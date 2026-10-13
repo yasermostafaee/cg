@@ -146,3 +146,17 @@ export const resizeHandle = style({
   cursor: 'ew-resize',
   touchAction: 'none',
 });
+
+/**
+ * `multibox-layout-switch` C2 — the ARRANGEMENT OVERRIDE marker on a timeline row.
+ *
+ * A diamond, in the accent, beside the eye: it says "this element's visibility is decided
+ * by the active arrangement, not by the authored value". Shape AND colour, never colour
+ * alone — the row is scanned under time pressure and a hue-only signal is the first thing
+ * lost on a bad monitor.
+ */
+export const arrangementOverride = style({
+  color: colors.accent,
+  fontSize: '0.6rem',
+  lineHeight: 1,
+});

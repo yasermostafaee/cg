@@ -7,24 +7,60 @@
  * the contract.
  */
 import type {
+  BackupChannelEntriesSetChannel,
+  BackupChannelsState,
+  BackupChannelsStateChannel,
+  BridgeBackupSignInChannel,
+  BridgeEnginesChannel,
+  BridgeSessionSignInChannel,
+  BridgeSessionState,
+  BridgeSessionStateChannel,
+  EngineSessions,
+  LicenseState,
+  LicenseStateChannel,
+  PgmMeterReading,
+  SignInFailure,
+  ChannelsCatalogueChannel,
+  SetupCheckChannel,
+  SetupPhase,
+  SetupRouteAddressChannel,
+  SetupChannelOccupancyChannel,
+  StationStray,
+  StationStraysChannel,
+  StationTakeOffAirChannel,
+  AuditHealthChannel,
+  AuditPageChannel,
   AuditRecentChannel,
+  AuthMode,
+  PlayoutPrincipal,
   ChannelRequest,
   ChannelResponse,
   ConnectionConfig,
   ConnectionHealth,
   ConnectionsFailoverChannel,
   ConnectionsSetConfigChannel,
+  ConnectionsTemplateServeChannel,
   FixedLayerBank,
+  FixedLayersBanksChannel,
   FixedLayersClearLayerChannel,
   FixedLayersConfigChannel,
   FixedLayersLoadChannel,
+  FixedLayersSetBanksChannel,
   FixedLayersSetConfigChannel,
   FixedLayersStateChannel,
   FixedSlotState,
   LayersClearChannel,
+  LayersClearedOutsideChannel,
   LayersOrphansChannel,
   LayersOwnedOccupancyChannel,
+  EmptiedAirDismissChannel,
+  EmptiedAirNotice,
+  EmptiedAirNoticeChannel,
+  EmptiedAirRestoreChannel,
+  PgmReturnStatus,
+  PgmReturnStatusChannel,
   LockEngageChannel,
+  ClearedOutsideLayer,
   OrphanLayer,
   OwnedOccupancyWarning,
   LockReleaseChannel,
@@ -36,15 +72,28 @@ import type {
   StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackDismissErrorChannel,
+  StackSetPlateVolumeChannel,
+  StackSetPlateVolumesChannel,
+  StackSilenceAllLivePlatesChannel,
+  StackSilenceChannelLivePlatesChannel,
   StackSetPositionChannel,
+  StackSetActiveLookChannel,
+  StackSetPassTimingChannel,
+  StackSwapLiveSourceChannel,
+  StackRestoreReportDismissChannel,
   StackSnapshotChannel,
   StackStopAllChannel,
   StackTakeChannel,
   StackUpdateChannel,
   PlayoutLayerState,
+  LiveLayerState,
+  LivePlateReleaseState,
   PlayoutLayersClearChannel,
   PlayoutLayersStateChannel,
+  LiveLayersStateChannel,
   StackNextChannel,
+  TemplateAct,
   TemplateInfo,
   TemplatesGetChannel,
   TemplatesImportChannel,
@@ -56,24 +105,32 @@ import type {
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
   ChannelSettingsState,
+  StationChannels,
   Rehearsal,
+  RestoreMigration,
+  RestoreSkip,
   RehearseEnterChannel,
   RehearseExitChannel,
   RehearseStateChannel,
   UpdateCancelChannel,
   UpdateRequestChannel,
   UpdateStateChannel,
-  Settings,
-  SettingsGetChannel,
-  SettingsSetChannel,
   SourceAssignments,
-  SourceCatalog,
+  ConsoleSourceCatalog,
   SourcesAssignmentsChannel,
   SourcesConfigChannel,
+  SourcesMediaSearchChannel,
+  SourcesRefreshChannel,
   SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
+  // `MEDIA-PLATES-01` — a clip's settings, its transport on air, and its clock.
+  LiveLayersMediaStateChannel,
+  MediaPlateState,
+  SourcesSetMediaPlaybackChannel,
+  StackMediaPlateTransportChannel,
 } from '@cg/shared-ipc';
-import type { StackItemState } from '@cg/shared-schema';
+import type { AuditEntry, StackItemState } from '@cg/shared-schema';
+import type { PvwPage } from './pvwPage.js';
 
 export interface AppInfo {
   name: string;
@@ -83,6 +140,143 @@ export interface AppInfo {
 }
 
 export type Unsubscribe = () => void;
+
+/**
+ * 🔴 `R-066` / `C-037` — **WHAT THE BRIDGE SAID ABOUT AUTHENTICATION AT CONNECT.**
+ *
+ * `null` while the answer is unknown — before the first `bridge.capabilities` lands, or when a
+ * bridge too old to be asked refused the channel. `null` is NOT "off": a console that treated
+ * unknown as off would present every control as live on a bridge that refuses them all, which
+ * is the defect class `B-153` exists to close one level up.
+ */
+export interface AuthCapabilities {
+  readonly mode: AuthMode;
+  /** D1, absolute, as the bridge advertises it. `null` when the mode is `off`. */
+  readonly signInUrl: string | null;
+  /** D2, absolute. `null` when the mode is `off`. */
+  readonly refreshUrl: string | null;
+  /** The Playout integration contract the bridge implements (`1.1`), or `null`. */
+  readonly contractVersion: string | null;
+  /**
+   * `DESKTOP-APPS-01` — where an installed station is in first-run (`target`, `channel`), or
+   * `null` once it is set up, and always for a bridge that is not an installed station.
+   */
+  readonly setupPhase: SetupPhase | null;
+  /**
+   * `R-081` — CG Bridge's release as it told this console (`bridge.capabilities`), for the connection
+   * check's Versions line. `null` — a bridge too old to say; absent — not read yet.
+   */
+  readonly bridgeVersion?: string | null;
+}
+
+/**
+ * 🔴 `B-317` — **A CHECK'S ANSWER, AND WHERE IT RAN.** The console writes its CG Bridge line from
+ * `bridge` — the CG Bridge that actually answered this check — never from the socket it happens to be on.
+ */
+export interface SetupCheckAnswer extends ChannelResponse<typeof SetupCheckChannel> {
+  /** `null` — test mode, which has no CG Bridge. */
+  readonly bridge: {
+    /** `host:port` the check ran at. */
+    readonly address: string;
+    /** CG Bridge's release as it said it; `null` — too old to say; absent — not read. */
+    readonly version?: string | null;
+    /**
+     * `R-090` — what CG Bridge says it cannot do about its own ports (`port-refused`, `reserved-port`),
+     * in its words, carried in its answer to the check; empty when nothing (or from an older CG Bridge).
+     */
+    readonly problems: readonly { readonly code: string; readonly message: string }[];
+  } | null;
+}
+
+/**
+ * 🔴 `R-091` — **CG BRIDGE ON THIS MACHINE**, as CG Control's shell reads it from Windows when the
+ * resolved CG Bridge address is this machine and nothing answered there.
+ */
+export type LocalBridgeState =
+  | { readonly kind: 'elsewhere' }
+  | {
+      readonly kind: 'here';
+      readonly service:
+        | 'not-installed'
+        | 'stopped'
+        | 'starting'
+        | 'running'
+        | 'stopping'
+        | 'unknown';
+      /** What holds TCP 5280 here: its PID, its image's name, and whether it is ours to stop. */
+      readonly holder: {
+        readonly pid: number;
+        readonly name: string;
+        readonly ours: boolean;
+      } | null;
+    };
+
+/** `R-091` — what one administrator step came to. */
+export type LocalBridgeOutcome =
+  | { readonly kind: 'done' }
+  | { readonly kind: 'declined' }
+  | { readonly kind: 'refused'; readonly code: number }
+  | { readonly kind: 'failed'; readonly reason: string };
+
+/**
+ * 🔴 `R-066` — **WHAT THE CONSOLE SAYS ABOUT ITSELF, in the operator's words, as ONE state.**
+ *
+ * Five names rather than a principal-or-null, because the surfaces that read this — the
+ * sign-in gate and the identity pill — have to tell apart three cases that a nullable
+ * principal flattens into one: a bridge that has not answered yet, a console that has never
+ * signed in, and a session that LAPSED. The third is the one an operator most needs named:
+ * _"signed out"_ and _"your session ended"_ send them to the same control by two different
+ * routes, and only the second explains why the console stopped working mid-shift.
+ */
+export type AuthSessionState =
+  /** The bridge does not authenticate. No sign-in exists, and nothing on screen changes. */
+  | { readonly kind: 'off' }
+  /** The bridge has not answered `bridge.capabilities` yet. Show no verdict. */
+  | { readonly kind: 'unknown' }
+  /**
+   * Auth is on and this console holds no valid token.
+   *
+   * `reason` is the BRIDGE's own sentence when it refused a token this console presented —
+   * "that sign-in has expired", "not for this station", "could not be verified". It exists
+   * because without it a console whose bridge refuses its token shows a sign-in form that
+   * silently does nothing: the operator types the right credentials, D1 succeeds, the bridge
+   * refuses the token, and the form clears with no message. Absent when nothing was presented.
+   */
+  | { readonly kind: 'signed-out'; readonly reason?: string }
+  /** A verified principal is on this socket. `principal` is the BRIDGE's answer, never the echo. */
+  | {
+      readonly kind: 'signed-in';
+      readonly principal: PlayoutPrincipal;
+      /**
+       * 🔴 `C-038` — which of THIS STATION's channels this principal may OPERATE, as the
+       * bridge computed them. Empty for a viewer, who is granted none.
+       *
+       * ⚠ **It is not `principal.channels`, and the difference matters.** That is the raw
+       * `cg_channels` claim — `{host, channel}` grants that may name hosts this bridge does
+       * not drive and channels this station does not have. This is the ANSWER: the grants
+       * resolved against the station, by the one predicate the request gate also asks. A
+       * surface reading the claim instead would offer a channel the bridge refuses.
+       */
+      readonly permittedChannels: readonly number[];
+      /**
+       * `CENTRAL-BRIDGE-01-A` A2 (Playout `2.9.2` §2) — the Playout refuses to RENEW this session,
+       * before using its refresh token (`cg_not_licensed`, `no_cg_access`, a disabled account).
+       * Nothing is lost: the token is kept and asked again every minute, and the session works to
+       * `exp`. `message` is the Playout's own reason, when it sent one. Absent while renewal works.
+       */
+      readonly renewalRefused?: { readonly code: SignInFailure; readonly message: string | null };
+    }
+  /**
+   * A principal was held and the bridge has stopped accepting it. The NAME is kept so the pill
+   * can say whose session ended — a lapsed session is still an answer to "who is at this
+   * console".
+   *
+   * ⚠ It covers REVOCATION as well as expiry, and is named for the common case deliberately.
+   * The console cannot tell the two apart (the bridge answers both with one sentence, by
+   * design — see the change's `design.md` §2), and the operator's remedy is identical: sign in
+   * again. Drawing a distinction here would ask them to act on one they cannot verify.
+   */
+  | { readonly kind: 'expired'; readonly name: string };
 
 /**
  * Tri-state link to the local CasparCG bridge (C-001 Phase 1).
@@ -100,10 +294,86 @@ export type BridgeLinkStatus = 'live' | 'offline-mock' | 'disconnected';
 export interface RuntimeBridge {
   getAppInfo(): Promise<AppInfo>;
 
+  /**
+   * `TEXT-DIGITS-01` — the keyboard language CG Control's window types in, from its shell's one
+   * read-only command (`keyboard_language`). Where no shell can say — a browser, the mock —
+   * `reportsLanguage()` is false and the one detector (`@cg/gesture`) reads the letters typed.
+   */
+  keyboard: {
+    reportsLanguage(): boolean;
+    /** `persian`, `arabic`, `latin` or `unknown` — the shell's reply, checked by the detector. */
+    language(): Promise<unknown>;
+  };
+
+  /**
+   * 🔴 `R-094` — **NO CLOSE ON A SLIP.** CG Control's shell holds every close of its window it can
+   * intercept and asks the console (`@cg/gesture`'s `closeGuardDoor`; the Rust half is shared with
+   * CG Designer). It is the SHELL's door, never the socket's: closing the window sends nothing to
+   * CG Bridge or CasparCG — it is a window close, not a CLEAR, and what is on air stays on air.
+   * A browser has no shell: `held()` is false, and the tab's leave prompt is the question.
+   */
+  closeGuard: {
+    /** Is a shell holding this window's closes? */
+    held(): boolean;
+    /** Every close the shell intercepts calls `onRequest` instead of closing. Returns the release. */
+    hold(onRequest: () => void): Unsubscribe;
+    /** Close the window now, asking nothing more (nothing to close in a browser). */
+    closeNow(): Promise<void>;
+  };
+
   /** Status of the link to the local bridge (drives the connection indicator). */
   link: {
     status(): BridgeLinkStatus;
     onStatusChanged(handler: (status: BridgeLinkStatus) => void): Unsubscribe;
+    /**
+     * 🔴 **Is the connect-time RESYNC in flight?** — `true` from the moment a (re)connect
+     * starts its resync until the stack has been re-pulled. (It delivered the stack too, until
+     * `CENTRAL-BRIDGE-01`: a console delivers nothing now.)
+     *
+     * It exists on this contract for ONE consumer and one question: whether an EMPTY stack
+     * is the answer or a not-yet. `useBridgeSnapshot`’s `ready` cannot answer it — it
+     * latches on the first arrival and never clears — so after a reconnect a browser sees a
+     * live link, a latched-ready stack of `[]`, and a bridge already serving its full
+     * adopted live-layer ledger. Read without this, every seated layer would look STRANDED
+     * with a control armed to cut it.
+     *
+     * ✅ The multi-browser residual it used to leave open is closed: no console restores rows
+     * any more — the bridge restores its own stack before any console connects.
+     */
+    resyncing(): boolean;
+    onResyncingChanged(handler: (value: boolean) => void): Unsubscribe;
+    /**
+     * 🔴 **`B-153` — WHICH CHANNELS THIS PAGE NEEDS THAT THE CONNECTED BRIDGE DOES NOT
+     * ROUTE.** `null` while the answer is unknown or the builds agree; a non-empty list is
+     * a live skew.
+     *
+     * Asked once at CONNECT, so the operator learns about it while nothing is at stake —
+     * rather than the way this was actually discovered, which was a LOOK button answering
+     * `unknown channel: stack.set-active-look` during a live show.
+     *
+     * ⚠ It reports; it does not REFUSE. A bridge missing one new channel still plays out
+     * perfectly well through the twenty it does route, and taking a working station off air
+     * over a feature it never had would be a far worse failure than the one being fixed.
+     * The commands that ARE missing refuse themselves, legibly, through `B-152`.
+     */
+    skew(): readonly string[] | null;
+    onSkewChanged(handler: (missing: readonly string[] | null) => void): Unsubscribe;
+    /**
+     * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — **THIS CONSOLE IS ANOTHER RELEASE THAN CG BRIDGE**: the one
+     * line to show, or `null` when the release lines match (or nothing is known yet).
+     *
+     * Unlike {@link skew} this REFUSES: while it is set, nothing is sent but the capabilities
+     * question and `auth.*`. CG Bridge and CG Control are one release installed apart, and a
+     * console from another release may read the bridge's state wrongly with every channel present.
+     */
+    versionMismatch(): string | null;
+    onVersionMismatchChanged(handler: (line: string | null) => void): Unsubscribe;
+    /**
+     * `CENTRAL-BRIDGE-01` (D8) — where this console's CG Bridge is (`host:port`), for the one line a
+     * console shows when it cannot reach it: "CG Bridge not reachable at <host>:5280". `null` where
+     * there is no bridge (test mode).
+     */
+    bridgeAddress(): string | null;
   };
 
   stack: {
@@ -137,6 +407,10 @@ export interface RuntimeBridge {
     remove(
       req: ChannelRequest<typeof StackRemoveChannel>,
     ): Promise<ChannelResponse<typeof StackRemoveChannel>>;
+    /** `B-301` — dismiss a row's error: the row reads the status it settled to, on every console. */
+    dismissError(
+      req: ChannelRequest<typeof StackDismissErrorChannel>,
+    ): Promise<ChannelResponse<typeof StackDismissErrorChannel>>;
     /**
      * R-011 — the operator's per-item on-air position override. Refused
      * (`reason: 'on-air'`) while the item is on air/unsettled — the picker
@@ -146,20 +420,165 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof StackSetPositionChannel>,
     ): Promise<ChannelResponse<typeof StackSetPositionChannel>>;
     /**
-     * R-010 — OUT + REMOVE every stack item (clears air, empties the list).
-     * The sanctioned path to unblock a server reconfiguration.
+     * R-048 — point ONE plate of ONE row at a different live source, WHILE the
+     * template is on air. A per-item override that never writes back to the
+     * template assignment or the installation catalog; a `sourceId` of `null`
+     * reverts the plate to its assignment.
      */
-    removeAll(): Promise<ChannelResponse<typeof StackRemoveAllChannel>>;
+    swapLiveSource(
+      req: ChannelRequest<typeof StackSwapLiveSourceChannel>,
+    ): Promise<ChannelResponse<typeof StackSwapLiveSourceChannel>>;
+    /**
+     * §14 (LOOKS) Stage E — **switch ONE row to another authored LOOK.**
+     *
+     * The look picker on the row sends this and nothing else does. It drives the one
+     * shipped seam: record the look → `reconcileLivePlates` moves the FILLS → the page is
+     * told on the `CG UPDATE` payload so it moves the HOLES, both off the same look id.
+     *
+     * ⚠ **The switch IS the cut** — v1 parks every other transition mode — so there is no
+     * mode to pick and none to escape. Taking the row off air stays STOP/CLEAR’s job.
+     */
+    setActiveLook(
+      req: ChannelRequest<typeof StackSetActiveLookChannel>,
+    ): Promise<ChannelResponse<typeof StackSetActiveLookChannel>>;
+    /**
+     * `TIMING-WIRE-22` (c) — set this row's PASS TIMING: how many more passes, and the gap
+     * between them. A CONFIGURATION verb — it carries no Take and seats nothing; it changes what
+     * the graphic already on the channel will do next. On a row that owns no live seats it
+     * records the intent for the next take.
+     *
+     * ⚠ A refused set records NOTHING, so the console keeps displaying what air is doing.
+     */
+    setPassTiming(
+      req: ChannelRequest<typeof StackSetPassTimingChannel>,
+    ): Promise<ChannelResponse<typeof StackSetPassTimingChannel>>;
+    /**
+     * C-015 phase 6 (6.5f) — raise or mute ONE plate's audio. The EXPLICIT
+     * RECORDED INTENT the mute rule defers to, and the only thing that may make a
+     * Live Source plate audible. Works on a row that is not yet on air: the intent
+     * stands and the next take carries it.
+     */
+    setPlateVolume(
+      req: ChannelRequest<typeof StackSetPlateVolumeChannel>,
+    ): Promise<ChannelResponse<typeof StackSetPlateVolumeChannel>>;
+    /**
+     * `add-multibox-audio` — the same intent for SEVERAL plates of one row, as ONE action.
+     *
+     * The door FADER, ON/OFF, SOLO and PANIC all go through. SOLO and PANIC are CROSS-PLATE
+     * statements ("this one and none of its siblings", "none of them"), which a sequence of
+     * single-plate calls cannot make: the bridge holds the row's live-seat lock for the whole
+     * map, so a look switch cannot land in the middle of one.
+     *
+     * ⚠ It reports **one outcome per plate**. A SOLO that lands three plates and is refused on
+     * the fourth is neither a success nor a failure, and a single boolean would have to lie
+     * about one of them.
+     */
+    setPlateVolumes(
+      req: ChannelRequest<typeof StackSetPlateVolumesChannel>,
+    ): Promise<ChannelResponse<typeof StackSetPlateVolumesChannel>>;
+    /**
+     * 🔴 `MEDIA-PLATES-01` §1.D — Play/Pause and Restart for ONE media plate of an on-air row.
+     * Refused with nothing sent for a live-input plate, a plate that is not seated, or a row that
+     * is not on air; the permission, the row's channel and the lock are the bridge's gate.
+     */
+    mediaPlateTransport(
+      req: ChannelRequest<typeof StackMediaPlateTransportChannel>,
+    ): Promise<ChannelResponse<typeof StackMediaPlateTransportChannel>>;
+    /**
+     * 🔴 **PANIC — silence every live plate the BRIDGE holds a seat for.**
+     *
+     * NO ARGUMENTS, deliberately: the scope is not the caller's to choose. It was, in the
+     * first cut — the browser resolved it from `isOnAir(item)` — and that left a row in the
+     * boot-adoption window (`B-145`: plates seated, potentially audible, status not on air —
+     * once misnamed the `exitRehearse` window; rehearse seats nothing, `B-216`) outside
+     * the panic button's reach, and would have addressed nothing at all in the window before
+     * `useLiveLayers` had answered. `B-122`'s rule is that an emergency control must not
+     * depend on the bookkeeping whose failure is the emergency; the bridge's ledger is the
+     * structural fact that replaces it.
+     *
+     * ⚠ It does NOT weaken golden rule 10: rule 10 stops a configuration verb putting content
+     * ON AIR (*"no `PLAY`, no un-mute and no fill"*), and this only ever lowers a volume on a
+     * layer that already exists.
+     */
+    silenceAllLivePlates(): Promise<ChannelResponse<typeof StackSilenceAllLivePlatesChannel>>;
+    /**
+     * 🔴 `MULTI-CHANNEL-01` §2 C — **PANIC FOR ONE CHANNEL**: every live plate the bridge holds a
+     * seat for on `channel`, and nothing on any other. A NEW verb beside
+     * {@link silenceAllLivePlates} (which stays unscoped, A16), scoped like every verb that names
+     * a channel. The PANIC control on a channel's view calls THIS, for that channel.
+     */
+    silenceChannelLivePlates(
+      req: ChannelRequest<typeof StackSilenceChannelLivePlatesChannel>,
+    ): Promise<ChannelResponse<typeof StackSilenceChannelLivePlatesChannel>>;
+    /**
+     * OUT + REMOVE every stack item (clears air, empties the list).
+     *
+     * 🔴 `R-017` — REFUSED, all-or-nothing, while anything is on air, and no longer R-010's
+     * unblock path: `clearAll` is. Apply gates on the on-air COUNT, so taking rows off air is
+     * the whole remedy and this one is refused in the very state a reconfiguration is blocked
+     * in (`operator-surface` §6).
+     */
+    removeAll(
+      req?: ChannelRequest<typeof StackRemoveAllChannel>,
+    ): Promise<ChannelResponse<typeof StackRemoveAllChannel>>;
     /**
      * Take every ON-AIR item off air, and KEEP them all on the stack (they go idle).
      * Reuses the per-item `out()` CLEAR — no new AMCP verb. The counterpart to `removeAll`:
      * that one empties the list, this one only clears the screen.
+     *
+     * `MULTI-CHANNEL-01` §2 B — `removeAll`, `clearAll` and `stopAll` take an OPTIONAL
+     * `{ channel }`: bare is every item, exactly as before; with a channel, that channel's items
+     * alone. The console passes the channel on screen when the station declares more than one.
      */
-    clearAll(): Promise<ChannelResponse<typeof StackClearAllChannel>>;
+    clearAll(
+      req?: ChannelRequest<typeof StackClearAllChannel>,
+    ): Promise<ChannelResponse<typeof StackClearAllChannel>>;
     /** C-012 — STOP every on-air item (outros run, producers stay resident). */
-    stopAll(): Promise<ChannelResponse<typeof StackStopAllChannel>>;
+    stopAll(
+      req?: ChannelRequest<typeof StackStopAllChannel>,
+    ): Promise<ChannelResponse<typeof StackStopAllChannel>>;
+    /**
+     * The WHOLE stack, always: the console filters per channel itself (`onChannel`), and this
+     * read also feeds the display copy (`B-092`), which a per-channel pull would silently narrow
+     * to one channel's rows. The contract's optional channel is not used here.
+     */
     snapshot(): Promise<ChannelResponse<typeof StackSnapshotChannel>>;
     onStateChanged(handler: (snapshot: readonly StackItemState[]) => void): Unsubscribe;
+    /**
+     * B-108 — the rows the bridge's restore could NOT bring back, with the reason.
+     *
+     * 🔴 `CENTRAL-BRIDGE-01` (`B-294`): the bridge keeps its stack and restores it itself at
+     * start; what it declines to re-seat was on the operator's screen before the restart and is
+     * now GONE — which desynchronises their model of the stack from reality, silently, unless it
+     * is said. The report is standing BRIDGE state (`stack.restore-report`), so every console
+     * shows it, and one console's dismissal ({@link dismissRestoreReport}) clears it for all.
+     *
+     * The BENIGN skip (an item the live bridge already holds) is filtered out on the bridge, so
+     * a subscriber can never raise a false alarm by forgetting to.
+     *
+     * The handler is called IMMEDIATELY with the latest report on subscribe: the
+     * panel mounts after boot, and a report it missed is exactly the one worth
+     * seeing. An EMPTY report is meaningful — it clears a stale notice.
+     */
+    onRestoreSkips(handler: (skips: readonly RestoreSkip[]) => void): Unsubscribe;
+    /**
+     * `single-clock-look-switch` — the rows the last restore brought back on a DIFFERENT
+     * row than the one retained.
+     *
+     * A SEPARATE seam from `onRestoreSkips`, for the reason `RestoreMigrationSchema` gives:
+     * these rows DID come back, and folding them into a list the panel introduces with
+     * "did not come back" would be a plainer lie than saying nothing. Same delivery
+     * contract as its sibling — replayed on subscribe, and an EMPTY report clears a stale
+     * notice.
+     */
+    onRestoreMigrations(handler: (migrations: readonly RestoreMigration[]) => void): Unsubscribe;
+    /**
+     * `CENTRAL-BRIDGE-01` — dismiss one half of the restore report ON THE BRIDGE, so every console
+     * stops showing it at once (`air.dismiss-emptied`'s reason). Changes nothing on air.
+     */
+    dismissRestoreReport(
+      req: ChannelRequest<typeof StackRestoreReportDismissChannel>,
+    ): Promise<ChannelResponse<typeof StackRestoreReportDismissChannel>>;
   };
 
   connections: {
@@ -171,6 +590,16 @@ export interface RuntimeBridge {
     setConfig(
       req: ChannelRequest<typeof ConnectionsSetConfigChannel>,
     ): Promise<ChannelResponse<typeof ConnectionsSetConfigChannel>>;
+    /**
+     * `C-024` — the template serve address IN FORCE, plus why: which fields a command-line flag
+     * is masking, and this machine's interface candidates.
+     *
+     * Deliberately NOT folded into {@link config}. That returns the STORED intent this panel edits
+     * and writes back; this returns what is actually in effect. The gap between them is the whole
+     * point — precedence is flag > file, so a stored value can be masked at any time, and a surface
+     * that showed the stored one as though it were live would be confidently wrong.
+     */
+    templateServe(): Promise<ChannelResponse<typeof ConnectionsTemplateServeChannel>>;
     health(): Promise<ConnectionHealth>;
     failover(
       req: ChannelRequest<typeof ConnectionsFailoverChannel>,
@@ -186,16 +615,32 @@ export interface RuntimeBridge {
    * derivation happens renderer-side, once, per design (f)/(g)).
    */
   fixedLayers: {
-    /** The declared bank, or null when none is configured. */
+    /**
+     * The declared bank, or null when none is configured — the v1 view: on a station that
+     * declares several channels, the lowest-numbered one's bank. The console reads
+     * {@link banks} for per-channel work.
+     */
     config(): Promise<ChannelResponse<typeof FixedLayersConfigChannel>>;
     /**
      * Apply a bank change LIVE (design (e)): grow-at-end and alias changes
      * apply immediately; renumber/channel-change and shrink-with-residents
-     * refuse with the validator's code in `reason`.
+     * refuse with the validator's code in `reason`. `MULTI-CHANNEL-01` — "the station's bank is
+     * this one": on a station declaring several channels, the set becomes this one bank.
      */
     setConfig(
       req: ChannelRequest<typeof FixedLayersSetConfigChannel>,
     ): Promise<ChannelResponse<typeof FixedLayersSetConfigChannel>>;
+    /** `MULTI-CHANNEL-01` — every declared bank, in channel order ([] when none is declared). */
+    banks(): Promise<ChannelResponse<typeof FixedLayersBanksChannel>>;
+    /**
+     * `MULTI-CHANNEL-01` — set the station's banks: add, remove, replace and edit channels as one
+     * request. A removed channel is refused while anything of ours holds air on it.
+     */
+    setBanks(
+      req: ChannelRequest<typeof FixedLayersSetBanksChannel>,
+    ): Promise<ChannelResponse<typeof FixedLayersSetBanksChannel>>;
+    /** `MULTI-CHANNEL-01` — the whole set, pushed whenever it is applied. */
+    onBanksChanged(handler: (banks: FixedLayerBank[]) => void): Unsubscribe;
     /**
      * R-021 stage 3 — create an item bound to an EXACT fixed slot and pre-roll
      * it. Resolves the layer through `LayerManager.bindFixed` — never the
@@ -237,6 +682,68 @@ export interface RuntimeBridge {
      */
     ownedOccupancy(): Promise<ChannelResponse<typeof LayersOwnedOccupancyChannel>>;
     onOwnedOccupancyChanged(handler: (warnings: OwnedOccupancyWarning[]) => void): Unsubscribe;
+    /**
+     * `B-292` — the layers of OURS that something outside CG Control cleared (another AMCP client,
+     * the Playout, CasparCG itself), still to be said. Their rows are already off air; nothing was
+     * re-sent. Pushed whenever the list changes.
+     */
+    clearedOutside(): Promise<ChannelResponse<typeof LayersClearedOutsideChannel>>;
+    onClearedOutsideChanged(handler: (cleared: ClearedOutsideLayer[]) => void): Unsubscribe;
+  };
+
+  /**
+   * `B-225` — **the playout server stopped carrying what this console had put on air.**
+   *
+   * Its own namespace rather than a field on `connections`: link health answers "can we
+   * reach the server", and this answers "is what we put up still there" — a statement about
+   * AIR that outlives the reconnect that produced it and needs its own two operator acts.
+   *
+   * 🔴 **`restore` is the ONLY way anything goes back on air, and it exists solely to be
+   * reached by a press.** The owner's decision (2026-09-05) was detect-and-say over restoring
+   * automatically, because *an unattended machine must not put a graphic on air.* Nothing may
+   * call it from an effect, a timer, a reconnect handler or a mount.
+   */
+  emptiedAir: {
+    /** The standing notice, or `null` when there is nothing to report. */
+    notice(): Promise<ChannelResponse<typeof EmptiedAirNoticeChannel>>;
+    /** Put the named rows back — an explicit operator act, never automatic. */
+    restore(
+      req: ChannelRequest<typeof EmptiedAirRestoreChannel>,
+    ): Promise<ChannelResponse<typeof EmptiedAirRestoreChannel>>;
+    /** Clear the notice without restoring. Changes nothing on air. */
+    dismiss(): Promise<ChannelResponse<typeof EmptiedAirDismissChannel>>;
+    onNoticeChanged(handler: (notice: EmptiedAirNotice | null) => void): Unsubscribe;
+  };
+
+  /**
+   * 🔴 `C-016` — **THE PROGRAMME RETURN: what the Playout is putting on air, as a picture.**
+   *
+   * The bridge reads the Playout's own `pgm` feed as one well-behaved client per channel and
+   * relays it on the console's origin; the PROGRAM pane shows it in an `<img>`. The picture is
+   * requested ONLY while that `<img>` is mounted — the relay's upstream is held for exactly as
+   * long as some console holds the picture open — so the pane must not mount it while hidden.
+   *
+   * Its STATE is a statement about the FEED, never about air: `connecting` does not mean
+   * nothing is on air.
+   */
+  pgmReturn: {
+    /**
+     * Where this console reads channel `n`'s picture, or `null` when it has no relay — test mode
+     * has no bridge, so there is no picture to request and the pane says "No return signal".
+     *
+     * `CENTRAL-BRIDGE-01` (D9) — ASYNCHRONOUS: CG Bridge is on another machine, and its `/pgm/<n>`
+     * opens only with a ticket the verified socket is given for that channel, so every request of
+     * the picture asks for a fresh one. Rejects when the bridge refuses (the channel is not held).
+     */
+    feedUrl(channel: number): Promise<string | null>;
+    /**
+     * `PLAYOUT-FEATURES-01` E (`R-076`) — where this console reads channel `n`'s programme SOUND (`/pgm/<n>/sound`,
+     * behind a ticket for the sound), or `null` with no relay (test mode). Asked for per connection.
+     */
+    audioUrl(channel: number): Promise<string | null>;
+    /** Every WATCHED channel's state. A channel nobody watches has no entry. */
+    status(): Promise<ChannelResponse<typeof PgmReturnStatusChannel>>;
+    onStatusChanged(handler: (status: readonly PgmReturnStatus[]) => void): Unsubscribe;
   };
 
   lock: {
@@ -268,24 +775,74 @@ export interface RuntimeBridge {
     ): Promise<ChannelResponse<typeof PlayoutLayersClearChannel>>;
     onStateChanged(handler: (state: PlayoutLayerState[]) => void): Unsubscribe;
   };
+  /**
+   * `B-145` acceptance 1, display half (2.8) — the layers the BRIDGE ITSELF has
+   * seated for a template's Live Source plates: the third declared layer class,
+   * beside `layers` (unowned orphans the app may reclaim) and `playoutLayers`
+   * (the station's own).
+   *
+   * READ-ONLY, and deliberately so. Every verb that can act on a seated layer is
+   * ITEM-scoped and already on this contract — `stack.swapLiveSource` to repoint,
+   * `stack.setPlateVolume` for audio, `stack.out` / `stack.remove` to take it off
+   * air — while `layers.clear` refuses a live-source coordinate BY NAME, having
+   * weighed and rejected an exemption. This surface exists so the operator can SEE
+   * which row owns a lit layer and so reach those verbs; it is not a fourth way to
+   * cut a guest off air.
+   */
+  liveLayers: {
+    state(): Promise<ChannelResponse<typeof LiveLayersStateChannel>>;
+    onStateChanged(handler: (state: LiveLayerState[]) => void): Unsubscribe;
+    /**
+     * 🔴 **`B-247` — WHY a plate stopped being seated, beside the ledger change that says
+     * THAT it did.**
+     *
+     * The bridge has always computed this sentence (`releaseLivePlate`) and always emitted
+     * it; until `B-247` nothing forwarded it, so §12.4's *"NAMED, OBSERVABLE behaviour"* was
+     * observable only to the bridge's own test suite. Without it the tab sees a three-seat
+     * row become a one-seat row and cannot tell a frame that was NEVER seated from one that
+     * WAS and was cleared — and it is the second that an operator needs a word for.
+     *
+     * ⚠ **AN EVENT, so it is only heard by a browser that was connected when it fired.** A
+     * reload loses it and the affected frame reads `Not seated` again. That is a deliberate
+     * bound and a safe one: the fact refines a state the ledger already publishes (no seat
+     * either way), so losing it under-claims rather than lying. It is NOT the shape to copy
+     * for anything an operator must not miss — `emptiedAir` is standing bridge state for
+     * exactly that reason.
+     */
+    onPlateReleased(release: (event: LivePlateReleaseState) => void): Unsubscribe;
+    /**
+     * 🔴 `MEDIA-PLATES-01` §1.E — every seated media plate's transport state: the remaining time
+     * (ABSENT unless the server reported the clip's time — never estimated), paused, ended and
+     * loop. Standing state, pulled on connect and pushed when what a console shows would change.
+     */
+    mediaState(): Promise<ChannelResponse<typeof LiveLayersMediaStateChannel>>;
+    onMediaStateChanged(handler: (state: MediaPlateState[]) => void): Unsubscribe;
+  };
 
+  /**
+   * 🔴 `CHANNEL-TEMPLATES-01` (the owner, 2026-09-28) — **EACH CHANNEL HAS ITS OWN TEMPLATE LIST.**
+   * Every call below names the channel whose list it reads or changes; with none, the station-wide
+   * reading (every listed template once), which is what a surface that shows no channel wants.
+   */
   templates: {
     get(
       req: ChannelRequest<typeof TemplatesGetChannel>,
     ): Promise<ChannelResponse<typeof TemplatesGetChannel>>;
-    list(): Promise<ChannelResponse<typeof TemplatesListChannel>>;
+    list(
+      req?: ChannelRequest<typeof TemplatesListChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesListChannel>>;
     /**
      * Register a verified `.vcg` template (R-001). The renderer verifies +
      * unpacks the upload first; this call adds the parsed template to the
-     * registry so `list` / `get` see it.
+     * registry so `list` / `get` see it — on `req.channel`'s list, and no other.
      */
     import(
       req: ChannelRequest<typeof TemplatesImportChannel>,
     ): Promise<ChannelResponse<typeof TemplatesImportChannel>>;
     /**
-     * Remove a template from the library (R-005). The bridge is authoritative: it refuses
-     * while any stack item references the template and returns the operator-facing reason.
-     * A confirmed removal also prunes the reconnect-reconciliation retention, so the
+     * Remove a template from `req.channel`'s list (R-005). The bridge is authoritative: it
+     * refuses while a row ON THAT CHANNEL holds the template and returns the operator-facing
+     * reason. A confirmed removal also prunes the reconnect-reconciliation retention, so the
      * template does not come back on the next bridge blip.
      */
     remove(
@@ -298,26 +855,168 @@ export interface RuntimeBridge {
      */
     onChanged(handler: (templates: TemplateInfo[]) => void): Unsubscribe;
     /**
-     * R-022 — the RETAINED self-contained page for a template, from THIS browser's
-     * local library, or null when it holds none.
-     *
-     * Browser-local by nature and deliberately NOT an `@cg/shared-ipc` channel:
-     * the page is already in this browser (the SPA produces it at import and keeps
-     * it to re-deliver on reconnect), so routing the read through the bridge would
-     * be a round trip to fetch something we hold — and would fail with the bridge
-     * down, when rehearse is exactly the thing that should still work.
-     *
-     * `null` is the honest "not in this browser": a template imported on another
-     * machine has metadata from the bridge's catalogue but no local page here, and
-     * the rehearsal panel says so instead of showing a blank box.
+     * 🔴 `CONSOLE-POLISH-01` (`B-300`) — WHO changed the catalogue: one per accepted import,
+     * re-import or removal, from ANY console, this one included. An open picker reads it to name
+     * a removal another console made instead of letting the next Load meet a raw refusal.
      */
-    html(templateId: string): Promise<string | null>;
+    onActed(handler: (act: TemplateAct) => void): Unsubscribe;
+    /**
+     * 🔴 `RELEASE-091-01` §1 (`B-288`) — **THE PAGE PVW RENDERS**: the one the bridge serves
+     * CasparCG for the version `channel` lists (`templates.page`), on any machine and in any
+     * browser; THIS browser's own copy only when the bridge cannot be reached; or why there is none
+     * ({@link PvwPage}). The decision is `pvwPageSource`, one pure function.
+     *
+     * SUPERSEDES R-022's `html()`, which read this browser's copy ALONE — "never a bridge round
+     * trip" — so a template imported on another machine, in another browser or on another channel
+     * could only be rehearsed after a re-import here. The round trip that note avoided is what makes
+     * the page the same everywhere; the fallback keeps rehearse working with the bridge down, which
+     * was that note's real concern.
+     */
+    page(templateId: string, channel?: number): Promise<PvwPage>;
+  };
+
+  /**
+   * 🔴 `R-066` / `C-037` — **THE PLAYOUT SIGN-IN.**
+   *
+   * ADR 0010 rule 9: the BROWSER obtains the token and the bridge only verifies it, so
+   * {@link signIn} posts to the Playout directly and the bridge never sees a password. The
+   * token is held per console, survives a reload, is presented on every (re)connect, and is
+   * refreshed about ten minutes before it expires while the page is open.
+   *
+   * ⚠ Everything here is INERT when the bridge's mode is `off`: {@link state} reads
+   * `{ kind: 'off' }`, no key is written, and no surface appears. That is what "byte-identical
+   * to today" means for this contract.
+   */
+  auth: {
+    /** What the bridge advertised at connect, or `null` while unknown. */
+    capabilities(): AuthCapabilities | null;
+    onCapabilitiesChanged(handler: (caps: AuthCapabilities | null) => void): Unsubscribe;
+    /** The one state every auth surface reads. See {@link AuthSessionState}. */
+    state(): AuthSessionState;
+    onStateChanged(handler: (state: AuthSessionState) => void): Unsubscribe;
+    /**
+     * Sign in against the PLAYOUT (not the bridge), then present the token on this socket.
+     *
+     * Rejects with a `PlayoutSignInError` carrying the contract's `error` code, which the
+     * surface maps to its own sentence — the contract says the Playout's free-text `message`
+     * is never shown verbatim.
+     */
+    signIn(username: string, password: string): Promise<void>;
+    /** Drop the token here and the principal on the bridge. Never closes the socket. */
+    signOut(): Promise<void>;
+  };
+
+  /**
+   * 🔴 `DESKTOP-APPS-01` — **SETTING THE STATION UP**: the connection check, the Playout's channels
+   * as first-run needs them, and — inside CG Control only — the Playout address.
+   */
+  setup: {
+    /**
+     * §2F — the connection check, one line per link. Reads; changes nothing.
+     *
+     * 🔴 `B-317` — with `where`, it runs on the CG Bridge the Set up fields resolve to
+     * ({@link RuntimeBridge.setup.bridgeAddressFor}), on a socket of its own when that is not the one
+     * this console is on; without it, on this console's own CG Bridge. Rejects with the operator's
+     * sentence `CG Bridge is not answering at <host>:<port>.` when nothing answers there.
+     */
+    check(
+      req: ChannelRequest<typeof SetupCheckChannel>,
+      where?: { readonly bridgeAddress: string },
+    ): Promise<SetupCheckAnswer>;
+    /**
+     * 🔴 `B-317` — the ONE CG Bridge address Set up's fields resolve to, as `host:port`: the CG Bridge
+     * field when a person typed it, else the Playout's host on 5280. `null` — no usable host. Pure.
+     */
+    bridgeAddressFor(playoutAddress: string, bridgeAddress: string): string | null;
+    /** §2E — this machine's address on the route to a host: the serve-host default. */
+    routeAddress(
+      req: ChannelRequest<typeof SetupRouteAddressChannel>,
+    ): Promise<ChannelResponse<typeof SetupRouteAddressChannel>>;
+    /** §2E step 3 — the Playout's channels UNJOINED, in the signed-in admin's grant. */
+    catalogue(): Promise<ChannelResponse<typeof ChannelsCatalogueChannel>>;
+    /**
+     * `DESKTOP-APPS-01-D` d — what is already on air on a channel, asked after the connection is
+     * written and before the channel is declared. A read.
+     */
+    channelOccupancy(
+      req: ChannelRequest<typeof SetupChannelOccupancyChannel>,
+    ): Promise<ChannelResponse<typeof SetupChannelOccupancyChannel>>;
+    /**
+     * `DESKTOP-APPS-01-A` — can THIS console change the Playout address? Only inside CG Control;
+     * a browser has no such door, and the control that would use it is then absent.
+     */
+    canSetPlayoutAddress(): boolean;
+    /**
+     * `CENTRAL-BRIDGE-01` (D8) — THIS console's Playout, which says where its CG Bridge is: saved in
+     * its station record, and the console reconnects to CG Bridge there. Never the socket, and never
+     * CG Bridge's own configuration. `bridgeAddress`: absent keeps the console's CG Bridge address;
+     * `''` puts CG Bridge on the Playout's host; `host` / `host:port` is a separate server's.
+     */
+    setPlayoutAddress(address: string, bridgeAddress?: string): Promise<string>;
+    /** `CENTRAL-BRIDGE-01` (D8) — the separate server's CG Bridge address this console keeps, if any. */
+    bridgeOverride(): string | null;
+    /**
+     * 🔴 `R-091` — CG Bridge on `host` when that is THIS machine: the `CGBridge` service and what holds
+     * TCP 5280, read by CG Control's shell. `null` outside CG Control (a browser has no Windows to read).
+     */
+    localBridgeState(host: string): Promise<LocalBridgeState | null>;
+    /**
+     * 🔴 `R-091` — one administrator step on this machine: `start` CG Bridge's service, or `free` TCP
+     * 5280 from a holder of OURS (by PID; the shell checks again that it is ours and stops nothing else).
+     */
+    localBridgeAct(action: 'start' | 'free', pid?: number): Promise<LocalBridgeOutcome>;
+    /**
+     * `CENTRAL-BRIDGE-01` (D8) — forget this console's station so it asks again (CG Control only;
+     * `false` elsewhere, or when the store refused). The caller restarts the page.
+     */
+    forgetStation(): boolean;
   };
 
   audit: {
     recent(
       req: ChannelRequest<typeof AuditRecentChannel>,
     ): Promise<ChannelResponse<typeof AuditRecentChannel>>;
+    /**
+     * 🔴 `CONSOLE-POLISH-01` (`R-083`) — the Log, a page at a time: up to 100 rows newest first,
+     * before `req.cursor`, that pass `req.filter` and this console's channel grant, both applied by
+     * CG Bridge before the page is cut. `next` is `null` when nothing older is left.
+     */
+    page(
+      req: ChannelRequest<typeof AuditPageChannel>,
+    ): Promise<ChannelResponse<typeof AuditPageChannel>>;
+    /** `R-083` — every row CG Bridge records from now on that this console may be told. */
+    onAppended(handler: (entry: AuditEntry) => void): Unsubscribe;
+    /**
+     * B-141 — is the instrument LIVE? Read alongside `recent` so an empty tail can
+     * be reported as "quiet" only when a configured, non-failing writer is what
+     * produced it.
+     */
+    health(): Promise<ChannelResponse<typeof AuditHealthChannel>>;
+    /**
+     * `CENTRAL-BRIDGE-01` §1 A — can THIS console download CG Bridge's logs? They live on the
+     * Playout machine now (`%ProgramData%\CG Bridge\logs\`), so "Open log folder" (`FIELD-FIXES-01`
+     * G) became a download of one zip. Offered while connected; the bridge gives the ticket to a
+     * station admin only, and says so to anyone else.
+     */
+    canDownloadLogs(): boolean;
+    /** Save CG Bridge's logs as one zip. A refusal is answered, never thrown. */
+    downloadLogs(): Promise<{ accepted: boolean; message?: string }>;
+    /*
+      🔴 `OPERATOR-NAME-SWEEP-01` — **THE TWO AUDIT MEMBERS THAT READ AND WROTE THE CONSOLE
+      LABEL ARE GONE FROM THIS CONTRACT, and the removal is the point rather than a tidy-up.**
+
+      They were the typed seam a browser-held, SELF-DECLARED console label hung from, and
+      every surface that showed it was obliged to say what it was worth. Identity is proven
+      now — `C-037` verifies a Playout token and `C-038` gates on it — so the label answers
+      a question the system can already answer properly, and the caveat that qualified it had
+      become a false statement displayed above verified names.
+
+      ⚠ **The CHANNEL is removed, not the control** (golden rule 13's door): a contract member
+      left in place with no UI is one edit away from coming back, and a type that cannot
+      express the value is the only version of this decision that cannot be undone by
+      accident. Under auth OFF the request frame now carries no `actor` at all and the bridge
+      records `unattributed` — see `proposal.md` for why that is the honest answer.
+    */
   };
 
   update: {
@@ -327,14 +1026,6 @@ export interface RuntimeBridge {
     state(): Promise<ChannelResponse<typeof UpdateStateChannel>>;
     cancel(): Promise<ChannelResponse<typeof UpdateCancelChannel>>;
     onStateChanged(handler: (pending: PendingUpdate | null) => void): Unsubscribe;
-  };
-
-  settings: {
-    get(): Promise<ChannelResponse<typeof SettingsGetChannel>>;
-    set(
-      req: ChannelRequest<typeof SettingsSetChannel>,
-    ): Promise<ChannelResponse<typeof SettingsSetChannel>>;
-    onChanged(handler: (next: Settings) => void): Unsubscribe;
   };
 
   /**
@@ -368,6 +1059,93 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof ChannelSettingsSetChannel>,
     ): Promise<ChannelResponse<typeof ChannelSettingsSetChannel>>;
     onChanged(handler: (state: ChannelSettingsState) => void): Unsubscribe;
+  };
+
+  /**
+   * 🔴 `R-062` gap 2 / `C-039` — **THE CHANNEL-DISCOVERY CALL.**
+   *
+   * Every channel any source knows of — the Playout's catalogue first, then the bank, then channel
+   * settings — each with its three facts kept apart: `named` (a label), `declared` (this station
+   * operates it) and `permitted` (this principal may). The strip lists the `declared` ones, under
+   * the catalogue's name where one joined. A `named` channel that is not `declared` is somebody
+   * else's output and is never offered as a channel this console operates.
+   */
+  stationChannels: {
+    list(): Promise<StationChannels>;
+    onChanged(handler: (state: StationChannels) => void): Unsubscribe;
+  };
+
+  /**
+   * 🔴 `DESKTOP-APPS-01-D` j — **ITEMS OF OURS ON A CHANNEL THIS STATION DOES NOT DECLARE.**
+   * Shown only in Station setup, to a station-admin; the one act is take-off-air (STOP then
+   * CLEAR on that exact layer). Never offered to load again.
+   */
+  strays: {
+    list(): Promise<ChannelResponse<typeof StationStraysChannel>>;
+    onChanged(handler: (strays: readonly StationStray[]) => void): Unsubscribe;
+    takeOffAir(
+      req: ChannelRequest<typeof StationTakeOffAirChannel>,
+    ): Promise<ChannelResponse<typeof StationTakeOffAirChannel>>;
+  };
+
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (D7, the Playout team's rule 8) — **CG BRIDGE'S OWN PLAYOUT SESSION.**
+   * One per bridge. While it `needs-admin`, every console says so in one line; a station admin gives
+   * the station account's password once, and the bridge keeps the refresh token and drops the
+   * password. This console never stores it either — the dialog forgets it when it closes.
+   */
+  bridgeSession: {
+    state(): Promise<ChannelResponse<typeof BridgeSessionStateChannel>>;
+    onChanged(handler: (state: BridgeSessionState) => void): Unsubscribe;
+    signIn(
+      req: ChannelRequest<typeof BridgeSessionSignInChannel>,
+    ): Promise<ChannelResponse<typeof BridgeSessionSignInChannel>>;
+    /**
+     * 🔴 `RELEASE-0112-01` (`R-085`) — EACH ENGINE'S CG Bridge session (`Primary engine`, and with a
+     * server B, `Backup engine`), in one word each: what the status bar's chips, the sign-in dialog
+     * and the check's Sign-in group say. A bridge too old to answer rejects: the console then shows the
+     * primary alone, as before.
+     */
+    engines(): Promise<ChannelResponse<typeof BridgeEnginesChannel>>;
+    onEnginesChanged(handler: (sessions: EngineSessions) => void): Unsubscribe;
+    /** A station admin signs CG Bridge in on the BACKUP engine, with that engine's own password. */
+    signInBackup(
+      req: ChannelRequest<typeof BridgeBackupSignInChannel>,
+    ): Promise<ChannelResponse<typeof BridgeBackupSignInChannel>>;
+  };
+
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` D (`R-077`) — **THE CG LICENSE**, as CG Bridge last read it from the Playout
+   * (`GET /api/cg/license`, kept through an outage). `license: null` — nothing read (auth off, a Playout
+   * before `2.9.2`): nothing is refused for it. The strip's mark and the admin's grace line read it.
+   */
+  license: {
+    state(): Promise<ChannelResponse<typeof LicenseStateChannel>>;
+    onChanged(handler: (state: LicenseState) => void): Unsubscribe;
+  };
+
+  /**
+   * 🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — **WHERE EACH CHANNEL'S LINES GO ON THE BACKUP ENGINE.** Never on
+   * the primary's channel number: on the mirror's own (from the backup engine's D4, or a station admin's
+   * entry checked against it), or nowhere. `backup: null` — no server B. A bridge too old to answer rejects,
+   * and the console says nothing about it.
+   */
+  backupChannels: {
+    state(): Promise<ChannelResponse<typeof BackupChannelsStateChannel>>;
+    onChanged(handler: (state: BackupChannelsState) => void): Unsubscribe;
+    /** A station admin's entries, complete: `CH N (primary) → CH M (backup)`. */
+    setEntries(
+      req: ChannelRequest<typeof BackupChannelEntriesSetChannel>,
+    ): Promise<ChannelResponse<typeof BackupChannelEntriesSetChannel>>;
+  };
+
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — **THE PLAYOUT'S METERS**, relayed by CG Bridge from `GET /api/cg/meters`
+   * for the channels this console's sign-in holds: bus levels every 50 ms, loudness every 150 ms. A push only
+   * — there is nothing to pull: a reading older than a moment is not a level, and the meter falls to the floor.
+   */
+  meters: {
+    onReading(handler: (reading: PgmMeterReading) => void): Unsubscribe;
   };
 
   /**
@@ -426,29 +1204,46 @@ export interface RuntimeBridge {
   sources: {
     config(): Promise<ChannelResponse<typeof SourcesConfigChannel>>;
     /**
-     * Replace the whole catalog. The BRIDGE is authoritative for the refusal —
-     * it rejects a duplicate id, a duplicate NAME, and a band overlapping the
-     * candidate bank or the reserved playout range, and supplies the wording —
-     * so a second browser cannot create a state this one is careful to prevent.
-     *
-     * A DELETION answers with `droppedAssignments`: the plates this change
-     * orphaned. The bridge cascades them rather than letting them dangle, and
-     * the caller is expected to SAY so at the moment of deletion — an operator
-     * who learns at the take is learning too late.
+     * 🔴 `PLAYOUT-SOURCES-01` §1.F — **the PLATE BAND, and nothing else.** The station's sources are
+     * the Playout's (D10 inputs, D11 media), read by the bridge; the one catalogue fact CG Control
+     * still owns is the band its plates are seated in. The BRIDGE is authoritative for the refusal —
+     * a band overlapping the candidate bank or the reserved playout range — and supplies the
+     * wording. It cascades nothing.
      */
     setConfig(
       req: ChannelRequest<typeof SourcesSetConfigChannel>,
     ): Promise<ChannelResponse<typeof SourcesSetConfigChannel>>;
-    onConfigChanged(handler: (catalog: SourceCatalog) => void): Unsubscribe;
+    /** `PLATE-BAND-01` — the catalogue with the plate band in force beside it. */
+    onConfigChanged(handler: (catalog: ConsoleSourceCatalog) => void): Unsubscribe;
     assignments(): Promise<ChannelResponse<typeof SourcesAssignmentsChannel>>;
     /**
-     * Replace the whole assignment set. Refused when a plate is assigned twice,
-     * or when it names a source this installation does not define.
+     * Replace the whole assignment set. Refused when a plate is assigned twice, or when a NEW or
+     * CHANGED binding names an entry that is not bindable (not offered, unusable, or gone).
      */
     setAssignments(
       req: ChannelRequest<typeof SourcesSetAssignmentsChannel>,
     ): Promise<ChannelResponse<typeof SourcesSetAssignmentsChannel>>;
     onAssignmentsChanged(handler: (assignments: SourceAssignments) => void): Unsubscribe;
+    /**
+     * `PLAYOUT-SOURCES-01` §1.A — one page of the Playout's media, searched on the Playout's side.
+     * A read: a viewer may search. Items carry no path — the bridge keeps the clip.
+     */
+    mediaSearch(
+      req: ChannelRequest<typeof SourcesMediaSearchChannel>,
+    ): Promise<ChannelResponse<typeof SourcesMediaSearchChannel>>;
+    /**
+     * `PLAYOUT-SOURCES-01` §1.A — a picker opened: ask the bridge to read again if its last read is
+     * older than 5 s. Answers at once; what changes arrives on {@link onConfigChanged}.
+     */
+    refresh(): Promise<ChannelResponse<typeof SourcesRefreshChannel>>;
+    /**
+     * 🔴 `MEDIA-PLATES-01` §1.A — a bound clip's two playback settings, STATION-WIDE: Loop, and what
+     * it does when a look hides it. Operator class, audited with the clip's name; the new catalogue
+     * (carrying them) arrives on {@link onConfigChanged}.
+     */
+    setMediaPlayback(
+      req: ChannelRequest<typeof SourcesSetMediaPlaybackChannel>,
+    ): Promise<ChannelResponse<typeof SourcesSetMediaPlaybackChannel>>;
   };
 
   delimiters: {

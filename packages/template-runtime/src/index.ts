@@ -8,6 +8,7 @@
 
 export { createRuntime } from './runtime.js';
 export { installCasparGlobals } from './adapters/caspar-globals.js';
+export { installCompletionPing } from './adapters/completion-ping.js';
 export {
   applyOutputPosition,
   outputTranslate,

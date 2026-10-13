@@ -161,7 +161,7 @@ function comp(id: string, outPoint: number, children: Element[]): Composition {
     frameRange: { in: 0, out: 100 },
     activeRange: { in: 0, out: 100 },
     lifecycle: { outPoint },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: `${id}-l`, name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],
@@ -182,7 +182,7 @@ function parentScene(compositions: Composition[], children: Element[], outPoint:
     frameRange: { in: 0, out: 100 },
     activeRange: { in: 0, out: 100 },
     lifecycle: { outPoint },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: 'pl', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],
@@ -322,7 +322,7 @@ function repeaterRowComp(children: Element[]): Composition {
     frameRange: { in: 0, out: 100 },
     activeRange: { in: 0, out: 100 },
     lifecycle: { outPoint: 70 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: 'rl', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],

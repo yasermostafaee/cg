@@ -1,5 +1,6 @@
 import { style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
+import { inlineMuted } from './prose.css.js';
 
 /**
  * D-108 (visual) — the READ-ONLY nested-composition drill-in rows in the Playout
@@ -66,10 +67,8 @@ export const actionValue = style({
   flex: '1 1 auto',
 });
 
-/** Instructional prose, demoted out of the action itself. */
-export const caption = style({
-  color: colors.textMuted,
-  fontSize: '0.66rem',
-  lineHeight: 1.4,
-  margin: '0.2rem 0 0',
-});
+/**
+ * Instructional prose, demoted out of the action itself. `DESIGNER-FIX-0905` §4 — the shared
+ * legible default, not a 0.66rem copy of it.
+ */
+export const caption = inlineMuted;

@@ -110,12 +110,22 @@ describe('createMock', () => {
     });
   });
 
-  it('INFO with a channel arg returns an XML stub', async () => {
+  it('INFO with a channel arg answers in the REAL 2.5.0 dialect (B-189)', async () => {
     mock = await createMock({ amcpPort: 0, oscPort: 0, channels: 1, disableOsc: true });
     const reply = await sendAndReceive(mock.amcpPort, ['INFO 1']);
-    expect(reply).toContain('200 INFO OK\r\n');
+    // `201` + ONE payload chunk with bare `\n` inside and a single terminal CRLF — the
+    // framing captured from 2.5.0 `69e8ad5` on 2026-08-31. The old stub's `200`/`ok-multi`
+    // was the code's expectation, not the server's dialect, and it is what kept `B-189`
+    // invisible: a mock that agrees with the code only proves the code agrees with itself.
+    expect(reply).toContain('201 INFO OK\r\n');
     expect(reply).toContain('<channel>');
-    expect(reply).toContain('1080i5000');
+    // The mode rides `<format>` — the tag the real server emits (never `<video-mode>`).
+    expect(reply).toContain('<format>1080i5000</format>');
+    expect(reply).not.toContain('<video-mode>');
+    // One chunk: no CRLF between the XML lines, exactly one at the very end.
+    const body = reply.slice(reply.indexOf('\r\n') + 2);
+    expect(body.endsWith('\n\r\n')).toBe(true);
+    expect(body.slice(0, -2)).not.toContain('\r\n');
   });
 
   it('INFO on an unknown channel returns 404', async () => {

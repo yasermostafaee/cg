@@ -2,7 +2,15 @@
 
 Cross-cutting items: shared packages, build/hosting, tests. See `README.md`.
 
-## [ ] P-001 — Bundle Vazirmatn offline ⟨priority: high⟩
+## [x] P-001 — Bundle Vazirmatn offline ⟨priority: high⟩
+
+**Done 2026-09-23 — `DESKTOP-APPS-01` §2B, change archived as
+`openspec/changes/archive/2026-09-23-desktop-apps/`.** The
+Runtime needed no new dependency: `main.tsx` now imports the `fonts.css` it already shipped, the
+jsdelivr `<link>` is gone and `cdn.jsdelivr.net` has left `style-src` and `font-src`. Both apps are
+pinned by `tests/e2e/fonts-offline.spec.ts`: with every off-machine host unreachable, no font or
+stylesheet request leaves the machine (control: the Arabic-range Vazirmatn face reports `loaded`,
+fetched from the page's own origin).
 
 **What:** Ship the Vazirmatn font with the apps instead of loading it from the
 jsdelivr CDN, and tighten the CSP accordingly.
@@ -22,6 +30,32 @@ returns** — the observed symptom is a hang, not a fallback to a system face. T
 the `medium` recorded here: this item was written as a portability and CSP improvement, and the
 report shows the target deployment is the one that breaks. The `What`, `Why` and `Acceptance`
 above already describe the fix correctly and are unchanged; only the severity moved.
+
+### ⭐ FOLDED IN 2026-08-11 — `runtime-splash-screen` task 8.4, and it makes the Runtime half CHEAPER than this item assumes
+
+R-035's deferral list carried "the Runtime's UI font still comes off a CDN" as an item of its own.
+It is **not** a separate item — it is exactly this one, so it is folded in here rather than filed
+as a duplicate (source:
+`openspec/changes/archive/2026-08-11-runtime-splash-screen/DEBT.md` §4). Two facts come with it,
+and the first changes the shape of the work:
+
+1. 🔴 **The Runtime ALREADY SHIPS the Vazirmatn faces** — `apps/runtime/src/renderer/fonts.css`
+   carries them — **but that file is imported only as `?inline`, for template delivery.** So the
+   app UI reads Persian off the network while the same faces sit unused in the bundle. For the
+   Runtime the fix may therefore be pointing the app UI at faces that are already there and
+   dropping the `<link>`, rather than adding `@fontsource/vazirmatn` as the Notes above assume.
+   **Check which is true per app before adding a dependency** — the Designer already self-hosts.
+2. **A partial mitigation is already in place on the Runtime, and it is NOT the fix.** R-035 made
+   the jsdelivr `<link>` non-render-blocking (`media="print"` until `onload`), because in its
+   previous form it blocked the FIRST PAINT until the CDN answered or the socket timed out — on a
+   LAN-only machine, never. That removed the hang from the boot path and **nothing more**: the UI
+   still falls back to a system face offline, which is a Persian/RTL shaping regression, not a
+   cosmetic one. Do not read the splash's green acceptance as evidence this item is smaller than
+   it was.
+
+The verification this needs is a font-loading change with Persian/RTL consequences — mixed
+RTL/LTR shaping checked with the network cut, per CLAUDE.md golden rule 4 — which is why R-035
+declined to smuggle it into a boot screen.
 
 ## [ ] P-002 — Lightweight routing / app shell ⟨priority: low⟩
 
@@ -1174,6 +1208,30 @@ for the normal one-at-a-time cadence, not for a burst. The lever if that ever ma
 concurrency group — deliberately NOT taken, because it removes the serialization that keeps
 runner-minute spend bounded.
 
+### ⚠ ADDENDUM 2026-08-19 — a `cancelled` conclusion has TWO causes, and they demand OPPOSITE responses
+
+Session AY read a `cancelled` push run as a supersede and concluded, in its handoff, that this item's
+claim was false. **It is not.** Verified two ways on run `32252553391` (`f894d0e8`):
+
+1. **The config says so** — `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`, so a
+   push run is never cancelled by a newer push.
+2. 🔴 **The timeline proves it independently** — the next push landed at **12:43:00** and that run's
+   `e2e` job went on running until **12:45:37**, outliving it by 2½ minutes. A supersede would have
+   killed it at 12:43.
+
+**What actually happened: the `e2e` job hit `timeout-minutes: 20`** (it ran 12:25:21 → 12:45:37 =
+20 m 16 s), **and GitHub reports a job killed by `timeout-minutes` as `cancelled`, not `failed`.**
+
+⇒ **Read the DURATION before reading the word.** A supersede is noise and the right response is to
+ignore it; a timeout is a real signal about the suite and the right response is to investigate. They
+are indistinguishable by `conclusion` alone, which is precisely how one gets mistaken for the other.
+
+⚠ **And the numbers say this one was a HANG, not a suite that has outgrown its budget.** The five
+healthy `e2e` runs that day took **9 m 37 s, 10 m 11 s, 11 m 44 s, 12 m 10 s, 12 m 12 s** — the worst
+is 61 % of the ceiling. A run that reached 20 m was not creeping past a budget; it stopped making
+progress. Raising `timeout-minutes` would hide that, which is `B-073`'s lesson: the fix is never a
+longer rope.
+
 **A SECOND, INDEPENDENT CAUSE — found by the acceptance test, which is the entire reason the fix is
 verified end to end rather than reasoned about.** With the base fixed, a docs-only push STILL ran
 `ci` and `e2e` (run 31257557820, whose only changed file was `docs/prd/bugs.md`). The filter's own
@@ -1371,7 +1429,7 @@ uses), and the completeness backstop now recorded in CLAUDE.md and
 `openspec/specs/platform-ci/spec.md` — the daily `dev` → `main` merge classifies the whole span, so
 anything an individual push skipped is still caught there.
 
-## [~] P-030 — the `dev` → `main` merge re-runs a full gate against a SHA that already has a green one ⟨priority: medium⟩ — in progress: `.github/workflows/pr.yml` (the `reuse` step)
+## [x] P-030 — the `dev` → `main` merge re-runs a full gate against a SHA that already has a green one ⟨priority: medium⟩ — SHIPPED: `.github/workflows/pr.yml` (the `reuse` step) + `tools/gate-hook/src/reuse-decision.mjs` (the pure rule). The `event === 'push'` match condition is archived at `openspec/changes/archive/2026-08-11-platform-reuse-guard-push-only/` (living spec `platform-ci`), verified by CI run <https://github.com/yasermostafaee/cg/actions/runs/31475639919> on commit `d693fa35` — `conclusion: success`, `Lint • Typecheck • Test • Build` ✓. ⚠ That run's `e2e` job was **skipped** (classifier: `{kind: 'code', needsE2e: false}`), which is correct for this diff and discharges NO e2e debt — this change alters no UI, layout, or rendering path
 
 **The symptom.** `dev` → `main` is a **`--ff-only`** merge, so `main`'s new HEAD is the **SAME
 COMMIT** as `dev`'s tip — **same SHA, same tree**. The push to `main` fires a full run against a tree
@@ -1383,10 +1441,12 @@ minutes are metered, so this is a recurring bill for re-proving a tree nothing c
 ⚠ **`[skip ci]` cannot help**, and this is why the fix has to be a workflow-level guard rather than a
 commit-message convention: **a fast-forward creates no commit** whose message could carry it.
 
-### The three-part match condition — and the third is the one a naive version gets wrong
+### The four-part match condition — and the third is the one a naive version gets wrong
 
 The guard asks the Actions API whether **this workflow** already has a run for the same `head_sha`,
-and may skip the heavy jobs **only** on a positive, complete match:
+and may skip the heavy jobs **only** on a positive, complete match. ⭐ **A FOURTH condition was added
+2026-08-11 — the run must be a `push` run** (`openspec/changes/platform-reuse-guard-push-only/`); see
+the qualification section below for why it is not optional:
 
 1. **The run is for the same `head_sha`**, and is not this run (a run can never verify itself — on a
    re-run it would otherwise find its own record and skip the work it was re-run to do).
@@ -1398,6 +1458,9 @@ and may skip the heavy jobs **only** on a positive, complete match:
    produces exactly that. And **the merge run is the completeness backstop** that would otherwise
    catch the day's render changes. So: skip only when the prior run's **`ci` AND `e2e` both RAN and
    succeeded**; if either was **skipped** there, do **not** skip here. **Fail toward running.**
+4. ⭐ **`event === 'push'`.** Only a `push` run tests the tree of that exact commit; a
+   `pull_request` run tests the merge ref. POSITIVE check — a missing, empty, or unrecognised
+   `event` is an uncertainty, never a permission.
 
 **Every uncertainty runs everything.** An API error, a missing permission, unreadable jobs, an
 ambiguous or empty result, a job renamed in the workflow without mirroring it in the guard — all
@@ -1407,6 +1470,68 @@ the absence of a negative.
 **Scope: `push` to `main` only.** Not `dev`, not `pull_request`. Every `dev` push has its own SHA so
 it would never match anyway, but restricting it **states the intent** and keeps re-run requests
 predictable.
+
+### 🔴 WHY reusing a green SHA is safe at all — classification gates WHETHER; the jobs are WHOLE-TREE
+
+**This is recorded because the alarm it dissolves is a GOOD one, it was raised in review, and the
+reasoning that answers it lived nowhere.** The next reader will raise it again — and might "fix" a
+guard that is already correct.
+
+**The alarm.** The guard skips the `main` run when the same SHA already has a green run that executed
+`ci` and `e2e`. But that run classified only **its own push's diff**, while the merge run's job is the
+whole **`main..head` span** — so (the argument goes) an earlier commit in the span could be uncovered,
+and the guard would skip the very run that covers it.
+
+**Why it is wrong: neither heavy job is diff-scoped.** Checked in `.github/workflows/pr.yml` rather
+than assumed. The steps are bare workspace-wide scripts — no `--filter`, no changed-file input, no
+path argument:
+
+| Job                               | Its steps, verbatim                                                               | What they cover                                                     |
+| --------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `Lint • Typecheck • Test • Build` | `pnpm format:check` · `pnpm typecheck` · `pnpm lint` · `pnpm test` · `pnpm build` | the whole workspace — each is `turbo run <task>` over every package |
+| `E2E (Playwright)`                | `pnpm build` · `pnpm test:e2e`                                                    | the **entire** Playwright suite (`turbo run test:e2e`)              |
+
+The changed-path classification ([[P-027]] / [[P-029]]) feeds only the jobs' `if:` conditions —
+`needs.changes.outputs.code` and `needs.changes.outputs.needs_e2e`. It never reaches a step.
+
+> **Classification gates WHETHER the jobs run; the jobs themselves are whole-tree.**
+
+So a green run in which both **EXECUTED** verifies the whole **TREE** at that SHA — and that tree
+contains the code of every earlier commit in the span. Reusing it does not narrow coverage; it
+declines to compute the same whole-tree answer twice.
+
+#### The corollary — the match condition is exactly right, not accidentally right
+
+🔴 Whole-tree coverage is a property of jobs that **RAN**. That is the entire reason constraint 3
+above is not belt-and-braces: **skipping is safe ONLY because the guard requires the prior run to have
+EXECUTED both jobs.** A run that was green having **SKIPPED** `e2e` proves nothing whatsoever about
+the tree's render behaviour — which is precisely why that case must not be reused.
+
+⚠ **The condition is LOAD-BEARING. Do not let a later reader relax it to "a green run exists for this
+SHA".** That reads as a harmless simplification of a fiddly rule, and it silently deletes the
+completeness backstop.
+
+✅ **"Same SHA ⇒ same tree" is no longer an assumption — candidates are `push` runs ONLY**
+(`openspec/changes/platform-reuse-guard-push-only/`, 2026-08-11). A **`push`** run tests the tree of
+that exact commit, so the whole-tree argument above applies to it directly. A **`pull_request`** run
+does not: it checks out the **merge ref** (`refs/pull/N/merge`), so `head_sha` names the commit while
+the tree tested is `merge(head, base)` — the same tree only while base is already an ancestor of head.
+`decideReuse` now requires `event === 'push'` as a fourth match condition, which **ELIMINATES** the
+base-dependency rather than documenting it. The check is POSITIVE (only the exact string `push`
+qualifies; a missing, empty, or unrecognised `event` is an uncertainty and runs everything), it lives
+in the **pure function** so it is unit-tested, and `pr.yml`'s API query additionally passes
+`event=push` as defence in depth — the query is not the guard.
+
+**This mattered in practice, in both directions.** The first live reuse consumed a **`pull_request`**
+run (`31469356886`); it was correct only because the ancestry invariant happened to hold that day
+(`caf94f0`, the previous `main` tip, is an ancestor of `a9ecfaa`). And the divergent state is real:
+PR #439 was squash-merged on GitHub, `main` diverged from `dev`, and PR #440 sat open with a conflict.
+Cost of the restriction is zero in the current model — there are no PRs; `dev` is pushed directly and
+the owner merges by hand — so every candidate the guard should ever see is already a `push` run.
+
+**SUPERSEDED text:** this paragraph previously read _"the guard does not filter candidates by
+`event` … if that invariant ever stops holding … this is the assumption to re-check"_. It is not an
+assumption any more, and there is nothing left to re-check.
 
 ### Acceptance
 
@@ -1436,31 +1561,2546 @@ The decision is a **pure module** (`tools/gate-hook/src/reuse-decision.mjs`), un
   and it needed no construction: an ordinary docs-only push produces it.
 - **e2e failed** — `ab7d12e`, run `31406199136`: `ci` green, `e2e` `failure` ⇒ **do NOT reuse**.
 
+⭐ **The `event` condition is tested off the SAME real fixture, changing only the event**, so nothing
+but the event can explain the different verdict: `both-ran` re-labelled `pull_request` ⇒ **do NOT
+reuse**, with a reason naming the non-push rejection and the counts; `event` absent / empty /
+`merge_group` / `PUSH` ⇒ **do NOT reuse** (each of those would be an automatic pass under a
+`!== 'pull_request'` phrasing, which is why the check is positive); and a mixed list with a
+`pull_request` run FIRST still reuses the `push` run behind it, proving the event check filters the
+candidate set rather than aborting on it. All six were confirmed RED against the pre-fix
+implementation before the fix was restored.
+
 Plus a test that reads `pr.yml` itself and asserts the job names the guard matches on still exist
 there, so a rename fails loudly instead of silently turning the guard into a permanent
 "run everything".
 
-### ⚠ UNDISCHARGED — the live end-to-end run on `main`
+### ✅ DISCHARGED — the live end-to-end run on `main`, observed 2026-08-11
 
-**Both directions are verified against real API data; NEITHER has been observed on a real `push` to
-`main` run, and CC cannot produce one.** CLAUDE.md is explicit that **CC never commits to, or merges
-into, `main`** — the owner performs that merge by hand — and the guard fires on **no other event by
-design** (constraint 1). So the one thing that cannot be self-tested here is the live firing.
+**Both directions were verified against real API data, but NEITHER had been observed on a real `push`
+to `main`, and CC could not produce one** — CLAUDE.md is explicit that **CC never commits to, or
+merges into, `main`**, and the guard fires on no other event by design (constraint 1). The owner's
+merge on **2026-08-11** supplied the live firing, and it behaved exactly as specified.
 
-What that leaves unproven is narrow and one-directional: the `gh api` invocation and the
-`actions: read` grant have not been exercised on a runner. **Both fail SAFE** — an API error or a
-missing permission yields `reuse=false` and the full gate runs, i.e. exactly today's behaviour — so
-the untested path can cost minutes, never coverage.
+**The merge run — https://github.com/yasermostafaee/cg/actions/runs/31470347819** (`push` to `main`,
+`a9ecfaa`, `conclusion: success`). From its log:
 
-**To discharge:** on the next `dev` → `main` merge, read the `main` run's summary. It states either
-_"heavy jobs skipped … verified by \<url\>"_ or _"running the full gate — \<reason\>"_. Record which,
-with the run URL, here.
+```
+classification: kind=code needsE2e=true files=31 => code=true
+P-030: reuse=true — prior run 31469356886 is completed+successful and RAN both Lint • Typecheck • Test • Build and E2E (Playwright)
+code=true | needs_e2e=true | reuse=true | ci=skipped | e2e=skipped | docs-check=success
+Already verified by a completed, successful run of this workflow for this SHA
+```
+
+**Every clause of the acceptance is visible in that one run**, and the first line is the important
+one: the merge run classified the **WHOLE span** — 31 files ⇒ `kind=code needsE2e=true` — so this was
+**not** a docs-only or not-owed skip. It was a span that genuinely owed both jobs, and the guard
+skipped them **only** because a prior run had actually RUN both. `required` then passed **citing the
+prior run's URL**, so "green because it did nothing" stays distinguishable from "green because it
+passed". The `gh api` invocation and the `actions: read` grant are now exercised on a runner.
+
+**The prior run reused — https://github.com/yasermostafaee/cg/actions/runs/31469356886** (`a9ecfaa`,
+`success`; `Lint • Typecheck • Test • Build = success`, `E2E (Playwright) = success`).
+
+🔴 **This run is also the concrete instance of the section above.** The reused run's own push
+classified a different, smaller diff than the merge run's 31-file span — the exact shape the alarm
+warns about — and the outcome is correct anyway, because both jobs are whole-tree. The theory and its
+first live case are the same story.
+
+⚠ **Also discharged by it: [[B-132]]'s open code debt.** `d32fa13`'s files
+(`.github/workflows/pr.yml`, `tools/gate-hook/src/reuse-decision.mjs`, its fixtures/tests/types,
+`openspec/specs/platform-ci/spec.md`) are all inside that 31-file span, and run `31469356886` ran both
+heavy jobs green on a tree containing them. **This item's own commit is now CI-verified.**
 
 ⚠ **AND THIS ITEM'S OWN COMMIT HAS NO CI RUN — see [[B-132]].** The push of `d32fa13`, which carries
 this guard, produced **no GitHub Actions run at all** (no run object, no check suite; the workflow
 validates clean and Actions reports operational), and the NEXT push's run **skipped both heavy jobs**
 because [[P-027]] classifies each push against the previous tip and that one was docs-only. So this
-guard landed on a full green LOCAL gate with **no CI verification of its own, and no later `dev` push
-will supply one.** The `dev` → `main` merge sweeps the whole span and is what will finally gate it —
-read that run before archiving this item, separately from and in addition to the live `main`-run
-discharge above.
+guard landed on a full green LOCAL gate with **no CI verification of its own.**
+
+✅ **RESOLVED 2026-08-11 — and how it resolved is the point.** Run `31469356886` ran both heavy jobs
+green on `a9ecfaa`, a tree that contains `d32fa13`'s files, so the code is verified; the `main` merge
+run then classified the whole 31-file span and reused it. Note that the earlier claim here — that _"no
+later `dev` push will supply one"_ — was **too strong**, and it is the same error [[B-132]] has now
+been re-scored for: no later push gives that commit **its own** run, but any later run that EXECUTES
+the heavy jobs verifies the **tree** containing it. What a dropped event costs is the per-commit
+signal, not the eventual verification.
+
+---
+
+## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.11.4`** — `0.9.0`, `0.9.1`, `0.10.0`, `0.11.0`, `0.11.1`, `0.11.2` and `0.11.3` were never delivered; `CENTRAL-BRIDGE-01` set it at `0.10.0` (2026-09-30), `RELEASE-0110-01` moved it to `0.11.0`, `RELEASE-0111-01` to `0.11.1`, `RELEASE-0112-01` to `0.11.2`, `RELEASE-0113-01` to `0.11.3`, and `RELEASE-0114-01` moves it to `0.11.4`, the build the client receives (2026-10-07); `RELEASE-0115-01` keeps it there, `0.11.4` being installed at a station (2026-10-11 — see the sections at this item's foot)
+
+**What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
+`migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
+it — but it must stop presenting itself as the place a schema conversion goes, because a migration
+registered there is a conversion that never runs.
+
+**Why:** The trap is not the dead code; it is the **docstring**, which tells the next author exactly
+the wrong thing:
+
+> _"The loader in `@cg/vcg-format` walks the registry from the loaded version to current."_
+
+It does not. **Measured 2026-08-11** (`git grep`, whole repo):
+
+| Claim                                                      | Reality                                                                                                                                                                                |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@cg/vcg-format` walks the registry                        | `packages/vcg-format/` contains **no reference to `migrations` at all** — not an import, not a call                                                                                    |
+| something outside `@cg/shared-schema` imports `migrations` | **nothing does.** The only importers are `packages/shared-schema/tests/migrations.test.ts` and `tests/zones.test.ts` — its own tests                                                   |
+| `schemaVersion` is read to select a migration              | it is **WRITTEN** by `apps/designer/src/platform/ProjectStore.ts:72` and `packages/vcg-format/src/pack.ts:94`, and read back only as `z.literal(1)` (`scene.ts:339`, `manifest.ts:54`) |
+
+So `schemaVersion` is **ASSERTED, never converted**: a document carrying `schemaVersion: 2` does not
+enter a migration, it **fails to parse** — `packages/vcg-format/tests/pack.test.ts:84` pins exactly
+that behaviour with a `schemaVersion: 99` fixture that is expected to `reject`. The walker's own
+`while (version < CURRENT_SCHEMA_VERSION)` loop can therefore never execute a step: the only version
+the schema admits IS the current one.
+
+**The two live consequences** — this is why the item exists rather than being a tidy-up:
+
+1. 🔴 **Any migration registered there is a conversion that never runs — and it LOOKS like the fix.**
+   The author writes an `up()`, ticks the task, and ships a silent no-op. Old documents then break
+   quietly at parse time, at the exact moment the registry was supposed to save them. Two changes have
+   now had to stop and re-derive this fact under time pressure ([[B-129]], and the project-package
+   work that closes [[B-104]]).
+2. **The codebase's WORKING precedent is parse-time normalization, and it is unwritten anywhere the
+   registry's reader would see it.** `PlayoutSchema`'s legacy `mode` key and [[B-129]]'s
+   `background` → `editorBackdrop` both normalize in a `z.preprocess` on the schema itself. That runs
+   on **every** load path for free, because every load path parses — which is precisely the property
+   the registry claims and does not have.
+
+**Acceptance:**
+
+- WHEN a developer opens `packages/shared-schema/src/migrations/index.ts` THEN its docstring states
+  what is TRUE of the registry today — no claim that any loader walks it — and points at parse-time
+  normalization (`z.preprocess`, per `PlayoutSchema`) as the mechanism that actually runs.
+- WHEN the decision is DELETE THEN `migrations/index.ts`, its export from `src/index.ts`, and
+  `tests/migrations.test.ts` are removed together, and `zones.test.ts`'s "registry is still empty"
+  assertion is removed or re-pointed, so no dangling reference survives.
+- WHEN the decision is WIRE IT UP THEN a real load path (`unpack`, `ProjectStore.load`) calls
+  `migrate()` BEFORE parsing, `SceneSchema.schemaVersion` stops being a `z.literal` that rejects every
+  older version, and a test proves a `schemaVersion: N-1` document loads through a registered step.
+- WHEN either decision lands THEN a test fails if a future `SchemaMigration` is registered without the
+  chosen mechanism being in force — the registry may never again be a plausible-looking dead end.
+
+**Notes:** The lying docstring was corrected in the same commit that filed this item (2026-08-11) —
+that part is a one-line removal of a trap, not the fix. The fix is the decision above, and it is
+deliberately NOT made here: it is a real fork (delete vs. wire) that wants the owner's call on whether
+this product ever ships a schema-version bump. Related: [[B-129]] recorded the measurement first, on
+its `editorBackdrop` preprocess (`packages/shared-schema/src/scene.ts:163`).
+
+---
+
+### ⭐ THE OWNER'S DECISION (2026-08-11) — DELETE, and the COMPATIBILITY FLOOR that governs it
+
+**The fork above is answered: DELETE.** The registry is gone
+(`packages/shared-schema/src/migrations/` and its `export * as migrations`), and
+`SceneSchema.schemaVersion` stays `z.literal(1)` — which is now the WHOLE mechanism, not a
+leftover beside one. A document from any other schema version fails to parse, loudly, at the
+door. That is the intended behaviour and it must not be softened.
+
+**The decision is bigger than the registry, because the context is:** _the product has not
+been delivered to a client yet, and no project file in the world has to keep opening._ Every
+backward-compatibility path is therefore DEBT that READS AS SAFETY — code the next author
+must reason about, and a second document shape every downstream consumer branches on, bought
+for nobody. This is the cheapest moment it will ever be to shed it, so it was shed.
+
+**Removed in the same change (each one a legacy shim, and nothing else):**
+
+| Removed                                                                                    | It existed to…                                                                | Replaced by                                                                            |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `packages/shared-schema/src/migrations/` + its export                                      | walk a registry to convert older documents (it never ran — that is this item) | nothing. `z.literal(1)` is the mechanism                                               |
+| `readProjectDocument`'s bare-`.cg.json` arm (`@cg/vcg-format`)                             | open pre-D-150 projects, which were a scene JSON with no assets               | ONE readable throw: _"Pre-package projects (a bare .cg.json) … re-create the project"_ |
+| `AssetStore.collectLegacyAssets` + the legacy `adoptDocument` arm                          | scrape whatever asset bytes a converted project still had in the workspace    | nothing — there is no conversion to feed it                                            |
+| `ProjectDocumentForm` / `ProjectDocument.form` / nullable `manifest`                       | let callers branch on package-vs-legacy                                       | one form, so no branch and no nullable                                                 |
+| `SceneSchema`/`CompositionSchema`'s `background` → `editorBackdrop` `z.preprocess` (B-129) | accept the pre-B-129 spelling of the editor backdrop                          | a required-key parse failure naming `editorBackdrop`                                   |
+| the forced-Save-As rule for converted projects (`convertedProjects`)                       | stop a converted package overwriting the `.cg.json` it came from              | nothing — see the judgment below                                                       |
+
+**LEFT IN PLACE, deliberately, and why:**
+
+- **The parse-time normalization MECHANISM itself.** `z.preprocess` is how this codebase
+  reshapes input at the door, and it is the mechanism this item's own acceptance points at.
+  Only the LEGACY USES of it were removed.
+- **`PlayoutSchema`'s legacy `mode` key.** It is the same class as the `background` shim and
+  the policy below covers it, but it was NOT in the owner's enumerated list and removing it
+  is a separate ripple (`docs/prd/designer.md`'s D-020 surface). Flagged here rather than
+  taken: **it is the one remaining legacy shim, and it is now the owner's call.**
+- **`z.literal(1)` on `schemaVersion`.** Load-bearing, and more so than before: it is the
+  only thing left that turns a stale document into a loud failure instead of a silent
+  mis-parse.
+
+**The forced-Save-As rule — judged on its own merits, not dropped by association.** D-150
+forced a converted project's first Save through the file picker so a `.cgproj` was never
+written over the `.cg.json` it came from. Re-judged: the ONLY thing that rule protected
+against was opening a document in a format DIFFERENT from the one Save writes. With the
+`.cg.json` read path gone, that mismatch is unreachable — every document the app can open is
+already the format it saves. Keeping the `Set` would have left a mechanism nothing can ever
+add to, which is precisely the dead-code-that-advertises-a-safeguard defect this item exists
+to end. So it went, and a real Save As (`askPath`) still forces the picker.
+
+### 🔴 THE POLICY, AND ITS REVERSAL — write this into any argument about compatibility
+
+**Until the first client delivery, NO backward compatibility is owed.** A shim that lets an
+older file open is optional, and where it costs a branch, a second document shape or a second
+derivation, the default is to DELETE it and fail loudly instead.
+
+**⭐ THE FIRST SHIPPED RELEASE BECOMES THE COMPATIBILITY FLOOR, AND THIS POLICY REVERSES AT
+THAT MOMENT.** From the first release a client actually holds, a file that release could open
+must keep opening — shims stop being optional, they become a requirement with a test, and
+removing one becomes a breaking change that needs its own decision and a migration story.
+
+**Both halves are written down on purpose.** The reversal is the half that will be forgotten:
+without it, someone reads "no backward compatibility is owed" a year from now, cites this
+item, and deletes a path a real station's files depend on. **Today's decision is scoped to
+today's fact — nothing has shipped — and it expires the moment that fact does.** If you are
+reading this after a release has gone out, this section is HISTORY, not licence.
+
+### 🔴 THE FLOOR IS SET — `0.9.0`, the first client delivery (2026-09-29, `CLIENT-TEST-RELEASE-01` B1)
+
+**Superseded (2026-09-30): `0.9.0` was never delivered, and the floor is OPEN — see the next section.**
+What follows is the record of that day.
+
+**`0.9.0` is the first release a client holds** — CG Control, CG Designer and the bridge, one
+version (`tools/release/src/release-version.mjs` reads all nine files that carry it). **The policy
+above reverses from this release.** Everything `0.9.0` can open must keep opening in every later
+release; a shim that keeps it opening is a requirement with a test; removing one is a breaking change
+that needs its own decision and a migration story.
+
+**What `0.9.0` opens, and so must keep opening:**
+
+- a `.vcg` template package — manifest `schemaVersion: 1`, `formatVersion: '1.0'`
+  (`packages/shared-schema/src/manifest.ts:54`, `:56`), its scene `schemaVersion: 1`
+  (`packages/shared-schema/src/scene.ts:545`);
+- a CG Designer project, `.cgproj` — `formatVersion: '1.0'`
+  (`packages/shared-schema/src/project-package.ts:56`);
+- CG Control's station files, read at every start from `%APPDATA%\CG Control\.cg-runtime\` — the
+  `bridge-*.json` stores and the template registry under `bridge-templates\`;
+- what each app keeps in its own WebView2 storage (the console's retained stack, the Designer's
+  workspace).
+
+Every record or comment that cites this item's licence ("nothing has shipped", "no conversion is
+owed") was written before `0.9.0` and is history from this date. `CG_RUNTIME_VERSION`
+(`packages/shared-schema/src/runtime-version.ts`) is a rendering-CONTRACT version and is untouched by
+this release, as its header prescribes for an ordinary release.
+
+### 🔴 THE FLOOR IS OPEN until `CENTRAL-BRIDGE-01` sets it at `0.10.0` (the owner, 2026-09-30)
+
+**Superseded (2026-09-30): `CENTRAL-BRIDGE-01` has set it — see the next section.** What follows is
+the record of the open interval.
+
+**Neither `0.9.0` nor `0.9.1` is delivered.** The owner's own check of `0.9.0` found the faults
+[[P-060]] carries, and its draft is retitled `v0.9.0 — superseded, do not use`; `RELEASE-091-01`
+DELTA B (B0) decided `0.9.1` is not handed to a client either — `CENTRAL-BRIDGE-01` (`0.10.0`, one
+bridge per Playout) comes first. `RELEASE-091-01` §5 had moved the floor to `0.9.1`; the owner's
+decision of 2026-09-30 leaves it **open**, and `CENTRAL-BRIDGE-01` sets it at `0.10.0`, the first
+release a client will hold. Until then no release a client holds constrains a format: the policy above
+applies as it did before `0.9.0`. The list in the section above is what `0.9.0` would have been held
+to; `CENTRAL-BRIDGE-01` writes `0.10.0`'s when it sets the floor.
+
+### 🔴 THE FLOOR IS SET — `0.10.0` (2026-09-30, `CENTRAL-BRIDGE-01` §1 E)
+
+**`0.10.0` is the first release a client will hold** — CG Bridge, CG Control and CG Designer, one
+version (`tools/release/src/release-version.mjs` reads the nine files that carry it; CG Bridge's
+installer is built from the same number). **The policy above reverses from this release.** Everything
+`0.10.0` can open must keep opening in every later release; a shim that keeps it opening is a
+requirement with a test; removing one is a breaking change that needs its own decision and a
+migration story.
+
+**What `0.10.0` opens, and so must keep opening:**
+
+- a `.vcg` template package — manifest `schemaVersion: 1`, `formatVersion: '1.0'`
+  (`packages/shared-schema/src/manifest.ts:54`, `:56`), its scene `schemaVersion: 1`
+  (`packages/shared-schema/src/scene.ts:545`);
+- a CG Designer project, `.cgproj` — `formatVersion: '1.0'`
+  (`packages/shared-schema/src/project-package.ts:56`);
+- CG Bridge's configuration, `%ProgramData%\CG Bridge\cg-bridge.json` — read at every start through
+  `ServiceConfigSchema` (`tools/caspar-bridge/src/service-config.ts:22`), which is STRICT: a key a
+  later release adds must be optional there, and a key it drops must still parse;
+- CG Bridge's station files, `%ProgramData%\CG Bridge\.cg-runtime\` — the `bridge-*.json` stores
+  (its own stack and Playout session among them) and the template registry under `bridge-templates\`;
+- a CG Control `0.9.x` user's `%APPDATA%\CG Control\.cg-runtime\`, which CG Bridge's installer imports
+  ONCE (`tools/caspar-bridge/src/import-state.ts`) — the one reader of a pre-floor shape, kept because
+  a station moving to `0.10.0` has nothing else to carry its layers over with;
+- what each app keeps in its own WebView2 storage — CG Control's station record
+  `cg.runtime.station.v1` (`apps/runtime/src/platform/stationAddress.ts`) and its display copies of
+  the library and the stack; the Designer's workspace;
+- the console ↔ CG Bridge protocol within `0.10.x`: a console and a bridge of the same `major.minor`
+  must work together, because that is the line the version check draws (`sameReleaseLine`,
+  `packages/shared-ipc/src/channels/capabilities.ts`) — a patch may add, never break.
+
+Every record or comment that cites this item's licence ("nothing has shipped", "no conversion is
+owed") was written before `0.10.0` and is history from this date. `CG_RUNTIME_VERSION`
+(`packages/shared-schema/src/runtime-version.ts`) is a rendering-CONTRACT version and is untouched by
+this release, as its header prescribes for an ordinary release.
+
+### 🔴 THE FLOOR MOVES — `0.11.0` (2026-10-04, `RELEASE-0110-01` §1)
+
+**Why:** the owner's decision of 2026-10-03 — `0.11.0` is the build the client gets, and `0.9.0`, `0.9.1`
+and `0.10.0` were never delivered to the client. The floor is the first release a client holds, so it
+is `0.11.0`, not `0.10.0`: `0.10.0` lived only on the owner's own machines and the `.111` test plant.
+
+**What it means:** everything `0.11.0` opens must keep opening in every later release, with the same
+list as the `0.10.0` section above, read at `0.11.0` — the five files that define the `.vcg` manifest
+and scene, the `.cgproj`, CG Bridge's `cg-bridge.json` and CG Control's station record are unchanged
+since `v0.10.0` (an empty `git diff v0.10.0` over them, 2026-10-04) — and the console ↔ CG Bridge
+protocol within `0.11.x` (`sameReleaseLine`:
+a `0.10` console or bridge meets a `0.11` one only with the one refusal line, pinned both ways in
+`apps/runtime/tests/bridgeSkew.test.ts`).
+
+**The `0.10.0` installs are still carried forward, without being a floor:** the owner's own machines
+and the test plant hold `0.10.0`, and `0.11.0`'s installers are to upgrade them in place, settings
+kept — `RELEASE-0110-01` §3 tests that on a clean runner, from the `v0.10.0` draft's own installers. That is a test of this release, not a promise to `0.10.0`'s formats.
+
+### 🔴 THE FLOOR MOVES — `0.11.1` (2026-10-04, `RELEASE-0111-01` §D1)
+
+**Why:** `0.11.0` was never delivered either. Its draft was cut, and the owner's decisions of
+2026-10-04 put three more things in front of the client before anything is handed over — CG Bridge's
+separate-server page ([[P-065]]), the operator sentences that still carried ids (`B-309`) and the Log
+page a rotation emptied (`B-310`). So the first build a client holds is `0.11.1`, and the floor is
+`0.11.1`. The `v0.11.0` draft is retitled "superseded, do not use" and stays a draft.
+
+**What it means:** the same list as the two sections above, read at `0.11.1`. Nothing it covers
+moved: the five files that define the `.vcg` manifest and scene, the `.cgproj`, CG Bridge's
+`cg-bridge.json` and CG Control's station record read an empty `git diff v0.11.0` (2026-10-04, against
+a control file in the same command that did change), so a `0.11.0` file and a `0.11.1` file are the
+same file. The separate-server page writes `cg-bridge.json` only through the engine's existing
+`/PLAYOUT=`, `/AMCPHOST=` and `/BRIDGEADDRESS=` options — no new key. The console ↔ CG Bridge protocol
+is one release line (`0.11`), so a `0.11.0` and a `0.11.1` meet with no refusal.
+
+**The `0.11.0` and `0.10.0` installs are carried forward, without being a floor:** `0.11.1`'s
+installers upgrade both in place, settings kept, tested on a clean runner from each draft's own
+installers (`RELEASE-0111-01` §D3). That is a test of this release, not a promise to either one's
+formats.
+
+### 🔴 THE FLOOR MOVES — `0.11.2` (2026-10-04, `RELEASE-0112-01` Part D)
+
+**Why:** `0.11.1` was never delivered either. The client runs a primary and a backup Playout engine from
+day one, and `0.11.1` could not keep a session on the backup engine ([[R-085]]), kept no Station-setup
+server B across a restart (`B-312`), and could become a second sender on the backup core (`B-313`). So the
+first build a client holds is `0.11.2`, and the floor is `0.11.2`. The `v0.11.1` draft is retitled
+"superseded, do not use" and stays a draft.
+
+**What it means:** the same list as the sections above, read at `0.11.2`. Nothing it covers moved: the five
+files that define the `.vcg` manifest and scene, the `.cgproj`, CG Bridge's `cg-bridge.json` and CG Control's
+station record read an empty `git diff v0.11.1` (2026-10-04, against a control file in the same command —
+`bridge-session.ts` — that did change). CG Bridge's station files gain, and lose, nothing a `0.11.1` station
+holds: `bridge-session.json`'s record takes an OPTIONAL `address`, which only the backup engine's session
+binds (the primary's record is written and read exactly as before), and the backup's session is a NEW file
+beside it, `bridge-session-backup.json`. The console ↔ CG Bridge protocol stays one release line (`0.11`):
+the new channels are additive — a `0.11.1` console never asks for the new reads, and its publish switch
+drops the new engine feed as an unknown name.
+
+**The `0.11.1`, `0.11.0` and `0.10.0` installs are carried forward, without being a floor:** `0.11.2`'s
+installers upgrade each in place, settings kept, tested on a clean runner from each draft's own installers.
+That is a test of this release, not a promise to any one's formats.
+
+### 🔴 THE FLOOR MOVES — `0.11.3` (2026-10-05, `RELEASE-0113-01` Part E)
+
+**Why:** `0.11.2` was never installed at a station either, and it is unsafe with a backup engine: it sent the
+backup's core every line on the PRIMARY's channel numbers, which on a real pair is another channel of the
+backup — possibly another programme on air (`B-316`, the Playout team's `PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md`
+§2). So the first build a client holds is `0.11.3`, and the floor is `0.11.3`. The `v0.11.2` draft is retitled
+"superseded, do not use (unsafe with a backup engine)" and stays a draft.
+
+**What it means:** the same list as the sections above, read at `0.11.3`. Nothing it covers moved: the five
+files that define the `.vcg` manifest and scene, the `.cgproj`, CG Bridge's `cg-bridge.json` and CG Control's
+station record read an empty `git diff v0.11.2` (2026-10-05, against a control file in the same command —
+`redundancy-adapter.ts`, 71 insertions and 31 deletions — that did change). CG Bridge's station files gain one
+and lose none: a station admin's backup channel entries are a NEW file, `bridge-backup-channels.json`, beside
+the connection file, written only when an admin saves one; a `0.11.2` station has none and needs none. The
+console ↔ CG Bridge protocol stays one release line (`0.11`): the `backupChannels.*` channels are additive — a
+`0.11.2` console never asks for them, and its publish switch drops `backupChannels.changed` as an unknown name.
+⚠ **One read is not additive, and is said rather than shimmed:** the audit log gains the action
+`set-backup-channels`, and a console checks every audit row against its own CLOSED list of actions. A `0.11.2`
+console reading a Log page that holds such a row therefore gets `invalid response for audit.page` for that
+page only, worded by `bridgeSkew.ts` as "This bridge is running an older build than this page…" — a sentence
+whose direction is backwards for this case (the CONSOLE is the older one). No station holds a `0.11.2`
+console, and the floor's own consoles read the row; a wording for the older-console direction is not filed.
+
+**The `0.11.2`, `0.11.1`, `0.11.0` and `0.10.0` installs are carried forward, without being a floor:**
+`0.11.3`'s installers upgrade each in place, settings kept, tested on a clean runner from each draft's own
+installers. That is a test of this release, not a promise to any one's formats.
+
+### 🔴 THE FLOOR MOVES — `0.11.4` (2026-10-07, `RELEASE-0114-01` Part D)
+
+**Why:** `0.11.3` was never installed at a station either. The owner's own test of it found Set up checking
+the wrong socket and stranding him with no CG Bridge answering (`B-317`, `R-090`–`R-093`), a dialog whose
+buttons left its frame (`B-319`), each installer showing the other app's art (`P-067`), and both installed
+apps closing at once with work unsaved (`D-162`, `R-094`). So the first build a client holds is `0.11.4`, and
+the floor is `0.11.4`. The `v0.11.3` draft is retitled "superseded, do not use" and stays a draft.
+
+**What it means:** the same list as the sections above, read at `0.11.4`. Nothing it covers moved: the five
+files that define the `.vcg` manifest and scene, the `.cgproj`, CG Bridge's `cg-bridge.json` and CG Control's
+station record read an empty `git diff v0.11.3` (2026-10-07, against a control file in the same command —
+`connection-check.ts`, 168 insertions and 160 deletions — that did change). CG Bridge gains no station file.
+CG Control's WebView2 storage gains one per-viewer convenience, `cg.runtime.check-show-all.v1` (whether the
+check shows its passing lines), which a `0.11.3` console never reads. The console ↔ CG Bridge protocol stays
+one release line (`0.11`), measured in both directions: the check's answer gains an OPTIONAL `bridgeProblems`,
+which a `0.11.3` console's plain `z.object` strips; and CG Bridge no longer sends the `ports` and `topology`
+lines, which a `0.11.3` console then does not show — it draws the answer's own lines
+(`PlayoutConnection.tsx`, `v0.11.3`, lines 222–223) — while a `0.11.4` console drops them by id from an
+older CG Bridge (`RETIRED_CHECK_IDS`).
+
+**The `0.11.3`, `0.11.2`, `0.11.1`, `0.11.0` and `0.10.0` installs are carried forward, without being a
+floor:** `0.11.4`'s installers upgrade each in place, settings kept, tested on a clean runner from each
+draft's own installers — from `0.11.3` with CG Designer and CG Control OPEN through it (`RELEASE-0114-01-C`).
+That is a test of this release, not a promise to any one's formats.
+
+### 🔴 THE FLOOR STAYS — `0.11.4` (2026-10-13, `RELEASE-0116-01` Part B)
+
+**Why it does not move:** `0.11.4` is the first release installed where it is used — CG Bridge on a real
+station (`.32`) and CG Control on the owner's PC. It is delivered, so `0.11.6` keeps every path that reads
+what `0.11.4` wrote. A release that moved the floor past a delivered build would delete those paths.
+
+**Measured at `0.11.6`:** the same five files read an **empty** `git diff --stat v0.11.5..dev` — each
+pathspec proved to match a tracked file first (`*/manifest.ts` 1, `*/scene.ts` 2, `*/project-package.ts` 2,
+`*/service-config.ts` 1, `*/stationAddress.ts` 1), with the control in the same command,
+`tools/caspar-bridge/src/caspar-runtime.ts`, printing `110 insertions(+), 51 deletions(-)`. Neither
+persisted-key census changed; `@cg/shared-schema` is unchanged; `@cg/shared-ipc` changed by ONE doc comment
+(`channels/license.ts` — the 5 s cadence while unlicensed), no schema move. So `0.11.6` adds no persisted
+shape and no wire line to what `0.11.5` already carried, and the console ↔ CG Bridge protocol stays one
+release line in both directions.
+
+**Measured at `0.11.5` (kept — the skew below is still open):** the five files that define the `.vcg` manifest and scene, the `.cgproj`, CG
+Bridge's `cg-bridge.json` and CG Control's station record read an empty `git diff v0.11.4` (2026-10-11,
+against a control file in the same command — `packages/shared-ipc/src/channels/setup.ts`, 26 insertions
+and 3 deletions — that did change). Neither persisted-key census changed (`persistedKeyCensus.test.ts`,
+`persisted-files-census.test.ts`); CG Control gains no storage key and CG Bridge no station file;
+`@cg/shared-schema` is unchanged. The console ↔ CG Bridge protocol stays one release line (`0.11`): the
+check's answer gains an OPTIONAL `casparJoin` and the serve state an OPTIONAL `elsewhere`, which a `0.11.4`
+console's plain `z.object` strips; the two new check lines (`graphics`, `caspar-join`) are worded by the
+console from those fields and never sent as lines, so an older console meets no unknown line id. A `0.11.5`
+console reading a `0.11.4` CG Bridge gets neither field and shows neither line. ⚠ **One skew, read from the
+code and reported by `RELEASE-0115-01`, not fixed in the release:** a `0.11.5` console's Station setup check
+names server A (`casparHost`) for the station's own Playout, and a `0.11.4` CG Bridge answers a named host
+without its own lines (session, OSC, license, channels) — a diagnostic surface that says less, never a
+refusal and nothing on the path to air. A take's tell gains an optional `timing` member inside `__cg`
+(`B-322`), which a page baked by `0.11.4` already reads (`applyPassTiming`) and keeps only until its loop
+settles (`B-323`, fixed in pages imported from `0.11.5`).
+
+**The `0.11.5`, `0.11.4`, `0.11.3`, `0.11.2`, `0.11.1`, `0.11.0` and `0.10.0` installs are upgraded in
+place:** `0.11.6`'s installers are tested on a clean runner from each release's own installers — from
+`0.11.5` and from `0.11.4` with CG Designer and CG Control OPEN through it (`acceptance-upgrade-0115`,
+`acceptance-upgrade-0114`).
+
+## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
+
+**What:** `PlayoutSchema` still carries a `z.preprocess` that rewrites the pre-D-028 spelling
+`mode: 'content-driven'` into `{ mode: 'loop-cycle', holdSource: 'content-driven' }`
+(`packages/shared-schema/src/scene.ts:77`–`85`). [[P-031]] deleted every other legacy
+compatibility path in the codebase under the compatibility-floor policy recorded above; this one
+was left in place because it was NOT in the owner's enumerated list and because removing it ripples
+into the D-020 playout surface. **It is the same class as everything P-031 removed**, so it is
+filed here rather than left as a bullet inside a decision section, where the next reader will not
+find it.
+
+**Why:** it is a second document shape that every consumer of `Playout` must tolerate, bought for
+no file that exists — the exact debt-that-reads-as-safety P-031 was about. Two facts sharpen it:
+
+1. 🔴 **The shim has TWO independent copies, not one.** Besides the `z.preprocess` at
+   `scene.ts:77`, `playoutOf()` re-derives the same normalization by hand at `scene.ts:436`–`443`
+   ("defensively normalizes the legacy `mode: 'content-driven'` for scene objects handed straight
+   to `createRuntime` without re-parsing"). That is the second-local-copy pattern golden rule 6
+   names: one legacy spelling, two places that must agree about it forever. Deleting the shim means
+   deleting BOTH, and any half-removal leaves a path that silently accepts what the other rejects.
+2. **The schema's own docstring is now stale.** `scene.ts:74`–`75` says "A registry migration is
+   deferred until a schema-version bump is unavoidable" — pointing at the migration registry that
+   P-031 **deleted**. The comment defers to a mechanism that no longer exists, which is precisely
+   the lying-docstring defect P-031 exists to end, surviving one file over.
+
+**Acceptance** (whichever way the owner decides):
+
+- WHEN the owner decides REMOVE THEN both the `z.preprocess` at `scene.ts:77` and the hand-rolled
+  arm in `playoutOf()` at `scene.ts:441` go together, a document carrying `mode: 'content-driven'`
+  fails to parse LOUDLY naming the field, and `packages/shared-schema/tests/scene.test.ts:297`
+  (which pins the normalization today) is replaced by a test pinning the refusal
+- WHEN the owner decides KEEP THEN `scene.ts:74`–`75`'s docstring stops citing the deleted
+  migration registry and states what is actually true — that parse-time normalization IS the
+  mechanism — and a test asserts the two copies agree, so they cannot drift apart
+- WHEN either decision lands THEN `apps/designer/tests/e2e/fixtures/designer.ts:828`, which still
+  types `'content-driven'` as an authorable `mode`, is updated to match
+
+**Notes:** **NOT removed by this filing, deliberately.** P-031 recorded it as "the one remaining
+legacy shim, and it is now the owner's call", and this item does not take that call — it only gives
+it a number so it stops living inside another item's decision section. The compatibility-floor
+policy above governs it: while nothing has shipped, removal is cheap and the default; from the
+first client delivery it becomes a breaking change with its own migration story. **The cost of
+deferring is that the window closes**, which is the whole argument for deciding now rather than
+later. Related: [[P-031]] (the policy and the enumerated removals).
+
+## [ ] P-033 — `typecheck` covers `src/**` only, so 557 test files are OUTSIDE the compile guarantee ⟨priority: medium⟩
+
+**What:** no workspace typechecks its tests. Every app's `tsconfig.json` includes `src/**/*` only,
+and every package's explicitly EXCLUDES its tests. So a test can call a function with the wrong
+arguments and nothing objects until it happens to throw at runtime — or never, if the wrong argument
+is only dereferenced on some paths.
+
+**Why this is worth a number rather than a shrug:** it **narrows a guarantee this repo has just
+relied on**. [[B-139]]'s fix was chosen precisely because a **required parameter is a type error** —
+an API that cannot be called wrong, rather than a corrected call site one edit away from regressing.
+That argument is sound for `src`, and **not true of tests**. When B-139 made `isItemDirty`'s plate
+baseline required, three test call sites kept passing two arguments:
+
+- they did not fail `typecheck`, because tests are not in it;
+- they did not fail at runtime either, because `appliedPlates` is only dereferenced when the item has
+  staged plates and those cases stage fields only.
+
+They were fixed by hand, having been found by reading. **The next one will not be**, and the reasoning
+that justified the API shape will still be quoted in the docstring. That is the exact shape of _a
+warning that outlives its truth_.
+
+**Measured, at `1577c4b9`:**
+
+| scope                 | `tsconfig` says                                                           | tests typechecked?        |
+| --------------------- | ------------------------------------------------------------------------- | ------------------------- |
+| `apps/runtime`        | `include: ["src/**/*", "vite.config.ts"]`                                 | **no**                    |
+| `apps/designer`       | `include: ["src/**/*", "vite.config.ts"]`                                 | **no**                    |
+| `packages/*`          | e.g. `include: ["src/**/*"], exclude: ["src/**/*.test.ts", "tests/**/*"]` | **no** — excluded by name |
+| `tools/caspar-bridge` | same exclusion                                                            | **no**                    |
+
+**557 test/spec files** are outside it: 113 in `apps/runtime`, 203 in `apps/designer`, 241 across
+`packages/` and `tools/`. ⚠ **The Designer does NOT differ** — it was checked specifically, and its
+only extra exclusion is `src/generated`, unrelated.
+
+**Status update (2026-08-22, sessions BR + BS): the middle path (option 3) is underway,
+per-workspace.** `apps/runtime` includes `tests/**` in its typecheck since `a7924255` (session BR;
+113 errors, all fixed, four vacuous tests made real), and `tools/caspar-bridge` since `85e3c27e`
+(session BS; 56 errors, all fixed — via a separate `tsconfig.typecheck.json`, because that package's
+BUILD is `tsc -b` and its build config cannot include tests). The measured table above is the state
+at `1577c4b9` and stands as history. `apps/designer` and the remaining `packages/*` are still
+outside the guarantee, and whether they follow remains the owner's question below.
+
+**Acceptance:**
+
+- WHEN a test calls a typed function with arguments its signature forbids THEN the gate fails, rather
+  than the mistake surviving to a runtime that may never exercise it
+- WHEN the coverage is deliberately left as it is THEN the claims that depend on it say so, so that
+  "a required parameter is a compile error" is not quoted more widely than it is true
+
+**Notes:**
+
+- **Nothing is changed by this filing** — no `tsconfig` is touched. The item records the gap and asks
+  the question.
+- 🔴 **Owner question, with the cost of each:**
+  1. **Extend coverage to tests.** Honest, and it makes the B-139 argument true everywhere. Costs:
+     typecheck time across 557 more files on every gate run; and an unknown number of EXISTING type
+     errors in tests would surface at once — tests legitimately use loose stubs and `as never` casts,
+     so this is very unlikely to be a clean flip. It would want its own change and probably a
+     per-workspace rollout rather than a big-bang.
+  2. **Narrow the claims instead.** Cheaper and immediately honest: where a docstring justifies an API
+     shape by "this is a compile error", say _in `src`_. Costs: the guarantee stays half-true, and the
+     next person to rely on it has to read the caveat.
+  3. **A middle path** — typecheck tests in the workspaces where the argument is actually load-bearing
+     (`apps/runtime` first, since B-139 lives there), and leave the rest. Costs: the rule then differs
+     per workspace, which is its own kind of thing nobody can see from either side.
+- **Cross-refs:** [[B-139]] (whose fix rests on the guarantee), [[B-142]] (the same shape one level
+  out — a rule the Designer enforces and the Runtime does not).
+
+## [x] P-034 — `pnpm test:e2e` starved its own suites: B-098's concurrency bound was applied to `test` and its sibling `test:e2e` escaped it ⟨priority: high — RE-SCORED 2026-08-18 from `low`⟩ — fixed in `openspec/changes/platform-e2e-fan-out-bound/`
+
+**What:** the root `pnpm test:e2e` was a **bare `turbo run`**, so it started BOTH apps' Playwright
+tasks at once and each opened its own default pool — **6 + 6 = 12 Chromium workers on a 12-core
+host**, the whole machine claimed by browsers before the two `vite preview` servers, the two node
+parents and turbo itself. Timing-sensitive tests then missed their deadlines and failed.
+
+```
+"test":     "node tools/gate-hook/src/bounded-turbo-cli.mjs run test --continue=…"
+"test:e2e": "turbo run test:e2e --continue=…"          ← a BARE turbo run
+```
+
+🔴 **One rule, two spellings** — this repo's most frequent failure shape, on the one gate script
+B-098's bound was never applied to. `CLAUDE.md` states the rule and names three scripts (`gate`,
+`test`, `test:integration`); `test:e2e` was not one of them.
+
+**Fix:** `test:e2e` and `gate:e2e:run` route through `bounded-turbo-cli.mjs` like their siblings,
+and the pure bound gained its Playwright half (`resolveE2eWorkers`) **in the same module** as the
+vitest half. See the change for the full shape.
+
+**Proof, before → after, same host, same command, rebuilt between runs:**
+
+|          | before                     | after          |
+| -------- | -------------------------- | -------------- |
+| workers  | 6 + 6 = **12** on 12 cores | **2 + 2 = 4**  |
+| designer | **264 passed, 4 failed**   | **268 passed** |
+| runtime  | **80 passed, 1 failed**    | **81 passed**  |
+
+🔴 **What made starvation the hypothesis, and it is the durable lesson here: ALL of the failures,
+across every occurrence, are TIMING assertions — not one is a logic assertion.** A clock that has
+not rendered, a crawl whose transform has not started, an opacity transition that has not finished,
+a page that never reached `toBeVisible`. And **the set of victims MOVES between runs** — the four
+named below are not the five that failed on the fix's base commit; one spec overlaps. A brittle test
+fails repeatably; a starved host fails whoever was unlucky. **The suite was never flaky about WHAT
+it checks, only about WHEN.**
+
+⚠ **The three occurrences below are kept as the evidence trail**, in the order they were found,
+including the CI half that was written and then withdrawn. They are not tidied into hindsight: the
+first two are still unexplained, and the record says so.
+
+**Original filing (2026-08-17), kept verbatim:** on 2026-08-17 the Designer Playwright suite failed
+one test out of 268, in the middle of three consecutive runs that otherwise passed, with **zero
+Designer source changed** in the session. It did not reproduce.
+
+**Repro:** none. That is the point of the item.
+
+**Expected:** 268 passed.
+**Actual:** run 1 — 268 passed. Run 2 — **267 passed, 1 failed**. Run 3 (isolated re-run of the
+Designer suite alone) — 268 passed.
+
+**Env:** Windows, local `pnpm gate:e2e` and `pnpm --filter @cg/designer test:e2e`, 2026-08-17, on a
+machine that had just run a full `pnpm gate` and the Runtime E2E suite back to back — i.e. **under
+load**. Session A's changes were confined to `apps/runtime` and `docs/`; the Designer's source was
+untouched, which is why the failure is not attributed to them.
+
+**Why file something that is not actionable:** because **one unreproducible flake is not actionable
+and a second one is** — and without a written first, nobody can tell that the next failure is a
+pattern. A suite that fails occasionally and is always re-run quietly stops meaning anything, and
+the day it fails for a real reason it gets re-run too. The record is the instrument that makes the
+second occurrence legible.
+
+**What was captured, and what was NOT:**
+
+- **Captured:** the assertion form — `expect(locator).not.toHaveText(expected) failed` — the counts,
+  the date, and the load conditions.
+- 🔴 **NOT captured: the spec file and test name.** The console filter used at the time dropped the
+  failing test's title, and the run is gone. **Naming a specific test here would be a guess**, and a
+  flake record naming the wrong test is worse than none — it sends the next reader to the wrong
+  place and makes a real pattern invisible.
+- **Narrowed, without asserting:** exactly TWO Designer E2E assertions use that form.
+  `tests/e2e/clock.spec.ts:35` — `await expect(time).not.toHaveText(before, { timeout: 3000 }); // ticked within ~1.5s`
+  — is **time-dependent with a 3 s budget**, which is the shape that fails under load; and
+  `tests/e2e/fit-on-open.spec.ts:26` — `await expect(readout).not.toHaveText('100%')` — is
+  deterministic. The first is the plausible candidate on its shape alone. **It is recorded as a
+  candidate, not as the cause.**
+
+**Acceptance:**
+
+- WHEN a Designer E2E fails again with `not.toHaveText` THEN this item is the prior occurrence to
+  attach it to, and the pair is a pattern rather than two separate shrugs
+- WHEN a second occurrence IS recorded THEN the failing test is captured by NAME, with the run's
+  output retained, so the third conversation is about a fix and not about what failed
+
+## 🔴 SECOND OCCURRENCE — 2026-08-17, on CI, and this one IS named
+
+The item's own purpose, discharged: a second Designer E2E flake, captured with the detail the first
+one lacked.
+
+|           | first (2026-08-17, local Windows)          | **second (2026-08-17, CI Linux)**                                                                                                             |
+| --------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| run       | `pnpm gate:e2e`, no URL                    | <https://github.com/yasermostafaee/cg/actions/runs/32054398518>                                                                               |
+| commit    | —                                          | `56c0799f`                                                                                                                                    |
+| counts    | 268 → 267/1 fail → 268                     | 268 run, **267 passed, 1 flaky**                                                                                                              |
+| test      | **not captured**                           | `apps/designer/tests/e2e/video-import.spec.ts:291` — _"a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-premultiply)"_ |
+| assertion | `expect(locator).not.toHaveText(expected)` | a PIXEL assertion, ~`:368-371` (`expect(px.right[0]).toBeGreaterThan(200)` and neighbours)                                                    |
+| outcome   | failed, not retried                        | failed then **passed on retry** — which is why the job is green                                                                               |
+
+🔴 **They are NOT the same failure, and that is the finding.** Different spec, different assertion
+kind — one a text-timing assertion, one a pixel comparison. So this is **not** a recurrence of the
+first; it is a second, independent Designer E2E flake within a day. **Two unrelated flakes is a
+different and worse signal than one repeated flake**: it points at the SUITE's environment
+(single-worker CI under load, video decode timing) rather than at one brittle assertion.
+
+⚠ **The job was GREEN.** Playwright retries in CI and a flaky pass counts as success, so this would
+have gone unnoticed had the discharge not read the log rather than the conclusion. **A green
+`conclusion` does not mean every test passed first time** — worth knowing for every future
+discharge, and the reason the e2e discharge lines now record the flaky count.
+
+**Still not actionable on its own**, and deliberately not acted on: the retry passed, and widening a
+timeout or loosening a pixel threshold on this evidence is the longer-rope failure below.
+
+**Notes:**
+
+- **Do not "fix" `clock.spec.ts` or `video-import.spec.ts` on the strength of this item.** Widening a
+  timeout or loosening a pixel threshold on an unconfirmed candidate is how a real defect gets a
+  longer rope — the pattern this repo already names in the gate's own bound (a contention red
+  answered by a longer timeout is `B-073`, and `B-098` is that bound blown in turn).
+- **A third occurrence should be treated as a pattern about the suite**, not about whichever test it
+  lands on: two independent specs in one day is already that shape.
+- **If it recurs:** capture the full Playwright output including the test title and any trace, and
+  note whether the machine was under concurrent load. Both runs that showed it were preceded by other
+  suites on the same host.
+- **Cross-refs:** `B-098` / `B-073` (the load-contention flake class and why a longer timeout is the
+  wrong answer).
+
+## 🔴🔴 THIRD OCCURRENCE — 2026-08-18 — AND IT IS REPRODUCIBLE, WITH A MECHANISM
+
+⚠ **Read this before treating P-034 as a note.** The item's own escalation rule ("a third occurrence
+should be treated as a pattern about the SUITE, not about whichever test it lands on") is now met —
+and this occurrence goes further than a pattern, because it **reproduces on demand** and points at a
+concrete cause.
+
+⚠ **SCOPE, corrected the same day: this is a LOCAL-ONLY finding.** It was first written as also
+explaining the CI flakes; that half is withdrawn and the retraction is at the end of this section.
+Read it before citing this occurrence for anything about CI.
+
+**What happened.** Running `pnpm test:e2e` (the root, turbo) on the session-D tip:
+
+| run | invocation                                  | Designer           | Runtime           |
+| --- | ------------------------------------------- | ------------------ | ----------------- |
+| 1   | `pnpm test:e2e` (both suites, concurrent)   | **265 / 3 failed** | 81 passed         |
+| 2   | `pnpm --filter @cg/designer test:e2e` alone | **268 passed**     | —                 |
+| 3   | `pnpm test:e2e` again (both, concurrent)    | **265 / 3 failed** | **80 / 1 failed** |
+| 4   | `pnpm --filter @cg/runtime test:e2e` alone  | —                  | **81 passed**     |
+
+**Reproducible in the concurrent shape, clean in isolation, twice each.** That is the first time this
+flake family has had a handle on it at all.
+
+**The four failing tests, all named this time** (the acceptance criterion the first occurrence could
+not meet):
+
+| spec                                               | test                                                                            | assertion                                                         |
+| -------------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `designer .../clock.spec.ts:14`                    | author a wall clock → canvas shows Persian-digit time → it ticks in the preview | `toHaveText(/[۰-۹]{2}:…/)` — **element(s) not found** within 7 s  |
+| `designer .../content-start-hold-entry.spec.ts:53` | timed / auto-out hold: the subtitle crawls from the entrance settle             | `expect.poll(style).toContain('translateX')` — **1500 ms budget** |
+| `designer .../content-start-hold-entry.spec.ts:63` | content-driven hold: the subtitle still crawls from the entrance settle         | same helper, same 1500 ms budget                                  |
+| `runtime  .../splash.spec.ts:102`                  | the phase label LEAVES on boot-done                                             | `toHaveCSS('opacity','0')` — got `"1"`, 17 polls over 7 s         |
+
+🔴 **Every one is "did this ANIMATE within N milliseconds".** Not one is a logic assertion. A clock
+that has not rendered, a crawl that has not started its transform, an opacity transition that has not
+finished — these are exactly the assertions that fail when the box cannot schedule frames, and they
+are the same shape as the first occurrence's `clock.spec.ts` candidate. **The suite is not flaky
+about WHAT it checks; it is flaky about WHEN.**
+
+## 🔴 THE MECHANISM — `test:e2e` is the ONE gate script B-098's bound was never applied to
+
+```
+"test":     "node tools/gate-hook/src/bounded-turbo-cli.mjs run test --continue=…"
+"test:e2e": "turbo run test:e2e --continue=…"          ← a BARE turbo run
+```
+
+`CLAUDE.md` states the rule and names three scripts — `gate`, `test`, `test:integration` — routed
+through `bounded-turbo-cli.mjs` so that `taskConcurrency × workersPerTask` stays ≤ cores. **`test:e2e`
+is not one of them.** So `pnpm test:e2e` runs BOTH apps' Playwright tasks concurrently, each spawning
+its own worker pool: **6 + 6 = 12 Chromium workers on an 8-core host.** That is precisely the
+compounding-multiplier shape B-098 exists to prevent, on the one script it does not cover.
+
+**Candidate remedy, since TAKEN (owner decision, 2026-08-18):** route `test:e2e` through
+`bounded-turbo-cli.mjs` like its siblings, and set Playwright's `workers` from the bound. It was
+left to the owner rather than applied by the session that found it — shared config every session
+picks up, and this item's own rule is that a flake is not answered by whoever happens to be looking
+at it. See the closing section for what shipped.
+
+⚠ **One correction to this occurrence's own record: the Env line below says 8 cores. The host is
+12** (`os.availableParallelism()` and `os.cpus().length` agree). The `6 + 6` figure is right —
+Playwright resolves `workers` to 50% of logical CPUs — but it is 12 workers on 12 cores, i.e. 100%
+of the machine with ZERO headroom, against the bound's 75% budget. That makes it a worse instance of
+B-098's headroom bug than the item claimed, not a milder one.
+
+🔴 **What must NOT be done, restated because this is exactly the moment it gets done:** no timeout is
+to be widened, no pixel threshold loosened, no retry added, and none of the four named tests is to be
+"fixed". Every one of them passes reliably when the host can schedule frames. Answering a contention
+red with a longer rope is `B-073`, and `B-098` is that bound blown in turn — the item already says
+so, and now the evidence says the same thing about this suite.
+
+⚠ **What this changes about the earlier entries: NOTHING, and the first draft of this line said
+otherwise.** It read that the three occurrences were "now plausibly ONE finding rather than three
+shrugs", on the strength of a CI claim that measurement has since withdrawn — see the correction
+below. The two earlier occurrences stand exactly as they were recorded, unexplained, and this local
+finding does not reach them.
+
+**Env:** Windows 11, 8 cores, session D tip, after a full `pnpm gate`. Full console output retained
+for this session only; the four test titles and assertion forms above are the durable part.
+
+## 🔴 CORRECTION — THE CI HALF OF THAT CLAIM IS WITHDRAWN (same day, 2026-08-18)
+
+**What this section said when it was written**, and it was wrong: that
+`.github/workflows/pr.yml`'s `e2e` job runs `pnpm test:e2e` on a single `ubuntu-latest` runner with
+the same unbounded fan-out, and that the two earlier occurrences — one local, one on CI — were
+therefore "consistent with a single cause rather than with two unrelated brittle tests".
+
+**The measurement that withdraws it:** run
+<https://github.com/yasermostafaee/cg/actions/runs/32126244485> (commit `63d42eae`), whose `e2e` job
+ran and was green. Its log reads:
+
+```
+10:24:09  Running 81 tests using 1 worker      → 81 passed (2.0m)     [runtime]
+10:28:31  Running 268 tests using 1 worker     → 268 passed (6.3m)    [designer]
+```
+
+**CI runs ONE worker per suite, and the two suites did not overlap** — the runtime suite finished
+around 10:26 and the designer suite started at 10:28:31. Whatever `pnpm test:e2e`'s fan-out does on
+an 8-core Windows box, it is not what CI does. The inference from the local finding to the CI
+occurrences had no evidence under it and is retracted.
+
+🔴 **THE CONSEQUENCE, STATED PLAINLY SO THE RECORD IS HONEST RATHER THAN EMPTY.** The SECOND
+occurrence's flake — `video-import.spec.ts:291`, one flaky in run
+<https://github.com/yasermostafaee/cg/actions/runs/32054398518> on commit `56c0799f` — had been
+explained by this section as the same cause. **That explanation is withdrawn, so that flake is
+UNEXPLAINED AGAIN**, and it needs somewhere for the next occurrence to land. It is recorded here as
+open, with its run URL, deliberately: this repo's rule about a warning that outlives its truth runs
+the other way too — an EXPLANATION that outlives its truth must leave the record honest, not tidy.
+Deleting the wrong sentence would have quietly re-labelled a known-unexplained flake as one nobody
+had ever looked at.
+
+**What SURVIVES the correction, unchanged:** the local finding above. It reproduces on demand, it is
+four named tests, and every one of them is an animate-within-N-milliseconds assertion. It is a
+**LOCAL-ONLY** finding about `pnpm test:e2e` on this host, and it is stated as one from here on.
+
+**What is now OPEN, and was not before:**
+
+- the second occurrence (`video-import.spec.ts:291`, run 32054398518) — cause unknown, one green
+  retry, no pattern it belongs to;
+- 🔴 **the THIRD occurrence — SAME SPEC, SAME LINE.** `video-import.spec.ts:291`, run
+  <https://github.com/yasermostafaee/cg/actions/runs/32424237246> on commit `0b6da499`
+  (2026-08-20). Recorded here because the paragraph above asked for somewhere for the next one
+  to land, and a second data point on an unexplained flake is worth more than a green tick.
+
+  **What is NEW evidence, and what is merely consistent.** New: it failed on the PIXEL
+  assertion (`video-import.spec.ts:368`, `px.left[0] > 200` — the OPAQUE control half reading
+  too dark), not on a timeout, so the clip decoded and the sampled frame was simply wrong. That
+  narrows it: whatever this is, it is not the spec giving up early. Consistent-but-not-new: one
+  green retry, same as occurrence two.
+
+  **What it is NOT.** The commit under it touches no designer, `@cg/vcg-format`,
+  `@cg/template-runtime` or video code at all — `git diff 9b587ddc..0b6da499` over those paths
+  is EMPTY — and the same test passed on the immediately preceding run (32420404344) on the
+  neighbouring commit. That bounds REACHABILITY, which is not the same as proving correctness,
+  and it is stated as the weaker claim it is.
+
+  ⚠ **The local suite cannot be used as evidence on this question, and was not.** Run on a
+  Windows host it fails 7 of 8 in this spec with `toContainText` — the conversion never
+  completes at all — which is a DIFFERENT failure mode from the pixel threshold CI hits. The
+  local Designer video environment is broken here (the geo-blocked Playwright CDN and its
+  system-Chrome fallback), so it says nothing either way and must not be quoted as if it did.
+
+  **The pattern now has two of three occurrences on the same line**, which is the first thing
+  about it that looks like a pattern rather than noise. Next occurrence: add it here, and if a
+  fourth lands on `:291` as well, that is enough to stop treating it as ambient and go and
+  measure the decode.
+
+- 🔴 **2026-09-27 — `:291` failed BOTH tries of one job, so the job went red** (`TIMING-TESTS-01`, run
+  <https://github.com/yasermostafaee/cg/actions/runs/36338340420> attempt 1, commit `d6b106df`). It
+  was the same assertion, `:368` `px.left[0] > 200`, which received `0` on the first try and on the
+  retry. The commit touches only `tools/caspar-bridge/tests/**` and one PRD file: no designer,
+  `@cg/vcg-format`, `@cg/template-runtime` or video code. The one rerun (attempt 2) was green with
+  `:291` passing. ADR 0009 and [[P-048]] already name `:291` among the known CI flakes, so this is
+  well past the fourth occurrence the paragraph above sets as the point to go and measure the decode.
+  That is still not done: recorded here, not fixed.
+
+- ✅ **2026-09-28 — MEASURED, then closed in code** (`FOLLOWUPS-01` §2.3, filed under [[P-057]]). The
+  local Designer video suite runs on this host now (8 of 8), so the decode was measured here, on system
+  Chrome: **184 of 184** reads at the spec's own trigger (`loadeddata`, `readyState >= 2`) received the
+  right frame — left `255,215,3,255`, right `253,212,4,129` — plain, eight decodes at once, and under a
+  12× CDP CPU throttle, 2–247 ms after `src`. The ONE way to receive CI's `0` was a read with no frame
+  to paint: at `loadedmetadata` (`readyState 1`) the draw is `[0,0,0,0]`, 9 of 10. So `readyState`
+  says a frame is decoded, not that the painter holds it, and CI's Linux Chromium read an empty
+  canvas at `readyState >= 2`. `requestVideoFrameCallback` never fires for a detached paused element
+  (124 of 124) and fires every time once it is attached on screen (60 of 60, `presentedFrames 1`,
+  right pixels); `new VideoFrame(video)` was rejected as the signal — it constructs at `readyState 1`.
+  The read now draws inside that callback, asserts `presentedFrames >= 1`, and every assertion
+  carries the whole read, so if CI ever fails it again the record says what and when. No frame was
+  decoded WRONG, so no product defect is filed. ⚠ The Linux reproduction was not obtained: this host
+  never produced the failure, and CI's evidence was the one number.
+- ⚠ Found on the way, not fixed: `:379` ("MOTION keeps transparency") asserts that corners stay
+  transparent after each `seeked`, and a draw that painted NOTHING passes it too — it has no positive
+  control that a frame was drawn.
+
+- whether the local concurrency finding and the CI flakes share anything at all — **no evidence
+  either way**, which is a different state from "consistent with a single cause" and must not be
+  written back as one.
+
+## ✅ CLOSED — 2026-08-18, the remedy taken and measured
+
+Fixed in `openspec/changes/platform-e2e-fan-out-bound/`. What shipped, and what it is worth:
+
+- `test:e2e` and `gate:e2e:run` route through `bounded-turbo-cli.mjs`. **Every `turbo run` in the
+  root `package.json` was swept**, not just the one named: `build`, `lint`, `typecheck`, `test:e2e`,
+  `gate:e2e:run`, `package`, `dev`, `clean`. Only the two E2E scripts spawn browser worker pools;
+  the rest run one process per task and cannot compound. `gate:e2e:run` already carried
+  `--concurrency=1` from B-095 so it was NOT exhibiting the defect — routed anyway, because one
+  rule with two spellings is what this item is about.
+- The Playwright bound lives in the **same** `test-concurrency.mjs` as the vitest bound, with 82 new
+  unit tests. A second module would have been the defect re-created one level out.
+- The cap can only ever **tighten**: `workersPerTask` is capped at the number Playwright would have
+  chosen unaided, so a serialised `gate:e2e` is not handed the whole budget and made WIDER. An
+  isolated single-suite run is left at the default — it is not contended.
+
+🔴 **Nothing was tuned.** No timeout widened, no threshold loosened, no retry added, no test edited.
+Every one of the named tests passes under the concurrent run that failed it.
+
+⚠ **STILL OPEN, and deliberately not closed with this item** — the SECOND occurrence
+(`video-import.spec.ts:291`, one flaky in run
+<https://github.com/yasermostafaee/cg/actions/runs/32054398518>, commit `56c0799f`) had been
+explained by the withdrawn CI claim and is therefore **unexplained again**. It is CI, this fix is
+local, and no evidence connects them. It is recorded here so the next occurrence has somewhere to
+land; a warning that outlives its truth and an EXPLANATION that outlives its truth are the same
+rule running in opposite directions, and both must leave the record honest rather than empty.
+
+✅ **Linux CI `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/32136025181>,
+commit `b658a033`, `conclusion: success`, `e2e` job **RAN**,
+**349 run / 349 passed / 0 flaky** (runtime 81, designer 268). The bound printed itself in that log
+too, on a **2-core** runner: `1 concurrent task x 1 playwright worker`.
+
+🔴 **And that zero is NOT evidence the fix worked on CI.** The run on the fix's BASE commit
+`4e876d7a` (<https://github.com/yasermostafaee/cg/actions/runs/32130531609>) already read
+**0 flaky** as well, before any of this landed — because CI never ran the unbounded shape. The
+honest reading is "the fix broke nothing on CI", which is what a local-only fix should show.
+Reading it as CI evidence would be the SAME inference this item already retracted once, and it is
+called out here because that is precisely where someone will reach for it.
+
+## [~] P-035 — a NEVER-STAGE guard, because `git add <directory>` swept the owner's uncommitted hack onto `dev` ⟨priority: high⟩ — implemented: the guard, its list and its tests ship with this item
+
+**What:** a pre-commit guard that **refuses** the commit when a listed path is staged, driven by a
+committed list (`.claude/never-stage`) with a documented, loud escape.
+
+**Why:** on 2026-08-17 a `git add tools/caspar-bridge` — staging a DIRECTORY to pick up bridge work —
+also staged the owner's uncommitted plant-testing hack. `dev` then briefly carried
+`return '192.168.21.93';` at the top of `guessLanHost()`, so **every install would have advertised
+one machine's LAN address** instead of its own, and the served template URL would have been wrong
+everywhere except that box. It was caught in post-push verification and corrected in `56c0799f`, at
+the cost of a second push on a day the owner was near their CI minute limit.
+
+🔴 **The instruction to never stage that file existed, was repeated three times in one brief, and was
+followed until it wasn't.** This repo is ONE folder on ONE branch that permanently contains the
+owner's uncommitted work, so the hazard is structural rather than occasional: `git add <path>` cannot
+distinguish that work from the work being committed, and a directory-level add reaches it silently.
+**A rule that depends on remembering is the one that already failed** — hence a guard with an exit
+code behind it, which is the same shape as this repo's other enforced rules (the gate lock, the
+pre-push decision, the message-region lint).
+
+**Acceptance:**
+
+- WHEN a never-stage path is staged THEN `git commit` is REFUSED, and the message names **which**
+  path tripped it, why the list exists, and the exact `git restore --staged` to undo it
+- WHEN an unrelated path in the SAME directory is staged THEN the commit proceeds — the guard forbids
+  a file, not the directory the accident happened in
+- WHEN the escape `CG_ALLOW_NEVER_STAGE=1` is set THEN the commit proceeds AND the guard prints every
+  path it let through, so a deliberate override is visible rather than silent
+- WHEN the list file is absent or empty THEN nothing is guarded and no commit is blocked
+- WHEN a listed file is DELETED in a commit THEN it is not refused, so the eventual cleanup is not
+  blocked by the guard protecting it
+
+**Notes:**
+
+- **Shipped with the item:** `.claude/never-stage` (the list, with the reason per entry),
+  `tools/gate-hook/src/never-stage-decision.mjs` (the pure decision) and `never-stage-cli.mjs` (the
+  CLI), wired into `.husky/pre-commit`, with 10 unit tests in
+  `tools/gate-hook/tests/never-stage-decision.test.ts`.
+- ⚠ **The guard runs BEFORE `lint-staged`, and the order is not cosmetic.** `lint-staged` runs
+  `prettier --write` over staged files. If the guard ran second, a commit about to be refused would
+  already have reformatted the owner's uncommitted file on the way there — touching the very file the
+  guard exists to leave alone.
+- ⚠ **`.gitignore` needed a negation.** `.claude/*` is ignored, so the list would have been
+  untracked — **a guard that silently does nothing on every other checkout**, which is the failure
+  mode the guard itself exists to prevent. `!.claude/never-stage` joins the two existing exceptions.
+- **PROVEN TO FIRE, end to end**, not only in unit tests: a real `git commit` with the hack staged was
+  refused (`husky - pre-commit script failed (code 1)`) with the path named; the escape let the same
+  staged state through and printed the override; and an ordinary commit in the same session passed
+  untouched.
+- 🔴 **THIS IS A NET, NOT A CURE.** The cure is the **bridge advertise-host refactor** — the hack
+  exists only because `guessLanHost()` cannot be told what to advertise. That hack cost **two
+  incidents in one day**: it blocked a push by failing `format:check`, and then it leaked to `dev`.
+  ✅ **The refactor is now filed as [[C-024]]** (2026-08-18, owner-supplied number). This guard stops
+  the hack reaching `dev`; C-024 removes the need for the hack to exist, and until it lands every
+  day is another day of an uncommitted edit in a permanently-dirty checkout — a hazard this guard can
+  only ever catch, never remove.
+- ✅ **THE LIST IS EMPTY as of 2026-09-04 (`LAN-DEV-ACCESS-01`).** The hack was deleted from the
+  working tree — it had already been reduced to a commented-out line by the owner — and its
+  `template-http-server.ts` entry was dropped from `.claude/never-stage` in the SAME commit, per
+  [[C-024]]'s "never before" rule. The guard stays wired in `.husky/pre-commit` with its escape and
+  its tests; the "shipped list" test now asserts the entry is ABSENT rather than present, and the
+  list file itself says why it is empty and when to add a path again. An empty list forbids
+  nothing, which is this item's own fourth Acceptance bullet. The item stays `[~]` only because its
+  guard has no change dir to archive; nothing about it is outstanding.
+- **Cross-refs:** `P-009` (the Stop-hook gate, the same "enforce rather than remember" shape),
+  `P-013` (the host gate lock), [[P-041]] (the session that emptied the list).
+
+## [~] P-036 — an E2E run against a STALE build makes red-then-green vacuous while looking rigorous ⟨priority: high⟩ — implemented: the guard, wired into both apps, with its proof
+
+**What:** the E2E runner REFUSES to start when the built bundle is older than the newest source file
+it covers, naming the stale file.
+
+**Why:** the suites run against the built `dist/` via `vite preview`, never against source.
+`turbo.json` already declares `test:e2e` `dependsOn: ['build']`, so the ROOT `pnpm test:e2e`
+rebuilds — but **`pnpm --filter <app> test:e2e` runs `playwright test` directly and bypasses turbo
+entirely.** Nothing rebuilds, and the suite tests whatever bundle happens to be on disk.
+
+🔴 **That silently invalidates RED-THEN-GREEN**, which is this project's standard proof that a test
+guards what it claims to guard — every implementation prompt asks for it by name. Edit the source,
+run the suite, revert the fix, run again: **both runs execute the same bundle, agree perfectly, and
+prove nothing.** The comparison looks exactly as rigorous as a real one.
+
+**It has already produced a false result.** On 2026-08-17 (session B) a defect was reported in CC's
+own B-140 fix — "the teardown runs but the divider still paints as dragging" — recorded as an open
+defect in the change, and **escalated to the owner as decision-relevant**. It was retracted only when
+it emerged that the second run had executed the first run's bundle. With a rebuild between runs the
+picture inverted and was consistent.
+
+**A proof that is vacuous while looking rigorous is worse than no proof**, because nobody goes
+looking for the missing one. That is why this outranks a feature.
+
+**Acceptance:**
+
+- WHEN an E2E run starts and any bundled source is newer than the build THEN the run is REFUSED
+  before any test executes, and the message names the offending file and how far behind the build is
+- WHEN the build is current THEN the run proceeds unchanged, with no false positive
+- WHEN there is no build at all THEN the run is refused rather than serving whatever is on disk
+- WHEN editing only a SPEC file THEN the run proceeds — a spec is loaded from source by Playwright,
+  never bundled, so it cannot make the build stale
+- WHEN testing the existing bundle IS the intent THEN `CG_ALLOW_STALE_E2E=1` allows it and says
+  loudly that it did
+- WHEN either app's suite is run by any entry point THEN the same rule applies — one rule, one
+  spelling
+- WHEN a WORKSPACE PACKAGE the app bundles has a source newer than the build THEN the run is
+  REFUSED naming that file, exactly as for the app's own sources
+- WHEN a new workspace dependency is added THEN it is covered without anyone editing the guard —
+  the set is resolved from the dependency graph, never from a list
+
+**Notes:**
+
+- **Mechanism chosen: a freshness check inside Playwright's `globalSetup`**, not a turbo dependency.
+  🔴 **The turbo dependency already exists and does not close the hole** — the failing path is
+  precisely the one that does not go through turbo. A check in the runner catches EVERY entry point
+  (turbo, a filtered `pnpm` script, a hand-typed `pnpm exec playwright test`) because they all end in
+  the same runner.
+- **It refuses rather than rebuilding**, deliberately: a guard that silently rebuilt would hide how
+  long the suite really takes and would make "test the bundle I have" impossible. Naming the stale
+  file is the point.
+- **Shipped:** `tools/gate-hook/src/e2e-staleness.mjs` (the walk, the pure `decideStaleness`, and
+  the workspace-graph resolver), `apps/{runtime,designer}/tests/e2e-global-setup.mjs`, both
+  `playwright.config.ts` files, and 15 unit tests across
+  `tools/gate-hook/tests/e2e-staleness{,-graph}.test.ts`.
+- ⚠ **Both apps checked and both had the identical hole** — `"test:e2e": "playwright test"` in each.
+  Fixed in the same shape rather than one app at a time.
+- 🔴 **PROVEN TO FIRE, with a rebuild between the runs** — the guard must not be validated by the very
+  mistake it exists to prevent:
+  1. build → run: **3 passed** (no false positive);
+  2. touch one source → run: **REFUSED**, _"`ShellDivider.tsx` is 28s NEWER than the newest file in
+     `apps/runtime/dist`"_;
+  3. rebuild → run: **3 passed** again;
+  4. touch again with `CG_ALLOW_STALE_E2E=1` → **ran, printing the override**.
+     The Designer was proven the same way (refused at 841m behind, then green after its build).
+- ⭐ **WIDENED to the DEPENDENCY GRAPH (owner decision, 2026-08-18).** The first cut compared only
+  the app's own `src/**`, `index.html` and `vite.config.ts`, which left the guard blind to every
+  workspace package the app bundles: a change in `@cg/gesture` — consumed by both apps' dividers —
+  left a stale bundle looking CURRENT. Same false green, one level out, and it would have been found
+  the same way: not at all.
+
+  **The costs are asymmetric, and that is the reasoning:** a wrong refusal costs one rebuild; a
+  wrong green costs a wrong conclusion, and this project has already paid that once. Every judgement
+  in the resolver therefore leans toward refusing.
+
+  🔴 **Resolved from the graph, NOT from a list.** `bundleInputDirs` walks the app's own
+  `package.json` and follows every `@cg/*` dependency TRANSITIVELY (both `dependencies` and
+  `devDependencies` — deciding per dependency kind which can reach a bundle is a judgement the
+  resolver would have to get right every time, while following both is a rule it cannot get wrong).
+  A hand-kept list is _extend the list, forget the mutator_: the next package added is exactly the
+  one nobody adds to it, and the guard would go quiet where it is newest. A `@cg/*` dependency that
+  cannot be LOCATED throws rather than being skipped — an unresolvable package must never be
+  indistinguishable from a fresh one.
+
+  ⚠ **Per dependency it takes `src` + `package.json`, NOT `dist` and NOT `tests`.** Both
+  exclusions are decisions: a turbo CACHE RESTORE rewrites a package's `dist` mtimes with nothing
+  edited, so including it would refuse on ordinary builds — and a guard that refuses routinely is
+  one whose override becomes habit; and a package's tests are never bundled, the same reason the
+  app's own `tests/` is absent. The one case this does not catch is a package rebuilt without any
+  source change, which is not an edit and so is not the red-then-green hazard.
+
+- 🔴 **PROVEN AGAIN, both apps, with a rebuild between the runs** (2026-08-18):
+  1. touch `packages/gesture/src/index.ts` → **@cg/designer REFUSED**, naming
+     `packages\gesture\src\index.ts` as _"8m NEWER than the newest file in apps\designer\dist"_;
+  2. same touch → **@cg/runtime REFUSED**, same file, same shape;
+  3. rebuild → **designer 268 passed**, **runtime 81 passed**.
+- ⚠ **MEASURED during that proof, and encoded in the refusal message: a FULL turbo cache hit does
+  not re-stamp `dist`.** Turbo hashes CONTENT, so a file whose mtime moved without its bytes
+  changing produces a 100% cache hit — `pnpm build` reports "21 cached, 21 total", writes nothing,
+  and the guard keeps refusing with the remedy it just printed. An ordinary edit does not hit this
+  (changed bytes bust the hash and the app rebuilds), but a rebase, a checkout or a `touch` does.
+  The message now names `pnpm build --force` for that case. **A guard whose printed remedy does not
+  work is a guard whose override becomes the habit**, and then it protects nothing — so this is a
+  correctness property of the guard, not a documentation nicety.
+- **Cross-refs:** `B-140`'s change (`shared-drag-gesture/tasks.md` §6b) records the false result this
+  item prevents; `P-035` (the other guard filed the same day, same "enforce rather than remember"
+  shape).
+
+## [x] P-037 — `pnpm test:e2e` regenerates four COMMITTED handoff stills, so an ordinary run leaves the tree dirty ⟨priority: medium⟩ — done: no change dir; filed and fixed in one commit each (`2bf31fa5`, `3e4f7832`), the platform/dev-loop path `P-026` and `P-027` established
+
+**What:** an ordinary `pnpm test:e2e` leaves `git status` CLEAN. The four stills a handoff document
+displays are written only when a run is explicitly asked for them; every other run writes its
+screenshots to an already-ignored output directory.
+
+**Why:** [`apps/designer/tests/e2e/looks.spec.ts`](../../apps/designer/tests/e2e/looks.spec.ts)
+writes four TRACKED files with `page.screenshot({ path: '../../docs/handoff/img/…' })` — lines
+**95, 116, 130 and 134** — `bb-step3-sixbox-authoring.png`, `bb-step4-solo-authoring.png`,
+`bb-step5-switched-sixbox.png` and `bb-step5b-switched-solo.png`. Render nondeterminism means the
+bytes differ a little every run, so the files re-dirty on every pass, green or red.
+
+⚠ **And the nondeterminism is PARTIAL, which is what made this worse than uniform dirt.** Measured
+during the fix: in one opt-in run only **two of the four** images moved — `bb-step5` and `bb-step5b`
+came back byte-identical — so the dirty SET varied from run to run. Uniform dirt at least teaches a
+stable expectation a reader can subtract. A varying set teaches none, so every run's `git status`
+had to be read afresh on its merits, and "that file is always modified" was never available as a
+dismissal. **An unstable expectation is what a real change hides behind.**
+
+🔴 **The cost is not the dirt, it is the JUDGEMENT the dirt demands.** Every E2E run now ends with a
+`git status` a human has to read and dismiss — and a working tree that is expected to be dirty is
+exactly the state in which a real change gets staged by accident. This repo already forbids
+`git add <directory>` for that reason (`P-035`, filed after `git add` swept the owner's uncommitted
+hack onto `dev`), and already has a NEVER-STAGE guard for one specific file. Habitual noise defeats
+both: a guard is only as good as the reader's willingness to look at what it is guarding.
+
+**Only ONE test does this.** Swept with `git grep` (golden rule 9) across every `tests/` tree for
+`screenshot(`, `writeFileSync`, and repo-relative `../../` write targets. The other screenshot
+callers — `pixel-paint.spec.ts:148,276`, `rehearse-canvas.spec.ts:107`,
+`rehearse-composite.spec.ts:167,185` — capture to a BUFFER with no `path:`, so they write nothing.
+Every `../../fixtures/b034` reference is a `readFileSync`. The one adjacent writer,
+`apps/designer/tests/exporter-vcg-fonts.test.ts:362`, is **already opt-in** (`D121_FIXTURE_OUT`,
+skipped when unset) and is the precedent this item follows.
+
+**Acceptance:**
+
+- WHEN an ordinary `pnpm test:e2e` completes THEN `git status --porcelain` reports no change under
+  `docs/handoff/img/` — the tree is CLEAN
+- WHEN that ordinary run completes THEN the four stills are STILL PRESENT in the repository and
+  still the correct images, byte-identical to what the handoff document displayed before the run
+- WHEN a run is explicitly asked to refresh the stills THEN it rewrites those four tracked paths, so
+  the document can be re-illustrated on demand
+- WHEN the stills are not being refreshed THEN the screenshots are still taken and still written,
+  to an already-ignored output directory, so the spec's coverage is unchanged and a failure can
+  still be looked at
+- WHEN a reader opens `docs/handoff/2026-08-20-session-bb.md` THEN its image links still resolve —
+  no committed image is deleted and no path it links to is gitignored
+
+**Notes:**
+
+- **Direction:** an env opt-in in the spirit of `CG_GATE_HOOK_E2E` / `CG_ALLOW_STALE_E2E`, with the
+  default writing under `apps/designer/test-results/` (already covered by `.gitignore:88`).
+- **Deliberately NOT the two obvious shortcuts.** Deleting the committed images breaks the handoff
+  document, and gitignoring `docs/handoff/img/` would make a path a document links to invisible to
+  the next clone — both trade a visible wart for an invisible one.
+- **Cross-refs:** `P-035` (never-stage guard — the accident this noise makes likelier); `P-036`
+  (the other "the runner should enforce it, not the human remember it" guard).
+- **Shipped:** `apps/designer/tests/e2e/looks.spec.ts` only — a `REFRESH_HANDOFF_STILLS` flag read
+  from `CG_HANDOFF_STILLS` and a `stillPath()` helper. No product source touched, nothing deleted,
+  nothing newly gitignored. The default writes to `apps/designer/test-results/handoff/`, already
+  covered by `.gitignore:88`.
+- 🔴 **PROVEN IN TWO ARMS, because a "the tree is clean now" reading alone cannot tell a fix from a
+  screenshot that silently stopped being taken:**
+  1. **opt-in arm** — `CG_HANDOFF_STILLS=1 pnpm --filter @cg/designer exec playwright test looks`:
+     1 passed, and `git status` then showed **`bb-step3` and `bb-step4` MODIFIED**. That is the
+     positive control: it reproduces the wart on demand and proves the doc can still be
+     re-illustrated. Restored with `git checkout --`.
+  2. **default arm** — a full `pnpm test:e2e`: **269 passed, 12 skipped**, and `git status
+--porcelain` reported **nothing under `docs/handoff/img/`**; all four stills hash-identical to
+     `HEAD`; all four screenshots present in `apps/designer/test-results/handoff/`, which
+     `git check-ignore -v` resolves to `.gitignore:88`.
+- **Where the partial-nondeterminism reading came from:** the opt-in arm above is the measurement
+  the **Why** now carries — two of four images moved, `bb-step5` and `bb-step5b` did not. Recorded
+  once, in the **Why**, because it is a property of the DEFECT rather than of the fix.
+- **Not covered by `typecheck`:** `apps/designer`'s tsconfig `include` is `["src/**/*",
+"vite.config.ts"]`, so this file is outside the compile guarantee (`P-033`, still open). The
+  change is covered by `lint` (which does lint `tests/`, 0 errors) and by the run itself.
+- ✅ **Linux `e2e` debt DISCHARGED** —
+  <https://github.com/yasermostafaee/cg/actions/runs/32585878051> — head `4124885d`, a later
+  `dev` HEAD carrying the fix commit `3e4f7832`; `completed` + `success`, with the
+  **`E2E (Playwright)` job RUN, not skipped**. The local Windows pass is not what discharges it.
+
+## [~] P-038 — CI cannot tell a RED E2E suite from a SLOW one: turbo buffers a task's output and the job cap kills it before the flush ⟨priority: high — it made eleven real failures read as flake for three runs and two pushes⟩ — implemented: the two budgets and the streaming flag ship with this item
+
+**What:** the `E2E (Playwright)` job runs `pnpm test:e2e`, which routes through
+`bounded-turbo-cli.mjs` to turbo. Turbo **buffers a task's output until that task COMPLETES** — on
+a GitHub runner it emits `::group::`/`::endgroup::` around the whole of it, which requires holding
+it. The job's `timeout-minutes: 20` then kills the run **before the second suite ever completes**,
+so not one line of that suite's output is ever written.
+
+🔴 **The consequence is not "we lose some logs". It is that two different outcomes become the same
+evidence.** A suite that is FAILING and a suite that is merely SLOW both produce: job conclusion
+`cancelled`, `required` → `failure`, zero bytes from the suite, and orphaned `chrome-headless-shell`
+processes at cleanup. Nothing in that picture distinguishes a product regression from infrastructure
+noise, and the natural reading of `cancelled` is the second one.
+
+**Measured, three times, same shape:**
+
+| run                                                                                 | commit     | `E2E (Playwright)` | duration | designer            | runtime              |
+| ----------------------------------------------------------------------------------- | ---------- | ------------------ | -------- | ------------------- | -------------------- |
+| [33632277519 att. 1](https://github.com/yasermostafaee/cg/actions/runs/33632277519) | `eb228a64` | **cancelled**      | 20m17s   | `275 passed (6.4m)` | **no output at all** |
+| [33632277519 att. 2](https://github.com/yasermostafaee/cg/actions/runs/33632277519) | `eb228a64` | **cancelled**      | 20m20s   | —                   | **no output at all** |
+| [33637419829](https://github.com/yasermostafaee/cg/actions/runs/33637419829)        | `68da3bfe` | **cancelled**      | 20m19s   | `275 passed (6.3m)` | **no output at all** |
+
+In the third, `##[endgroup]` for the designer suite lands at `13:51:13` and
+`##[error]The operation was canceled` at `14:03:22` — **12 m 09 s of silence**. The designer suite's
+entire 298-line output shares ONE timestamp, which is the buffering measured directly.
+
+⚠ **A second, unrelated instance already existed and was read the same way**: run 32278566981
+attempt 1 was `cancelled` at the same cap from an apt-mirror stall. `cancelled` could not tell
+those two apart either.
+
+**What the silence actually was:** eleven Runtime specs failing on `a7976e14`'s `wrong-bank`
+refusal (`B-201`). CI runs `workers: 1, retries: 1, timeout: 30_000`, so **11 × 2 × 30 s = 11 min**
+of pure timeout plus the ~1.8 min the suite takes green ≈ **12.8 min** — the observed silence, to
+within a minute. The arithmetic was only derivable AFTER running the suite locally; from CI alone it
+was unobtainable.
+
+**Fix — two parts, and the first is the one that matters.**
+
+1. **`globalTimeout`, CI-only, in BOTH Playwright configs**, set so the two suites' budgets SUM
+   under the job cap: designer **8.5 min**, runtime **7.5 min**, against ~17.4 min of usable room
+   (20 min cap − ~1.6 min setup − ~1 min build). Playwright then ends its own run, exits 1 with a
+   summary, and the job concludes **`failure`** with the failing specs named — inside the cap, so
+   the cap stops being the thing that decides. ⚠ The two numbers are ONE sum: raising either
+   obliges lowering the other, and each config's comment says so.
+
+   ⭐ **REBALANCED 2026-09-15 from 11 / 5 — same sum, same margin — and the rebalance is itself
+   evidence the mechanism works.** Run 34894055817 (`189b5d43`) concluded `failure` having failed
+   NOTHING: `199 passed`, **`23 did not run`**, and two errors belonging to no test — _"Timed out
+   waiting 300s for the test suite to run"_. That is exactly the legible outcome this item was
+   written to buy, applied to a cause it did not anticipate: the budget itself expiring. The
+   Runtime suite was 1.8 min when the 5 was chosen and is now ~5.6 min of tests (300 s × 223/199,
+   extrapolated from where the cut landed), which the 5 could not hold even before the 120 s
+   `webServer` boot each budget must also cover. The room came from the Designer's half, which has
+   never spent more than 6.6 of its 11.
+
+   🔴 **AND THE READING HAZARD THIS ADDS, because it is the cost of the fix:** a run that
+   blew its DEADLINE and a run with a FAILING SPEC now conclude identically — `failure` — and
+   only `N did not run` in the step output separates them. Read that line before attributing a red
+   `e2e` to the diff. The remedy for a timeout is to measure and move the line (or raise
+   `timeout-minutes` and redo the arithmetic in the runtime config, which owns it); it is NEVER to
+   delete or skip specs until the suite fits.
+
+2. **`--log-order=stream`** on `test:e2e` and `gate:e2e:run`. Output appears as it is produced
+   instead of at a completion that may never come, so a hung suite is legible WHILE it hangs.
+   `bounded-turbo-cli.mjs` forwards argv verbatim (it rewrites only `--concurrency`), so this needs
+   no change there; turbo 2.9.14 documents `stream` as a supported value.
+
+**Why not the alternatives**, costed rather than dismissed:
+
+- **Raise `timeout-minutes`** — a longer rope. The outcome is still `cancelled`, just later and
+  dearer; a fully red Runtime suite at `workers: 1, retries: 1` is ~93 min and no cap bounds that.
+  `CLAUDE.md` already argues this shape down at `B-073` → `B-098`.
+- **Split into two jobs** — ~80 lines across 6 files, and it does NOT satisfy the acceptance: a job
+  killed by `timeout-minutes` still concludes `cancelled`. 🔴 As a **matrix** it is actively
+  dangerous: the API job names become `E2E (Playwright) (designer)`, which no longer match
+  `REQUIRED_JOB_NAMES` in `tools/gate-hook/src/reuse-decision.mjs`, so `P-030`'s merge-run guard
+  would silently degrade to "always run everything" — and its test still passes, because it asserts
+  against the literal name string.
+- **`timeout 14m pnpm test:e2e`** — gives the `failure` conclusion but names nothing on its own,
+  and kills rather than reports.
+
+**Acceptance:** a deliberately-failing Runtime spec produces a CI conclusion of **`failure`** with
+that spec **named in the log**, not `cancelled`.
+
+- **Number:** highest `P-` HEADING across every ref was `P-037`; `P-038` … `P-040` returned no
+  headings anywhere, and the duplicate audit for `P-` printed nothing. Cross-checked against the
+  registry's dated pointer — _"no gaps. Next free: `P-038`."_ — headings and pointer AGREE.
+
+## [x] P-039 — a lint guard for the two-bank SHAPE: a bank range or a row name rebuilt by hand fails `cg/bank-shape`, in every workspace ⟨priority: high — nine restatements were found by sweeping, and nothing stopped a tenth⟩ — implemented 2026-09-02 by `BANK-HALF-SWEEP-01`
+
+**What:** `a7976e14` put the bank's union in ONE function (`fixedBankSlots`) and nine sites then
+rebuilt its range by hand — four in the mock (`B-201`), the schema default (`B-202`), the panel's
+row name (`B-203`), the bridge's volume recovery (`B-204`) and its untick gate (`B-205`). Every one
+was the OPERATOR half only, and none could be found by grepping for the predicate's name, because a
+restatement never uses the name. The sweep that caught the last two used three patterns:
+hand-built row-name strings, `start`/`count` arithmetic outside `shared-ipc`, and a literal
+`layer <= 9`.
+
+**How a tenth hides from that sweep — the shapes the three patterns miss, and two were already in
+the tree:**
+
+| shape                                                                                      | where it was                                                                                 | seen by the sweep?             |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------ |
+| `Array.from({ length: bank.count }, (_, i) => bank.start + i)` — no `count - 1`, no `<= 9` | `rehearse.integration.test.ts`, `skew-harness/run.ts` (both halves, by hand)                 | **no**                         |
+| `for (let i = 0; i < bank.count; i++)` with `bank.start + i` inside                        | —                                                                                            | no                             |
+| `const { start, count } = bank` then `start + n`                                           | —                                                                                            | only if `n` is spelled `count` |
+| a direct tick read, `bank.visibility?.[k]`, instead of `isLayerVisible`                    | `bin/caspar-bridge.mjs` — the boot line counted operator ticks only and never mentioned beds | **no**                         |
+| a positional read of the union, `fixedBankSlots(bank).slice(0, bank.count)`                | —                                                                                            | no                             |
+| `layer < 10`, `slot.layer > 9`, `9 >= layer`, `layer <= MAX_LOW_FIXED_LAYER`               | —                                                                                            | only `layer <= 9`              |
+| the name built elsewhere — `'Layer ' + n`, an i18n table                                   | —                                                                                            | no                             |
+
+**The options, costed:**
+
+- **A lint rule on the SHAPE** — a custom ESLint rule, `cg/bank-shape`, in `@cg/eslint-config`,
+  registered by the BASE tier so every workspace has it, the owner module exempted by PATH. ~90
+  lines of rule, ~100 of smoke cases, 16 mechanical site fixes. Small. **Built.**
+- **Narrow the surface so `fixedBankSlots()` is the only enumerator** — `start`/`count` are the
+  persisted wire shape of a Zod-parsed record; hiding them means a class wrapper across an IPC
+  boundary and a persisted file, touching every consumer, and it does nothing for `Layer ${n}`.
+  Large, and incomplete. Not built.
+- **Type-aware lint** (`parserOptions.project`) checking member access on `FixedLayerBank`-typed
+  objects — precise, no name heuristics, but the base config is deliberately non-type-aware and
+  turning that on across thirty workspaces is a minutes-per-lint cost and a config migration.
+  Medium-large. Deferred; it is the shape that would close the direct-tick-read hole below.
+- **The grep sweep as a gate step** — cheapest of all, and it IS the sweep that cannot see the
+  tenth (rule 9 already records that a grep can go blind).
+
+**What was built.** `packages/eslint-config/src/rules/bank-shape.ts`: esquery selectors for
+`x.start + x.count` (either order, any receiver, either half), `start + count` on bare identifiers,
+`{ length: x.count }` / `new Array(x.count)`, a `for` bounded by `.count`, and a template literal
+that is exactly `` `Layer ${…}` `` / `` `Bed ${…}` `` or a `'Layer ' + …` concatenation. A custom
+rule with its OWN id rather than more `no-restricted-syntax` entries, because flat config REPLACES
+a rule's options when a later block re-declares it and three configs in this repo do — one of them
+for the directory that contains `LayerRow.tsx`. The owner module
+(`packages/shared-ipc/src/channels/fixedLayers.ts`) is exempt by a `files` pattern, and the smoke
+check proves the exemption does not extend to a neighbouring file.
+
+**Demonstrated, twice.** First fire on the real tree: **16 sites** in exactly the four bank-holding
+workspaces (`shared-ipc` ×3, `runtime` ×8, `caspar-bridge` ×3, `skew-harness` ×2) and none
+elsewhere — every one either the `fixedBankEnd` restatement or the `{ length }` shape above; all
+fixed in place, tree-wide lint then `25 successful, 25 total`. Then the three shipped restatements
+reintroduced VERBATIM from their original commits (`B-204`'s loop, `B-205`'s loop, `B-203`'s
+`` `Layer ${bankPosition}` ``) in a scratch file inside the bridge workspace: `3 problems (3
+errors)`, exit 1.
+
+**Which of the nine it would have caught:** eight — all four mock sites, both bridge sites, the
+panel's row name, and `defaultFixedLayerBank`'s inline bed loop. **Not the ninth:** `B-202`'s
+schema default was an OMISSION (a `{ start, count }` with no `visibility`), and no syntax rule sees
+what is absent; that one is pinned by `B-202`'s own picture-level tests.
+
+**What it covers that the nine did not need, stated so the guard is not read as a closed class:**
+any receiver name (`next`, `current`, `b`, `HARNESS_BANK`), the bed half's arithmetic, the
+destructured form, the array-fill and index-walk forms, and the name built by concatenation.
+**What it does not see:** literal bounds (three test suites use the default bed range as their own
+oracle, and an oracle derived from the code under test proves nothing, so the grep sweep keeps
+those); direct tick/alias record reads (`visibility` and `aliases` are ordinary property names in
+the designer's arrangements and the runtime's looks, and without types the rule cannot tell a
+bank's record from theirs — the bin's was fixed by hand alongside); and a positional slice of the
+union. The type-aware option above is what would close the second.
+
+- **Cross-refs:** [[B-201]], [[B-203]], [[B-204]], [[B-205]] (the restatements), [[B-066]] (the
+  same one-curated-list-two-enforcers shape, for CEF built-ins).
+- **Number:** highest `P-` HEADING across every ref was `P-038`; `P-039` … `P-041` returned no
+  headings anywhere. Cross-checked against the registry's dated pointer — _"and `P-039`"_ —
+  headings and pointer AGREE.
+
+## [x] P-040 — the gate persists its FULL output to a file, not its tail: `.gate-logs/gate-<stamp>-<pid>.log` from the one chokepoint every gate runs through ⟨priority: medium — a tool that failed and could not say why, one level below the CI blindness `P-038` had just closed⟩ — implemented 2026-09-02 by `BANK-HALF-SWEEP-01`
+
+**What:** the first push of `96090c49` failed its pre-push gate naming no failing task. Only the
+tail was captured; a standalone `pnpm gate` immediately after passed, the retry passed, and it was
+recorded as transient-but-undiagnosed. That record was right, and it is also `P-038` restated one
+level down: `P-038` was CI unable to say whether a suite was red or slow; this is the local gate
+unable to say WHICH task failed. The Stop hook already keeps a full per-session log
+(`.gate-logs/<session>.log`); a hand-run `pnpm gate` and the `.husky/pre-push` path kept nothing
+beyond the terminal, and a terminal is exactly what a tool captures the tail of.
+
+**The fix.** `tools/gate-hook/src/gate-log.mjs` — pure parts (names, header/footer, the prune
+decision) unit-tested with an injected filesystem plus one real round-trip on disk — wired into
+`gate-lock-cli.mjs`, the same chokepoint P-013 chose for the lock and for the same reason: every
+entry point (direct, pre-push, Stop hook) funnels through `gate` / `gate:e2e`, so one tee covers
+all of them. The child's stdout and stderr are PIPED and every chunk goes to both the terminal and
+the file; the header records command, cwd and start; the footer records exit code (or the signal),
+end, and wall time — a log with no footer is a gate that died before it could say so, which is
+itself a diagnosis. The path is printed before the gate starts and again on failure. Newest twenty
+kept, pruned by name (= by time) on gate END so a running gate's own file is never pruned, and only
+`gate-*.log` files are ever touched. Logging is FAIL-OPEN, unlike the gate: a read-only checkout
+warns once and still gates.
+
+**Verified:** 6 unit tests (`gate-log.test.ts`), and an end-to-end smoke through the real CLI with
+a child that wrote to both streams and exited 3 — both lines in the file in order, `(exit 3,
+0.1s)` in the footer, `gate FAILED (exit 3) - full output: .gate-logs\gate-…log` on stderr, exit
+3 forwarded.
+
+**One cost, named:** the child no longer sees a TTY, so turbo and vitest print without colour.
+That is the face the Stop hook and CI already saw, and the face a log file wants.
+
+- **Cross-refs:** [[P-013]] (the chokepoint), [[P-038]] (the same blindness one level up),
+  [[P-009]] (the Stop hook's own log, which this does not replace).
+- **Number:** derived in the same sweep as `P-039` above — highest heading `P-038`, `P-039` …
+  `P-041` absent; `P-040` is the next after the one filed immediately above.
+
+## [~] P-041 — the dev servers answer only on `localhost` and the client assumes it: LAN-visible dev by default, the bridge origin derived from the page, and a lint guard so a literal origin cannot come back ⟨priority: high — nothing could be tested from a second machine, and the client half is invisible from the dev box⟩ — implemented 2026-09-04 by `LAN-DEV-ACCESS-01` (`openspec/changes/lan-dev-access/`); e2e discharged by https://github.com/yasermostafaee/cg/actions/runs/33808859821 (the `E2E (Playwright)` job RAN and passed on `b30bd5da`, 9m28s); the second-machine acceptance is still the OWNER's
+
+**What:** both Vite dev servers listen on every interface by default in development
+(`HOST=127.0.0.1` restricts; `vite preview` and the built app unchanged); the Runtime derives its
+bridge WebSocket host from the page's own origin in ONE module (`apps/runtime/src/platform/
+bridgeUrl.ts`), keeping the bridge's port; the `C-024` pin is gone (see [[C-024]], commit
+`f41da425`); and `cg/no-hardcoded-origin` refuses a hand-spelled client origin in the renderer
+tier.
+
+**Why:** the servers bound `127.0.0.1` unless `HOST` was remembered, and the client probed the
+constant `ws://127.0.0.1:5280`. From a second machine the page did not load, and had it loaded it
+would have probed THAT machine's loopback and sat in DISCONNECTED with nothing wrong anywhere it
+could see. The defect cannot be seen from the dev box, where `localhost` and the LAN address are
+one machine — which is why every local check passed. It is the `C-024` gap one layer up: the
+client could not be told, or ask, where its server is.
+
+**Acceptance:**
+
+- WHEN either app is started with `dev` and `HOST` is unset THEN it listens on every interface
+  and prints a `Network:` URL per interface; WHEN `HOST=127.0.0.1` THEN loopback only
+- WHEN `vite preview` or a build runs THEN nothing about them changes (loopback; static files)
+- WHEN a browser opens the dev server at the LAN address THEN HMR connects at that address
+- WHEN the Runtime page is opened at `http://192.168.21.93:5174` from a second machine THEN it
+  probes `ws://192.168.21.93:5280`, never `ws://127.0.0.1:5280`
+- WHEN client code spells a loopback/IPv4 origin, a host:port, a scheme beside one of this
+  repo's default ports, or imports the bridge's bind-default constants THEN lint fails; WHEN it
+  is the owner module THEN it does not
+
+**Notes:**
+
+- **§1 discovery, and a prediction that FAILED.** The brief predicted 3–6 origin-producing
+  sites, one a WebSocket, one a template/asset URL bypassing the helper. The sweep (every hit
+  listed in `openspec/changes/lan-dev-access/tasks.md` 1.3) found ONE: `createRuntimeBridge.ts`'s
+  `resolveBridgeUrl()` → `DEFAULT_BRIDGE_WS_URL`. The WebSocket half was right; the template half
+  was wrong for a structural reason — the PVW is a same-origin `srcdoc` iframe, template HTML
+  rides the socket, and the CasparCG-facing URL is built by the BRIDGE (`bridge.ts:678`), never
+  by the client. One mechanism, not three. ⚠ The first `git grep` over `packages/*/src` was
+  BLIND — git treats a wildcard pathspec as a full-path match, so it matched nothing and said
+  nothing — caught because the `packages/shared-ipc` constant was known to exist; rerun as a
+  prefix. Golden rule 9's tool can go blind by pathspec, not only by NUL byte.
+- **§4 identification.** `git diff` showed ONE added line, `// return '192.168.21.93';` — the pin
+  already commented out by the owner, not a live return and not a second artifact; `git log -S`
+  showed the live pin entered at `9453b989` and left at `56c0799f`. Deleted with its never-stage
+  entry and the flag-only warning sentence in one commit, per C-024's rule.
+- **Default LAN-visible, deliberately.** `HOST` existed and defaulted to loopback; that is a flag
+  someone has to remember, the failure mode the hack came from. The dev-only boundary is Vite's
+  contract (`server.*` is read by the dev server alone), pinned by `tests/vite-config.test.ts` in
+  each app. `host: true` rather than `'0.0.0.0'` so Vite prints every `Network:` URL — on this
+  box, `172.18.0.1` (a tunnel adapter) AND `192.168.21.93`, the two-interface situation that made
+  `guessLanHost()` guess wrong.
+- **Verified here (same machine, LAN address — which proves the BINDING and HMR, not the client):**
+  Chromium at `http://192.168.21.93:5174/` and `:4000/` — both 200; both HMR sockets
+  `ws://192.168.21.93:<port>/?token=…` received `{"type":"connected"}`; the served
+  `/@vite/client` carries `__HMR_HOSTNAME__ = null`. **Verified for the client without loopback:**
+  `tests/e2e/lan-origin.spec.ts` serves the page from an unresolvable name routed to the preview
+  server at the network layer; red on the old constant (`Received: "ws://127.0.0.1:5280/"`),
+  green on the fix. The live dev page at the LAN address probed `ws://192.168.21.93:5280/` (refused
+  — the bridge was not started with `--host 0.0.0.0`).
+- 🔴 **UNVERIFIED — the owner's half, on a second machine.** (1) On this box: `pnpm build`, then
+  `node tools/caspar-bridge/bin/caspar-bridge.mjs --host 0.0.0.0` (plus the usual flags) and
+  `pnpm --filter @cg/runtime dev`. (2) On the second machine, Chrome or Edge: open
+  `http://192.168.21.93:5174/`. (3) Expect the page to load and the link pill to read LIVE, not
+  "NOT CONNECTED"; DevTools → Network → WS shows `ws://192.168.21.93:5280/` and
+  `ws://192.168.21.93:5174/?token=…`. (4) `http://192.168.21.93:4000/` loads the Designer; a
+  "Session-only storage" notice is expected (next bullet). (5) If (3) reads NOT CONNECTED: the
+  bridge must have printed `WS listening on ws://0.0.0.0:5280`, and TCP 5280 must pass the
+  firewall.
+- **§6 firewall — REPORT, nothing changed.** Active profile `DomainAuthenticated` on both
+  adapters. Inbound Allow rules already exist for `C:\program files\nodejs\node.exe` (TCP and UDP,
+  Domain and Public profiles), and that is the node in use (v26.4.0), so no new rule is expected.
+  If the second machine cannot connect: allow inbound TCP 4000, 5174 and 5280 on the Domain
+  profile (or re-check the program rule). The PRIVATE profile has no node rule.
+- **The bridge's loopback bind is NOT changed and is not a bug:** `runtime-caspar-bridge`
+  requires it. A remote console needs `--host 0.0.0.0` (README updated).
+- ⚠ **Plain HTTP on a LAN IP is an INSECURE context.** The Designer there shows "Session-only
+  storage — no persistent storage" (OPFS and the File System Access pickers exist only under
+  `https:` or `localhost`); the Runtime falls back to an in-memory library the same way
+  (`workspace.ts`). A second-machine session works but does not persist a library across
+  reloads. Not fixed here — the fix is TLS or a per-browser flag; recorded so the plant is not
+  surprised.
+- **§7 the guard.** Shape: fold a string-building expression (literal / template / `+` chain,
+  non-literal pieces as `«expr»`) and match scheme+loopback/IPv4 host, host:port, scheme+known
+  dev port (4000, 5000, 5174, 7000, 5280), plus the `DEFAULT_BRIDGE_HOST` / `DEFAULT_BRIDGE_WS_URL`
+  imports. Registered by `base` via the ONE `cg` plugin object (`rules/cg-plugin.ts`), enabled by
+  the renderer tier only. **First fire: 0** on the current tree across the five renderer-tier
+  workspaces; **1** on the verbatim pre-fix `createRuntimeBridge.ts` (the import). Smoke `58
+passed, 0 failed`. ⚠ The owner exemption is inside the RULE, not a base `files` block: the
+  first smoke run fired inside the owner module because `renderer()` composes after `base` and
+  re-enabled it. **Cannot see:** bare hosts (`'127.0.0.1'` is also a CasparCG default), numeric
+  ports, pieces assembled across statements, config/env values, `new URL()` parts, hostnames,
+  anything outside `src/**`, and Node-tier code by design.
+- **Filed, NOT fixed (outside the boundary):** `tools/caspar-amcp-probe/bin/beacon-probe-lib.mjs:49`
+  `DEFAULT_LAN_HOST = '192.168.21.93'`, a throwaway harness default — the last machine-specific
+  address in the tree, in a tool that is not client code and not lint-guarded.
+- **Prefix class:** `P-`, because the subject is cross-cutting dev tooling — two apps' dev
+  servers, the Runtime's platform layer and the lint tier — not a Runtime feature, not a CasparCG
+  behaviour, not an on-air bug.
+- **Number:** highest `P-` HEADING across every ref was `P-040`; `P-041` … `P-043` returned no
+  headings (the only `P-041` hits were the registry's own forward pointer and this session's
+  cross-references). The dated pointer reads _"and `P-041`"_ — headings and pointer AGREE.
+- **Cross-refs:** [[C-024]] (the same gap one layer down, closed here), [[P-035]] (the net, now
+  empty), [[P-039]] (the sibling guard this one is shaped after), [[B-162]] (the flag that
+  `templateServeUnreachableWarning` names).
+
+## [ ] P-042 — `@cg/single-file-export`'s three `pre*` hooks race over ONE generated file: an `EPERM: rename` on Windows reddened one gate in two ⟨priority: low — a host flake, but it reads exactly like a product regression and it is not bounded⟩ — FILED ONLY 2026-09-05 (`DESIGNER-FIX-0905`; outside the Designer boundary that prompt authorises)
+
+**What:** `packages/single-file-export/package.json` runs `scripts/bundle-runtime.mjs` from THREE
+hooks — `prebuild`, `pretypecheck`, `pretest`. Under `pnpm gate` turbo runs `typecheck` and `test`
+(neither depends on `build`) concurrently, so two generators run at once. Each writes its own
+pid-named temp file and then renames it onto the SAME `src/generated/cg-runtime-bundles.ts`
+(`bundle-runtime.mjs:136-138` — _"atomic write: temp + rename so a concurrent reader never sees a
+partial file"_). On Windows the second rename lands while the first's target, or a `tsc` /
+`vitest` reading it, still has the file open, and `fs.rename` refuses it with `EPERM`. The hook
+exits 1, the task goes red, and the loser's `.tmp-<pid>` file is left behind (gitignored, so
+`git status` stays clean and nothing announces it).
+
+**Measured:** 2026-09-05, first `pnpm gate` of the session —
+`@cg/single-file-export#typecheck` red with
+`EPERM: operation not permitted, rename '…cg-runtime-bundles.ts.tmp-14568' -> '…cg-runtime-bundles.ts'`
+(`.gate-logs/gate-20260904T204552Z-7908.log`); the rerun was green, `93 successful, 93 total, 0
+cached`. Nothing in the diff touched that package.
+
+**Why it matters:** the red names a real task and a real file, so it reads as a product failure
+and costs a full uncached rerun (~5 min) to disprove; and the "atomic" write is atomic only for
+one writer — the comment promises what three concurrent writers cannot keep. It is the `B-098` /
+`P-034` shape one layer down: a contention red whose victim moves between runs.
+
+**Acceptance:**
+
+- WHEN two of the three hooks run the generator concurrently THEN neither fails — either the
+  generator skips its write when the existing file is byte-identical to what it just built (the
+  common case: all three build the same bytes from the same runtime), or the rename is retried on
+  `EPERM`, or the hooks are collapsed to one turbo task the others depend on
+- WHEN a generator loses such a race THEN it leaves no `.tmp-<pid>` file behind
+- WHEN the gate is red for this reason THEN it says so in one line rather than a Node stack
+
+**Notes:** deliberately NOT fixed by the session that found it — the fix is in build tooling, and
+that prompt authorised Designer UI and copy only. The stray `cg-runtime-bundles.ts.tmp-14568` was
+deleted by hand before the rerun.
+
+- **Prefix class:** `P-`, dev tooling; the package is shared by both apps.
+- **Number:** highest `P-` HEADING was `P-041`; `git grep -n "P-042"` returned only the registry's
+  own "Next free" pointers (seven, all `P-042 (unchanged)`). The dated pointer reads `P-042` —
+  headings and pointer AGREE.
+- **Cross-refs:** [[P-034]] / [[B-098]] (the bounded fan-out — this race is the same class inside
+  one package), [[P-040]] (the persisted gate log that made the diagnosis a read rather than a
+  rerun).
+
+## [ ] P-043 — CasparCG 2.5.0 DOES play a VP8 WebM with its alpha (the producer picks `libvpx` off the `alpha_mode` tag, where the bundled `ffmpeg` CLI would not), and its mixer composites PREMULTIPLIED — so an asset whose transparent pixels are not black lifts everything under it ⟨priority: medium — two facts that decide whether a graphic may leave HTML, and both are the opposite of what the CLI and the usual "straight alpha" assumption say⟩ — MEASURED 2026-09-05 by `STRAP98-PAINT-01`
+
+**Where measured:** the DEV HOST's own install
+(`D:\programs\casparcg-server-v2.5.0-stable-windows`, `VERSION` → `2.5.0 69e8ad5 Stable`), started as
+an ISOLATED instance — its own config file, its own media path, AMCP on port **5260**, one
+`1080p5000` channel with NO consumers. The owner's `casparcg.config` was not touched and nothing was
+sent to the plant.
+
+**Method:** `PLAY 1-1 #AARRGGBB` (a flat colour producer), `PLAY 1-2 <clip>`, then `PRINT 1` and read
+the PNG it drops in the media folder. The subject is layer 98's strap asset — VP8 in WebM, 1920×282,
+50 fps, 14.3 s, `alpha_mode=1` — whose held frame is **79 % fully transparent** with RGB **18,18,18**
+under alpha 0, and carries an opaque white bar at rows 198–260.
+
+⚠ **`PRINT` LAGS BY ONE.** The PNG that appears while case N is running is case N−**1**'s frame. Give
+every case a DIFFERENT background colour so each grab identifies itself — otherwise a whole set reads
+one case out of step and every conclusion is shifted onto the wrong clip. The first pass here did
+exactly that, and only the colours caught it.
+
+| case                                            | transparent area reads | verdict                                           |
+| ----------------------------------------------- | ---------------------- | ------------------------------------------------- |
+| flat colour alone (red, black, grey)            | exactly the colour     | baseline: the mixer does not tint                 |
+| the strap WebM over magenta `#FFFF00FF`         | `255,19,255`           | the background shows through — **ALPHA HONOURED** |
+| opaque control (solid green h.264) over blue    | `0,147,0` everywhere   | nothing shows through — negative control HOLDS    |
+| ProRes 4444 of the same held frame, over cyan   | `0,255,255` +18 red    | alpha honoured — positive control HOLDS           |
+| the WebM re-encoded to ProRes 4444, over yellow | `255,255,19`           | same; **no conversion is needed**                 |
+
+**The decoder — and why a CLI check would have lied.** CasparCG's log names no decoder even at
+`debug`. The bundled `ffmpeg.exe` (7.0.2) decodes this same file with `vp8 (native)` → `yuv420p`,
+**no alpha**; forced with `-c:v libvpx` it yields `yuva420p`. The server passes the alpha anyway, and
+`casparcg.exe` carries the literals `libvpx` and `libvpx-vp9` in the same block as `alpha_mode` inside
+`caspar::ffmpeg::Decoder::Decoder(struct AVStream *)` (source path
+`src/modules/ffmpeg/producer/av_producer.cpp`) and imports `avcodec_find_decoder_by_name`: the
+producer looks the alpha-capable decoder up BY NAME off the stream's `alpha_mode` tag. **Never infer
+CasparCG's alpha support from a bare `ffmpeg` run — the CLI default and the producer disagree, and the
+CLI is the pessimistic one.**
+
+🔴 **PREMULTIPLIED, and this is the half that bites.** Over pure black the same strap's transparent
+area reads **19,19,19**, not `0,0,0`: the mixer ADDS the source's RGB instead of scaling it by alpha.
+The SAME asset rendered by the browser reads exactly `255,0,255` over magenta — straight alpha, no
+lift. So this strap on a CasparCG media layer would lay a constant **~7.5 % grey wash over the whole
+1920×282 band**, visibly unlike what is on air today. An asset is safe to move out of HTML only if its
+transparent pixels are BLACK; `alpha_mode=1` alone does not make it so.
+
+**Acceptance:**
+
+- WHEN a session must know whether CasparCG can play an asset's alpha THEN it reads this entry rather
+  than running the `ffmpeg` CLI, whose default decoder answers the wrong question
+- WHEN a graphic is proposed for a move from HTML onto a media layer THEN its transparent pixels are
+  checked for black BEFORE the move is costed, and a non-black finding is reported as a picture
+  change rather than discovered on air
+- WHEN a `PRINT`-based frame grab is used for a series of cases THEN each case gets a distinct
+  background colour and every grab is identified by it
+
+**Notes:** the converted candidate (`-c:v libvpx` decode → ProRes 4444) was produced and does
+composite identically, at **16.5 MB against the WebM's 2.24 MB** — it is not needed and it did not
+leave the dev host. Nothing was sent to `192.168.21.114`.
+
+- **Prefix class:** `P-`, platform — a property of the CasparCG build both apps target, not of our code.
+- **Number:** highest `P-` HEADING was `P-042` (this file); `git grep -n "P-043" HEAD` returned only
+  the registry's own "Next free" pointers and `P-044` nothing. The dated pointer reads
+  _"`P-043` (unchanged)"_ — headings and pointer AGREE.
+- **Cross-refs:** [[B-222]] §D (which measured that the move this entry costs buys no paints anyway),
+  [[R-030]] (the `cw`/`ch` raster the bridge appends, and why it is not CasparCG's `width=`).
+
+## [ ] P-044 — `git add -A` commits whatever else changed the tree: a hand edit nobody reviewed shipped inside `57ca77d3` ⟨priority: high — the value that reached `dev` was chosen by neither the author nor the owner⟩ — FILED ONLY 2026-09-06 by `MODAL-CONTRACT-02`
+
+> ⚠ **AND `git add <dir>` IS `git add -A` WEARING A NARROWER PATH — added 2026-09-13, after
+> it happened a second time in different clothes.** A closing session ran
+> `git add docs openspec` to stage two documentation edits and swept in two of the owner's
+> UNTRACKED working files (`docs/design/station-setup-*.html`, 1 150 lines) that had been
+> sitting in the tree since before the session began. Untracked again in `d9336787`, both
+> still on disk unchanged — but the commit LOOKED reviewed, which is this item’s whole point.
+>
+> **The rule: stage by explicit FILE.** `git add <dir>` stages whatever else is in that
+> directory, and "whatever else" is exactly what neither the author nor the owner chose.
+
+**What:** `57ca77d3` shipped `rgb(35 30 38)` as the emptied-air marked-row wash. Nobody picked
+that value. The session that wrote the rule intended the notice strip's own
+`rgba(180, 83, 9, 0.12)` — its comment says so in as many words — and the owner was mid-tuning the
+same declaration in his working tree when the commit was staged with `git add -A`. The sweep took
+his in-progress value, the comment kept describing the intended one, and the commit message
+described neither. Three artifacts, three different colours, one `git add`.
+
+🔴 **The damage is not the colour, it is that the commit LOOKED reviewed.** A diff nobody read
+rode inside a diff somebody did, under a message that described only the second. The comment above
+the rule then documented a value the file did not contain — the repo's
+_"a correct comment above incorrect code"_ class, arrived at by staging rather than by editing.
+
+**Why `P-035` could not catch it.** `P-035` is a DENYLIST: it refuses a commit that stages a path
+on `.claude/never-stage`. `controls.css` is not on that list and must not be — it is a file
+sessions legitimately edit every day. The guard answers _"is this path forbidden?"_; the question
+that was open is _"did this session write this hunk?"_, which no denylist can answer.
+
+**The two candidate guards, and the recommendation.**
+
+1. **Stage by path, never `git add -A` / `git add .` / `git commit -a`.** Free, immediate, and
+   already in force for this session. But it is discipline, and `P-035`'s own header is the
+   argument against relying on it alone: _"A rule that depends on remembering is the one that
+   already failed."_ The `git add <directory>` instruction that preceded `P-035` "existed, was
+   repeated three times, and was followed until it wasn't."
+2. ⭐ **RECOMMENDED — an opt-in staged-set ALLOWLIST, as `P-035`'s twin at the same hook.** The
+   session writes the paths it means to commit to a gitignored manifest; `.husky/pre-commit`
+   compares `git diff --cached --name-only` against it and refuses on any path not listed, naming
+   the surprise and printing the `git restore --staged` line for it. FAIL-OPEN on an absent
+   manifest, so the owner's own commits are untouched and the guard costs nothing when it is not
+   armed — the same escape-hatch shape `CG_ALLOW_NEVER_STAGE` already has. It reuses
+   `never-stage-cli.mjs`'s structure and its pure/CLI split, and it runs FIRST for the reason
+   `P-035` documents: `lint-staged` rewrites staged files, so a guard that ran second would have
+   already reformatted the file it exists to keep untouched.
+
+**Acceptance:**
+
+- WHEN a commit stages a path the session did not declare THEN the commit is refused, the
+  surprising path is named, and the `git restore --staged` line for it is printed
+- WHEN no manifest is present THEN the hook does nothing and exits 0 — the owner's own commits
+  never see it
+- WHEN the override is used THEN it says so LOUDLY on stderr, never silently, per `P-035`
+- WHEN a session commits at all THEN it stages by explicit path and names those paths in its report
+
+**Notes:** the marked-row wash is now the owner's own `rgb(145 93 5)`, committed as `262d0f5b`
+with the comment corrected to state the real reason (opacity, for visibility) rather than the
+strip-derived value it never had. That commit staged one path by name.
+
+- **Cross-refs:** [[P-035]] (the denylist this is the allowlist twin of, and the source of the
+  "a rule that depends on remembering" argument), [[B-232]] (the change that carried the
+  unreviewed hunk), [[P-009]] (the Stop hook, the other consumer of a session's own diff).
+- **Prefix class:** `P-`, platform — a property of the dev loop, not of either app's code.
+- **Number:** highest `P-` HEADING in this file was `P-043`; `git grep -n "P-044"` returned only
+  the registry's own "Next free" pointers and `git grep -n "P-045"` nothing at all. The registry's
+  dated pointer reads _"`P-044` (unchanged)"_ — headings and pointer AGREE. Two numbers taken here
+  (`P-044`, `P-045`); the space stays contiguous.
+
+## [~] P-045 — the Stop hook's 1 MiB `spawnSync` buffer KILLS a gate that prints too much, and truncates the very log `P-040` says to read ⟨priority: high — it manufactures a red from a green gate, and it does it exactly when output grows⟩ — FILED 2026-09-06 by `MODAL-CONTRACT-02`; FIXED 2026-09-06 by `STATION-SETUP-02` §R1 (`tools/gate-hook/src/gate-run.mjs`, streamed rather than raised — see the closing note); green on Linux at `30a0cf17` — <https://github.com/yasermostafaee/cg/actions/runs/34045753015>
+
+**What:** `.claude/hooks/gate-stop.mjs` runs the turn-end gate as
+`spawnSync(command, { cwd: root, shell: true, encoding: 'utf8', windowsHide: true })` with no
+`maxBuffer`, so Node's default of `1024 * 1024` applies. When the gate's combined stdout+stderr
+crosses 1 MiB, `spawnSync` **kills the child** and returns what it had. Three things follow, and
+the third is the one that matters:
+
+1. `run.status` is `null` for a signal death, so `run.status !== 0` is TRUE — the hook reports the
+   gate as RED, prints the last 120 lines of a truncated capture, and blocks the turn. **A green
+   gate reads as a failing one.**
+2. `.gate-logs/<session>.log` — the file the hook's own message tells the reader to open — holds
+   the same truncated capture.
+3. The gate's OWN tee (`gate-lock-cli.mjs` writing `.gate-logs/gate-<stamp>-<pid>.log`) stops
+   mid-line too, because the process writing it was killed. So `P-040`'s remedy — _"When a
+   pre-push gate fails naming no task, read that file, not the terminal's tail"_ — finds a log
+   with no footer and no verdict. **The diagnostic is disarmed by a limit in a DIFFERENT file,
+   one that P-040 never had reason to look at.**
+
+🔴 **MEASURED, and the separation is total.** Twenty gate logs in `.gate-logs/` on 2026-09-06:
+
+| outcome                   | count | size range              |
+| ------------------------- | ----- | ----------------------- |
+| ends with the footer line | 18    | 934,010 - 971,008 B     |
+| ends mid-line, no footer  | 2     | 1,048,320 - 1,048,786 B |
+
+Every complete log is under 1,048,576; both truncated ones are within 300 bytes of it. There is no
+overlap between the two ranges. The largest COMPLETE log is **92.6 %** of the cap — the headroom on
+an ordinary green 233.6 s gate is about **78 KB**, roughly 8 %.
+
+⚠ **That margin is the finding.** Output grows when a gate FAILS (stack traces, diffs, a suite's
+verbose output), so the cap is crossed precisely in the case the log exists to explain. A limit
+that only bites on the bad path is indistinguishable from a flaky tool.
+
+⭐ **The general shape, which is why this is filed rather than fixed in passing: a documented
+diagnostic can be disarmed by a limit nobody measured.** `P-040` is correct, tested, and wired at
+the right chokepoint. It fails anyway, because the thing that decides whether its file is complete
+lives in another process's spawn options. The lesson is the one `P-034` taught about a bound and
+its siblings, one layer over: when you build a mechanism, measure the thing that can silence it.
+
+**The fix, and what holds until then.** Pass an explicit generous `maxBuffer` at the `spawnSync`
+call — the gate's own tee is the durable record, so the hook's in-memory copy only needs to
+survive long enough to slice a tail from. Until that lands, **the FOREGROUND gate's own output
+supersedes the log**: a gate run in the foreground is the authoritative reading, and a truncated
+`.gate-logs/gate-*.log` with no footer must be read as "the capture died", never as "the gate
+failed here".
+
+**Acceptance:**
+
+- WHEN a gate prints more than 1 MiB THEN it runs to completion and its exit code is the gate's
+  own, never a signal death from the capture buffer
+- WHEN a gate log ends without its footer THEN that is reported as a truncated capture rather than
+  as a failing task
+- WHEN a session needs a gate verdict before this is fixed THEN it reads the foreground run's own
+  output, not `.gate-logs/`
+
+**CLOSED 2026-09-06 by `STATION-SETUP-02` §R1 — STREAMED, not raised.** The one-line fix this
+entry proposed (`maxBuffer: 256 MiB`) was declined because it keeps the SHAPE of the defect: a
+limit nobody measures that bites only when output grows, and output grows when a gate fails. The
+hook now hands the child its own log file's descriptor as stdout and stderr
+(`runGateCommand`, `tools/gate-hook/src/gate-run.mjs`) — there is no pipe, so there is no
+`maxBuffer`, so there is nothing to cross — and slices the 120-line tail FROM THE FILE after the
+child exits, bounded at read time (256 KiB) rather than at capture time. The exit code is
+therefore always the gate's own; the hook's red message now says `died (<signal>)` for a
+`null` status, distinct from `failed (exit N)`, so a host-killed gate can never again read as a
+failing task. Fail-open on the log, like P-040's tee: a log that cannot be opened runs the gate
+through the old pipe shape with an explicit 256 MiB buffer and says so in the tail.
+
+⭐ **Proved by a RUN, not by reading the constant** (`tools/gate-hook/tests/gate-run.test.ts`):
+a child printing 2 MiB to stdout plus a stderr marker and exiting 3 is run through the SAME
+function the hook calls — status 3, no signal, every byte in the log, the last line in the tail.
+The POSITIVE CONTROL runs the same child through the OLD shape and asserts the measured death:
+`status: null`, `signal: SIGTERM`, `error.code: ENOBUFS`, the capture cut at 1,114,112 bytes,
+last line absent. Without that control the survival test would prove only that the child was
+not chatty enough.
+
+🔴 **The anchors in this entry were re-measured before the fix, and two moved.** On 2026-09-06
+at 14:47 the tee logs read: complete green gates from 954,627 to **1,013,268** B (the entry's
+table said 934,010–971,008), the two truncated ones unchanged at 1,048,320 and 1,048,786, and one
+HAND-RUN red gate at **1,138,246 B with its footer intact** — which is the cleanest proof that
+the cap lived only in the hook's spawn: a gate run outside the hook crossed 1 MiB and survived.
+The margin on the latest green gate was ~35 KB, not ~40.
+
+`P-040`'s remedy text is corrected in `CLAUDE.md` in the same act: read the footer first, and
+a footer-less log is a capture that died, never a task that failed.
+
+⚠ **AND THE CONTROL ITSELF IS PLATFORM-SPECIFIC — measured, not assumed.** The first Linux CI
+run of the fix was RED on the positive control: on `ubuntu-latest` the 2 MiB child can FINISH
+before `spawnSync`'s kill lands, so `status` is its own exit code beside the same `ENOBUFS`,
+where win32 reports `status: null` / `SIGTERM`. Both are the capture dying; only the Windows
+shape is the one this hook misread as a failing task, and only there is it asserted. The
+platform-independent half — `ENOBUFS` plus a capture cut short of the child's last line — is
+asserted everywhere. Two more Linux-only facts fell out of the same run and are recorded
+because each would recur: a fixture ending in `process.exit()` drops a pipe write still in
+flight (the streamed path writes to a FILE and is unaffected), and Playwright's `getByRole`
+matches an accessible name as a SUBSTRING, so a `region` named `Outputs` also finds a nested
+`Program outputs`.
+
+- **Cross-refs:** [[P-040]] (the remedy this disarms), [[P-009]] (the Stop hook), [[P-013]] (the
+  chokepoint the tee shares with the lock), [[P-038]] (the same blindness one level up, in CI).
+- **Prefix class:** `P-`, platform — the dev loop's tooling.
+- **Number:** taken in the same sweep as `P-044` above; see its Number note for the derivation.
+
+## [~] P-046 — CI's `Install system deps for cached browser` fails on an apt index download, and takes the whole `e2e` job with it ⟨priority: high — it leaves every commit UNDISCHARGED while `ci` stays green, and it poisons the `dev` → `main` backstop⟩ — FILED 2026-09-09 by `RUNTIME-REPAIR-05`
+
+**What happens.** The `e2e` job's `Install system deps for cached browser` step runs
+`pnpm --filter @cg/designer exec playwright install-deps chromium`. Its `apt-get update` fails
+to fetch one or more index files — `E: Some index files failed to download. They have been
+ignored, or old ones used instead.` — and `playwright install-deps` exits **100**, so the step
+fails, `Build (workspace)` and `E2E` are both **skipped**, and the job is red in ~55 s.
+
+**Measured on `acf3cf1a`, twice, on the same step:**
+
+| attempt    | run                                                             | job          | outcome                                                 |
+| ---------- | --------------------------------------------------------------- | ------------ | ------------------------------------------------------- |
+| 1          | <https://github.com/yasermostafaee/cg/actions/runs/34384364734> | 102576887292 | 17:40:54Z → 17:41:48Z, failed at `Install system deps`  |
+| 2 (re-run) | the same run, re-run of the failed job                          | 102580651348 | 17:51:56Z → 17:52:51Z, **failed at the identical step** |
+
+Two attempts, one step, one error — **so it is not a flake and it was not re-run a third time.**
+
+🔴 **WHY IT MATTERS MORE THAN A RED TICK.** The suite NEVER RAN, so the red says nothing
+whatsoever about the code — the mirror image of `P-029`'s green-but-skipped job, and the same
+trap read from the other side (golden rule 12b). Every commit that lands while this step is
+broken is **undischarged**: `ci` is green, `e2e` is red, and there is no e2e result to cite.
+
+⚠ **And it poisons the `dev` → `main` backstop.** `P-030`'s guard skips the merge run's heavy
+jobs only on a **positive, complete match** — a prior run for that exact `head_sha` that is
+`completed` + `success` with `ci` AND `e2e` both actually RAN. A red run is not such a match, so
+the merge run correctly does the work — and then hits the same broken step. **Every merge
+inherits the failure until the step is fixed**; the backstop is not bypassed, it is simply
+unable to complete.
+
+**What it is not.** Not the product, not the specs, not `P-036`'s staleness guard. `ci`
+(`Lint · Typecheck · Test · Build`) passed on the same commit, and the immediately preceding
+commit `6b4e29c4` ran the full suite green
+(<https://github.com/yasermostafaee/cg/actions/runs/34380878473>, 11 m 48 s) — so the breakage
+arrived with the runner's apt state, not with a change in this repo.
+
+**Where to look.** `.github/workflows/pr.yml`, the `Install system deps for cached browser`
+step. Candidate remedies, in order of how little they hide: make the step retry `apt-get update`
+before failing; or fall back to the bundled-browser path (`Install Playwright Chromium (+ deps)`,
+which this run SKIPPED because the browser cache hit); or pin/refresh the mirror list.
+⚠ Do **not** make the step `continue-on-error` — that converts a job that cannot run the suite
+into a job that silently does not, which is exactly the `P-029` hole this repo already closed.
+
+### ⟶ REMEDIED 2026-09-09 by `CI-BROWSER-DEPS-01`, and NOT YET EXERCISED — which is why this is `[~]`
+
+🔴 **THE CAUSE, MEASURED RATHER THAN ASSUMED.** The filing said "an apt index"; the log names it:
+
+```
+Err:29 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages
+  Hash Sum mismatch
+E: Failed to fetch .../chrome-stable/deb/dists/stable/main/binary-amd64/Packages.gz
+E: Some index files failed to download.
+```
+
+It is **Google's chrome-stable list**, which the runner image adds and **which this job does not
+use** — the suite runs Playwright's own bundled Chromium out of `~/.cache/ms-playwright`, never an
+apt-installed browser. `apt-get update` treats any index failure as fatal, so `install-deps` exits
+100 and takes `Build` and `E2E` down with it.
+
+⭐ **AND `install-deps` IS NOT A NO-OP HERE, WHICH IS WHY THE STEP WAS NOT SIMPLY DELETED.** On the
+last green run it reported `0 upgraded, 9 newly installed`. Every Chromium **shared library** was
+already `the newest version` in the image; all nine new packages are **FONTS** —
+`fonts-freefont-ttf`, `fonts-ipafont-gothic`, `fonts-tlwg-loma-otf`, `fonts-unifont`,
+`fonts-wqy-zenhei`, `xfonts-cyrillic`, `xfonts-encodings`, `xfonts-scalable`, `xfonts-utils`. So
+**Chromium launches on `ubuntu-latest` without this step**, and what the step buys is glyph
+coverage — which matters more in this repo than most, because it renders Persian (golden rule 4).
+That is the whole shape of the remedy: the browser is not at risk, the fonts are.
+
+**The remedy, in `P-046`'s own order of how little it hides:**
+
+1. **Retry — implemented, and NOT sufficient alone.** A hash-sum mismatch is a stale artifact on a
+   CDN edge, not a dropped packet: attempt 2 failed identically to attempt 1, eleven minutes later.
+   Kept anyway, because it costs nothing and covers the genuinely transient case.
+2. **Fall back to the bundled-browser path — REJECTED, and it could not have worked.** That path is
+   `playwright install --with-deps chromium`, which runs the SAME apt. The workflow's two browser
+   steps differ in whether they download a browser, not in whether they touch apt.
+3. **Refresh the sources — implemented as the ESCALATION on first failure**, because it is the only
+   one that addresses the measured cause: drop the third-party lists the image adds
+   (`google-chrome.list`, `microsoft-prod.list`) and consult Ubuntu's archives, which are the only
+   ones Playwright needs.
+
+**And the tolerance is licensed by a POSITIVE CONTROL, not by optimism.** After three failures the
+step warns and continues — but the next step launches the browser the suite will use, paints a
+page, and **fails the job loudly** if it cannot. Not `continue-on-error`, here or above: that would
+convert "cannot run the suite" into "silently did not", which is `P-029`'s hole read backwards.
+The probe mirrors `playwright.config.ts`'s CI branch exactly (bundled Chromium, **no** channel
+fallback), so it cannot go green on a browser the suite would not use. It was proved both ways
+before shipping: with no bundled browser it exits 1 naming the missing executable; with one it
+prints the version and exits 0.
+
+🔴 **WHY THIS IS `[~]` AND NOT `[x]` — MEASURED, NOT PREDICTED.** The outage ENDED before the fix
+shipped: a third re-run of job `102629045993` passed the same step cleanly, so Google's CDN had
+recovered. The first run of the shipped fix
+(<https://github.com/yasermostafaee/cg/actions/runs/34401286747>, green, `E2E` RAN 10 m 57 s) says
+so in its own log, which is why the markers are there to read:
+
+```
+P-046: install-deps attempt 1 of 3
+P-046: install-deps SUCCEEDED on attempt 1
+P-046 probe: Chromium 148.0.7778.96 launched and painted OK
+```
+
+`RETRY PATH EXERCISED`, `ESCALATION EXERCISED` and `TOLERATED` are all **absent**. So:
+
+| part of the remedy                          | exercised?                                          |
+| ------------------------------------------- | --------------------------------------------------- |
+| the retry WRAPPER (it logs every attempt)   | yes — `attempt 1 of 3`                              |
+| the RETRY path (a second attempt)           | **no** — apt succeeded first time                   |
+| the ESCALATION (dropping third-party lists) | **no** — it only fires after a failure              |
+| the launch PROBE                            | **yes**, and it passed — a new, always-on guarantee |
+
+**A green run that never met the failure is no evidence about the part of the fix that handles
+it.** The probe is genuinely proved in production; the failure path is not, and this item stays
+open until it is.
+
+**What would exercise it** — proposed, NOT run against `dev`: a `workflow_dispatch` variant of the
+`e2e` job that writes a deliberately broken `sources.list.d` entry (an unreachable host, or a
+`Packages.gz` whose hash cannot match) before the deps step, and asserts the log contains
+`P-046: ESCALATION EXERCISED` followed by a green `E2E`. That is a test of CI by CI and belongs in
+its own change, on a branch, never on `dev`.
+
+- **Cross-refs:** [[P-029]] (a skipped `e2e` is not evidence — this is its inverse), [[P-030]]
+  (the merge backstop this blocks), [[P-038]] (CI's own blindness class), [[P-027]].
+- **Prefix class:** `P-`, platform — CI and the dev loop's tooling.
+- **Number:** `P-046`, verified free at allocation with `git grep -n --untracked "P-046"` across
+  the whole tree: the only hits were the registry's own "Next free" pointers, never an item.
+  `P-047` returned nothing at all. The space stays contiguous (`P-001` … `P-046`).
+
+## [ ] P-047 — `live-look-reconcile` fails under gate load and passes 66/66 alone: a contention flake that reads as a product red ⟨priority: medium — it fails a landing gate on work that did not touch it⟩ — FILED 2026-09-13 by `CONSOLE-LOOK-06`
+
+**What.** During the overnight run a `pnpm gate` came back `92 successful, 93 total` on a
+commit that removed two files from tracking and changed nothing else. The failing task was
+`@cg/caspar-bridge:test`, and inside it exactly one case:
+
+```
+× B-161 neighbour 2 — a REHEARSING row with nothing seated: UPDATE reaches NO live layer
+  tests/live-look-reconcile.integration.test.ts
+```
+
+Re-run ALONE immediately afterwards: `66 passed (66)`, 24.2 s. Re-run as a full `pnpm gate`:
+`93 successful, 93 total`. **Nothing was changed between the red and the two greens.**
+
+**Why it is filed rather than shrugged at.** This is the `B-098` class — a timing-sensitive
+integration suite co-scheduled with the rest of the fan-out — and `bounded-turbo-cli` caps the
+width precisely to keep it rare, not to make it impossible. A flake here is expensive out of
+proportion to its rarity: it reds a LANDING gate, on a diff that cannot have caused it, and
+the honest response (re-run, confirm, push) costs four minutes and looks like ignoring a red.
+
+🔴 **Do NOT answer this with a longer timeout.** `B-073` already did that and `B-098` is that
+bound blown in turn. The question worth asking is what in this file is timing-sensitive at
+all — it is an integration suite driving a reconciler, and if a case there depends on wall
+clock rather than on an awaited settle, that dependency is the defect.
+
+**Acceptance.**
+
+- The suite SHALL NOT depend on wall-clock timing for its verdicts; every wait SHALL be on an
+  observable settle.
+- WHEN the gate runs it under full fan-out THEN the suite SHALL produce the same verdict it
+  produces alone.
+
+- **Cross-refs:** [[B-098]] (the load-flake class this belongs to), [[B-073]] (the longer
+  timeout that did not work), [[P-034]] (the bound that keeps it rare).
+- **Prefix class:** `P-`, platform — the dev loop and its gate.
+- **Number:** `P-047`, verified free at allocation with
+  `git grep -n --untracked "P-047"` across the whole tree: the only hit was `P-046`s own
+  allocation note recording it as free, never an item. The space stays contiguous
+  (`P-001` … `P-047`).
+
+⚠ `P-046`s allocation note still reads "`P-047` returned nothing at all". That is a DATED
+statement about the moment `P-046` was allocated and it was true then, so it is left standing
+rather than rewritten — the same rule this session applied to `B-168`.
+
+## [ ] P-048 — two CI `e2e` specs failed together on a diff that could not have touched them, and NEITHER had flaked before ⟨priority: medium — a red landing run on unrelated work, and the pair reds together⟩ — FILED 2026-09-16 by `SELF-STOP-24 · REPLY 1`
+
+**What.** Run [35007222705](https://github.com/yasermostafaee/cg/actions/runs/35007222705) on
+`f7fd432f` failed its `e2e` job with FOUR specs. Two of them are already assessed in
+[ADR 0009](../adrs/0009-timing-setting-ownership.md) ("The two flaky specs, named and
+assessed"). **The other two had never failed anywhere in the record**, which is why they get a
+number instead of being folded into [[B-098]]:
+
+1. `apps/runtime/tests/e2e/picker-manage-chrome.spec.ts:213` —
+   _"§D1 — Import occupies the SAME slot in both views"_. Failed on the first attempt AND on
+   retry #1 (464 ms, then 833 ms). Its assertion is
+   `expect(manage, 'Import moves when the view changes').toEqual(selection)` — a comparison of
+   the Import control's slot INDEX between the picker's two views.
+2. `apps/designer/tests/e2e/looks.spec.ts:75` —
+   _"the 6-box debate: group → six sources → two looks → the selector switches the canvas"_.
+   Failed with `Error: stage or plate not rendered`, reached from
+   `expect(Math.abs(plateBox.x - (stageBox.x + 320 * scale))).toBeLessThan(2)`.
+
+**Why it is filed rather than shrugged at.** The diff on `f7fd432f` was the `C-013` page
+runtime, the single-file export's CSP and two bridge-adjacent schema members. **It touches
+neither the Runtime's template picker nor the Designer's look selector**, and the same tree plus
+a bridge-only diff passed completely twenty minutes later on `bf00530b`
+([35009537814](https://github.com/yasermostafaee/cg/actions/runs/35009537814)) — so the code was
+not the cause. That leaves a flake, and a flake that reds a landing run on unrelated work costs
+the same four minutes and the same "is this me?" that [[P-047]] is filed for.
+
+⚠ **The pair failing TOGETHER is the fact worth keeping.** Four specs across three subsystems in
+one run, two of them first-time, is the signature of a LOAD event rather than two independent
+knife-edges — which points at the [[B-098]] family (a whole suite co-scheduled at full width)
+rather than at either spec. `P-034` bounded `test:e2e`'s fan-out on the LOCAL host; CI runs the
+Playwright suite on `ubuntu-latest` under whatever width the runner gives it, and nothing in
+this repo bounds that.
+
+**Acceptance:**
+
+- WHEN either named spec fails again in CI THEN this item carries the second occurrence and its
+  run URL, so "first-time" stops being a guess
+- WHEN the cause is identified THEN it is fixed at the cause — **NOT by a longer timeout**
+  ([[B-073]] did that and [[B-098]] is that bound blown in turn), and **NOT by a retry count**,
+  which converts a red into a slow green and deletes the evidence
+- WHEN neither recurs in a reasonable number of CI runs THEN this item is closed as a
+  one-off, with the runs cited — an absence is a result only once the instrument has been busy
+
+**Notes:** NOT the same as [[P-047]], which is one named `@cg/caspar-bridge` INTEGRATION case
+under local gate load; this is the CI `e2e` job. NOT [[B-098]] either, whose subject is the
+`caspar-bridge` suite's `did not reach HEALTHY` bound — but the same FAMILY, and if a cause is
+ever found it is likely one cause. — WHAT WAS ALREADY KNOWN, so the new half is legible: ADR
+0009 records `live-source.spec.ts:511` flaky on `d440cd7f` and `d3ddfcb5` (a knife-edge fixture
+geometry, explicitly not the load class) and `video-import.spec.ts:291` flaky on `d3ddfcb5` (a
+decode under a loaded gate). Both failed again in this run; neither is new and neither is
+re-filed here. — ⚠ **Nothing was fixed by `REPLY 1`**; the prompt's instruction was to record,
+not to repair.
+
+**⭐ SECOND OCCURRENCE, 2026-09-16 — `picker-manage-chrome.spec.ts:213` recurred, and "first-time"
+is now a measured claim rather than a guess.**
+
+Run [35112170513](https://github.com/yasermostafaee/cg/actions/runs/35112170513) on `0464e0ac`
+(`PASSES-CYCLE-ONLY-26` Part B) failed its `e2e` job with two specs:
+
+| spec                                        | case                                                    | status                              |
+| ------------------------------------------- | ------------------------------------------------------- | ----------------------------------- |
+| `runtime/e2e/picker-manage-chrome.spec:213` | §D1 — Import occupies the SAME slot in both views       | **2nd occurrence** — this item      |
+| `designer/e2e/live-source.spec:511`         | MULTIPLE independent Live Sources each get their own id | 3rd — ADR 0009's knife-edge fixture |
+
+**What the second occurrence settles, and what it does not.**
+
+- It settles that `picker-manage-chrome:213` is a RECURRING flake and not a one-off, so this item
+  does not close as "never happened again". The same assertion failed both times —
+  `expect(manage, 'Import moves when the view changes').toEqual(selection)` — so it is the same
+  defect, not two.
+- It does NOT settle the cause. Both runs carried a diff that cannot have touched the template
+  picker: `f7fd432f` was the `C-013` page runtime and the export CSP; `0464e0ac` was the PVW
+  preview payload. Neither goes near the picker's slot geometry.
+- ⚠ The pair no longer fails TOGETHER, which weakens the original "one LOAD event" reading: on
+  this run `looks.spec:75` passed and `video-import.spec:291` passed, while these two failed. Two
+  independent knife-edges is now at least as good an explanation as one load event, and the item's
+  framing should not harden around the load reading before there is evidence for it.
+
+**Still fixed nowhere, and still not by a retry.** Recorded so the next reader inherits two data
+points instead of one.
+
+- **Number:** `P-048`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] P-048" -- docs` returned nothing, against a positive
+  control on the same regex for `P-047` which returned `platform.md:3142`. The registry's dated
+  pointer independently reads `P-047` as the last taken.
+
+## [ ] P-049 — three `pre*` hooks regenerate ONE file concurrently under the gate, and the rename loses: `EPERM` reds a landing gate on unrelated work ⟨priority: medium — same cost as [[P-047]]: a red gate on a diff that cannot have caused it⟩ — FILED 2026-09-16 by `PASSES-CYCLE-ONLY-26`
+
+**What.** A `pnpm gate` came back `92 successful, 93 total` with `@cg/single-file-export#typecheck`
+failing before `tsc` ever ran:
+
+```
+$ node ./scripts/bundle-runtime.mjs
+Error: EPERM: operation not permitted, rename
+  '…/src/generated/cg-runtime-bundles.ts.tmp-6416' -> '…/src/generated/cg-runtime-bundles.ts'
+  at async .../scripts/bundle-runtime.mjs:138  { errno: -4048, code: 'EPERM', syscall: 'rename' }
+```
+
+Re-run immediately afterwards on **the identical tree, with nothing changed**: `exit 0`,
+`93 successful, 93 total`.
+
+**Why it happens.** `@cg/single-file-export` declares `prebuild`, `pretypecheck` AND `pretest`,
+and all three run the same `bundle-runtime.mjs`, which writes `cg-runtime-bundles.ts` via a
+temp file and a rename. Under the gate those tasks are co-scheduled, so two generators race for
+one path — and on Windows a rename over a file another process still holds open is `EPERM`, not
+a silent overwrite. The write-to-temp-then-rename is otherwise exactly right; what is missing is
+that the three callers are not serialised against each other.
+
+**Why it is filed rather than shrugged at.** It is [[P-047]]'s argument applied to a different
+mechanism: a landing gate goes red on a diff that cannot have caused it, and the honest response
+— re-run, confirm, push — costs five minutes and looks like ignoring a red. It is also NOT a
+contention flake in the [[B-098]] sense (no timing bound, no CPU starvation): it is two writers
+and one path, so it is fixable rather than merely rare.
+
+**Acceptance:**
+
+- WHEN two of the three `pre*` hooks run concurrently THEN the generated file is written once and
+  neither task fails
+- WHEN the generated artifact is already current THEN regenerating is a no-op rather than a
+  rewrite — a rename that never happens cannot race
+- ⚠ NOT answered by a retry loop around the rename, and NOT by dropping one of the hooks without
+  checking what it guarantees: `pretest`/`pretypecheck` exist so a stale bundle cannot be tested
+  or typechecked, which is the [[P-034]]/turbo-inputs family this repo has already paid for
+
+**Notes:** Observed once, on 2026-09-16, during `PASSES-CYCLE-ONLY-26` Part A's gate. Recorded
+with its full error and its clean re-run so a second occurrence has something to join rather than
+looking like a first. — The likely shapes of a fix: make the generator CONTENT-ADDRESSED (write
+only when the bytes differ), or give the three hooks one lock the way `P-013` gave the gate one.
+Both are small; which is right depends on whether a stale-bundle guarantee has to survive a
+concurrent writer at all. — Cross-refs [[P-047]] (the same cost, a different mechanism),
+[[P-013]] (the host gate lock — the precedent for serialising one chokepoint), [[P-034]] (why the
+`pre*` hooks exist at all).
+
+- **Number:** `P-049`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] P-049" -- docs` returned nothing, against a positive
+  control on the same regex for `P-048` which returned `platform.md:3186`.
+
+## [ ] P-050 — the Stop hook's E2E reminder gives a FALSE REASON: it says "this turn changed UI/render paths" on turns that changed only docs ⟨priority: medium — it is the reminder's own failure mode, and a reminder that is wrong on a docs commit is one the next session learns to skip on a render one⟩ — FILED 2026-09-22 by `MODAL-TRUTH-01` §6, NOT worked
+
+**Observed:** three firings across recent sessions, **at least two provably on docs-only
+commits**, every one of them printing the same sentence — _"this turn changed UI/render
+paths"_. The 2026-09-22 recon week's commits (`08a0c5ab`, `eddf9794`, `1df84986`, `7a4e77d5`)
+touched `docs/**` and nothing else, and the hook said it anyway.
+
+**Why it is this session's family.** It is [[B-251]]/[[B-252]]'s defect in the tooling: a
+statement asserting a state that is not in force. The hook's own classification is a
+_category_ — `kind=code needsE2e=true` — and the message reports the category as though it
+were an observation about the diff. When the classifier is right the sentence is right by
+coincidence; when it is wrong there is nothing in the output to notice it by, because the
+message never names what it saw.
+
+**Fix, stated as the shape rather than the patch:** the message NAMES THE FILE that triggered
+it. _"`apps/runtime/src/renderer/ui/Modal.tsx` changed"_ is checkable by the reader in one
+glance and self-correcting when the classifier over-matches; _"this turn changed UI/render
+paths"_ is neither. A reminder that cites its evidence cannot lie about its evidence.
+
+**Secondary, and it bit this session:** the hook's discharge instruction assumes an OpenSpec
+`tasks.md` exists to hold the run URL. A plain owner-reported bugfix has no change dir, so
+there is nowhere the instruction points to. `MODAL-TRUTH-01` recorded its run URL on the PRD
+bug entries instead ([[B-251]], [[B-252]]) — the convention [[B-111]] already used — but the
+hook does not say so, and the next session will ask the same question. Either the instruction
+names the PRD entry as the fallback home, or a bugfix is expected to open a change dir; it is
+one or the other and currently it is neither.
+
+**Acceptance:**
+
+- WHEN the hook prints the E2E reminder THEN it names at least one changed path that caused
+  the classification
+- WHEN the diff is docs-only THEN the reminder does not fire at all
+- AND the discharge instruction names a home for the run URL that exists for a change with no
+  OpenSpec change dir
+- ⚠ NOT answered by softening the sentence to "may have changed": a hedge in place of evidence
+  is the same defect wearing a qualifier, and it makes the true firings weaker too
+
+**Notes:** the hook is `.claude/hooks/gate-stop.mjs` with its logic under `tools/gate-hook/`;
+the classifier it shares with CI is [[P-029]]'s. ⚠ **The CI side is NOT in scope and must not
+be relaxed to fix this** — `P-029`'s skip is load-bearing for the merge backstop, and
+[[P-030]]'s guard reuses a prior run only on a positive, complete match precisely because a
+green-but-skipped `e2e` proves nothing. This item is about what the LOCAL hook SAYS, not about
+what either side decides. Cross-refs [[P-028]] (why the hook stopped running the suite),
+[[P-029]] (the classifier), [[P-030]] (the merge-run guard), [[B-111]] (a bugfix that recorded
+its run URL on its PRD entry).
+
+- **Number:** `P-050`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] P-050" -- docs` returned nothing, against a positive
+  control on the same regex for `P-049` which returned `platform.md`.
+
+## [x] P-051 — Desktop delivery: CG Control and CG Designer as two Windows installers ⟨priority: high⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01`
+
+**What.** Two Tauri installers built by CI: **CG Control** (the console, served by its bridge
+sidecar on `http://127.0.0.1:5174`, per-machine, firewall rules for UDP 6250 and TCP 7911) and
+**CG Designer** (per-user, no bridge). A fresh CG Control walks the station through first-run —
+the Playout's address, a `station-admin` sign-in, the channel — with a seven-line connection
+check. ADR 0011 records the decision.
+
+**Why.** The client installs the Playout, CG Control and CG Designer itself, on its own machines
+and addresses, with nobody from our side present and often no internet.
+
+**Acceptance:**
+
+- WHEN either installer runs on a clean Windows machine with no repo, Node or internet THEN the app
+  installs and opens (CG Designer without admin rights)
+- WHEN CG Control opens for the first time THEN it asks for the Playout's address and nothing else
+  is typed but a `station-admin` sign-in and the channel choice
+- WHEN CG Control closes or is killed THEN no bridge process is left behind
+- AND no Playout target is ever written over the control socket
+
+**Notes:** change archived 2026-09-23 as `openspec/changes/archive/2026-09-23-desktop-apps/`
+(deltas A–D folded into `desktop-delivery`, `runtime-caspar-bridge`, `runtime-ui`). Follow-ups filed beside it: [[P-052]] signing,
+[[P-053]] auto-update, [[P-054]] the Designer's file backend (only if needed), [[R-067]] the
+bridge as a service, [[R-068]] one CG Control per channel.
+
+- **Number:** `P-051`. Verified free at the moment of commit: `git grep -n --untracked -E
+"^## \[.\] P-051" -- docs` returned nothing, against a positive control on `P-050`.
+
+## [ ] P-052 — Code-sign both installers ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4
+
+**What.** Sign `CG Control_…-setup.exe`, `CG Designer_…-setup.exe` and the executables inside
+them. **Why.** Unsigned, SmartScreen stops every install with _"Windows protected your PC"_, and
+an operator is taught to click past a warning. **Acceptance:** WHEN either installer is run on a
+clean machine THEN Windows names the publisher and shows no SmartScreen stop.
+
+## [ ] P-053 — Auto-update for the desktop apps ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4
+
+**What.** Tauri's updater plugin, signed feeds, for both apps. **Why.** Today every update is a
+manual reinstall. **Acceptance:** WHEN a newer signed build is published THEN each app offers it,
+and CG Control never installs while anything is on air (ADR 0002's update-cadence reason).
+
+## [ ] P-054 — CG Designer: a desktop file backend behind `@cg/storage`, if the folder permission does not survive a restart ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §1.4
+
+**What.** A Tauri file backend implementing the existing `Workspace` abstraction. **Why.** It
+was REPORTED that WebView2 keeps the File System Access pickers working but drops a handle's
+permission across a restart, so the Designer would ask for the file again on each launch. Filed
+conditionally: the owner's §7 step 2 measures it on a real install; close this as not needed if
+the permission holds. **Acceptance:** WHEN CG Designer restarts THEN a project opened before
+reopens without a picker.
+
+## [x] P-055 — CI actions ran on Node 20, which GitHub deprecates ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` E · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+**What.** Every action the workflows use moves to its latest major that runs on Node 24:
+`actions/checkout` v7, `actions/setup-node` v7, `actions/upload-artifact` v7, `actions/download-artifact` v8,
+`pnpm/action-setup` v6, and `actions/cache` v6 and `dorny/paths-filter` v4, which ran on Node 20 too.
+Each was confirmed from the runtime its own `action.yml` declares at the release tag, and every
+crossed major's release notes were read against these workflows. Our own Node stays as `.nvmrc`
+says (22). **Why.** GitHub warned "Node.js 20 is deprecated" on every run. **Acceptance:** WHEN CI
+runs THEN no step warns that it runs on Node 20. **Shared CI config.**
+
+## [ ] P-056 — Bridge tests on the default connection would dial a running dev station's 127.0.0.1:5250 ⟨priority: low⟩ — FILED 2026-09-26 by `FIELD-FIXES-01`
+
+**What.** `reconfigure.integration.test.ts` starts bridges with `createBridge({ port: 0 })` — the
+default connection, server A `127.0.0.1:5250` with OSC on 6250. On a machine running
+`pnpm dev:station` those are the station's ports. On 2026-09-26 the test bridges could not dial it
+only because the station also held `127.0.0.1:6250`: a bridge that cannot bind its OSC port never
+dials AMCP (`server-session.ts`, the session loop). Were the OSC port free, each would open a session
+to the station and send `VERSION`, `INFO` and `INFO CONFIG`. The first of them tests the default
+itself (`bridge.host` is `127.0.0.1`), so it cannot simply be pointed elsewhere. First-run's
+Check-rerun e2e had the same reach and was moved off it (`eac4e7c0`). **Why.** The gate runs these on
+every push, and a developer's dev station is not a test's to reach. **Acceptance:** WHEN the gate
+runs beside a running dev station THEN no test bridge opens a connection to `127.0.0.1:5250`.
+
+## [~] P-057 — Wall-clock tests turned the local gate red: a test's precondition must be an assertion, not a hope ⟨priority: medium⟩ — FILED 2026-09-27 by `TIMING-TESTS-01` · the two below CLOSED IN CODE · three more CLOSED IN CODE 2026-09-28 by `FOLLOWUPS-01` §2 · one more CLOSED IN CODE 2026-09-28 by `PLATE-BAND-01`
+
+**What.** A test that waits on the wall clock for its PRECONDITION fails under the gate's load while
+the code is right (`B-098`'s signature: the victim moves between runs). Each such test is made
+deterministic: its precondition is ordered or counted by the test, never slept for, and no margin is
+widened, no retry added and nothing skipped. **Why.** On 2026-09-27 the local gate went red twice in a
+row on two different tests while Linux CI was green (`DAY-RUN-01`; logs
+`gate-20260927T153719Z-22320.log` and `gate-20260927T154734Z-9380.log`).
+
+**Closed in code (2026-09-27):**
+
+- `tools/caspar-bridge/tests/pgm-return.test.ts` ("sends exactly the one request, and nothing after
+  it") asked for more than 20 frames in 600 ms from a feed sending every 40 ms — about 47 ms on
+  Windows' 15.6 ms timer, a margin of two frames. The window is now fifteen frames the fake itself
+  counts (`framesSent`), and the positive control is that the relay forwarded every frame the fake
+  sent, in order.
+- `tools/caspar-bridge/tests/look-switch-all-or-nothing.integration.test.ts` ("a row taken OUT while
+  its pre-seat is in flight") delayed the pre-seat's `PLAY` 150 ms and pressed `out` after a 50 ms
+  sleep. Measured: the mock answers every line at once, so `out`'s `202 CLEAR` overtook the held
+  `PLAY`'s reply and the bridge's queue, which pairs replies by position, settled the `PLAY` with it.
+  The preroll therefore started about 10 ms before `out` finished, not 120 ms. Now the mock answers
+  in order, as CasparCG answers one connection; the `PLAY` is held until `out`'s first command has
+  landed behind it; and the preroll's timer is held open until `out` has completed.
+
+Each was shown red under the defect it guards, planted and removed: an extra write after the request
+and a duplicated frame (the relay), and the missing post-preroll re-ask (the switch).
+
+**Closed in code (2026-09-28, `FOLLOWUPS-01` §2)** — three flakes CI had met, same rule, no product
+code changed:
+
+- `tools/caspar-bridge/tests/reachability-predicate.integration.test.ts` ("load onto a degraded
+  server…") waited 15 s for `degraded` and saw `healthy` (run 36358077540, attempt 1). Its "deaf" OSC
+  port came from `freeUdpPort()` — `bind(0)`, close, reuse — and so does every other test's OSC
+  target, while a mock keeps sending to its target after its runtime stops (the file's own
+  `plantOrphan` does). The deaf port now comes from BELOW the OS's ephemeral range (Linux reads
+  `ip_local_port_range`; otherwise 49152), which `bind(0)` never hands out, probed free and asserted
+  outside it. Reproduced first: the deaf port set to the orphan mock's target → red exactly as CI
+  (`the deaf OSC port 57690 heard OSC`, `healthy` for `degraded`). Guard kept: `B-100`'s predicate
+  (`state !== 'healthy'`) planted → red.
+- `apps/runtime/tests/e2e/modal-frame-chrome.spec.ts:171` (now `:192`) polled the chip's BACKGROUND,
+  then read its border once; the hover leaving mid-flight re-times the interrupted transitions, so the
+  border was still moving (`rgb(75, 107, 127)` / `rgb(75, 111, 133)` for `rgb(75, 116, 139)`). Both
+  reads now wait until the element's `getAnimations()` list is empty, then read every value once; the
+  colours asserted are unchanged. Reproduced: `border-color` slowed to 3 s → the OLD spec red as CI,
+  the new one green. Guard kept: the selected edge planted violet → red.
+- `apps/designer/tests/e2e/video-import.spec.ts:291` — see [[P-034]]'s last bullet: measured first,
+  then the read waits for a PRESENTED frame (`requestVideoFrameCallback` on the attached element),
+  asserts `presentedFrames >= 1`, and every assertion carries the whole read. No frame was ever
+  decoded wrong, so no product defect was filed. Guard kept: the un-premultiply switched off → red,
+  right `R` 127.
+
+**Closed in code (2026-09-28, `PLATE-BAND-01` §1)** — one flake CI met and its sibling, which the
+local gate met, same rule, no product code changed:
+
+- `tools/caspar-bridge/tests/media-plates.integration.test.ts:563` ("a held, paused clip is re-sent
+  `OPACITY 0` and muted…") was red on `a802a7c0`'s CI, attempt 1 (run 36419832113:
+  `MIXER 2-61 OPACITY 0 DEFER` not seen). After the reconnect it waited for the SHOWN plate's
+  `OPACITY 1`, which is the first record's last line, and then asserted the clip's lines, which
+  `#resendLiveMixerState` sends after it, one awaited line at a time. It now waits for the re-send's
+  own end: the row's one `MIXER 2 COMMIT`, sent only once every `DEFER` line of the row has been
+  answered, on a rig holding one row on one channel. The margin is unchanged (5 s, 50 ms poll).
+  Reproduced first: a 300 ms pause planted between the two records → the OLD test red exactly as CI;
+  the new one green under the same pause. Guard kept: the re-send planted to send `OPACITY 1` for
+  every plate → red (`MIXER 2-61 OPACITY 0 DEFER` missing, 13 lines read).
+- `tools/caspar-bridge/tests/route-plates.integration.test.ts:617` ("a reconnect keeps a held route
+  HIDDEN…") is the same wait in a second spelling, and the pre-push gate at `1ce93cb1` met it
+  (`gate-20260928T141642Z-25016.log`: 9 lines read, `MIXER 2-61 OPACITY 0 DEFER` missing). The
+  same fix. Found by two sweeps: the drop (`closeAllAmcpConnections()`) and the wait loop on a
+  plate's line; no third test waits that way. `look-switch-all-or-nothing`'s reconnect test already
+  waited for the commit. Reproduced the same way (HEAD's test red under the 300 ms pause, the new one
+  green); guard kept (the same plant → red, 17 lines read).
+
+**Open:** the rest of `TIMING-TESTS-01` §0.2's table. In the 43 gate logs retained since 2026-09-13, no
+other wall-clock assertion failed on timing. Every other failure there came from three runs on
+2026-09-14 against the layer re-band in progress (`bd3e7455`): 11–62 failures a run, the same set
+each time, green from the next gate. The wall-clock-shaped ones among them — `soak-runner`'s
+`harness.test.ts` soaks, `live-add-mute`'s wait for a layer-10 `VOLUME 0`, `stack-retention.test.ts`'s
+restart waits, `pending-update-completion` and `look-picker-operator`'s publish beat — failed with that
+code, not with time, and are listed there, not fixed. A timing failure found later goes on this item.
+
+**Acceptance:** WHEN `pnpm gate` runs three times in a row on one host THEN none of these tests
+fails (the two `e2e` specs are the CI `e2e` job's, not the gate's); WHEN the defect each guards is
+planted THEN that test is red.
+
+**Evidence (2026-09-27):**
+
+- **Local.** Three `pnpm gate` runs in a row, all green, with both files run in full each time:
+  `gate-20260927T172018Z-25740.log`, `gate-20260927T172737Z-22956.log`,
+  `gate-20260927T173439Z-20712.log`. The pre-push gate was a fourth, also green
+  (`gate-20260927T174203Z-15948.log`).
+- **Linux CI** on `d6b106df`: <https://github.com/yasermostafaee/cg/actions/runs/36338340420>.
+  - Attempt 1 was red on the Designer's known `video-import.spec.ts:291` flake (see [[P-034]]).
+  - Attempt 2, the one rerun, **completed with `success`, and its `E2E` step RAN**: runtime 289 passed;
+    Designer 287 passed + 1 flaky (`live-source.spec.ts:610`, green on its retry).
+- **Installers:** <https://github.com/yasermostafaee/cg/actions/runs/36338340442> — `success`.
+
+**Evidence (2026-09-28, `FOLLOWUPS-01` §2):**
+
+- **Local.** Three `pnpm gate` runs in a row on the final tree, all green (96/96, 0 cached),
+  `reachability-predicate` 7/7 in each: `gate-20260928T100800Z-15948.log`,
+  `gate-20260928T101521Z-18636.log`, `gate-20260928T102238Z-24812.log`; the pre-push gate a fourth
+  (`gate-20260928T102945Z-23800.log`). The two `e2e` specs, which the gate does not run (`P-028`):
+  `modal-frame-chrome` 5/5 and `video-import:291` 5/5 repeated, the whole `video-import` file 8/8
+  (Windows, non-authoritative).
+- **Linux CI** on `b5e681f4`, which carries all three:
+  <https://github.com/yasermostafaee/cg/actions/runs/36410757836> — COMPLETED `success` on the first
+  attempt; `ci` RAN; `E2E (Playwright)` RAN: runtime 298 passed, `modal-frame-chrome.spec.ts:192`
+  among them; designer 291 passed, 12 skipped, `video-import.spec.ts:291` among them; no retry.
+- **Installers:** <https://github.com/yasermostafaee/cg/actions/runs/36410757798> — both jobs RAN,
+  `success`.
+
+**Evidence (2026-09-28, `PLATE-BAND-01`):**
+
+- **Local.** The pre-push gate at `1ce93cb1` was red on the sibling (above) and pushed nothing; at
+  `9d732331` it was green, 96/96, 0 cached (`gate-20260928T142540Z-12316.log`), and again at the two
+  later pushes of the same session.
+- **Linux CI** on `9d732331`: <https://github.com/yasermostafaee/cg/actions/runs/36436809766> — COMPLETED
+  `success` on the first attempt; `Lint • Typecheck • Test • Build` RAN, `media-plates.integration.test.ts`
+  21 ✓ and `route-plates.integration.test.ts` 26 ✓; `E2E (Playwright)` RAN, green.
+
+## [x] P-058 — `pnpm dev:station --fake --caspar 127.0.0.1:5250`: the fake Playout in front of this machine's own CasparCG ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-29 by `DEV-LOCAL-CASPAR-01` (v1) · archived 2026-09-29 (`openspec/changes/archive/2026-09-29-dev-local-caspar`) · the owner's local run PASSED 2026-09-29
+
+**What.** A dev-only mode of the dev station. The bridge's AMCP and OSC go to the CasparCG running on
+this machine; the fake Playout stays in front (sign-in, D4, D10, D11), shaped from that core: D4 its
+channels from `INFO`, named `CH n · local` with `output: unknown`; D10 empty; D11 its media library from
+`CLS`, each clip's absolute path under the media folder `INFO PATHS` names, with its length — read at
+the start and again when the Media tab searches after 30 s. There is no programme feed: the core's own
+window shows the programme. The flag takes loopback only (`127.0.0.1`, `::1`, `localhost`, on 5250) and
+refuses every other host, the test Playout (`.111`) and the plant (`.114`) by name, in one line, before
+anything starts. The station sends only five reads (`VERSION`, `INFO`, `INFO PATHS`, `INFO CONFIG`,
+`CLS`) and writes no file; the bridge's send guard is unchanged. **Why.** `MEDIA-PLATES-01` (Pause,
+Restart, Loop, Ended, the remaining time) could not be checked with real video: `--fake` plays none, and
+`.111`'s engine service is stopped with `2.9.0` not installed (the Playout's reply of 2026-09-29,
+`PLAYOUT-CG-RESPONSE-ROUTE-ON-SOURCES-v1.md` §0, kept in the untracked `Claude outputs/`). **Acceptance:** WHEN the
+owner runs the command with his CasparCG running THEN the Media tab lists his clips, a take plays real
+video in CasparCG's window, and Pause, Restart, Loop, Ended and the remaining time can be checked;
+WHEN `--caspar` names any other machine THEN the station refuses in one line and starts nothing;
+WHEN the installer is built THEN none of this mode is in it.
+
+**Known limits, from source.** `CLS` is the media scanner's list relayed by the core; with no scanner
+running a 2.5.0 core answers `501 CLS FAILED` (`AMCPCommandsImpl.cpp` `make_request`), measured on the
+owner's core on 2026-09-28 — the Media tab is then empty and one start line says why. `CLS` gives names
+upper-cased and without their extension; a 2.5.0 core plays such a path (`src/common/filesystem.cpp`
+`probe_path`). The remaining time needs the core's OSC to its AMCP clients on 6250, its default
+(`src/shell/server.cpp` `setup_osc`); a start line says so when `INFO CONFIG` shows otherwise.
+
+**Closed in code (2026-09-29):** `84751dfd` (the mode), `40a0cfe4`, `4414bd3b` and `ae5e6c32` (a one-line
+refusal whatever was typed; five findings of an independent review, one of them a regression of `84751dfd`'s
+own: a failed `--fake` start hung, because the stand-in left its OSC socket open on a failed listen).
+
+**The owner's run on his own core — PASSED (2026-09-29)** (`openspec/changes/archive/2026-09-29-dev-local-caspar/tasks.md`
+5.4): real clips load, and he then asked for the archive. That is the whole of what he reported; which of 5.4's
+steps he ran one by one is not recorded. It was not run by CC: his `dev:station --fake` held `127.0.0.1:5250`
+and every station port, and no CasparCG was running. Recorded by `CLIENT-TEST-RELEASE-01` (v1) B5; it is also
+[[R-071]]'s real-video check.
+
+**Evidence (2026-09-29):**
+
+- **Local.** The pre-push gate of each push was green, 96/96, 0 cached: `gate-20260929T083245Z-7860.log`,
+  `gate-20260929T084923Z-8504.log`, `gate-20260929T093143Z-18284.log`.
+- **Linux CI** — every run COMPLETED `success` on attempt 1, `ci` and `E2E (Playwright)` both RAN:
+  <https://github.com/yasermostafaee/cg/actions/runs/36544178627> (`84751dfd`),
+  <https://github.com/yasermostafaee/cg/actions/runs/36546022415> (`40a0cfe4`),
+  <https://github.com/yasermostafaee/cg/actions/runs/36550551130> (`ae5e6c32`: 3 Designer specs flaked and
+  passed on retry, none in this diff's reach).
+- **Installers** — every run COMPLETED `success`, both jobs RAN:
+  <https://github.com/yasermostafaee/cg/actions/runs/36544178635>,
+  <https://github.com/yasermostafaee/cg/actions/runs/36546022440>,
+  <https://github.com/yasermostafaee/cg/actions/runs/36550551264>.
+
+## [x] P-059 — The first client test release, `0.9.0`: one version, two installers with no manual side step, a Persian install guide, a draft release ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-29 by `CLIENT-TEST-RELEASE-01` (v1) · `openspec/changes/client-test-release/` · tag `v0.9.0` on `aba3c8fa`; the DRAFT release opened by run 36583156212 — publishing it is the owner's · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-client-test-release/`, `RELEASE-0110-01` §0.3) — `0.9.0` was never delivered (`P-060`); the delivery build is `0.11.0`
+
+**What.** The first build a client installs by itself, on its own machines and addresses, with nobody
+from our side there (the owner's decisions of 2026-09-23). **B1** — one version, `0.9.0`, for CG
+Control, CG Designer and the bridge, in all nine files that carry it (`tools/release` refuses a build
+whose files disagree); it shows in both installers' names, in Windows' Installed apps, in one line in
+each app (CG Control: Station setup's rail; CG Designer: its start screen, as it has no settings or
+about place) and in the bridge's first start line. It sets [[P-031]]'s compatibility floor. **B2** —
+the CG Control installer's inbound rules for UDP 6250 (OSC) and TCP 7911 (templates), scoped to
+`cg-bridge.exe`, already exist (`DESKTOP-APPS-01`); the clean-Windows smoke now judges each rule by
+its fields, not its name. **No real address, no test secret** — two plant addresses in console copy
+and one in a bridge comment are replaced, and the installer workflow scans what both installers are
+built from. **B3** — a short Persian install guide, `docs/release/0.9.0/install-guide.fa.md`, built by
+Chromium into a PDF in the repo's Vazirmatn, right to left, with screenshots taken by the e2e harness.
+**B4** — a `v*` tag builds both installers from the tagged commit, runs the clean-Windows smoke, and
+opens a DRAFT pre-release with exactly four files: the two installers, `SHA256SUMS.txt` and the guide.
+
+**Why.** No manual side steps: the client installs alone, from two unsigned installers, and the only
+steps allowed are inside an app's own UI.
+
+**Acceptance:** WHEN either installer is built THEN its name and Installed apps carry the one release
+version, and each app names it in one line; WHEN the nine version files disagree THEN the build
+stops; WHEN the bridge starts THEN its first line names its version; WHEN CG Control is installed THEN
+exactly two inbound rules exist, each for `cg-bridge.exe`, on its one port and protocol, AND WHEN it
+is uninstalled THEN neither does; WHEN the installers are built THEN nothing they ship carries a
+private address or a test secret; WHEN `v0.9.0` is pushed THEN a draft pre-release holds exactly the
+four files, and nothing is published by CI. **Shared CI config** (`.github/workflows/desktop.yml`,
+`turbo.json`, `pnpm-lock.yaml`).
+
+**Established first (A0 / B0, 2026-09-29):** the splash still frame the owner saw was the browser's
+reduced-motion setting, not code (his Chrome, started inside a Remote Desktop session, reports
+`prefers-reduced-motion: reduce`); nothing was changed for it. The rest is in the change's design.
+
+## [x] P-060 — Release `0.9.1`: the fixes the owner's `0.9.0` check found, one `SHA256SUMS.txt`, a draft release ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` (v2) + DELTA A + DELTA B · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`) · `0.9.0` is never delivered
+
+**What.** One version, `0.9.1`, for CG Control, CG Designer and the bridge, through `tools/release`;
+a `v0.9.1` tag builds, smokes and opens a DRAFT pre-release with the same four files as [[P-059]]. It
+carries [[B-288]] (PVW from the bridge's store), [[B-289]] (a media plate starts silent and its raise
+ramps), [[B-290]] (each app its own icon), [[B-291]] (rows at start), [[B-292]] (our layer cleared
+from outside) and [[D-161]] (Help → About). **One `SHA256SUMS.txt`:** the draft's own file already
+named each asset by its release name; the copy the owner holds with a space (`CG Control_0.9.0_x64-
+setup.exe`) is the INSTALLER JOB's, which the workflow wrote over Tauri's built names and uploaded
+inside both CI artifacts — it is no longer written, so the only `SHA256SUMS.txt` is the release's, and
+the release job now checks it against the uploaded assets (a line naming a file the release does not
+hold, a missing line or a wrong hash stops it). The `v0.9.0` draft is retitled `v0.9.0 — superseded,
+do not use` and stays a draft. [[P-031]]'s floor stays open: `CENTRAL-BRIDGE-01` sets it at `0.10.0`
+(the owner, 2026-09-30; §5 had moved it to `0.9.1`). The install guide for `0.9.1`
+states the one limit that stands until `CENTRAL-BRIDGE-01`: one channel is driven from one CG Control
+at a time ([[R-068]]).
+
+**Why.** The owner's check of the installed `0.9.0` (2026-09-29) found each of the above; `0.9.0` is
+not handed to the client.
+
+**Acceptance:** WHEN the parts are built THEN they carry `0.9.1`; WHEN `v0.9.1` is pushed THEN a draft
+pre-release holds exactly four files and every line of its `SHA256SUMS.txt` names one of them with its
+hash; WHEN a sums line names a file the release does not hold THEN the release job stops (the control);
+WHEN a CI run builds the installers THEN no artifact carries a `SHA256SUMS.txt`.
+
+**Built (2026-09-30; archived 2026-09-30).** The nine files carry `0.9.1` (`release-version.mjs`); the
+installers job logs its hashes and uploads no sums; the release job runs `release-files.mjs verify` over
+the assets downloaded back from the draft (`sumsProblems` — the `0.9.0` job's own sums fail it, naming
+the line). The `0.9.1` guide adds the one-CG-Control-per-channel limit and Help → About. [[P-031]]'s floor
+is left open — `CENTRAL-BRIDGE-01` sets it at `0.10.0` (the owner, 2026-09-30). The draft itself is read
+back in the change's `tasks.md` (5.4).
+
+## [x] P-061 — Release `0.10.0`: three installers — CG Bridge, CG Control, CG Designer ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §E · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`) · `0.9.1` is never delivered · the draft `v0.10.0` opened (the owner publishes) · owed: the `.111` run
+
+**What.** One version, `0.10.0`, for CG Bridge, CG Control and CG Designer, through `tools/release`, now
+covering three apps. A `v0.10.0` tag builds all three installers, runs the clean-Windows smoke, and opens a
+DRAFT pre-release holding the three installers, `SHA256SUMS.txt` (names matching the assets, checked
+against them) and the updated Persian install guide (PDF). [[P-031]]'s floor moves to `0.10.0` — the first
+release a client holds. The guide gains the install order (CG Bridge on the Playout machine by the
+Playout's admin; CG Control on each operator's PC; CG Designer), the two places CG Bridge can go (on the
+Playout machine; on a separate server, with what that changes), and what to do for each line the console
+can show; the "one CG Control per channel" limit is removed ([[R-068]]). **The clean-Windows smoke**
+installs CG Bridge and checks the service (automatic start, recovery, no dependency), `/health` under 1 s,
+our firewall rules and that nothing binds UDP `127.0.0.1:6250`, and a silent install, upgrade and uninstall
+with their exit codes; then installs CG Control and checks it connects to that bridge — control: a
+console with no valid token gets no state.
+
+**Why.** The owner's decision of 2026-09-29: one bridge per Playout, before the client delivery
+([[R-067]], [[R-068]]).
+
+**Acceptance:** WHEN the parts are built THEN all three carry `0.10.0`; WHEN `v0.10.0` is pushed THEN a
+draft pre-release holds exactly the three installers, `SHA256SUMS.txt` and the guide, every sums line
+naming one of them with its hash; WHEN the smoke runs THEN each check above passes, and its controls fail
+where they should.
+
+**Built in code (2026-09-30, `9c93ace7` and before).** The nine version files carry `0.10.0`;
+`release-files.mjs` names five files; the guide `docs/release/0.10.0/install-guide.fa.md` (nine
+sections, picture 1 the new Playout-address question); the floor set in [[P-031]]. The smokes are
+written (`bridge-smoke`, and the apps' smoke on the v3 model) — their first run found three installer
+defects, fixed in `5530536a`. ~~**Owed:** both smokes green on CI, then the `v0.10.0` tag and the draft
+read back (`central-bridge` tasks 9.3, 9.5).~~ **Done 2026-09-30:** both smokes green (from run
+36719814207 on); the tag `v0.10.0` on `3899b914` ran green (run 36732476610) and opened the DRAFT
+pre-release "APASAI CG 0.10.0 (test build)" with exactly the five files, its `SHA256SUMS.txt` checked
+against what was uploaded (`central-bridge` 9.5 has the sizes and the address). **Still owed:** the
+hardware run on `.111` and the owner's own-PC run; the owner publishes the draft.
+
+## [ ] P-062 — TLS for the console ↔ CG Bridge connection ⟨priority: low⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §B · filed only
+
+**What.** CG Bridge's console connection (TCP `5280`) is plain WebSocket over HTTP, the transport the
+Playout's own API offers on `8080` — which every console already uses for its D1 sign-in, so the same token
+already crosses the station's network in clear. A TLS listener (as the Playout's `8443`) needs a
+certificate the client does not have and a trust decision in each console. **Why.** Recorded when
+`CENTRAL-BRIDGE-01` chose the transport. **Acceptance (sketch):** WHEN a station enables TLS on CG Bridge
+THEN every console connects over `wss://`, a console that does not trust the bridge's certificate refuses
+with one line, and the Playout's own choice (HTTP or HTTPS) is not constrained.
+
+## [~] P-063 — A setup window of our own for all three installers ⟨priority: high⟩ — FILED 2026-10-04 by `INSTALLER-DESIGN-01` (v2) · `openspec/changes/installer-design`
+
+**What.** The three installers open the default NSIS wizard (a white page, a grey system button row). They
+open instead one setup window of our own — CG Setup (`tools/setup-ui`, Rust: Win32 + Direct2D +
+DirectWrite, no WebView2, no .NET): frameless, the system's shadow and Windows 11's corners, its own title
+bar, a step rail (Welcome → Location → Installing → Done) on the splash's ground and the page on the
+sign-in card's surface, in the console's tokens and faces, vector at every scale. Each installer is CG
+Setup with the product's NSIS installer — built exactly as before — appended behind it as its ENGINE: with
+`/S` (or Tauri's `/P`) CG Setup runs the engine with the same command line and returns its exit code, so
+every silent path is the engine's; without, it shows the window and drives the same engine silently, its
+bar following the engine's real steps. **Why.** The owner (2026-09-30, clarified 2026-10-03): setup
+should feel like installing a current product and look like the same product as the splash and sign-in —
+not a classic wizard, nor one with a picture pasted on top.
+
+**Acceptance:** WHEN an installer is run with `/S` THEN it and its engine alone exit the same, for every
+silent path the Playout document names; WHEN it is run without THEN its window shows Welcome (the question,
+the tile, publisher, version, what it installs, "Update from … to …" over an older release), Location,
+Installing (a real bar), Done ("Launch when ready" starts the app) and Error, every page operable by
+keyboard and UI Automation, sharp at 150 % and 200 %, still under reduced motion; WHEN WebView2 is
+unavailable THEN the first screen opens all the same; WHEN packed THEN each installer is at most 15 MB
+larger than its engine.
+
+**Built in code (2026-10-04).** `tools/setup-ui` (46 unit tests), `tools/release/src/pack-installers.mjs`,
+`desktop.yml` (built 32-bit, packed, the smokes and the `setup-window` job). The uninstallers stay the
+engines' classic pages (`design.md` §4). **Verified (2026-10-04, `11ff890c`):** Desktop run
+37168047465 green with every job run — the silent paths equal against each engine, every page of each
+installer driven through UI Automation and captured, "Launch when ready" starting the app, updates keeping
+the settings, the first screen with WebView2 blocked on Server 2022 and 2025, the keyboard, 150 %; PR run
+37168047476's `e2e` green. Each installer +0.84 MB. The Playout document's §2 says what the installer is
+now. **Not verified on a runner:** Windows 11's rounded corners (Windows does not round without a GPU)
+and 200 % (the runner's display stops at 175 %). **Owed:** the owner's look on his own PC; archive.
+
+## [~] P-064 — Release `0.11.0`: the delivery build — three installers, the Persian guide, accepted on clean Windows ⟨priority: high⟩ — FILED 2026-10-04 by `RELEASE-0110-01` (v3) · `openspec/changes/release-0-11-0` · `0.10.0` is never delivered
+
+**What.** `0.11.0` is the build the client receives (the owner, 2026-10-03): CG Bridge, CG Control and CG
+Designer from one green commit, behind CG Setup ([[P-063]]), with the Persian install guide and
+`SHA256SUMS.txt`, in a DRAFT release the owner publishes. One version set through `tools/release`
+(`release-version.mjs --set`); the release line (`major.minor`) pinned both ways; [[P-031]]'s compatibility
+floor moved to `0.11.0`. **Why.** The first build a client holds, and the upgrade path from the `0.10.0`
+the owner and the test plant hold must be proved, not assumed: `INSTALLER-DESIGN-01` proved only a
+synthetic one.
+
+**Acceptance:** WHEN the three installers run on a clean Windows, in the guide's order, with the network
+cut THEN each installs; WHEN the installed CG Control is driven against the installed CG Bridge and a fake
+Playout THEN a station admin signs in, chooses channel 2, signs CG Bridge in, takes a row ON AIR and clears
+it; WHEN each `0.11.0` installer runs over the classic `0.10.0` with a row ON AIR THEN its Welcome reads
+"Update from 0.10.0 to 0.11.0. Your settings are kept.", its `/S` exits 0, the service, settings, session
+and station are kept and nothing on air is cleared; WHEN they are uninstalled THEN the service, its rules
+and the shortcuts are gone and the data kept; WHEN the built installers are scanned THEN none carries a
+private address, a test secret, a token or dev-only code; WHEN `v0.11.0` is tagged THEN a draft titled
+"APASAI CG 0.11.0" holds exactly five files.
+
+**Status (2026-10-04): built; the draft is open, unpublished.** `v0.11.0` is tagged on `941ffefc` (PR run
+37192167182 with `ci` and E2E RAN; Desktop 37192167147, both acceptances RAN — 148 checks); the tag's own
+run 37194356468 repeated the acceptances and opened the draft, read back and each file re-checked against
+its sums. Owed: the owner's check and publication, and the `.111` run on Playout 2.9.2.
+
+## [~] P-065 — CG Bridge's setup asks whether it runs on a separate server: no command line for a separate server ⟨priority: high — the delivery rule⟩ — FILED 2026-10-04 by `RELEASE-0111-01` Part A · `openspec/changes/installer-design` (tasks §4)
+
+**What.** CG Bridge's setup window gets a Playout page, after Location, with one checkbox — "CG Bridge runs on
+a separate server (not on the Playout machine)" — unticked by default. Ticked, it asks for the Playout address,
+CasparCG's AMCP host and this server's address (one of this machine's IPv4 addresses, or one typed), judges each
+by the engine's own rules, says a refusal in words under its field, and gives the engine exactly the options a
+command-line user types (`/PLAYOUT=`, `/AMCPHOST=`, `/BRIDGEADDRESS=`). On an upgrade it starts from the stored
+configuration. **Why.** `0.11.0`'s guide told the client to install a separate-server CG Bridge from a
+PowerShell line — a side step outside every app's own UI, which the delivery rule forbids (the owner,
+2026-10-04).
+
+**Acceptance:** WHEN the checkbox stays unticked THEN the install is `0.11.0`'s: the same configuration file,
+field by field, and the same service; WHEN it is ticked and the three filled THEN the configuration equals what
+`/S /PLAYOUT=… /AMCPHOST=… /BRIDGEADDRESS=…` writes, field by field, the service runs and `/health` names that
+Playout; WHEN the Playout address is empty, or one the engine refuses, THEN the page refuses it in words — and
+the same value on the command line keeps its old exit code; WHEN a separate-server `0.11.0` is upgraded through
+the window THEN the page opens filled and the values are kept; WHEN any installer runs with `/S` THEN it behaves
+and exits exactly as before.
+
+**Built (2026-10-04)** — `tools/setup-ui` (`address.rs`, `field.rs`, `server.rs`, the page, the window, UI
+Automation); the engine unchanged (`8e6b7796`). **Verified on clean Windows** — every acceptance bullet above,
+on `61026bc3` (tagged `v0.11.1`): the CG Bridge smoke 109/109 and both upgrade acceptances 75/75, Desktop
+<https://github.com/yasermostafaee/cg/actions/runs/37210021257>. Open: the owner's look at the page on his own
+Windows 11 at 200 % (CI has no rounded corners), then `installer-design` is his to archive.
+
+## [~] P-066 — CG Bridge's Installed-apps row is a contract with the Playout's engine installer ⟨priority: high — their `2.9.4` decides from it whether to run our file⟩ — FILED 2026-10-04 by `RELEASE-0112-01-C` C1 · `openspec/changes/backup-session/` (tasks §7)
+
+**What.** The Playout's `2.9.4` engine installer runs CG Bridge's installer with `/S` when its box
+«CG Bridge هم نصب شود» is ticked, and leaves an installed CG Bridge alone when the version it reads is the
+same or newer, or unreadable (`docs/integration/playout/PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §2). It reads
+the row whose `DisplayName` is `CG Bridge`, and that row's `DisplayVersion`, in both the 64-bit and the 32-bit
+registry views. So those two values, the one row and its view, are promises to another team's installer, and
+a change to any of them is a contract change — never a silent one. **Why.** A second row, a renamed product or
+a four-part version would make their installer run our file over a newer CG Bridge, or never upgrade it.
+
+**Acceptance:** WHEN CG Bridge is installed on a clean Windows THEN exactly one Installed-apps row in either view
+resembles `CG Bridge`, its `DisplayName` is exactly `CG Bridge`, its `DisplayVersion` is the release in
+`major.minor.patch`, and it is in the 64-bit view; WHEN it is upgraded — over itself, and over each delivered or
+drafted release (`0.10.0`, `0.11.0`, `0.11.1`) — THEN the same holds with the new version; WHEN any of these
+changes THEN the smoke fails by name.
+
+**Built (2026-10-04, `a9bcfbd2`)** — `tools/bridge-installer/installed-apps.mjs`, the one reader; checked in the
+CG Bridge smoke after the install and after the upgrade, and in every release acceptance after the classic
+install and after the upgrade. **Read on the clean runner** (Desktop 37228341119, the build still `0.11.1`): the
+CG Bridge smoke and the classic installs of the `v0.10.0`, `v0.11.0` and `v0.11.1` drafts each left exactly one
+row — 64-bit view, key `CGBridge`, `DisplayName` `CG Bridge`, `DisplayVersion` `0.10.0` / `0.11.0` / `0.11.1` —
+and every upgrade left one row reading the build's version. The NSIS lines that write it are byte-identical at
+the three tags. **The `0.11.2` build** (Desktop 37231676336, dispatched on the bump `e14274af`): the CG Bridge
+smoke's install and upgrade each left exactly one row — 64-bit, `CGBridge`, `CG Bridge`, `0.11.2` — and every
+upgrade acceptance (from `0.10.0`, `0.11.0`, `0.11.1`) passed its row checks. **The `0.11.3` build** (`RELEASE-0113-01`;
+Desktop 37331199682 on `65507361` and the tag's run 37337861683): the CG Bridge smoke's install and upgrade each
+left exactly one row — 64-bit, `CGBridge`, `CG Bridge`, `0.11.3`; the `v0.11.2` draft's classic install left its
+own row at `0.11.2` (a new upgrade job), and every upgrade — from `0.10.0`, `0.11.0`, `0.11.1` and `0.11.2` — left
+one row reading `0.11.3`.
+
+## [~] P-067 — Each installer's step rail carries its own art ⟨priority: low⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part B2 · `openspec/changes/installer-rail-art/`
+
+**Repro / Actual (the owner's `0.11.3`, picture 2):** CG Designer's setup window shows CG Control's illustration
+at the foot of its step rail, and a second window frame stood behind it with `Version 0.11.3` at its foot.
+**Expected:** CG Control keeps today's motif; CG Designer and CG Bridge get their own (or none); the second frame
+is identified — ours and fixed so one window shows, or named if it is not ours. **Acceptance:** every installer's
+rail pictured before and after on the clean runner.

@@ -2,7 +2,15 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { isLayerVisible, type ConnectionConfig, type FixedLayerBank } from '@cg/shared-ipc';
+import {
+  defaultFixedLayerBank,
+  fixedBankEnd,
+  fixedBankSlots,
+  isLayerVisible,
+  isLowBankLayer,
+  type ConnectionConfig,
+  type FixedLayerBank,
+} from '@cg/shared-ipc';
 import { createBridge, type BridgeHandle } from '../src/index.js';
 
 /**
@@ -11,7 +19,7 @@ import { createBridge, type BridgeHandle } from '../src/index.js';
  * The bank a station gets when its fixed-layers file is ABSENT used to be no
  * bank at all, so a fresh machine showed an empty Layers panel and an old
  * machine showed whatever its file last said — on 2026-08-01 that was a
- * four-layer 70–73 bank written before the thirty-layer decision, on one
+ * four-layer 80–83 bank written before the whole-band decision, on one
  * machine and not the other, with nothing anywhere announcing the difference.
  *
  * These boot against a DEAD CasparCG (unreachable AMCP, ephemeral OSC bind):
@@ -46,13 +54,13 @@ function freshConfigDir(): string {
 
 function visibleLayers(bank: FixedLayerBank): number[] {
   const out: number[] = [];
-  for (let layer = bank.start; layer <= bank.start + bank.count - 1; layer++) {
+  for (let layer = bank.start; layer <= fixedBankEnd(bank); layer++) {
     if (isLayerVisible(bank, layer)) out.push(layer);
   }
   return out;
 }
 
-it('no config file: the station comes up on channel 1, layers 70–99, thirty rows, top five ticked', async () => {
+it('no config file: the station comes up on channel 1, layers 80–99, twenty rows, top five ticked', async () => {
   const fixedLayersPath = path.join(freshConfigDir(), 'bridge-fixed-layers.json');
   expect(fs.existsSync(fixedLayersPath)).toBe(false);
 
@@ -66,16 +74,19 @@ it('no config file: the station comes up on channel 1, layers 70–99, thirty ro
   expect(bank).not.toBeNull();
   if (bank === null) throw new Error('no bank');
   expect(bank.channel).toBe(1);
-  expect(bank.start).toBe(70);
-  expect(bank.count).toBe(30);
+  expect(bank.start).toBe(80);
+  expect(bank.count).toBe(20);
   expect(visibleLayers(bank)).toEqual([95, 96, 97, 98, 99]);
 
-  // All thirty are FENCED from automatic allocation, not just the five shown —
+  // All twenty are FENCED from automatic allocation, not just the five shown —
   // fencing derives from start/count, never from the ticks.
   const slots = bridge.runtime.fixedSlots();
+  // Twenty operator rows plus the TEN bed rows the default bank also declares
+  // (`single-clock-look-switch`) — both halves fenced, for the same reason. The default
+  // declares each band WHOLE, so the two counts are the bands' own sizes.
   expect(slots).toHaveLength(30);
-  expect(slots[0]).toEqual({ channel: 1, layer: 70 });
-  expect(slots[29]).toEqual({ channel: 1, layer: 99 });
+  expect(slots[0]).toEqual({ channel: 1, layer: 80 });
+  expect(slots[19]).toEqual({ channel: 1, layer: 99 });
 
   // Resolving a default must not WRITE one. The file still records a deviation
   // from the default; a bridge that persisted the default on boot would make
@@ -84,13 +95,14 @@ it('no config file: the station comes up on channel 1, layers 70–99, thirty ro
   expect(fs.existsSync(fixedLayersPath)).toBe(false);
 });
 
-it('a config file still wins: a station that declared 70–73 gets 70–73, not the default', async () => {
+it('a config file still wins: a station that declared 80–83 gets 80–83, not the default', async () => {
   const fixedLayersPath = path.join(freshConfigDir(), 'bridge-fixed-layers.json');
   const declared: FixedLayerBank = {
     channel: 1,
-    start: 70,
+    low: { start: 50, count: 9 },
+    start: 80,
     count: 4,
-    aliases: { '70': 'logo22', '71': 'clock' },
+    aliases: { '80': 'logo22', '81': 'clock' },
   };
   fs.writeFileSync(fixedLayersPath, JSON.stringify(declared, null, 2), 'utf8');
 
@@ -103,7 +115,7 @@ it('a config file still wins: a station that declared 70–73 gets 70–73, not 
   // The bank the operator wrote, verbatim — the default does not merge into it,
   // does not extend it, and does not overwrite the file.
   expect(bridge.runtime.fixedLayersConfig()).toEqual(declared);
-  expect(bridge.runtime.fixedSlots()).toHaveLength(4);
+  expect(bridge.runtime.fixedSlots()).toHaveLength(13); // 4 operator rows + 9 bed rows
   expect(JSON.parse(fs.readFileSync(fixedLayersPath, 'utf8'))).toEqual(declared);
 });
 
@@ -113,6 +125,7 @@ it('a deliberately narrow bank is not widened by the default, ticks and all', as
   // field the default has an opinion about is set to something else here.
   const declared: FixedLayerBank = {
     channel: 2,
+    low: { start: 50, count: 9 },
     start: 80,
     count: 2,
     visibility: { '80': false, '81': true },
@@ -128,7 +141,52 @@ it('a deliberately narrow bank is not widened by the default, ticks and all', as
   expect(bridge.runtime.fixedSlots()).toEqual([
     { channel: 2, layer: 80 },
     { channel: 2, layer: 81 },
+    // The BED rows ride the same channel as the bank that declares them, and the file
+    // said nothing about them — so they come from the schema default, on channel 2.
+    ...Array.from({ length: 9 }, (_, i) => ({ channel: 2, layer: i + 50 })),
   ]);
+});
+
+/*
+  `FIELD-FIXES-01` I — A STATION SET UP BEFORE THE FIVE-ROW DEFAULT. First-run used to declare every
+  row shown — twenty template rows and ten beds, the owner's "30/30 rows" — and a new bank shows five
+  of each.
+
+  🔴 `RELEASE-091-01` §7 (`B-291`) — SUPERSEDES this test's old claim that "an upgrade boots it exactly
+  as written". The owner's decision (2026-09-29): such a bank is brought ONCE to five rows of each band,
+  plus every occupied row — but only once the channel's occupancy is KNOWN
+  (`bank-bring-in.integration.test.ts`). This boot is against a DEAD server, where it can never be
+  known, so what it pins now is the other half of the rule: unknown changes nothing, on screen or on
+  disk.
+*/
+it('a bank saved before the five-row default is left exactly as written while the channel cannot be read', async () => {
+  const fixedLayersPath = path.join(freshConfigDir(), 'bridge-fixed-layers.json');
+  const base = defaultFixedLayerBank();
+  // Every row of each band ticked, enumerated as the bank enumerates them.
+  const ticked = (bed: boolean): Record<string, boolean> =>
+    Object.fromEntries(
+      fixedBankSlots(base)
+        .filter(({ layer }) => isLowBankLayer(base, layer) === bed)
+        .map(({ layer }) => [String(layer), true]),
+    );
+  const declared: FixedLayerBank = {
+    ...base,
+    channel: 2,
+    visibility: ticked(false),
+    low: { ...base.low, visibility: ticked(true) },
+  };
+  fs.writeFileSync(fixedLayersPath, JSON.stringify(declared, null, 2), 'utf8');
+
+  bridge = await createBridge({ port: 0, connection: deadConnection(), fixedLayersPath });
+
+  const bank = bridge.runtime.fixedLayersConfig();
+  expect(bank).toEqual(declared);
+  if (bank === null) throw new Error('no bank');
+  // The owner's "30/30 rows": twenty template rows and ten beds, every one still shown.
+  const rows = fixedBankSlots(bank);
+  expect(rows).toHaveLength(30);
+  expect(rows.filter(({ layer }) => !isLayerVisible(bank, layer))).toEqual([]);
+  expect(JSON.parse(fs.readFileSync(fixedLayersPath, 'utf8'))).toEqual(declared);
 });
 
 it('a present-but-unusable file is still a hard boot failure — never quietly replaced by the default', async () => {

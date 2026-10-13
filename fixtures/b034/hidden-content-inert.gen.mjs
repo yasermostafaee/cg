@@ -116,7 +116,7 @@ const comp = (id, children, playout, lifecycle) => ({
   frameRange: { in: 0, out: 50 },
   ...(lifecycle ? { lifecycle } : {}),
   ...(playout ? { playout } : {}),
-  background: 'transparent',
+  editorBackdrop: 'transparent',
   layers: [layer(`${id}-l`, children)],
 });
 
@@ -133,7 +133,7 @@ const scene = {
   lifecycle: { outPoint: 25 },
   // Content-driven parent: its only content is a nested instance whose own content is HIDDEN.
   playout: { mode: 'auto-out', holdSource: 'content-driven', holdMs: 3000 },
-  background: 'transparent',
+  editorBackdrop: 'transparent',
   layers: [
     layer('root-l', [
       // Per-instance holdOverride FORCE-INCLUDE of the hidden child crawl — must be a no-op.
@@ -194,7 +194,7 @@ const ancestorScene = {
   lifecycle: { outPoint: 25 },
   // Content-driven; a generous holdMs is only a fallback — the VISIBLE finite ticker (b) should drive.
   playout: { mode: 'auto-out', holdSource: 'content-driven', holdMs: 30000 },
-  background: 'transparent',
+  editorBackdrop: 'transparent',
   layers: [
     layer('root-l', [
       // (a) HIDDEN instance whose child holds a VISIBLE infinite sequence, NO holdOverride — its whole

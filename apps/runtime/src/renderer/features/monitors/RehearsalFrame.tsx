@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { CSSProperties, Ref } from 'react';
 import type { FieldValues, Position } from '@cg/shared-schema';
-import { positionQuery } from '@cg/shared-schema';
+import { positionQuery, withCgControl } from '@cg/shared-schema';
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { applyOperatorPosition, type PageRuntimeWindow } from './frameEnvironment.js';
+import type { TimingToSend } from '../inspector/timingToSend.js';
+import { frameBox } from './rehearsalFrames.js';
 
 /**
  * R-022 — ONE rehearsing row's frame: the retained self-contained page, in a
@@ -17,16 +19,13 @@ import { applyOperatorPosition, type PageRuntimeWindow } from './frameEnvironmen
 
 const styles = {
   frame: {
-    position: 'absolute' as const,
-    left: '50%',
-    top: '50%',
     border: 0,
     display: 'block',
-    // The FIT scale is composed with the centring translate so the frame scales
-    // about its own centre inside the shared box. Every frame is the same size
-    // (the channel raster), which is what makes ONE checker behind the whole
-    // stack correct.
-    transformOrigin: 'center center',
+    // R-049 — the box and the FIT transform are NOT written here any more. They
+    // come from the shared `frameBox`, because the live-plate overlay must land
+    // on exactly these pixels and a second copy of the expression is how an
+    // overlay drifts off the page beneath it. What stays here is what belongs to
+    // an iframe and to nothing else.
     // TRANSPARENT, not black — an opaque frame would hide both the checker and
     // every frame below it in the composite, which is the entire point of
     // compositing. The page inside paints its own background where it has one.
@@ -118,6 +117,23 @@ interface Props {
   position: Position | undefined;
   /** Row label, for the accessible name. */
   rowName: string;
+  /**
+   * 🔴 `B-151` — WHICH LOOK THIS PAGE SHOULD SHOW, and the third consumer of a mechanism
+   * whose other two were each wired by hand.
+   *
+   * A look switch is two mutations on two machines, and the page's half arrives through the
+   * reserved `__cg` key on the payload (`tasks.md` 6.7). The plant gets it on `CG ADD` and
+   * `CG UPDATE`; the Designer's canvas gets it by `postMessage` → `setActiveLook`. PVW got
+   * NOTHING — so the page in the frame sat on the authored default from the first frame and
+   * stayed there through every switch, while air moved.
+   *
+   * It rides the SAME payload key rather than a preview-only call, so there is no third
+   * spelling of "tell the page which look": what PVW sends is byte-shaped like what CasparCG
+   * delivers, which is the whole fidelity claim rehearse is built on.
+   */
+  activeLookId: string | undefined;
+  /** `PASSES-CYCLE-ONLY-26` Part B — the operator's effective pass timing, or undefined. */
+  timing: TimingToSend | undefined;
   handleRef?: Ref<RehearsalFrameHandle>;
   /** Told whenever this frame's readiness flips, so the stage can gate its transport. */
   onReadyChange?: (itemId: string, ready: boolean) => void;
@@ -132,6 +148,8 @@ export function RehearsalFrame({
   fields,
   position,
   rowName,
+  activeLookId,
+  timing,
   handleRef,
   onReadyChange,
 }: Props): JSX.Element {
@@ -142,14 +160,63 @@ export function RehearsalFrame({
     return (frameRef.current?.contentWindow as TemplateWindow | null | undefined) ?? null;
   }, []);
 
+  /*
+    🔴 `B-151` — ONE PAYLOAD BUILDER for both entry points, carrying the look on the reserved
+    `__cg` key exactly as the bridge does.
+
+    `withCgControl` only when there IS a look: a pre-LOOKS template must receive the payload
+    it always received, byte for byte. An empty control block would be a difference between
+    what PVW sends and what CasparCG sends, on the one surface whose entire claim is that
+    there is no difference — and `CG_CONTROL_KEY`'s strip rule means the page would silently
+    tolerate it, so nothing would ever have told us.
+  */
+  const payload = useCallback(
+    (): string =>
+      JSON.stringify(
+        activeLookId === undefined ? fields : withCgControl(fields, { look: activeLookId }),
+      ),
+    [fields, activeLookId],
+  );
+
+  /*
+    🔴 `PASSES-CYCLE-ONLY-26` Part B — **THE TIMING RIDES `play()`, AND RIDES `update()` ONLY
+    WHEN IT CHANGES. The two are different rules and collapsing them re-arms a live count.**
+
+    `play()` SEATS the count as a TOTAL (`DELTA B0`): the controller snapshots it, so a PLAY
+    must always carry it or PVW starts on the authored default.
+
+    `update()` is the trap. The effect that pushes field edits re-fires on EVERY draft change —
+    that responsiveness is most of what rehearse is for — and on a RUNNING page
+    `__cg.timing.passes` means "passes REMAINING FROM NOW". Folding the timing into `payload()`
+    would therefore re-arm the count on every keystroke in an unrelated text field: type four
+    characters during a two-pass run and the graphic has been told "two more" four times.
+
+    So the timing is NOT in `payload()`. It has its own effect below, keyed on the timing VALUE,
+    which fires on the first boot (before any play, where it is stored as a pending total) and
+    again only when the number itself changes.
+  */
+  const playPayload = useCallback(
+    (): string =>
+      JSON.stringify(
+        withCgControl(fields, {
+          ...(activeLookId !== undefined && { look: activeLookId }),
+          ...(timing !== undefined && { timing }),
+        }),
+      ),
+    [fields, activeLookId, timing],
+  );
+
+  /** The timing's VALUE as a stable key — an object identity would re-fire on every render. */
+  const timingKey = timing === undefined ? null : JSON.stringify(timing);
+
   useImperativeHandle(
     handleRef,
     () => ({
-      play: () => templateWindow()?.play?.(JSON.stringify(fields)),
+      play: () => templateWindow()?.play?.(playPayload()),
       next: () => templateWindow()?.next?.(),
       stop: () => templateWindow()?.stop?.(),
     }),
-    [templateWindow, fields],
+    [templateWindow, playPayload],
   );
 
   // Re-arm on a template change: a fresh document has not booted yet.
@@ -175,10 +242,39 @@ export function RehearsalFrame({
   // visible immediately — that responsiveness is most of what rehearse is for.
   // It goes through `window.update` with a JSON string, which is byte-for-byte
   // the payload shape `CG UPDATE` delivers on air.
+  //
+  // `B-151` — and whenever the LOOK changes, which is what makes a switch reach the page at
+  // all. `payload` closes over both, so this one effect carries the field edit and the look
+  // through the same call the plant makes; a separate look push would be a second transport
+  // and could land out of order with the values it belongs to.
   useEffect(() => {
     if (!ready) return;
-    templateWindow()?.update?.(JSON.stringify(fields));
-  }, [ready, fields, templateWindow]);
+    templateWindow()?.update?.(payload());
+  }, [ready, payload, templateWindow]);
+
+  /*
+    🔴 `PASSES-CYCLE-ONLY-26` Part B — **THE TIMING'S OWN PUSH, keyed on its VALUE.**
+
+    Deliberately separate from the field/look effect above, and keyed on `timingKey` rather than
+    on `timing`: the value arrives as a fresh object out of every panel render, so depending on
+    the object would re-fire on every unrelated push — which is precisely the relative-count
+    re-arm this separation exists to prevent. (The placement effect below carries the same rule
+    for the same reason; see its note.)
+
+    It fires on the FIRST boot — before any play, where `setRemainingPasses` stores the number as
+    a pending TOTAL for `play()` to seat — and thereafter only when the operator's number itself
+    changes, which IS an instruction to re-arm.
+
+    ⚠ It sends the timing ALONE, carrying no fields. An absent field payload merges nothing, and
+    an absent `look` member means "this payload says nothing about looks" — neither disturbs what
+    the page already has.
+  */
+  useEffect(() => {
+    if (!ready || timingKey === null) return;
+    templateWindow()?.update?.(
+      JSON.stringify(withCgControl({} as FieldValues, { timing: JSON.parse(timingKey) as never })),
+    );
+  }, [ready, timingKey, templateWindow]);
 
   // THE POSITION EDIT REACHING THE PREVIEW. `ready` and the placement are BOTH
   // dependencies, and that pairing is what makes an Apply visible: `ready`
@@ -238,17 +334,15 @@ export function RehearsalFrame({
         setReady(true);
       }}
       style={{
-        ...styles.frame,
-        zIndex,
-        // Sized to the CHANNEL RASTER — this is what makes the page inside place
-        // itself exactly as it will on air (R-030 geometry step 2 reads
-        // `window.innerWidth`/`innerHeight`, which inside a frame is this box).
-        width: `${String(raster.width)}px`,
-        height: `${String(raster.height)}px`,
-        // Preview-only fit, composed with the centring translate. A CSS
+        // Sized to the CHANNEL RASTER and fitted by the shared transform — the
+        // size is what makes the page inside place itself exactly as it will on
+        // air (R-030 geometry step 2 reads `window.innerWidth`/`innerHeight`,
+        // which inside a frame is this box), and the fit is preview-only. A CSS
         // transform on the ELEMENT cannot change what the document inside
         // measures, which is why the two scales stay apart.
-        transform: `translate(-50%, -50%) scale(${String(fit)})`,
+        ...frameBox(raster, fit),
+        ...styles.frame,
+        zIndex,
       }}
     />
   );

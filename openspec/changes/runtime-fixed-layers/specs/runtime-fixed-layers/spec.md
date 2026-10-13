@@ -48,7 +48,10 @@ retained item's identity and the observed occupancy — and NOTHING is sent to t
 restore never clears automatically, and recovery is the operator's separate, explicit Clear
 followed by take (never one compound action). `restore-blocked` also exits when the foreign
 producer vacates (observed empty → the normal deferred re-ADD proceeds). Dynamic (non-fixed)
-retained slots keep the existing fall-through unchanged.
+retained slots keep the existing behavior unchanged: the retained coordinate is taken EXACTLY
+when it is free, and only then falls through to allocate-elsewhere. A fixed slot that cannot be
+taken exactly (another restored item already bound it) SHALL be skipped with a reason of its own
+— never re-homed onto a dynamic layer.
 
 #### Scenario: Bridge-only restart keeps the item on its fixed layer
 
@@ -71,8 +74,16 @@ retained slots keep the existing fall-through unchanged.
 
 #### Scenario: Dynamic slots are unchanged
 
-- **WHEN** restore finds a DYNAMIC retained slot quarantined **THEN** the item falls through
-  to allocate-elsewhere exactly as before
+- **WHEN** restore finds a DYNAMIC retained slot that is FREE **THEN** the item comes back on
+  that exact layer, never on some other free layer in its range
+- **WHEN** restore finds a DYNAMIC retained slot quarantined or taken **THEN** the item falls
+  through to allocate-elsewhere exactly as before
+
+#### Scenario: A fixed slot already bound is skipped, never re-homed
+
+- **WHEN** restore finds the retained fixed slot already bound by another restored item
+  **THEN** the item is SKIPPED with a reason distinguishable from an exhausted range, and no
+  dynamic layer is allocated for it
 
 ### Requirement: Fixed-row verbs are split by residency and declared once
 

@@ -257,10 +257,11 @@ export function PreviewScopeTiming({
   onChange: (path: string, patch: TimingOverride) => void;
 }): JSX.Element {
   const scopes = timingScopeList(scene);
+  // ADR 0009 — a nested scope's timing relevance is decided by the mode the TEMPLATE stores,
+  // because `mode` is designer-owned and the preview can no longer override it. The root is
+  // always listed, so every operator-owned control stays reachable for the previewed template.
   const visible = scopes.filter(
-    (node) =>
-      node.path === '' ||
-      TIMING_RELEVANT_MODES.has(effectiveMode(node.source, overrides[node.path] ?? {})),
+    (node) => node.path === '' || TIMING_RELEVANT_MODES.has(effectiveMode(node.source)),
   );
   return (
     <>

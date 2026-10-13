@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   aspectForFormat,
   assignedSourceId,
+  STREAM_URL_SCHEMES,
   checkSourceAssignments,
   checkSourceCatalog,
   EMPTY_SOURCE_ASSIGNMENTS,
@@ -154,9 +155,14 @@ describe('the catalog file', () => {
     expect(LiveSourceLayerRangeSchema.safeParse({ start: 10, end: 10 }).success).toBe(true);
   });
 
-  it('the suggested band is design.md §4s 10-59 and is NOT applied on its own', () => {
-    expect(SUGGESTED_LIVE_SOURCE_LAYER_RANGE).toEqual({ start: 10, end: 59 });
-    // The empty catalog — what a station with no file has — declares NO band.
+  it('the suggested band is the PLATE band 60-79, and the empty catalogue DECLARES none', () => {
+    // `LAYER-BANDS-16` — it was 10-59 until the 2026-09-14 re-cut, which is exactly the span
+    // now left free for the playout server. The value is DERIVED from `LAYER_BANDS.plate`;
+    // what is pinned here is that the suggestion and the band agree.
+    expect(SUGGESTED_LIVE_SOURCE_LAYER_RANGE).toEqual({ start: 60, end: 79 });
+    // The empty catalog — what a station with no file has — declares NO band. `PLATE-BAND-01`: a
+    // Playout-linked station is then GIVEN 60–79 by `plateBandInForce` (`plate-band.test.ts`), which
+    // is computed and never written here, so this stays true of every station's catalogue.
     expect(EMPTY_SOURCE_CATALOG.layerRange).toBeUndefined();
   });
 
@@ -189,7 +195,7 @@ describe('nextSourceId — an id is NEVER reused', () => {
 
 describe('validateSourceCatalog — at load AND at change', () => {
   function bank(overrides: Partial<FixedLayerBank> = {}): FixedLayerBank {
-    return { channel: 1, start: 70, count: 30, ...overrides };
+    return { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 30, ...overrides };
   }
 
   const studioA = source('src-aaa', 'Studio A');
@@ -357,22 +363,52 @@ describe('the assignments — the join the operator makes', () => {
       { catalog },
     );
     expect(verdict).toMatchObject({ ok: false, reason: 'unknown-source' });
-    expect(verdict.ok ? '' : verdict.message).toContain('guest-1');
+    // 🔴 `B-309` — the sentence names nothing by its id; the ids are RELOCATED to `detail` (a log's).
+    expect(verdict.ok ? '' : verdict.message).toBe(
+      'A plate is assigned to a source this installation does not define — assign it to one of ' +
+        'the defined sources, or leave it unassigned',
+    );
+    expect(verdict.ok ? undefined : verdict.detail).toBe(
+      'plate "guest-1" of template "tpl-1", source "src-gone"',
+    );
+  });
+
+  it('🔴 `B-309` — a plate assigned twice is said in words; the ids are the log’s', () => {
+    const verdict = checkSourceAssignments(
+      {
+        assignments: [
+          { channel: 2, templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
+          { channel: 2, templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-bbb' },
+        ],
+      },
+      { catalog: null },
+    );
+    expect(verdict).toMatchObject({ ok: false, reason: 'duplicate-plate' });
+    const message = verdict.ok ? '' : verdict.message;
+    expect(message).toBe(
+      'A plate of one template is assigned twice on channel 2 — which source it used would ' +
+        'depend on the order of the list',
+    );
+    expect(message).not.toMatch(/guest-1|tpl-1|src-/);
+    expect(verdict.ok ? undefined : verdict.detail).toBe(
+      'plate "guest-1" of template "tpl-1" on channel 2',
+    );
   });
 
   it('reads back which source a plate uses, and which plates have none', () => {
     const assignments = {
       assignments: [{ templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' }],
     };
-    expect(assignedSourceId(assignments, 'tpl-1', 'guest-1')).toBe('src-aaa');
-    expect(assignedSourceId(assignments, 'tpl-1', 'guest-2')).toBeNull();
+    expect(assignedSourceId(assignments, 1, 'tpl-1', 'guest-1')).toBe('src-aaa');
+    expect(assignedSourceId(assignments, 1, 'tpl-1', 'guest-2')).toBeNull();
     // A freshly imported template has ALL of its plates here, which is the
     // ordinary state and not an error.
-    expect(unassignedPlateIds(assignments, 'tpl-1', ['guest-1', 'guest-2'])).toEqual(['guest-2']);
-    expect(unassignedPlateIds(EMPTY_SOURCE_ASSIGNMENTS, 'tpl-1', ['guest-1', 'guest-2'])).toEqual([
-      'guest-1',
+    expect(unassignedPlateIds(assignments, 1, 'tpl-1', ['guest-1', 'guest-2'])).toEqual([
       'guest-2',
     ]);
+    expect(
+      unassignedPlateIds(EMPTY_SOURCE_ASSIGNMENTS, 1, 'tpl-1', ['guest-1', 'guest-2']),
+    ).toEqual(['guest-1', 'guest-2']);
   });
 });
 
@@ -405,7 +441,9 @@ describe('deleting a source that is in use — cascades, never dangles', () => {
   it('leaves the plates it dropped reading as UNASSIGNED, not as broken', () => {
     const withoutBaku: SourceCatalog = { sources: [source('src-aaa', 'Studio A')] };
     const pruned = pruneAssignmentsForCatalog(assignments, withoutBaku);
-    expect(unassignedPlateIds(pruned.value, 'tpl-1', ['guest-1', 'guest-2'])).toEqual(['guest-2']);
+    expect(unassignedPlateIds(pruned.value, 1, 'tpl-1', ['guest-1', 'guest-2'])).toEqual([
+      'guest-2',
+    ]);
   });
 
   it('returns the SAME object when nothing is orphaned', () => {
@@ -417,8 +455,113 @@ describe('deleting a source that is in use — cascades, never dangles', () => {
   });
 });
 
+describe('the STREAM arm — C-025, the URL the owner proved by hand', () => {
+  const streamSource = (url: string) => ({
+    id: 'src-str',
+    name: 'Web feed',
+    producer: { kind: 'stream' as const, url },
+  });
+  const NO_LAYERS = { fixedBank: null, reservedLayers: [] } as const;
+
+  it('parses at the union — the fifth arm, URL required non-empty', () => {
+    expect(
+      SourceProducerSchema.safeParse({ kind: 'stream', url: 'rtmp://cdn/live/x' }).success,
+    ).toBe(true);
+    expect(SourceProducerSchema.safeParse({ kind: 'stream', url: '' }).success).toBe(false);
+    expect(SourceProducerSchema.safeParse({ kind: 'stream' }).success).toBe(false);
+  });
+
+  it('the allowlist is EXACTLY the nine the client requires, and each is accepted', () => {
+    // The list is the client's requirement, not a claim about CasparCG/ffmpeg —
+    // its docstring says so, and this pins the set against silent widening.
+    expect([...STREAM_URL_SCHEMES]).toEqual([
+      'http',
+      'https',
+      'rtmp',
+      'rtmps',
+      'rtsp',
+      'srt',
+      'udp',
+      'rtp',
+      'mms',
+    ]);
+    for (const scheme of STREAM_URL_SCHEMES) {
+      expect(
+        checkSourceCatalog(
+          { sources: [streamSource(`${scheme}://10.0.0.20:9000/live`)] },
+          NO_LAYERS,
+        ),
+      ).toEqual({ ok: true });
+    }
+  });
+
+  it('scheme CASE is not a refusal — RTMP:// is rtmp:// (RFC 3986 §3.1)', () => {
+    expect(checkSourceCatalog({ sources: [streamSource('RTMP://cdn/live/x')] }, NO_LAYERS)).toEqual(
+      { ok: true },
+    );
+  });
+
+  it('refuses a scheme outside the nine, with the NAMED code — at the boundary, never at take', () => {
+    const verdict = checkSourceCatalog({ sources: [streamSource('ftp://server/x.ts')] }, NO_LAYERS);
+    expect(verdict).toMatchObject({ ok: false, reason: 'stream-scheme-not-allowed' });
+    // The message names the SPECIFICS — the source and the scheme — per house rule.
+    expect(verdict.ok ? '' : verdict.message).toContain('ftp');
+    expect(verdict.ok ? '' : verdict.message).toContain('Web feed');
+  });
+
+  it('refuses a URL with no scheme at all — malformed goes through the same door', () => {
+    for (const url of ['239.0.0.1:1234', 'server/live/stream', 'rtmp:cdn/live']) {
+      expect(checkSourceCatalog({ sources: [streamSource(url)] }, NO_LAYERS)).toMatchObject({
+        ok: false,
+        reason: 'stream-scheme-not-allowed',
+      });
+    }
+  });
+
+  it('the refusal is the SAME DOOR duplicate-name goes through — a coded SourceCatalogConfigError', () => {
+    // At LOAD the store catches this class and refuses the file with the code;
+    // at CHANGE the wire answers it as { ok: false, reason }. One spelling, in
+    // validateSourceCatalog — deliberately NOT a zod refine, so a hand-written
+    // config gets a NAMED refusal rather than an unusable-file boot error.
+    expect(() => validateSourceCatalog({ sources: [streamSource('ftp://x')] }, NO_LAYERS)).toThrow(
+      SourceCatalogConfigError,
+    );
+  });
+
+  it('C-025 §1.4 — a stream states NO aspect unless told: explicit aspect, else null (AUTO’s branch)', () => {
+    // Pinned so a later session does not "fix" this into a required field: a
+    // stream usually states no format, and that falls through sourceAspect to
+    // the explicit aspect and then to null — exactly where AUTO lands.
+    expect(sourceAspect({ ...streamSource('srt://10.0.0.20:9000'), aspect: 16 / 9 })).toBeCloseTo(
+      16 / 9,
+      10,
+    );
+    expect(sourceAspect(streamSource('srt://10.0.0.20:9000'))).toBeNull();
+  });
+
+  it('the MEDIA arm is NOT narrowed — a URL typed into it still parses and still passes', () => {
+    // The pre-C-025 workaround (a URL in "Media file") keeps working: the gap
+    // was expression, not capability, and closing it must not break the bridge
+    // configs that used the workaround.
+    expect(
+      checkSourceCatalog(
+        {
+          sources: [
+            {
+              id: 'src-m',
+              name: 'Old feed',
+              producer: { kind: 'media', file: 'https://example.com/live.m3u8' },
+            },
+          ],
+        },
+        NO_LAYERS,
+      ),
+    ).toEqual({ ok: true });
+  });
+});
+
 describe('the refusal codes are ONE definition', () => {
-  it('names the four the catalog can raise and the two the assignments can', () => {
+  it('names the six the catalog can raise and the three the assignments can', () => {
     // The stores DERIVE their error types from these arrays. A code added on one
     // side and not the other is exactly the drift the shared const prevents.
     expect([...SOURCES_SET_CONFIG_REASONS]).toEqual([
@@ -426,8 +569,17 @@ describe('the refusal codes are ONE definition', () => {
       'duplicate-name',
       'overlaps-fixed-bank',
       'overlaps-reserved',
+      'stream-scheme-not-allowed',
+      // `single-clock-look-switch` — the bed rows must lie BELOW the band. A separate code
+      // from `overlaps-fixed-bank` because the test is strictly-below rather than disjoint.
+      'low-bank-not-below-band',
     ]);
-    expect([...SOURCES_SET_ASSIGNMENTS_REASONS]).toEqual(['duplicate-plate', 'unknown-source']);
+    expect([...SOURCES_SET_ASSIGNMENTS_REASONS]).toEqual([
+      'duplicate-plate',
+      'unknown-source',
+      // `PLAYOUT-SOURCES-01` — a NEW binding to an entry that is unusable or no longer offered.
+      'source-unusable',
+    ]);
   });
 });
 

@@ -5,7 +5,8 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { OwnedOccupancyWarning, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { SAME_NUMBERS_ON_B } from './support/backup-map.js';
 
 /**
  * B-056 — the owned-slot occupancy warning. Mirror pair where the PRIMARY's
@@ -123,15 +124,20 @@ async function bootMirrorWithDeadPrimary(opts: { foreignOnPrimary: boolean }): P
     mockA = await createMock({ amcpPort: 0, oscPort: oscA, oscHost: '127.0.0.1', oscHz: 30 });
   }
   mockB = await createMock({ amcpPort: 0, oscPort: oscB, oscHost: '127.0.0.1', oscHz: 30 });
-  const r = new CasparRuntime({
-    servers: {
-      A: { host: '127.0.0.1', amcpPort: deadAmcpPort, oscPort: oscA },
-      B: { host: '127.0.0.1', amcpPort: mockB.amcpPort, oscPort: oscB },
+  const r = new CasparRuntime(
+    {
+      servers: {
+        A: { host: '127.0.0.1', amcpPort: deadAmcpPort, oscPort: oscA },
+        B: { host: '127.0.0.1', amcpPort: mockB.amcpPort, oscPort: oscB },
+      },
+      strategy: 'mirror-sync',
+      // The PRD scenario: no failover — the unreachable A STAYS primary.
+      autoFailoverEnabled: false,
     },
-    strategy: 'mirror-sync',
-    // The PRD scenario: no failover — the unreachable A STAYS primary.
-    autoFailoverEnabled: false,
-  });
+    {},
+    // `B-316` — the backup-only path needs B's channel; the mocks share numbers by construction.
+    { layerPolicy: TEST_LAYER_POLICY, backupChannels: SAME_NUMBERS_ON_B },
+  );
   runtime = r;
   const emissions: OwnedOccupancyWarning[][] = [];
   r.ownedOccupancyChanged.subscribe((w) => emissions.push(w));
@@ -181,7 +187,7 @@ it('B-056: a backup-only adopt over an observed foreign producer raises the owne
   expect(loaded.accepted).toBe(true);
   // R-030 — the served URL now carries the channel raster on every ADD.
   expect(mockB!.lastCgAdd(SLOT)?.template).toMatch(
-    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third\?cw=1920&ch=1080$/,
+    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third~[0-9a-f]{16}\?cw=1920&ch=1080$/,
   );
 
   // (a) The warning surfaces, naming the channel-layer AND the item.

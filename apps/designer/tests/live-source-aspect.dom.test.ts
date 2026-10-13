@@ -142,6 +142,71 @@ describe('D-147 — the picker shows the stored number as a NAMED preset', () =>
   });
 });
 
+/**
+ * ⭐ `C-028` — the FIT MODE control's WIRING.
+ *
+ * The fitted geometry itself is pinned across the package boundary in
+ * `packages/template-runtime/tests/live-fit-two-axis.test.ts`. What is only observable
+ * HERE is what the control does to the scene: that it writes the element (not local
+ * state), that it is one ordinary undoable edit, and that an absent value reads as
+ * `contain` without the schema being made to store it.
+ */
+describe('C-028 — the fit mode is written to the ELEMENT', () => {
+  const fitSelect = (c: HTMLElement): HTMLSelectElement =>
+    c.querySelector<HTMLSelectElement>('select[aria-label="fit"]') as HTMLSelectElement;
+
+  const pickFit = (c: HTMLElement, value: string): void => {
+    const select = fitSelect(c);
+    act(() => {
+      select.value = value;
+      select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+  };
+
+  it('a plate with NO stored mode reads `contain`, and stores nothing', () => {
+    const id = seedLiveSource();
+    const c = renderStyle(elementById(id));
+    expect(fitSelect(c).value).toBe('contain');
+    // 🔴 Reading the default must not WRITE it. A control that wrote `contain` on mount
+    // would put a value in every scene that opens, which is a diff on a file nobody
+    // edited — and would make "absent" unreachable for any plate ever opened.
+    expect(elementById(id).fitMode).toBeUndefined();
+  });
+
+  it('picking a mode writes THAT mode, and touches nothing else', () => {
+    const id = seedLiveSource();
+    const c = renderStyle(elementById(id));
+    pickFit(c, 'cover');
+    expect(elementById(id).fitMode).toBe('cover');
+    // The picker declares how the picture sits IN the box; it never moves the box.
+    expect(elementById(id).transform.size).toEqual({ w: 640, h: 360 });
+    expect(elementById(id).expectedAspect).toBeCloseTo(16 / 9, 6);
+  });
+
+  it('the stored mode reads back into the control', () => {
+    const id = seedLiveSource({ fitMode: 'cover' });
+    const c = renderStyle(elementById(id));
+    expect(fitSelect(c).value).toBe('cover');
+  });
+
+  it('🔴 it is ONE undoable element edit — not local component state', () => {
+    // The failure this catches is a control wired to `useState`: it reads correctly for
+    // as long as it stays mounted and silently loses the value the moment it does not.
+    // Driven here rather than in the E2E because the store coalesces writes within
+    // 300 ms into a single history entry, so an E2E undo assertion would be measuring
+    // Playwright's action latency against that window (the same reason D-147's fit
+    // undo assertion lives in this file).
+    const id = seedLiveSource();
+    const c = renderStyle(elementById(id));
+    designerStore.markHistoryBoundary();
+    pickFit(c, 'cover');
+    expect(elementById(id).fitMode).toBe('cover');
+
+    act(() => designerStore.undo());
+    expect(elementById(id).fitMode).toBeUndefined();
+  });
+});
+
 describe('D-147 — “not specified” writes the field ABSENT', () => {
   it('picking it removes the value, and it reloads as absent', () => {
     const id = seedLiveSource();

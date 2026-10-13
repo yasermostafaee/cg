@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react';
 import type { RecentProject, StarterEntry } from '@cg/shared-ipc';
-import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
+import {
+  designerStore,
+  hasUnsavedChanges,
+  shallowEqual,
+  useDesignerSelector,
+} from '../../state/store.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import { Tag } from '../../ui/Tag.js';
+import { APP_BUILD, APP_VERSION } from '../../appVersion.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
+import { playoutBadge } from './playout-badge.js';
 import * as s from './LandingView.css.js';
 
 /**
@@ -52,8 +60,9 @@ export function LandingView(): JSX.Element {
    * otherwise queues it behind the save-before-switch modal.
    */
   function guardedSwitch(label: string, action: () => Promise<void>): void {
-    // Only prompt to save when the project actually has unsaved changes.
-    if (scene === null || !designerStore.get().dirty) {
+    // Only prompt to save when the project actually has unsaved changes — `D-162`'s ONE
+    // predicate, the same the leave prompt and the window-close guard ask.
+    if (!hasUnsavedChanges(designerStore.get())) {
       void action();
       return;
     }
@@ -106,12 +115,22 @@ export function LandingView(): JSX.Element {
   return (
     <div className={s.page} aria-label="Designer landing">
       <div>
-        <div className={s.brand}>
-          <h1 className={s.brandTitle}>cg Designer</h1>
-        </div>
+        {/*
+          `FIELD-FIXES-01` G — NO IN-APP BRAND: the name appears once, in the window's title bar
+          (`APASAI CG DESIGNER`, with the Apasai logo), and the browser tab carries the title and
+          the favicon. The line below says what the page is for.
+        */}
         <p className={s.brandSub}>
           Broadcast template builder — pick a demo, open a recent project, or start fresh.
         </p>
+        {/*
+          `CLIENT-TEST-RELEASE-01` B1 — THE LINE THAT NAMES THIS RELEASE on the start screen, where the
+          Designer introduces itself and the first thing on screen at every launch (Help → About,
+          `D-161`, names it too, with the build). A fact, so a `Tag`, in the line above's own treatment.
+        */}
+        <Tag className={s.brandSub} title={APP_BUILD} data-testid="app-version">
+          Version {APP_VERSION}
+        </Tag>
       </div>
 
       <Button
@@ -145,6 +164,13 @@ export function LandingView(): JSX.Element {
               )}
               <span className={s.cardBody}>
                 <span className={s.cardLabel}>{st.label}</span>
+                {/* `DESIGNER-FIX-0905` — the DIFFERENTIATOR as a comparable badge, derived
+                    from the starter's scene, above one line of description. */}
+                {st.playout !== undefined && (
+                  <span className={s.cardBadge} data-testid="starter-playout">
+                    {playoutBadge(st.playout)}
+                  </span>
+                )}
                 <span className={s.cardDesc}>{st.description}</span>
               </span>
             </Button>

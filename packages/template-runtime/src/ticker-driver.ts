@@ -267,6 +267,11 @@ export class TickerDriver {
     this.cancelFrame();
   }
 
+  /** `B-217` — crawling right now (started, and not frozen). The look park asks before it pauses. */
+  isRunning(): boolean {
+    return this.running && !this.paused;
+  }
+
   /** Continue from exactly the frozen offset. */
   resume(): void {
     if (!this.running || !this.paused) return;

@@ -28,9 +28,30 @@ const MAX_ENTRIES = 2048;
  * tracker). It emits nothing, subscribes to nothing, and never feeds the
  * Reconciler; consumers (the bridge's periodic orphan sweep) sample it.
  *
- * Why OSC and not AMCP: verified by live capture on CasparCG 2.5.0
- * (`69e8ad5`) — `INFO <channel>` returns no per-layer data on the 2.3+
- * lineage; the per-layer producer signal exists only on OSC (ADR 0004).
+ * Why OSC and not AMCP: this tap is PASSIVE — it costs no commands, samples
+ * continuously and cannot starve the queue, which is what suits a periodic sweep.
+ *
+ * ⚠ **CORRECTED 2026-08-18 (B-145): the reason previously given here was WRONG on the
+ * production build.** It read _"`INFO <channel>` returns no per-layer data on the 2.3+
+ * lineage; the per-layer producer signal exists only on OSC"_. Re-measured on the plant at
+ * `2.5.0 69e8ad5` — the very build that claim cited — `INFO <channel>` DOES return a
+ * `<stage>` block naming every occupied layer, its producer kind and that producer's own
+ * parameters, and a layer DISAPPEARS from the reply as soon as it is cleared (controls run
+ * in both directions: empty channel → no `<stage>` at all; two producers seated → both
+ * listed; `CLEAR` one → it is gone).
+ *
+ * 🔴 **CORRECTED 2026-09-23 (`BRIDGE-TRUTH-01` §3): `INFO <ch>-<layer>` does NOT answer for one
+ * layer.** This paragraph used to end _"`INFO <ch>-<layer>` answers `201` for one layer"_. It
+ * answers `201` — for the whole CHANNEL: the layer argument is accepted and silently ignored
+ * (`info_channel_command` never reads it), measured by the Playout team as two byte-identical
+ * 1173-byte replies. Address `INFO` by channel only. And a reading built on `INFO` establishes
+ * that a layer has NO PRODUCER — never that it is clean: the mixer state a `CLEAR` leaves behind
+ * is not exported by `INFO` at any verbosity.
+ *
+ * The tap's own justification is unaffected — passive beats polling for a sweep that runs
+ * every few seconds — but the false half mattered: it says AMCP cannot answer a question
+ * AMCP answers, and the next person needing a definite one-shot occupancy reading (B-145's
+ * boot adoption is exactly that) would have believed it and gone without.
  *
  * Freshness matters: real CasparCG goes SILENT for a CLEARed layer (B-053
  * finding) rather than reporting `empty`, so consumers must treat entries
@@ -118,6 +139,16 @@ export class OscOccupancyTap {
       });
     }
     return out;
+  }
+
+  /**
+   * `RELEASE-091-01` (DELTA B, B1) — when this layer last reported a producer (any but `empty`), or
+   * `null` when it never did or last reported `empty`. The bridge asks it of the layers it holds on
+   * air: a layer that stopped reporting while its channel still ticks may have been cleared.
+   */
+  lastProducerAt(channel: number, layer: number): number | null {
+    const entry = this.entries.get(`${String(channel)}:${String(layer)}`);
+    return entry === undefined || entry.producer === 'empty' ? null : entry.at;
   }
 
   /**

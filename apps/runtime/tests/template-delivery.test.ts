@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { pack, sha256Hex } from '@cg/vcg-format';
+import { CG_RUNTIME_VERSION } from '@cg/shared-schema';
 import type { AssetEntry, FontReference, Manifest, Scene } from '@cg/shared-schema';
 import {
   importTemplateFromBytes,
@@ -51,7 +52,7 @@ function fixtureScene(): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'layer-1',
@@ -138,6 +139,7 @@ function fixtureScene(): Scene {
 async function buildVcgWithImage(
   templateId = 'tpl-delivery-1',
   manifestName = 'delivery-lower-third',
+  minRuntimeVersion = '0.0.0',
 ): Promise<Uint8Array> {
   const scene = fixtureScene();
   const assetPath = `assets/image/${sha256Hex(PNG_1X1)}.png`;
@@ -160,7 +162,7 @@ async function buildVcgWithImage(
       createdAt: '2026-06-30T00:00:00.000Z',
       exportedAt: '2026-06-30T00:01:00.000Z',
     },
-    compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+    compatibility: { minRuntimeVersion, minCasparCGVersion: '2.3.0' },
     fontDeps,
     assetIndex,
   } satisfies Pick<Manifest, 'id' | 'name' | 'authoring' | 'compatibility'> & {
@@ -248,6 +250,47 @@ describe('produceTemplateDelivery', () => {
   });
 });
 
+describe('produceTemplateDelivery — B-196 the runtime-contract guard', () => {
+  it('🔴 REFUSES a package from a newer build, and the message names both versions', async () => {
+    /*
+      The direction that needs a guard: a package declaring a rendering contract this build does
+      not implement. Something already refuses it — `schemaVersion` is a literal and
+      `ElementSchema` is a union — but what an operator gets from those is a zod path into an
+      element array. This is the sentence.
+    */
+    const bytes = await buildVcgWithImage('tpl-future', 'future lower third', '99.0.0');
+    await expect(produceTemplateDelivery(bytes)).rejects.toThrow(/future lower third/);
+    await expect(produceTemplateDelivery(bytes)).rejects.toThrow(/99\.0\.0/);
+    // The build's own version, matched literally — escaping the dots by hand here would be a
+    // second spelling of the constant, and the point is that the message quotes it verbatim.
+    await expect(produceTemplateDelivery(bytes)).rejects.toThrow(CG_RUNTIME_VERSION);
+    await expect(produceTemplateDelivery(bytes)).rejects.toThrow(/Update this station/);
+  });
+
+  it('🔴 the guard runs BEFORE the render — a refused package is never built', async () => {
+    // Rendering a package that must be refused wastes the work and, worse, would let a render
+    // failure mask the real reason with `could not be rendered`.
+    const bytes = await buildVcgWithImage('tpl-future-2', 'future two', '99.0.0');
+    await expect(produceTemplateDelivery(bytes)).rejects.not.toThrow(/could not be rendered/);
+  });
+
+  it('every package written before the field meant anything still imports', async () => {
+    // The literal `'0.0.0'` the exporter wrote for the whole life of the format. A guard that
+    // refused these would be worse than the gap it closes.
+    const { template } = await produceTemplateDelivery(
+      await buildVcgWithImage('tpl-legacy', 'legacy', '0.0.0'),
+    );
+    expect(template.templateId).toBe('tpl-legacy');
+  });
+
+  it('a package from THIS build imports', async () => {
+    const { template } = await produceTemplateDelivery(
+      await buildVcgWithImage('tpl-current', 'current', CG_RUNTIME_VERSION),
+    );
+    expect(template.templateId).toBe('tpl-current');
+  });
+});
+
 describe('produceTemplateDelivery — B-066 Persian UTF-8 integrity (upstream hops)', () => {
   it('a packed .vcg with Persian field defaults keeps the exact codepoints through unpack + delivery', async () => {
     // The upstream half of the "????" trace: .vcg pack → verify/unpack →
@@ -332,7 +375,7 @@ async function buildVcgWithFont(templateId = 'tpl-font-1'): Promise<Uint8Array> 
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 100 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'layer-1',
@@ -454,9 +497,8 @@ async function buildVcgWithLiveSource(
         id: 'comp-box',
         name: 'box',
         resolution: { width: 960, height: 540 },
-        frameRate: 50,
         frameRange: { in: 0, out: 50 },
-        background: 'transparent',
+        editorBackdrop: 'transparent',
         layers: [
           {
             id: 'comp-layer',
@@ -567,6 +609,18 @@ describe('produceTemplateDelivery — D-137 the Live Source carrier', () => {
         rect: { x: 1100, y: 650, width: 200, height: 100 },
         expectedAspect: 16 / 9,
         dynamic: false,
+        // `multibox-layout-switch` 5.2 — this plate sits inside a ROOT-LEVEL composition
+        // instance, which is exactly what a BOX is under A′, so its position WITHIN that box
+        // is carried as fractions. Composed with an arrangement's cell rect it gives the
+        // plate's hole in that arrangement — the pair that replaces a per-plate rect the
+        // import cannot derive (which plate lands in which cell is the operator's toggles).
+        // The instance is 480×270 at (1000,600); the plate is 200×100 at (1100,650).
+        boxRelativeRect: {
+          x: 100 / 480,
+          y: 50 / 270,
+          width: 200 / 480,
+          height: 100 / 270,
+        },
       },
     ]);
   });

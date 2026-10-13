@@ -55,6 +55,26 @@ The Issues panel (bottom, alongside the timeline) runs `export.preflight` on eve
 
 The StatusBar's EXPORT button disables itself while any error-severity issue is present.
 
+## Live boxes, and artwork that must appear over the picture
+
+A **Live Source** plate is a box the Runtime fills with a live picture. On air the page that
+carries the plates is composited **below** them: everything you draw in that template — the
+background, a neon frame, a `LIVE STREAM` title bar — sits **behind** the live pictures, whatever
+its layer order inside the template. There is no per-element "draws over the picture" setting,
+and none is planned.
+
+**Artwork that has to appear ON TOP of a live box is authored as its own template**, loaded on
+its own bank row above the live band. A logo bug, a lower-third name super, a news bar, a title
+bar or the corners of a frame that must overlap the picture are each a separate `.vcg` — the
+operator takes them on a row of their own, and they draw over every plate-bearing template
+beneath. This is how the client's own set is already built: one package carries the plates, and
+the logo, lower third, news bar, news sequence and interstitial are separate templates.
+
+One shape is deliberately not covered yet: a super positioned **under a particular guest box**,
+whose geometry must follow that box when the layout switches. On its own row such a graphic can
+arrive a frame late on a switch; it never opens a hole. If you need one, ask for it as a feature —
+do not try to build it inside the plate-bearing template.
+
 ## Export
 
 `EXPORT` from the StatusBar produces a `.vcg` at the path you pick. The file is:

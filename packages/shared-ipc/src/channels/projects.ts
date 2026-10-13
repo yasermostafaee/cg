@@ -98,6 +98,31 @@ export const ProjectsActiveChangedChannel = definePublishChannel(
  * `projects.starter` which returns a *clone* of the starter's Scene to
  * become the new active project.
  */
+/**
+ * `DESIGNER-FIX-0905` — a starter's PLAYOUT BEHAVIOUR, derived from its entry composition
+ * (`@cg/starter-templates` `describePlayout`), so the landing card can show a comparable
+ * badge — "auto-out after 6 s", "content-driven hold", "loops every ~10 s" — instead of
+ * burying the one thing the five starters differ in inside a paragraph. Derived rather than
+ * authored: a hand-written badge is one more string that can drift from the scene.
+ */
+const StarterPlayoutSchema = z.object({
+  /** The entry composition's EFFECTIVE mode (`playoutOf`, so a no-out-point default reads `static`). */
+  mode: z.enum(['static', 'manual', 'auto-out', 'loop-cycle']),
+  /** `operator` for manual / static (the hold source is ignored); else the hold source. */
+  hold: z.enum(['operator', 'timed', 'content-driven']),
+  /** The timed hold, in seconds, when the hold is timed. */
+  holdSeconds: z.number().nonnegative().optional(),
+  hasOutPoint: z.boolean(),
+  /**
+   * The cycle length of a loop-cycle composition the entry DIRECTLY instances (the on-air
+   * footprint comp of the two-comp structure) — the logo sting's ~10 s loop lives there while
+   * its entry is `manual`. Direct children only: a blink deeper down is not the template's
+   * playout behaviour.
+   */
+  nestedCycleSeconds: z.number().positive().optional(),
+});
+export type StarterPlayout = z.infer<typeof StarterPlayoutSchema>;
+
 const StarterEntrySchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -107,6 +132,8 @@ const StarterEntrySchema = z.object({
   previewUrl: z.string().optional(),
   /** When true, the landing card shows a "New" badge. */
   isNew: z.boolean().optional(),
+  /** `DESIGNER-FIX-0905` — the derived playout badge (optional so an old catalog still parses). */
+  playout: StarterPlayoutSchema.optional(),
 });
 export type StarterEntry = z.infer<typeof StarterEntrySchema>;
 

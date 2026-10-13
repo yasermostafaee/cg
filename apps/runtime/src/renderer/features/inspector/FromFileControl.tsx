@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -11,10 +11,12 @@ import {
   listDelimiters,
   subscribeDelimiters,
 } from './delimiterStore.js';
-import { DelimitersModal, ManageDelimitersButton } from './DelimitersModal.js';
+import { ManageDelimitersButton } from './DelimitersSection.js';
+import { openStationSetup } from '../stationSetup/stationSetupStore.js';
 import { splitDefaultFor } from './fieldTargetStore.js';
 import { type FromFileFieldKind } from './fromFileContent.js';
 import { reloadFromFile, stageFromFile } from './fromFileOps.js';
+import { Tag } from '../../ui/Tag.js';
 import {
   attachFileSource,
   detachFileSource,
@@ -52,7 +54,7 @@ const styles = {
   // its detach control. It was a bare muted span that wrapped and pushed the
   // buttons around as the path grew.
   hint: { fontSize: '0.72rem', color: colors.textMuted, margin: 0 },
-  error: { fontSize: '0.75rem', color: colors.error, margin: 0 },
+  error: { fontSize: '0.75rem', color: colors.errorText, margin: 0 },
   splitLabel: {
     display: 'flex',
     gap: '0.3rem',
@@ -77,6 +79,12 @@ const styles = {
  * the EXISTING field-update path (stage → `stack.update`) — the file is just
  * an input method, never a second content pipeline.
  *
+ * TEXT-FILE-OPT-01 — it renders only on a field whose AUTHOR GRANTED it a file
+ * source (`allowFileSource`). The kind is still the outer condition but no longer
+ * the whole one: the gate lives in `Inspector.tsx`'s `fromFileKind`, and this
+ * component is mounted only for a field that passed it. Nothing here re-checks the
+ * grant — a second copy of that rule is how the two would come to disagree.
+ *
  * Chromium-only by nature (File System Access API): elsewhere the button
  * renders disabled with the reason — a legible degrade, never a broken control.
  */
@@ -95,7 +103,6 @@ export function FromFileControl({
   useSyncExternalStore(subscribeDelimiters, delimitersVersion);
   const state = fromFileState(item.itemId, path);
   const supported = fileSourceSupported();
-  const [managing, setManaging] = useState(false);
   const delimiters = listDelimiters();
 
   const choose = async (): Promise<void> => {
@@ -123,11 +130,13 @@ export function FromFileControl({
       <div className="cg-from-file" style={styles.wrap}>
         <div style={styles.row}>
           {/* NEUTRAL IS NOT INVISIBLE. This was a `ghost` (no fill, no border, muted
-              text) and read as static text under every text-carrying field — the most
-              PROPAGATED instance of that mistake in the app, since it renders once per
-              text / multiline / list field. `neutral` keeps it colourless while giving
-              it the boundary, hover and focus ring a control owes. See the `--ghost`
-              warning in `controls.css`. */}
+              text) and read as static text under every text-carrying field — at the
+              time, the most PROPAGATED instance of that mistake in the app, since it
+              rendered once per text / multiline / list field. TEXT-FILE-OPT-01 cut the
+              propagation (it now renders only where the author granted a file source),
+              but the styling verdict stands on its own and must not be walked back:
+              `neutral` keeps it colourless while giving it the boundary, hover and
+              focus ring a control owes. See the `--ghost` warning in `controls.css`. */}
           <Button
             variant="neutral"
             aria-label={`Load ${fieldId} from file`}
@@ -168,7 +177,7 @@ export function FromFileControl({
             here is the same glyph as the item-delete buttons one row up, doing
             something else, and attaching it to the name is what stops the two
             being confusable. */}
-        <span className="cg-file-chip">
+        <Tag className="cg-file-chip">
           <span className="cg-file-chip__name" title={state.source.name}>
             {state.source.name}
           </span>
@@ -181,7 +190,7 @@ export function FromFileControl({
           >
             ×
           </button>
-        </span>
+        </Tag>
         {needsGrant ? (
           <AsyncButton
             variant="secondary"
@@ -258,7 +267,9 @@ export function FromFileControl({
                   </option>
                 ))}
               </select>
-              <ManageDelimitersButton onOpen={() => setManaging(true)} />
+              {/* `STATION-SETUP-02` — a deep link into Station setup's Delimiters section,
+                  kept beside the picker because this is where the need is discovered. */}
+              <ManageDelimitersButton onOpen={() => openStationSetup('delimiters')} />
             </>
           )}
         </div>
@@ -272,7 +283,6 @@ export function FromFileControl({
           {state.error}
         </p>
       )}
-      {managing && <DelimitersModal onClose={() => setManaging(false)} />}
     </div>
   );
 }

@@ -262,6 +262,12 @@ export class Preview {
         // operator can edit. createRuntime always sets cg-pending; this only
         // decides whether applyScene clears it on load.
         const REVEAL_ON_LOAD = ${String(revealOnLoad)};
+        // B-134 — the EDITOR BACKDROP paints on the editing canvas ONLY. The Preview
+        // modal is a preview of AIR, and the backdrop never reaches air (B-129), so it
+        // must show what air shows. A SEPARATE axis from the render mode, which stays
+        // 'author' on both surfaces because neither can show real live video.
+        // (No backticks in this block: it lives inside a template literal.)
+        const PAINT_EDITOR_BACKDROP = ${String(authoring)};
         // Mutable bookkeeping — the iframe document stays alive across
         // edits; only the runtime (its DOM tree) is rebuilt by
         // applyScene(). This avoids reloading the whole HTML on every
@@ -309,6 +315,13 @@ export class Preview {
         // D-026 — PER-SCOPE overrides keyed by instance-name path ('' = root). Lets
         // the preview time each nested child independently (session-only).
         let scopeOverrides = undefined;
+        // multibox-layout-switch C2 — the ACTIVE ARRANGEMENT's view, retained across
+        // rebuilds so a fresh runtime is re-told which arrangement the author is on.
+        let arrangementView = undefined;
+        // LOOKS phase 1D (design.md section 14) — the ACTIVE LOOK's id, retained across
+        // rebuilds for the same reason. Phase 2's Designer UI is this seam's first caller;
+        // in phase 1 nothing posts 'look' yet (said so the seam is not taken for dead).
+        let activeLookId = undefined;
         // Families we've already loaded into this iframe's
         // document.fonts. Keyed by family name; the value is the
         // assetUrl we loaded from, so we can re-fetch when a font
@@ -357,6 +370,15 @@ export class Preview {
                   url,
                 );
               }
+              // D-135 §5 — the poster is SUBORDINATE to the tick: it stays as the
+              // load path + the sequential-decode recovery for seek-fragile assets
+              // (and paints only as a PRE-TICK transient), but the playhead owns the
+              // at-rest frame. The routine settles ASYNC — after applyScene's own
+              // tick — so without this chained re-tick the poster's seek would land
+              // LAST and the canvas would rest on a mid-clip poster, disagreeing
+              // with the Lottie beside it (the §9.5 consistency debt). Never while
+              // playing: the controller owns the frame then (B-029's rule).
+              if (runtime && !playing) runtime.tick(currentFrame);
             },
           );
         }
@@ -368,7 +390,17 @@ export class Preview {
           const nodes = document.querySelectorAll('video[data-cg-element-id]');
           for (let i = 0; i < nodes.length; i++) {
             const id = nodes[i].dataset && nodes[i].dataset.cgElementId;
-            if (id) videoPool[id] = nodes[i];
+            if (!id) continue;
+            // B-217 — a node with a TERMINAL media error is a corpse, not a warm cache. Pooling
+            // it would put it back on screen after every rebuild, and nothing in the static
+            // canvas ever rebuilds a dead node: the driver's recover() runs only while a
+            // driver is running, which the canvas never is. Drop it so the fresh node takes
+            // over and gets a normal src + poster from applyAssetUrls.
+            if (nodes[i].error) {
+              delete videoPool[id];
+              continue;
+            }
+            videoPool[id] = nodes[i];
           }
         }
 
@@ -388,7 +420,8 @@ export class Preview {
             if (!id) continue;
             seen[id] = true;
             const pooled = videoPool[id];
-            if (pooled && pooled !== fresh && pooled.dataset.cgAssetId === assetId) {
+            // B-217 — never transplant a dead node (see harvestVideos); the fresh one wins.
+            if (pooled && pooled !== fresh && !pooled.error && pooled.dataset.cgAssetId === assetId) {
               pooled.style.cssText = fresh.style.cssText; // the new transform/geometry
               pooled.className = fresh.className;
               pooled.dataset.cgPosterMs = fresh.dataset.cgPosterMs || '';
@@ -487,16 +520,10 @@ export class Preview {
               document.fonts.add(face);
               loadedFonts.set(font.family, url);
             } catch (err) {
-              if (window.parent && window.parent !== window) {
-                window.parent.postMessage(
-                  {
-                    kind: 'cg-preview-error',
-                    label: 'font.load',
-                    payload: font.family + ': ' + (err && err.message ? err.message : String(err)),
-                  },
-                  '*',
-                );
-              }
+              postPreviewError(
+                'font.load',
+                font.family + ': ' + (err && err.message ? err.message : String(err)),
+              );
             }
           }
         }
@@ -520,6 +547,46 @@ export class Preview {
         function cssEscape(s) {
           if (window.CSS && CSS.escape) return CSS.escape(s);
           return String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => '\\\\' + c);
+        }
+
+        // ── Session Z — AN INERT CONTROL MUST EXPLAIN ITSELF ──────────────────────
+        // Every diagnostic this document produces travels ONE channel: a
+        // 'cg-preview-error' postMessage the host logs as console.error('[cg-preview]',…).
+        // (No backticks in this block: it lives inside a template literal.)
+        function postPreviewError(label, payload) {
+          try {
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage(
+                { kind: 'cg-preview-error', label: label, payload: String(payload) },
+                '*',
+              );
+            }
+          } catch (e) {
+            /* a diagnostic must never throw over the thing it is reporting */
+          }
+        }
+        // play / update / stop / out / next are delivered through the CasparCG globals
+        // installCasparGlobals(runtime) installs at the end of every applyScene. Those
+        // branches used to be GATED on 'typeof window.<name> === "function"', a guard that
+        // fails silently in both directions: a missing global dropped the command with no
+        // diagnostic anywhere, and window.stop is worse still — lib.dom ALWAYS defines it
+        // (the page-load canceller), so the guard reads "installed" and the click cancels
+        // nothing at all. The truthful test is whether window.cg is the runtime THIS
+        // document currently has; anything else is a stale or absent install.
+        function controlFn(name) {
+          if (runtime === null) return null;
+          if (window.cg !== runtime) return null;
+          if (typeof window[name] !== 'function') return null;
+          return window[name];
+        }
+        function reportDroppedControl(name) {
+          var why =
+            runtime === null
+              ? 'no runtime — the last scene build failed'
+              : window.cg !== runtime
+                ? 'the CasparCG globals point at a stale runtime'
+                : 'window.' + name + ' is not installed';
+          postPreviewError('control.dropped', name + ' — ' + why);
         }
 
         async function applyScene(scene) {
@@ -556,7 +623,13 @@ export class Preview {
               // AUTHOR is building, not what the exporter will emit, so a Live
               // Source shows its bars in both and an invisible box in neither.
               // The exports name 'output' at their own boot sites.
+              //
+              // B-134 — the two surfaces do NOT agree about the editor backdrop, which
+              // is why that is its own option below rather than another render-mode
+              // value: the modal needs 'author' (bars) and no backdrop at once.
               mode: 'author',
+              // B-134 — canvas paints the editor backdrop; the Preview modal does not.
+              paintEditorBackdrop: PAINT_EDITOR_BACKDROP,
               playoutOverride: playoutOverride,
               scopeOverrides: scopeOverrides,
               // D-039ext — give the runtime the current asset URLs so the ticker driver can
@@ -568,13 +641,41 @@ export class Preview {
               lottieAssets: lottieAssets,
             });
             installCasparGlobals(runtime);
+            // Session Z — the runtime's OWN diagnostics reach the parent console on the
+            // same channel. An invariant break such as 'lifecycle.play-not-on-air' is the
+            // whole difference between "the buttons are dead" and a named cause.
+            if (typeof runtime.on === 'function') {
+              runtime.on('error', (e) => {
+                postPreviewError(
+                  'runtime.error',
+                  (e && e.code ? e.code : '?') + ': ' + (e && e.message ? e.message : ''),
+                );
+              });
+            }
             await runtime.ready;
+            // ⭐ multibox-layout-switch C2 — RE-ASSERT the active arrangement onto the
+            // fresh runtime. Every scene edit rebuilds (createRuntime above), and a new
+            // runtime knows nothing about which arrangement the author is looking at — so
+            // without this line the canvas would snap back to the authored geometry on the
+            // next keystroke, and the selector would look intermittently broken rather
+            // than unwired.
+            if (arrangementView) runtime.setArrangementView(arrangementView);
+            // LOOKS phase 1D — re-assert the active look onto the fresh runtime, for the
+            // same reason as the arrangement line above (a rebuild forgets it).
+            if (activeLookId) runtime.setActiveLook(activeLookId);
             // D-087 — a broadcast preview leaves cg-pending in place so the
             // stage stays blank until play(); the canvas reveals frame 0 now.
             if (REVEAL_ON_LOAD) document.body.classList.remove('cg-pending');
             await runtime.update(currentFields);
             runtime.tick(currentFrame);
             applyAssetUrls();
+            // D-135 §5 — tick AGAIN after the asset walk: reconcileVideos (inside
+            // applyAssetUrls) may have TRANSPLANTED a pooled <video> over the node the
+            // tick above just positioned, and the pooled node's currentTime predates
+            // the rebuild. The re-tick resolves it through the driver's live() and
+            // re-positions — so a phases edit shows its NEW mapping at the same
+            // playhead, not the pooled node's stale frame.
+            runtime.tick(currentFrame);
             applyEditingHide();
           } finally {
             busy = false;
@@ -793,7 +894,17 @@ export class Preview {
           }
         }
 
-        await applyScene(${sceneJson});
+        // Session Z — the BOOT build must not take the message listener down with it.
+        // This await sits ABOVE the addEventListener further down, so a throw here (an
+        // element the builder rejects, a Lottie that fails to mount) used to abort the
+        // whole module: the document then received NOTHING, ever again, with no
+        // diagnostic — a live-looking preview whose every button is inert. Report it and
+        // carry on to the listener, so the next scene-replace can repair the document.
+        try {
+          await applyScene(${sceneJson});
+        } catch (e) {
+          postPreviewError('boot.applyScene', e && e.message ? e.message : String(e));
+        }
 
         // D-071 — the content-grown frame inset is a CSS variable on :root (which
         // createRuntime never recreates), so a moving offset re-insets .cg-stage live.
@@ -873,12 +984,39 @@ export class Preview {
                   if (playing) pendingLottieRebuild = true;
                   else await applyScene(currentScene);
                 }
+              } else if (msg.action === 'arrangement') {
+                // ⭐ multibox-layout-switch C2 — THE ACTIVE ARRANGEMENT, straight into the
+                // entry point C1 built. This is what makes the toolbar selector visibly
+                // change the canvas rather than only changing the authored state.
+                //
+                // 🔴 It is deliberately NOT a scene-replace. setArrangementView() re-punches
+                // the masks on the LIVE nodes, so switching arrangements costs the page
+                // nothing it is holding — a playing animation, a <video>'s decode position,
+                // a sequence's dwell all survive. Rebuilding would blank and restart the
+                // graphic on every switch, which is the manoeuvre being previewed.
+                //
+                // arrangementView is retained so the next applyScene() can re-assert it:
+                // a rebuild creates a fresh runtime, which knows nothing about it.
+                // (No backticks in this block: it lives inside a template literal.)
+                arrangementView = msg.view ?? undefined;
+                if (runtime) runtime.setArrangementView(arrangementView);
+              } else if (msg.action === 'look') {
+                // LOOKS phase 1D — the ACTIVE LOOK, straight into setActiveLook. Same
+                // shape as 'arrangement' above and deliberately NOT a scene-replace: a
+                // look switch is a visibility flip + re-punch on the live nodes, which is
+                // the cut being previewed. An absent lookId only clears the retention —
+                // there is no lookless state to enter; a rebuilt runtime falls back to the
+                // group's default look on its own.
+                activeLookId = typeof msg.lookId === 'string' ? msg.lookId : undefined;
+                if (runtime && activeLookId !== undefined) runtime.setActiveLook(activeLookId);
               } else if (msg.action === 'editing-text') {
                 editingTextId = typeof msg.elementId === 'string' ? msg.elementId : null;
                 applyEditingHide();
-              } else if (msg.action === 'update' && typeof window.update === 'function') {
+              } else if (msg.action === 'update') {
                 currentFields = msg.fields ?? {};
-                window.update(JSON.stringify(currentFields));
+                const updateFn = controlFn('update');
+                if (updateFn === null) reportDroppedControl('update');
+                else updateFn(JSON.stringify(currentFields));
                 // D-106 — apply IN PLACE: update() swaps the bound values on the LIVE
                 // graphic; re-tick only when NOT playing (the canvas / static scrub), so a
                 // held graphic keeps its background + animation untouched (the CG UPDATE
@@ -890,7 +1028,7 @@ export class Preview {
                 applyFrameOffset(msg.frameOffset);
                 currentFrame = msg.frame;
                 if (runtime) runtime.tick(currentFrame);
-              } else if (msg.action === 'play' && typeof window.play === 'function') {
+              } else if (msg.action === 'play') {
                 currentFields = msg.fields ?? {};
                 // B-091 — mount any Lottie map deferred during the LAST run before this one
                 // starts (rebuilds while nothing is on air; no-op when nothing is pending).
@@ -899,22 +1037,37 @@ export class Preview {
                 // await them so the first pass a user ever sees measures with
                 // final glyphs (no-op when already loaded).
                 await applyFontFaces().catch(() => {});
-                playing = true;
-                window.play(JSON.stringify(currentFields));
+                // Resolved AFTER the flush: that rebuild reinstalls the globals.
+                const playFn = controlFn('play');
+                if (playFn === null) reportDroppedControl('play');
+                else {
+                  playing = true;
+                  playFn(JSON.stringify(currentFields));
+                }
                 // B-029 — do NOT re-tick currentFrame here. During playback the
                 // controller owns the frame (its per-frame applyFrame now drives the
                 // lifespan gate too); a static re-tick at the scrubbed frame could
                 // re-hide a start-trimmed (lifespan.in > 0) element at frame 0 just
                 // before play restores it. The prior scrub already painted currentFrame.
-              } else if (msg.action === 'stop' && typeof window.stop === 'function') {
-                playing = false;
-                window.stop();
-              } else if (msg.action === 'out' && typeof window.out === 'function') {
+              } else if (msg.action === 'stop') {
+                const stopFn = controlFn('stop');
+                if (stopFn === null) reportDroppedControl('stop');
+                else {
+                  playing = false;
+                  stopFn();
+                }
+              } else if (msg.action === 'out') {
                 // D-105 — the coordinated animated exit (content first, background last).
-                playing = false;
-                window.out();
-              } else if (msg.action === 'next' && typeof window.next === 'function') {
-                window.next();
+                const outFn = controlFn('out');
+                if (outFn === null) reportDroppedControl('out');
+                else {
+                  playing = false;
+                  outFn();
+                }
+              } else if (msg.action === 'next') {
+                const nextFn = controlFn('next');
+                if (nextFn === null) reportDroppedControl('next');
+                else nextFn();
               } else if (msg.action === 'pause') {
                 // D-020 — freeze the lifecycle (intro / hold countdown / outro).
                 if (runtime && typeof runtime.pause === 'function') runtime.pause();
@@ -930,7 +1083,15 @@ export class Preview {
                 }
               }
             } catch (e) {
-              /* swallow preview-side errors */
+              // Session Z — never swallow. A throw in here (a scene rebuild that failed,
+              // a runtime that errored under a control) is indistinguishable, from the
+              // operator's chair, from a button that simply does nothing.
+              postPreviewError(
+                'message.handler',
+                (msg && msg.action ? msg.action : '?') +
+                  ': ' +
+                  (e && e.message ? e.message : String(e)),
+              );
             }
           })();
         });

@@ -1,0 +1,77 @@
+# Tasks — `multi-channel` (`MULTI-CHANNEL-01`)
+
+Every `e2e` URL below is a PR-workflow run whose `E2E (Playwright)` JOB was read back from the API
+as `completed/success` — it RAN, it was not skipped. A commit pushed together with a later one is
+discharged by the later one's run, which carries it.
+
+## 1. Establish before changing (§1)
+
+- [x] 1.1 Every producer and consumer of `FixedLayerBankSchema`, with plural-readiness — `design.md` §1
+- [x] 1.2 The five `z.void()` verbs and `channelIndependence.dom.test.ts` §3 — `design.md` §1.5
+- [x] 1.3 `MockRuntime.load()` writes `item.slot`, keyed by channel and layer — `b7317f8b`; e2e https://github.com/yasermostafaee/cg/actions/runs/36022562387
+- [x] 1.4 The persisted file's shape measured (all v1) and the decision made — `design.md` §1.6, §2
+
+## 2. The change (§2)
+
+- [x] 2.1 A — one bank per declared channel: schema, the three channels, the store, the file, every consumer, the mock — `9759511e`, `aabaff19`; e2e https://github.com/yasermostafaee/cg/actions/runs/36026001236
+- [x] 2.2 J — `cg-admin-ch2`, the demo station's own station-admin — `b11f546a`; e2e https://github.com/yasermostafaee/cg/actions/runs/36028052893
+- [x] 2.3 B — the four housekeeping verbs take an optional channel — `f061c1dc`; e2e https://github.com/yasermostafaee/cg/actions/runs/36028052893
+- [x] 2.4 C (bridge) — `stack.silence-channel-live-plates` — `50a6ca95`; e2e https://github.com/yasermostafaee/cg/actions/runs/36029483900
+- [x] 2.5 D — switching: every per-channel surface follows the channel on screen — `6a8dc8ca`; e2e https://github.com/yasermostafaee/cg/actions/runs/36033228077
+- [x] 2.6 C (console) — PANIC on a channel's view, and the every-channel control beside the strip; the A16 test moved with the label — `f7961e3d`; e2e https://github.com/yasermostafaee/cg/actions/runs/36035770252
+- [x] 2.7 F — a lock-covered channel's view presents as locked, its verbs absent — `9dd2b887`; e2e https://github.com/yasermostafaee/cg/actions/runs/36037329126
+- [x] 2.8 E, M — first-run picks one or more channels; Change channel… edits the set; the Channel pane's legend — `e78d1181` (its own run went red on the Runtime suite's time budget, no assertion failed — see 3.1); e2e https://github.com/yasermostafaee/cg/actions/runs/36041982962
+- [x] 2.9 I — every Station setup pane shows values below `station-admin` — `3fd68521`; e2e https://github.com/yasermostafaee/cg/actions/runs/36041982962
+- [x] 2.10 G — the playout tab split by channel; H — the subtitle names the channel — `1186f49a`, `f783d1c3`; e2e https://github.com/yasermostafaee/cg/actions/runs/36044276589
+- [x] 2.11 L — a channel's messages stay in its view; strip marks — `08deea2a`; e2e https://github.com/yasermostafaee/cg/actions/runs/36046302656
+- [x] 2.12 K — `B-263`: Persian chrome in Vazirmatn, measured with CDP — `4858c84b`; e2e https://github.com/yasermostafaee/cg/actions/runs/36048029090
+
+## 3. Shared config
+
+- [x] 3.1 CI: the `e2e` job cap 20 → 24 min, the Runtime suite budget 8 → 10 min (`design.md` §14) — `5831d6c1`; e2e https://github.com/yasermostafaee/cg/actions/runs/36043143440
+
+## 4. Tests (§4)
+
+- [x] 4.1 Channel independence at the wire, two declared channels — a take, a clear, each bulk verb with a channel, the per-channel PANIC; controls: the target channel reached, the every-channel silence reaches both, a bare call unchanged (`multi-channel-banks`, `channel-independence`)
+- [x] 4.2 `channelIndependence.dom.test.ts` §3 updated: four verbs take an optional channel; `silenceAllLivePlates` still rejects `{ channel }`, positive control intact; the new verb requires a channel
+- [x] 4.3 The lock with partial overlap — the console (`channelSwitch.dom.test.ts` F) and the bridge with two declared channels (`lock-scope.integration.test.ts`, `3ad63a24`)
+- [x] 4.4 First-run with two channels, the console (`firstRunChannelStep`, `firstRunStation`) and the permitted-channel push (`authz-strip-freshness`, `de4f12db`); switching; a reload reopens on the lowest declared channel
+- [x] 4.5 A load that names no channel is refused on a two-channel station, with its one-channel control (`multi-channel-banks`, `7cca994a`)
+- [x] 4.6 Auth OFF with one declared channel: the existing suites green and unchanged apart from the forcing functions of §1.5; the one-channel controls in `channelSwitch.dom.test.ts`
+- [x] 4.7 Every absence assertion names its positive control; each new behaviour red under a planted defect first
+- [x] 4.8 The e2e spec `multi-channel.spec.ts` — `e7740f76`; e2e https://github.com/yasermostafaee/cg/actions/runs/36049446822 (job log: its three tests ✓ on Linux; Runtime 261 passed in 7.7 min, Designer 282 in 6.5 min)
+- [x] 4.9 The final head `230dd27f`, carrying every commit above — e2e https://github.com/yasermostafaee/cg/actions/runs/36054476711
+
+## 5. Records (§5)
+
+- [x] 5.1 This OpenSpec change; `openspec validate --all --strict`
+- [x] 5.2 The owner's A16 follow-up, 2026-09-23, beside A16 in `docs/prd/runtime.md`
+- [x] 5.3 `R-062` gaps 1 and 3 → done; `B-263` closed
+- [x] 5.4 The bank schema change and its producer/consumer list — `design.md` §1–§2
+- [x] 5.5 `docs/operator-guide/README.md`: switching channels, and which PANIC does what
+- [x] 5.6 The superseded pending claims rewritten in place (`runtime-redesign-programme`, `add-multibox-audio`, `operator-surface`, `playout-authz-channels`, `station-setup`)
+- [x] 5.7 The installer pair of the final head `230dd27f` — Desktop run https://github.com/yasermostafaee/cg/actions/runs/36054476598 (`Installers (Windows)` and `Installer smoke (clean Windows)` both `completed/success`):
+  - CG Control — https://github.com/yasermostafaee/cg/actions/runs/36054476598/artifacts/10832367585
+  - CG Designer — https://github.com/yasermostafaee/cg/actions/runs/36054476598/artifacts/10832047884
+
+## 6. `DELTA-MULTI-CHANNEL-01-A` (`design.md` §15)
+
+- [x] 6.1 A1 — `--fake` runs a whole station; its own integration test (a take on channel 1 reaches the mock on channel 1 only; control: the default seal leaves AMCP pending) — `1993515d`; e2e https://github.com/yasermostafaee/cg/actions/runs/36231411641
+- [x] 6.2 A3 — a reconnect re-delivery waits for the sign-in, its notice withdraws itself — `cbc96797`; e2e https://github.com/yasermostafaee/cg/actions/runs/36231411641
+- [x] 6.3 A4, A6 — rows and the every-channel PANIC without a reload — `93130ef6`; e2e https://github.com/yasermostafaee/cg/actions/runs/36231411641 (Desktop https://github.com/yasermostafaee/cg/actions/runs/36231411501, both installer jobs `completed/success`)
+- [x] 6.4 A2 — the check does not loop: one held re-run at the sign-in (`awaitLetIn`) — `b12f61ac`; e2e https://github.com/yasermostafaee/cg/actions/runs/36234622859
+- [x] 6.5 A5 — a refusal reads one line; the refused hide's layer as data; the sweep — `c637b8df`; e2e https://github.com/yasermostafaee/cg/actions/runs/36234622859
+- [x] 6.6 A7 — Station setup follows the channel on screen, switched while open (test) — `bfa6cd4c`; e2e https://github.com/yasermostafaee/cg/actions/runs/36234622859
+- [x] 6.7 A8 — the button follows the count; a picked chip looks picked (e2e measures the fill) — `9af46b1e`; e2e https://github.com/yasermostafaee/cg/actions/runs/36234622859
+- [x] 6.8 The DELTA-A head `8fc556a5` — PR run https://github.com/yasermostafaee/cg/actions/runs/36234622859 (`E2E (Playwright)` and `Lint • Typecheck • Test • Build` both `completed/success`); Desktop run https://github.com/yasermostafaee/cg/actions/runs/36234622912 (`Installers (Windows)` and `Installer smoke (clean Windows)` both `completed/success`):
+  - CG Control — https://github.com/yasermostafaee/cg/actions/runs/36234622912/artifacts/10903493131
+  - CG Designer — https://github.com/yasermostafaee/cg/actions/runs/36234622912/artifacts/10903453349
+
+## 7. `DELTA-MULTI-CHANNEL-01-B` (`design.md` §16)
+
+- [x] 7.1 B1 — the check answers before a sign-in, for this station's Playout only; a refusal names nothing not involved (auth, lock, skew) — `27ddb19c`; e2e https://github.com/yasermostafaee/cg/actions/runs/36236895294
+- [x] 7.2 B3 (log) — the Playout's answer to a failed sign-in reaches the bridge's log, as one untrusted line — `27ddb19c`; e2e https://github.com/yasermostafaee/cg/actions/runs/36236895294
+- [x] 7.3 B2, B3 — a sign-in is offered only when it can work, in English; only a wrong username or password marks a field — `e0fcbdb1`; e2e https://github.com/yasermostafaee/cg/actions/runs/36236895294
+- [x] 7.4 The DELTA-B head `cae42a52` — PR run https://github.com/yasermostafaee/cg/actions/runs/36236895294 (`E2E (Playwright)` and `Lint • Typecheck • Test • Build` both `completed/success`); Desktop run https://github.com/yasermostafaee/cg/actions/runs/36236895221 (`Installers (Windows)` and `Installer smoke (clean Windows)` both `completed/success`):
+  - CG Control — https://github.com/yasermostafaee/cg/actions/runs/36236895221/artifacts/10904453227
+  - CG Designer — https://github.com/yasermostafaee/cg/actions/runs/36236895221/artifacts/10904119429

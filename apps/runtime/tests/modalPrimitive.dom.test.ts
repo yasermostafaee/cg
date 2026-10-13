@@ -5,8 +5,14 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FixedLayerBank, FixedSlotState } from '@cg/shared-ipc';
 import { Modal, ModalAction, modalActionVariant } from '../src/renderer/ui/Modal.js';
-import { FixedBankConfigModal } from '../src/renderer/features/fixedLayers/FixedBankConfigModal.js';
 import { clearPortals, openDialog } from './support/dialog.js';
+import {
+  clickSetupButton,
+  renderStationSetup,
+  sectionOf,
+  stationSetupStub,
+  unmountStationSetup,
+} from './support/stationSetup.js';
 
 /**
  * THE MODAL PRIMITIVE — one chrome, three button roles, and one pinned message.
@@ -37,6 +43,7 @@ afterEach(async () => {
   root = null;
   container?.remove();
   container = null;
+  await unmountStationSetup();
   clearPortals();
   vi.restoreAllMocks();
 });
@@ -56,19 +63,13 @@ async function render(element: ReturnType<typeof createElement>): Promise<HTMLEl
   return dialog;
 }
 
-async function settle(): Promise<void> {
-  await act(async () => {
-    for (let i = 0; i < 6; i++) await Promise.resolve();
-  });
-}
-
 describe('§1 — every dialog gets its chrome from the primitive', () => {
   it('renders ONE close affordance, and it is the ✕ — never a `Close` button in the header', async () => {
     const dialog = await render(
       createElement(Modal, {
         title: 'Some dialog',
         onClose: () => undefined,
-        footer: createElement(ModalAction, { actionRole: 'primary' }, 'Done'),
+        footer: createElement(ModalAction, { actionRole: 'primary', children: 'Done' }),
         children: 'body',
       }),
     );
@@ -96,8 +97,8 @@ describe('§1 — every dialog gets its chrome from the primitive', () => {
         onClose: () => undefined,
         message: { role: 'refusal' as const, text: 'why it did not happen' },
         footer: [
-          createElement(ModalAction, { actionRole: 'cancel', key: 'c' }, 'Cancel'),
-          createElement(ModalAction, { actionRole: 'primary', key: 'p' }, 'Apply'),
+          createElement(ModalAction, { actionRole: 'cancel', key: 'c', children: 'Cancel' }),
+          createElement(ModalAction, { actionRole: 'primary', key: 'p', children: 'Apply' }),
         ],
         children: 'body',
       }),
@@ -124,9 +125,13 @@ describe('§2 — each role resolves to exactly ONE treatment', () => {
         title: 'Roles',
         onClose: () => undefined,
         footer: [
-          createElement(ModalAction, { actionRole: 'cancel', key: 'c' }, 'Cancel'),
-          createElement(ModalAction, { actionRole: 'destructive', key: 'd' }, 'Clear all'),
-          createElement(ModalAction, { actionRole: 'primary', key: 'p' }, 'Apply'),
+          createElement(ModalAction, { actionRole: 'cancel', key: 'c', children: 'Cancel' }),
+          createElement(ModalAction, {
+            actionRole: 'destructive',
+            key: 'd',
+            children: 'Clear all',
+          }),
+          createElement(ModalAction, { actionRole: 'primary', key: 'p', children: 'Apply' }),
         ],
       }),
     );
@@ -167,7 +172,7 @@ describe('§2 — each role resolves to exactly ONE treatment', () => {
       createElement(Modal, {
         title: 'One',
         onClose: () => undefined,
-        footer: createElement(ModalAction, { actionRole: 'destructive' }, 'Clear all'),
+        footer: createElement(ModalAction, { actionRole: 'destructive', children: 'Clear all' }),
       }),
     );
     const firstClass = first.querySelector('[data-modal-role="destructive"]')?.className;
@@ -181,7 +186,7 @@ describe('§2 — each role resolves to exactly ONE treatment', () => {
       createElement(Modal, {
         title: 'Two',
         onClose: () => undefined,
-        footer: createElement(ModalAction, { actionRole: 'destructive' }, 'Remove'),
+        footer: createElement(ModalAction, { actionRole: 'destructive', children: 'Remove' }),
       }),
     );
     expect(second.querySelector('[data-modal-role="destructive"]')?.className).toBe(firstClass);
@@ -218,12 +223,12 @@ describe('§2 — each role resolves to exactly ONE treatment', () => {
 describe('§3 — a refusal is pinned beside the action row, never appended to the scroll', () => {
   const BANK: FixedLayerBank = {
     channel: 1,
+    low: { start: 50, count: 9 },
     // THIRTY layers, so the list genuinely scrolls and a refusal about a row far
     // down is genuinely off-screen when the list is at the top. Four would not
     // reproduce the operator's situation at all.
     start: 70,
     count: 30,
-    visible: [],
     aliases: {},
   };
   const SLOTS: FixedSlotState[] = Array.from({ length: 30 }, (_, i) => ({
@@ -233,38 +238,26 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
     binding: null,
   }));
 
-  function stubBridge(): void {
-    const stub = {
-      link: { status: () => 'live', onStatusChanged: () => () => undefined },
-      stack: { snapshot: () => Promise.resolve([]), onStateChanged: () => () => undefined },
-      fixedLayers: {
-        // The refusal the owner hit: a row far down the list is occupied.
-        setConfig: () =>
-          Promise.resolve({
-            ok: false,
-            reason: 'occupied-layer',
-            message: 'Layer 95 has a template on it.',
-          }),
-      },
-    };
-    (window as unknown as { cg: typeof stub }).cg = stub;
-  }
-
+  /*
+    `STATION-SETUP-02` — the candidate-layer table is a SECTION of Station setup now, and
+    its Apply lives in the section body rather than the dialog footer. The defect and the
+    mechanism are unchanged: the refusal is pinned beside the action row, and the thirty
+    rows above it scroll.
+  */
   async function openAndRefuse(): Promise<HTMLElement> {
-    stubBridge();
-    const dialog = await render(
-      createElement(FixedBankConfigModal, { bank: BANK, slots: SLOTS, onClose: () => undefined }),
-    );
-    await settle();
-    const apply = [...dialog.querySelectorAll('.cg-modal-footer button')].find(
-      (b) => b.textContent === 'Apply',
-    );
-    if (apply === undefined) throw new Error('Apply not rendered');
-    await act(async () => {
-      apply.click();
-      await Promise.resolve();
+    stationSetupStub({
+      bank: BANK,
+      slots: SLOTS,
+      // The refusal the owner hit: a row far down the list is occupied.
+      fixedSetConfigResult: {
+        ok: false,
+        reason: 'untick-occupied',
+        message: 'Layer 95 has a template on it.',
+        layer: 95,
+      },
     });
-    await settle();
+    const dialog = await renderStationSetup({ section: 'candidate-layers' });
+    await clickSetupButton(dialog, 'Apply layers');
     return dialog;
   }
 
@@ -282,21 +275,33 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
       'the refusal was appended to content the operator may have scrolled away from',
     ).toBe(false);
 
-    // …and it sits immediately beside the action row, which is where the operator
-    // is looking, because that is where he just clicked.
-    const kids = [...dialog.children];
+    /*
+      …and it sits IMMEDIATELY BESIDE the action row, which is where the operator is looking,
+      because that is where he just clicked.
+
+      ⚠ `SETTINGS-MATCH-02` §1 — READ FROM THE MESSAGE'S OWN PARENT, not from the dialog's
+      children. The claim is unchanged and is still the whole point of this spec; what moved is
+      how deep the pair sits. The `fixed` frame's body is a RAIL beside a PANEL now, and the
+      message and the footer both belong to the PANEL's column — which is what stopped a
+      refusal taking 109 px out of the rail every time the operator pressed Servers. Indexing
+      `dialog.children` was reading a level that no longer holds either element, so it was
+      measuring the wrong container rather than a moved message.
+    */
+    const column = message?.parentElement;
+    expect(column, 'the message has a parent to be measured in').not.toBeNull();
+    const kids = [...(column?.children ?? [])];
     expect(kids.indexOf(message as Element)).toBe(
       kids.findIndex((k) => k.matches('.cg-modal-footer')) - 1,
     );
   });
 
-  it('does not shorten the message — the cause AND the remedy both survive', async () => {
+  it('does not shorten the message — the layer AND the outcome both survive, in one line', async () => {
     const dialog = await openAndRefuse();
     const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
-    // The bridge's own sentence, verbatim: it names the layer.
-    expect(text).toContain('Layer 95 has a template on it.');
-    // …and the mapped rule, which is the remedy.
-    expect(text.length).toBeGreaterThan('Layer 95 has a template on it.'.length);
+    // `DELTA-MULTI-CHANNEL-01-A` A5 — the layer comes from the refusal's data, into our sentence,
+    // with what became of the row; the bridge's own sentence is the record's, not this line's.
+    expect(text).toContain('Refused — layer 95 is not empty, so it stays shown.');
+    expect(text).not.toContain('Layer 95 has a template on it.');
   });
 
   /**
@@ -323,6 +328,22 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
     // the operator's edits intact, exactly as before.
     const dialog = await openAndRefuse();
     expect(openDialog()).not.toBeNull();
-    expect(dialog.querySelectorAll('input[type="checkbox"]').length).toBe(30);
+    /*
+      Thirty operator rows plus the nine declared bed rows (`single-clock-look-switch`) — the
+      section lists every candidate layer of BOTH halves — PLUS the filter bar's one
+      `Shown only` check, which `SETTINGS-MATCH-02` added above them. 39 + 1.
+
+      ⚠ Counted as two named halves rather than as `40`, because the number is the POINT: the
+      claim is that a refusal leaves every row in place, and a bare literal would go on passing
+      if the rows were replaced by forty checkboxes of some other kind.
+    */
+    const boxes = sectionOf(dialog, 'candidate-layers').querySelectorAll(
+      'input[type="checkbox"]',
+    ).length;
+    const rowSwitches = sectionOf(dialog, 'candidate-layers').querySelectorAll(
+      'input[aria-label^="Show layer "]',
+    ).length;
+    expect(rowSwitches, 'every candidate layer of both halves is still listed').toBe(39);
+    expect(boxes, 'the rows, plus the filter bar’s own check').toBe(rowSwitches + 1);
   });
 });

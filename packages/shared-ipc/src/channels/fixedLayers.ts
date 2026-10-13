@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { FieldValuesSchema, IdSchema } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
+import { LAYER_BANDS, bandSize } from '../layer-bands.js';
 
 /**
  * R-021 — the fixed operator layer bank: the BANK shape (stage 1), the
@@ -9,7 +10,8 @@ import { definePublishChannel } from '../publish.js';
  * the exact-slot LOAD (stage 3). Layer VERB channels arrive with stage 4.
  *
  * The bank declares a contiguous run of operator-designated layers on one
- * channel (default TEN at 70–79), each optionally aliased for display.
+ * channel (default: the whole TEMPLATE band, `LAYER_BANDS.template`), each optionally
+ * aliased for display.
  * Numeric bounds that depend on OTHER config live in the VALIDATOR
  * (`tools/caspar-bridge/src/fixed-layers-store.ts`) — deliberately not here —
  * so refusals can name the ceiling and both offending ranges (design.md (a)/(e):
@@ -18,8 +20,13 @@ import { definePublishChannel } from '../publish.js';
  */
 /**
  * THE built-in default bank — what a machine with NO persisted fixed-layers
- * file comes up with. Owner decision, 2026-07-30: channel 1, the full 70–99
- * ceiling, the top five rows ticked.
+ * file comes up with. Channel 1, the full TEMPLATE band, the top five rows ticked.
+ *
+ * ⚠ **THE NUMBERS ARE NOT HERE. They are `LAYER_BANDS.template` (`../layer-bands.ts`),
+ * and 2026-09-14 is why.** The owner re-cut the map that day — beds 50-59, plates 60-79,
+ * templates 80-99, with 1-49 left free for the playout server — and this bank moved from
+ * 70-99 (thirty rows) to 80-99 (twenty). A constant that restated `70` would have been the
+ * second copy that did not move, which is the whole shape `layer-bands.ts` exists to close.
  *
  * WHY THESE ARE CONSTANTS AND NOT LITERALS. They are read from three places —
  * the schema's `.default()`s (what a PARTIAL file leaves unsaid),
@@ -30,30 +37,159 @@ import { definePublishChannel } from '../publish.js';
  */
 export const DEFAULT_FIXED_BANK_CHANNEL = 1;
 /** First layer of the default bank. */
-export const DEFAULT_FIXED_BANK_START = 70;
-/** Rows in the default bank — the full 70–99 ceiling. */
-export const DEFAULT_FIXED_BANK_COUNT = 30;
+export const DEFAULT_FIXED_BANK_START = LAYER_BANDS.template.start;
+/** Rows in the default bank — the whole TEMPLATE band. */
+export const DEFAULT_FIXED_BANK_COUNT = bandSize(LAYER_BANDS.template);
 /**
  * How many of the default bank's rows are TICKED (displayed), counting down
- * from its highest layer: 99, 98, 97, 96, 95. The other twenty-five are
+ * from its highest layer: 99, 98, 97, 96, 95. The other fifteen are
  * declared — and therefore fenced from automatic allocation — but hidden, so
  * the operator can reveal one without a bridge restart (the ceiling is fixed
  * at install; the ticks are live).
  */
 export const DEFAULT_FIXED_BANK_VISIBLE_ROWS = 5;
 
+/**
+ * 🔴 **`single-clock-look-switch` — THE SECOND DECLARED BANK, and it is LOW.**
+ *
+ * A template that declares live plates is a graphics **BED**: it draws the programme's
+ * background and its plates are composited ON TOP of it, so its page must sit BELOW every
+ * live-source layer. A template that declares none is FURNITURE — a logo, a super, a ticker
+ * — and belongs above them, where the operator bank already is.
+ *
+ * ── WHY THIS IS A SUB-BANK AND NOT A SECOND `FixedLayerBank` ────────────────
+ *
+ * Because the identity `R-021` / `R-028` are built on must not split. Every consumer of a
+ * fixed slot — `LayerManager.isFixed` / `bindFixed`, `#slots`, occupancy, quarantine,
+ * `clearLayer`, the per-slot publish — keys on the `(channel, layer)` COORDINATE and asks
+ * nothing about which bank it came from. Declaring the low rows inside the same bank object
+ * means {@link fixedBankSlots} hands the LayerManager one union and every one of those
+ * consumers keeps working untouched. A parallel bank object would have been a second place
+ * a layer coordinate lives, which is the drift `design.md` §1 rejects in exactly these words.
+ *
+ * ── WHERE THE BEDS LIVE: `LAYER_BANDS.bed`, AND IT MOVED ────────────────────
+ *
+ * 🔴 **THEY USED TO BE 1-9, AND THAT WAS THE DEFECT (`LAYER-BANDS-16`, 2026-09-14).**
+ * The reasoning at the time was that 1-9 is free of everything WE allocate — and it was,
+ * and that is not the same question. 1-9 is exactly where a playout server is likely to be
+ * working on a shared channel, and a bed of ours landing on a playout layer is
+ * indistinguishable from the playout system's own graphic on the wire. The owner's re-cut
+ * moved the beds to **50-59** and left **1-49 free** for the playout server and anything
+ * else on the channel; `FIRST_ALLOCATABLE_LAYER` is where that floor is written down, with
+ * its reason attached so nobody reclaims the band later.
+ *
+ * The bed band is still BELOW every band above it — that is a REQUIREMENT and not a
+ * coincidence, since a higher CasparCG layer renders over a lower one and a bed is
+ * composited UNDER its own plates. `assertLayerBands` enforces the ordering; the
+ * `low-bank-not-below-band` refusal enforces it again against a station's DECLARED band,
+ * which is the half that can move.
+ *
+ * **Layer 0 is still excluded** — it is a legal layer number and reads as "unset" in too
+ * many places to spend the ambiguity on one extra slot. It now sits far below the floor
+ * anyway.
+ */
+export const MAX_LOW_FIXED_LAYER = LAYER_BANDS.bed.end;
+/** First layer of the default bed bank. */
+export const DEFAULT_LOW_BANK_START = LAYER_BANDS.bed.start;
+/** Rows in the default bed bank — the whole BED band. */
+export const DEFAULT_LOW_BANK_COUNT = bandSize(LAYER_BANDS.bed);
+/**
+ * How many bed rows are TICKED by default, counting down from the highest.
+ *
+ * TWO, not ten and not one. `B-195` found exactly ONE of the client's twelve packages
+ * carries plates, so ten visible bed rows would be eight rows of noise; one would leave the
+ * operator no way to stage the next programme's bed while the current one is on air without
+ * first editing config. The other eight stay DECLARED — and therefore fenced — but hidden,
+ * exactly the pattern the operator bank already uses for its fifteen.
+ */
+export const DEFAULT_LOW_BANK_VISIBLE_ROWS = 2;
+
+/**
+ * 🔴 `B-202` — THE DEFAULT BED TICKS, COMPUTED IN ONE PLACE.
+ *
+ * There are TWO ways a bank reaches a reader with no bed half of its own: the schema's
+ * `.default()` (a persisted file written before `low` existed) and {@link
+ * defaultFixedLayerBank} (no file at all). Both call this, so they cannot give different
+ * answers — which they did, for exactly as long as the schema default restated the shape
+ * `{ start, count }` and left `visibility` out. `isLayerVisible` reads an absent tick as
+ * VISIBLE, so an upgraded station got **nine** visible bed rows where a fresh one got two:
+ * the "eight rows of noise" {@link DEFAULT_LOW_BANK_VISIBLE_ROWS} exists to prevent,
+ * delivered to precisely the installs that had been running longest.
+ *
+ * ⚠ A FRESH RECORD every call, for the reason {@link defaultFixedLayerBank} gives about
+ * itself: a shared literal handed to two readers is one mutation away from disagreeing.
+ */
+export function defaultLowBankVisibility(): Record<string, boolean> {
+  const end = DEFAULT_LOW_BANK_START + DEFAULT_LOW_BANK_COUNT - 1;
+  const ticks: Record<string, boolean> = {};
+  for (let layer = DEFAULT_LOW_BANK_START; layer <= end; layer++) {
+    ticks[String(layer)] = layer > end - DEFAULT_LOW_BANK_VISIBLE_ROWS;
+  }
+  return ticks;
+}
+
+/**
+ * The LOW (bed) half of the bank. It carries no `channel` of its own: a bed and the plates
+ * composited over it are on ONE channel by construction, so a second channel field would be
+ * a value that can only ever be wrong.
+ */
+export const LowFixedLayerBankSchema = z.object({
+  /**
+   * First bed layer. Immutable mid-session, like the operator bank's `start`.
+   *
+   * ⚠ **BOUNDED AT BOTH ENDS NOW, and the lower bound is the new half.** While the band
+   * started at 1 a `.positive()` lower bound WAS the band's floor; at 50-59 it is not, and
+   * a bed declared at 1 would be a graphic of ours on a playout layer. The bound is the
+   * band's own `start`, never a literal.
+   */
+  start: z
+    .number()
+    .int()
+    .min(LAYER_BANDS.bed.start)
+    .max(LAYER_BANDS.bed.end)
+    .default(DEFAULT_LOW_BANK_START),
+  /**
+   * Bed rows. Fixed at install, like the operator bank's `count`.
+   *
+   * ⚠ The ceiling is the band's SIZE, not its last layer. The two were the same number
+   * while the band was 1-9 and are not at 50-59 — a `.max(MAX_LOW_FIXED_LAYER)` here would
+   * now admit a fifty-nine-row bed bank running to layer 108.
+   */
+  count: z.number().int().min(1).max(bandSize(LAYER_BANDS.bed)).default(DEFAULT_LOW_BANK_COUNT),
+  /** Optional display aliases, keyed by layer number (as a numeric string). */
+  aliases: z.record(z.string().regex(/^\d+$/), z.string().min(1)).optional(),
+  /** Per-layer visibility ticks. Absent means VISIBLE, as in the operator bank. */
+  visibility: z.record(z.string().regex(/^\d+$/), z.boolean()).optional(),
+});
+export type LowFixedLayerBank = z.infer<typeof LowFixedLayerBankSchema>;
+
 export const FixedLayerBankSchema = z.object({
-  /** CasparCG channel the bank lives on (one channel per bank, v1). */
+  /**
+   * CasparCG channel the bank lives on — one channel per bank. A station holds ONE BANK PER
+   * DECLARED CHANNEL (`MULTI-CHANNEL-01`, {@link FixedLayerBanksSchema}); it held exactly one bank
+   * in v1.
+   */
   channel: z.number().int().positive(),
   /** First layer of the bank. Immutable mid-session (validator-enforced). */
   start: z.number().int().positive().default(DEFAULT_FIXED_BANK_START),
   /**
    * R-028 — the FIXED CEILING of candidate layers. Immutable mid-session
    * (validator-enforced: `resize-refused`); changing it means editing the
-   * persisted install config and restarting the bridge. The 89 layer ceiling
-   * is validator-enforced. Replaces R-021's mutable, grow-at-end `count`.
+   * persisted install config and restarting the bridge. Replaces R-021's
+   * mutable, grow-at-end `count`.
+   *
+   * ⚠ The ceiling is the TEMPLATE band's size — twenty as of the 2026-09-14 re-cut, down
+   * from the thirty that `70-99` held. A persisted file declaring the old thirty rows does
+   * not parse, which is the REFUSAL the old-map decision asks for: see
+   * `fixed-layers-store.ts`'s `describeOldMapBank`, which turns that parse failure into a
+   * sentence naming both maps rather than a bare schema error.
    */
-  count: z.number().int().min(1).max(30).default(DEFAULT_FIXED_BANK_COUNT),
+  count: z
+    .number()
+    .int()
+    .min(1)
+    .max(bandSize(LAYER_BANDS.template))
+    .default(DEFAULT_FIXED_BANK_COUNT),
   /** Optional display aliases, keyed by layer number (as a numeric string). */
   aliases: z.record(z.string().regex(/^\d+$/), z.string().min(1)).optional(),
   /**
@@ -65,12 +201,184 @@ export const FixedLayerBankSchema = z.object({
    * unknown-occupancy — layer is refused by the validator (fail closed).
    */
   visibility: z.record(z.string().regex(/^\d+$/), z.boolean()).optional(),
+  /**
+   * `single-clock-look-switch` — the BED rows (see {@link LowFixedLayerBankSchema}).
+   *
+   * DEFAULTED, never optional. A station that has never heard of beds still gets the whole
+   * BED band fenced, which costs nothing (it is outside every allocation range already) and
+   * means no reader anywhere has to branch on "is a bed bank declared?".
+   *
+   * ⚠ **`visibility` IS PART OF THAT DEFAULT AND MUST STAY PART OF IT (`B-202`).** This is
+   * the path an UPGRADED station takes — every `bridge-fixed-layers.json` written before
+   * `a7976e14` lacks `low` — so a default that omits the ticks is not "unspecified", it is
+   * nine visible bed rows on the installs that have been running longest. A THUNK, so each
+   * parse gets its own record rather than a shared one every caller could mutate.
+   */
+  low: LowFixedLayerBankSchema.default(() => ({
+    start: DEFAULT_LOW_BANK_START,
+    count: DEFAULT_LOW_BANK_COUNT,
+    visibility: defaultLowBankVisibility(),
+  })),
 });
 export type FixedLayerBank = z.infer<typeof FixedLayerBankSchema>;
 
+/** The inclusive last layer of the OPERATOR half. */
+export function fixedBankEnd(bank: Pick<FixedLayerBank, 'start' | 'count'>): number {
+  return bank.start + bank.count - 1;
+}
+
+/** The inclusive last BED layer. */
+export function lowBankEnd(bank: Pick<FixedLayerBank, 'low'>): number {
+  return bank.low.start + bank.low.count - 1;
+}
+
 /**
- * THE bank a station gets when it has declared none — channel 1, layers 70–99,
- * the top five ticked and the remaining twenty-five declared-but-hidden.
+ * 🔴 **THE canonical predicate: is this layer a BED row?**
+ *
+ * Every site that has to tell the two groups apart — the load refusal, the restore
+ * migration, the alias, the visibility tick, the panel's grouping — calls THIS. A second
+ * local `layer <= 9` is exactly how a name comes to lie about what it tests (golden rule 6),
+ * and it would lie the first time a station declared its beds at 2–5.
+ */
+export function isLowBankLayer(bank: FixedLayerBank, layer: number): boolean {
+  return layer >= bank.low.start && layer <= lowBankEnd(bank);
+}
+
+/**
+ * 🔴 `B-201` — IS THIS COORDINATE A ROW OF THE BANK? Both halves, one answer.
+ *
+ * The bridge never needed this: its `LayerManager` is fenced with {@link fixedBankSlots} at
+ * boot and answers membership from that set, so it learned about the beds for free. Anything
+ * that does NOT hold a fenced set — the offline `MockRuntime` is the one that matters —
+ * was left rebuilding the range by hand as `layer >= start && layer < start + count`, which
+ * is the OPERATOR half and silently nothing else.
+ *
+ * That is what this exists to stop, and the cost of not having it is measured: three such
+ * copies in `MockRuntime` (the exact-slot load, the bank-scoped clear, the owned-layer
+ * clear) all kept refusing bed rows as `not-fixed` for a full change cycle after the beds
+ * shipped — each one a predicate whose NAME said "is it in the bank" while its body asked a
+ * narrower question (golden rule 6).
+ *
+ * Channel is PART of the question, not a caller's job: a bank is one channel by
+ * construction, and a membership test that ignored it would call `2-70` a bank row.
+ */
+export function isFixedBankLayer(bank: FixedLayerBank, channel: number, layer: number): boolean {
+  if (channel !== bank.channel) return false;
+  return (layer >= bank.start && layer <= fixedBankEnd(bank)) || isLowBankLayer(bank, layer);
+}
+
+/**
+ * Every slot the bank declares, BOTH halves, in one list — what the boot validator returns
+ * and what the LayerManager is fenced with. The union is the whole reason the two-bank shape
+ * costs the runtime nothing: `isFixed` keys on the coordinate and never asks which half.
+ */
+export function fixedBankSlots(bank: FixedLayerBank): { channel: number; layer: number }[] {
+  const out: { channel: number; layer: number }[] = [];
+  // Operator rows FIRST, beds after — the order the panel shows them in, and the order
+  // that keeps a positional read of this list meaning what it meant before the beds
+  // existed. Nothing downstream depends on it (the per-slot publish sorts), so it is
+  // chosen for the reader.
+  for (let layer = bank.start; layer <= fixedBankEnd(bank); layer++) {
+    out.push({ channel: bank.channel, layer });
+  }
+  for (let layer = bank.low.start; layer <= lowBankEnd(bank); layer++) {
+    out.push({ channel: bank.channel, layer });
+  }
+  return out;
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **THE STATION'S BANKS: ONE PER DECLARED CHANNEL, KEYED BY CHANNEL.**
+ *
+ * A station that operates two channels declares two banks, each the standard shape (beds 50–59,
+ * templates 80–99) on its own channel. The list IS the station's channel declaration: the
+ * bridge's `#declaredChannels()` is its channels, and nothing else declares one.
+ *
+ * ⚠ **ONE BANK PER CHANNEL is the schema's rule, not a caller's.** Two banks on one channel would
+ * be two answers to "is `2-99` a row, and whose" — the `(channel, layer)` coordinate every fixed-
+ * slot consumer keys on would name two rows. Refused here, so neither the persisted file nor the
+ * wire can carry it.
+ */
+export const FixedLayerBanksSchema = z.array(FixedLayerBankSchema).superRefine(oneBankPerChannel);
+
+/** The refinement both list schemas share — one spelling of "one bank per channel". */
+function oneBankPerChannel(banks: readonly FixedLayerBank[], ctx: z.RefinementCtx): void {
+  const seen = new Set<number>();
+  banks.forEach((bank, index) => {
+    if (seen.has(bank.channel)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [index, 'channel'],
+        message: `channel ${String(bank.channel)} is declared twice — a station holds one bank per channel`,
+      });
+    }
+    seen.add(bank.channel);
+  });
+}
+
+/**
+ * The station's banks in the ONE order everything reads them in: ascending channel. The strip
+ * lists channels that way, `#declaredChannels()` answers that way, and the first entry is the
+ * v1 single-bank view ({@link firstBank}).
+ */
+export function sortBanks(banks: readonly FixedLayerBank[]): FixedLayerBank[] {
+  return [...banks].sort((a, b) => a.channel - b.channel);
+}
+
+/**
+ * 🔴 **THE BANK THAT DECLARES `channel`, or `null`.** Every per-channel reader asks THIS rather
+ * than scanning the list itself — a second local `find` is how "which bank owns this coordinate"
+ * would come to have two answers (golden rule 6).
+ */
+export function bankForChannel(
+  banks: readonly FixedLayerBank[],
+  channel: number,
+): FixedLayerBank | null {
+  return banks.find((bank) => bank.channel === channel) ?? null;
+}
+
+/**
+ * THE v1 SINGLE-BANK VIEW: the lowest-numbered channel's bank, or `null` when none is declared.
+ * What `fixedLayers.config` answers — on a one-channel station, the bank itself, exactly as
+ * before. A console that operates a second channel reads `fixedLayers.banks` instead.
+ */
+export function firstBank(banks: readonly FixedLayerBank[]): FixedLayerBank | null {
+  return sortBanks(banks)[0] ?? null;
+}
+
+/** Every slot of every bank — what the LayerManager is fenced with on a multi-channel station. */
+export function fixedBanksSlots(
+  banks: readonly FixedLayerBank[],
+): { channel: number; layer: number }[] {
+  return sortBanks(banks).flatMap((bank) => fixedBankSlots(bank));
+}
+
+/**
+ * One bank, a station's list of them, or nothing — what a NAMING helper accepts, so a caller that
+ * holds the whole list and a caller that holds one bank ask the same function.
+ */
+export type BankSet = FixedLayerBank | readonly FixedLayerBank[] | null;
+
+/**
+ * The bank a {@link BankSet} holds for `channel`: from a list, the one that declares it; from a
+ * single bank, that bank when it is on `channel` and otherwise none.
+ */
+export function bankInSet(set: BankSet, channel: number): FixedLayerBank | null {
+  if (set === null) return null;
+  if (Array.isArray(set)) return bankForChannel(set as readonly FixedLayerBank[], channel);
+  const bank = set as FixedLayerBank;
+  return bank.channel === channel ? bank : null;
+}
+
+/** How many channels a {@link BankSet} declares. */
+export function bankSetSize(set: BankSet): number {
+  if (set === null) return 0;
+  return Array.isArray(set) ? (set as readonly FixedLayerBank[]).length : 1;
+}
+
+/**
+ * THE bank a station gets when it has declared none — channel 1, the whole TEMPLATE band
+ * (`LAYER_BANDS.template`), the top five ticked and the rest declared-but-hidden.
  *
  * THE POINT OF IT. A persisted fixed-layers file now records a DEVIATION from
  * this bank; it does not supply the bank. That is what makes a new machine
@@ -85,7 +393,7 @@ export type FixedLayerBank = z.infer<typeof FixedLayerBankSchema>;
  * readers in the same process, which is the exact class of bug the constants
  * above exist to close.
  *
- * VISIBILITY IS WRITTEN OUT IN FULL — all thirty keys, `true` for the top five
+ * VISIBILITY IS WRITTEN OUT IN FULL — every key in the band, `true` for the top five
  * and `false` for the rest — rather than relying on `isLayerVisible`'s
  * absent-means-visible rule for the ticked ones. The bank is persisted verbatim
  * the first time the operator changes anything, and a file that states every
@@ -103,6 +411,13 @@ export function defaultFixedLayerBank(): FixedLayerBank {
     start,
     count: DEFAULT_FIXED_BANK_COUNT,
     visibility,
+    low: {
+      start: DEFAULT_LOW_BANK_START,
+      count: DEFAULT_LOW_BANK_COUNT,
+      // `B-202` — the SAME function the schema's own `.default()` calls, so "no file at all"
+      // and "a file written before beds existed" cannot answer this differently.
+      visibility: defaultLowBankVisibility(),
+    },
   };
 }
 
@@ -113,7 +428,62 @@ export function defaultFixedLayerBank(): FixedLayerBank {
  * "absent means visible" would drift.
  */
 export function isLayerVisible(bank: FixedLayerBank, layer: number): boolean {
-  return bank.visibility?.[String(layer)] !== false;
+  // Each half carries its OWN ticks, and the dispatch is `isLowBankLayer` rather than a
+  // merged record: two halves writing into one `visibility` map would make layer 3's tick
+  // meaningful to a bank whose operator rows start at 70, which is a key that means two
+  // different things depending on who reads it.
+  const ticks = isLowBankLayer(bank, layer) ? bank.low.visibility : bank.visibility;
+  return ticks?.[String(layer)] !== false;
+}
+
+/** `FIELD-FIXES-01` I — how many rows of each band a new bank shows: the highest of each band. */
+export const NEW_BANK_SHOWN_PER_BAND = 5;
+
+/**
+ * 🔴 `FIELD-FIXES-01` I — **THE FIVE-ROW RULE, for any bank**: the highest
+ * {@link NEW_BANK_SHOWN_PER_BAND} rows of each band shown (templates 99–95 and beds 59–55 on the
+ * default bands), every `occupied` layer shown, the rest hidden — each key written out, `true` or
+ * `false`. `occupied` is `null` when the channel's occupancy is not known, and then EVERY row is
+ * shown: unknown is never treated as empty (`untick-unknown`).
+ *
+ * `RELEASE-091-01` §7 (`B-291`) moved it here from the console's first-run, because the bridge now
+ * applies the same rule to a bank no operator ever applied ({@link isUnappliedAllShownBank}) — one
+ * rule, one spelling, two callers.
+ */
+export function fiveRowVisibility(
+  bank: FixedLayerBank,
+  occupied: ReadonlySet<number> | null,
+): FixedLayerBank {
+  const visibility: Record<string, boolean> = {};
+  const low: Record<string, boolean> = {};
+  // Each band's rows through the ONE enumeration, and each band's top through its own end.
+  for (const { layer } of fixedBankSlots(bank)) {
+    const bed = isLowBankLayer(bank, layer);
+    const top = bed ? lowBankEnd(bank) : fixedBankEnd(bank);
+    (bed ? low : visibility)[String(layer)] =
+      occupied === null || layer > top - NEW_BANK_SHOWN_PER_BAND || occupied.has(layer);
+  }
+  return { ...bank, visibility, low: { ...bank.low, visibility: low } };
+}
+
+/**
+ * 🔴 `RELEASE-091-01` §7 (`B-291`) — **A BANK NO OPERATOR HAS EVER APPLIED**: every row of its
+ * TEMPLATE band carries an explicit `true`.
+ *
+ * That shape has exactly two writers, and neither is an operator's choice: first-run before
+ * `FIELD-FIXES-01` I (every row shown), and first-run since, when it could not read the channel's
+ * occupancy (the unknown case of {@link fiveRowVisibility}). An operator's Apply writes HIDDEN rows
+ * only — `false` keys, a shown row carries none — so a bank anyone applied can never match, and the
+ * five-row result carries `false` keys, so a bank brought in once can never match again. The file
+ * has no version or provenance field; the shape is the only signature, and it is enough.
+ */
+export function isUnappliedAllShownBank(bank: FixedLayerBank): boolean {
+  const ticks = bank.visibility;
+  if (ticks === undefined) return false;
+  for (let layer = bank.start; layer <= fixedBankEnd(bank); layer++) {
+    if (ticks[String(layer)] !== true) return false;
+  }
+  return true;
 }
 
 /**
@@ -128,34 +498,46 @@ export function isLayerVisible(bank: FixedLayerBank, layer: number): boolean {
  * screen: the `#` column reads 1, 2, 3, 4 downwards, which is what anyone expects a
  * row number to do.
  *
- * THIS IS THE ALIAS'S NUMBER, NOT THE `#` COLUMN'S. The two are different questions
- * and the owner settled them separately:
- *
- *   - the default alias (`Layer 1`, `Layer 2`, …) uses THIS — the layer's fixed place
- *     in the bank;
- *   - the `#` column is plain DISPLAY ORDER, 1 at the top of the rendered list.
- *
- * With the shipped bank (70–99 declared, the top five ticked) they read identically,
- * because the shown rows are the top five in order: `#1` is layer 99, which is
- * `Layer 1`. They can diverge only if a NON-CONTIGUOUS set is ticked — untick 97 and
- * the third visible row is `#3` but still `Layer 4`. That is the accepted trade, and
- * it falls out of the constraint below.
- *
- * IT IS BOUND TO THE BANK, NOT TO WHAT IS DISPLAYED, and that is the property that
- * makes the alias safe to say out loud. Ticking and unticking change what is shown;
- * neither may renumber anything. `Layer 1` is always the bank's highest layer whether
- * or not it is currently ticked. If unticking a row renumbered the ones past it,
- * "Layer 2" would mean different rows on different days — a positional handle that
- * silently renumbers is worse than none at all. This matters more with thirty declared
- * and five shown than it did with four of four.
+ * 🔴 `DESKTOP-APPS-01-D` h — **NO LONGER THE ROW'S NAME OR ITS `#`.** Both now carry the real
+ * AMCP layer ({@link defaultLayerAlias}); this position survives only where a surface says where
+ * a row sits within its half of the bank.
  */
 export function bankPosition(bank: FixedLayerBank, layer: number): number {
-  return bank.start + bank.count - 1 - layer + 1;
+  // ONE rule, applied to whichever half the layer belongs to — counting down from THAT
+  // half's highest layer. The alternative (numbering the beds on from the operator rows)
+  // would make a bed's number move whenever the operator bank's count changed, which is
+  // precisely the renumbering this function's contract forbids.
+  if (isLowBankLayer(bank, layer)) return lowBankEnd(bank) - layer + 1;
+  return fixedBankEnd(bank) - layer + 1;
 }
 
-/** The default display name for an unaliased candidate layer — `Layer 1`, `Layer 2`, … */
+/**
+ * The default display name for an unaliased candidate layer — `Layer 99`, `Layer 98`, … for an
+ * operator row, and `Bed 59`, `Bed 58`, … for a bed row: the word, then the REAL AMCP layer.
+ *
+ * 🔴 `DESKTOP-APPS-01-D` h — **THE NUMBER IS THE LAYER, never a position.** It used to be the
+ * row's place in its half of the bank, so the owner's top row read `Layer 1` while the Inspector
+ * said layer 99 — and on a channel shared with a playout server, "layer 1" is the one number an
+ * operator must never be invited to believe he is touching. The number an operator reads is the
+ * number CasparCG obeys.
+ *
+ * THE WORD IS PART OF THE REFUSAL. `wrong-bank`'s message tells the operator to use a bed
+ * row; if the rows were all called `Layer N` there would be nothing on screen for that
+ * sentence to point at.
+ */
 export function defaultLayerAlias(bank: FixedLayerBank, layer: number): string {
-  return `Layer ${String(bankPosition(bank, layer))}`;
+  const word = isLowBankLayer(bank, layer) ? 'Bed' : 'Layer';
+  return `${word} ${String(layer)}`;
+}
+
+/**
+ * THE configured alias for a candidate layer, from whichever half owns it — or `undefined`
+ * when the operator has named none. The per-slot publish reads THIS rather than
+ * `bank.aliases` directly, so a bed row's alias is not silently dropped.
+ */
+export function layerAlias(bank: FixedLayerBank, layer: number): string | undefined {
+  const aliases = isLowBankLayer(bank, layer) ? bank.low.aliases : bank.aliases;
+  return aliases?.[String(layer)];
 }
 
 /**
@@ -222,6 +604,11 @@ export const FIXED_LAYERS_SET_CONFIG_REASONS = [
   // Fail closed: unknown is never treated as empty — hiding a row that may be
   // on air would leave the operator no surface for a live graphic.
   'untick-unknown',
+  // `single-clock-look-switch` — the two halves of the bank claim a layer in
+  // common. Refused at config time with both ranges named, the `overlaps-*`
+  // stance: one layer that is both a bed row and an operator row has no
+  // answer to "does this composite above the plates or below them".
+  'banks-overlap',
 ] as const;
 
 /**
@@ -281,10 +668,46 @@ export const FixedSlotStateSchema = z.object({
       templateName: z.string().min(1).optional(),
       /** The imported `.vcg` file name, verbatim (display resolution input). */
       sourceFileName: z.string().min(1).optional(),
+      /**
+       * R-021 stage 4 (task 3.1) — **RESTORE-BLOCKED**: this row's retained item
+       * came back from a bridge restart, its declared layer is occupied by a
+       * producer that is provably NOT ours, and the restore therefore PARKED
+       * instead of acting. Absent (never `false`) on every other row.
+       *
+       * It rides the BINDING rather than an `observed` variant because it is a
+       * fact about the ITEM's restore, not about the layer: the layer's own
+       * account is already complete in `observed`
+       * (`{ kind: 'producer', producer: 'decklink' }`), and the two together are
+       * exactly what the row must show — "your clock is waiting; a decklink is on
+       * layer 72". Publishing a computed `restore-blocked` ROW STATE instead
+       * would be the second derivation this schema's header forbids: verb
+       * derivation stays ONE function of `(localItem, observation)` in the
+       * renderer.
+       *
+       * A DECIDED fact, never an inferred one. It is set only where the decision
+       * is actually taken (`#decidePendingRestores`, against a HEARING tap), and
+       * never re-derived from "a non-html producer sits under a binding" — a
+       * BLIND tap yields `unverified`, not `blocked`, and collapsing the two
+       * would let silence claim knowledge (B-093).
+       */
+      restoreBlocked: z.literal(true).optional(),
     }),
   ]),
 });
 export type FixedSlotState = z.infer<typeof FixedSlotStateSchema>;
+
+/**
+ * What a bank door answers. `message` is the bridge's own sentence, written for the RECORD (the
+ * audit log, a technical read) — `DELTA-MULTI-CHANNEL-01-A` A5: an operator surface never shows it
+ * under its own sentence. `layer` is the layer an `untick-*` refusal is about, carried as DATA, so
+ * the console names it in its one line instead of leaning on the bridge's words.
+ */
+const FixedLayersSetResultSchema = z.object({
+  ok: z.boolean(),
+  reason: z.enum(FIXED_LAYERS_SET_CONFIG_REASONS).optional(),
+  message: z.string().optional(),
+  layer: z.number().int().nonnegative().optional(),
+});
 
 /** Pull the configured bank; null when no bank is declared. */
 export const FixedLayersConfigChannel = defineChannel(
@@ -305,17 +728,58 @@ export const FixedLayersConfigChannel = defineChannel(
 export const FixedLayersSetConfigChannel = defineChannel(
   'fixedLayers.set-config',
   FixedLayerBankSchema,
-  z.object({
-    ok: z.boolean(),
-    reason: z.enum(FIXED_LAYERS_SET_CONFIG_REASONS).optional(),
-    message: z.string().optional(),
-  }),
+  FixedLayersSetResultSchema,
 );
 
 /** Pushed when a bank change is applied (null = no bank declared). */
 export const FixedLayersConfigChangedChannel = definePublishChannel(
   'fixedLayers.config-changed',
   z.union([FixedLayerBankSchema, z.null()]),
+);
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **EVERY DECLARED BANK**, in channel order; `[]` while none is declared.
+ *
+ * The console's per-channel views read THIS: channel 2's rows come from channel 2's bank. The
+ * three single-bank channels above stay, each the v1 view of the same list — `config` answers
+ * {@link firstBank}, `config-changed` pushes it, and `set-config` makes the set that one bank —
+ * so a one-channel station, and a console older than this change, see exactly what they saw.
+ */
+export const FixedLayersBanksChannel = defineChannel(
+  'fixedLayers.banks',
+  z.void(),
+  FixedLayerBanksSchema,
+);
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **SET THE STATION'S BANKS: add, remove, replace and edit channels, as
+ * one request.** `station-admin`, like every declaration door.
+ *
+ * Validated per channel against the set in force:
+ *
+ *   - a channel in both — `validateFixedBankChange`, unchanged: `start` and `count` are fixed at
+ *     install, and a row may be hidden only while it is provably empty;
+ *   - a channel only in the request — a NEW declaration, validated as a bank installed on a
+ *     bank-less bridge is;
+ *   - a channel only in force — REMOVED, refused while anything of ours holds air on it
+ *     (`channel-change-refused`, the `B-269` sentence), exactly as a replaced channel is.
+ *
+ * At least one bank: a station that declared none would fall back to channel 1 by default, and
+ * channel 1 may be somebody else's programme output — so emptying the set is not expressible.
+ * On success the set is applied, persisted and pushed; on refusal nothing is.
+ */
+export const FixedLayersSetBanksChannel = defineChannel(
+  'fixedLayers.set-banks',
+  z.object({
+    banks: z.array(FixedLayerBankSchema).min(1).superRefine(oneBankPerChannel),
+  }),
+  FixedLayersSetResultSchema,
+);
+
+/** `MULTI-CHANNEL-01` — pushed with the whole list whenever the set is applied. */
+export const FixedLayersBanksChangedChannel = definePublishChannel(
+  'fixedLayers.banks-changed',
+  FixedLayerBanksSchema,
 );
 
 /** Pull the current per-slot state ([] when no bank is declared). */
@@ -359,6 +823,21 @@ export const FIXED_LAYERS_LOAD_REASONS = [
   'not-fixed',
   'slot-bound',
   'rehearsing',
+  /**
+   * 🔴 `single-clock-look-switch` — **the package belongs to the OTHER half of the bank**,
+   * and it is refused in BOTH directions because both mistakes are on-air faults:
+   *
+   *   - a plate-bearing package onto an OPERATOR row composites its own background OVER
+   *     the plates it declares — every guest picture hidden behind the bed that was meant
+   *     to sit under them;
+   *   - a furniture package onto a BED row composites the logo/super/ticker UNDER any live
+   *     picture, so it silently disappears the moment a plate covers it.
+   *
+   * The classification is derived, never chosen: see `requiredBankFor` in `templates.ts`.
+   * A checkbox someone forgets to tick is this project's standing objection to guards that
+   * fail quietly (`design.md` §9a-Z).
+   */
+  'wrong-bank',
 ] as const;
 
 /**

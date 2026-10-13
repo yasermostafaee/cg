@@ -1,0 +1,42 @@
+/*
+ * 🔴 `MULTI-CHANNEL-01` §2 K / `B-263` — PERSIAN CHROME IN THE APP'S OWN PERSIAN FACE.
+ *
+ * The chrome stack leads with a Latin face and reaches `system-ui` before Vazirmatn, and on
+ * Windows `system-ui` (Segoe UI) HAS Arabic glyphs — so every Persian label in the chrome rendered
+ * in Segoe UI and the self-hosted Vazirmatn was never even requested.
+ *
+ * 'Vazirmatn Arabic' is a CHROME-ONLY family: Vazirmatn's own Arabic faces (the same files
+ * `fonts.css` serves), each limited to the Arabic ranges by `unicode-range`. Put FIRST in the chrome
+ * stack, it claims exactly the Persian code points; any other character matches none of its faces
+ * and falls through to the rest of the stack — so Latin keeps the font it uses today, by
+ * construction rather than by hope.
+ *
+ * ⚠ It lives HERE and not in `fonts.css`, because `fonts.css` is also inlined into every exported
+ * template (`?inline`, B-038) — a second copy of the Arabic faces there would double the Persian
+ * payload of every template for a family no template names.
+ */
+
+@font-face {
+  font-family: 'Vazirmatn Arabic';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+200C-200D, U+FB50-FDFF, U+FE70-FEFF;
+  src: url('/fonts/vazirmatn/vazirmatn-arabic-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Vazirmatn Arabic';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+200C-200D, U+FB50-FDFF, U+FE70-FEFF;
+  src: url('/fonts/vazirmatn/vazirmatn-arabic-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Vazirmatn Arabic';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+200C-200D, U+FB50-FDFF, U+FE70-FEFF;
+  src: url('/fonts/vazirmatn/vazirmatn-arabic-700-normal.woff2') format('woff2');
+}

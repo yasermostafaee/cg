@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { AnimatableProperty, Element, Scene } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { colors } from '../../theme.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import * as s from './TimelineDock.css.js';
@@ -9,6 +10,7 @@ import { DisplayRow } from './DisplayRow.js';
 import { ElementRow, lifespanColorFor } from './ElementRow.js';
 import { FrameRuler } from './FrameRuler.js';
 import { LayerContextMenu } from './LayerContextMenu.js';
+import { contentStartDefaultFrom } from '../inspector/content-start-default.js';
 import { LABEL_COL_PX, timelineGroupsFor } from './keyframe-helpers.js';
 import { TrackRow } from './TrackRow.js';
 import {
@@ -419,6 +421,35 @@ export function TimelineDock({
   // Position a frame as a percent of the full span (markers + overlays).
   const markerPct = (f: number): number => frameToPctClamped(f, frameIn, frameOut);
 
+  /**
+   * D-133 — the HOLD LOOP range `[content start → out point]`, PRESENT BY DEFAULT.
+   *
+   * "By default" is the load-bearing word (design §9.2's consequence): because the loop
+   * range is only OFFERED where an out-point exists, what discharges D-133's "the
+   * conditional affordance is at most a shortcut, never the only path" is this — the range
+   * being drawn for every composition that holds, with nothing added by hand.
+   *
+   * So the start is the EFFECTIVE content start, not only the pinned one: the marker when
+   * the operator has pinned it, else the same default `contentStartDefaultFrom` that "Pin
+   * content start" would write. ONE definition, now three callers (the Inspector's pin, the
+   * follow-window hint, this) — extended by a call, never copied, so what the timeline draws
+   * and what pinning produces can never disagree. An UNPINNED start draws dashed: it is
+   * derived, and the timeline should not present a derivation as an authored decision.
+   *
+   * A degenerate range (`contentStartDefaultFrom` returns the out-point verbatim when there
+   * is no entrance to settle) draws nothing — a zero-width band and two coincident lines
+   * read as one stray marker, which is worse than silence. The Playout panel is where that
+   * composition is told what its loop range is and how to move it.
+   */
+  const loopRange = ((): { from: number; to: number; pinned: boolean } | null => {
+    const lc = scene.lifecycle;
+    if (lc === undefined) return null;
+    const from = lc.contentStart ?? contentStartDefaultFrom(scene.layers, active.in, lc.outPoint);
+    return from < lc.outPoint
+      ? { from, to: lc.outPoint, pinned: lc.contentStart !== undefined }
+      : null;
+  })();
+
   // Clicking empty timeline space or the (non-selectable) Scene row clears the
   // layer selection — mirrors the canvas, where clicking the dark area
   // deselects. `clearSelectionOnEmpty` guards on target===currentTarget for the
@@ -586,6 +617,37 @@ export function TimelineDock({
               }}
             >
               <BodyPlayhead frameIn={frameIn} frameOut={frameOut} />
+              {loopRange !== null && (
+                <>
+                  <div
+                    className={s.loopRangeBand}
+                    data-testid="loop-range-band"
+                    style={{
+                      left: `${markerPct(loopRange.from).toFixed(3)}%`,
+                      width: `${(markerPct(loopRange.to) - markerPct(loopRange.from)).toFixed(3)}%`,
+                    }}
+                    aria-hidden
+                  />
+                  <div
+                    className={s.loopRangeLine}
+                    data-testid="loop-range-start"
+                    style={{
+                      left: `${markerPct(loopRange.from).toFixed(3)}%`,
+                      borderLeft: `1.5px ${loopRange.pinned ? 'solid' : 'dashed'} ${colors.markerIn}`,
+                    }}
+                    aria-hidden
+                  />
+                  <div
+                    className={s.loopRangeLine}
+                    data-testid="loop-range-end"
+                    style={{
+                      left: `${markerPct(loopRange.to).toFixed(3)}%`,
+                      borderLeft: `1.5px solid ${colors.markerOut}`,
+                    }}
+                    aria-hidden
+                  />
+                </>
+              )}
               {hasInactiveTail && (
                 <div
                   className={s.inactiveTail}
@@ -734,7 +796,10 @@ function FrameReadout({ frameOut }: { frameOut: number }): JSX.Element {
 function BodyPlayhead({ frameIn, frameOut }: { frameIn: number; frameOut: number }): JSX.Element {
   const currentFrame = useDesignerSelector((s) => s.currentFrame);
   const pct = frameToPct(currentFrame, frameIn, frameOut).toFixed(3);
-  return <div className={s.bodyPlayhead} style={{ left: `${pct}%` }} />;
+  // The testid identifies the SHIPPED full-height body overlay: D-133's loop-range lines
+  // assert they are its siblings, which is the structural half of "full timeline height"
+  // (the pixel half is measured in the E2E, where CSS actually runs).
+  return <div className={s.bodyPlayhead} data-testid="body-playhead" style={{ left: `${pct}%` }} />;
 }
 
 /**

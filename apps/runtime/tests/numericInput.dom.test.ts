@@ -2,11 +2,13 @@
 import { StrictMode, createElement, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectionHealth } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
-import { ServerSettingsPanel } from '../src/renderer/features/connections/ServerSettingsPanel.js';
+import { StationSetupDialog } from '../src/renderer/features/stationSetup/StationSetupDialog.js';
+import { stationSetupStub } from './support/stationSetup.js';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
+import { applyDraft } from '../src/renderer/features/inspector/applyDraft.js';
 import { PositionPicker } from '../src/renderer/features/inspector/PositionPicker.js';
 import {
   __resetDraftsForTest,
@@ -17,6 +19,7 @@ import { StatusBar } from '../src/renderer/features/status/StatusBar.js';
 import { NumericInput, normalizeDigits } from '../src/renderer/ui/NumericInput.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
 import { clearPortals, openDialog } from './support/dialog.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * R-020 — Persian-keyboard digits accepted in numeric inputs, normalized to
@@ -39,7 +42,7 @@ beforeEach(() => {
 afterEach(() => {
   container?.remove();
   container = null;
-  // `ServerSettingsPanel` is a portalled `Modal` now — clear the scrim so it cannot
+  // `StationSetupDialog` is a portalled `Modal` — clear the scrim so it cannot
   // leak into the next spec's queries.
   clearPortals();
   vi.restoreAllMocks();
@@ -100,14 +103,24 @@ describe('normalizeDigits — R-020', () => {
 function Harness({
   onValue,
   decimal,
+  asTyped,
+  persian,
+  scrub,
 }: {
   onValue: (v: string) => void;
   decimal?: boolean;
+  asTyped?: boolean;
+  /** `FIELD-DIGITS-01` — a template field set to Persian. */
+  persian?: boolean;
+  scrub?: boolean;
 }): JSX.Element {
   const [value, setValue] = useState('');
   return createElement(NumericInput, {
     value,
     ...(decimal === true ? { decimal } : {}),
+    ...(asTyped === true ? { digits: 'as-typed' as const } : {}),
+    ...(persian === true ? { digits: 'persian' as const } : {}),
+    ...(scrub === true ? { scrub: { step: 1 } } : {}),
     onValueChange: (next: string) => {
       setValue(next);
       onValue(next);
@@ -147,6 +160,74 @@ describe('NumericInput — R-020', () => {
     expect(seen.at(-1)).toBe('5250');
   });
 
+  it('`digits="as-typed"` hands over the operator\'s text UNCHANGED (a template value)', async () => {
+    const seen: string[] = [];
+    const el = await render(
+      createElement(Harness, { onValue: (v) => seen.push(v), decimal: true, asTyped: true }),
+    );
+    const input = inputByLabel(el, 'num');
+    await setInput(input, '۱۲٫۵');
+    expect(input.value).toBe('۱۲٫۵');
+    expect(seen.at(-1)).toBe('۱۲٫۵');
+    await setInput(input, '١٢٫٥');
+    expect(seen.at(-1)).toBe('١٢٫٥');
+  });
+
+  it('`as-typed` arrows step the NUMBER and write it back in the typed digits', async () => {
+    const seen: string[] = [];
+    const el = await render(
+      createElement(Harness, {
+        onValue: (v) => seen.push(v),
+        decimal: true,
+        asTyped: true,
+        scrub: true,
+      }),
+    );
+    const input = inputByLabel(el, 'num');
+    await setInput(input, '۱۲٫۵');
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    });
+    expect(seen.at(-1)).toBe('۱۳٫۵');
+    // The control: Latin text steps in Latin.
+    await setInput(input, '12.5');
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    });
+    expect(seen.at(-1)).toBe('13.5');
+  });
+
+  it('`digits="persian"` writes every digit and the decimal mark in Persian as they land', async () => {
+    const seen: string[] = [];
+    const el = await render(
+      createElement(Harness, { onValue: (v) => seen.push(v), decimal: true, persian: true }),
+    );
+    const input = inputByLabel(el, 'num');
+    await setInput(input, '12.5');
+    expect(input.value).toBe('۱۲٫۵');
+    expect(seen.at(-1)).toBe('۱۲٫۵');
+    await setInput(input, '١٢٫٥');
+    expect(seen.at(-1)).toBe('۱۲٫۵');
+  });
+
+  it('`persian` arrows step the NUMBER and write it back in Persian', async () => {
+    const seen: string[] = [];
+    const el = await render(
+      createElement(Harness, {
+        onValue: (v) => seen.push(v),
+        decimal: true,
+        persian: true,
+        scrub: true,
+      }),
+    );
+    const input = inputByLabel(el, 'num');
+    await setInput(input, '12.5');
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    });
+    expect(seen.at(-1)).toBe('۱۳٫۵');
+  });
+
   it('decimal mode: ۱۲٫۵ commits as 12.5', async () => {
     const seen: string[] = [];
     const el = await render(
@@ -164,7 +245,12 @@ describe('Inspector fields — R-020', () => {
     const stub = {
       // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
       // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
-      link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+      link: {
+        status: () => linkFor('both-up'),
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
       connections: connectionsStub('both-up'),
       templates: {
         list: vi.fn(() => Promise.resolve([])),
@@ -174,22 +260,48 @@ describe('Inspector fields — R-020', () => {
             name: 'Lower third',
             templateType: 'lower-third',
             fields: [
-              { id: 'fontSize', type: 'number', label: 'Font size', default: 5, step: 1 },
+              // FIELD-DIGITS-01 — `fontSize` is set to Persian, which is what keeps PERSIAN-DIGITS-01's
+              // on-screen assertions below exactly as they were; `count` carries no setting (Latin).
+              {
+                id: 'fontSize',
+                type: 'number',
+                label: 'Font size',
+                default: 5,
+                step: 1,
+                digits: 'persian',
+              },
               { id: 'title', type: 'text', label: 'Headline', default: '' },
+              { id: 'count', type: 'number', label: 'Count', default: 1 },
+              { id: 'clock', type: 'text', label: 'Clock', default: '', digits: 'persian' },
+              {
+                id: 'notes',
+                type: 'multiline',
+                label: 'Notes',
+                default: '',
+                digits: 'arabic-indic',
+              },
             ],
           }),
         ),
+        onChanged: () => () => undefined,
+      },
+      // Phase 6 — the Inspector names the ROW (`useOperatorNames`), so it reads the bank too.
+      fixedLayers: {
+        config: () => Promise.resolve(null),
+        onConfigChanged: () => () => undefined,
+        state: () => Promise.resolve([]),
+        onStateChanged: () => () => undefined,
       },
       stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
     };
-    (window as unknown as { cg: typeof stub }).cg = stub;
+    (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   }
 
   function item(): StackItemState {
     return {
       itemId: 'item-1',
       templateId: 'tpl-1',
-      fields: { fontSize: 5, title: '' },
+      fields: { fontSize: 5, title: '', count: 1, clock: '', notes: '' },
       status: 'loaded',
       pending: false,
     };
@@ -206,12 +318,65 @@ describe('Inspector fields — R-020', () => {
     );
   }
 
-  it('a NUMBER field typed in Persian stages the canonical number', async () => {
+  /*
+    🔴 `PERSIAN-DIGITS-01` — RE-EXPRESSED, NOT LOOSENED. This used to assert the field DISPLAYED
+    `128`: R-020 normalised a template number to Latin on screen. The owner's rule supersedes
+    that for TEMPLATE VALUES — the operator's digits stay exactly as typed — while the staged
+    value is still the canonical NUMBER, which is the half of the claim that reaches the wire and
+    is asserted exactly as before. Console numbers (the ports, the offsets, the PIN, below) keep
+    R-020's Latin display unchanged.
+  */
+  it('a NUMBER field typed in Persian keeps its digits on screen and stages the number', async () => {
     const el = await renderInspector();
     await setInput(inputByLabel(el, 'fontSize'), '۱۲۸');
     // Stored value: the NUMBER 128 — not a Persian-digit string.
     expect(effectiveValue('item-1', ['fontSize'], undefined)).toBe(128);
-    expect(inputByLabel(el, 'fontSize').value).toBe('128');
+    expect(inputByLabel(el, 'fontSize').value).toBe('۱۲۸');
+  });
+
+  it('reads ٫ and ٬ — `۱۲٫۵` stages 12.5 and `۱٬۲۳۴` stages 1234, the text untouched', async () => {
+    const el = await renderInspector();
+    const input = inputByLabel(el, 'fontSize');
+    await setInput(input, '۱۲٫۵');
+    expect(effectiveValue('item-1', ['fontSize'], 5)).toBe(12.5);
+    expect(input.value).toBe('۱۲٫۵');
+    await setInput(input, '۱٬۲۳۴');
+    // Measured before this change: the wire carried 1 — the last prefix that parsed.
+    expect(effectiveValue('item-1', ['fontSize'], 5)).toBe(1234);
+    expect(input.value).toBe('۱٬۲۳۴');
+  });
+
+  it('`۱۲a` is refused in ONE line and stages NOTHING — not even the `۱۲` typed on the way', async () => {
+    const el = await renderInspector();
+    const input = inputByLabel(el, 'fontSize');
+    // The control: a number stages, with no refusal.
+    await setInput(input, '۱۲');
+    expect(effectiveValue('item-1', ['fontSize'], 5)).toBe(12);
+    expect(el.querySelector('[data-field-refusal]')).toBeNull();
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+
+    await setInput(input, '۱۲a');
+    const refusal = el.querySelectorAll('[data-field-refusal]');
+    expect(refusal, 'exactly one refusal line').toHaveLength(1);
+    expect(refusal[0]?.textContent).toBe('Not a number — Update will not change it.');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.getAttribute('aria-describedby')).toBe(refusal[0]?.id);
+    // The draft is WITHDRAWN: the value an Update would send is the one on air (5).
+    // Measured before this change: `۱۲a` reached air as 12.
+    expect(effectiveValue('item-1', ['fontSize'], 5)).toBe(5);
+    // …and the operator's text is still there to correct, not reset under him.
+    expect(input.value).toBe('۱۲a');
+  });
+
+  it('a half-typed number says NOTHING and stages nothing', async () => {
+    const el = await renderInspector();
+    const input = inputByLabel(el, 'fontSize');
+    for (const partial of ['-', '۱٬', '']) {
+      await setInput(input, partial);
+      expect(el.querySelector('[data-field-refusal]'), JSON.stringify(partial)).toBeNull();
+      expect(effectiveValue('item-1', ['fontSize'], 5), JSON.stringify(partial)).toBe(5);
+      expect(input.value).toBe(partial);
+    }
   });
 
   it('a TEXT field keeps Persian digits verbatim — display text is display text', async () => {
@@ -220,29 +385,92 @@ describe('Inspector fields — R-020', () => {
     expect(effectiveValue('item-1', ['title'], undefined)).toBe('کانال ۳');
     expect(inputByLabel(el, 'title').value).toBe('کانال ۳');
   });
+
+  /*
+    `FIELD-DIGITS-01` — the field, not the keyboard, decides the digits. A Windows keyboard types
+    Latin digits on the numpad whatever its layout, so each digit is written in the field's choice
+    as it lands, with the caret where it was. `title` carries no setting: the control, as typed.
+  */
+  it('a Persian TEXT field writes `12:30` as `۱۲:۳۰` in the box and in the staged value', async () => {
+    const el = await renderInspector();
+    const clock = inputByLabel(el, 'clock');
+    await setInput(clock, '12:30');
+    expect(clock.value).toBe('۱۲:۳۰');
+    expect(effectiveValue('item-1', ['clock'], undefined)).toBe('۱۲:۳۰');
+    // The control: a field with no setting keeps Latin digits as typed.
+    await setInput(inputByLabel(el, 'title'), '12:30');
+    expect(inputByLabel(el, 'title').value).toBe('12:30');
+    expect(effectiveValue('item-1', ['title'], undefined)).toBe('12:30');
+  });
+
+  it('a digit typed MID-TEXT is written in place and the caret stays after it', async () => {
+    const el = await renderInspector();
+    const clock = inputByLabel(el, 'clock');
+    await setInput(clock, '۱۲:۳۰');
+    // The browser inserts a Latin `5` after `۱۲` and puts the caret after it (index 3).
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => {
+      setter?.call(clock, '۱۲5:۳۰');
+      clock.setSelectionRange(3, 3);
+      clock.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(clock.value).toBe('۱۲۵:۳۰');
+    expect([clock.selectionStart, clock.selectionEnd]).toEqual([3, 3]);
+  });
+
+  it('an Arabic-Indic MULTILINE field writes its digits the same way', async () => {
+    const el = await renderInspector();
+    const notes = el.querySelector<HTMLTextAreaElement>('textarea[aria-label="notes"]');
+    if (notes === null) throw new Error('notes not rendered');
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+    await act(async () => {
+      setter?.call(notes, 'line 1\nline 2');
+      notes.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(notes.value).toBe('line ١\nline ٢');
+    expect(effectiveValue('item-1', ['notes'], undefined)).toBe('line ١\nline ٢');
+  });
+
+  it('a NUMBER field with no setting shows Latin — what the page draws for it — and stages the number', async () => {
+    const el = await renderInspector();
+    const count = inputByLabel(el, 'count');
+    await setInput(count, '۱۲٫۵');
+    expect(count.value).toBe('12.5');
+    expect(effectiveValue('item-1', ['count'], 1)).toBe(12.5);
+  });
+
+  it('a Persian NUMBER field writes `12.5` as `۱۲٫۵` and still stages the NUMBER', async () => {
+    const el = await renderInspector();
+    const fontSize = inputByLabel(el, 'fontSize');
+    await setInput(fontSize, '12.5');
+    expect(fontSize.value).toBe('۱۲٫۵');
+    expect(effectiveValue('item-1', ['fontSize'], 5)).toBe(12.5);
+    expect(typeof effectiveValue('item-1', ['fontSize'], 5)).toBe('number');
+  });
 });
 
 describe('PositionPicker offsets — R-020', () => {
   it('Persian-typed offsets apply as canonical numbers on the wire', async () => {
     const setPosition = vi.fn(() => Promise.resolve({ ok: true }));
-    const stub = { stack: { setPosition } };
-    (window as unknown as { cg: typeof stub }).cg = stub;
-    const el = await render(
-      createElement(PositionPicker, {
-        item: {
-          itemId: 'item-1',
-          templateId: 'tpl-pos',
-          fields: {},
-          status: 'loaded',
-          pending: false,
-        },
-      }),
-    );
+    // `stack.update` too: the commit is UPDATE now, and `applyDraft` always sends the field
+    // half (the documented `B-048` re-send). See `positionPicker.dom.test.ts`'s stub note.
+    const update = vi.fn(() => Promise.resolve({ accepted: true }));
+    const stub = { stack: { setPosition, update } };
+    (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
+    const subject: StackItemState = {
+      itemId: 'item-1',
+      templateId: 'tpl-pos',
+      fields: {},
+      status: 'loaded',
+      pending: false,
+    };
+    const el = await render(createElement(PositionPicker, { item: subject }));
     await setInput(inputByLabel(el, 'Position offset X'), '-۴۰');
     await setInput(inputByLabel(el, 'Position offset Y'), '٧');
     expect(inputByLabel(el, 'Position offset X').value).toBe('-40');
     await act(async () => {
-      el.querySelector<HTMLButtonElement>('button[aria-label="Apply position"]')?.click();
+      // `INSPECTOR-DELTA` — the commit is UPDATE now; `applyDraft` is what it calls.
+      await applyDraft(subject);
       await Promise.resolve();
     });
     expect(setPosition).toHaveBeenCalledWith({
@@ -252,37 +480,24 @@ describe('PositionPicker offsets — R-020', () => {
   });
 });
 
-describe('ServerSettingsPanel ports — R-020 (B-077 interaction)', () => {
-  function stubBridge(): { setConfig: Mock } {
-    const setConfig = vi.fn(() => Promise.resolve({ ok: true }));
-    const stub = {
-      connections: {
-        config: () =>
-          Promise.resolve({
-            servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
-            strategy: 'mirror-sync' as const,
-            autoFailoverEnabled: true,
-          }),
-        onConfigChanged: () => () => undefined,
-        setConfig,
-      },
-      stack: {
-        snapshot: () => Promise.resolve([]),
-        onStateChanged: () => () => undefined,
-      },
-      link: { status: () => 'live' as const, onStatusChanged: () => () => undefined },
-    };
-    (window as unknown as { cg: typeof stub }).cg = stub;
-    return { setConfig };
-  }
-
+describe('Station setup — Servers ports — R-020 (B-077 interaction)', () => {
   it('a Persian-typed port passes the numeric validation and submits canonical', async () => {
-    const { setConfig } = stubBridge();
-    await render(createElement(ServerSettingsPanel, { open: true, onClose: () => undefined }));
-    // The panel is built on the shared `Modal` now, which PORTALS to `document.body`,
-    // so the fields are not inside the mount container. Query the dialog itself.
+    // `STATION-SETUP-02` — the Servers form is a section of Station setup; the one shared
+    // stub supplies every section's bridge surface.
+    const { setConfig } = stationSetupStub();
+    // `STATION-CHROME-01` §2 — the dialog is tabbed, so it has to be opened AT Servers:
+    // the default tab is Channel, which carries no ports at all.
+    await render(
+      createElement(StationSetupDialog, {
+        open: true,
+        section: 'servers',
+        onClose: () => undefined,
+      }),
+    );
+    // The dialog PORTALS to `document.body`, so the fields are not inside the mount
+    // container. Query the dialog itself.
     const el = openDialog();
-    if (el === null) throw new Error('the server settings dialog did not open');
+    if (el === null) throw new Error('Station setup did not open');
     await setInput(inputByLabel(el, 'Primary AMCP port'), '۵۲۵۱');
     // The /^\d+$/ port rule sees Latin digits — no "must be an integer" refusal.
     expect(el.textContent).not.toContain('AMCP port must be an integer');
@@ -293,7 +508,7 @@ describe('ServerSettingsPanel ports — R-020 (B-077 interaction)', () => {
     });
     expect(setConfig).toHaveBeenCalledWith(
       expect.objectContaining({
-        servers: { A: { host: '127.0.0.1', amcpPort: 5251, oscPort: 6250 } },
+        servers: { A: { host: '127.0.0.1', amcpPort: 5251, oscPort: 6251 } },
       }),
     );
   });
@@ -337,32 +552,197 @@ describe('Lock PIN — R-020 (both ends of the comparison normalize)', () => {
         onHealthChanged: () => () => undefined,
         failover: () => Promise.resolve({ ok: false, newPrimary: 'A' as const }),
       },
+      /*
+      `R-066` — the status bar now carries the sign-in state, so a stub that claims to be a
+      bridge has to answer for it. `off` is what this stub means: these specs are about the
+      LINK and the servers, and a console that does not authenticate is the state in which
+      every assertion below was written.
+
+      ⚠ Added rather than defended against in `useAuthSession`. A hook that read an absent
+      `auth` member as "off" would also read a PRODUCTION bridge missing it as "off" — and
+      `B-153`'s doctrine is that a bridge which cannot answer is the LOUDEST match, never a
+      quiet default.
+    */
+      auth: {
+        state: () => ({ kind: 'off' as const }),
+        onStateChanged: () => () => undefined,
+      },
       lock: {
         state: () => Promise.resolve({ engaged: false }),
         onStateChanged: () => () => undefined,
         engage,
       },
-      link: { status: () => 'live' as const, onStatusChanged: () => () => undefined },
+      link: {
+        status: () => 'live' as const,
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
     };
-    (window as unknown as { cg: typeof stub }).cg = stub;
+    (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
     const el = await render(createElement(StatusBar));
 
     // Open the lock prompt, type a Persian PIN, submit. The prompt dialog is
     // PORTALLED to document.body, so it is queried on the document, not `el`.
     const lockButton = [...el.querySelectorAll('button')].find((b) =>
-      (b.textContent ?? '').includes('Lock…'),
+      (b.textContent ?? '').includes('Lock'),
     );
     await act(async () => {
       lockButton?.click();
     });
-    const pinInput = document.querySelector<HTMLInputElement>('input[type="password"]');
-    if (pinInput === null) throw new Error('lock prompt input not rendered');
-    await setInput(pinInput, '۱۲۳۴');
-    const submit = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Lock');
+    /*
+      ⭐ `STATION-CHROME-01` §7 — THE PIN IS ASKED TWICE, so R-020's claim is now checked on
+      BOTH ends AND on the comparison between them, which is strictly more than it was.
+
+      That comparison is where normalisation earns its keep a second time: `۱۲۳۴` typed into
+      one field and `1234` into the other are the same number to everyone except a byte
+      comparison, and a match check on the RAW strings would refuse a PIN the operator typed
+      correctly. So the two fields below deliberately use DIFFERENT digit systems.
+    */
+    const fields = [...document.querySelectorAll<HTMLInputElement>('input[type="password"]')];
+    expect(fields, 'the engage form asks for the PIN twice').toHaveLength(2);
+    await setInput(fields[0] as HTMLInputElement, '۱۲۳۴');
+    await setInput(fields[1] as HTMLInputElement, '1234');
+    /*
+      ⚠ SCOPED TO THE DIALOG. This searched the whole DOCUMENT for a button reading exactly
+      `Lock` — which was unambiguous only while the status bar's own control said `Lock…`.
+      `MODAL-CHROME-10` A §A2 took its ellipsis away, so document order would hand this the
+      BAR's button instead of the dialog's submit.
+    */
+    const submit = [
+      ...(document.querySelector('[role="dialog"]')?.querySelectorAll('button') ?? []),
+    ].find((b) => b.textContent === 'Lock');
     await act(async () => {
       submit?.click();
       await Promise.resolve();
     });
     expect(engage).toHaveBeenCalledWith({ pin: '1234' });
+  });
+
+  it('🔴 §7 — two DIFFERENT PINs are refused, and nothing is engaged', async () => {
+    const engage = vi.fn(() => Promise.resolve({ ok: true }));
+    const health: ConnectionHealth = {
+      primary: { label: 'A', state: 'healthy', amcpAxisOk: true },
+      currentPrimary: 'A',
+      strategy: 'mirror-sync',
+    };
+    const stub = {
+      connections: {
+        health: () => Promise.resolve(health),
+        onHealthChanged: () => () => undefined,
+        failover: () => Promise.resolve({ ok: false, newPrimary: 'A' as const }),
+      },
+      // `R-066` — the bar now reads the sign-in state too; `off` is what these PIN specs mean.
+      auth: {
+        state: () => ({ kind: 'off' as const }),
+        onStateChanged: () => () => undefined,
+      },
+      lock: {
+        state: () => Promise.resolve({ engaged: false }),
+        onStateChanged: () => () => undefined,
+        engage,
+      },
+      link: {
+        status: () => 'live' as const,
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
+    };
+    (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
+    const el = await render(createElement(StatusBar));
+    const lockButton = [...el.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').includes('Lock'),
+    );
+    await act(async () => {
+      lockButton?.click();
+    });
+
+    const fields = [...document.querySelectorAll<HTMLInputElement>('input[type="password"]')];
+    await setInput(fields[0] as HTMLInputElement, '1234');
+    await setInput(fields[1] as HTMLInputElement, '1235');
+    /*
+      ⚠ SCOPED TO THE DIALOG. This searched the whole DOCUMENT for a button reading exactly
+      `Lock` — which was unambiguous only while the status bar's own control said `Lock…`.
+      `MODAL-CHROME-10` A §A2 took its ellipsis away, so document order would hand this the
+      BAR's button instead of the dialog's submit.
+    */
+    const submit = [
+      ...(document.querySelector('[role="dialog"]')?.querySelectorAll('button') ?? []),
+    ].find((b) => b.textContent === 'Lock');
+    await act(async () => {
+      submit?.click();
+      await Promise.resolve();
+    });
+
+    /*
+      🔴 THE WHOLE POINT: the lock does NOT engage. A mistyped PIN here locks the operator out
+      of a live console — the lock refuses everything, the only way out is the PIN, and there
+      is no reset. This is the one form in the app where a single keystroke error is
+      unrecoverable.
+    */
+    expect(engage, 'a mismatched PIN must not engage the lock').not.toHaveBeenCalled();
+    const said = document.body.textContent ?? '';
+    expect(said).toContain('The two PINs are different');
+    // …and the form stays open, on the fields, so he can fix it.
+    expect(document.querySelectorAll('input[type="password"]')).toHaveLength(2);
+  });
+
+  it('a PIN shorter than the floor is refused with the rule, not silently dropped', async () => {
+    const engage = vi.fn(() => Promise.resolve({ ok: true }));
+    const health: ConnectionHealth = {
+      primary: { label: 'A', state: 'healthy', amcpAxisOk: true },
+      currentPrimary: 'A',
+      strategy: 'mirror-sync',
+    };
+    const stub = {
+      connections: {
+        health: () => Promise.resolve(health),
+        onHealthChanged: () => () => undefined,
+        failover: () => Promise.resolve({ ok: false, newPrimary: 'A' as const }),
+      },
+      // `R-066` — the bar now reads the sign-in state too; `off` is what these PIN specs mean.
+      auth: {
+        state: () => ({ kind: 'off' as const }),
+        onStateChanged: () => () => undefined,
+      },
+      lock: {
+        state: () => Promise.resolve({ engaged: false }),
+        onStateChanged: () => () => undefined,
+        engage,
+      },
+      link: {
+        status: () => 'live' as const,
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
+    };
+    (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
+    const el = await render(createElement(StatusBar));
+    const lockButton = [...el.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').includes('Lock'),
+    );
+    await act(async () => {
+      lockButton?.click();
+    });
+    const fields = [...document.querySelectorAll<HTMLInputElement>('input[type="password"]')];
+    await setInput(fields[0] as HTMLInputElement, '12');
+    await setInput(fields[1] as HTMLInputElement, '12');
+    /*
+      ⚠ SCOPED TO THE DIALOG. This searched the whole DOCUMENT for a button reading exactly
+      `Lock` — which was unambiguous only while the status bar's own control said `Lock…`.
+      `MODAL-CHROME-10` A §A2 took its ellipsis away, so document order would hand this the
+      BAR's button instead of the dialog's submit.
+    */
+    const submit = [
+      ...(document.querySelector('[role="dialog"]')?.querySelectorAll('button') ?? []),
+    ].find((b) => b.textContent === 'Lock');
+    await act(async () => {
+      submit?.click();
+      await Promise.resolve();
+    });
+    expect(engage).not.toHaveBeenCalled();
+    expect(document.body.textContent ?? '').toContain('at least 4 characters');
   });
 });

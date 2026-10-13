@@ -223,3 +223,43 @@ seeded face resolves wherever the scene uses it.
   placeholder family
 - **THEN** after seeding, that element's `font.family` is the imported
   `asset-<assetId>` (not the unresolved placeholder)
+
+### Requirement: Persian in the Designer's chrome is drawn in Vazirmatn, and Latin keeps Exo 2
+
+The Designer's chrome SHALL draw every Persian glyph in the self-hosted Vazirmatn (`B-263`), from a chrome-only family of Vazirmatn's Arabic faces limited by `unicode-range` to the Arabic ranges and leading both chrome stacks — the page's and `body`'s — so that any other character falls through to the stack exactly as before and Latin keeps Exo 2. It SHALL be declared outside `fonts.css`, which is inlined into every exported template, and SHALL change no authored font. This SHALL be measured in a real browser by the platform font the engine used, never by reading CSS.
+
+#### Scenario: Persian chrome and Latin chrome
+
+- **WHEN** a Persian label in the Designer's chrome is measured with CDP `CSS.getPlatformFontsForNode` **THEN** it is drawn in Vazirmatn, not in `Segoe UI`
+- **WHEN** a Latin label is measured the same way **THEN** it is drawn in exactly the font the previous stack gives it at the same weight and size
+
+### Requirement: Help → About SHALL name CG Designer, its version and its build
+
+The Designer's Help menu SHALL offer `About`, which opens a dialog naming the app — `CG Designer` —
+`Version <release>`, and the exact build (`<sha> · <date>`), from the same build stamp the start screen's
+version line reads. The start screen's line SHALL stay. The facts SHALL be rendered as facts, not
+controls, and the dialog SHALL close by its own close control and Escape.
+
+#### Scenario: About
+
+- **WHEN** the operator chooses Help → About **THEN** a dialog names CG Designer, `Version <release>` — the
+  version `tools/release` reads for the release — and the build
+
+#### Scenario: A wrong version is caught
+
+- **WHEN** the dialog shows another version than `tools/release` reads (a planted `0.0.1`) **THEN** the
+  same check the real dialog passes fails
+- **WHEN** Escape is pressed, or the dialog's own close **THEN** it closes
+
+### Requirement: A starter card carries a comparable playout badge and one line
+
+Each starter card on the landing screen SHALL show a playout badge derived from the starter's entry
+composition — stays until stopped · holds until stopped, then exits · auto-out after N s ·
+content-driven hold · loop-cycle every ~N s — beside a one-line description. The badge SHALL be
+computed from the scene, not authored beside it, so it cannot drift from what the template does.
+
+#### Scenario: the five starters differ by badge
+
+- **WHEN** the landing screen lists the five starters
+- **THEN** each card shows a badge, and the Guest Title's reads "auto-out after 6 s", the Headline
+  Rotator's "content-driven hold", the Logo Sting's names a loop of about 10 s

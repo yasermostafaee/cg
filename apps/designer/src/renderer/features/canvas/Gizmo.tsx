@@ -1,23 +1,26 @@
 import { useSyncExternalStore } from 'react';
-import type { Element } from '@cg/shared-schema';
+import { noiseFloor, type Element } from '@cg/shared-schema';
 import { designerStore, editSceneOf } from '../../state/store.js';
-import { effectivePathLocalRect, effectiveTransformAt } from '../timeline/keyframe-helpers.js';
+import { effectivePathLocalRect } from '../timeline/keyframe-helpers.js';
 import { measureElementSceneSize, subscribeMeasure, getMeasureVersion } from './measure-element.js';
 import { cx } from '../../cx.js';
 import {
   boxRect,
+  chooseEdgeSnap,
   computeRectResize,
   computeRotationAngle,
   gizmoCorners,
   gizmoCornersOfRect,
   localToScene,
+  movingCornerScene,
   pivotClientFromGrab,
+  pointerForMovingEdge,
   quantizeBoxToLayout,
   rectCorner,
   rectHandleLocal,
   screenAngleDeg,
   screenDistance,
-  snapValue,
+  snapDragToPixel,
   RESIZE_CFG,
   type Corner,
   type Handle,
@@ -26,6 +29,9 @@ import {
 } from './geometry.js';
 import { colors } from '../../theme.js';
 import * as s from './Gizmo.css.js';
+import { hasNoActiveCell, renderedTransformAt } from '../../state/slices/arrangements.js';
+import { isAspectLocked } from '../../state/slices/view.js';
+import { sizeRatioForAspect } from '../inspector/aspect-presets.js';
 
 interface Props {
   element: Element;
@@ -144,7 +150,13 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   // asynchronously; webfonts swap in later). Subscribing re-renders the gizmo so the
   // auto box stays glued without polling.
   useSyncExternalStore(subscribeMeasure, getMeasureVersion);
-  let t = effectiveTransformAt(element, currentFrame);
+  // 🔴 D-154 — the ARRANGED transform, not the authored one. With an arrangement active a
+  // box renders at its CELL, and a gizmo drawn from `element.transform` sat in empty space
+  // while the picture was elsewhere — the owner's handles did not touch what he could see.
+  // 🔴 B-175 — through the ONE read side, so this DRAW and the gestures below cannot be
+  // reading two different rects. They were, and that is the bug this call now shares a
+  // function with rather than a convention.
+  let t = renderedTransformAt(element, currentFrame);
   // D-060 §C — an auto-sized text box is content-driven, so `transform.size` is not
   // authoritative. Trace the RENDERED box (the element's local content size measured
   // from the iframe — `offsetWidth/Height`, unaffected by zoom or scale/rotate), and
@@ -326,7 +338,9 @@ export function MultiGizmo({ elements, scale, currentFrame }: MultiProps): JSX.E
   if (elements.length < 2) return null;
   const boxes = elements.map((el) => {
     // B-042 — same LayoutUnit quantization as the single-selection gizmo (visual only).
-    const t = quantizeBoxToLayout(effectiveTransformAt(el, currentFrame));
+    // B-175 — and the same ONE read side: a member box drawn at its authored rect while the
+    // single-selection gizmo drew the cell made the two gizmos disagree about one element.
+    const t = quantizeBoxToLayout(renderedTransformAt(el, currentFrame));
     // D-110 — a keyframed path's member box follows its live morph rect (same
     // axis-aligned fidelity as the other members — rotation is ignored here).
     const r = effectivePathLocalRect(el, currentFrame) ?? boxRect(t);
@@ -370,7 +384,10 @@ function buildSnapTargets(excludeId: string, currentFrame: number): { xs: number
     for (const layer of doc.layers) {
       for (const el of layer.children) {
         if (el.id === excludeId) continue;
-        const tr = effectiveTransformAt(el, currentFrame);
+        // B-175 — snap to where a box IS DRAWN, not to where it was authored. A target
+        // read from the authored rect is a guide line the author cannot see, pulling the
+        // dragged edge to an alignment that is not on screen.
+        const tr = renderedTransformAt(el, currentFrame);
         const ew = tr.size.w * tr.scale.x;
         const eh = tr.size.h * tr.scale.y;
         xs.push(tr.position.x, tr.position.x + ew / 2, tr.position.x + ew);
@@ -390,7 +407,14 @@ function beginResize(
   currentFrame: number,
   ev: PointerEvent,
 ): void {
-  const t0 = effectiveTransformAt(element, currentFrame);
+  // 🔴 B-175 — a box the active arrangement gives NO CELL renders nowhere, and starting a
+  // resize on it would divide by `NO_CELL`'s zero width. Refused at the door, from the SAME
+  // predicate the write side refuses with — see `hasNoActiveCell`.
+  if (hasNoActiveCell(element.id)) return;
+  // 🔴 B-175 — the ONE read side, the same call the gizmo DREW from. This read
+  // `effectiveTransformAt` — the AUTHORED rect — so `grabScene`, the fixed corner and both
+  // ratios were solved against a rect that was not where the handle was drawn.
+  const t0 = renderedTransformAt(element, currentFrame);
   // D-110 — a keyframed path resizes from its LIVE morph rect (what the handles
   // sit on); everything else from the plain element box. `computeRectResize`'s
   // ratio-based commits make either box mean "scale the shape so THIS extent
@@ -410,41 +434,173 @@ function beginResize(
   // Snap the moving edge to other elements / canvas / guides — only when the
   // element is axis-aligned (snapping to H/V lines is undefined when rotated).
   const snapping = designerStore.get().snappingEnabled && t0.rotation === 0;
+  /*
+    🔴 `D-155` — THE LOCK, RESOLVED ONCE FOR THE WHOLE GESTURE.
+
+    Read here rather than per pointer-move on purpose: a lock toggled MID-DRAG would change
+    which solution the box is tracking halfway through, so the box would relocate under a
+    pointer that did not change direction. The press decides.
+
+    ⚠ This comment previously justified that by appeal to "the same visible jump the
+    dominant-axis rule produces". **That jump does not exist** — it was measured, and both
+    candidate corner rules are continuous at the diagonal. See `lockExtents` in `geometry.ts`
+    for the full correction. The reason above stands on its own and does not borrow it.
+
+    The ratio is `sizeRatioForAspect`'s, never `aspect` itself — that function is the ONE
+    place that knows the effective aspect includes `scale`, and `geometry.ts` deliberately
+    never learns what an aspect is.
+
+    ⚠ NARROW BY CONSTRUCTION: a `video-placeholder` with `expectedAspect` SET, and nothing
+    else. Every other element kind, an unspecified aspect, and the lock switched off all
+    resolve to `undefined` and take the untouched free-resize path.
+
+    `B-218` — the lock is THIS plate's (`isAspectLocked(state, element.id)`), never a flag
+    shared by every plate in every look.
+  */
+  const lockRatio =
+    element.type === 'video-placeholder' &&
+    element.expectedAspect !== undefined &&
+    isAspectLocked(designerStore.get(), element.id)
+      ? (sizeRatioForAspect(element.expectedAspect, t0.scale) ?? undefined)
+      : undefined;
   const targets = snapping ? buildSnapTargets(element.id, currentFrame) : { xs: [], ys: [] };
   const thr = SNAP_PX / scale;
 
+  /*
+    ⭐ **`B-181` — THE SNAP IS DECIDED ON THE RECT THAT WILL BE COMMITTED, NOT ON THE POINTER.**
+
+    ── WHAT WAS WRONG ─────────────────────────────────────────────────────────
+
+    This handler used to `snapValue(pScene.x, …)` — snap the POINTER — and apply the aspect lock
+    afterwards, inside `computeRectResize`. Unlocked that is correct by accident and exactly
+    correct: the solver puts the grabbed edge at the pointer, so `movingEdge.x === pScene.x`
+    identically (the element's own `scale` cancels), and snapping one IS snapping the other.
+
+    Under the lock it is not. `computeRectResize` solves for a rect satisfying the ratio, so the
+    edge is NOT under the pointer; for a CORNER, `lockExtents` projects onto the locked diagonal
+    and separates them by construction. The pointer landed on the target and the box did not —
+    which is precisely what the owner reported: *"the mouse pointer drifts away from the box, and
+    it is the POINTER that reacts to the guides and the canvas corners and snaps, not the box."*
+
+    And because Live Source plates are the only elements the lock applies to, the broken path was
+    the one an author uses to build a multibox layout — the second half of the same report:
+    *"making the boxes touch each other is very hard."*
+
+    ── THE ORDER NOW ──────────────────────────────────────────────────────────
+
+      1. solve from the raw pointer, LOCK APPLIED  → a candidate rect
+      2. ask where that candidate's MOVING EDGE actually is (`movingCornerScene`)
+      3. test THAT against the targets, at the same `thr`
+      4. re-solve through the SAME solver via the inverse (`pointerForMovingEdge`)
+      5. `B-180`'s pointer quantise, on the axes no snap claimed
+      6. draw the guide from the FINAL rect — see below
+
+    🔴 **THE GUIDE IS A FUNCTION OF THE COMMITTED RECT.** It used to be set to the snapped POINTER
+    coordinate, so the canvas drew a line announcing a snap that never happened to the box: the
+    surface reported success for something the geometry had refused. That is this repo's named
+    pattern — *the system knows something and does not say it* (`B-141`, `B-143`, `B-144`) — in its
+    inverted form, the system saying something it does not know. Emitting the guide from the
+    measured edge rather than from the intent makes the lie structurally impossible, and it is why
+    step 6 re-measures instead of reusing what step 4 asked for: `lockExtents`'s `MIN_SIZE`
+    up-scale can still override a target, and only measuring can tell.
+  */
+  /** Is `v` genuinely ON one of `ts` — not merely near one? `B-180`'s floor, reused. */
+  const onTarget = (v: number, ts: readonly number[]): number | null => {
+    for (const t of ts) if (Math.abs(t - v) <= noiseFloor(t, v)) return t;
+    return null;
+  };
+
   const onMove = (e: PointerEvent): void => {
-    const pScene = {
+    // `Shift` is this gesture's bypass — unchanged, and it suppresses BOTH the snap and
+    // `B-180`'s quantise, exactly as before.
+    const bypass = e.shiftKey === true;
+    let pointer = {
       x: grabScene.x + (e.clientX - startX) / scale,
       y: grabScene.y + (e.clientY - startY) / scale,
     };
-    let guideX: number | null = null;
-    let guideY: number | null = null;
-    if (snapping && e.shiftKey !== true) {
-      if (cfg.freeW) {
-        const sx = snapValue(pScene.x, targets.xs, thr);
-        if (sx !== null) {
-          pScene.x = sx;
-          guideX = sx;
-        }
-      }
-      if (cfg.freeH) {
-        const sy = snapValue(pScene.y, targets.ys, thr);
-        if (sy !== null) {
-          pScene.y = sy;
-          guideY = sy;
+    let solved = computeRectResize(t0, rect0, handle, pointer, lockRatio);
+
+    // ── 1–4: snap the EDGE of the candidate, then re-solve through the same solver ──
+    let claimedX = false;
+    let claimedY = false;
+    if (snapping && !bypass) {
+      const lead = chooseEdgeSnap(
+        movingCornerScene(t0, rect0, handle, solved),
+        handle,
+        targets,
+        thr,
+      );
+      if (lead !== null) {
+        const aimed = pointerForMovingEdge(
+          t0,
+          rect0,
+          handle,
+          lead.axis,
+          lead.target,
+          pointer,
+          lockRatio,
+        );
+        if (aimed !== null) {
+          pointer = aimed;
+          solved = computeRectResize(t0, rect0, handle, pointer, lockRatio);
+          /*
+            🔴 A LOCKED CORNER CLAIMS BOTH AXES. The lock TIES the two extents, so the snapped
+            axis fixes the other one too — quantising the "free" one would silently drag the
+            snapped edge off its target, undoing the fix one line after making it. An edge handle
+            drives one axis and derives the other, so there is nothing to claim on the second.
+          */
+          const tied = lockRatio !== undefined && cfg.freeW && cfg.freeH;
+          claimedX = tied || lead.axis === 'x';
+          claimedY = tied || lead.axis === 'y';
         }
       }
     }
-    const next = computeRectResize(t0, rect0, handle, pScene);
-    designerStore.commitAnimatable(element.id, 'position.x', next.position.x);
-    designerStore.commitAnimatable(element.id, 'position.y', next.position.y);
-    designerStore.commitAnimatable(element.id, 'size.w', next.size.w);
-    designerStore.commitAnimatable(element.id, 'size.h', next.size.h);
+
+    /*
+      ── 5: `B-180` half 1 — QUANTISE THE POINTER, on the axes no snap claimed ──
+
+      🔴 **The POINTER, never the solved rect**, and the reason is `B-175`: `computeRectResize`
+      pins the corner opposite the handle for ANY pointer position, so rounding its OUTPUT
+      (`next.position` / `next.size` separately) walks that pin off by up to half a pixel under
+      rotation, a non-uniform scale or a centred anchor. That was measured — it broke
+      `arrangement-gizmo-read.dom.test.ts` by 0.108 px — and rounding the INPUT is free of it.
+
+      ⚠ **An axis a SNAP claimed is left exactly alone.** A snapped edge has landed on a real
+      target and rounding would pull it back off — which would break the very flush abutment
+      `B-181` exists to deliver. This is a deliberate and permanent exception, not an oversight.
+
+      🔴 **AND WHAT THIS GUARANTEES IS WEAKER THAN `B-180` FIRST CLAIMED.** That session's comment
+      here said *"for an unrotated element that also makes the committed size and position whole"*.
+      **It does not.** `computeRectResize` commits `size.w * (wNew / rect.w)`, and `w · (n / w)` is
+      not an identity in IEEE754 — the plainest possible resize can hand back `62.00000000000001`.
+      Sub-ULP and invisible behind `formatNumberDisplay`, so it is not what the owner reads, but a
+      future reader would have trusted the sentence. What is actually guaranteed is a quantised
+      POINTER; the aspect lock's derived axis, a rotation, a non-unit element `scale` and an
+      inherited fraction all still commit readable fractions BY DESIGN. `B-180` carries the full
+      enumeration, and the genuine gaps are `B-182`.
+    */
+    if (!bypass) {
+      const qx = cfg.freeW && !claimedX ? snapDragToPixel(pointer.x) : pointer.x;
+      const qy = cfg.freeH && !claimedY ? snapDragToPixel(pointer.y) : pointer.y;
+      if (qx !== pointer.x || qy !== pointer.y) {
+        pointer = { x: qx, y: qy };
+        solved = computeRectResize(t0, rect0, handle, pointer, lockRatio);
+      }
+    }
+
+    designerStore.commitAnimatable(element.id, 'position.x', solved.position.x);
+    designerStore.commitAnimatable(element.id, 'position.y', solved.position.y);
+    designerStore.commitAnimatable(element.id, 'size.w', solved.size.w);
+    designerStore.commitAnimatable(element.id, 'size.h', solved.size.h);
+
+    // ── 6: the guide, measured off the rect that was just committed ──
     if (snapping) {
+      const landed = movingCornerScene(t0, rect0, handle, solved);
+      const gx = cfg.freeW && !bypass ? onTarget(landed.x, targets.xs) : null;
+      const gy = cfg.freeH && !bypass ? onTarget(landed.y, targets.ys) : null;
       designerStore.setSnapGuides({
-        x: guideX === null ? [] : [guideX],
-        y: guideY === null ? [] : [guideY],
+        x: gx === null ? [] : [gx],
+        y: gy === null ? [] : [gy],
       });
     }
   };
@@ -466,7 +622,12 @@ function beginRotate(
   currentFrame: number,
   ev: PointerEvent,
 ): void {
-  const t0 = effectiveTransformAt(element, currentFrame);
+  // 🔴 B-175 — as `beginResize`: no cell means the box is not on screen, so there is no
+  // pivot to rotate about and the gesture must not open.
+  if (hasNoActiveCell(element.id)) return;
+  // 🔴 B-175 — the ONE read side. Rotation pivots about `anchor ⊙ size`, so reading the
+  // AUTHORED size here spun the box about a pivot that was not inside the drawn box.
+  const t0 = renderedTransformAt(element, currentFrame);
   const startAngle = t0.rotation;
   // D-110 — the rotate zones sit just outside the LIVE rect corners for a
   // keyframed path; the pivot stays the element anchor (transform-origin).

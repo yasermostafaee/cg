@@ -1,5 +1,5 @@
 import type { BindingTransform } from '@cg/shared-schema';
-import { dateEn, dateFa, latinDigits, persianDigits, truncate } from '@cg/text-shaping';
+import { dateEn, dateFa, truncate, writeFieldDigits } from '@cg/text-shaping';
 
 /**
  * Apply a `BindingTransform` to a stringified field value. Pure function;
@@ -17,10 +17,11 @@ export function applyTransform(value: string, transform: BindingTransform | unde
       return value.toLowerCase();
     case 'truncate':
       return truncate(value, 100);
+    // `TEXT-DIGITS-01` — through the one writer, like every digit on the page.
     case 'persian-digits':
-      return persianDigits(value);
+      return writeFieldDigits(value, 'persian');
     case 'latin-digits':
-      return latinDigits(value);
+      return writeFieldDigits(value, 'latin');
     case 'date-fa':
       return dateFa(value);
     case 'date-en':

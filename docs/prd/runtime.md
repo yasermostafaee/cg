@@ -178,7 +178,8 @@ visibility nit:
    are refused (`errorCode: 'disconnected'`) BEFORE any intent is applied, so no
    optimistic status can exist. Refuse, never defer — a queued command would be
    stranded (reconnect-reconciliation replays template HTML, not stack intents).
-3. **Test mode is an EXPLICIT operator switch** with a loud, persistent indicator.
+3. **Test mode is an EXPLICIT operator switch** with a loud, persistent indicator. _(Superseded in part
+   2026-10-04 by `R-087`: the operator's switch into test mode is gone; the mode stays for the test harness.)_
    Never entered automatically, never mid-show.
 4. **No fake ON AIR / no fake HEALTHY.** A simulation may simulate playout; it may
    not claim the broadcast-red ON AIR badge or a healthy link to hardware that is
@@ -429,6 +430,13 @@ this item is the UI plus a runtime path to apply it.
   already derives the routable template-serve host when CasparCG is remote —
   the serve path is solved; the panel only changes where the config comes
   from.
+  🔴 **That last clause was FALSE for a BACKUP and stayed false for months** —
+  the derivation read `servers.A.host` alone, so a remote backup behind a
+  loopback primary was served an address it could not fetch and showed live
+  sources with no graphic. Corrected 2026-08-23; see [[B-162]]. Left in place
+  rather than rewritten, because "the serve path is solved" is exactly the
+  belief that let the gap survive, and a reader arriving here should meet it
+  together with its correction.
 
 **Missing:** the settings UI itself and a `connections.configure`-style
 channel that applies a new `ConnectionConfig` to a RUNNING bridge
@@ -758,7 +766,60 @@ week — before [[C-012]] there was no non-destructive way off air, so "clear it
   three places (`StackRow.tsx:128`, `:216`, its docstring) and `rowAction.ts:16-17` still lists
   PLAY/UPDATE/CLEAR/REMOVE — [[C-012]]'s STOP made it five.
 
-## [~] R-018 — feed field values from a text file (whole-text default, OPTIONAL split; manual reload) ⟨priority: medium⟩ — manual-reload half implemented: `openspec/changes/runtime-field-from-file/`; local gate green; no CasparCG hardware pass owed (renderer-only over the EXISTING field-update path — same `stack.update` wire and value shapes as hand edits, no new AMCP verbs, `@cg/template-runtime` untouched); OWES one Linux `pnpm gate:e2e` (FULL suite — a Linux run is owed for any UI/layout/rendering change, not only spec edits: the new FromFileControl mounts inside the Inspector and changes its content height, and nine existing specs interact with the Inspector plus the content-height-sensitive `panel-scroll.spec.ts`; run once WSL lands, alongside the #369/#370 Linux-gate debt); the Windows `gate:e2e` 22/22 (0 cached) pass is recorded as non-authoritative EVIDENCE, not discharge (~19px render-geometry delta); the WATCH half moved out to [[R-026]] (recon-first); remaining to reach [x] + archive: the Linux `gate:e2e` run + owner runs it
+⭐ **DESIGNED 2026-08-15 alongside [[R-021]] / [[R-028]] / [[R-031]] / [[R-032]] / [[R-033]] as ONE
+surface — `openspec/changes/operator-surface/`. DESIGN ONLY; no code changed. Re-verified against
+`ec65480`** (an earlier pass measured a tree 68 commits stale and was discarded — see the change's
+`design.md` `§0.2a`).
+
+**THE FINDING IS CONFIRMED, and every file reference above is STALE**: `StackRow.tsx` no longer
+exists (R-028 part B deleted it with `StackPanel`, `LibraryPanel`, `FixedLayersPanel` and
+`FixedRow`). Re-measured at `ec65480`, locating by symbol rather than by line:
+
+- **the row** is `features/layers/layerRowActions.ts`, where the REMOVE half of the LOAD/REMOVE
+  toggle is `act('load-remove', 'REMOVE', false, …)` — its only gates are the ones `act` ORs in
+  centrally, `linkDown || awaiting`.
+- **the bulk** is `features/layers/LayersPanel.tsx` — `disabled={linkDown || items.length === 0}`,
+  with no `onAirCount` term although `onAirCount` is computed a few lines above and already gates
+  STOP ALL.
+- **the bridge** is unchanged: `stack.remove` answers `{ accepted }` and `stack.remove-all`
+  answers `{ ok, removed }` — neither response shape has anywhere to put a reason.
+
+🔴 **AND THE GAP HAS WIDENED SINCE THIS ITEM WAS FILED.** [[R-021]] stage 4 added a FIFTH verb
+gate — `blocked` (`restoreBlocked`: the row's layer is held by a producer that is not ours) — and
+wired it into PLAY, NEXT, SOURCE and AUDIO. **REMOVE did not get that one either.** Re-counted at
+`ec65480`: PLAY gates on `empty || playing || rehearsing || blocked || needsCaspar`; NEXT on
+`empty || !onAir || !hasNext || blocked || needsCaspar`; STOP and UPDATE on `!onAir || …`; CLEAR
+on `needsCaspar || awaiting`; SOURCE and AUDIO on `empty || blocked || needsCaspar`. **REMOVE is
+the only verb on the row with no state condition whatsoever** — and the only irreversible one.
+
+🔴 **THE ONE-AUTHORITY NOTE ABOVE NEEDS RE-DECIDING, and the design says so rather than quietly
+following it.** This item directs "read the EXISTING shared `isOnAir`". Since it was filed,
+**`B-122` rewrote that predicate's CONTRACT** — `onAir.ts` now says in its own text _"THIS IS NO
+LONGER CLEAR-ALL'S PREDICATE, AND MUST NOT BE MADE ONE AGAIN … it gated the EMERGENCY control on
+the believed status — precisely the value that may be wrong in the emergency … ⚠ It must never
+gate a clear path again, on either side of the bridge seam."_ In the same span the bridge grew
+its own canonical `isOnAirStatus(status, pending)` (`caspar-runtime.ts`), extracted under
+CLAUDE.md golden rule 6 with four consumers, whose doc states the principle this item needs:
+_"Unknown must count as on air in every one of these gates, because each one's failure mode is
+acting on a live graphic."_ **Neither predicate is a superset of the other** — the renderer's
+never reads `pending`; the bridge's omits `unverified` / `error` / `disconnected`. `design.md`
+`§5` sets out four candidates with their costs and recommends promoting `isOnAirStatus` into a
+shared package so BOTH sides import ONE predicate. The item's ONE-AUTHORITY _principle_ survives
+intact; its named answer does not.
+
+**One question this item asked is already ANSWERED and needs no work:** how a disabled REMOVE
+composes with [[R-033]] point 10's neutral buttons. `controls.css` already splits the two disabled
+treatments deliberately — `.cg-btn--verb:disabled` drops the fill AND the border (the row's
+icon-only verbs, so disabled reads as disabled by SHAPE, without colour), while `--neutral` /
+`--icon` KEEP their boundary at 0.45 opacity because they stand alone rather than in a column of
+peers. The row REMOVE inherits the first, REMOVE ALL the second.
+
+**R-017 is SEPARABLE and is wave 1 of that design's landing order** — it touches nothing in the
+column grid, the sticky header, the channel/tab axes or the PLAYOUT tab, and changes neither
+`VERB_COUNT` nor `VERB_HEADS` (both verified unmoved). It is also the only on-air-safety item
+among the six.
+
+## [x] R-018 — feed field values from a text file (whole-text default, OPTIONAL split; manual reload) ⟨priority: medium⟩ — manual-reload half SHIPPED and archived: `openspec/changes/archive/2026-08-11-runtime-field-from-file/` (living spec `runtime-ui`); local gate green; no CasparCG hardware pass owed (renderer-only over the EXISTING field-update path — same `stack.update` wire and value shapes as hand edits, no new AMCP verbs, `@cg/template-runtime` untouched); OWES one Linux `pnpm gate:e2e` (FULL suite — a Linux run is owed for any UI/layout/rendering change, not only spec edits: the new FromFileControl mounts inside the Inspector and changes its content height, and nine existing specs interact with the Inspector plus the content-height-sensitive `panel-scroll.spec.ts`; DISCHARGED 2026-08-08 by a COMPLETED, GREEN `e2e` job on `ubuntu-latest` for commit `a344cd2`, which carries the change: <https://github.com/yasermostafaee/cg/actions/runs/31252541925> — run `conclusion: success`, `E2E (Playwright)` job conclusion `success`, runtime 62 passed / designer 237 passed, including the named-risk `panel-scroll.spec.ts` and `inspector-open-close.spec.ts`); the Windows `gate:e2e` 22/22 (0 cached) pass is recorded as non-authoritative EVIDENCE, not discharge (~19px render-geometry delta); the WATCH half remains OPEN as [[R-026]] (recon-first) and is NOT part of this closure
 
 **What:** At playout, a text-carrying field takes its value from a chosen text file: whole-file
 verbatim by default, an OPTIONAL delimiter split into list items, and a manual RELOAD. The
@@ -851,7 +912,42 @@ text-verbatim, the B-077 interaction); implement the input half ONCE, under this
 R-014's input-side acceptance reads as satisfied by this item, and R-014 keeps the DISPLAY
 half and its open questions.
 
-## [~] R-021 — fixed operator layers: aliased pre-defined slots with on-row import+load and layer-level control ⟨priority: high⟩ — STAGES 1 + 2a landed (`openspec/changes/runtime-fixed-layers/`, see its STAGE MAP). Stage 1: install config + the LayerManager fixed mechanism + the R-009 orphan-sweep exclusion. Stage 2a (wire contract): the five `fixedLayers.*` channels (config read/update with the validator's own reason codes, single-sourced; per-slot state as FACTS — observed occupancy per the D3 honesty rules + a stage-3 `binding` field), bridge routes + publish-on-change from the existing sweep tick, LIVE bank changes via `LayerManager.applyFixed`, persistence on applied change, the typed `RuntimeBridge.fixedLayers` seam + `WebSocketRuntime` impl + `MockRuntime` parity (offline occupancy honestly UNKNOWN). Still no renderer/UI, still no on-air behaviour change (no bank ⇒ config null / state [] / zero publishes, test-pinned), R-015's clear refusal untouched. No CasparCG hardware pass and no Linux `gate:e2e` owed for the 2a slice — every touched path checked against `UI_RENDER_PATTERNS` in `tools/gate-hook/src/gate-decision.mjs`, none matches (packages/shared-ipc, packages/caspar-client, tools/caspar-bridge, apps/runtime src/shared + src/platform + non-e2e tests, docs, openspec). **Stage 2b (renderer) landed:** the fixed-bank panel above the stack (idle-quiet — no bank, no panel, byte-identical column), permanent rows with alias + layer number and honest occupancy (explicit UNKNOWN never shown as empty, B-094; a dead SPA↔bridge link masks EVERY row to unknown over the frozen snapshot, the B-087 class), verb derivation as the ONE pure `fixedRowActions` declaration point — stage 2b's ONLY verb is a confirm-gated layer CLEAR on an OBSERVED `html` producer (the b1 blind-Clear-under-silence and the non-html carve-out are DELIBERATELY stage 4/task 4.3: today's bridge refuses both and an enabled control must never invite a click that only rejects), the declaration-time confirm gate (`withConfirm` + the `cancelled` async path — cancel is no success flash and no toast) shared by buttons and context menu, the bank config modal (count/aliases live; channel/start read-only; refusals surface the validator's mapped reason + its message), the b′ same-bank invariant documented (operator guide + `fixed-layers-store.ts` header; the divergence HINT is deferred to stage 3 — with `binding` null, every html producer is indistinguishably foreign and the hint would carry no information), and the `CG_E2E_FIXED_BANK` mock seed + unit/DOM/E2E coverage (the "import+load lands on the exact slot" E2E moved to stage 3 beside 5.3). **Stage 2b OWES, recorded as OWED not done:** (1) a Linux `gate:e2e` run — this slice touches `apps/runtime/src/renderer/**` + `tests/e2e/**`, which match `UI_RENDER_PATTERNS`; the Windows `gate:e2e` result is a Windows signal only, NON-authoritative for render geometry (~19px delta class); (2) a real-hardware pass on CasparCG 2.3.2 for the one on-air path this stage adds — with a bank declared and a foreign html graphic on a bank layer, the fixed row's Clear takes it off air, the row settles to empty on the next sweep, and nothing else on the channel is disturbed. Remaining: stages 3, 4 per the STAGE MAP
+⭐ **AMENDED 2026-09-27 by `openspec/changes/archive/2026-09-27-template-value-digits/` (`PERSIAN-DIGITS-01`) — for
+TEMPLATE VALUES only.** The owner's rule: a template value takes digits exactly as the keyboard
+types them. So the Inspector's template `number` field no longer DISPLAYS Latin: it keeps `۱۲٫۵`
+on screen and reads it through `@cg/text-shaping`'s one reader, while the staged and transmitted
+value is still the canonical NUMBER (this item's wire half is unchanged). Every CONSOLE number —
+ports, device indexes, layers, position offsets, timing overrides, the lock PIN — keeps this
+item's normalise-and-display-Latin behaviour exactly. The change also closed a defect this item
+left open: the number field staged the last PREFIX that parsed, so `۱٬۲۳۴` reached air as 1 and
+`۱۲a` as 12; a text that is not a number now withdraws the draft, and an impossible one is refused
+in one line.
+
+⭐ **AMENDED AGAIN 2026-09-27 by `openspec/changes/archive/2026-09-27-field-digits/` (`FIELD-DIGITS-01`).** A Windows
+keyboard types Latin digits whatever its layout, so a template FIELD now says which digits its value
+is written in, and the Inspector writes each digit in that choice as it is typed. The number field's
+box is in the field's digits — Latin for a number field that carries no setting (what air draws for
+it), as typed only while the template schema is unresolved. Console numbers are unchanged.
+
+⭐ **AMENDED A THIRD TIME 2026-09-27 by `openspec/changes/archive/2026-09-29-text-digits/` (`TEXT-DIGITS-01`, archived 2026-09-29).**
+"As typed" is now **Keyboard**: a TYPED digit in a text field is written in the digits of the keyboard
+language active as it is typed (Persian → Persian, English → Latin; unknown → left as the key sent it),
+and a paste keeps its digits — so this item's "text-type content is untouched" holds for a paste and
+for a language that cannot be known, not for a digit typed on a known layout. A list field's cells now
+write their list's Digits choice as typed. Console numbers are still unchanged.
+
+## [~] R-021 — fixed operator layers: aliased pre-defined slots with on-row import+load and layer-level control ⟨priority: high⟩ — STAGES 1 + 2a landed (`openspec/changes/runtime-fixed-layers/`, see its STAGE MAP). Stage 1: install config + the LayerManager fixed mechanism + the R-009 orphan-sweep exclusion. Stage 2a (wire contract): the five `fixedLayers.*` channels (config read/update with the validator's own reason codes, single-sourced; per-slot state as FACTS — observed occupancy per the D3 honesty rules + a stage-3 `binding` field), bridge routes + publish-on-change from the existing sweep tick, LIVE bank changes via `LayerManager.applyFixed`, persistence on applied change, the typed `RuntimeBridge.fixedLayers` seam + `WebSocketRuntime` impl + `MockRuntime` parity (offline occupancy honestly UNKNOWN). Still no renderer/UI, still no on-air behaviour change (no bank ⇒ config null / state [] / zero publishes, test-pinned), R-015's clear refusal untouched. No CasparCG hardware pass and no Linux `gate:e2e` owed for the 2a slice — every touched path checked against `UI_RENDER_PATTERNS` in `tools/gate-hook/src/gate-decision.mjs`, none matches (packages/shared-ipc, packages/caspar-client, tools/caspar-bridge, apps/runtime src/shared + src/platform + non-e2e tests, docs, openspec). **Stage 2b (renderer) landed:** the fixed-bank panel above the stack (idle-quiet — no bank, no panel, byte-identical column), permanent rows with alias + layer number and honest occupancy (explicit UNKNOWN never shown as empty, B-094; a dead SPA↔bridge link masks EVERY row to unknown over the frozen snapshot, the B-087 class), verb derivation as the ONE pure `fixedRowActions` declaration point — stage 2b's ONLY verb is a confirm-gated layer CLEAR on an OBSERVED `html` producer (the b1 blind-Clear-under-silence and the non-html carve-out are DELIBERATELY stage 4/task 4.3: today's bridge refuses both and an enabled control must never invite a click that only rejects), the declaration-time confirm gate (`withConfirm` + the `cancelled` async path — cancel is no success flash and no toast) shared by buttons and context menu, the bank config modal (count/aliases live; channel/start read-only; refusals surface the validator's mapped reason + its message), the b′ same-bank invariant documented (operator guide + `fixed-layers-store.ts` header; the divergence HINT is deferred to stage 3 — with `binding` null, every html producer is indistinguishably foreign and the hint would carry no information), and the `CG_E2E_FIXED_BANK` mock seed + unit/DOM/E2E coverage (the "import+load lands on the exact slot" E2E moved to stage 3 beside 5.3). **Stage 2b OWES, recorded as OWED not done:** (1) a Linux `gate:e2e` run — this slice touches `apps/runtime/src/renderer/**` + `tests/e2e/**`, which match `UI_RENDER_PATTERNS`; the Windows `gate:e2e` result is a Windows signal only, NON-authoritative for render geometry (~19px delta class); (2) a real-hardware pass on the production CasparCG 2.5.0 for the one on-air path this stage adds — with a bank declared and a foreign html graphic on a bank layer, the fixed row's Clear takes it off air, the row settles to empty on the next sweep, and nothing else on the channel is disturbed. **Stage 3 (the exact-slot import+load chain) landed** — see the change's STAGE MAP. **Stage 4 (the restore branch) landed 2026-08-14:** `#slotForRestore` now BRANCHES — a declared row is bound exactly or the item is skipped (`fixed-slot-taken`), and `#allocate()` is unreachable for one, so a bridge restart can no longer bring an operator's row back on some dynamic layer (D11's warning, and under R-028's declared model it would have misplaced EVERY row rather than an unlucky one — which is why R-028 §1.1 named this Blocking); a declared row observed holding a NON-html producer parks in the named `restore-blocked` state with ZERO wire traffic (no adopt — that is B-092's misadoption lie; no auto-CLEAR — automatic paths never destroy), exiting only by the operator's explicit Clear-then-take or by the foreign producer vacating; the row shows BOTH facts and BLOCKED outranks the item's retained (usually `on-air`) status, and every verb that would COMMAND that layer is held while CLEAR/REMOVE stay live; task 4.3's dialog now branches on what the wire actually said (unknown → says it cannot tell · producer → names the kind · empty → says so), every branch naming the layer number. **Found and fixed in passing (D12):** B-114 had replaced `reserve()` with `bindFixed()` instead of branching, so every DYNAMIC retained coordinate had silently lost its exact-slot restore — pinned now by design §d test 5, verified failing first. **Stage 4's Linux `gate:e2e` is DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/31760214543 (run 31760214543, `dev` HEAD `6ee4c5d4` which contains `e326a962`; completed + success, with the `e2e` job itself having RUN rather than skipped). **Stage 4 still OWES:** the real-hardware pass (7.3), which also still carries 4.3's UNRUN RECON (`CG STOP` on a non-html layer on the production 2.5.0 — nothing shipped depends on its answer, since STOP is withheld for any non-html observation). Remaining: 7.3 (hardware) and the archive.
+
+⭐ **Cross-referenced 2026-08-15 into `openspec/changes/operator-surface/` (design ONLY, no code),
+which designs this surface as ONE surface with [[R-017]] / [[R-028]] / [[R-031]] / [[R-032]] /
+[[R-033]]. Verified at `ec65480`: every stage of this item has landed, stage 4 included, with all
+task boxes ticked** — recorded because an earlier pass of that design read a 68-commit-stale tree
+and reported stage 4 as outstanding; that finding was discarded, not softened.
+
+**One consequence of stage 4 belongs to [[R-017]] and is easy to miss:** stage 4 added a FIFTH
+verb gate, `blocked` (`restoreBlocked`), and wired it into PLAY, NEXT, SOURCE and AUDIO — but not
+into REMOVE. So the one verb this project has never gated on air state is now also the only verb
+on the row with no state condition of ANY kind. See R-017's own note.
 
 **What:** A Cinegy-parity operating model IN PARALLEL with the dynamic stack: a fixed set of
 pre-defined CasparCG layers (default TEN at 70–79 — chosen because the default policy's dynamic
@@ -936,7 +1032,7 @@ a row — this is the Cinegy operating rhythm the fixed layers exist for.
 - WHEN the modal lists layers THEN it shows aliases, not bare numbers
 
 **Notes:** RECON-FIRST for the two uncertain verbs — PAUSE: what AMCP `PAUSE` actually does to
-an html-producer layer on real 2.3.2 is UNVERIFIED (probe first, never assume); NEXT: requires
+an html-producer layer on the production 2.5.0 is UNVERIFIED (probe first, never assume); NEXT: requires
 template-side step support (`CG NEXT` → template `next()`), which is Designer-track work on the
 playout lifecycle — a cross-track dependency: file the finding rather than assuming. Combos
 match the PHYSICAL key (`e.code`) per the design-system keyboard rule, so a Persian layout
@@ -1057,14 +1153,22 @@ on a Runtime capability with no timeline. The remaining work here is a Runtime c
 once it lands, an on-hardware re-run of those three D-128 cases against the already-shipped
 feature — see the archived change's `design.md` ("Phase 6 — FINAL verdict (2026-07-27)") for the
 exact cases and their preconditions. RECON-FIRST on the AMCP half for the same reason [[R-023]]
-records: what AMCP `PAUSE` actually does to an html-producer layer on real 2.3.2 is UNVERIFIED —
+records: what AMCP `PAUSE` actually does to an html-producer layer on the production 2.5.0 is UNVERIFIED —
 probe first, never assume; a browser-side clock suspension may be the honest answer. Cross-refs
 [[R-023]] (per-layer shortcuts — its PAUSE key depends on this item existing), [[R-021]]
 (fixed-layer rows are one candidate surface). Cross-track filing: raised from the Designer track
 (the `cg-designer` worktree) because that is where the gap surfaced; the item itself is
 Runtime-track work.
 
-## [ ] R-028 — one layer surface: declared rows replace the dynamic stack (supersedes R-021's parallel-bank framing) ⟨priority: high⟩
+## [~] R-028 — one layer surface: declared rows replace the dynamic stack (supersedes R-021's parallel-bank framing) ⟨priority: high⟩ — PARTS A + B landed (see `openspec/changes/runtime-unified-layer-rows/`); §§6–7 landed 2026-08-14. **§6 — retiring the dynamic path:** the sweep's narrowing is now written against ONE canonical enumeration of the THREE declared classes (`CasparRuntime#declaredLayerClass` → `playout | live-source | operator-row | null`), each arm delegating to that class's existing single source and re-deriving none of them. It returns a CLASS and not a boolean deliberately: the three make DIFFERENT claims, and an `isDeclared()` would have collapsed them into the strongest one — silently excluding the operator bank from the sweep, which is the two-of-three narrowing 6.5 was written to prevent. C-015 phase 5's three doors (the `#liveLayers` ledger, the R-009 sweep exclusion, the C-014 quarantine skip, `clearLayer`'s distinct `live-source` refusal) were PRESERVED, not rewritten: all seven door tests re-run and green by name. 6.1 is TWO tests because the claim has two halves — no OPERATOR-graphic caller of `allocate()` (renderer source scan, plus a guard that the exact-slot row load still exists so the absence cannot be met by deleting the feature), AND a declared non-operator caller still allocating across the freed 10–59 span, which is the half that keeps C-015's third ownership class legal. 6.4's ranges are DESCRIPTIVE, recorded beside both the policy and `TemplateTypeSchema`: `logo-bug`'s range moved (90–99 → 40–49) and the TYPE did not go with it — it travels in every `.vcg`. **One divergence from §6.2's wording, stated rather than coded around:** "candidates become layers nobody declared" would exclude the operator bank, and DECLARED ≠ OWNED — a row declares the layer is the operator's to USE, so a producer there we did not put there is an orphan, and since an unbound row now reads EMPTY unconditionally, excluding it would report it NOWHERE. **§7 — migration:** items on old dynamic layers are NOT auto-relocated (asserted as a behaviour, not trusted to the absence of migration code), and the operator guide gains an "Upgrading from the old dynamic stack" note; two adjacent falsehoods in that section were fixed in passing (the bridge-restart warning R-021 stage 4 retired, and "the slot count can GROW", false since part A's `resize-refused`). **Linux `gate:e2e` DISCHARGED** for the §6/§7 slice — https://github.com/yasermostafaee/cg/actions/runs/31760214543 (run 31760214543, `dev` HEAD `6ee4c5d4` which contains `25c21420`; completed + success, `e2e` job RAN). **OWED:** 8.1's wider operator-guide rewrite (the guide still describes a FIXED LAYERS panel part B deleted) and 9.3's hardware pass. Remaining: §8 docs, §9 gate/hardware
+
+> 🔴 **`FOLLOWUPS-01` B (the owner, 2026-09-28) — part B's deliberate CLEAR is retired BELOW LAYER 50.** Rule 3 (C5): nothing of ours touches layers 1–49, the Playout's span. `playoutLayers.clear`
+> and `layers.clear` now take a layer from 50 up (`FIRST_ALLOCATABLE_LAYER`), so a request below it
+> meets the socket's shape error before any gate runs — no new reason word, because the console
+> never offers it; the Station layers tab lists a reserved row below 50 with what is on it and no
+> CLEAR, and its CLEAR ALL leaves such a row out. A CLEAR of a reserved layer in 50–99 is unchanged.
+> Tests: `low-layer-clear.integration.test.ts` (both doors refused at the socket, nothing sent, the
+> same door still clearing 60), `stationLayersPanel.dom.test.ts`, `runtime-channels.test.ts`.
 
 **What:** Merge the fixed-layer bank and the dynamic stack into ONE operator surface — a single
 list of DECLARED layer rows, ordered descending by layer, each with an alias, the real CasparCG
@@ -1086,8 +1190,12 @@ Cinegy CG (its LAYOUT, never its vocabulary — see the verb trap below).
 
 - WHEN the operator loads from a row THEN the item binds that row's EXACT layer via the
   exact-slot path, never automatic allocation
-- WHEN any row is displayed THEN its REAL CasparCG layer number is visible (a display index may
-  sit beside it, never instead of it) — an operator may need it to clear that layer by hand
+- WHEN any row is displayed THEN its REAL CasparCG layer number is REACHABLE from that row without
+  leaving it — the row's `title` and `aria-label`, and the Inspector — and a display index may sit
+  beside it, never instead of it; and WHEN a surface names a row in a SENTENCE (the audit log, the
+  emptied-air notice, the orphan banner) THEN the number is VISIBLE there, never behind a hover.
+  **AMENDED 2026-09-07 — see the supersession note below.** The original read _"its REAL CasparCG
+  layer number is visible … an operator may need it to clear that layer by hand"_
 - WHEN a candidate layer is unticked THEN its row hides AND the layer stays fenced — unticking
   never returns a layer to an allocatable pool
 - WHEN the operator tries to untick a row that is occupied, OR whose occupancy is UNKNOWN THEN it
@@ -1118,8 +1226,55 @@ layers 90–99 are free at runtime (`pinned` is declared but NEVER populated by 
 `logo-bug` remains a `templateType` in the scene schema even when its range is freed;
 `reservedLayers` (C-015) is the only possible mechanism for the playout split because OSC reports
 producer KIND, not identity — without declaration R-009 flags healthy playout graphics as orphans.
-**C-015 stops being distant** — it is a prerequisite. One RECON owed: whether CasparCG 2.3.2
+**C-015 stops being distant** — it is a prerequisite. One RECON owed: whether the production CasparCG 2.5.0
 exposes template identity beyond producer kind, via `tools/caspar-amcp-probe` on real hardware.
+
+⭐ **RE-MEASURED 2026-08-15 at `ec65480` (`openspec/changes/operator-surface/design.md` `§0`),
+designed as ONE surface with [[R-017]] / [[R-021]] / [[R-031]] / [[R-032]] / [[R-033]].** Parts A
+and B shipped and `§§6–7` landed (`25c2142`), so the surface half of this item is complete.
+
+🔴 **ONE ACCEPTANCE BULLET OF THIS ITEM IS CURRENTLY NOT MET, and it is not an oversight — it was
+superseded by a later owner decision that never came back here.** _"WHEN any row is displayed
+THEN its REAL CasparCG layer number is visible (a display index may sit beside it, never instead
+of it) — an operator may need it to clear that layer by hand."_ `layerTable.ts` removed the LAYER
+column altogether; the number now lives in the row's `title` and `aria-label`, and in the
+Inspector. The argument for the removal is sound as far as it goes (the fact moved somewhere
+always reachable rather than being deleted) — but "visible" and "reachable by hovering" are
+different claims, and this bullet names the exact scenario that separates them: an operator
+reaching for the number in order to clear that layer BY HAND, which is done when the console is
+NOT helping. Resolved either way by `design.md` `§2`; whichever candidate the owner picks, **this
+bullet's text must move**, because shipping against an unmet criterion is worse than either
+answer.
+
+✅ **RESOLVED 2026-09-07 by `STALE-CLAIMS-02` §4 — the owner answered `§2` with (A), the
+supersession STANDS, and the bullet above has been amended. That amendment was the DELIVERABLE,
+not a side effect of it.** Recorded here rather than only in the change, because this is the
+document that carries the criterion.
+
+- **What was decided:** tooltip + `aria-label` + Inspector are enough for the layer TABLE. The
+  LAYER column does not come back. `layerTable.ts`'s density ladder keeps the width it bought.
+- **What the amendment does NOT concede**, and this is the half that stopped it being a plain
+  retreat: the number stays VISIBLE wherever a row is named in a SENTENCE. `operatorRowName`
+  returns the coordinate as a quiet secondary and `EmptiedAirNotice` renders it, because a notice
+  is read once under pressure and a hover needs a working pointer and a dwell. So the amended
+  bullet is two clauses, not one weakened clause.
+- ⚠ **The cost is NAMED, not hidden.** The scenario the original bullet cited — an operator
+  reaching for the number in order to clear that layer BY HAND, which is done precisely when the
+  console is not helping — is slower now on the layers table: a hover, or the Inspector. The owner
+  weighed that and chose it. It is written down so the next reader does not "restore" the column
+  believing nobody considered the case, and does not delete the coordinate from the notices
+  believing the tooltip covers it.
+- ⚠ **Two places MISCITED this answer and have been corrected.** `operatorNaming.ts` and
+  CLAUDE.md's golden rule 11 both said `operator-surface` `§2` _"declined to hide the number
+  behind a tooltip"_ — the opposite of the recorded answer. The RULE they state is right and
+  unchanged; only the citation was wrong, and it was wrong in the direction that would have made a
+  later reader re-litigate a settled decision.
+
+**Also confirmed here rather than assumed:** the PLAYOUT tab does not leak ownership class three.
+It reads `playoutLayers.state` — the declared RESERVED set only — and there is no `liveLayers()`
+accessor in the tree. `design.md` `§0.8` names the mechanism that WOULD create the leak, as a
+standing constraint: declaring Live Source layers by adding them to `reservedLayers`, the only
+existing "layers we do not allocate" list.
 
 ## [~] R-031 — the operator surface, as the owner described it: one Layers section, no Library, verbs on the row ⟨priority: high⟩
 
@@ -1157,6 +1312,32 @@ once the Library panel went, and losing a shipped capability (R-005) silently wo
 worse. Settings-side candidate-layer editing is the existing bank config modal, reached from the
 Layers header. See `openspec/changes/runtime-unified-layer-rows/DEBT.md` for what part B left
 owed (E2E suite, hardware pass).
+
+⭐ **ALL EIGHT POINTS VERIFIED TRUE AT `ec65480`, point by point, in
+`openspec/changes/operator-surface/design.md` `§0.3`** — designed 2026-08-15 alongside
+[[R-017]] / [[R-021]] / [[R-028]] / [[R-032]] / [[R-033]] as ONE surface. Seven of the eight rest
+on files with ZERO commits since `2a44247`; the eighth (point 7, verbs on the row) rests on
+`layerRowActions.ts`, which changed three times, so it was re-read rather than assumed — the
+verb declaration's SHAPE rule is intact, with two conditional MENU entries added beside it and
+the six-button block untouched.
+
+Point 8 is not merely satisfied but ARGUED in code, at the exact place a later reader would undo
+it (`layerRowActions.ts`, "THE SHAPE NEVER CHANGES"), including the NEXT case the owner caught in
+review — a verb that vanished when a single-step template landed and shifted its neighbours under
+the operator's finger.
+
+**Point 2's cost is PAID, not pending** — this was the open worry, and the recon closes it. What
+was deleted is the PANEL. The template REGISTRY survives with six working consumers, enumerated
+in `§0.3`: `useTemplatePicker` (list / remove / import), the Inspector (`templates.get` for the
+field schema), `useTemplateIndex` → the row's template label, `PreviewPanel` and `RehearsalStage`
+(`templates.html`), `SourcesModal` (Live Source plate assignments) and `fixedSlotLoad`. R-005's
+remove-a-template — which had no other surface once the panel went — was re-homed into the picker
+rather than lost. **The one residual question is `design.md` `§1`:** whether "the Library is
+DELETED" extends to the template PICKER dialog, the last surface still showing a LIST of
+templates. Recommended answer is that it stays (a list reached inside one action is a step, not a
+panel), and the cost of the alternative is spelled out there.
+
+This item is a candidate for `[x]` on the recon alone, once `§1` resolves.
 
 ## [~] R-032 — a PLAYOUT tab: see and clear what the playout system has on the reserved layers ⟨priority: high⟩
 
@@ -1199,6 +1380,36 @@ for layers this bridge did not create — four foreign `html` producers observed
 tap and AMCP `INFO` — and the occupancy tap stores the kind verbatim with no defaulting, so a
 non-html producer cannot be misread as html. Still owed: observing the NEGATIVE case (a video on a
 reserved layer) on hardware. Implemented in R-028 part B.
+
+⭐ **EVERY ACCEPTANCE BULLET VERIFIED TRUE AT `ec65480`, bullet by bullet, in
+`openspec/changes/operator-surface/design.md` `§0.4`** — designed 2026-08-15 alongside
+[[R-017]] / [[R-021]] / [[R-028]] / [[R-031]] / [[R-033]] as ONE surface. `PlayoutPanel.tsx`,
+`playoutOccupancy.ts` and `shared-ipc/channels/playoutLayers.ts` are all byte-identical since
+`2a44247`, so this section was confirmed by tree hash plus a re-read of the badge condition in
+`LayersPanel.tsx` (which did change, for an unrelated reason).
+
+The yellow indicator is a `badge: { tone: 'warn' }` on the PLAYOUT tab, and it is correct on the
+hard case: it fires on `kind === 'producer'` ONLY, so an `unknown` never raises it — the absence
+of a claim is not a claim — and `linkDown` masks it, because a frozen snapshot cannot back a
+warning. **The R-028 `§5.3` reversal is quoted VERBATIM in two places in the tree**
+(`PlayoutPanel.tsx`'s module doc and `packages/shared-ipc/src/channels/playoutLayers.ts`), the
+owner's reasoning intact, with the honest limit beside it in both — `html` means "not a video
+feed", never "unimportant".
+
+**ONE GAP, and it is a collision with [[R-033]] rather than a defect in this item
+(`design.md` `§0.9` C5 → `§3`):** the PLAYOUT tab's rows are laid out with
+`gridTemplateColumns: 'auto 1fr auto'`, the exact `auto`-sizing pattern `layerTable.ts` exists to
+replace, and they have no sticky header and no density ladder. R-033's rigid-grid rule governs
+the LAYERS tab and never reached the tab one click away — the tab an operator opens when ANOTHER
+system's graphic is on air, which is where a surprise is least welcome. One rule, applied to one
+of two surfaces.
+
+**Checked and clean:** the tab does NOT list Live Source layers. It reads `playoutLayers.state`,
+which is the declared RESERVED set only; there is no `liveLayers()` accessor in the tree. The
+exposure is FUTURE and its mechanism is named in `§0.8` — declaring Live Source layers by adding
+them to `reservedLayers` would put ownership class three into class two's surface.
+
+This item is a candidate for `[x]` once `§3` resolves.
 
 ## [ ] R-033 — the Layers surface as a table: neutral controls, state carried by icon, channel as the outer axis ⟨priority: high⟩
 
@@ -1253,7 +1464,46 @@ candidate ceiling is currently four layers (70–73) while R-028's design record
 available — if the demo needs more than four simultaneous rows that is a config decision to take
 before the demo. Filed from `dev-r028-b2`; see `openspec/changes/runtime-unified-layer-rows/DEBT.md`.
 
-## [~] R-029 — cueing a graphic puts its audio on air before the operator takes it ⟨priority: high⟩ — in progress: `openspec/changes/live-source-multibox/` (task 6.5a; CONTAINMENT only — the head bullet is NOT discharged, see below)
+⭐ **TEN OF TWELVE POINTS ARE ALREADY TRUE AT `ec65480`; TWO WERE SUPERSEDED; TWO REAL GAPS
+REMAIN.** Point-by-point citations in `openspec/changes/operator-surface/design.md` `§0.5` —
+designed 2026-08-15 alongside [[R-017]] / [[R-021]] / [[R-028]] / [[R-031]] / [[R-032]] as ONE
+surface. **This item reads as unbuilt and is mostly built**, which is exactly what filing a
+visual review from chat produces.
+
+**TRUE:** 3 (`layerTable.ts` — every column a fixed px width or an explicit `minmax(floor, Nfr)`,
+never `auto`), 4 (`ChannelScope` wraps the whole workspace; LAYERS/PLAYOUT nest inside), 5
+(`resolveDensity` / `minWidthFor`, three densities, the verb block never drops), 6
+(`ui/Tooltip.tsx` — delegated off any `title`, ported from the Designer's `InputTooltip`), 7
+(`MonitorStrip`, resizable, fullscreen-able), 8 (88vh, scrolling body), 9 (`role="button"` on the
+row, controls excluded via `closest(...)`, keyboard parity), 10 (`--r-verb-*` hover fills; **and
+its hardest half — disabled vs enabled legible without colour — is done by SHAPE**:
+`.cg-btn--verb:disabled` drops fill AND border, so enabled is a raised chip and disabled a bare
+dimmed glyph), 11's icon-only verbs under a sticky header that names each, and 12
+(`ui/Panel.tsx` — which is how the Inspector finally got one). Every one of those files has ZERO
+commits since `2a44247`, so the confirmation is a tree-hash comparison plus a read, not a
+re-assertion.
+
+**SUPERSEDED by a later owner decision recorded in `layerTable.ts` — now `design.md` `§2`:**
+point 1's real-layer-number secondary and point 2's description were removed as COLUMNS; both
+facts moved to tooltips (the row's own `title`/`aria-label`, and the state cell's tooltip) and to
+the Inspector. 🔴 **Point 1's supersession collides with a SHIPPED [[R-028]] acceptance bullet** —
+_"WHEN any row is displayed THEN its REAL CasparCG layer number is visible … an operator may need
+it to clear that layer by hand"_ — and "visible" is not "reachable by hovering", in precisely the
+scenario that bullet names. Three sources, two answers: whichever way `§2` resolves, R-028's
+acceptance text must move, because shipping against an unmet criterion is worse than either
+answer.
+
+**GAPS:** (a) point 11's "a real table" is true visually and FALSE semantically —
+`LayerTableHeader.tsx` carries `role="row"` with **no table-role ancestor** (an orphan role) and
+the body rows carry `role="button"`, so no table structure reaches assistive technology and the
+header words are announced as loose text rather than as the column headers of the glyphs beneath
+them. That matters more here than on an ordinary table: the header word is the third channel that
+retires the icon-only misread, and this product's STOP and CLEAR are inverted from the reference
+product's. (b) point 3's rigid grid never reached the PLAYOUT tab (see [[R-032]]). **Both land in
+ONE commit** — the only hard coupling in that design's landing order — because doing either first
+means the ARIA roles get written twice or written for one table and immediately extended.
+
+## [~] R-029 — cueing a graphic puts its audio on air before the operator takes it ⟨priority: high⟩ — CONTAINMENT LANDED 2026-08-14 in `openspec/changes/live-source-multibox/` (task 6.5a); the HEAD bullet is NOT discharged and this item stays `[~]` for it alone, see below
 
 **What:** Make template audio start at the **take**, not at the **cue**. Today `CG ADD` with no
 `PLAY` already produces audio on the channel, so an operator preparing a graphic is heard on air
@@ -1281,6 +1531,12 @@ Confirmed by ear at the box on **2026-07-28** during the same owner checklist th
 audible audio and working `MIXER VOLUME` (see [[C-018]]'s owner-checklist results). This is
 2.5.0 behaviour and it is a direct consequence of the fix C-018 wants: on 2.3.x template audio
 never reached the channel at all, so the defect could not exist there.
+
+**LANDED 2026-08-14 (task 6.5/6.5a).** The mute is emitted in `#sendAdd` — the SINGLE `CG ADD` emit
+chokepoint — so all four of its callers are covered by one implementation rather than by three
+remembered guards, and `live-add-mute.integration.test.ts` pins each site individually **on the AMCP
+trace**. A mute that FAILS does not proceed to the ADD (`add-mute-failed`): the mute is not a
+courtesy step around the load, it is the condition under which loading is safe.
 
 **MECHANISM CHOSEN 2026-08-08 — option 2, bridge-side, inside `live-source-multibox`.** The owner
 folded this item, [[R-042]] and [[B-121]] into one wave (`live-source-multibox` design.md §7 and
@@ -1326,7 +1582,7 @@ of `live-source-multibox`'s scope. **This item therefore stays `[~]` carrying ex
 more than usual: if [[C-019]] ships template audio before this is decided, every audio template
 authored in the meantime bakes in whichever behaviour the exporter allowed at the time.
 
-## [ ] R-030 — output placement must know the channel raster ⟨priority: medium⟩
+## [ ] R-030 — output placement must know the channel raster ⟨priority: medium⟩ — the raster is REPORTED, not set: `Station setup ▸ Channel` shows it read-only beside Outputs (`STATION-CHROME-01` §4, 2026-09-07). `STATION-SETUP-02` briefly gave `channelSettings.set` its first UI and the owner’s response was «I don’t know what this is for»; the facts agreed — the configured value reaches AIR through the served URL’s `?cw=&ch=`, and both the page and the console can already derive it from the server. ⚠ ONE GAP IS OPEN: the stored raster defaults to 1920×1080 and only a writer changes it, so a non-1080 install now shows a standing mismatch with no in-console remedy. The fix belongs in the bridge — adopt `observed` when the verdict is `mismatch` and the mode was readable, one change in `channel-settings-store.ts`
 
 **What:** Give play-out placement the real channel geometry, and scale the stage to it. R-011's
 "author small, place anywhere" is already implemented — but against a **hardcoded 1920×1080
@@ -1416,12 +1672,24 @@ channel does produce a `mismatch` and the banner does fire. The gap that remains
 whose mode `INFO` cannot read: the verdict is `unreadable`, the banner stays silent **by design**,
 and placement silently uses 1920×1080.
 
+⚠ **AMENDED 2026-09-07 by [[B-236]] — the first half above is no longer what happens, and the
+second half is now the WHOLE of the gap.** The declared-but-unconfigured 720p channel no longer
+sits at a standing mismatch: the bridge ADOPTS the server's raster the moment it reads one that
+contradicts config (`ChannelSettingsStore.adoptObserved`), persists it, and places against it, so
+that case self-corrects and the banner clears. It had to, because `STATION-CHROME-01` §4 removed
+the typed field and left the value with no writer at all. What survives unchanged is exactly the
+`unreadable` channel — no raster to adopt, so nothing to correct — plus one case adoption
+declines: while anything is ON AIR, because re-pointing plate geometry under a template that
+already carries the old raster would pull a live plate out of its own box. **Source 2 is still
+unreachable and this item's acceptance is still unmet**; adoption narrows the exposure, it does
+not close R-030's own bullet.
+
 **This is recorded as an unmet acceptance of THIS item, not as a new defect** — the behaviour it
 describes is the behaviour this item was filed to deliver. Closing `R-030` means either making
 source 2 reachable (append `cw`/`ch` only when a channel is genuinely configured) or amending the
 acceptance to drop a source the design does not want — a decision, not a bug fix.
 
-## [ ] R-034 — the delimiter list is CONFIGURABLE in settings, not hard-coded in the control ⟨priority: medium⟩
+## [~] R-034 — the delimiter list is CONFIGURABLE in settings, not hard-coded in the control ⟨priority: medium⟩ — FIXED and on `dev`: `openspec/changes/runtime-from-file-persistence/` (20/21 tasks), authored together with [[B-113]] because they are two defects in the same control. Gated on the SAME single remaining task 6.2 — an owner browser check on a Chromium that does not auto-grant — which is a File System Access question, not a delimiter one; one owner pass closes both items
 
 **What:** the five delimiters offered under a list field are a hard-coded array in
 `fromFileContent.ts` (`DELIMITER_SUGGESTIONS`). The owner asked for a section in settings where
@@ -1449,9 +1717,9 @@ one-time setup step.
 - The list can never be emptied to nothing — a list field with split on must always have at
   least one delimiter to choose.
 
-## [~] R-035 — a startup splash screen: the product's first frame ⟨priority: medium⟩
+## [x] R-035 — a startup splash screen: the product's first frame ⟨priority: medium⟩ — shipped and archived: `openspec/changes/archive/2026-08-11-runtime-splash-screen/` (living spec `runtime-ui`). The Linux `gate:e2e` this UI change owed is DISCHARGED — <https://github.com/yasermostafaee/cg/actions/runs/31252541925>, commit `a344cd2`, run `conclusion: success`, `E2E (Playwright)` job conclusion `success` (it RAN); `splash.spec.ts` all 6 passed on Linux. The change's three remaining deferrals were RESCOPED OUT rather than done — they were never its scope: the placeholder brand → [[R-050]], the in-app about/version surface → [[R-051]], and the CDN font → folded into [[P-001]], which IS that fix, not filed as a duplicate
 
-<!-- change: openspec/changes/runtime-splash-screen/ -->
+<!-- change: openspec/changes/archive/2026-08-11-runtime-splash-screen/ -->
 
 <!-- Filed as R-031 by a session reading this file ON `main`, where R-030 was the highest in
      use; `dev` already held R-031 (the operator surface) in an unmerged fast-mode edit that
@@ -1716,7 +1984,7 @@ merely written.
 **Notes:** related to [[R-033]] (the Layers table this lives in). Source: `DEBT.md:2621` (current
 model, authoritative) and `DEBT.md:1606` (superseded reading — do NOT specify from it).
 
-## [~] R-042 — mute-before-ADD, so LOAD can run during rehearse without a brief audible leak ⟨priority: medium — reaches air⟩ — in progress: `openspec/changes/live-source-multibox/` (task 6.5b)
+## [x] R-042 — mute-before-ADD, so LOAD can run during rehearse without a brief audible leak ⟨priority: medium — reaches air⟩ — DONE 2026-08-14, `openspec/changes/live-source-multibox/` (task 6.5b)
 
 **What:** rehearse currently REFUSES LOAD on a rehearsing row (fail closed), because LOAD on a
 cleared row is the one path that can put an UNMUTED producer under a row the UI shows as
@@ -1747,6 +2015,17 @@ every bridge-created producer is created muted, audio raised only by explicit re
 ordering constraint above is carried verbatim into 6.5b, including the requirement that the
 `MIXER … VOLUME` be asserted **on the AMCP trace** rather than by the absence of an error. Nothing
 about this item's substance changed — only its home.
+
+**DONE 2026-08-14, and one premise of this item was already STALE when it landed.** All three
+acceptance bullets hold — the `MIXER … VOLUME` precedes the `CG ADD` on the trace at every one of
+the four call sites, and a failed mute refuses the load with `add-mute-failed` rather than
+proceeding. But the FIRST bullet was already satisfied by a different route: **LOAD stopped
+refusing a rehearsing row when it became LIST-ONLY** (`loadFixed` emits no AMCP at all), and the
+guard this item describes was removed then — _"a path that cannot exist beats a guard that has to
+be remembered"_. What the mute actually closes is the caller that survived: the DYNAMIC `load()`,
+which still emits and never had a guard, plus `setPosition`’s re-ADD and [[B-121]]’s reconnect
+re-ADD. Recorded here because the per-site tables in this item, in [[B-121]] and in the design all
+name `loadFixed` as the guarded site, and all three are now wrong about it.
 
 **DESIGN-FIRST — implementation needs an OpenSpec change before code.** The command ORDER is a
 contract between the bridge and the template runtime, and it is version-dependent (2.5.0), so it
@@ -1930,10 +2209,28 @@ that a Designer-splash change dir does not exist at all (`DEBT.md:1975`) — tha
 separate, larger, and is not folded in here. Source: `DEBT-SWEEP.md:665-672`, recorded as owed by
 the sweep's closing session and left unfiled.
 
-## [ ] R-048 — swap a plate's input WHILE the template is ON AIR ⟨priority: high⟩ — ⭐ CLIENT REQUIREMENT, implemented in [[C-015]] phase 6
+## [~] R-048 — swap a plate's input WHILE the template is ON AIR ⟨priority: high⟩ — ⭐ CLIENT REQUIREMENT — BUILT 2026-08-14 in [[C-015]] phase 6 (tasks 6.9–6.9f); `[~]` for ONE reason only, the unmeasured occupied-layer substitution on the production 2.5.0 (6.9a), see below
 
 🔴 **This is a CLIENT REQUIREMENT, not a preference.** Recorded as such 2026-08-10 (owner) so a
 later prioritisation pass cannot read it as a nice-to-have and defer it.
+
+**BUILT 2026-08-14 (session AG).** A PER-ITEM override — the template's assignment and the
+installation's catalog are both untouched, and it never writes back. A REPLACE, never a
+clear-then-add: on failure the previous producer stays, the override is not recorded, and the row is
+told. The fit re-derives in the same action, the plate's audio intent survives the swap, the override
+survives a bridge restart through retention, and it is reachable in two actions from the row.
+
+⭐ **AND IT IS NOT ONLY AN EMERGENCY AFFORDANCE.** The owner's 2026-08-14 answer to the studio-plate
+question (`live-source-multibox` design.md §12.6) is that the studio's address is chosen AT THE
+MOMENT OF USE — so this swap is also the ONLY mechanism by which a moment-chosen source is
+addressable at all on this installation. Reading it as "nice to have in a failure" under-weights it.
+
+🔴 **WHY IT STAYS `[~]`, and it is one thing:** whether `PLAY` on an OCCUPIED layer SUBSTITUTES the
+producer rather than requiring a prior clear is **unmeasured on the production 2.5.0** (corrected
+2026-08-22 — this said "the plant's 2.3.2", which is retired and must never be probed). The AMCP mock
+models it as a replace, so the offline tests prove the code is self-consistent and prove nothing
+about the server. Task 6.9a carries the probe; ride it with design.md §3b's `DEFER`/`COMMIT` question
+and 6.3a's `CLIP` intersection probe, which are AMCP probes on the same build.
 
 **What:** a three-plate template is on air, one input drops and its plate goes black. The operator
 must be able to point **that ONE plate** at a different source, **fast**, **without taking the
@@ -1964,7 +2261,7 @@ the graphic itself never reloads.
   [[B-126]] window, **arriving during an emergency** — a destructive step committed before the
   constructive one was known to succeed. WHEN the replace fails THEN the previous (black) producer
   stays and the row **says so honestly** rather than reporting a success it did not achieve.
-  ⚠ **VERIFY on the plant's 2.3.2 that `PLAY` on an OCCUPIED layer substitutes rather than requiring
+  ⚠ **VERIFY on the production 2.5.0 that `PLAY` on an OCCUPIED layer substitutes rather than requiring
   a prior clear — do NOT assume it; record the measurement.** Run it in the same `amcp-poke` session
   as `live-source-multibox` design.md §3b's `DEFER`/`COMMIT` question.
 - WHEN the substituted source carries a different format THEN **the fit recomputes automatically**,
@@ -1998,7 +2295,19 @@ and which source is healthy. C-023 is the diagnosis half; this item is the repai
 6.9–6.9f), cross-referenced both ways — the same pattern D-147 used to ride phase 1 rather than
 opening a change of its own.
 
-## [ ] R-049 — a rehearse plate is COMPLETELY BLANK, so a live plate is indistinguishable from a broken render ⟨priority: medium⟩ — depends on [[C-015]]'s assignment store
+## [~] R-049 — a rehearse plate is COMPLETELY BLANK, so a live plate is indistinguishable from a broken render ⟨priority: high⟩ — depends on [[C-015]]'s assignment store
+
+<!--
+  PRIORITY RAISED medium → high, 2026-08-12. Not a re-estimate: the owner hit this
+  in LIVE TESTING and reported that in CG Control's PVW you cannot tell a live
+  plate exists at all. That is this item's own premise — "indistinguishable from a
+  broken render" — confirmed in use rather than predicted, and a filed premise that
+  has been met in operation is no longer a medium.
+-->
+
+**In progress:** `openspec/changes/rehearse-live-plate-placeholders/`. Linux `gate:e2e` DISCHARGED —
+[run 31551511995](https://github.com/yasermostafaee/cg/actions/runs/31551511995) on commit
+`455318b4`, `conclusion: success`, with the `E2E (Playwright)` job RUN (not skipped) and green.
 
 **What:** in PVW, draw a **labelled placeholder** over each live plate's rect — procedural colour
 bars carrying the **plate's name** and, when one is assigned, **the assigned SOURCE's name**. Drawn
@@ -2069,6 +2378,34 @@ Three consequences of that, each a reason this is cheap:
   bridge's FILL contract test. Use a raster that pads on the other axis (e.g. `1440×1080` or
   `720×576`).
 
+### ⭐ DECIDED 2026-08-12, owner — VISIBLE BEFORE PLAY, and it does NOT reopen [[D-087]]
+
+Observed by the owner during implementation: the placeholders paint **as soon as PVW opens**, while
+the template's own elements stay blank until **Play**. That is [[D-087]]'s **blank-until-play**
+contract, which the rehearse frame inherits by rendering the exported page verbatim
+(`body.cg-pending` hides the page's stage; `play()` clears it, settle re-adds it). The overlay sits
+**outside** that page, so it was never subject to it. **Recorded here as a DECISION rather than
+left as the side effect it started as:**
+
+- **Visible before Play is CORRECT and is kept.** This item's own acceptance is the argument: an
+  unassigned plate **REFUSES the take**, and PVW is "the operator's last chance to see it before
+  air". A placeholder that appeared only after Play would be absent at exactly the moment it was
+  filed to serve.
+- **It does NOT reopen [[D-087]]**, for the same reason it does not reopen §12.2: **the page still
+  paints nothing before Play.** `cg-pending` is a class on the PAGE's own `body`; the overlay is a
+  Runtime layer composited over the frame and reaches into no document. The contract is untouched.
+- **DURING play: it persists, entirely unchanged** — same box, same state, same words. **Verified,
+  not assumed** (`apps/runtime/tests/e2e/pvw-live-plate-placeholder.spec.ts` drives a stand-in page
+  carrying the real `cg-pending` contract and asserts the page blank → painting → blank while the
+  marker never moves). Nothing about it changes appearance and nothing disappears, because the
+  component takes **no lifecycle input at all**. That is the wanted behaviour rather than a gap: the
+  hole is still a hole while the graphic runs, and the "never mistakable for a real incoming
+  picture" requirement is **most** load-bearing exactly then — fading the marker at play would
+  restore the original defect at the moment the frame most resembles air.
+
+Pinned at both levels so it cannot drift silently: the E2E above for the real lifecycle, and
+`apps/runtime/tests/livePlateOverlay.dom.test.ts` for the overlay's invariance under the transport.
+
 ### Cross-references, so neither is read as a duplicate of the other
 
 - **[[C-023]]** (a confidence thumbnail per live source) answers **"is the picture good"** — it needs
@@ -2083,3 +2420,2224 @@ Three consequences of that, each a reason this is cheap:
 **Depends on the assignment store** ([[C-015]] phase 4, shipped), because the source NAME is what
 makes the placeholder worth drawing. Without it the item degrades to bars plus a plate name — still
 better than blank, but it is the name that answers the operator's actual question.
+
+## [ ] R-050 — swap the placeholder APASAI mark and brand colours for the real ones ⟨priority: low⟩
+
+<!-- rescoped out of R-035 (runtime-splash-screen task 8.2), 2026-08-11 -->
+
+**What:** Replace the placeholder brand on the Runtime's startup splash with the real APASAI
+mark and the real brand colours.
+
+**Why:** the splash is the product's first frame — the thing an operator sees before anything
+else — and it currently carries a stand-in. `R-035` shipped the splash deliberately with a
+placeholder because the real mark did not exist yet; this item is the swap, filed so the
+placeholder cannot quietly become permanent by nobody remembering it was one.
+
+**Acceptance:**
+
+- WHEN the real mark is dropped in THEN the ONLY file that changes is
+  `apps/runtime/index.html`, at the single `<svg class="cg-splash__mark">` BRAND SLOT — the
+  swap point R-035 built for exactly this
+- WHEN the mark is replaced THEN the `cg-splash__mark` class, the 56×56 `viewBox` and
+  `aria-hidden` are preserved, so layout and accessibility are unchanged by the swap
+- WHEN brand colours are applied THEN every colour is a `--r-*` token value, never a literal —
+  `apps/runtime/tests/splashCss.test.ts` already enforces this and must stay green
+
+**Notes:** the swap point being ONE documented element is R-035's deliberate design (see
+`openspec/changes/archive/2026-08-11-runtime-splash-screen/DEBT.md` §2). Do not spread brand
+values across the stylesheet on the way in — that is what makes the NEXT rebrand expensive.
+Blocked on the owner supplying the final mark and palette; no code question is open.
+
+## [ ] R-051 — an in-application about / version surface that reads the ONE build stamp ⟨priority: low⟩
+
+<!-- rescoped out of R-035 (runtime-splash-screen task 8.3), 2026-08-11 -->
+
+**What:** Give the Runtime a place inside the app — an About dialog or a status-bar readout —
+where the operator can read which build they are running, without restarting to catch the
+splash.
+
+**Why:** the build stamp exists and nothing in the app reads it. `vite.config.ts` computes it
+ONCE and exposes it both as the HTML the splash paints and as the `__CG_BUILD__` compile-time
+global; today only the splash uses it, so the only way to answer "which build is this?" is to
+reload and read a screen that dismisses itself. On a support call that is the wrong
+affordance.
+
+**Acceptance:**
+
+- WHEN the about/version surface renders THEN it reads `__CG_BUILD__` and does NOT re-derive a
+  version, a SHA or a date — 🔴 two derivations are two answers, and the whole point of the
+  stamp is that what the operator reads on the first frame and what they read in the app are
+  the SAME STRING
+- WHEN the project starts tagging releases THEN `v${version}` is prefixed at the ONE render
+  site named in the comment beside `#cg-splash-version` in `apps/runtime/index.html`, not at a
+  second one
+- WHEN no release tag exists THEN the surface shows `sha · builtAt` only, exactly as the splash
+  does — `0.0.0` is a placeholder, not a release identity, and showing it would be a lie about
+  what is deployed
+
+**Notes:** carries the `version` decision R-035 deferred (see
+`openspec/changes/archive/2026-08-11-runtime-splash-screen/DEBT.md` §3). The Designer has the
+same gap; if that surface is built too, both read their own app's `__CG_BUILD__` — one
+mechanism, two call sites, never a shared re-derivation.
+
+## [~] R-052 — one message region for every modal, enforced rather than remembered ⟨priority: medium⟩ — implemented (`e1e2d03`): `openspec/changes/runtime-modal-message-region/`; all 19 tasks ticked including the owed Linux `gate:e2e`; ARCHIVE-READY
+
+<!-- Filed 2026-08-11 by the [~] audit. The work SHIPPED in `e1e2d03` and was fully
+     specified in its change dir, but no PRD item was ever written for it — the only
+     reference anywhere in docs/prd was a cross-link from the Designer counterpart
+     D-148. Filed retrospectively so every open change dir resolves to exactly one
+     PRD item, and so the capability is discoverable from the PRD rather than only
+     from a change dir that is about to be archived. R-052 verified free against
+     `dev`, `origin/main` and every file in the repo before claiming it. -->
+
+**What:** give the Runtime's `Modal` primitive ONE message region that every dialog uses, and
+make it impossible to go around:
+
+- The region takes **DATA, not a node** — `message?: ModalMessage | ModalMessage[]` where
+  `ModalMessage` is `{ role, text, detail? }` with **string** fields. There is no seam to pass
+  a `style` through, so a call site cannot spell its own treatment even by accident.
+- **Two roles, and the ROLE decides the treatment** — `refusal` (why it did not happen) and
+  `notice` (what happened when it worked) — the same rule the action-button roles already
+  follow. The treatment lives in exactly one place, `renderer/ui/Notice.tsx`.
+- **A lint rule closes the placement hole** the type system cannot see: `role="alert"` inside a
+  `<Modal>` subtree is banned outside `ui/`.
+
+**Why:** the `Live sources` modal put `colors.error` (`#991B1B`) as a FOREGROUND on the modal
+surface (`#111827`) — **2.13:1**, below even the 3:1 large-text floor. But the contrast number
+is the symptom, not the defect. **The pattern was already solved and the new modal went around
+it**: the dialog wave that introduced `Modal` gave it a message region pinned OUTSIDE the
+scrolling body and immediately above the action row, precisely because _a refusal appended to
+scrollable content is a refusal the operator never sees_ — he presses Apply with the list
+scrolled to the top, nothing happens, and the reason is below the fold. The audit found the
+pattern **half-adopted**, which is the worst state a shared rule can be in: four dialogs, four
+spellings, and `Text file delimiters` rendering `<p role="alert">` as the last child of its own
+scrolling body — the exact defect the region exists to prevent, in a dialog otherwise ON the
+primitive.
+
+**Acceptance:**
+
+- WHEN any dialog that can speak renders THEN its message goes through the shared region, and a
+  DOM-level census test asserts the MECHANISM rather than a colour
+- WHEN a message is supplied THEN its treatment is decided by its `role`, and no call site can
+  supply a style — the props carry strings only
+- WHEN a developer places `role="alert"` inside a `<Modal>` subtree outside `ui/` THEN `eslint`
+  FAILS, so the placement rule is enforced rather than remembered
+- WHEN a validator refuses inside a genuinely scrolling dialog body THEN the message is fully
+  in the viewport (`toBeInViewport({ ratio: 1 })`), asserted by an E2E that was verified RED
+  against the reintroduced in-body placement
+- WHEN a message carries Persian text THEN it renders `dir="auto"`
+
+**Notes — no new colour was introduced, and that is deliberate.** `refusal` **IS**
+`Candidate layers`' existing amber box, MOVED rather than redesigned; the three red spellings
+were **deleted** rather than replaced, because in `theme.ts` red means error or destructive
+intent and a refusal is neither — it is the ATTENTION case, which is amber.
+
+**Partial discharge only** of the `Modal` contract debt (`DEBT.md:2079`): this covers the
+MESSAGE region and its roles. The three action-button roles and the chrome migration of five
+dialogs remain unspecified and still owe their own artifacts.
+
+**Cross-reference — [[D-148]] is the Designer counterpart, and it is NOT a copy job.** The
+Designer has its own `features/shell/Modal.tsx` with no message region at all, and its one
+dialog message sits in the scrolling body — the same placement defect, but latent (its colour
+measures 7.38:1, not 2.13:1), which is why D-148 is `low` and this was not. D-148 records
+explicitly that its roles must be DERIVED from the Designer's own existing treatments, not
+copied from this item's two: the Runtime's `refusal`/`notice` were an EXTRACTION of treatments
+that already existed in that app.
+
+## [ ] R-053 — an aspect-mismatched plate must be TAKEABLE, with operator-confirmed CENTRE CROP ⟨priority: high⟩
+
+⭐ **RE-SCOPED BY [[C-028]] (2026-08-25) — READ THIS BEFORE PICKING THE ITEM UP. Its opening
+premise is now FALSE BY DEFAULT and the rest of the item has not been rewritten.**
+
+C-028 shipped a per-plate FIT MODE and made `contain` the default, and it made the
+`live-source-aspect-mismatch` refusal **conditional on that mode**: a refusal under `cover`, a
+non-blocking warning under `contain`. So the sentence below — _"the take is refused"_ — now
+describes only the `cover` path.
+
+What that leaves of this item, honestly:
+
+- **Reason 1 (one mismatched plate refuses the entire take) is answered for the default**, because
+  the default no longer refuses. It still stands, unchanged, for a plate authored `cover`.
+- **Reason 2 (the operator has no on-air remedy) is PARTLY answered and is the half worth keeping.**
+  The operator now HAS a remedy — the per-assignment `fitMode` override — but it is a CG Control
+  edit, not the row-level, per-run consent this item asks for, and nothing surfaces the warning
+  C-028 attaches to a `contain` mismatch. **The warning has no reader**, which is the same
+  zero-reader shape as [[B-143]]'s `assumed` flag and is the most useful thing left here.
+- **The DRAFT message below now needs a `contain` arm**, and its remedy list is wrong for that mode:
+  under `contain` nothing is cropped, so _"confirm the centre crop"_ is not the remedy — switching
+  the plate to `cover` is. C-028 already splits the consequence clause per mode in
+  `resolvePlateAspect`; a rewrite here must not collapse them back into one sentence.
+
+**Not re-scoped by the C-028 session on purpose** — deciding what remains of a `[ ] high` item is
+the owner's call, not a ripple to absorb quietly. What is recorded here is the fact that moved.
+
+**What:** when a live plate's `expectedAspect` disagrees with the assigned source's shape, the take
+is refused. Keep the refusal — but let the operator **consent to a centre crop from the row** and
+take again. The consent is **per-item, per-run**: it never edits the template's assignment nor the
+plate's `expectedAspect`. While a consented plate is on air, the row says **persistently** that it
+is cropped by consent.
+
+**Why:** the refusal is correct in principle and unsurvivable in practice, for two measured reasons.
+
+1. 🔴 **Seating is ALL-OR-NOTHING, so ONE mismatched plate refuses the ENTIRE take.** A three-box
+   graphic does not reach air because one guest's feed is a different shape than the author
+   guessed. The all-or-nothing rule is deliberate and right — _"a layout with one unfilled hole is
+   the silent-empty-hole outcome reached by a different road"_
+   (`tools/caspar-bridge/src/caspar-runtime.ts:2913-2915`) — which is exactly why the per-plate
+   remedy has to exist.
+2. 🔴 **The operator has no on-air remedy at all.** The message names two fixes and both live in CG
+   Control; a third exists and is unmentioned (clearing `expectedAspect`) and is an author-side,
+   template-wide edit in the Designer. None of the three is available to an operator with a guest
+   waiting.
+
+**This is a SMALL addition, not new geometry — the mechanism is already built and already centred.**
+
+- **Crop-to-fill is already CENTRED**, and the code says why:
+  _"Centred on the hole, so the crop takes evenly from both edges. An off-centre crop would cut one
+  side of a face and not the other"_ — `x: hole.x + (hole.width - width) / 2`
+  (`packages/shared-schema/src/live-geometry.ts:186-189`), pinned by a unit test. It lives in
+  `@cg/shared-schema`, so the page and the bridge share ONE computation. ⚠ The one case that is not
+  centred is a hole partly off-frame, because the CLIP is intersected with the stage while the FILL
+  is not (`live-geometry.ts:153-166`) — that is the existing clamp and is out of scope here.
+- **`expectedAspect` is a VALIDATION, not a fit input.** The source's own aspect is genuinely first
+  in the chain; the author's number is consulted as a fit input only where the source states
+  nothing (`tools/caspar-bridge/src/live-plate-fit.ts:135-170`).
+
+⇒ **"Proceed with centre crop" is, mechanically, "skip this one validation and fit from the source's
+real aspect."** The branch is `if (stated !== null && expected !== undefined)` at
+`live-plate-fit.ts:148`. No new arithmetic and no new AMCP commands. What must be BUILT is the
+**consent**: how it is expressed, where it is carried, how it is shown, and how it is cleared.
+
+**The precedent to reuse — do NOT build a second mechanism.** [[R-048]]'s `#sourceOverrides` is the
+shape: a per-item, per-plate map in the bridge, resolved inside the ONE resolver, which explicitly
+does not write back _"because an emergency substitution must never silently become the permanent
+configuration."_ It rides the OPEN retention axis as `RetainedStackItem.sourceOverride` and is
+re-applied by `restore()`.
+
+🔴 **But its clear-set is far thinner than it looks, and a consent must not inherit it unexamined.**
+Measured: `#sourceOverrides` is cleared by exactly **two** events — `remove()`, and a swap that
+empties the map — plus bridge-process death, repaired by `restore()`. It is **NOT** cleared by a new
+assignment, a re-take, a template re-import, `stopItem`, `out`, teardown, a catalog change, or
+disconnect. For an override that is tolerable: it names a source the operator chose. **For a
+consent it is not** — a consent is permission to crop THIS mismatch, and a consent that outlives the
+mismatch is a silent crop on a plate that no longer needs one. Enumerating the inverse is part of
+this item, not a detail: for every place the consent is set, name what clears it.
+
+**It must be VISIBLE that a plate is running cropped**, and the obvious precedent is not usable as
+one. `resolvePlateAspect`'s `assumed` flag was built for exactly this honesty role — _"what lets a
+row or a log say 'fitted unverified' instead of claiming a verified fit"_ — but ⚠ **`assumed` has
+ZERO readers outside its own unit test**: it reaches no UI, no IPC channel and no log. So the
+principle is sound and the surface does not exist; this item builds the first one, and should carry
+`assumed` with it rather than leaving a second unread flag behind.
+
+**Where the control lives** — two measured constraints, both binding: the row's verb block is a
+**fixed six-column grid** with a sticky header printing a word above each glyph, which is why AUDIO
+and SOURCE became `surface: 'menu'` actions (`features/layers/layerRowActions.ts:655-668`); and
+[[R-048]]'s 6.9e requires the source swap to be reachable in **one or two actions from the row** and
+explicitly not behind a modal chain. A refused take with a guest waiting has the same emergency
+character and the same argument.
+
+**Acceptance:**
+
+- WHEN a take includes a plate whose `expectedAspect` disagrees with its assigned source THEN the
+  take is still REFUSED first, and the operator sees the warning naming the plate and both numbers
+  before anything reaches air
+- WHEN the operator consents to the crop from the row, in one or two actions, and takes again THEN
+  the take succeeds and the plate shows the CENTRE of the source, cropped to fill the hole
+- WHEN a consent is given THEN it applies to that row's run only, and neither the template's
+  assignment nor the plate's `expectedAspect` is modified
+- WHEN two plates mismatch and only one has been consented THEN the take is STILL refused, naming
+  the plate that still lacks consent
+- WHEN a consented plate is on air THEN the row shows persistently that it is cropped by consent,
+  not only as a toast at the moment of confirming
+- WHEN ⟨the named clearing events⟩ occur THEN the consent is cleared, and WHEN the row is retained
+  and restored THEN it survives, so a reconnect does not silently drop it
+- WHEN a plate carries no `expectedAspect` THEN nothing is refused, unchanged
+- WHEN the two aspects differ by no more than `ASPECT_MATCH_TOLERANCE` (1%) THEN the take passes
+  silently, unchanged
+- WHEN the refusal is shown THEN it names all four remedies in order, on-air one first, each with
+  where it lives
+- WHEN the refusal sentence is rendered anywhere THEN it has exactly ONE spelling in the repo
+
+**Notes:**
+
+- **Scope decided by the owner: OPERATOR CONSENT ONLY.** An author-side `allowCrop` field on the
+  plate was considered and NOT taken: the author cannot see the feed, so a pre-authorised crop is a
+  crop nobody has looked at — the same argument the code already makes for why the SOURCE outranks
+  the AUTHOR (_"Crop-to-fill DISCARDS PICTURE… the author cannot see the feed, so their guess is
+  about what they DESIGNED FOR, not about what arrives"_). It stays available as a later item if
+  operating experience asks for it.
+- **Fit-inside (letterbox / pillarbox) is rejected, for TWO independent reasons — record both.**
+  The code's own reason is aesthetic: _"a multi-box guest window is a designed graphic element, not
+  a video player viewport, and black bars inside a frame the designer drew do not read as 'the
+  source is 4:3', they read as a fault on air"_ (`live-geometry.ts:144-152`). The **structural**
+  reason is additional and is not written down anywhere: the plate is a **transparent hole punched
+  in the backdrop**, so an under-filled hole does not show black bars at all — it shows whatever is
+  on the layer beneath it. Making letterboxing safe means painting bars or shrinking the hole, i.e.
+  touching the punch geometry.
+- **Out of scope for v1:** a pan / offset control choosing which part survives the crop. Centre
+  only; an offset control is a separate later item ⟨MINT: live plate crop offset control⟩.
+- 🔴 **The refusal message is INCOMPLETE and already has TWO SPELLINGS.** Every site, measured:
+
+  | site                                                     | what it carries                                        |
+  | -------------------------------------------------------- | ------------------------------------------------------ |
+  | `tools/caspar-bridge/src/live-plate-fit.ts:156-160`      | **source of truth** — names the plate and BOTH numbers |
+  | `apps/runtime/src/renderer/ui/errorCodeMessage.ts:88-89` | a generic paraphrase — **no plate, no numbers**        |
+  | `tools/caspar-bridge/tests/live-plate-fit.test.ts:99`    | asserts `/re-assign\|correct the source/i`             |
+  | `apps/runtime/tests/errorCodeMessage.test.ts:76-81`      | asserts `/cut/i`, `Re-assign`, `format`                |
+
+  🔴 **A THIRD DELIVERY PATH, and it is the one this item cares about most.** `swapLiveSource` calls
+  `resolvePlateAspect` itself and returns the SAME composed sentence on its own result shape —
+  `tools/caspar-bridge/src/caspar-runtime.ts:3288-3293`,
+  `if (!aspect.ok) return { ok: false, reason: aspect.errorCode, message: aspect.message };`. So the
+  refusal already reaches the operator through the **row's SOURCE swap**, which is exactly the
+  control the corrected message will point them to. Any rewrite must cover this path, and the
+  wording must still make sense when the operator is already IN the swap dialog rather than reading
+  a refused take.
+
+  The two prose sites already differ three ways — "cut **a** part" vs "cut part", an em-dash vs a
+  full stop, and an ASCII `'` vs a curly `’` in "source's format". There is **no** e2e assertion, no
+  operator doc and no archived spec carrying it (SEARCH over `docs/`, `apps/*/tests/e2e`,
+  `openspec/specs` for "designed for" / "cut a part of the picture" / "re-assign the plate" → no
+  further hits). ⚠ **Three different selectors decide which spelling the operator sees**, each with
+  its own preference rule — `ui/asyncButtonController.ts:87-88` prefers the bridge's sentence and
+  falls back to the catalogue, and the Inspector and swap paths differ again — so "one sentence, one
+  spelling" has to be settled at the SOURCE, not per selector.
+
+- **DRAFT of the corrected message — AWAITING OWNER APPROVAL, not to be applied in this item:**
+
+  > plate "live-1" is designed for a 0.9 feed, but the assigned source "Studio 1" delivers 16:9.
+  > Cropping it would cut a part of the picture the author never saw.
+  > **To go to air now:** confirm the centre crop on the row — it applies to this run only.
+  > **To fix it properly, in CG Control ▸ Sources:** re-assign the plate to a 0.9 source, or correct
+  > "Studio 1"'s format if 16:9 is wrong.
+  > **If this plate should not assert a shape at all:** clear its expected aspect in the Designer —
+  > that is permanent and applies to every future take of this template.
+
+  ⚠ The four remedies are **not interchangeable** and the message must not present them as if they
+  were: clearing `expectedAspect` is PERMANENT and TEMPLATE-WIDE (it removes the check for every
+  future mismatch on that plate, including a genuinely wrong assignment the check would have
+  caught), and it is an AUTHOR action in the Designer, so it is not reachable by the operator
+  reading the message — naming it without saying where it lives would be a fourth dead end.
+
+- **Owner questions, deliberately not resolved here:**
+  1. **What clears the consent?** The minimum defensible set is a change to the plate's assignment
+     or override, and a new mismatch with different numbers. Should a re-take also clear it — safer,
+     but it makes the operator re-consent on every take of a permanently-mismatched feed?
+  2. **Does the consent survive retention/restore?** [[R-048]]'s override does — it is persisted
+     beside `position` (`apps/runtime/src/platform/stack/StackRetentionStore.ts:112-116`, whose
+     comment says the override travels "for the same reason `position` does"). A consent that
+     survives a reconnect keeps the graphic on air; one that does not means a reconnect silently
+     drops a plate. Recommendation: survive, on the same OPEN axis — but it is the owner's call,
+     because it is the difference between two on-air failure modes.
+     ⚠ **And whichever way it goes, note the hole the override already has:** `restore()` can SKIP
+     an item (four wire reasons — `already-held`, `unknown-template`, `no-layer`,
+     `fixed-slot-taken`), and a PARTIAL restore still counts as success —
+     `apps/runtime/src/platform/WebSocketRuntime.ts:463` sets `restoreOk = true` and only the
+     `catch` at `:483-484` clears it. So a skipped item's per-run state is not merely absent for
+     that connect; the retention is then overwritten and it is gone for good. A consent inheriting
+     this axis inherits that too.
+  3. **Exact wording of the message above.**
+- **Cross-refs:** [[R-048]] (the per-run override this reuses, and whose clear-set must NOT be
+  inherited unexamined), [[B-139]] (the row's draft/dirty predicate — this item adds a fourth
+  per-plate row indicator and must read the existing predicate rather than adding a third
+  spelling). The refusal and the fit chain live in `tools/caspar-bridge/src/live-plate-fit.ts`; see
+  the pointer beside [[C-015]] in `caspar.md`.
+
+## [~] R-054 — one SETTINGS shell for CG Control, and one layout for its panes ⟨priority: medium⟩ — PARTLY DELIVERED 2026-09-06 by `STATION-SETUP-02` (`openspec/changes/station-setup/`): ONE dialog, `Station setup`, every old entry point a deep link, each section's commit contract in a legend; Linux `gate:e2e` DISCHARGED for `30a0cf17` — <https://github.com/yasermostafaee/cg/actions/runs/34045753015> (`E2E (Playwright)` RAN 624 s, `success`).
+
+⭐ **ADVANCED 2026-09-07 by `STATION-CHROME-01`** (`ffddf471` · `37f6848b` · `d1786d66`): the acceptance's TABS are delivered — a vertical rail (Channel · Servers · Live sources · Text file delimiters · Layers), each tab owning its own footer and its own refusal, with a rail dot marking every blocked or edited section so nothing is hidden (which is what `STATION-SETUP-02`'s no-tabs argument was protecting, and the scroll did not deliver: it put `Apply is blocked for Servers` in front of an operator editing delimiters). Also delivered: the SOURCES TABLE with kind-aware labelled columns, one small second dialog for every Add and Edit, the channel raster made READ-ONLY, Station layers moved out to its panel, and one home for colour (`theme.ts` `cssVars`, 126 role tokens, guarded by `tokenHome.test.ts`). NOT delivered — the shared `Select`. Linux `gate:e2e` DISCHARGED for `d1786d66` — <https://github.com/yasermostafaee/cg/actions/runs/34059477058> (`E2E (Playwright)` RAN 637 s, `success`)
+
+**What:** one gear/settings entry point in CG Control opening ONE modal with tabs — at least
+**Configure** (candidate layers), **Sources** (live sources) and **Servers** (connections) — so
+adding a future settings area is adding a tab entry rather than building a new dialog. The panes
+share one frame: title + one-line description, a scrollable body, ONE footer. Sources becomes a
+**table**, one row per source, instead of a stack of tall cards.
+
+**Why:** configuration is scattered across separate dialogs reached from three different places,
+with no shared shape, so each new setting invents a new dialog. The contents also waste space: each
+live source is a tall card (Name, Kind, Format, Media file, trash, derived-aspect note), so two
+sources fill the dialog and a real installation scrolls. **This cost is already recorded** —
+`live-source-multibox` design.md §2d moved plate binding OUT of that modal for exactly this reason,
+_"with two templates imported it already listed six plates and scrolled before a single source
+existed"_. The same argument applies to the sources themselves.
+
+**What the recon found, and two of it corrects this item's own premises.**
+
+- **ELEVEN dialogs, all already on ONE primitive.** `ui/Modal` owns the chrome (title, ✕, scrolling
+  body, pinned message region, right-aligned footer), the focus trap, Escape/backdrop cancel and a
+  three-role action table. So the shell is **not** a rescue from chaos — it is a grouping layer on
+  top of a primitive that is already doing its job.
+- **There is NO tabbed modal and NO settings-shell abstraction anywhere.** `ui/Tabs.tsx` exists but
+  is used only by `ChannelScope` and `LayersPanel`, never inside a `<Modal>`. A tabbed shell is new
+  construction.
+- 🔴 **CORRECTION 1 — the footer divergence is DELIBERATE, not drift, and "pick one contract" would
+  overturn reasoned decisions.** Server connection and Candidate layers use an explicit **Apply**;
+  Live sources, Delimiters, Live source swap and Live plate audio **commit on change** — and each
+  carries a written justification at its call site. The split tracks a real distinction: a dialog
+  that edits a DRAFT of connected state applies atomically, while a dialog that edits a LIST of
+  independent records commits per record. ⇒ **The item should NOT mandate one footer.** It should
+  require that the frame make which contract is in force **legible** — a pane that commits on change
+  must say so, and must never show an Apply that does nothing.
+- 🔴 **CORRECTION 2 — `apps/runtime` does NOT have the Designer's lint ban, and has no shared
+  `Select`.** Four dialogs render raw `<select>`s (`SourcesModal.tsx:389,411`,
+  `ServerSettingsPanel.tsx:368`, `AuditPanel.tsx:136`, `LiveSourceSwapDialog.tsx:130`). So "lint
+  enforces this" is true of the Designer and **not** of the Runtime. That makes the primitive work
+  part of this item rather than a given — and it is load-bearing, because ⚠ **`Modal`'s focus-trap
+  selector omits `select`, `textarea` and `a[href]`** (`Modal.tsx:48`), so those raw `<select>`s are
+  currently **outside the tab trap**.
+
+**Acceptance:**
+
+- WHEN the operator opens CG Control settings THEN there is ONE entry point and ONE modal, with
+  Configure / Sources / Servers as tabs
+- WHEN a new settings area is added THEN it is a tab entry, and no new dialog shell is written
+- WHEN any pane renders THEN it uses the shared frame — title, one-line description, scrolling body,
+  one footer — and its commit contract is stated where the operator can see it
+- WHEN the Sources pane renders THEN each source is ONE table row (Name · Kind · Format ·
+  media/address · derived aspect · actions), not a card
+- WHEN the operator adds a source THEN an _Add source_ action appends an editable row, rather than a
+  permanent empty form sitting at the bottom of the list
+- WHEN the Sources pane renders THEN the LAYER BAND is outside the source scroll region, because it
+  is a setting ABOUT sources and not a source
+- WHEN a destructive act is offered anywhere in the shell THEN it uses the one agreed verb and the
+  one agreed confirm rule
+- WHEN a pane renders in Persian THEN mixed RTL/LTR content (Persian names beside Latin ids and
+  numbers) reads correctly in the table layout, verified rather than assumed
+- WHEN every behavioural affordance listed in the Notes is exercised after the restyle THEN it still
+  behaves as it did before
+
+**Notes:**
+
+- **Non-negotiables:** all controls through the shared primitives in
+  `apps/runtime/src/renderer/ui/` (`Button` / `Control`), styled from `renderer/theme.ts` +
+  vanilla-extract; all icons through the shared `Icon` component (lucide) — no new Unicode glyphs,
+  no ad-hoc inline `<svg>`; `@cg/ui` stays **tokens-only** (no components, no palette change).
+  ⚠ Per CORRECTION 2 this includes **introducing a shared `Select`** and bringing the four raw
+  `<select>`s onto it — which also closes the focus-trap gap.
+- **Red is a budget.** State the rule the panes follow. Today `danger` is worn by `Remove…`
+  (Candidate layers), `Delete from station` (the picker's `Manage` view), and two icon trashes;
+  `caution` by the orphan banner and Playout's clear. See [[R-055]] for the adjacent FAILOVER
+  miscolour.
+  ⭐ **2026-09-09, `RUNTIME-REPAIR-04`** — the picker's red came OFF EVERY ROW and now appears
+  once, behind `Manage`. That is the budget rule applied rather than restated: a destructive
+  control repeated down a list spends red on every row of it.
+  🔴 **That is the RESTING budget only, and the loudest red in the product is a HOVER.**
+  `--r-verb-remove: #ff0000` (`ui/controls.css:54`) — pure, fully saturated red — is painted as a
+  hover fill by `.cg-btn[data-verb-tone='remove']:hover:not(:disabled)` (`:571-574`), reachable on a
+  button inside a dialog. Any "red is a budget" rule that counts only resting variants misses it, so
+  the rule must be stated over **every interactive state**, which is also the reason it belongs in
+  the shared primitive rather than per pane.
+- 🔴 **Destructive-verb vocabulary today — four spellings for one family, and the confirm rule is
+  inconsistent:**
+
+  | spelling                          | where                                 | confirms?                                                                |
+  | --------------------------------- | ------------------------------------- | ------------------------------------------------------------------------ |
+  | `Remove…` (danger)                | `FixedBankConfigModal.tsx:478-485`    | ✅ three-branch                                                          |
+  | `Delete from station` (danger)    | `useTemplatePicker.tsx` — in `Manage` | ✅                                                                       |
+  | red trash icon, no text           | `SourcesModal.tsx:372-383`            | 🔴 **no** — and it cascades, reporting orphaned bindings only afterwards |
+  | red trash icon, no text           | `DelimitersModal.tsx:109-115`         | 🔴 **no**                                                                |
+  | `Reset to defaults` (destructive) | `DelimitersModal.tsx:90-95`           | 🔴 **no**                                                                |
+  | `Remove backup` (default variant) | `ServerSettingsPanel.tsx:344-346`     | n/a — draft-only until APPLY                                             |
+
+  ⇒ The vocabulary decision is not cosmetic: **two acts that destroy shared configuration do not
+  confirm today**, and the Sources one cascades.
+
+- 🔴 **BEHAVIOURAL AFFORDANCES A RESTYLE MUST NOT DROP** — the complete measured list:
+  - **Focus:** opens onto the ✕ as the SAFE control (`Modal.tsx:306`, rationale `:358-369`);
+    previously focused element restored on close (`:336`); Tab trapped and WRAPPING at both ends so
+    focus cannot reach an on-air control behind the scrim (`:316-330`).
+    ⚠ **Gap to fix, not preserve:** the `FOCUSABLE` selector omits `select` / `textarea` /
+    `a[href]` (`:48`).
+  - **Keyboard:** Escape cancels on the CAPTURE phase with `stopPropagation`, so it belongs to the
+    top-most dialog (`Modal.tsx:309-313`); Enter submits the prompt but never past `minLength`
+    (`useDialog.tsx:173-177`); the audio slider commits on `onKeyUp` as well as `onPointerUp`
+    (`LivePlateAudioDialog.tsx:189-191`); `NumericInput` normalises Persian/Arabic-Indic digits
+    before any parse (`ui/NumericInput.tsx:29-32`).
+  - **Dismissal:** backdrop click cancels, inside-click does not (`Modal.tsx:344`, `:354`);
+    right-click on the scrim suppressed (`:345`); every route funnels to the one `onClose`, which is
+    by contract the SAFE path (`Modal.tsx:23`).
+  - **Layout:** capped at 88vh, only the BODY scrolls (`Modal.tsx:77`, `:90-103`); the message region
+    is pinned OUTSIDE the body above the footer with its own `maxHeight: 30vh` and does not move the
+    body's scroll (`:104-134`) — this is [[R-052]]'s contract and must survive; footer buttons share
+    a 36px/110px floor so Cancel and commit read as peers (`controls.css:759-772`).
+  - **Disabled states, each with a stated reason:** Server APPLY on `onAirCount > 0 ||
+validationError` with both reasons spelled out in the pinned region
+    (`ServerSettingsPanel.tsx:312`, `:252-260`); Candidate layers' Apply while the round-trip is in
+    flight (`FixedBankConfigModal.tsx:385`); the prompt's submit until `minLength`
+    (`useDialog.tsx:158`); audio MUTE when `!audible` (`LivePlateAudioDialog.tsx:163`).
+  - **Masked-not-disabled:** Candidate layers HIDES both the bound-template cell and `Remove…` when
+    the link is down (`FixedBankConfigModal.tsx:419`, `:461-488`).
+  - 🔴 **The on-air safety rule:** _"an occupied (or unverifiable) row cannot be unticked until its
+    template is removed"_ is stated verbatim in the body (`FixedBankConfigModal.tsx:396-398`) but is
+    enforced **bridge-side only** — the checkbox is never disabled (`:430-440`) and the refusal
+    arrives on Apply. **A restyle must keep the wording AND must not "helpfully" disable the
+    checkbox**, which would change the contract.
+  - **Refusal wording is keyed off the wire union** so a new code cannot ship wordless —
+    `ui/fixedLayersReasonMessage.ts:32-35` (incl. `untick-occupied` / `untick-unknown`) and
+    `ui/sourcesReasonMessage.ts:32-48`; unknown codes surface verbatim as `Not accepted (<code>).`
+    rather than being swallowed. A refused Apply keeps the dialog OPEN and shows rule + specifics as
+    `text` + `detail` (`FixedBankConfigModal.tsx:275-278`).
+  - **Validation messages:** Server host/AMCP port/OSC port, each prefixed `Primary:` / `Backup:`
+    (`ServerSettingsPanel.tsx:99-105`); Sources' name and band messages (`SourcesModal.tsx:302`,
+    `:323`, `:327`); Delimiters' three add-time refusals plus the last-one-standing guard
+    (`delimiterStore.ts:107-121`); `RequiredText` snaps an empty field back to the stored value on
+    blur (`SourcesModal.tsx:194-230`).
+  - **Empty states, all distinct and all worded:** Sources (`:355-359`, `role="status"`), Audit
+    (`AuditPanel.tsx:169`), picker (`useTemplatePicker.tsx:320-323`), Server backup
+    (`ServerSettingsPanel.tsx:356-358`), and the whole `NoBankModal` as the candidate-layer empty
+    state with a monospace JSON sample (`FixedBankConfigModal.tsx:156-200`).
+  - **Orphan / cascade reporting:** Sources names every orphaned `template / plate` pair AFTER a
+    delete, falling back to ids (`SourcesModal.tsx:245-287`); the picker names the binding count in
+    ADVANCE (`useTemplatePicker.tsx:230-236`) and gives a partial failure its own notice (`:258-262`);
+    picker rows carry `Re-import required` and `Needs a source: <plateIds>` (`:357-381`).
+  - **State honesty:** no optimistic local update anywhere — the sources store adopts a value only
+    once the bridge accepts (`sourceStore.ts:141-177`).
+  - **Announcement roles:** `refusal` → `role="alert"`, `notice` → `role="status"`, `note` for a
+    standing fact (`Notice.tsx:124`).
+  - **RTL:** message text and detail are `dir="auto"` (`Notice.tsx:126-131`); the candidate-layer
+    alias input and bound-template cell are `dir="auto"` (`FixedBankConfigModal.tsx:453`, `:463`).
+  - **Test hooks a restyle must keep:** `data-modal-role` (`Modal.tsx:210`), `data-modal-body`
+    (`:382`), `data-modal-message` (`:396`), `data-notice` (`Notice.tsx:123`), `data-source-id`
+    (`SourcesModal.tsx:363`), `data-template-id` / `data-live-sources` / `data-plates-unassigned`
+    (`useTemplatePicker.tsx:333`, `:360`, `:376`), `data-verb-tone` (`useDialog.tsx:93`).
+  - **State persistence:** `AuditPanel` and `ServerSettingsPanel` are always mounted and return null
+    when closed, so filters and the last message survive close/reopen; the others are conditionally
+    mounted and reset. **A tab switch must decide which behaviour it inherits.**
+- ⚠ **Surfaces that are deliberately NOT dialogs and must NOT be absorbed:** `LockOverlay`
+  (hand-rolled scrim — `Modal.tsx:41-45` states it must NEVER move onto the primitive, _"a lock with
+  a way out is not a lock"_), `ContextMenu`, `CommandToast` (zIndex 50, i.e. UNDER a modal backdrop —
+  which is why in-dialog refusals must use the message region), `FailoverBanner`, the narrow-screen
+  Inspector overlay, and the native file chooser.
+- **Owner questions, not resolved here:**
+  1. Is the tab set FIXED, or does it grow from a registry?
+  2. Does the modal keep per-tab dirty state, and what happens on tab switch with an unapplied edit?
+     ⚠ This is the same predicate problem as [[B-139]] — reuse that answer, do not re-derive it.
+  3. Does the shell REPLACE the per-dialog entry points entirely, or keep deep links to a tab? Note
+     that Delimiters is opened from a gear beside a field in the Inspector
+     (`FromFileControl.tsx:261`), not from the status bar, so "replace entirely" has a real cost
+     there.
+  4. Which of the eleven dialogs are in scope? Audit log, the template picker, the row's SOURCE /
+     AUDIO dialogs and the shared confirm/prompt are all `Modal`s but are not settings.
+- 🔴 **FOLLOW-ON CARRIED HERE FROM [[R-055]] — rename the `playout*` wire names when this work
+  reopens these files.** R-055 renamed the tab to **STATION LAYERS** and every renderer-local
+  identifier with it, but deliberately left the IPC surface alone: the channel strings
+  `playoutLayers.state` / `.state-changed` / `.clear`, the `PlayoutLayers*Channel` constants, the
+  `PlayoutLayerState` contract type, the `PlayoutLayersClearReason` union and the
+  `window.cg.playoutLayers` bridge surface. Renaming an IPC surface touches both sides, the mock and
+  every test, and R-055 was a `low`-priority cosmetic item landing in a batch that had to fit one CI
+  run.
+  **It belongs here rather than in a new item** because this work reopens the same files anyway, so
+  doing it here is one coherent change instead of a second pass. Pointer comments now sit at the
+  channel definition and the exported type so the mismatch is not silent in the meantime — "one
+  concept, two spellings" is this repo's most frequent failure, and an undocumented one is how it
+  survives. ⟨Owner: confirm the rename rides with R-054, or say it should stay as-is permanently.⟩
+- 🔴 **A SETTING IS ALREADY LODGING HERE AND MUST MOVE WHEN THIS SHELL IS BUILT: the console's
+  OPERATOR NAME** (`audit-actor-console-name`, 2026-08-18). It is a per-console label sent with
+  every control request and recorded as the audit `actor`, and it is a **SETTING** — but this shell
+  did not exist, and a standalone dialog for one field would have been a twelfth dialog for R-054
+  to absorb. It therefore sits in the **Audit panel**, which is the least-bad existing home: that
+  is the only surface where `actor` appears at all (the column and the filter), so the value, its
+  caveat and its consequence are read in one glance.
+  **What must happen here: NOTHING — RESOLVED 2026-09-23 by `OPERATOR-NAME-SWEEP-01`, and not
+  the way this bullet expected.** It ordered the control MOVED into the Settings shell with its
+  honesty caveat travelling alongside. Both were retired instead: [[C-037]] made identity
+  provable and [[C-038]] gated on it, so a browser-held label answers a question the Playout token
+  answers properly, and the caveat that qualified it had become a false sentence displayed above
+  verified names. There is no control left to move and no caveat left to carry.
+  ⚠ Updated rather than left standing, because [[R-066]]'s Notes required exactly that: a live
+  bullet ordering work on a retired feature is a contradiction the next reader would try to
+  discharge. Under auth OFF the console now sends no `actor` at all and the bridge records
+  `console` for a console's action and `unattributed` for one no console caused
+  (`BRIDGE-TRUTH-01` §4, 2026-09-23 — it read `unattributed` for both until then).
+- **Cross-refs:** [[R-052]] (the message region contract every pane inherits), [[R-055]] (the red
+  budget, the FAILOVER miscolour, and the wire-name follow-on above), [[R-056]] (the same space
+  discipline, applied to the position section), [[B-139]] (the dirty predicate a tab switch will
+  need), [[B-141]] (the operator-name setting lodging here, above), [[B-142]] (the raw `<select>`s
+  outside `Modal`'s focus trap, whose fix belongs to this shell work).
+
+## [~] R-055 — three CG Control chrome corrections: a PVW-coloured hover, a coloured FAILOVER, and a tab whose name is not what it lists ⟨priority: low⟩ — implemented: openspec/changes/cg-control-chrome-corrections/; tab named STATION LAYERS
+
+**What:** three independent, behaviour-free corrections to CG Control's chrome. (1) The maximised
+panel's hover borrows the PVW violet. (2) The FAILOVER button is coloured when it should not be.
+(3) The `PLAYOUT` tab's name does not describe what the tab lists.
+
+**Why:** each is a case of a signal saying something it does not mean, on a surface whose whole
+premise is that colour and naming carry state.
+
+**1 — the maximised-panel hover paints the PVW hue, and the file forbids it six lines above.**
+
+The base is correct and deliberately argued: `.cg-panel-actions .cg-btn.is-on` uses `--r-accent`
+(sky) at `apps/runtime/src/renderer/ui/controls.css:671-676`, under a comment that spends ten lines
+on why — _"IT MAY NOT BE THE VIOLET. `.is-on`'s base fill is `--r-rehearsing-strong`, and that hue
+is R-022's REHEARSING state: it means 'this row is on PVW and cannot reach air'. A violet chip in a
+panel header would be that claim in a place it cannot be true, which is precisely the
+one-hue-one-meaning rule the rest of this file is built on"_ (`:660-669`).
+
+🔴 **Then the rule is defeated by the rules immediately below it.**
+`.cg-btn--verb.is-on:hover / .cg-btn--neutral.is-on:hover / .cg-btn--icon.is-on:hover`
+(`controls.css:678-685`) and the matching `:active` (`:687-692`) are **unscoped** and paint
+hard-coded `#8b5cf6`, border `#a78bfa` and `#6d28d9`. **`--r-rehearsing` is `#a78bfa`**
+(`controls.css:51`) — so on hover the panel header wears the PVW border colour literally, at higher
+specificity (`0,4,0` vs `0,3,0`) and later source order than the rule that forbids it.
+
+The fix is a **theme / variant** concern — the scoped `.cg-panel-actions` treatment needs its own
+hover and active, tuned to sky, so the shared primitive bakes them in per variant. Never a one-off
+override on the panel.
+
+⚠ **The sweep for other borrowers was run, and it matters that it came back nearly empty.** The
+only other rule that could reach those violets is `[data-verb-tone='play'].is-on`, and it is
+**latent but unreachable** — PLAY is disabled whenever it is `active`, and the rules carry
+`:not(:disabled)`. So the maximised toggle is the one reachable non-PVW borrower today, and the
+fix should close the unscoped rule rather than only re-colour the one caller.
+
+**2 — FAILOVER wears the fault colour, in a bar whose doctrine forbids it.**
+
+`FAILOVER` is `variant="caution"` (`features/status/StatusBar.tsx:379-392`). `--r-caution` is
+`#f59e0b` (`controls.css:43`) — the SAME hex as the `⚠ NO OSC FROM …` alarm two elements to its
+left (`StatusBar.tsx:371`). The bar's own doctrine says those are **fault** tones: _"amber for a
+configuration problem, red for down. Those are role colours (`--r-caution`, `--r-danger`)"_
+(`StatusBar.tsx:59-61`). FAILOVER is a manual ACTION, not a fault, and it is not the loudest thing
+on the panel. Its three neighbours — SERVERS, SOURCES and LOG — are bare `<Button>`s at the default
+variant (`StatusBar.tsx:393-402`), which is the honest choice here too.
+
+**3 — the `PLAYOUT` tab lists the layers the station's playout system OWNS, not layers this console
+plays out.**
+
+Established before proposing any name. The label is literally `'PLAYOUT'` (uppercase) at
+`features/layers/LayersPanel.tsx:430`. A row in it is **one declared reserved layer number plus the
+producer observed on it** — the `reservedLayers` fence, described in the bridge as _"a fence AWAY
+from a foreign owner"_. `PlayoutPanel`'s own docstring says so: _"the PLAYOUT tab: the declared
+reserved layers (C-015), what is on them, and a deliberate clear"_
+(`features/layers/PlayoutPanel.tsx:52-54`). So the tab is about **someone else's** layers, and the
+current name reads as the opposite — the operator's own playout.
+
+⚠ **"Other layers" appears nowhere in the repo** (SEARCH: `grep -rn "Other layers\|other layers"
+apps/runtime/src apps/runtime/tests docs` → 0 hits), so it is not an existing name being replaced.
+
+**Acceptance:**
+
+- WHEN the maximised-panel toggle is hovered or pressed THEN it stays on the sky accent and never
+  paints the PVW violet, and the unscoped `.is-on` hover/active rules no longer hand those hues to
+  any control that has not asked for them
+- WHEN the FAILOVER button is at rest THEN it carries no role colour, matching its SERVERS /
+  SOURCES / LOG neighbours, and the amber in that bar means only a fault
+- WHEN the reserved-layers tab is labelled THEN its name says whose layers it lists, and every site
+  carrying the old label is updated with it
+
+**Notes:**
+
+- **Nothing here changes behaviour** — all three are colour or naming.
+- All three go through `renderer/theme.ts` + the shared primitives in `renderer/ui/`
+  (`Button` / `Control` bake hover / active / focus-visible / disabled per variant); no raw
+  `<button>`, no ad-hoc override, and `@cg/ui` stays tokens-only.
+- 🔴 **Owner question — the tab's name.** Report and candidates, choice left to the owner:
+  - **`STATION LAYERS`** — says whose they are in the operator's own vocabulary; reads well beside
+    `LAYERS`, and does not require the operator to know what "reserved" means internally.
+  - **`RESERVED`** / **`RESERVED LAYERS`** — matches the code, the bridge store
+    (`reserved-layers-store.ts`) and the C-015 vocabulary exactly, so the surface and the
+    configuration agree; slightly more jargon.
+  - **`FOREIGN LAYERS`** — most literal about the fence, but "foreign" is engineering language and
+    would read oddly to an operator.
+
+  Recommendation if one is wanted: `STATION LAYERS`, because the tab's whole purpose is to say
+  these belong to someone else and can be cleared deliberately.
+
+- **What must change with the name** (complete, measured):
+  - the label — `features/layers/LayersPanel.tsx:430`
+  - the E2E selector — `apps/runtime/tests/e2e/fixtures/runtime.ts:90`,
+    `getByRole('tab', { name: /PLAYOUT/ })`
+  - two prose comments describing the strip — `features/channels/ChannelScope.tsx:17` and
+    `features/layers/LayersPanel.tsx:598`, both _"Channel 1 | Channel 2 | Playout"_
+
+  SEARCH: `grep -rn "'PLAYOUT'\|\"PLAYOUT\"\|/PLAYOUT/" apps/runtime/src apps/runtime/tests` → the
+  label and the one selector; no other test string, no aria-label, no doc reference.
+  ⚠ The code IDENTIFIERS (`PlayoutPanel`, `usePlayoutLayers`, `playoutLayers`, `playoutOccupancy`)
+  are a separate question: renaming the LABEL does not require renaming them, and the item does not
+  ask for it. ⟨Owner: rename identifiers too, or label only?⟩
+
+## [ ] R-056 — the position section: PVW follows the number as it changes, and the section collapses ⟨priority: medium⟩
+
+**What:** two changes to the on-air position section. (1) While the operator changes a position
+number, **PVW follows live** — before the field is committed — with **nothing extra going to the
+bridge or to AMCP**. (2) The section becomes **collapsible and is collapsed by default**, with the
+collapsed header carrying the fact when the row is not at the template's position.
+
+**Why:** position is set by eye. Typing a number, committing, looking, and typing again is a loop
+the preview can close instantly — and it can do so for free, because **PVW is already a local
+render**. Meanwhile the section is set once per template and then left alone, so it should not hold
+a block of the panel open for the whole session.
+
+**🔴 The distinction that must not be lost: PVW is a LOCAL preview; PGM is a shared server.**
+
+- **PVW is local, measured.** `RehearsalFrame` renders `srcDoc={html}` where `html` is _"The
+  retained self-contained HTML — byte-identical to what the bridge serves"_
+  (`features/monitors/RehearsalFrame.tsx:105-106`, `:234`), a same-origin `srcdoc` driven from
+  retained browser state. **Re-rendering it costs one local reflow and no wire traffic.**
+- **The on-air apply is a single explicit command.** `PositionPicker` sends ONE
+  `stack.set-position` on Apply (`features/inspector/PositionPicker.tsx:78-79`). Today **nothing at
+  all** reaches the bridge before that press.
+
+⇒ **The preview may follow every input change, ideally on the browser's own animation frame. Nothing
+extra may go to the bridge or to AMCP per keystroke, and the on-air apply stays on commit.** This is
+a requirement, not advice — it is the same class as the finding that per-frame `MIXER FILL` emission
+is not viable: a command per keystroke on a socket shared with other stations.
+
+**Which inputs are in scope — reported rather than assumed.** The section is **position only**: a
+**3×3 anchor grid** of nine buttons and **two pixel-offset nudge inputs** (`Position offset X` /
+`Position offset Y`). There is **no size, scale, rotation or opacity control** here
+(`PositionPicker.tsx:96-175`). ⟨Owner: confirm position-only is the intended scope, or widen it.⟩
+
+**🔴 One constraint the section already carries, which changes what "realtime" means here.** The
+picker is **LOCKED while the item is on air or unsettled** — _"position is fixed once taken —
+Option A cannot reposition on air without a re-serve flash"_ — and is editable only while
+loaded-not-taken and idle (`PositionPicker.tsx:79-83`, `isPositionLocked`). So the realtime preview
+applies exactly where it is safe: to a row that is being set up, not one on air. That is a reason to
+do it, not an obstacle.
+
+**Acceptance:**
+
+- WHEN the operator changes a position number or picks an anchor THEN the PVW render moves before
+  the field is committed
+- WHEN those uncommitted changes are made THEN no `stack.set-position`, no other bridge call and no
+  AMCP command is produced; the on-air value changes only on Apply
+- WHEN the field is empty or partially typed (`-`, `.`, `+`) THEN the preview stays at the last
+  valid position and does NOT jump to the origin
+- WHEN the value is `0` THEN it is applied as `0`, distinctly from empty
+- WHEN the value is changed by typing, by the spinner, by arrow keys or by the scrub gesture THEN
+  all four behave identically, through one path
+- WHEN the position section renders on load THEN it is COLLAPSED, and it can be opened and closed
+- WHEN the section is collapsed and the row is NOT at the template's position THEN the header shows
+  that fact, so an operator cannot miss a placement difference that is live
+- WHEN the section is collapsed and re-opened THEN every value is unchanged — collapsing is not
+  resetting
+- WHEN the disclosure is rendered THEN it is a real control through the shared primitives, carrying
+  `aria-expanded`, with its icon from the shared `Icon` component
+
+**Notes:**
+
+- 🔴 **Zero is a valid position and an empty field is not zero — and TODAY IT IS READ AS ZERO.**
+  `const offset = (raw: string): number => { const n = Number(raw); return raw.trim() !== '' &&
+Number.isFinite(n) ? n : 0; }` (`PositionPicker.tsx:106-109`). An emptied or half-typed field
+  becomes `0`, and that value feeds the dirty comparison at `:127-128`, so clearing the field reads
+  as "offset 0" and can mark the picker dirty against a non-zero applied value. **This is a
+  pre-existing defect the realtime preview would make continuously visible** — with live preview it
+  would yank the graphic to the anchor on every backspace. Fixing the parse is part of this item.
+- 🔴 **There is NO undo/history in the Runtime at all**, so the "undo granularity" requirement is
+  moot rather than unmet. SEARCH: `grep -rn "undo|history" apps/runtime/src/renderer` → only prose,
+  and two comments state the fact outright — _"there is no undo"_ (`draftStore.ts:32`, `:379`). ⇒
+  The item requires only that live preview **introduce** no history mechanism; if undo is ever added
+  to the Runtime, its granularity is that item's problem, not this one's.
+- **The collapsed-header marker has a precedent in this very component.** A `cg-dirty-dot` labelled
+  _"Position has unapplied changes"_ already exists (`PositionPicker.tsx:137`), and the "differs
+  from the template" condition is already computed: the seed precedence is **applied override →
+  manifest default → centred** ([[B-072]], `PositionPicker.tsx:99-103`), so "not at the template's
+  position" is exactly "an override is present". This is the same honesty-half principle as
+  `resolvePlateAspect`'s `assumed` flag and [[R-053]]'s consent indicator — cite it rather than
+  re-deriving it.
+  ⚠ **The override PERSISTS across a restart**, so the marker is not a within-session concern:
+  `apps/runtime/src/platform/stack/StackRetentionStore.ts:112` writes
+  `...(item.position !== undefined && { position: item.position })`. An operator can therefore
+  arrive at a console where a row is already off the template's position, with a collapsed section
+  as the only place that could say so.
+- **A "collapsed by default" precedent exists in-app**, with the same reasoning:
+  `RehearsalStage.tsx:295` — _"Collapsed by default: the caveats are a thing to CONSULT, not a thing
+  to read"_ — with `aria-expanded={showCaveats}` at `:478`; `LayersPanel.tsx:566` has another. ⚠ But
+  there is **no shared `Disclosure` primitive** — both are hand-rolled. Whether this item adds one
+  is a scope decision; adding a third hand-rolled disclosure would be the second-spelling failure.
+- 🔴 **Tests that assume the position inputs are visible on load** — a default-collapsed section
+  breaks these silently unless the fixture opens the section first:
+  - `apps/runtime/tests/e2e/onair-position.spec.ts` — `picker.getByLabel('Position offset X'|'…Y')`
+    at `:25`, `:26`, `:130`, `:131`, `:141`, `:150`, `:151`
+  - `apps/runtime/tests/e2e/fixtures/runtime.ts` — the shared `picker` locator every one of those
+    goes through, so the fixture is the single place to teach it to open the section
+  - `apps/runtime/tests/positionPicker.dom.test.ts` — the component's own DOM test. ⚠ It is worse
+    than "one assertion moves": `:108-113` queries **every** `button` in the section and asserts a
+    uniform enabled/disabled state across all of them. A collapse toggle is a new button that must
+    stay ENABLED even when the picker is locked, so it breaks that loop by construction rather than
+    by a locator miss
+  - also touching the picker: `apps/runtime/tests/e2e/import-vcg-template.spec.ts`,
+    `apps/runtime/tests/e2e/rehearse-composite.spec.ts`,
+    `apps/runtime/tests/inspectorToast.dom.test.ts`, `apps/runtime/tests/numericInput.dom.test.ts`
+- **Owner questions, not resolved here:**
+  1. **Does the open/closed state persist, and at what scope** — per row, per template, per session,
+     or global? Recommendation: **per session, global** (one preference, not one per row), because
+     the section is a workflow mode rather than a property of a row; but it is the owner's call.
+  2. **If an override IS active, does the section auto-open?** Both are defensible: stay closed with
+     a marked header (space wins), or auto-open (visibility wins). Posed, not picked.
+  3. Is position-only the intended scope (see above)?
+- **Cross-refs:** [[R-054]] (the same space discipline, argued once there — this item does not
+  re-argue it), [[B-072]] (the seed precedence the marker depends on), [[R-011]] (the position
+  override itself).
+
+## [ ] R-057 — the multi-box LOOK switch: the OPERATOR half ⟨priority: high — the client runs a 3-box show and cannot change it live⟩
+
+**What:** the operator can switch a running row between the **LOOKS** its template authors — the
+6-box grid → the 1-box solo and back — with **exactly ONE active at a time, so the operator cannot
+make a mistake**. Concretely: a **look picker** on the row that IS the on-air readout and the switch
+in one object; **preset-then-take** (any declared source can be re-pointed BEFORE the switch,
+through the staged-assignment machinery that already exists); a single reconcile that applies the
+change to what is on air; and one refusal.
+
+⚠ **This is HALF the feature. The authoring half is [[D-152]]** — the looks themselves, the declared
+sources and the background are a Designer concern and a Designer-focused reader must find them
+there. The split follows [[D-137]] / [[C-015]]: one capability, two items, cross-referenced both
+ways. **Design, evidence and task list for both halves live in ONE change:**
+`openspec/changes/multibox-layout-switch/`.
+
+**Why:** the client's requirement, verbatim (owner, 2026-08-17):
+
+> The operator is on a 3-box layout and must be able to switch to 2-box or 1-box, and back. There
+> must be a switch between the multi-box layouts, with **exactly ONE active at a time, so the
+> operator cannot make a mistake.**
+
+No such switch exists. The workaround in use — playing all counts at once and stopping the top one
+to reveal the next — produced a **measured** defect on the plant (2026-08-17): every live source
+sits BELOW every template, so a hole punched by one template opens onto the whole stack beneath it
+and reveals whatever live layer is topmost at that pixel, **which may belong to a different
+template**. Both reported symptoms follow at once — one arrangement appearing under another, and
+boxes that look cropped. The switch makes that state unreachable.
+
+**The model (owner, 2026-08-19 — LOOKS, `design.md` §14).** The author composes each **LOOK** as a
+full sub-scene — plates, titles, decor, freely placed; **SOURCES are declared ONCE on the
+multi-frame group** and a look's plates REFERENCE them, so the same source in two looks is ONE seat,
+held across switches. The operator **SELECTS a look**; what each frame shows is re-pointable through
+the preset. ⚠ **This supersedes TWO earlier operator models on this item** — the segmented control
+over counts (`056ffdd5`) and D1's toggle-per-source (2026-08-18): with per-slot preset, toggles no
+longer carry the combination — **the look does** (`design.md` §14.5 records both reversals). What
+survives every reversal: always visible, state-carrying, no menu.
+
+**The decisions this item implements** (owner-answered; `design.md` §12 as re-keyed by §14):
+
+|                                               | Decision                                                                                                                                                                                                                                                           |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Phasing**                                   | **cut-only v1** (owner: "the transition does not matter — a cut is enough"). The animated switch is PARKED with D2's fade/move modes (§14.4), not designed here                                                                                                    |
+| **The control**                               | 🔴 **ONE LOOK PICKER, always visible on the row — the picker IS the on-air readout.** One-of-N by construction: an invalid state is unrepresentable. A menu stays disqualified: it hides the current state, and the requirement is the operator cannot be mistaken |
+| **A source with no plate in the active look** | **HELD muted and idle**, so switching back is instant (§12.4 unchanged). A source kind that cannot be held falls back to teardown as a **NAMED, observable** behaviour, never a silent difference                                                                  |
+| **Two multi-box templates on air together**   | **REFUSED**, in `take()` **AND** `restore()` — restore never passes through take — through **ONE predicate CALLED from both** (§12.6, SHIPPED; keys on the declaration count, arrangement/look-independent)                                                        |
+| **The Inspector's assignment edit**           | surface only — see [[B-146]], which carries it. **Strengthened by preset-then-take:** "takes effect at the next take" becomes the operator's normal grammar                                                                                                        |
+| **Transition modes**                          | **cut in v1, full stop.** D2's per-entered-look mode set and §12.2's `linear` contract are PARKED for the animated phase (§14.4); the subset argument (§13.6.2) carries over unchanged when it arrives                                                             |
+
+🔴 **The switch and the live-source change are ONE mechanism.** A switch changes _which plates are
+visible and where_; a source change changes _what one plate shows_. Both are "reconcile the seated
+live-plate set of a RUNNING row against a freshly-resolved desired set" — the desired set is now
+**the active look's `{routeKey → rect}`** from the look carrier. `swapLiveSource` (R-048, shipped)
+becomes a CALLER of that reconcile, not a peer — **do not build a second mechanism beside it.**
+
+⚠ **The control still lands on the closed six-column verb grid, and the collision SHRANK twice** —
+first from an authored dimension to the plate count (D1), now to **one picker** (§14.5). The SHAPE
+rule (`layerRowActions.ts:407-409`) and the fixed-px column model (`layerTable.ts:1-22`,
+`VERB_COUNT = 6` at `:75`) still bind; `design.md` §12.8's placement **(ii) — a second line on the
+row, outside the verb block** — stands and is easiest of all for a single control. It leaves
+`VERB_COUNT` and the header word alignment untouched, and that invariant has a recorded on-air
+failure behind it.
+
+🔴 **UNBLOCKED 2026-08-18 — [[B-145]] IS DONE.** The live-layer ledger now survives a bridge restart:
+it is persisted on every change and ADOPTED at boot, corrected against what the server actually has
+(`INFO` supplies the truth about occupancy; the file supplies the `itemId` / `sourceId` / `role` the
+server was never told). That mattered here because the switch seats and releases plates continuously
+rather than once per take, so a stranded producer under it would be a live guest on air that no code
+path could reach. ✅ Its DISPLAY half (change `tasks.md` 2.8) landed 2026-08-20 as the `LIVE SOURCES` tab, so the picker has no remaining blocker.
+
+**Refusals — ONE trigger in v1** (`design.md` §14.5; supersedes the three count-shaped triggers of
+2026-08-18, which are retired UNREPRESENTABLE rather than moved):
+
+- A multi-box template that authors **NO LOOKS** refuses the take, naming what is missing.
+- Over-lit, absent-count and **all-off cannot be expressed** by a one-of-N picker. Taking the row
+  off air stays the STOP verb's job alone — the picker offers no implicit route to off-air.
+
+**Acceptance:**
+
+- WHEN the operator switches a running row from the 6-box look to the solo look THEN the solo look
+  is the only one on air, and no part of the 6-box one remains visible — neither its painted frames
+  nor the holes its plates punched
+- WHEN the operator switches back THEN each frame shows the same source it showed before, with no
+  operator action, because a source is declared ONCE and `(templateId, plateId=routeKey)` never
+  changes across looks
+- WHEN the operator picks a look THEN it takes ONE action, and the picker afterwards reads as what
+  is on air
+- WHEN the operator re-points a source and then switches THEN the new pointing rides the switch —
+  preset-then-take through the staged-assignment machinery, with [[R-048]]'s swap as the live path
+- WHEN a source has no plate in the picked look THEN it is held (or its teardown is surfaced), and
+  it is not reassigned onto a surviving frame
+- WHEN a take or a restore would put a second multi-box template on air THEN it is refused by ONE
+  predicate called from both paths
+- WHEN a multi-box template authors no looks THEN the take is refused naming what is missing — and
+  there is NO picker state expressing all-off, over-capacity or an absent count
+- (animated phase, PARKED) WHEN a plate's geometry or opacity is animated THEN the page and the
+  server both use `linear`, so the hole and the picture stay together
+
+- **Cross-refs:** [[D-152]] (the AUTHORING half — looks, declared sources, titles; read both),
+  [[B-145]] (landed in full, display half 2026-08-20), [[B-146]] (the Inspector surface, same row),
+  [[R-048]] (the source swap this reconcile absorbs), [[C-015]] (Live Source routing and seating),
+  [[C-023]] (the confidence thumbnails — with six live inputs nothing here detects a dead one),
+  [[D-137]] (the Live Source element), [[R-028]] (the declared-rows model the control lives in).
+
+## [~] R-058 — "reachable" is not "working": a channel that produces nothing must be LOUD, and a bare ERROR must say WHY ⟨priority: high — the console read HEALTHY over a channel that was producing nothing at all⟩ — IMPLEMENTED 2026-08-24
+
+**What the owner saw, 2026-08-23.** He added a `<decklink>` consumer to `casparcg.config` for a
+device this machine does not have. CasparCG started, AMCP connected, and the console read
+**`BRIDGE LIVE` + `PRIMARY A HEALTHY`** while **the channel produced nothing at all** — not even on
+the `<screen />` consumer. The only signal anywhere was a bare **`ERROR`** on one row, with no
+reason attached.
+
+> _"if the config has a problem the operator must find out somehow, not just an empty error."_
+
+🔴 **Every signal the console had was about REACHABILITY, and every one of them was TRUE.** There
+was no signal anywhere about PRODUCTION. That is the gap.
+
+### Part A — the bare ERROR, which turned out to be four lines
+
+**The reason was on the row the whole time.** Established before writing anything: the bridge
+threads the AMCP code into the reconciler (`reconciler.ts` — `if (errorCode !== undefined)
+rec.errorCode = errorCode`), it is a published field on `StackItemState`
+(`item-state.ts`), and `errorCodeMessage` has worded it since [[B-070]], `amcp-NNN` fallback
+included. **Exactly ONE place in the runtime read `item.errorCode`** — `LayerRow`'s narrow
+`osc-unverifiable` check — so for every other code the sentence existed, arrived, and was dropped
+at the last inch.
+
+So Part A is not plumbing: `rowState` now words the `error` status through `errorCodeMessage`, in
+the same tooltip that already carries `readyDetail` and the wire's own occupancy report.
+
+⚠ **It claims exactly what it knows.** `amcp-404` becomes _"CasparCG refused the command (AMCP
+404)"_ — true and quotable to an engineer. It never says the config is wrong: the console cannot
+read `casparcg.config` and must not imply that it can.
+
+> **Superseded 2026-09-26 by `FIELD-FIXES-01` A:** the operator surface no longer quotes the number. One
+> mapping (`apps/runtime/src/renderer/ui/amcpRefusal.ts`) says what the reply means for the refused
+> command; the code and the command go to the log (`logs/amcp.log`, the audit record).
+
+### Part B — a channel that stops ticking is an ALARM
+
+`/channel/N/framerate` is emitted on every channel tick and **nothing consumed it** (verified with
+`git grep` across `apps/runtime/src`, `tools/caspar-bridge/src`, `packages/caspar-client/src` and
+`packages/shared-ipc/src`: every hit was the OSC plumbing itself). It is now a liveness signal:
+
+- `OscChannelTickTap` (caspar-client) records which channels have ticked and when, fed at the same
+  point as the occupancy tap and **before** the 1 Hz rate limiter, so staleness is judged from what
+  CasparCG sent rather than from what our own throttle let through;
+- the **bridge decides** which are stale and publishes `ServerHealth.channels`, because the
+  judgement needs the tick clock and the session's reconnect history — a renderer re-deriving it
+  would be [[B-171]]'s second-authority shape;
+- the StatusBar shows `⚠ {label} NOT PRODUCING · CH n` beside its `⚠ NO OSC FROM` sibling, and the
+  server's pill **stops asserting** (mutes to the `stale` tone) so there is no confident green
+  HEALTHY beside the alarm — [[B-081]]/[[R-006]]'s rule, and the owner's exact complaint.
+
+### 🔴 SILENCE IS NOT PROOF, and it is enforced by the SHAPE rather than by a check
+
+Two reasons a channel is not in the stream, demanding opposite responses:
+
+| observation              | meaning       | response                |
+| ------------------------ | ------------- | ----------------------- |
+| **never ticked here**    | no evidence   | UNKNOWN, never an alarm |
+| **ticked, then STOPPED** | a real change | the alarm               |
+
+**A channel enters the published list only by TICKING**, so `ticking: false` can only ever be said
+about a channel that has proved it ticks. "Alarmed without ever having ticked" is not a case
+defended against — it is unrepresentable. A `now - lastAt > N` rule over a map that also held
+never-seen channels would be one `?? 0` from alarming on silence, which is [[B-163]]'s named trap
+and the shape [[B-101]] and [[B-053]] both shipped.
+
+`reset()` on reconnect returns every channel to never-seen, so a reconnect cannot manufacture an
+alarm about ticks that have merely not resumed.
+
+### Why the StatusBar and NOT a banner (decided, with the argument)
+
+`ConnectionBanner` owns "nothing can reach air" and renders **only while the link is NOT live** —
+its own header makes that a promise: _"When the link is live this renders nothing: no banner is
+itself the signal that the Runtime can actually reach air."_ An operator has been taught that.
+Rendering a banner while the link IS live would spend that learned signal. It also carries the
+recorded strip-not-a-slab regression (it once took the shell's `1fr` track and ate half the
+viewport), and a per-CHANNEL, per-SERVER fact does not fit a surface that is singular by design.
+
+The StatusBar is where the OSC axis already lives (`⚠ NO OSC FROM {label}`), it is per-server, and
+it scales to several channels. The two chips coexist rather than suppress each other: NO OSC means
+we cannot SEE this server's channels; NOT PRODUCING means we can see them and they have stopped.
+
+### ⚠ What this does NOT establish, and the measurement still owed
+
+**Whether the owner's specific incident lands in "stopped" or in "never ticked" is UNVERIFIED.** If
+CasparCG ticked before the consumer failed, the alarm fires. If the channel never started at all,
+the tap reports nothing and the console still says only what it can honestly say. That distinction
+needs a plant measurement — reproduce the broken-consumer config and read whether
+`/channel/N/framerate` ever arrives — and it was deliberately not guessed at. Part A improves that
+case regardless, because the row's ERROR now carries its reason.
+
+Out of scope by decision: the console does **not** read, fetch or validate `casparcg.config`. It is
+on the playout machine, may be remote, and AMCP does not expose it.
+
+> ⭐ **ADDENDUM 2026-09-04 ([[C-029]]) — the sentence above was wrong on the fact, and is superseded
+> in part.** `INFO CONFIG` DOES expose the parsed configuration (measured on the plant 2026-08-25,
+> Q2 of the DeckLink walk; re-read 2026-09-04). What it exposes is what the operator WROTE — not
+> what the card reports — and that is exactly the baseline a "declared but not running" check needs.
+> [[C-029]] reads it, compares it with `INFO <channel>`'s `<output>`, and raises a full-width banner
+> naming the declared consumer that never started. This chip's last sentence now points there for
+> that case and keeps "only the log can see" for the other (every consumer started, one stopped
+> later). The owner's 2026-08-23 incident lands in [[C-029]]'s case, not in "stopped": a consumer
+> that fails at boot never appears in `<output>`, and the channel ticks normally on the consumers it
+> does have — which is why this chip could never have caught it. The prose above is left as written
+> so the dated reasoning is not falsified.
+
+**Acceptance:**
+
+- WHEN a channel's framerate ticks were arriving and STOP, with AMCP healthy THEN the alarm shows,
+  naming the server and the channels, and that server's pill stops asserting
+- WHEN a channel has NEVER ticked THEN nothing alarms, however long the wait
+- WHEN ticks resume THEN the alarm clears
+- WHEN the server is unreachable THEN this does NOT alarm — that fault already has an owner and a
+  different remedy
+- WHEN a row is in `error` THEN its state cell carries the bridge's reason, worded by
+  `errorCodeMessage`, and never claims a cause the console cannot see
+
+- **Cross-refs:** [[B-094]] (the NO OSC sibling this sits beside, and whose doctrine it reuses),
+  [[B-163]] (silence-as-evidence, the trap the shape makes unrepresentable), [[B-101]]/[[B-053]]
+  (the two times this repo shipped that trap), [[B-070]] (the `errorCode` vocabulary Part A
+  finally reads), [[B-081]]/[[R-006]] (the reassuring-claim-wins rule the pill muting follows),
+  [[B-171]] (why the bridge decides and the renderer renders).
+
+---
+
+## [ ] R-059 — the operator can override a live plate's FIT MODE from CG Control, staged onto UPDATE, remembered PER LOOK ⟨priority: medium⟩
+
+**What:** a live plate's fit mode (`contain` / `cover`) is authored per element and resolved per look
+([[C-028]], wired by [[B-178]]), default `contain`. The operator in CG Control cannot change it. The
+owner wants them able to:
+
+> the person watching air is the one who sees a guest wrongly cropped.
+
+### 🔴 The premise, verified against the code before this item was written
+
+The existing record says the mode is _"choosable in the Designer and overridable by the operator"_
+([caspar.md](caspar.md):1801). **That is TRUE, and the attachment point already exists** — this item
+EXPOSES one rather than introducing one:
+
+| piece                                | where                                                 |
+| ------------------------------------ | ----------------------------------------------------- |
+| the override field on the assignment | `packages/shared-ipc/src/channels/sources.ts:405`     |
+| the bridge collecting it             | `tools/caspar-bridge/src/caspar-runtime.ts:4068-4069` |
+| the resolver, WITH provenance        | `tools/caspar-bridge/src/live-plate-fit.ts:277-284`   |
+
+`resolvePlateFitMode(override, authored)` already returns `{ mode, from: 'override' \| 'authored' \|
+'default' }`, and its field docstring already argues why the operator outranks the author for the
+MODE where `D-147` has the source outranking the author for the ASPECT.
+
+### 🔴 …but it is keyed WITHOUT a look, and that is the whole cost of this item
+
+`TemplateSourceAssignmentSchema` is `{ templateId, plateId, sourceId, fitMode? }`
+(`sources.ts:374-405`). **There is no look dimension anywhere in it**, and the bridge folds it into
+`fitOverrides.set(a.plateId, a.fitMode)` — one value per plate, **in force in EVERY look.**
+
+⇒ **Decision 2 below is therefore a STORAGE-SHAPE change, not a surface.** Anyone picking this up
+expecting "just add a control to CG Control" will ship an override that leaks between looks and will
+have satisfied the owner's example exactly backwards. This is the single most important line in the
+item.
+
+⚠ **This repo has already made this mistake once, in this same file, about this same feature.**
+`sources.ts:880-899` records PVW's overlay being handed a `(plateId) => name` callback with _"no look
+dimension in it at all"_ — a per-look binding flattened on the way to the surface. And [[R-048]]'s
+per-plate emergency patch is documented as _"outermost, in force in EVERY look"_, which is the
+CORRECT shape for an emergency patch and the WRONG shape for this.
+
+### Owner decisions, 2026-08-29 — decided, with reasons
+
+**1. STAGED, applied by UPDATE. Never live-on-change.** It marks the row dirty and lands on UPDATE,
+exactly like every other row edit.
+
+- _Reason:_ this config reaches air, and **nothing lands unconfirmed.**
+- _Rejected:_ applying live; and a dual staged+live path — **two doors onto one fact is the shape
+  that produced [[B-164]]**.
+- ⚠ It must use the **same single dirty boolean** as the row's other staged edits, never a second
+  fact. See CLAUDE.md golden rule 7 (one boolean, read once) and [[B-139]] — that predicate's
+  baseline collapses when its optional third argument is omitted. **`B-139` is `[~]`, implemented but
+  not archived; do not assume it is fixed — verify before relying on it.**
+
+**2. 🔴 The override is remembered PER LOOK. It neither leaks between looks nor is discarded by a
+switch.** The owner's example, which is the whole shape of the feature:
+
+> On a two-box look the operator changes the fit mode of one of the two boxes. Switching to the
+> one-box look, that look's box shows **its own** mode. Switching back to the two-box look, the box
+> comes back with **the mode the operator last set there**.
+
+⇒ storage is a **per-(look, plate) map**, never one value per plate. A look switch is a **swap of
+which set is in force** — never a reset, never an inheritance.
+
+⭐ The override then lives at exactly the granularity the mode already resolves at ([[B-178]]: a
+look-group template carries the authored mode PER LOOK), which is why it is cheap and why an override
+can never be inherited by a look whose box is a different shape.
+
+**Precedence to state and to test:** element authored mode → resolved per look → **the operator's
+override for THAT look (wins)**.
+
+**3. The in-force mode must be VISIBLE as an override and CLEARABLE back to the authored mode.**
+Inside one look the operator still has to know the mode came from their own past decision rather than
+from the author, and be able to undo it.
+
+- This is the [[B-141]] / [[B-143]] / [[B-144]] family — _"the system knows something and does not say
+  it"_.
+- ⚠ The take readout already prints the MODE ([[B-178]]'s work). **The item requires it to print the
+  ORIGIN as well** — and `resolvePlateFitMode`'s `from` field already carries exactly that, so this is
+  a matter of not throwing it away on the way to the surface.
+
+### Open questions — RECORDED, not answered
+
+- **Where the per-look map lives, and whether it survives a bridge restart.** With the assignment in
+  the ledger, or in the row's staged state? ⚠ Note the shape [[R-053]] describes for the analogous
+  case — _"a per-item, per-plate map in the bridge, resolved inside the ONE resolver"_, emptied by
+  specific events and repaired by `restore()` after bridge-process death. Record what the code makes
+  possible; do not decide by assumption.
+- **What clears an override** — unassigning the plate, changing the source, taking the row down?
+- **An override staged in look X, not yet applied, when the operator switches to look Y.**
+  🔴 **The precedent this was said to have DOES NOT EXIST.** The commissioning prompt cited
+  [[R-054]] as having decided that a tab switch with unapplied edits KEEPS the edits and marks it
+  dirty. It did not: `runtime.md:2835` lists _"Does the modal keep per-tab dirty state, and what
+  happens on tab switch with an unapplied edit?"_ as an **open question**, under a line that says
+  explicitly _"A tab switch must decide which behaviour it inherits."_ So this is an open question
+  here too, and it is now open in **two** places that must be answered consistently — flagged rather
+  than invented.
+- Whether [[R-048]]'s per-plate emergency patch and this per-look override can coexist without a
+  precedence ambiguity. They answer the same question at different scopes.
+
+### What this item does NOT touch
+
+- **`resolvePlateAspect`'s chain and [[D-147]] are NOT touched.** The ASPECT chain runs the opposite
+  way round (the source outranks the author, because an aspect is a measurable property of the feed);
+  the MODE chain has the operator outranking the author, because a mode is a presentation choice.
+  `sources.ts:392-398` argues this at length. **Neither chain is a template for the other and they
+  must not be collapsed.**
+- ⚠ **Adjacent and NOT the same thing: [[B-179]]** — `expectedAspect` asserts a property of the FEED
+  and therefore cannot vary per look. This item's value CAN vary per look precisely because it is not
+  a property of the feed. Cross-referenced, not merged.
+- ⚠ **Also not this item:** the outstanding OPERATOR action that an existing installation must
+  re-import its templates or the take readout says `default` ([[B-178]]).
+
+### Why it is filed under `R-` in [runtime.md](runtime.md)
+
+Most of the work is CG Control SURFACE even though the mechanism sits in the bridge — the same
+placement [[R-053]] has, whose refusal and fit chain live in `tools/caspar-bridge/src/live-plate-fit.ts`
+while the item sits here. ⚠ The storage-shape half above may well land bridge-side; the item is still
+named by where the operator meets it.
+
+- **Cross-refs:** [[C-028]] (the fit mode itself, archived); [[B-178]] (the per-look resolution this
+  builds on, and the re-import caveat); [[B-179]] (adjacent, not merged); [[B-139]] (the dirty
+  predicate decision 1 must reuse); [[R-054]] (the tab-switch question, still OPEN — see above);
+  [[R-048]] (the per-plate emergency patch, the shape to NOT copy); [[R-053]] (the per-plate map
+  shape, and the `R-` placement precedent); [[D-147]] (the aspect chain, deliberately untouched);
+  [[B-141]] / [[B-143]] / [[B-144]] (the family decision 3 belongs to); [[B-164]] (why the dual
+  staged+live path was rejected).
+- **Number verification:** highest `R-` HEADING across **every** ref was `R-058`; `R-059` … `R-064`
+  returned **no headings anywhere**, and every `R-059` occurrence tree-wide is
+  [b-number-registry.md](b-number-registry.md)'s own retired "next free" pointer, never an item.
+  `git stash list` empty; `git worktree list --porcelain` showed this checkout only.
+  **Nothing is implemented by this item.**
+
+## [x] R-060 — should "monitors hidden" survive a reload? The shell's `monitorsShown` flag is session-only by Phase 5's constraint ⟨priority: low⟩
+
+**CLOSED by the owner, 2026-09-08 (`RUNTIME-REDESIGN-01` Phase 6, answer A13): `monitorsShown`
+does NOT persist.** It stays session-only, exactly as Phase 5 built it. The rule behind the
+answer, recorded for the phases that will meet it again: **a control that HIDES a safety surface
+does not persist its hidden state** — this product prefers a known safe state after a restart
+over a remembered one, the same call as the unpersisted rehearsal flag and reset-to-idle on
+reconnect. `shellLayout.monitorsShown.dom.test.ts`'s "is NOT persisted" case is the assertion
+of that decision, and `useShellLayout`'s interface note points here. Nothing is implemented by
+this item; it closes as a recorded decision.
+
+⚠ **STILL CLOSED, AND STILL THIS ANSWER — but the neighbouring question it was NOT asked has
+since been answered the other way (2026-09-09, `MONITORS-01`; `design.md` §19.2).** This item is
+about PERSISTENCE, and its answer is unchanged: the flag is written by nothing and read from
+nothing. The console's shipped BOOT STATE is a different question, was never on this item's
+table, and is now **HIDDEN** (`DEFAULT_MONITORS_SHOWN = false`) — because neither monitor pane
+renders the channel. PGM was then an empty placeholder for [[C-016]] (since built as the Playout's return, still off by default) (whose own
+acceptance says its panel would be OFF by default), and PVW is a LOCAL browser render of the
+rehearsing rows through `@cg/template-runtime` ([[R-022]] — "nothing is ever sent to CasparCG"),
+so the strip was spending 247.2 px and three rows of the layer list on the least authoritative
+picture on screen.
+
+🔴 **DO NOT READ THAT FLIP AS THIS ITEM BEING REOPENED OR A13 OVERTURNED.** The one clause of
+A13 that the flip does touch is its EXAMPLE — "a known safe state after a restart" meant SHOWN
+when it was written, and the safe boot state is now "no monitors". The load-bearing half — a
+KNOWN state over a REMEMBERED one — is untouched and is if anything better served, since what
+boots is the shipped decision rather than the last shift's. **The remedy is NOT to re-persist
+the flag**, which would answer this item the way it was already answered no.
+
+**What:** `RUNTIME-REDESIGN-01` Phase 5 built the reference's `Show monitors` / `Hide monitors`
+toggle (`useShellLayout.monitorsShown`, the Layers header button, `App` gating the strip). It is
+SESSION state: a reload starts with the strip shown, whatever the last session did. Every other
+piece of the shell's geometry — the Inspector width, the strip height, the fullscreen focus — is
+persisted per browser under `cg.runtime.shell-layout.v1`, and the flag is the one member of that
+family that is not. Decide whether it should join them.
+
+**Why it was NOT decided in Phase 5:** the phase's own constraint is _no persisted key, file or
+schema change_, and adding a field to the persisted shape is a shape change even under an
+unchanged key. And the two readings of "folded across a reload" are indistinguishable from the
+code: a remembered preference (the operator on a small screen who never wants the strip) or a
+lost safety surface (PVW is the last look before air; a console that boots with it folded away has
+deleted a surface by default — the deletion-guard argument, `design.md` §3). That is the owner's
+call, not a session's.
+
+**Acceptance:**
+
+- The owner answers: persisted (join `{inspectorPx, monitorPx, focus}` under the same key, with
+  `persistedKeyCensus.test.ts` unchanged because the KEY does not change) or session-only (this
+  item closes as a recorded decision and `useShellLayout`'s interface note points here).
+- If persisted: `shellLayout.monitorsShown.dom.test.ts`'s "is NOT persisted" case is REPLACED by
+  its opposite, never weakened; `reset()` still restores shown; and the boot default with no
+  stored value stays SHOWN.
+- Either way, the three-way independence (`workspaceIndependence.dom.test.ts`,
+  `workspace-independence.spec.ts`) is untouched — persistence is about the flag's lifetime, not
+  about what else reads it.
+
+- **Cross-refs:** `openspec/changes/runtime-redesign-programme/design.md` §12.2 / §12.7 (where
+  the flag lives and why it stopped short of persisting); [[R-028]] part B (the persisted shell
+  layout this would join); the deletion guard, item 19 (the resizable shell).
+- **Number verification:** highest `R-` HEADING across every ref was `R-059`; `R-060` returned
+  no headings anywhere, its only tree-wide occurrences being two lines of
+  [b-number-registry.md](b-number-registry.md)'s own prose about gaps. `git stash list` empty.
+  **Nothing is implemented by this item beyond what Phase 5 shipped as session state.**
+
+## [~] R-061 — the Inspector should be titled by the ROW's name, with the template on the line beneath; and the position draft wants a Reset ⟨priority: medium⟩
+
+**SPLIT by the owner, 2026-09-08 (`RUNTIME-REDESIGN-01` Phase 6, answer A14).** **(a) DONE in
+Phase 6:** the Inspector's heading is the selected ROW's operator name through `operatorRowName`
+(`useOperatorNames`), in its own `<bdi>`, with every id the row has on the heading's `title`; the
+template's display name (and its stub when two templates share a name, `title` carrying the id)
+moved to the line beneath (`data-inspector-template`). Golden rule 11's reason, now that drafts
+are per-row and survive a round trip: the risk of editing the wrong row's draft is real, and the
+heading is what the operator reads. Asserted as the PROPERTY, not the string —
+`apps/runtime/tests/inspectorHeading.dom.test.ts` (the heading carries what the one composition
+names the selected row, from the bank the mock publishes, and follows selection) and
+`tests/e2e/live-plate-audio-access.spec.ts` (Chromium). Sweep: `livePlates.dom.test.ts`'s two
+stub cases re-pointed from the `<h3>` to the template line; no e2e addressed the heading by
+template name. **(b) PARKED, not built:** a Reset for the position draft — Discard already undoes
+edits, and the owner declined a second control for the same gesture. The acceptance bullets
+below for (b) are kept as written for the record; they are not owed by any phase.
+
+**What:** two Inspector deltas Phase 5 measured against the rendered reference
+(`05-row-inspector.html`, `design.md` §12.3) and ARGUED rather than fixed, because each is a
+wording or lifecycle decision rather than a geometry move:
+
+1. **The title.** The reference's head reads an eyebrow `Inspector`, then the ROW's name as the
+   heading (`Layer 3`, in a `<bdi>`), then a meta line: status badge · the template's name ·
+   a `PVW` mini-badge. The app's panel bar reads `INSPECTOR`, and the body's `<h3>` is the
+   TEMPLATE's display name (with the id stub when two templates share a name), then chips
+   (status · layer · channel · server). Golden rule 11 — _an operator-facing surface names things
+   in the operator's words_, through `operatorRowName` — sits on the reference's side: the
+   operator selected a ROW, and the row's name is what he reads under pressure; the template is
+   what it carries.
+2. **A reset for the position draft.** Phase 5 moved the unapplied on-air position (anchor and
+   offsets as typed) into `draftStore` so it survives a selection round trip, with its own dirty
+   mark and its own `Apply position` — and deliberately outside DISCARD and the row's UPDATE verb,
+   because UPDATE does not send the position (`draftStore`'s header says why a chip that lit for
+   it would lie). The reference draws a `Reset` link on the position section (`Discard the
+unapplied position draft`). The app's draft today clears only by convergence (the applied
+   value catching up) or by prune (the row leaving the stack): there is no way to abandon a
+   position edit short of typing it back.
+
+**Why it is an item and not a Phase 5 edit:** (1) is a user-facing wording change with its own
+golden-rule-9 sweep (every spec that finds the Inspector's heading by the template name), a
+`<bdi>` for a Persian row name beside a Latin template name, and a decision about where the id
+stub goes; (2) is a new control with a lifecycle question (does Reset revert to the APPLIED
+position or to the manifest default? — the reference reverts to the row's fields, i.e. applied).
+Neither is in `PROMPT.md` §5, and Phase 9 re-dresses the Inspector's chrome anyway.
+
+**Acceptance:**
+
+- The Inspector's heading is `operatorRowName(...)` in its own `<bdi>`, the template's display
+  name (with its stub when ambiguous, `title` carrying the id) on the meta line beneath; every
+  spec that addressed the heading by template name is re-pointed, and the sweep is recorded.
+- A `Reset` on the position section drops the item's position draft (`clearPositionDraft` —
+  the one export `draftStore` does not yet have) and the picker re-seeds from the applied override
+  or the manifest default, exactly as a reselect would with no draft; hidden or disabled when
+  the position is clean, present when dirty, and disabled while locked on air.
+- `positionPicker.dom.test.ts` gains the reset case beside the round-trip case; `draftStore.test.ts`
+  gains the clear case; the e2e `onair-position.spec.ts` drives it once.
+
+- **Cross-refs:** `openspec/changes/runtime-redesign-programme/design.md` §12.1 / §12.3 / §12.7
+  (the measured head and the argued deltas); golden rule 11 (`CLAUDE.md`); [[R-040]]'s class (the
+  id stub on the heading, which must not be lost in the move); [[B-072]] (the seed rule the reset
+  falls back to); [[R-011]] (the picker).
+- **Number verification:** as for `R-060` — `R-061` returned no headings anywhere, only the
+  registry's prose. **Nothing is implemented by this item.**
+
+## [x] R-062 — the bridge is single-channel in exactly three places: five bulk verbs take `z.void()`, there is no channel-discovery call, and the fixed bank is the app's only channel authority ⟨priority: medium⟩ — ALL THREE GAPS DONE: gap 2 2026-09-23 (`CHANNEL-AUTHORITY-01`), gaps 1 and 3 2026-09-24 (`MULTI-CHANNEL-01`, `openspec/changes/archive/2026-09-26-multi-channel`)
+
+**Filed by `RUNTIME-REDESIGN-01` Phase 7 (2026-09-08), from `design.md` §4 as corrected by owner
+answer A3 — a GAP FILED, not a design.** The earlier finding that _"a second channel's rows cannot
+be addressed today"_ was too strong and is withdrawn: `itemId` identifies one stack item = one
+operator row, `StackItemStateSchema.slot` carries `{ channel, layer, server }`, ids are globally
+unique, so `stack.load` / `take` / `update` / `stop` / `out` / `remove` / `setPosition` /
+`setActiveLook` / `swapLiveSource` / `setPlateVolume(s)` are ALREADY channel-agnostic. What is
+single-channel is exactly this:
+
+**What (the three gaps):**
+
+1. ✅ **DONE 2026-09-24 — `MULTI-CHANNEL-01` §2 B and C (`openspec/changes/archive/2026-09-26-multi-channel`).**
+   ~~Five verbs take `z.void()` — `stack.removeAll`, `clearAll`, `stopAll`, `snapshot` and
+   `silenceAllLivePlates` — and therefore mean "everything the bridge knows about".~~ The four
+   housekeeping verbs take an OPTIONAL `{ channel }` — a bare call is byte-identical, and with a
+   channel each acts on that channel alone, fenced, permission-checked and lock-judged on that
+   channel. `silenceAllLivePlates` is UNTOUCHED (`z.void()`, unscoped, A16) and is the every-channel
+   control; per-channel PANIC is the NEW verb `stack.silence-channel-live-plates`, as the trap below
+   required. Independence is proven at the fake's wire with two declared channels
+   (`channel-independence.integration.test.ts`, `multi-channel-banks.integration.test.ts`).
+2. ✅ **DONE 2026-09-23 — `CHANNEL-AUTHORITY-01` commit 2 (`openspec/changes/archive/2026-09-23-channel-authority`).**
+   ~~There is no channel-discovery call on the contract.~~ `channels.list` (+ the per-console
+   `channels.changed` push) returns every channel any source names — the Playout's catalogue
+   ([[C-039]]) first, then the bank, then channel settings — with `named` / `declared` /
+   `permitted` KEPT APART, and `channelIds` reads its `declared` channels first with the two
+   sources above as the fallback. ⚠ What it does NOT do, and why it could land at all: commit 1
+   (`9d114657`) made the declared bank the only thing that decides what the bridge writes to, so a
+   discovered channel is never a writable one. The pre-change text was: _"Nothing asks the bridge
+   which channels exist. The renderer's list today is the union of `fixedLayers.config.channel`
+   and `channelSettings.settings[].channel` — and is the one function a discovery call would
+   feed."_
+3. ✅ **DONE 2026-09-24 — `MULTI-CHANNEL-01` §2 A (`openspec/changes/archive/2026-09-26-multi-channel`).**
+   ~~`fixedLayers` declares ONE bank on ONE channel (`FixedLayerBankSchema.channel`, documented "one
+   channel per bank, v1"), and the bank is the app's channel authority.~~ The station declares ONE
+   BANK PER CHANNEL (`FixedLayerBanksSchema`; `fixedLayers.banks` / `set-banks` / `banks-changed`,
+   with `config` / `set-config` kept as the one-bank view), and `#declaredChannels()` answers every
+   bank's channel through the one predicate. Every producer and consumer was named first
+   (`design.md` §1), as the acceptance below required. The bank file keeps a one-channel station's
+   v1 object byte for byte; `MockRuntime.load()` writes `item.slot` (the fourth finding).
+
+**Why it is an item and not a Phase 7 edit:** each is a CONTRACT change (a request shape, a new
+channel, a schema's cardinality) with producers and consumers on both tiers — precisely what
+`PROMPT.md` §7 and §11 forbid a UI phase from inventing in passing. Phase 7 built the UI SHAPE
+(a list, a keyed selection, a per-channel Channel tab) so that closing these is a bridge change
+and not a redesign.
+
+🔴 **The trap, written here so nobody closes gap 1 by widening it:** `silenceAllLivePlates` takes
+no arguments ON PURPOSE. It is PANIC, and the scope of a panic is not the caller's to choose;
+channel-scoping it would CHANGE an emergency control's contract, not widen it. Whether a
+multi-channel plant wants a per-channel panic beside the station-wide one is the OWNER's decision
+and is recorded here as a question, not as a task. The other four bulk verbs are ordinary
+housekeeping and can take an optional channel without changing what a bare call means.
+
+✅ **ANSWERED by the owner — A16, `RUNTIME-REDESIGN-01` Phase 8 (2026-09-08).**
+`silenceAllLivePlates` STAYS UNSCOPED. It takes `z.void()` on purpose; PANIC's scope is not the
+caller's to choose. The scope question is a PRECONDITION OF EVER SHIPPING REAL MULTI-CHANNEL,
+decided then, with the operator's workflow in front of us — never in passing, and never by this
+item. That is the answer, not an open question. What Phase 8 did instead was make the assumption
+VISIBLE where the operator reads it: the plates toolbar's control is `SILENCE ALL BOXES · EVERY
+CHANNEL`, its accessible name and tooltip say the same (golden rule 11), so that when
+multi-channel arrives the LABEL is the thing that has to change and cannot be forgotten. One
+control, its label and its tooltip — no behaviour change, no wire change
+(`apps/runtime/tests/liveSourcesPanel.dom.test.ts`, "A16 — the panic label names its scope").
+
+✅ **A16 FOLLOW-UP — ANSWERED by the owner, 2026-09-23 (the precondition above, decided when real
+multi-channel arrived — `MULTI-CHANNEL-01`).** When the operator presses PANIC, **only the channel
+on screen goes silent.** A **separate, explicit** control silences every channel. Built as the trap
+and A16 required: `silenceAllLivePlates` is untouched and IS the every-channel control, placed in
+the header beside the channel strip (`SILENCE ALL PLATES · EVERY CHANNEL`), never beside the
+per-channel one; PANIC on a channel's view is the NEW verb `stack.silence-channel-live-plates`
+(`operator` class, channel-scoped), labelled in A16's form — `Silence all plates · CH n`, accessible
+name `Silence all boxes on channel n — …`. The label changed, as A16 built it to. With ONE declared
+channel nothing changes: there is no second control, and the toolbar's PANIC is A16's, bare.
+
+⭐ **GAP 1 IS NOW PINNED BY A TEST, and this is the half that makes the item self-defending**
+(`RUNTIME-REDESIGN-01` Phase 10, 2026-09-08; `design.md` §17.2).
+`apps/runtime/tests/channelIndependence.dom.test.ts` §3 asserts that all five verbs accept
+`undefined` and REJECT `{ channel }`, with a positive control beside it so the assertion cannot be
+satisfied by a schema that accepts anything. **The day someone adds a channel to one of them, that
+test goes red and this entry has to be read before the change lands** — which is the only thing
+keeping the ledger and the contract from drifting apart quietly. The test names this item in its
+own comment, so the pointer runs both ways.
+
+⚠ **And the reason the same phase could not prove channel INDEPENDENCE at the wire is these three
+gaps.** With the bridge single-channel there is no second channel to disturb, so a wire test would
+pass because the configuration cannot exist rather than because the property holds. Phase 10 said
+so rather than writing one (`design.md` §17.2), and proved what it could at the contract, UI and
+store levels instead. A fourth thing surfaced there and is filed with this item: **`MockRuntime.load()`
+writes no `item.slot`**, so the app's own mock cannot express two rows on two channels either —
+whoever takes this item will want that first, or the UI half stays unprovable after the bridge half
+is done.
+
+**Acceptance (when this is taken):**
+
+- [x] A channel-discovery channel on the contract (`channels.list` or the settings list carrying
+      it), with `channelIds` reading it FIRST and the two existing sources kept as fallbacks; the
+      strip and Station setup unchanged in shape. — **gap 2, done 2026-09-23**
+      (`CHANNEL-AUTHORITY-01`). Gaps 1 and 3 below are untouched and still open, and so is
+      A16's precondition: PANIC's scope is decided before real multi-channel ships, never in
+      passing.
+- [x] `removeAll`, `clearAll`, `stopAll` and `snapshot` accept an OPTIONAL channel; a bare call keeps
+      its meaning byte for byte (every existing test green unchanged). — **gap 1, done 2026-09-24**
+      (`MULTI-CHANNEL-01` §2 B).
+- [x] `silenceAllLivePlates` is NOT re-scoped by this item; if the owner wants a per-channel silence it
+      is a NEW verb beside PANIC, never a parameter on it. — **the owner wanted it (A16 follow-up,
+      2026-09-23): `stack.silence-channel-live-plates`, a NEW verb** (`MULTI-CHANNEL-01` §2 C).
+- [x] The bank's cardinality (one bank, one channel) is either kept and stated as the v1 constraint, or
+      changed by its own item naming every producer and consumer of `FixedLayerBankSchema` first.
+      — **gap 3, changed 2026-09-24 by `MULTI-CHANNEL-01`, which named them first**
+      (`openspec/changes/archive/2026-09-26-multi-channel/design.md` §1).
+
+- **Cross-refs:** `openspec/changes/runtime-redesign-programme/design.md` §4 (the corrected
+  finding, per namespace) and §14 (Phase 7's UI shape); golden rule 10 (a configuration verb is
+  never a playout verb — the bulk verbs' gates must not move); `B-122` (PANIC's scope is the
+  ledger, and status is not asked); [[R-030]] (the channel-keyed settings list this would extend).
+- **Number verification:** `git grep -n "R-062"` over the tree returned nothing before this entry
+  was written. **Nothing is implemented by this item.**
+
+## [x] R-063 — DOCTRINE: a row shows whether a change is DECLARED, APPLIED, or merely UNCONFIRMED ⟨priority: high — two surfaces were reported as contradicting each other and neither was lying⟩ — RECORDED 2026-09-13
+
+⚠ **Cross-reference, 2026-09-15 — `openspec/changes/timing-pass-control/`.** The timing arc
+added a per-row CONFIGURATION verb (`stack.set-pass-timing`) that this doctrine governs, and
+[[B-248]] is filed under it: a timing set is in flight and the row says nothing, because a
+configuration verb does not move the row's STATUS. **This item stays `[x]`** — it is a
+RECORDED DOCTRINE, not an implementation item, and flipping it to `[~]` would misrepresent
+it as unfinished work. What is unfinished is `B-248`, which has its own number.
+
+**What.** The on-row rendering of golden rule 10 (_a configuration verb is never a playout
+verb_), written down so the two are findable from each other:
+
+> **Any action that records an intent which is not yet on air leaves its row in a WAITING
+> state until the change is actually applied. The row's state distinguishes DECLARED from
+> APPLIED.**
+
+⚠ **And a THIRD meaning exists, which is the one most likely to be re-broken.** A row can be
+APPLIED ON OUR SIDE and not yet CONFIRMED BY THE SERVER. That is neither "declared" nor
+"done", and the console already renders it — see the answer below.
+
+**Why.** `CONSOLE-LOOK-06` DELTA 9 reported a contradiction: the console says a look press
+applies immediately while the row shows an amber clock. Both statements are true, they answer
+different questions, and nothing on screen said so.
+
+### The answer, read from the code — it is (c), and the premise needed correcting first
+
+1. 🔴 **THERE IS NO `PENDING` LABEL IN THE PRODUCT.** `git grep` over `apps/runtime/src` and
+   `packages/shared-schema/src` finds the word nowhere operator-facing. The amber-clock words
+   are **`TAKING`** (`playing` + pending, `colors.pending`, `⟳`) and **`UNCONFIRMED`**, from
+   `airStateVisual` in `theme.ts`. So the reported "PENDING" is `TAKING`.
+2. **The look press really does apply immediately.** `B-168`, the owner's own decision of
+   2026-08-25 (option b): the pick is not staged and `UPDATE` is not involved. `LookPicker`
+   renders `· NOW` beside the label and its tooltip says so outright. On the bridge,
+   `setActiveLook` reconciles at once when `#ownsLiveSeats(itemId)`; only on a row that owns
+   NO seats does it `#recordActiveLook` and stay silent (`B-151`), where the next take seats
+   it.
+3. **So the amber clock is not "declared, not applied".** `pending` is computed in
+   `packages/caspar-client/src/reconciler/reconciler.ts` as
+   `!isTerminalStatus(rec.intentStatus) && !this.isConfirmed(rec)` — **an intent was SENT and
+   the wire has not answered yet.** A confirmation gap, not a staging gap.
+
+**Verdict: (c).** Applied on our side, pending confirmation from the server. **The hint is not
+lying and the state is not lying.** Nothing is reworded, because neither string is wrong;
+what was missing was this paragraph.
+
+⚠ **THE PREDICATE IS NAMED FOR LESS THAN IT DECIDES, and it is reported rather than renamed**
+(DELTA 9 §1 says not to rename it here). `pending` reads as "waiting"; what it actually
+decides is **"the wire has not confirmed this yet"**. A row is `pending` because an intent is
+outstanding, never because a change is staged. Anyone reaching for it to mean "declared but
+not applied" will be wrong.
+
+**The boundary with the other two surfaces**, so a later change cannot collapse them:
+
+| kind                                   | lifetime                             | what it means                |
+| -------------------------------------- | ------------------------------------ | ---------------------------- |
+| a TOAST                                | transient, may auto-hide             | this action COMPLETED        |
+| a REFUSAL                              | persists until dismissed or resolved | this did NOT happen, and why |
+| a row STATE (`TAKING` / `UNCONFIRMED`) | as long as the condition holds       | sent, not yet confirmed      |
+
+**Acceptance.**
+
+- WHEN an action records an intent that is not yet on air THEN its row SHALL show a waiting
+  state until the change is applied, and the row's state SHALL distinguish declared from
+  applied.
+- WHEN a look is pressed on a row that owns live seats THEN the change SHALL be applied
+  immediately and the row SHALL show the confirmation-gap state until the wire answers.
+- The console SHALL NOT render a state whose meaning is "declared, not yet applied" while the
+  action that produced it applied immediately.
+
+## [~] R-064 — the pass and gap controls exist ONLY when the stated Mode is `Loop cycle`; a hidden control sends nothing ⟨priority: high — the console was confidently wrong on the plant's two busiest rows⟩ — FILED 2026-09-16 by `PASSES-CYCLE-ONLY-26` Part A, building in `openspec/changes/timing-pass-control/` §7
+
+**What:** The Inspector's Timing section offers the pass count and the between-pass gap only for
+a template whose stated `mode` is `loop-cycle`. `manual`, `auto-out` and `static` never show them
+— whatever loops INSIDE the graphic. The `hold` does not decide: `loop-cycle` + `timed` and
+`loop-cycle` + `content-driven` both keep them. A row whose controls are hidden sends no stored
+override and no draft, on a take or an `Update`.
+
+**Why (owner, 2026-09-16):** on the news ticker `نوار خبر (روی آنتن)` the section read
+`Auto-out` / `Content-driven` and still showed `Until stop` / `Count`, a gap box and
+`Default (∞)`. Changing them did nothing he could see.
+
+**Measured on the stored records, re-verified at HEAD:**
+
+- `c44d061f…` — the root is `auto-out` / `content-driven`; its ticker `crawl` has `repeat: 2`, so
+  the graphic ends by itself after two crawl passes. The root nests `live-dot` →
+  `comp-ticker-pulse` («چشمک»): `loop-cycle`, `holdMs: 0`, `repeat: 'infinite'`. **A blinking
+  dot.**
+- `templateTimingOf` takes `loop` from the first reachable `loop-cycle` instance when the root is
+  not one, so the published block was `{auto-out, content-driven, loops: true, repeat: infinite}`
+  — the loop fields are the DOT's.
+- `applyPassTiming` walks every scope and `setRemainingPasses` returns early on a non-cyclic one,
+  so **`Count 2` made the dot blink twice and vanish**, and `Default (∞)` stated the dot's count
+  on a graphic that ends after two crawl passes.
+- `4ccad4c4…` (same name, older import, root `manual`, crawl infinite) has the same dot and showed
+  the same controls under `Manual`.
+
+**The defect class, stated plainly:** a control that names another scope's number and silently
+steers a decoration is worse than no control. It is the console being confidently wrong, which is
+the one thing an operator cannot defend against — the same standard [[B-143]]'s `assumed` and
+[[R-063]]'s DECLARED / APPLIED / UNCONFIRMED doctrine are held to.
+
+**Acceptance:**
+
+- WHEN the stated mode is `loop-cycle` THEN the pass control and the gap control are offered,
+  whatever the hold source
+- WHEN the stated mode is `manual`, `auto-out` or `static` THEN neither is offered, even where a
+  nested scope in the same template loops, and no authored default count is stated
+- WHEN a row whose controls are hidden is taken or updated THEN no `__cg.timing` reaches the page
+- WHEN a count was stored while the controls were visible THEN it is NOT migrated or deleted —
+  only the wire is gated, so a template re-authored as a loop still honours the operator's number
+
+**Notes:** ONE predicate, `templateAdmitsPassTiming` (`@cg/shared-ipc`), with three consumers —
+the Inspector's render gate, the console's press/PVW builder (`timingToSend.ts`), and the bridge's
+wire gate. Three machines, one spelling (golden rule 6). — THE WRAPPER CASE was established and
+deliberately NOT excepted: exporting a starter at its default `entryCompositionId` publishes the
+wrapper's `manual` with a loop taken from the graphic inside it, so `logo-bug` @ `comp-logo-bug`
+reads `Manual` with no pass controls. The owner decides whether that wants an exception; the
+plant's own logo is exported at `comp-logo-mark` and is unaffected. — The Designer ALREADY gated
+its own `repeat` control on `mode === 'loop-cycle'`, so the console was the only inconsistent
+surface. — NO RE-IMPORT is owed: nothing here touches the page runtime or the import metadata.
+— Cross-refs [[R-065]] (Part B — PVW plays the count), [[C-036]] (the latent nested-loop reach),
+[[C-034]] (the re-import tax), [[R-063]] (the honesty doctrine).
+
+- **Number:** `R-064`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] R-064" -- docs` returned nothing, against a positive
+  control on the same regex for `R-063` which returned `runtime.md:3703`.
+
+## [~] R-065 — PVW plays the operator's pass count and gap, not the template's authored defaults ⟨priority: high — the one surface that exists to check a graphic before air was showing a different graphic⟩ — FILED 2026-09-16 by `PASSES-CYCLE-ONLY-26` Part B, building in `openspec/changes/timing-pass-control/` §8
+
+**What:** the rehearsal preview plays the pass count and the between-pass gap the operator has
+set, exactly as a take would. The value is the EFFECTIVE one — the staged draft layered on the
+stored override — through the SAME builder that decides what an UPDATE press sends. A row with no
+override reaches the page with no timing at all, so it runs its authored default.
+
+**Why (owner, 2026-09-16):** in PVW the timing always ran the template's authored defaults. The
+logo `آرم (روی آنتن)` set to `Count 1` did not play one pass, and pressing `Update` changed
+nothing there either.
+
+**Measured at HEAD before the fix:** `RehearsalFrame` built its payload as
+`withCgControl(fields, { look })` — fields and the active look, nothing else — and `PreviewPanel`
+handed the frame `fields` (through `buildApplyPayload`) and `activeLookId` and no timing at all.
+So the page never received `__cg.timing`.
+
+**This is [[B-151]]'s shape one member later.** PVW once received no LOOK for exactly the same
+reason: a third delivery door that the work which added the member never knocked on. The plant
+gets `__cg` on `CG ADD` and `CG UPDATE`; the Designer's canvas gets its look by `postMessage`;
+PVW got nothing. The lesson that did not carry was that PVW is a DOOR, not a mirror.
+
+⚠ **A discrepancy worth recording, since the prompt's premise differed from the tree.** The
+prompt describes the logo as authored `repeat: 'infinite'`. The stored record and the decoded
+scene both say `repeat: 2` — the owner re-imported it at 12:51:53Z, nineteen minutes after the
+other five records (12:32:39Z), so the prompt described the EARLIER import. The defect is
+identical either way: PVW ran the authored number and ignored the operator's.
+
+**Acceptance:**
+
+- WHEN a row whose template loops has a pass count set and is put on PVW THEN the preview page is
+  told that count before it is played
+- WHEN the operator types into an unrelated field while a rehearsing page is running THEN the
+  field edit reaches the page and the count is NOT re-sent
+- WHEN a row whose pass controls are hidden ([[R-064]]) is put on PVW THEN its payload carries no
+  timing member
+- WHEN any row is put on PVW THEN the payload still carries no take token ([[C-013]])
+
+**Notes:** 🔴 THE RELATIVE-COUNT TRAP shaped the design. `__cg.timing.passes` on a RUNNING page
+means "passes REMAINING FROM NOW", and the frame's field-push effect re-fires on every draft
+change — so folding the timing into that payload would re-arm the count on every keystroke in an
+unrelated text box. The timing therefore rides `play()` always (a play SEATS a total) and rides
+`update()` only on the first boot and when the value itself changes, through its own effect keyed
+on the VALUE rather than on the object. — NOTHING REACHES CasparCG: PVW is a local browser render
+([[R-022]]), so this is a preview-only change and no wire verb moved. — NO RE-IMPORT is owed: the
+page runtime and the import metadata are untouched. — Cross-refs [[R-064]] (Part A — the gate
+this reuses), [[B-151]] (the same door, the look member), [[R-022]] (PVW reaches no plant).
+
+- **Number:** `R-065`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] R-065" -- docs` returned nothing, against a positive
+  control on the same regex for `R-064` which returned this file.
+
+## [~] R-066 — sign-in surface, permitted-channel strip, viewer state, and retiring the self-declared console name ⟨priority: high⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+
+<!-- change: openspec/changes/playout-auth-signin/ — the SIGN-IN half only; see the
+     unticked bullets below for what remains -->
+
+**What:** The console half of the Playout link. A sign-in surface when the bridge advertises
+`auth: 'playout'`; the token held per console and presented on every reconnect; a channel strip
+that lists only the principal's permitted channels; a viewer read-only state; and the retirement
+of the self-declared operator name together with every copy of its caveat.
+
+**Why:** [[C-037]] and [[C-038]] make the bridge refuse what the principal may not do — but a
+refusal the operator cannot anticipate is a console that feels broken. The operator needs to know
+who they are signed in as, which channels are theirs, and (for a viewer) that reading is the whole
+of it. And once identity is PROVEN, the _"a LABEL you typed, not a verified sign-in"_ caveat stops
+being honest and becomes wrong: it would be telling the operator the record is weaker than it is.
+
+**Acceptance:**
+
+- [x] WHEN the bridge advertises `auth: 'playout'` THEN the console shows a sign-in (Persian/RTL,
+      shared primitives, no raw controls) over the live stack; PANIC and every intent are refused
+      underneath until signed in; and the link indicator names the state in the operator's words
+- [x] WHEN signed in THEN the token is held per console, survives a reload, is presented on every
+      (re)connect, and is refreshed about 10 minutes before expiry while the page is open; sign-out
+      clears it
+- [x] WHEN the principal's channel set is known THEN the strip lists ONLY those channels (`channelIds`
+      in `features/channels/channelList.ts` gains the principal as an input), and a channel the bank
+      names but the principal may not operate is shown READ-ONLY, not hidden
+- [x] WHEN the principal is a `viewer` THEN every surface is read-only and says so once, in the
+      operator's words — the controls are ABSENT as facts, not greyed out (golden rule 13)
+- [x] WHEN identity is verified THEN the Audit panel's _"self-declared label, not a verified sign-in"_
+      copy and the operator-name field are RETIRED, and a two-axis `git grep` sweep — by the SENTENCE
+      and by the `operatorName` SYMBOL — finds no stale copy in tests, docs or task lists
+- [x] WHEN auth is OFF THEN every surface is byte-identical to today
+
+**Candidate, FILED not worked (`BRIDGE-TRUTH-01` §6, 2026-09-23):** rename `LayerRow`'s prop
+`operatorName`. It carries the ROW's name (golden rule 11's `operatorRowName`), not an operator's —
+which is why the retired symbol cannot be guarded case-insensitively: widening the symbol axis that
+way adds 24 files, 23 of them this row-naming meaning. A distinct name for the row's prop would let
+a future guard match the bare word and so catch more; it is a rename across the row surfaces, not a
+rider on a bridge change.
+
+**Notes:** 🔴 THE SWEEP IS THE HARD PART, and it is a golden-rule-9 sweep on two axes because one
+axis provably misses. Measured at `546258d3`: the STRING pass (`self-declared`, case-insensitive)
+returns 19 hits in 16 files; the SYMBOL pass (`operatorName`) returns **21 files / 41 hits**
+(corrected 2026-09-23 by `BRIDGE-TRUTH-01` §6 — this read "44 files", most likely hits mislabelled as
+files; measured with `git grep -c operatorName 546258d3 -- .`: 21 files, 41 hits summed), including
+`WebSocketRuntime.ts`, `createRuntimeBridge.ts` and `persistedKeyCensus.test.ts` which the string
+pass does not see. And the caveat is BUILT ACROSS LINES in `AuditPanel.tsx:322-325`, so a per-line
+grep for `LABEL you typed` finds it in ten test and doc files and MISSES the source it came from —
+scan multi-line. Known sites: `apps/runtime/src/renderer/features/audit/AuditPanel.tsx` (~293,
+~323, ~340), `apps/runtime/src/platform/operatorName.ts:12`,
+`apps/runtime/src/shared/runtime-bridge.ts:562`, `packages/shared-ipc/src/ws-frame.ts:93`,
+`tools/caspar-bridge/src/actor-context.ts:10`, `tools/caspar-bridge/src/bridge.ts:903`,
+`tools/caspar-bridge/src/caspar-runtime.ts:507`, `docs/prd/runtime.md:2910` (inside [[R-054]]'s
+notes), `docs/prd/bugs-runtime.md:3683` and `:9687`, plus four e2e/dom specs and five spec/design
+files under `openspec/changes/`. — The persisted key `cg.runtime.operatorName` retires with the
+field; `persistedKeyCensus.test.ts` is a consumer. — An E2E is OWED (this renders; golden rule 12).
+— `docs/operator-guide/README.md` gains a sign-in paragraph. — [[R-054]] records the operator-name
+field as a setting that must MOVE into the Settings shell _"and the honesty caveat travels with
+it"_; this item retires both instead, so R-054's bullet must be updated rather than left
+contradicting. — Depends on [[C-037]] and [[C-038]]. Cross-refs [[R-062]], [[C-039]], [[B-141]],
+[[B-153]], [[R-017]], [[R-022]].
+
+- **Number:** `R-066`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] R-066" -- docs` returned nothing, against a positive
+  control on the same regex for `R-065` which returned `runtime.md:3830`. The registry's dated
+  pointer independently reads `R-066`.
+
+## [x] R-067 — The bridge as a Windows service that survives CG Control closing ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4 · → built by `CENTRAL-BRIDGE-01` (v3) as **CG Bridge** · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`) · owed: the `.111` run
+
+**What.** Run CG Control's bridge as a service, so closing the window or logging off does not stop
+control. **Why.** Today closing CG Control stops the bridge: air keeps playing (CasparCG holds it)
+and the next launch re-adopts from the ledger ([[B-225]]), but nothing can be taken or cleared
+until the app is open again. **Acceptance:** WHEN CG Control's window closes THEN the bridge keeps
+running AND the next window attaches to it rather than starting a second one.
+**→ Built by `CENTRAL-BRIDGE-01` (v3, 2026-09-30), under the Playout team's rules
+(`docs/integration/playout/PLAYOUT-CG-RESPONSE-BRIDGE-HOST-v1.md`).** The bridge becomes **CG Bridge**,
+its own per-machine installer and a Windows service on the Playout machine (or a server beside it):
+automatic start, restart on failure, no service dependency on `ApasaiEngine`, state and logs under
+`%ProgramData%\CG Bridge\`, configured by command line and by file, a fixed `/health` the Playout's own
+page reads. CG Control no longer starts a bridge ([[R-068]]). The service's acceptance is the change's
+spec (`desktop-delivery`, `runtime-caspar-bridge`).
+
+## [x] R-068 — One CG Control per channel ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4 · → built by `CENTRAL-BRIDGE-01` (v3): one bridge per Playout, every CG Control a console of it · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`) · owed: the `.111` run
+
+**What.** Two CG Control installs driving the same channel run two bridges with two live-layer
+ledgers, and neither knows of the other. **Why.** Recorded, not solved: the install-time rule
+(ADR 0011) is one CG Control per channel. **Acceptance:** WHEN a second station declares a channel
+another already drives THEN the second is told so before it can take.
+**→ Built by `CENTRAL-BRIDGE-01` (`0.10.0`), the owner's decision of 2026-09-29:** one bridge per
+Playout — a Windows service on the Playout machine or a server beside it, started with the system —
+that every CG Control connects to with the Playout's sign-in; CG Control becomes the console only, and
+the operator still types only the Playout address. Two bridges on one channel stop being a supported
+case. Open for its design: the Playout team's agreement to host it; the console ↔ bridge connection
+over the network (authentication, [[B-262]]); two operators on one channel (the lock); the backup
+Playout. Until then the `0.9.1` install guide states the limit: one channel is driven from one CG
+Control at a time. `RELEASE-091-01` (DELTA B) fixes the part that holds whoever clears our layer
+([[B-292]]); what the owner saw station B show at its start is recorded as UNCONFIRMED until he says.
+**The built shape (`CENTRAL-BRIDGE-01` v3, 2026-09-30).** CG Control is the console only: no sidecar,
+no Node. It finds CG Bridge on the Playout host at `5280` from the Playout address the operator types (an
+admin can set another address in Station setup), signs in to the Playout directly with D1 from its native
+side (no `Origin`), and presents that token on every connection; the bridge verifies it (signature,
+issuer, audience, expiry, D9) and scopes both commands and the state it pushes to the token's
+`cg_channels` — a console holds nothing the bridge does not ([[B-262]] closed). The bridge keeps the one
+stack, template store and ledger per Playout and pushes one state to every console; two consoles on one
+channel are serialised by its seat locks, and each audit row names the user and the console machine. The
+console and the bridge must share `major.minor`, else one line and no command. **Acceptance (added):**
+WHEN console A takes a multi-box page THEN console B shows it ON AIR within a second, AND WHEN B clears it
+THEN A shows it cleared within a second with no box left on air (control: another item on the channel
+stays ON AIR on both); WHEN a console closes THEN nothing on air changes and a new console sees it. **Filed
+beside it:** [[R-078]] (an exclusive lock for two operators on one channel), [[R-079]] (a standby bridge on
+the backup Playout).
+
+## [x] R-069 — Choosing a channel that is already on air warns first ⟨priority: high⟩ — FILED AND DONE 2026-09-23 by `DESKTOP-APPS-01-D` d
+
+**What.** First-run and Station setup's Change channel… read the chosen channel's occupancy after the
+connection is written and before the channel is declared; a channel already on air with somebody
+else's content earns one line — the channel's name, its number and the layers in use — and a second
+press ("Use this channel anyway"). **Why.** The owner declared the Playout's programme channel with
+nothing to tell him it was on air. It is not a block: at a client, CG graphics do belong on the
+programme channel, above the Playout's layers. **Acceptance:** WHEN the admin picks a channel
+carrying another system's producer THEN one warning line appears and the channel is declared only
+on a second press; WHEN the channel is empty THEN no warning. Tests: `firstRunChannelStep.dom.test.ts`,
+`one-channel-station.integration.test.ts` (d).
+
+## [x] R-070 — A new station shows five rows per band, not thirty ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` I · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+**What.** A bank made for a new channel (first-run, or a channel Change channel… adds) shows five rows
+of each band — templates 99–95 and beds 59–55 — and hides the rest, once the channel's occupancy is
+read. A row carrying anything stays shown; an unknown reading shows every row; a bridge refusal falls
+back to every row. **Why.** After first-run the owner's Layers tab read 30/30 rows with the beds out
+of sight. **Acceptance:** WHEN first-run declares two channels the tap reads THEN each shows 99–95 and
+59–55 and the rest hidden; WHEN a layer carries a producer at the read THEN its row stays shown; WHEN
+the channel cannot be read THEN every row is shown. An existing station's saved rows are unchanged.
+
+## [x] R-071 — Media plates — when hidden, loop, freeze at end, transport ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `MEDIA-PLATES-01` (v2) · archived 2026-09-29 (`openspec/changes/archive/2026-09-29-media-plates`) · the owner's real-video check PASSED 2026-09-29 (`P-058`)
+
+**What.** Each bound clip carries two settings, station-wide, on its bound-media reference: `loop`
+(default off) and `whenHidden` — `pause` (the default: paused and muted, still seated, resumed from
+the same frame when a look shows it again), `restart` (torn down and played from the beginning, as
+every clip was before) or `continue` (keeps playing, hidden and muted). A clip that is not looping
+freezes on its last frame at its end — 2.5.0's ffmpeg producer does it, nothing is sent. An on-air
+row's media plate has Play/Pause and Restart, its remaining time (`−0:12`) only when the server
+reports the clip's time, and `Paused` / `Ended`. **Why.** A clip in box 2 of a two-box look was torn
+down whenever a one-box look hid it and started again from the beginning, on the premise that a held
+clip "runs to its end and comes back black" — false on 2.5.0; vMix, TriCaster, Cinegy and Viz all
+make it a per-clip setting plus transport on air. **Acceptance:** WHEN a look hides a `pause` clip
+THEN it is sent `OPACITY 0` and its mute in the switch's committed batch, then `PAUSE`, and no `CLEAR`;
+and WHEN a look shows it again THEN `RESUME` with its declared volume, on the same layer, before the
+reveal is committed. WHEN it is `continue` THEN only the hide and the reveal are sent. WHEN it is
+`restart` THEN the teardown and a fresh `PLAY` happen as before. WHEN Loop is on THEN the `PLAY`
+carries `LOOP`, and a change reaches a playing clip at once (`CALL … LOOP 1|0`). WHEN the operator
+presses Pause, Play or Restart on an on-air row's clip THEN `PAUSE`, `RESUME`, or `CALL … SEEK 0` then
+`RESUME` is sent; it is refused with nothing sent for a live input, a plate not seated, a row not on
+air, a viewer, another channel's operator and a locked console. WHEN the server reports no time THEN
+no number is shown. A live-input plate's hold, release and wire are byte-identical to before.
+**The owner's decisions (2026-09-28, `FOLLOWUPS-01` D — recorded, no code change):** `Loop` stays a
+checkbox; a clip on air across the upgrade gets its transport record at its next take.
+**The owner's real-video check — PASSED (2026-09-29):** on `pnpm dev:station --fake --caspar
+127.0.0.1:5250` against his own CasparCG ([[P-058]], task 5.4 of the archived `dev-local-caspar`), real
+clips load, and he then asked for the archive. Recorded by `CLIENT-TEST-RELEASE-01` (v1) B5.
+
+## [x] R-072 — Each channel keeps its own Source defaults; a take refused for having no band is a row line ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `CHANNEL-SOURCES-01` (v1) · decision 1 STOPPED, then decided → `R-073` · archived 2026-09-29 (`openspec/changes/archive/2026-09-28-channel-sources`)
+
+**What.** (2) Source defaults are kept per channel, keyed (channel, template, plate); every reader —
+take, look switch, swap, restore, the Inspector's `Default (…)`, the Source defaults dialog, PVW —
+reads the row's own channel. On the first load, the station-wide defaults become every declared
+channel's own copy and the file is rewritten; a channel declared later starts from a copy of the
+template's defaults. The dialog edits the channel of the row it was opened from and is titled
+`Source defaults · CH n`. (3) A take refused because no plate band is declared is one line on its row
+and in its Inspector — `<row>: no live source layer band is declared — nothing was sent.` — in that
+channel's view only, with no banner. **Why.** The owner's check on `dev:station --fake` (2026-09-28):
+changing Source defaults on channel 2 changed channel 1's too, and a take of `Bed 59` was refused with a
+console-wide banner. **Acceptance:** WHEN a default is changed on CH 2 THEN CH 1's default and its take
+are unchanged, and CH 2's take uses the new one; WHEN a station-wide file is first loaded THEN every
+declared channel holds its own copy and a take is unchanged, and a second load copies nothing; WHEN a
+channel is declared later THEN it starts from a copy; WHEN a take is refused for having no band THEN
+its row carries one line and no banner is raised. **Decision 1 — no hand-declared band before a take
+(the effective band is the declared one, else 60–79) — is STOPPED** at the prompt's hard stop: the
+design record says the band is DECLARED, never defaulted, and gives a reason — defaulting it would be
+this project choosing layer numbers for a plant it cannot see, and a station whose reservation already
+sits inside the band would fail to boot on upgrade (`packages/shared-ipc/src/channels/sources.ts:426`,
+`openspec/changes/live-source-multibox/tasks.md:935`). The owner decides whether that reason still
+stands; until then a station with no band still refuses a take — as one row line. ⚠ **Decided
+2026-09-28 by the owner** — see [[R-073]]: a Playout-linked station with none declared is given 60–79,
+unless its own config claims a layer there.
+
+## [x] R-073 — A station linked to the Playout gets the plate band 60–79 with no hand step, unless it claims a layer there; Source defaults obey the channel grant ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `PLATE-BAND-01` (v1) · archived 2026-09-29 (`openspec/changes/archive/2026-09-28-plate-band`) · the owner's `dev:station --fake` check still open
+
+**What.** A station linked to the Playout (its auth config names one) that declares no plate band seats
+its plates in 60–79, unless its own config claims a layer there — a reserved playout layer, a bank row or
+bed, or a dynamic policy range — when it gets no default and a take with plates is refused as one line on
+its row, as before. A declared band is used exactly as declared; a station not linked to the Playout keeps
+the declared band or none. The default is computed and never written into the station's config, so a
+station boots whatever its config holds. Station setup → Live sources shows the band in force and says
+`default` when it is the computed one (`Currently 60–79 · default · 20 layers.`); the bridge's boot line
+names it and why. **Why.** `CHANNEL-SOURCES-01` stopped its decision 1 on the design record's two reasons
+([[R-072]]); the owner answered both (2026-09-28): the contract fixes a Playout-linked plant's layers (the
+Playout owns 1–49; CG Control 50–99 — beds 50–59, plates 60–79, template rows 80–99), and a reservation
+inside the band becomes the condition for no default rather than a boot failure. **Acceptance:** WHEN a
+linked station with no band declared and nothing of its own in 60–79 takes a two-plate template THEN both
+plates are seated in 60–79 and nothing is written to its config; WHEN 70–79 is declared THEN it is used as
+declared; WHEN its config reserves layer 65 THEN it gets no default and the row line appears; WHEN it is not
+linked THEN today's rule holds; WHEN its config reserves 60–79 THEN it boots unchanged; WHEN Station setup
+opens on the default THEN it reads `60–79 · default`.
+
+**Source defaults obey the channel grant.** A `sources.set-assignments` is judged by the permission gate on
+the channels whose Source defaults it changes: a principal whose grant (`cg_channels`) does not hold one of
+them is refused with the gate's existing sentence (`This sign-in does not cover channel N, …`), and nothing
+changes; `"*"` holds every channel. A channel whose defaults are sent back as they were is not judged — the
+console sends the whole set. The write stays `station-admin`, so an operator-role principal is refused by
+role first, as before. A channel-scoped lock judges the same channels (flagged in the report: under a lock
+on channel 1, a channel-2 save now passes it). **Found, not changed:** "Delete from station" and a
+re-import rewrite a template's defaults on every channel, so a station-admin not holding one of them is
+refused that rewrite. **Acceptance:** WHEN a station-admin holding CH 2 only changes CH 1's defaults THEN it
+is refused and nothing changes there; WHEN it changes CH 2's THEN they change; WHEN a `"*"` station-admin
+changes both THEN both change.
+
+## [x] R-074 — Each channel has its own template list: import, delete and re-import act on the current channel only ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-29 by `CHANNEL-TEMPLATES-01` (v1) · archived 2026-09-29 (`openspec/changes/archive/2026-09-29-channel-templates`) · its open points for the owner stay open
+
+**What.** Each CasparCG channel keeps its own template list over one shared store of versions. The picker
+shows the current channel's list; `Import a .vcg` (or a dropped `.vcg`) adds to it only; the row's delete
+icon — `Remove <name> from CH n`, its confirm naming the channel — removes from it only, refused while a row
+on that channel holds the template. A re-import moves the current channel alone to the new version; other
+channels keep theirs until they re-import. One stored file per version, however many channels list it; a
+version's file goes only when no channel lists it and no row holds it, and a page on air keeps its file and
+its serve path. Every action is judged on the current channel alone (fence, grant, lock). No template action
+writes Source defaults: a re-import keeps the channel's defaults for plates that still exist, and a default
+for a plate that is gone is ignored, never deleted. On the first load every declared channel lists the
+station's library; a channel added later starts empty. **Why.** `PLATE-BAND-01` found that "Delete from
+station" and a re-import rewrote a template's defaults on every channel, so a channel's own operator was
+refused them ([[R-073]]); the owner's model (2026-09-28) is one programme and one operator per channel.
+**Acceptance:** WHEN an operator holding CH 2 only imports, re-imports and removes on CH 2 THEN none is
+refused and CH 1's list, rows, defaults and on-air page are unchanged, while the same acts on CH 1 are
+refused by the grant; WHEN the same `.vcg` is imported on CH 1 and CH 2 THEN one file is stored, and a
+re-import on CH 2 gives CH 2 the new version while CH 1 keeps the old, both served; WHEN a template is
+removed from CH 2 while CH 1 lists it THEN the file stays, and from the last channel with no row holding it
+THEN the file goes; WHEN a row on CH 2 holds it THEN its removal on CH 2 is refused; WHEN the station first
+loads THEN every declared channel lists today's library once; WHEN a page is on air on CH 1 THEN every act on
+CH 2 leaves its serve path byte for byte. **Open for the owner:** a "Change channel…" move starts the new
+channel empty (the old list stays dormant); template audit rows name no channel; same-channel re-delivery is
+still local-wins (`B-085`); a browser's record from before the change re-delivers only as a restore (never
+a replacement), and not at all once a channel has removed it.
+
+## [x] R-075 — The Playout's running playlist as a plate source ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.1 · ANSWERED by `PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §1 (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` C (§3) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: `2.9.2` on `.111`
+
+**What.** A channel's running playlist appears inside a CG box — a squeeze-back or an L-shaped look —
+with our graphics around it. It comes from the Playout as a D10 input (for example a `route` to the
+layer the playlist plays on), the operator picks it in the Inputs tab like any input, and it starts
+silent under rule 2 ([[B-289]]). **Why.** The owner asked for it on 2026-09-29. **Depends on:** the
+Playout's answers — whether D10 can list "the playlist output of channel N", what the route points at
+when the playlist uses several layers, the delay on the same channel, the route across an event
+change, a pause and a core reset, the D10 shape and the build. Nothing is built before them.
+**Acceptance (to confirm with the answer):** WHEN the operator binds a plate to a channel's playlist
+output THEN the box shows what the playlist airs, never our own layers 50–99, and it is silent until
+raised.
+
+**Answered (`2.9.2`) and built (`PLAYOUT-FEATURES-01` C, 2026-09-30) — with one change to the acceptance
+above: the box is NEVER raised.** D10 lists a `pl-<code>` row per programme channel: a `route` to that
+channel's playout layer L (read from D10, never assumed 5) with `playlistOf`. Their rules, kept: exactly
+`route://N-L` (never `route://N`, never `NEXT`/`BACKGROUND`, never `BUFFER`); nothing ever sent to layer L;
+the box ALWAYS at `VOLUME 0`, because the route carries the programme sound again (≈ +6 dB, no
+normalisation). **Built:** the row is listed in the Inputs tab under its D10 name, disabled with its reason
+in words when `available: false`; the seat writes the box's volume 0 whatever intent was armed, a raise is
+refused by the bridge (`playlist-audio-locked`) and every audio control is disabled with `Programme sound
+is already on air`, the pill reading `Locked · 0`; the send guard now refuses ANY targeted verb to a layer
+outside 50–99 the station does not own (it refused only `CLEAR` before — `design.md` §0.1), refuses every
+command to L even then, a route's `NEXT`/`BACKGROUND`/`BUFFER`, and a `VOLUME` above 0 on the box; the
+reveal waits two ticks of the route's own rate (never under 80 ms), so it lands a full tick after the
+`PLAY` takes effect (the fixed 80 ms fell short below 25 fps). What the box shows follows the playlist
+(their §1.5): a stop is transparent; a core restart takes the box off (the restart notice, PUT BACK ON AIR);
+the Playout's own `CLEAR N` on an unlicensed channel is named by `B-292`'s notice (`R-077`); a per-channel
+tick error that clears the box with no `epoch` change is caught by `B-292`'s silence check (`design.md`
+§0.4). **Tests:** `route-plates.integration.test.ts` (C), `amcp-guard.test.ts`, `playout-sources.test.ts`,
+`sourcePicker.dom.test.ts`, `playlistAudioLock.dom.test.ts`, e2e `playlist-output.spec.ts`. **Owed:** `2.9.2`
+on `.111`, where both channels' L is 5.
+
+## [x] R-076 — PGM audio in CG Control, in sync with the PGM picture, with a VU meter ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.2 · ANSWERED by `PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §2 (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` E (§5) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: `2.9.2` on `.111`
+
+**What.** The programme's sound in CG Control, in sync with the PGM monitor's picture, and a VU meter
+like the Playout's own. It REUSES the Playout's way of syncing audio and its level source — no second
+method is invented. **Why.** The owner asked for it on 2026-09-29; the PGM monitor today shows the
+Playout's return picture without sound. **Depends on:** the Playout's answers — how its client keeps
+sound and picture together (one stream or two, buffering, timestamps, latency), where its meter reads
+levels (OSC, an endpoint, or the stream), the scale and ballistics, and whether CG Control may read
+the same audio and levels with D4/D10's authentication. **Acceptance (to confirm):** WHEN the PGM
+monitor shows a channel THEN its sound plays in sync and the meter moves as the Playout's does.
+
+**Answered (`2.9.2`, PLAYLIST-AUDIO §2) and built (`PLAYOUT-FEATURES-01` E, 2026-10-01).** Their client keeps
+sound and picture as two separate streams with no timestamp and no comparison — "in sync" means each path as
+short as it can be — and meters from the engine (`GET /api/cg/meters`, SSE, D4/D10 authentication), not from
+the stream. Built to that, reusing their method and never a second one: CG Bridge relays the core's
+`/audio.wav` as `/pgm/<n>/sound` behind a ticket for the sound (one reader per channel; no `.wav` and
+`application/octet-stream`, because a download manager's browser hook swallows a `.wav` typed `audio/wav` —
+measured on the dev host), and reads the meters stream ONCE with its own session, relaying each reading only
+to a console holding its channel. The console plays the sound by their client's buffer rules (30 → 90 ms, the
+150 ms cap), behind a speaker on the PROGRAM strip that is off by default and remembered per console, and
+draws their `VuMeterTall` beside the picture — eight bars and a linear dBFS scale, written to the DOM with no
+render per reading — with the short-term loudness badge in their three tones, pulsing while the limiter
+works. Eight bars fit at the desktop's smallest window (measured: the picture is height-bound there); two show
+only in a narrower browser. Tests: `pgm-audio.test.ts`, `playout-meters.integration.test.ts`,
+`pgmAudioPlayer.test.ts`, `meterScale.test.ts`, `programMeter.dom.test.ts`, e2e `programme-sound.spec.ts`.
+**Owed:** `2.9.2` on `.111` (the meters endpoint), and a listen on the plant.
+
+**IDM — recorded, nothing to change (`RELEASE-0111-01-A` A5; `PLAYOUT-CG-RESPONSE-0110-111-v1.md` §1).** Their client
+`2.9.3` reads the core's `/audio`, not `/audio.wav`; the core itself is unchanged and serves any path that
+carries `/audio` (measured on `.111`: `GET http://127.0.0.1:9250/audio` → `200`, `RIFF`/`WAVE`). CG Bridge's relay
+reads the core upstream from Node, never through a browser, so no download manager's hook can touch that read;
+and the console's own path is already `/pgm/<n>/sound`, typed `application/octet-stream`.
+
+## [x] R-077 — CG Control licensed through the Playout's dongle ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.3 · ANSWERED by `PLAYOUT-CG-RESPONSE-LICENSE-v1.md` (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` D (§1) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: `2.9.2` on `.111`
+
+**What.** CG Control works with a Playout only if that Playout's license includes CG Control. The
+Playout is the only license authority: it refuses an unlicensed CG Control at the `cg-admin` sign-in
+and at the AMCP approval; CG Control holds no license file and no dongle; CG Designer needs no
+license. CG Control shows the refusal in one line of words. **Losing the license on air (proposed):**
+nothing on air is cleared; new takes are refused with the reason; removals still work; the full
+refusal applies at the next sign-in. The fake Playout will model "licensed" and "not licensed" when
+this is built. **Why.** The owner asked for it on 2026-09-29. **Depends on:** the Playout's answers —
+whether the dongle can carry a CG Control feature (and a count), the refusal's error code, a claim or
+an endpoint for the state, their own rule when the dongle goes, a development license for CI, and
+the build. **Acceptance (to confirm):** WHEN the Playout's license lacks CG Control THEN the sign-in is
+refused in one line and nothing can be taken; WHEN the license goes while graphics are on air THEN
+nothing is cleared, new takes are refused with the reason, and removals still work.
+
+**Answered (`2.9.2`, `PLAYOUT-CG-RESPONSE-LICENSE-v1.md`) and built (`PLAYOUT-FEATURES-01` D, 2026-09-30).**
+The dongle carries a `cg` bit and a CG channel cap; the Playout refuses D1/D2 with `403 cg_not_licensed`
+(built by `CENTRAL-BRIDGE-01-A`), serves `GET /api/cg/license` and adds `cgLicensed` to each D4 row. CG
+Bridge reads the license beside D9 (at most once a minute, after its own sign-in, the last value KEPT
+while the Playout cannot be reached, `404` read as "not served"), pushes it to every console, and refuses
+a take where `licensed` is `false` or the channel's `cgLicensed` is `false` (while D4 is unread, the
+license's own channel list) — before anything is sent, with the Playout's message on the row. Clears,
+stops and removals pass; nothing on air is cleared by us. The strip marks the channel (` · NO CG
+LICENSE`, the reason on hover); a station admin sees one line in `grace`; a layer found cleared while D4
+reads the channel `unlicensed` is named `Cleared by the Playout: its license` (the Playout's OWN rule,
+`B-292`'s notice). Tests: `cg-license.integration.test.ts`, the cause case in
+`media-plates.integration.test.ts`, `cgLicense.dom.test.ts`, e2e `channel-air.spec.ts` (D). **Test
+switches on a real engine** (their §6): `APASAI_LICENSE_BYPASS=1` (license off, CG allowed, no cap) with
+`APASAI_LICENSE_CG=0` (not included) or `=N` (a cap of N); `.111` runs with the bypass on and no
+`APASAI_LICENSE_CG`, so after `2.9.2` it reads licensed with no cap. **Owed:** `2.9.2` on `.111`.
+
+**⚠ Recorded limit — not built around (their §5).** On loopback, AMCP cannot be locked by a license: the
+core's AMCP has no authentication and no per-layer permission, and loopback is outside the firewall, so
+any local process — a modified or unlicensed bridge on the Playout machine included — can send any AMCP
+command. The token gate (D1/D2) and `/api/cg/license` hold our own bridge and consoles; against a
+modified bridge they are advisory. A hard lock needs new work in their C++ core (an authenticated AMCP
+handshake, or a per-connection layer limit), which is not planned. For a bridge on another machine the
+Playout's AMCP allow list and firewall remain the real barrier.
+
+## [ ] R-078 — Two operators on one channel: an exclusive lock ⟨priority: low⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §B · filed only
+
+**What.** With one bridge per Playout ([[R-068]]) two consoles may drive one channel at once: the bridge
+serialises their commands through its seat locks, and every audit row names the user and the console
+machine, but neither console can hold the channel for itself. An exclusive lock would let one operator
+take a channel so another console sees it held (by whom, from which machine) and cannot take or clear
+there until it is released or expires. **Why.** The owner asked for no exclusive lock in `0.10.0`
+(`CENTRAL-BRIDGE-01` §B). **Acceptance (sketch):** WHEN console A holds CH 2 THEN console B's takes and
+clears on CH 2 are refused with a line naming A's user and machine, and B's other channels are
+untouched; WHEN A's console closes or its hold expires THEN CH 2 is free.
+
+## [ ] R-079 — A standby bridge on the backup Playout ⟨priority: medium⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), from the Playout team's rule 10 · filed only
+
+**What.** One CG Bridge per Playout runs on the primary machine and drives the backup's core across the
+network (`OSC SUBSCRIBE` to the backup, the primary's IP on the backup's AMCP allow list). If the primary
+MACHINE dies, the backup keeps airing and our layers 50–99 there stay as last set, but no command reaches
+the backup until a bridge does, and every console loses `5280` with the primary. A standby bridge on the
+backup machine, reading the same stores, would take over. **Why.** The Playout team's answer to
+`CG-CONTROL-ASK-BRIDGE-HOST-2026-09-29.md` §2.5 (`PLAYOUT-CG-RESPONSE-BRIDGE-HOST-v1.md` §5); out of
+`0.10.0` by the owner's scope. If only the bridge dies there is no failover — failover follows the
+primary ENGINE's death, not the bridge's. **Acceptance (sketch):** WHEN the primary machine is lost THEN
+the consoles reconnect to the standby bridge and the on-air record is the same as the primary's was.
+
+## [~] R-080 — CG Control's first question says CG Bridge's address may stay empty, and first-run says where CG Bridge was found ⟨priority: medium⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §5 · `openspec/changes/console-polish/`
+
+**What:** the `CG Bridge address` field reads `Found automatically` while empty, with one hint line under it:
+`Leave empty unless CG Bridge runs on a separate server.` Once connected, first-run's check names where CG
+Bridge was found: `CG Bridge found at <host>:<port>`. **Why:** the owner's own-PC run of `0.10.0`
+(2026-09-30): nothing said the field could be left empty. **Acceptance:**
+
+- WHEN CG Control asks its first question THEN the CG Bridge field is empty with the placeholder and the one
+  hint line
+- WHEN the console has connected THEN first-run's check carries `CG Bridge found at <host>:<port>`
+
+## [~] R-081 — First-run's check reads in the order things happen, grouped, and runs again from Station setup ⟨priority: medium⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §6 · `openspec/changes/console-polish/`
+
+**What:** the check's lines in four visible groups — **Reachable** (the Playout, CG Bridge), **Versions**
+(CG Bridge against this console), **Sign-in** (this console's, then CG Bridge's own session), **After
+sign-in** (CasparCG through CG Bridge, OSC, the CG license, the channels, where things run) — the same list
+in first-run and in Station setup, where a station admin runs it again. **Why:** the owner's run: the
+"waiting for sign-in" line sat in the middle of the list. **Acceptance:**
+
+- WHEN the check is shown THEN its lines are grouped and ordered as above
+- WHEN no one has signed in THEN every line of the last group waits, and none fails for it
+- WHEN a station admin opens Station setup THEN the same check runs again there
+
+**Notes:** the Playout publishes no build number to CG (none in D1–D11, the license read or the API's
+headers, which say `Server: Kestrel`), so the Versions group holds CG Bridge's; the Playout's build joins
+it when the Playout publishes one.
+
+## [~] R-082 — One sign-in look: the Playout sign-in, CG Bridge's sign-in and first-run ⟨priority: medium⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §7 · `openspec/changes/console-polish/`
+
+**What:** one centred card on the dark ground, with the Apasai mark and the product name, the app's
+version at its foot, labelled fields, a show/hide control on every password, Enter submitting from any
+field, and one error line in the message style (a Persian message from the Playout as it is, right to
+left), in the splash's visual language. **Why:** the owner's run of `0.10.0`. **Acceptance:**
+
+- WHEN any of the three is shown THEN it carries the mark, the product name and the version
+- WHEN the password's show control is pressed THEN the password reads as text, and back
+- WHEN Enter is pressed in any field THEN the form submits
+- WHEN the Playout refuses with a Persian message THEN that line reads right to left, as sent
+
+**Notes:** `@cg/splash-kit` holds the splash's timing only; its visual language — the mark, the ground,
+the type — lives in `apps/runtime/index.html` and the `--r-splash-*` tokens.
+
+## [~] R-083 — The audit log is paged from CG Bridge, filtered there, and rotated ⟨priority: medium⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §9 · `openspec/changes/console-polish/`
+
+**What:** the LOG dialog reads the audit 100 rows a page, newest first, with a cursor; the list is
+virtualised; filters (channel, user, action, result) and the search run on CG Bridge; a new row appears at
+the top live. The audit file rotates by day and by size and keeps a set limit; `Download logs` carries
+every kept audit file. **Why:** the dialog read the whole file on every open. **Acceptance:**
+
+- WHEN the audit holds 50,000 rows THEN the dialog opens in under 1 s with no more than 100 rows rendered
+- WHEN the next page is asked, or a filter set THEN the right rows come back
+- WHEN a row is written while the dialog is open THEN it appears at the top
+
+## [~] R-084 — Show the Playout build in Versions once the Playout publishes it ⟨priority: low⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` A3; BUILT 2026-10-04 by `RELEASE-0111-01-A` A1 (change `console-polish`, tasks §11)
+
+**What:** the connection check's Versions group shows the Playout's build beside CG Bridge's release and
+this console's. **Why:** `R-081` asked for the Playout build there, and `CONSOLE-POLISH-01` §0.4 found the
+Playout publishes it nowhere CG can read — not in D1–D11, not in the 2.9.2 license answer, and its API
+answers `Server: Kestrel`. **Waits on:** the Playout team publishing the build (the owner asks in his next
+letter). Nothing is built until then. **Acceptance:**
+
+- WHEN the Playout publishes its build THEN the Versions group shows it, read from that source
+- WHEN it does not THEN the Versions group says nothing about it rather than guessing
+
+**It exists — the Playout team's answer, 2026-10-04 (`docs/integration/playout/PLAYOUT-CG-RESPONSE-0110-111-v1.md`
+§3.1):** `GET /api/v1/system/version` on the API port (8080), with NO token, in every Playout from `2.1.0`
+(`.111` answers `2.9.2`); read `version` (semver) and nothing else — the `changelog` is long, Persian and changes
+every build, and there is no separate build number; read it from CG Bridge, never a browser (it answers any
+origin today, which may tighten); not part of the contract (they warn before any change to its shape).
+**Built:** `tools/caspar-bridge/src/playout-version.ts` — CG Bridge reads it at start and then at most once a
+minute, through `playoutFetch` (no `Origin`) with no `Authorization`, and logs `Playout version: …` when it
+changes; the connection check's eighth line, `playout-version`, asks the candidate address the same way and
+shows `Playout 2.9.2.` in the Versions group beside CG Bridge's release, or `The Playout's version: not served.`
+— neutral, never a refusal, and nothing else reads it. **Tests:** `playout-version.test.ts` (the `version` alone;
+read at start with no token or `Origin`, again each period; not served), `connection-check.test.ts` (served,
+asked with neither header; control: not served, every other line unchanged; a black hole reads not served),
+`playout-version.integration.test.ts` (a real CG Bridge configured by address reads it at start; the Versions
+line through the socket; control as above), `connectionCheckGroups.dom.test.ts` (the Versions group's two
+lines). The fake Playout serves the endpoint (`2.9.2`, switchable off).
+
+## [~] R-085 — CG Bridge keeps one Playout session per engine (primary and backup) ⟨priority: high — the client runs a pair from day one (the owner, 2026-10-04)⟩ — FILED 2026-10-04 by `RELEASE-0111-01-A` A3; BUILT by `RELEASE-0112-01` Part A · `openspec/changes/backup-session/` (tasks §2, §3, §5)
+
+**Amended 2026-10-04 (`RELEASE-0112-01`, delta B):** a pair is two ENGINES — each with its own CasparCG core,
+its own API on `:8080`, its own key, users and license — listed by ONE Playout client; "server" below reads
+"engine". The station admin signs CG Bridge in on each engine from «Sign in CG Bridge…», which names `Primary
+engine` and `Backup engine` with their addresses and states. Beyond D11, the backup's session reads the
+backup's D4, its license, and makes the introducing D9 read that lets this machine into the backup core's
+AMCP, so the backup's «تأیید» is automatic in the ordinary case. Priority raised: without it, every media-plate
+take after a failover is refused (`backup-no-copy`).
+
+**What:** CG Bridge signs in on EACH Playout it reads — the primary and, when a server B is configured, the
+backup — with that server's own D1 and D2: a separate access and refresh token per server, and reuse detection
+per server. A station admin signs CG Bridge in on each server once, through the same in-app «Sign in CG Bridge…»
+flow, with each server named in it. **Why:** the Playout team's answer (`PLAYOUT-CG-RESPONSE-0110-111-v1.md` §2):
+each Playout signs its tokens with its OWN ES256 key, and keys and users are never mirrored — so the primary's
+token gets `401 invalid_token` on the backup's D4, D9, D10, D11, `/api/cg/license` and `/api/cg/meters`, and they
+will not change that. Today CG Bridge reads only the backup's D11 (`PLAYOUT-FEATURES-01` A) with the primary's
+token: a `401` is logged (`backup media list answered 401 — kept what was known`), nothing is guessed, server B
+is sent no clip, and the row reads `Backup has no copy of “…” (its media list has not been read); these boxes stay
+empty on the backup` (`backup-media.integration.test.ts`, `takeRefusalLine.test.ts`, `RELEASE-0111-01-A`) — and
+the `401` never touches the primary's session (the lookup's bearer is a pure read, `playout-auth.ts`
+`usableBearer`; nothing in `backup-media.ts` refreshes). **Conditions (their §2):** the account exists on that
+server — `cg-admin`, or `cg-bridge` from `2.9.3` — with THAT server's own random password; and that server has its
+own CG license, else `403 cg_not_licensed`; the backup token's `cg_channels` use the backup's own channel numbers
+(no matter for D11, which is not per channel). **Acceptance:**
+
+- WHEN a station admin signs CG Bridge in on the backup THEN its D11 is read with the backup's own token, and a
+  clip it holds reaches server B by its own path
+- WHEN the backup refuses (no account, a wrong password, `cg_not_licensed`) THEN the row says the backup's list
+  could not be read, in words, and the primary's session is untouched
+- WHEN either server's refresh is reused THEN only that server's session is lost
+
+**Not built in `0.11.1`; built for `0.11.2`** (`RELEASE-0112-01` Part A — the change's tasks name its tests).
+**Verified on the fake pair** (two fake engines, different keys and passwords, each verifying bearers against its
+own keys): every acceptance bullet above in the bridge suite (`backup-session.integration.test.ts`,
+`backup-media.integration.test.ts`), the console in a real browser on Linux (`backup-engine.spec.ts`, in the
+`E2E` step of <https://github.com/yasermostafaee/cg/actions/runs/37227120747>), and the whole path by hand on
+`pnpm dev:station --fake --pair`. **Owed:** a run on two real engines (none is available to us yet).
+
+## [~] R-086 — Sign CG Bridge in as `cg-bridge` (Playout `2.9.4`+) ⟨priority: medium⟩ — FILED 2026-10-04 by `RELEASE-0111-01-A` A4; BUILT by `RELEASE-0112-01-C` C3 · `openspec/changes/backup-session/` (tasks 2.7, 5.1)
+
+**Answered and built 2026-10-04 (`RELEASE-0112-01-C` C3, `PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §3):** from
+`2.9.4` `/api/cg/meters` serves `cg-bridge` every CG-licensed programme channel, as `cg-admin` (up to `2.9.2`:
+no such account; `2.9.3`: the account, its meters empty). «Sign in CG Bridge…» offers `cg-bridge` for an engine
+whose own `GET /api/v1/system/version` is `2.9.4` or newer, and `cg-admin` otherwise — never `cg-bridge` for
+`2.9.3`; any account typed is accepted (`suggestedBridgeAccount`, per engine — `R-085`). The one in-app line
+names where that account's password is shown (each engine's «تنظیمات ← اتصال به CG Control» → «حسابِ داخلیِ CG
+Bridge»; which engine's page the client shows: [confirm with the Playout team], delta B question 4). A bridge
+signed in as `cg-bridge` is not a station admin: over the network its AMCP waits for that engine admin's
+«تأیید» — the engine line reads `amcp-pending`; over loopback nothing is needed. Tests: the meters flow with
+the `cg-bridge` token on a `2.9.4` fake (control: none on `2.9.3`), and the offer by version
+(`bridge-engines.test.ts`, `bridgeSessionBanner.dom.test.ts`).
+
+**What:** «Sign in CG Bridge…» suggests the account `cg-bridge` when the Playout's version (`R-084`) is at least
+`2.9.3`. **Why:** the Playout team built a CG-only account for the bridge (`PLAYOUT-CG-RESPONSE-0110-111-v1.md`
+§3.2–§3.3): role `viewer`, `cg_channels: []`, a random password per install shown beside `cg-admin` in «تنظیمات ←
+اتصال به CG Control» → «حسابِ داخلیِ CG Bridge», accepted even with `AllowViewerSignIn` off, and its own refresh
+family — so a reuse, or a «گذرواژهٔ تازه», on it touches no `cg-admin` console, and a new `cg-admin` password no
+longer cuts CG Bridge off. **Enough for** D4, D9, D10, D11, `/api/cg/license` and D8 (they check the token, not
+its role). **⚠ Not enough for `/api/cg/meters`:** it filters by the token's `cg_channels`, so a `cg-bridge` token
+gets `: ping` and no data for any channel. **What CG Bridge would do signed in as `cg-bridge` today** (measured by
+reading the code, `RELEASE-0111-01-A`): its meters stream uses CG Bridge's OWN session whenever it has one
+(`usableBearer`: own first, a console's only while it has none), and reopens an open stream on its own session the
+moment it arrives (`playout-meters.ts` `restart`) — so the meters would be EMPTY on every channel: the bars at the
+floor, the badge `— LUFS`; there is no fallback to a console's token while CG Bridge holds its own. **Also:** D1
+still needs the CG license; and AMCP's automatic acceptance of the first bridge needs `station-admin`, so a
+separate-server CG Bridge signed in as `cg-bridge` waits as pending for the admin's «تأیید» (a loopback CG Bridge
+needs nothing). ~~**Waits on:** the Playout team serving the meters to `cg-bridge` (we ask), or a decision to read
+the meters with another token. **Not built now.**~~ Answered (`2.9.4`) and built — see the note at the head of
+this item.
+
+## [~] R-087 — The NOT CONNECTED banner: no way into test mode, and actions drawn for red ⟨priority: medium — before `0.11.2`'s tag⟩ — FILED 2026-10-04 by `RELEASE-0112-01-A` · `openspec/changes/console-polish/` (tasks §12)
+
+**What:** (A1) the red `NOT CONNECTED — NOTHING CAN REACH AIR.` banner no longer offers `Enter test mode` — the
+only operator door into the simulator there ever was. The mode's own code stays: every Playwright spec boots it
+through the harness flag (`window.CG_E2E`), and the TEST MODE banner keeps its way out. (A2) every action on a red
+(`alarm`) banner is drawn for red by one banner-scoped rule in the shared button declaration — the first action
+a white fill with dark-red ink, the others white text, a white focus ring, each state (hover, active,
+`focus-visible`, disabled) drawn for red — with existing tokens only and no blue anywhere on the red. **Why:** the
+owner, 2026-10-04 (`Claude outputs/BANNER-BUTTONS-owner-screenshot-2026-10-04.png`): test mode "has no use for
+now", and `Retry connection` was the console's blue outline on the red — hard to read and plainly not designed
+for it; `Set up again` was a muted grey not designed for red either. **Acceptance:**
+
+- WHEN the bridge is not reachable THEN the banner offers `Retry connection` (and, inside CG Control, `Set up
+again`), and nothing on the page names test mode
+- WHEN a red banner carries actions THEN none is blue in any state; text is ≥ 4.5 : 1 against what it stands on
+  and the focus ring ≥ 3 : 1 against the banner, measured in Chromium
+
+**Supersedes in part:** `R-006` bullet 3 ("Test mode is an EXPLICIT operator switch") — the switch is gone; the
+mode stays for the test harness.
+
+## [ ] R-088 — A single D2 re-send within 10 s of the first send, for a transport failure ⟨priority: low⟩ — FILED 2026-10-04 by `RELEASE-0112-01-C` C2 · filed only
+
+**What:** when a D2 (refresh) reached the Playout but its answer was lost (a timeout, a dropped connection —
+today's "outcome unknown"), CG Bridge would send the SAME refresh token once more, but only within 10 s of the
+first send, instead of losing the session. **Why:** the Playout team's rule (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md`
+§4): a spent refresh token that comes back within 10 s gets `401` with no other effect; after 10 s the whole
+family is revoked (theft). So a re-send inside the window costs at worst a `401`, and could save a station admin's
+sign-in after a lost reply. **Not built:** `RELEASE-0112-01-C` asked for it to be filed, not added — today every
+unknown outcome means the token is never sent again (`CENTRAL-BRIDGE-01-A`, kept per engine by `R-085`).
+**Acceptance (sketch):** WHEN a D2's answer is lost THEN the token is sent once more only if less than 10 s have
+passed since the first send, and never after; WHEN that second answer is lost too THEN the session is lost as
+today.
+
+## [~] R-089 — The backup core gets every line on its OWN mirror channel; an unknown mapping sends it nothing ⟨priority: critical — before any hand-over with a backup engine⟩ — FILED 2026-10-05 by `RELEASE-0113-01` Parts A–C · `openspec/changes/backup-channel-map/`
+
+**What:** for each channel N that CG declares on the primary engine (A), CG Bridge knows the number M of N's
+mirror on the backup engine (B), and sends B every line for N on M — layers unchanged — or, with no valid M,
+nothing for N at all. **The mapping's source, in this order:** (1) B's own D4, read with B's own token
+(`R-085`), by the Playout team's rule (`PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md` §3, Playout `2.9.5`): the rows
+whose `mirrorOf.id` is A's D4 id for N and whose `mirrorOf.playout` names A's engine — the HOST compared, the
+port ignored; an empty `playout` accepted only when exactly one row in B has that id; zero or more than one
+matching rows is no mapping; and never A's `mirrors[].casparChannel`, which is recorded at creation and never
+refreshed; (2) a station admin's explicit entry in Station setup → Servers → Backup engine (`CH N (primary) →
+CH M (backup)`), for engines before `2.9.5` or when D4 gives none, checked against B's D4; (3) when the two
+disagree, no mapping, said. **Valid only when** B's row is `cgLicensed: true`, has A's `videoMode`, and its
+`casparHost` (rule 9: loopback = B's machine) is server B. **Kept current:** B's D4 on its own cycle, at B's
+sign-in and on B's reconnect; a mapping that disappears or changes while CG has layers on that channel stops
+every line to B for it, sends no clean-up anywhere, and takes the new mapping at the channel's next take.
+**After a failover:** every send uses M; a take on a channel with no mapping is refused in words (`No backup
+channel is known for CH N`) with nothing sent; the programme return, sound and meters say plainly that they are
+not available on the backup engine. **Why:** `B-316`. **Acceptance:**
+
+- WHEN B's D4 (`2.9.5`) names A's channel 1 by `mirrorOf` at B's channel 2 THEN every line for A's channel 1 —
+  a take, an UPDATE, a look switch, a swap, a clear, a `CLEAR ALL`, a restore and a failover catch-up — reaches
+  B as `2-…`, and not one line reaches B's channel 1, a preview channel or any unmapped channel
+- WHEN `mirrorOf.playout` names A by another spelling (a name where CG knows an IP), or two rows name the same
+  id, or B publishes no `mirrorOf` at all THEN that channel has no mapping and B is sent nothing for it, unless
+  a station admin's entry is given and checked
+- WHEN an entry names a B channel whose `videoMode` differs or whose `cgLicensed` is false THEN it is refused in
+  words beside its line
+- WHEN a mapping changes while the channel is live THEN B is sent nothing more for it, and no line goes to a
+  guessed channel
+- WHEN B is the primary and a channel has no mapping THEN a take there is refused in words and nothing is sent
+- WHEN anything goes to A THEN its line is unchanged, line for line, against `0.11.2`'s wire
+- the status bar reads `BACKUP B · n of m channels mapped`; each channel's own view reads `Backup: CH M on
+<host>` or `Backup: not mapped — nothing is sent to the backup`
+
+## [~] R-090 — The console's check judges only what a console needs: no verdict about the machine it runs on ⟨priority: high — the owner's question: "when the Playout runs on another server, why does a console check this machine's ports or engine at all?"⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part A1 · `openspec/changes/console-check-scope/`
+
+**What:** the check (first-run and Station setup → Check) carries no line about local ports ("Ports 5280, 7911 and
+6251/udp are free for this station") and no topology advice ("UDP 6250 belongs to the engine here, so CG Control
+belongs on a separate machine") — leftovers of the era when CG Control carried its own bridge. A console may run
+on any machine, the Playout's included; the ports are CG Bridge's, wherever it runs. CG Bridge's own state comes
+from CG Bridge: its `/health` names a port it cannot open and what holds it, and the console says so naming the
+machine — `CG Bridge on <host> cannot open UDP 6251: held by <process> (PID n)`. Every line CG Bridge writes
+about its own machine names it as CG Bridge's, never "this machine". An older CG Bridge's `ports` and `topology`
+lines are dropped by the console. **Acceptance:** a check against the fakes has no `ports` or `topology` line; a
+CG Bridge whose OSC port is held shows the line above; the old strings are gone from the tree.
+
+## [~] R-091 — CG Bridge on this machine and not running: `Start CG Bridge`, and `Free the port` only for a holder of ours ⟨priority: medium⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part A5 · `openspec/changes/console-check-scope/`
+
+**What:** when the resolved CG Bridge address is this machine and nothing answers there, CG Control reads its
+own Windows (the `CGBridge` service, what listens on TCP 5280) and says, in words:
+`CG Bridge is installed here but not running.` with `Start CG Bridge` — which asks Windows for administrator rights (the UAC prompt is the app's
+own step) and starts the service; or that TCP 5280 is held by `<process> (PID n)`, offering `Free the port` only
+when the holder is ours (an older CG Bridge, or a CG Control `0.9.x` sidecar `cg-bridge.exe`) and never stopping
+anything else; or that CG Bridge is not installed here. No PowerShell line in the app or the guide. **Acceptance:**
+the three states and the two offers in dom tests; the classification (ours or not) and the service read in the
+shell's own tests; a foreign holder is never offered `Free the port`.
+
+## [~] R-092 — The check shows what needs attention, and folds the passes ⟨priority: medium⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part A6 · `openspec/changes/console-check-scope/`
+
+**What:** each group shows its failures, warnings and waits in full; its passes fold into one line
+(`Reachable · 4 OK`); a group with only passes is that one line; one `Show all` control opens every line, and
+the choice is remembered per viewer. **Acceptance:** dom tests for a mixed group, an all-pass group, the toggle
+and its memory; the persisted-key census lists the key.
+
+## [~] R-093 — The last explanatory prose on operator surfaces: the NOT CONNECTED banner and the layer list's wait ⟨priority: low — the owner's standing rule⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part C · `openspec/changes/console-check-scope/`
+
+**What:** the banner keeps the state, the address and the one fact an operator acts on
+(`Takes are refused until it is back.`), and drops the explanations ("nothing is listening on port 5280 there", "switched off, a wrong
+address, or a firewall", "something there answers, but not as CG Bridge", "On-air commands are refused, not
+queued: reissue them …"); `Loading the layer list…` loses "Waiting for the bridge to send the declared rows. This
+is not an empty list — the rows appear as soon as it answers." **Acceptance:** both absences pinned in specs; the
+old strings swept by string and by component.
+
+## [~] R-094 — CG Control does not close on a slip ⟨priority: medium⟩ — FILED 2026-10-07 by `RELEASE-0114-01-B` B2 · `openspec/changes/close-guard/`
+
+**What:** any close the shell can intercept shows one dialog, `Close CG Control?`, with `Close` and `Cancel`
+(focus on `Cancel`, `Esc` = Cancel) and, only when true, the fact `N items stay on air.`; the browser console
+asks with its own leave prompt while signed in. Closing sends nothing to CG Bridge or CasparCG. **Acceptance:**
+the desktop smoke (UIA): a close shows the dialog, `Cancel` keeps the window, `Close` exits; Playwright: the leave
+prompt while signed in; a test that nothing goes on the wire.
+
+## [~] R-095 — One address to give: each address a host and a port, the defaults placeholders, one `Connect` ⟨priority: high — the owner, 2026-10-10: "a station is one Playout; I give only its address"⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` Part A (T1, T5) · `openspec/changes/servers-simplify/`
+
+**What:** Station setup's `Servers` tab is `Connection`. Its Playout card states the two addresses as facts —
+`192.168.21.32 : 8080`, and CG Bridge's with where it is (`On the Playout machine` or `Separate server`) — each
+with `Change`. An address is edited as a `Host` and a `Port`, the defaults their placeholders (the Playout's port
+`8080`; CG Bridge's host the Playout's, its port `5280`); an empty field IS the default; a whole address pasted into
+a `Host` fills both. `Connect` is the one commit, offered as soon as a field changed beside the fact `Not connected
+yet`; it runs the check where the fields resolve and saves only where CG Bridge answers (`B-317`). `Check` stays a
+test. The Set up page asks with the same fields (one component, one rule). **Acceptance:** jsdom for the fields
+(split, paste, empty = default, the comparison); Chromium for the card and the Set up page, the port on its host's
+row; a Linux `e2e` run.
+
+## [~] R-096 — CasparCG is derived in a Playout station, and the cards say `CasparCG` ⟨priority: high — the owner read `Primary server` as "where the bridge is"⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` Part B (T2, T3) · `openspec/changes/servers-simplify/`
+
+**What:** a Playout station is one whose CG Bridge advertises `auth: playout`. There, server A is not typed: a
+fact row reads `On the Playout machine`, its host as stored, its ports and its health. The cards are `CasparCG A`
+and `CasparCG B · backup`, the rail's foot `CasparCG`; the status bar and the subtitle keep `Primary A` (the
+redundancy role). B stays addable and editable, the Add dialog's ports placeholders. The graphics address sits
+behind `Advanced` (collapsed in a Playout station), titled `Where CasparCG fetches graphics`, `Host` and `Port`
+with `Detect automatically` / `Assign automatically`; no sentence calls CG Bridge's machine "this machine", and the
+candidates are labelled as CG Bridge's machine's addresses.
+
+## [ ] R-097 — A status-bar fact while the Playout's readings are dropped ⟨priority: low — filed only⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` (T6) · `openspec/changes/servers-simplify/`
+
+**What:** while this station's CasparCG host does not join the Playout's (`B-327`), the Playout's meters, sources
+and grants are dropped. Say so in the status bar as a fact, beside the server it is about, so an operator who
+never opens Station setup still learns it. **Not built in `SERVERS-SIMPLIFY-01`** (the owner's instruction: file, do
+not build).
+
+## [ ] R-098 — A station with no Playout is an explicit choice ⟨priority: medium⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` (T4) · `openspec/changes/servers-simplify/`
+
+**What:** Set up offers a plain `No Playout` choice; the station record then holds CG Bridge's address alone. The
+Connection card reads `No Playout`, the CasparCG card is editable — `Host` (placeholder `127.0.0.1`), `AMCP port`
+(`5250`), `OSC port` (`6251`) — and CG Bridge has `Host` and `Port`. The persisted record (`cg.runtime.station.v1`)
+keeps every old record valid, and the persisted-key census is updated.
+
+## [~] R-099 — An outage documents itself: one log line per change of the license the bridge holds ⟨priority: medium⟩ — FILED 2026-10-12 by `DONGLE-RECOVER-01` A2 · `openspec/changes/dongle-recover/`
+
+**What:** CG Bridge writes one stderr line, with the time it saw it, each time the license fields a take reads
+change (`licensed`, `reason`, `playoutState`, `graceUntil`, `maxChannels`), and one each time D4's `playlist` or
+`cgLicensed` changes for a channel. Nothing is written while they do not change, and a failed read is not a change.
+No token and no Playout message text are logged. The backup engine's readers log through its own prefix.
+
+**Why:** the owner's 2026-10-11 dongle test left no record of when the bridge began and stopped refusing takes; it
+had to be read backwards from a count of refresh refusals. Whether the Playout's window reads `licensed:false` is the
+open question this line settles on the next outage (`DONGLE-RECOVER-01` H5).
+
+**Acceptance:** `license-change-lines.test.ts` — one line per change for both readers, none across many unchanged
+reads (control: every read happened), none for an unreachable Playout.

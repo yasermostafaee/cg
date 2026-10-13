@@ -166,7 +166,7 @@ describe('buildGddSchema', () => {
           name: 'Row',
           resolution: { width: 200, height: 50 },
           frameRange: { in: 0, out: 40 },
-          background: 'transparent',
+          editorBackdrop: 'transparent',
           layers: [
             {
               id: 'rl',

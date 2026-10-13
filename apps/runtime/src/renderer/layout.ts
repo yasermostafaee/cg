@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { colors } from './theme.js';
+import { colors, cssVars } from './theme.js';
 
 /**
  * The app shell's layout contract: the PAGE never scrolls, each PANEL does.
@@ -30,8 +30,10 @@ import { colors } from './theme.js';
 export const appShell = {
   /** The page: exactly one viewport tall, and it never scrolls. */
   page: {
+    // `B-263` — the chrome-only Persian face leads (`chromeFonts.css`): Persian from Vazirmatn,
+    // and every other character falls through to the stack exactly as before.
     fontFamily:
-      'Inter, system-ui, -apple-system, "Segoe UI", Vazirmatn, "Noto Sans Arabic", sans-serif',
+      '"Vazirmatn Arabic", Inter, system-ui, -apple-system, "Segoe UI", Vazirmatn, "Noto Sans Arabic", sans-serif',
     color: colors.text,
     background: colors.background,
     height: '100vh',
@@ -51,8 +53,9 @@ export const appShell = {
     // hidden): the workspace takes the space the library used to hold. The
     // columns are now COMPUTED per render (`useShellLayout`) — the operator
     // drags the divider, takes a panel fullscreen, or drops below the narrow
-    // breakpoint — so this is only the server-rendered default.
-    gridTemplateColumns: '1fr 6px 320px',
+    // breakpoint — so this is only the server-rendered default. The 396 is the reference's
+    // Inspector column as rendered (`DEFAULT_INSPECTOR_PX`, `RUNTIME-REDESIGN-01` Phase 5).
+    gridTemplateColumns: '1fr 6px 396px',
     /*
      * TIGHTER than the original 0.75rem (owner: the gap between panels is too big).
      *
@@ -119,7 +122,7 @@ export const appShell = {
   overlayScrim: {
     position: 'fixed' as const,
     inset: 0,
-    background: 'rgba(0, 0, 0, 0.45)',
+    background: cssVars['--r-scrim'],
     zIndex: 800,
   },
   overlayPanel: {
@@ -133,7 +136,7 @@ export const appShell = {
     zIndex: 801,
     display: 'flex',
     flexDirection: 'column' as const,
-    boxShadow: '-8px 0 24px rgba(0, 0, 0, 0.45)',
+    boxShadow: cssVars['--r-shadow-drawer'],
   },
   fixedPanel: {
     display: 'flex',

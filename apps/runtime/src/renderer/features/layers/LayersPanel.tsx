@@ -1,40 +1,113 @@
-import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
-import type { StackItemState } from '@cg/shared-schema';
+import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+// B-228 — the ONE renderer-side REMOVE decision, shared with the row's own gate. It reads
+// `isOnAirStatus` for us, and `removeBlockedCount` below must read THIS and never the bare
+// predicate: the bridge's answer is `isOnAirStatus` MINUS two published exemptions, so a count
+// gated on the predicate disables a press the wire would have accepted.
+import { removeIsRefused } from './removeGate.js';
+import { silenceHasTarget } from './panicReport.js';
+/*
+  ⚠ THIS COMMENT USED TO SAY «this panel no longer imports that predicate directly», and the
+  import below now makes that false — so it is corrected rather than left to mislead.
+
+  `CONSOLE-MATCH-03` needs the air fact PER ROW for the sub-bar's filter override, and the one
+  thing golden rule 6 forbids is a second local spelling of that status list, so the canonical
+  function comes back in. What B-228 was protecting is not the absence of an import — it is
+  `removeBlockedCount`, and that is protected where it is written: it calls `removeIsRefused`,
+  and its own comment there says at length why it may never become `items.filter(isOnAirStatus)`.
+  🔴 If you are reading this because you are about to use `isOnAirStatus` for a REMOVE or a CLEAR
+  count, stop and read that comment first — the answer is `removeIsRefused`.
+*/
+import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
+import {
+  isPlaylistOutput,
+  resolvePlateSourcesForLook,
+  type EmptiedAirRow,
+  type OrphanLayer,
+  type RestoreMigration,
+  type RestoreSkip,
+  type SourceDefinition,
+} from '@cg/shared-ipc';
+import {
+  currentSourceAssignments,
+  currentSourceCatalog,
+  sourcesVersion,
+  subscribeSources,
+} from '../sources/sourceStore.js';
 import {
   CircleArrowOutDownRight,
+  Info,
   LoaderCircle,
   PanelRight,
   RotateCcw,
+  Search,
   Trash2,
+  TriangleAlert,
+  X,
   XSquare,
 } from 'lucide-react';
-import { colors } from '../../theme.js';
+import { colors, cssVars, LAYER_ROW_PX } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Panel } from '../../ui/Panel.js';
-import { Tabs, type TabSpec } from '../../ui/Tabs.js';
+import { TabPanel, TabStrip, type TabSpec } from '../../ui/Tabs.js';
+import {
+  NO_FILTER,
+  layerTally,
+  rowIsShown,
+  type FilterableRow,
+  type LayerFilter,
+} from './layerFilter.js';
+import { OperatorNames } from '../../ui/OperatorNames.js';
+import { operatorRowName, placeName, type OperatorRowName } from '../../ui/operatorNaming.js';
 import type { ShellLayout } from '../../hooks/useShellLayout.js';
+import { useCanOperate } from '../../hooks/useCanOperate.js';
 import { useElementWidth } from '../../hooks/useElementWidth.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.js';
 import { useStackSnapshot } from '../../hooks/useStack.js';
-import { useFixedBankState, useFixedSlotsState } from '../../hooks/useFixedLayers.js';
-import { usePlayoutLayers } from '../../hooks/usePlayoutLayers.js';
+import {
+  restoreSkipReason,
+  useRestoreMigrations,
+  useRestoreSkips,
+} from '../../hooks/useRestoreSkips.js';
+import { useFixedSlotsState } from '../../hooks/useFixedLayers.js';
+import { useChannelBankState, useSelectedChannel } from '../channels/useSelectedChannel.js';
+import { boundChannelOf, itemChannelOf } from '../channels/itemChannel.js';
+import { useStationLayers } from '../../hooks/useStationLayers.js';
+import { useLiveLayers } from '../../hooks/useLiveLayers.js';
+import { usePlateReleases } from '../../hooks/usePlateReleases.js';
+import { useStackDeliveryPending } from '../../hooks/useStackDeliveryPending.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
-import { bankPosition, isLayerVisible, isRehearsing } from '@cg/shared-ipc';
+import { defaultLayerAlias, isLayerVisible, isLowBankLayer, isRehearsing } from '@cg/shared-ipc';
 import { useRehearse } from '../../hooks/useRehearse.js';
-import { isOnAir } from '../stack/onAir.js';
+import { airTally, isOnAir, onChannel } from '../stack/onAir.js';
 import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftStore.js';
-import { reportCommandError } from '../status/commandFeedback.js';
+import { appliedPlateSources } from '../inspector/livePlates.js';
+import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import { LayerRow } from './LayerRow.js';
+import { RowErrorsBadge } from './RowErrorsBadge.js';
+import { onRowFocus } from './rowFocus.js';
 import { resolveRowBinding } from './rowState.js';
 import { LayerTableHeader } from './LayerTableHeader.js';
-import { resolveDensity } from './layerTable.js';
-import { PlayoutPanel } from './PlayoutPanel.js';
-import { hasPlayoutOccupant } from './playoutOccupancy.js';
-import { FixedBankConfigModal } from '../fixedLayers/FixedBankConfigModal.js';
+import { ROW_GEOMETRY, resolveDensity } from './layerTable.js';
+import { StationLayersPanel } from './StationLayersPanel.js';
+import { LiveSourcesPanel } from './LiveSourcesPanel.js';
+import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
+import { announcePlateAudio } from './plateAudio.js';
+import { plateLabelOf } from './takeRefusalLine.js';
+import {
+  declaredFrameRows,
+  hasStrandedLiveLayer,
+  liveLayerBlindness,
+  liveLayerRows,
+  ownerLabelFor,
+  plateVolumeFor,
+  rowPlateAudioOf,
+} from './liveLayerRows.js';
+import { hasStationLayerOccupant } from './stationLayerOccupancy.js';
+import { openStationSetup } from '../stationSetup/stationSetupStore.js';
 
 interface Props {
   onSelectionChange: (itemId: string | null) => void;
@@ -45,7 +118,34 @@ interface Props {
   /** Narrow screens only: is the Inspector overlay showing? */
   inspectorOpen: boolean;
   onToggleInspector: () => void;
+  /**
+   * `B-232` (owner) — the rows the standing emptied-air notice names, so the table can
+   * MARK them and the operator can see which rows one press of PUT BACK ON AIR would put
+   * back, instead of carrying their names down from the strip.
+   *
+   * Passed from `App`, which already reads the notice for the strip itself, so the strip
+   * and the marked rows are ONE reading of ONE snapshot. Optional and defaulted, so every
+   * existing caller and spec keeps its current meaning: nothing said, nothing marked.
+   */
+  emptiedAirRows?: readonly EmptiedAirRow[];
+  /**
+   * 🔴 `B-235` — layers carrying a producer this console did not put there and which nobody
+   * declared reserved. The STATION LAYERS tab lists them; the R-009 warning strip above the
+   * list names them too.
+   *
+   * Passed from `App` for the SAME reason `emptiedAirRows` is, and it is the reason that
+   * matters rather than the convenience: the strip and this tab must describe ONE set. Two
+   * independent subscriptions to the same channel can disagree for a frame, and a tab that
+   * says "nothing" while the strip above it says "layer 42" is precisely the confusion
+   * `B-235` is about. Optional and defaulted, so every existing spec keeps its meaning.
+   */
+  orphans?: readonly OrphanLayer[];
 }
+
+/** A stable empty default, so the memo below does not see a new array every render. */
+const NO_EMPTIED_AIR_ROWS: readonly EmptiedAirRow[] = [];
+/** Same, for the undeclared-layer group. */
+const NO_ORPHANS: readonly OrphanLayer[] = [];
 
 /**
  * §0 — what the panel says while the row states are not in yet.
@@ -88,6 +188,54 @@ const styles = {
    * a narrow width would defeat the fixed height. The full sentence stays reachable
    * through the element's own `title`.
    */
+  restoreSkipStrip: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.4rem',
+    padding: '0.35rem 0.6rem',
+    fontSize: '0.78rem',
+    // The CAUTION role, not the danger red: nothing is on air wrongly and nothing is
+    // broken — the operator's LIST is short, and they have to know before they reach
+    // for a row that is not there.
+    color: colors.pending,
+    background: colors.panelMuted,
+    borderBottom: `1px solid ${colors.border}`,
+    overflow: 'hidden',
+  },
+  /**
+   * The break between the operator rows and the graphics beds. Quiet on purpose — it is a
+   * label for a boundary, not a warning about one — and it uses the same uppercase-muted
+   * treatment the table header does, so it reads as structure rather than as a row.
+   *
+   * `RUNTIME-REDESIGN-01` PHASE 3 — the BAND is the reference's `.bed-divider`, measured
+   * in Chromium: a 25 px row (`--r-bed-divider-h`) with `4px 12px` padding on the PANEL
+   * ground, ruled off above by the strong line.
+   *
+   * 🔴 `MONITORS-01` — AUDIT ROW 12: THE TYPE IS THE REFERENCE'S NOW.
+   *
+   * Phase 3 kept the sticky header's treatment here — `0.62rem` (9.92 px) tracked `.06em` —
+   * against the reference's own `10px / 700 / untracked`, arguing that the band and the
+   * header are the two pieces of structure in the list and must read as one voice. Measured
+   * in Chromium at 1280 × 800, `.bed-divider>td` renders `font-size: 10px`, `font-weight:
+   * 700`, `letter-spacing: normal`. The "one voice" argument was doing no work the WEIGHT
+   * was not already doing — both are 700 — and it cost the band the drawing's own size and
+   * tracking for a 0.08 px difference nobody can see and a tracking that is visible.
+   * Adopted as measured.
+   */
+  bedGroupHead: {
+    boxSizing: 'border-box' as const,
+    minHeight: 'var(--r-bed-divider-h)',
+    display: 'flex',
+    alignItems: 'center',
+    padding: `var(--r-space-1) ${ROW_GEOMETRY.headerPaddingX}`,
+    fontSize: `${String(LAYER_ROW_PX.bedDividerText)}px`,
+    fontWeight: 700,
+    textTransform: 'uppercase' as const,
+    color: colors.textMuted,
+    background: colors.panel,
+    borderTop: `1px solid ${cssVars['--r-border-strong']}`,
+  },
   awaitingStrip: {
     height: '1.65rem',
     flexShrink: 0,
@@ -96,6 +244,37 @@ const styles = {
     gap: '0.4rem',
     padding: '0 0.6rem',
     fontSize: '0.78rem',
+    color: colors.textMuted,
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  /**
+   * 🔴 `AUDIT-CLOSE-01` B — THE SAME LIVE REGION, ON A LINE THAT ALREADY EXISTS.
+   *
+   * The strip above used to be a line of its own, and it reserved **26.4 px of the layer list
+   * permanently** — for a message the operator sees for about a second at boot. Measured
+   * against the reference that is a sixth of the whole chrome gap the audit was about, and
+   * the reference has no equivalent line at all.
+   *
+   * ⚠ **THE RESERVATION IS NOT WEAKENED, IT IS RE-HOUSED, and the distinction is the whole
+   * point.** The property this strip exists for is that ROWS MUST NOT MOVE UNDER A REACHING
+   * HAND when the message goes — a real one, argued and tested before this change. Collapsing
+   * the strip to zero height would have broken it outright. So the region moved INTO the
+   * sub-bar, whose height is declared (`--r-subbar-h`) and does not depend on its contents:
+   * the message appears and goes inside a line that is there either way, so the shift is
+   * impossible for a stronger reason than before rather than a weaker one.
+   *
+   * It stays MOUNTED and it stays a `role="status"`: a screen reader only announces text that
+   * appears inside a live region already in the tree, so a conditional render would have
+   * traded a visible defect for a silent one.
+   */
+  awaitingInBar: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.4rem',
     color: colors.textMuted,
     whiteSpace: 'nowrap' as const,
     overflow: 'hidden',
@@ -137,6 +316,8 @@ export function LayersPanel({
   layout,
   inspectorOpen,
   onToggleInspector,
+  emptiedAirRows = NO_EMPTIED_AIR_ROWS,
+  orphans = NO_ORPHANS,
 }: Props): JSX.Element {
   /**
    * §3 — THE LIST AND WHETHER IT HAS ARRIVED, never the list alone.
@@ -151,12 +332,75 @@ export function LayersPanel({
    * over unready slots renders the declared range as a list with nothing on it,
    * which is the same lie one snapshot along.
    */
-  const { bank, ready: bankReady } = useFixedBankState();
-  const { slots, ready: slotsReady } = useFixedSlotsState();
+  // `C-038` — may this principal act on the channel this console is scoped to? The ONE
+  // console-side answer; every operator control in this panel reads it (golden rule 6).
+  const canOperate = useCanOperate();
+  /*
+    `MULTI-CHANNEL-01` — the SELECTED channel's bank: the table is that channel's rows.
+
+    🔴 §2 B — **THE BULK VERBS ACT ON THE CHANNEL ON SCREEN**, the principle the owner chose for
+    PANIC. On a station that declares ONE channel "this channel" and "every channel" are the same
+    set, and the verb is sent BARE — its meaning and its frame exactly what they always were; with
+    two or more it names the channel this table shows (`verbScope`), even before that channel's
+    bank has arrived, so a scoped verb can never fall back to a bare one on a multi-channel view.
+  */
+  const {
+    bank,
+    ready: bankReady,
+    failed: bankFailed,
+    viewChannel,
+    verbScope: scopeChannel,
+  } = useChannelBankState();
+  const bulkScope = useMemo(
+    () => (scopeChannel === null ? undefined : { channel: scopeChannel }),
+    [scopeChannel],
+  );
+  // `CHANNEL-SOURCES-01` — the channel whose own Source defaults a row with no slot or binding reads.
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (D4) — CG Bridge tells a console only the channels its sign-in holds
+    (`channel-scope.ts`). A channel shown READ ONLY because the sign-in does not include it
+    (`R-066` bullet 3: shown, never hidden) therefore has no state here at all, and its rows would
+    read EMPTY — a claim about another operator's air this console was never told. So it says the
+    fact instead of drawing rows. A viewer whose sign-in DOES include the channel is told its state
+    and sees its rows, read-only by role.
+  */
+  const { selected: selectedChannel, canOperateSelected: selectedHeld } = useSelectedChannel();
+  const defaultsChannel = viewChannel ?? selectedChannel;
+  const { slots, ready: slotsReady, failed: slotsFailed } = useFixedSlotsState();
+  /*
+    🔴 `DELTA A` §A2 — the bridge ANSWERED and the answer was a refusal. Kept apart from
+    `listReady` because they are different facts: not-ready is "we are waiting", failed is "we
+    asked and were told no", and saying the first while the second is true is a surface
+    asserting a state that is not in force.
+  */
+  const listFailed = bankFailed || slotsFailed;
+  /*
+    The station's source catalogue (the Playout's inputs and the media bound here —
+    `PLAYOUT-SOURCES-01`) and its template assignments, for the LIVE PLATES
+    table's `Plate / source` column. Subscribed HERE rather than in the tab for
+    `operatorRowName`'s reason: this panel already holds the stack, and the four-level
+    binding chain needs the ITEM as well as the store. One reading serves the rows and the
+    declared frames below, so the two cannot name different inputs for one plate.
+  */
+  useSyncExternalStore(subscribeSources, sourcesVersion);
+  const sourceCatalog = currentSourceCatalog();
+  const sourceAssignments = currentSourceAssignments();
   const listReady = bankReady && slotsReady;
   // R-022 — ONE rehearse snapshot for the whole table, from the bridge.
   const rehearsals = useRehearse();
-  const playout = usePlayoutLayers();
+  const playout = useStationLayers();
+  // B-145 (2.8) — the layers the BRIDGE seated for Live Source plates, WITH their
+  // readiness: the zero-row case has no row to carry a blindness state, so the panel
+  // needs the ledger's own arrival flag to avoid asserting that nothing is on air.
+  const { value: live, ready: ledgerReady } = useLiveLayers();
+  /*
+    `B-247` — WHY a plate left that ledger, which the ledger payload itself cannot say. An
+    EVENT rather than a snapshot (see the hook), so it has no readiness of its own: a browser
+    that heard nothing shows every unseated frame as `Not seated`, exactly as before.
+  */
+  const plateReleases = usePlateReleases();
+  // §4 — is a stack delivery in flight? An EMPTY stack is only an ANSWER when it is not.
+  const deliveryPending = useStackDeliveryPending();
   /**
    * THE STACK, WITH ITS READINESS — and this is the THIRD snapshot, which is the
    * bug the `listReady` guard above did not reach.
@@ -171,7 +415,47 @@ export function LayersPanel({
    * ones appearing at once, on every startup and every reconnect. Three snapshots,
    * two of them guarded.
    */
-  const { items, ready: stackReady } = useStackSnapshot();
+  const { items: stackItems, ready: stackReady } = useStackSnapshot();
+  /*
+    🔴 `DESKTOP-APPS-01-D` j — THIS CHANNEL'S ITEMS, and only them. Every count, notice and
+    bulk verb below reads `items`, so filtering it HERE is what makes the whole panel obey the
+    owner's rule (a channel's messages never appear in another channel's view) in one place.
+  */
+  const items = useMemo(() => onChannel(stackItems, viewChannel), [stackItems, viewChannel]);
+  /*
+   * B-108 — the rows the last restore could NOT bring back.
+   *
+   * DELIBERATELY MINIMAL, and the reason is scheduling rather than taste: Live Source
+   * phase 6.9e reshapes these same rows, so this adds the LEAST that is honest and
+   * leaves the better surface to the change that is about to rebuild it. When 6.9e
+   * lands it can move this per-row and delete the strip; nothing else depends on it.
+   *
+   * A PANEL notice and not a row one, because these rows DO NOT EXIST any more —
+   * that is precisely what is wrong. There is nothing to hang a per-row mark on.
+   * (The rows a restore deliberately declines to re-seat — cleared and errored — are
+   * honest ON the row already, through the state the row renders. Those two surfaces
+   * are complementary and neither duplicates the other.)
+   */
+  // `DESKTOP-APPS-01-D` j — a row remembered on ANOTHER channel is Station setup's, not this view's.
+  const restoreSkips = onChannel(useRestoreSkips(), viewChannel);
+  const [dismissedSkips, setDismissedSkips] = useState('');
+  // Keyed by CONTENT, not a boolean: dismissing this report must not also dismiss the
+  // NEXT one. A boolean flag would silence every future reconnect after the operator
+  // acknowledged one — a surface that can be permanently turned off by a single click
+  // is a surface that eventually lies.
+  const skipsKey = restoreSkips.map((s) => `${s.itemId}:${s.reason}`).join('|');
+  const showSkips = skipsKey.length > 0 && skipsKey !== dismissedSkips;
+  /*
+    `single-clock-look-switch` — the rows that came back SOMEWHERE ELSE.
+
+    A separate notice from the skips one, with the same content-keyed dismissal, because
+    the two say opposite things about whether the row is there. Folding a migration into
+    "did not come back" would send the operator looking for a row that is on screen.
+  */
+  const restoreMigrations = useRestoreMigrations();
+  const [dismissedMigrations, setDismissedMigrations] = useState('');
+  const migrationsKey = restoreMigrations.map((m) => `${m.itemId}:${String(m.to.layer)}`).join('|');
+  const showMigrations = migrationsKey.length > 0 && migrationsKey !== dismissedMigrations;
   const linkDown = useLink() === 'disconnected';
   // THE SECOND HOP — a live bridge says nothing about the playout machine.
   const casparReach = useCasparReach();
@@ -182,7 +466,6 @@ export function LayersPanel({
   // from the row verbs refusing for the identical reason.
   const needsCasparReason = casparRefusalReason(linkDown, casparReach) ?? BRIDGE_DOWN_REASON;
   const [activeTab, setActiveTab] = useState('layers');
-  const [configOpen, setConfigOpen] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
   /**
    * The table degrades on the width of the LIST, not the viewport: the operator
@@ -193,8 +476,118 @@ export function LayersPanel({
   const { ref: listRef, width: listWidth } = useElementWidth<HTMLDivElement>();
   const density = listWidth === null ? 'full' : resolveDensity(listWidth);
 
+  /*
+    `B-212` — "take me to that row". A refusal elsewhere (the template picker's
+    `in-use`) names a row; this is the other half of the remedy: scroll the row into
+    view, put focus on it, and select what it carries so the Inspector shows it too.
+
+    Looked up by the row's `data-layer` — its stable identity — on the document rather
+    than through the list's ref, because `useElementWidth` hands out a CALLBACK ref (see
+    that hook for why) and there is exactly one Layers table on the page. `scrollIntoView`
+    is guarded for jsdom, where the rest of the gesture still runs.
+  */
+  useEffect(
+    () =>
+      onRowFocus((layer) => {
+        const row = document.querySelector<HTMLElement>(`[data-layer="${String(layer)}"]`);
+        if (row === null) return;
+        if (typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center' });
+        row.focus();
+        // `MULTI-CHANNEL-01` — the row of THIS table's channel: layer 99 exists on every channel.
+        const bound = slots.find(
+          (s) => s.layer === layer && (bank === null || s.channel === bank.channel),
+        )?.binding;
+        if (bound !== null && bound !== undefined) onSelectionChange(bound.itemId);
+      }),
+    [slots, bank, onSelectionChange],
+  );
+
   // Template identity for every bound row, joined once for the whole list.
-  const templates = useTemplateIndex(items.map((i) => i.templateId));
+  /*
+    🔴 `B-233` — THE SKIPPED ROWS' TEMPLATES ARE IN THIS SET, AND THAT IS NOT AN OPTIMISATION.
+
+    The index was `items.map(i => i.templateId)` — the templates of rows ON THE STACK. A
+    restore SKIP is a row that is NOT on the stack, so its template was never fetched, and
+    handing `operatorRowName` a `templateId` the index cannot resolve produced the row's name
+    with the template's silently missing. Caught by the spec, not by reasoning: widening the
+    wire is only half a fix if the consumer never looks the value up.
+
+    The list is the union, so a template referenced ONLY by a skip is still fetched.
+    `useTemplateIndex` keys its effect on the SET's identity (a sorted joined string), so a
+    skip arriving and clearing does not re-fetch on every stack publish.
+  */
+  /*
+    `CHANNEL-TEMPLATES-01` — each on the channel it belongs to: a row's template is read from ITS
+    channel's list (two channels may list one template at two versions), a skip's from the channel
+    its report names.
+  */
+  const templates = useTemplateIndex([
+    ...items.map((i) => ({ templateId: i.templateId, channel: boundChannelOf(i, slots) })),
+    ...restoreSkips.flatMap((s) =>
+      s.templateId === undefined ? [] : [{ templateId: s.templateId, channel: s.slot?.channel }],
+    ),
+  ]);
+
+  /*
+    `B-232` — how the restore strips name a row. This panel already holds all three
+    inputs the rule needs (the bank, the stack, the registry), so it calls
+    `operatorRowName` DIRECTLY rather than through `useOperatorNames`: the hook exists
+    for the sibling strips in `App`, which hold none of them, and taking a second copy
+    of two snapshots here to reach the same function would be the duplication the shared
+    module exists to end.
+  */
+  /*
+    `B-232` (owner) — the item ids the standing emptied-air notice names, as a set, so the
+    row marking below is a lookup rather than a scan per row.
+
+    ⚠ It is a PROP and not a second `useEmptiedAir()` here, deliberately. `App` already
+    holds that snapshot for the strip itself and renders both surfaces, so passing it down
+    makes ONE reading serve both: the strip and the marked rows cannot come to describe
+    different sets, which two independent subscriptions to the same channel could. Same
+    reasoning as `rehearsing` and `seatedPlates` one level down.
+  */
+  const emptiedAirItemIds = useMemo(
+    () => new Set(emptiedAirRows.map((r) => r.itemId)),
+    [emptiedAirRows],
+  );
+
+  const migrationName = (m: RestoreMigration): OperatorRowName =>
+    operatorRowName(
+      {
+        itemId: m.itemId,
+        slot: m.to,
+        ...(() => {
+          const templateId = items.find((i) => i.itemId === m.itemId)?.templateId;
+          return templateId !== undefined ? { templateId } : {};
+        })(),
+      },
+      bank,
+      templates,
+    );
+
+  /**
+   * 🔴 `B-233` — the SKIPPED row's name, and the asymmetry with `migrationName` above is
+   * the whole reason the wire had to change.
+   *
+   * A MIGRATED row came back, so `items` holds it and the join above reaches its
+   * `templateId`. A SKIPPED row did not come back — it is absent from `items`, from the
+   * snapshot and from every map this panel has — so there is nothing here to join against
+   * and the naming has to arrive WITH the report (`RestoreSkipSchema.templateId` / `.slot`).
+   *
+   * A bridge that predates that widening sends neither, and `operatorRowName` then falls
+   * back to a shortened id — the documented last resort, and still better than the raw UUID
+   * this strip used to print.
+   */
+  const skipName = (s: RestoreSkip): OperatorRowName =>
+    operatorRowName(
+      {
+        itemId: s.itemId,
+        ...(s.templateId !== undefined ? { templateId: s.templateId } : {}),
+        ...(s.slot !== undefined ? { slot: s.slot } : {}),
+      },
+      bank,
+      templates,
+    );
 
   // Live draft chips (staged-but-unapplied edits). Subscribe only — this panel
   // RENDERS drafts, it no longer prunes them.
@@ -218,14 +611,19 @@ export function LayersPanel({
   // live graphic can never lose its only surface.
   const rows = useMemo(() => {
     if (bank === null) return [];
-    return [...slots]
-      .filter(
-        (slot) =>
-          isLayerVisible(bank, slot.layer) ||
-          slot.binding !== null ||
-          slot.observed.kind === 'producer',
-      )
-      .sort((a, b) => b.layer - a.layer);
+    return (
+      [...slots]
+        // `MULTI-CHANNEL-01` — the per-slot state carries EVERY declared channel's rows; this
+        // table is the selected channel's, so its rows are that channel's and no other's.
+        .filter((slot) => slot.channel === bank.channel)
+        .filter(
+          (slot) =>
+            isLayerVisible(bank, slot.layer) ||
+            slot.binding !== null ||
+            slot.observed.kind === 'producer',
+        )
+        .sort((a, b) => b.layer - a.layer)
+    );
   }, [bank, slots]);
 
   /**
@@ -257,7 +655,122 @@ export function LayersPanel({
   /** How many rows do not yet know what they carry. Zero hides the notice. */
   const awaitingRows = rowBindings.filter((r) => r.binding.kind === 'awaiting').length;
 
+  /*
+   * 🔴 `AUDIT-CLOSE-01` B2 — THE SUB-BAR'S FILTER.
+   *
+   * The reference's `Find row or template…` and `Hide empty`, which `design.md` §1.1 row 72
+   * recorded as already built and which did not exist. The PREDICATE lives in `layerFilter.ts`
+   * with its own argument and its own tests; what lives here is the state and the projection
+   * from a row onto the four facts the predicate needs.
+   *
+   * ⚠ Component state, deliberately: it is not a preference, it is a thing the operator is
+   * doing right now, and a search that survived a reload would leave a narrowed list in front
+   * of the next person to sit down. No persisted key (the change adds none).
+   */
+  const [filter, setFilter] = useState<LayerFilter>(NO_FILTER);
+
+  /**
+   * One row's four facts, read from the SAME binding the table renders.
+   *
+   * 🔴 Golden rule 11 — the two searchable strings come out of `operatorRowName`, the ONE
+   * composition, so what the operator TYPES is matched against what he READS in the NAME and
+   * TEMPLATE columns. Composing a name here would be a second spelling that could drift from
+   * the column beside it, which is the failure mode the rule is about.
+   */
+  const filterableOf = useCallback(
+    (entry: (typeof rowBindings)[number]): FilterableRow => {
+      const item = entry.binding.kind === 'bound' ? entry.binding.item : null;
+      const name = operatorRowName(
+        {
+          ...(item !== null ? { itemId: item.itemId, templateId: item.templateId } : {}),
+          ...(bank !== null ? { slot: { channel: bank.channel, layer: entry.slot.layer } } : {}),
+        },
+        bank,
+        templates,
+      );
+      return {
+        // `names` is [place, template] in reading order — exactly the two visible columns.
+        rowName: name.names[0] ?? '',
+        templateName: name.names[1] ?? null,
+        // The OBSERVATION, never a status — see `layerFilter.ts`'s override.
+        occupied: entry.slot.observed.kind === 'producer',
+        /*
+          🔴 `CONSOLE-MATCH-03` — the AIR half of the override, and the reason the search
+          works on the station now.
+
+          `isOnAirStatus` is imported, not re-spelled: it is the same function object the
+          bridge's own gates call, so the rows this filter refuses to hide and the rows the
+          bridge treats as on air are the same set by identity rather than by two lists that
+          happen to agree (golden rule 6). An unbound row is not on air by definition — there
+          is no item to ask — and `occupied && !loaded` is what covers it instead.
+        */
+        onAir: item !== null && isOnAirStatus(item),
+        loaded: entry.binding.kind === 'bound',
+      };
+    },
+    [bank, templates],
+  );
+
+  const shownRowBindings = useMemo(
+    () => rowBindings.filter((entry) => rowIsShown(filterableOf(entry), filter)),
+    [rowBindings, filterableOf, filter],
+  );
+
+  const filterTally = useMemo(
+    () => layerTally(rowBindings.map(filterableOf), filter),
+    [rowBindings, filterableOf, filter],
+  );
+
+  // STOP ALL's count: the status IS the right question there — a row that never
+  // played has no authored outro to run. See `isOnAir`.
   const onAirCount = items.filter(isOnAir).length;
+  /*
+    `B-213` — the HEADER's numbers, and deliberately not `onAirCount`. STOP ALL must be
+    offered to an errored row (it MAY be showing something); a tally in the air colour
+    may not count a refused take as a graphic on air. Two questions, two predicates,
+    both spelled once in `stack/onAir.ts`.
+  */
+  const tally = airTally(items);
+  /*
+    §4 — `unreachable` ONLY, never the boot window: a count that greyed itself for the first
+    second of every reload would teach the operator to stop reading the grey. Derived once,
+    beside the tally it qualifies, so the two can never be read from different moments.
+  */
+  const tallyUnverifiable = linkDown || casparReach === 'unreachable';
+  // B-122 — CLEAR ALL's count, and deliberately a different one. It counts rows
+  // that HOLD A LAYER, an ownership fact, because the believed status is exactly
+  // what may be wrong when the operator reaches for this button.
+  const boundCount = items.filter((i) => i.slot !== undefined).length;
+  /*
+    🔴 `R-017` — REMOVE ALL's count, and it is a FOURTH one. Read this before "simplifying"
+    it into `onAirCount` four lines above.
+
+    `onAirCount` is `isOnAir` — status-only, everything but idle/loaded, so `unverified` and
+    `error` are IN. Two reasons it cannot gate this button. First, `isOnAir` carries `B-122`'s
+    standing prohibition — _"it must never gate a clear path again, on either side of the
+    bridge seam"_ — and Remove-All IS a clear path: `removeAll` is built from `remove`, which
+    sends `out(slot)`. Second, the bridge refuses `stack.remove-all` on `isOnAirStatus`, so
+    gating the button on a WIDER set would disable it on rows the bridge would have accepted —
+    the UI and the wire disagreeing about the same press, which is the one thing R-017's
+    ONE-AUTHORITY direction exists to prevent.
+
+    So the same imported function the row's REMOVE and the bridge's refusal read. Four counts
+    on this panel now, one per question, each spelled once.
+
+    🔴 **`B-228` — AND THAT WAS STILL WRONG, BECAUSE THE PREDICATE IS NOT THE ANSWER.** Every
+    sentence above is true and the line below it read `items.filter(isOnAirStatus)`, which is
+    the bridge's answer MINUS its two exemptions (`#removeRefusal`: a restore-blocked row, and
+    an item on no declared operator row). So this button sat disabled for a press
+    `stack.remove-all` would have accepted — the very "UI and the wire disagreeing about the
+    same press" this comment set out to prevent, reached by sweeping the predicate across and
+    leaving the rest of the decision behind. It held `dev`'s Linux `e2e` red until it was
+    traced.
+
+    `removeIsRefused` is now the one renderer-side decision, read here and by the ROW's REMOVE,
+    and it consults the bridge's PUBLISHED `removeExempt` instead of recomputing the rule —
+    which the renderer could not do anyway, since `#declaredLayerClass` is bridge knowledge.
+  */
+  const removeBlockedCount = items.filter(removeIsRefused).length;
 
   // "Get it off the screen" is not "throw it away". This clears air and KEEPS
   // the rows, so recovering is a re-take — not a re-import and re-typing every
@@ -266,40 +779,74 @@ export function LayersPanel({
   // header it replaces — the distinction it draws is the point.)
   const clearAll = useCallback(async (): Promise<void> => {
     /*
-      THE WORDING HAS TO MATCH WHAT THE BRIDGE ACTUALLY DOES, and that is narrower
-      than this button's availability suggests.
+      ⭐ B-122 — THE WORDING NOW MATCHES A BULK VERB THAT REALLY IS AN ESCAPE HATCH.
 
-      The button is always enabled (owner decision — Clear is the escape hatch). But
-      the bridge's `stack.clearAll` clears only items whose status is NOT `idle` or
-      `loaded`, which are exactly the statuses that might be WRONG in the situation
-      the escape hatch exists for. So when nothing currently reads as on air, this
-      bulk action would report success having sent nothing.
+      It used to have to apologise for one. The bridge's `stack.clearAll` cleared only
+      items whose status was NOT `idle` or `loaded` — exactly the statuses that may be
+      WRONG in the situation the hatch exists for — so this dialog had to warn that
+      pressing it "may send no commands at all" and point the operator at the per-row
+      CLEAR instead. A bulk emergency control whose own dialog tells you to use a
+      different control is a defect wearing a caption.
 
-      Rather than promise "everything comes off", the dialog says what will happen and
-      — when the count is zero — names the per-row CLEAR, which really is not
-      status-gated (`out()` needs only a bound slot). Recorded in DEBT.md: making the
-      bulk verb a true escape hatch is a BRIDGE change on an on-air path, not a
-      wording fix, and it is not this session's to make silently.
+      The predicate is gone (owner decision, 2026-08-12): a clear goes to EVERY row
+      holding a layer, whatever the console believes about it, INCLUDING rows that read
+      merely `loaded`. So the dialog now promises exactly that, and says the cost out
+      loud — a cued row loses its pre-rolled producer and will re-ADD on the next take.
+
+      `boundCount`, not `onAirCount`, is what this dialog counts: the believed status is
+      the thing that may be wrong, so it must not be what the operator is asked to
+      confirm against. `onAirCount` survives for STOP ALL, where the status IS the right
+      question (a row that never played has no outro to run).
     */
-    const body =
-      onAirCount > 0
-        ? `All ${String(onAirCount)} on-air item(s) come off air. They stay on the stack, idle, and can be taken again.`
-        : 'Nothing currently reads as on air, so this may send no commands at all. ' +
-          'If you believe a graphic is stuck on air, use CLEAR on its own row — that one ' +
-          'is not gated on the status.';
     const ok = await confirm({
-      title: onAirCount > 0 ? 'Clear all on-air items?' : 'Clear all — nothing reads as on air',
-      body,
+      title: `Clear all ${String(boundCount)} row(s) holding a layer?`,
+      body:
+        `Every row that holds a layer is cleared immediately, with no outro — whatever this ` +
+        `console currently believes is on it. That deliberately includes rows that read as ` +
+        `merely loaded: a cued row loses its pre-rolled graphic and will re-load on its next ` +
+        `play. The rows all stay on the stack and can be taken again.`,
       confirmLabel: 'Clear all',
       tone: 'clear',
     });
     if (!ok) return;
     try {
-      await window.cg.stack.clearAll();
+      /*
+        REPORT WHAT ACTUALLY WENT — the other half of B-122, and the half the operator
+        sees. The old code discarded the result entirely, which is how a bulk verb that
+        sent nothing could still look like it had worked.
+
+        The three outcomes are genuinely different operator situations and must never
+        share a message: nothing was owed; everything owed landed; or some of it did not
+        and those graphics are STILL ON AIR. `refused` is its own sentence because a
+        refusal is not a failure — a Live Source layer is not the operator's to clear,
+        and saying "failed" about it would send them looking for a fault.
+      */
+      const res =
+        bulkScope === undefined
+          ? await window.cg.stack.clearAll()
+          : await window.cg.stack.clearAll(bulkScope);
+      const stuck = res.attempted - res.cleared;
+      const refusedNote =
+        res.refused.length > 0
+          ? ` · ${String(res.refused.length)} live source layer(s) left alone, not this console's to clear`
+          : '';
+      if (stuck > 0) {
+        reportCommandError(
+          `Cleared ${String(res.cleared)} of ${String(res.attempted)} — ${String(stuck)} did not go ` +
+            `and may still be on air. Try CLEAR on those rows.${refusedNote}`,
+        );
+      } else if (res.cleared > 0) {
+        reportCommandSuccess(
+          `Cleared · ${String(res.cleared)} ${res.cleared === 1 ? 'row' : 'rows'}${refusedNote}`,
+        );
+      } else {
+        // Never a green "done": nothing was sent, and saying so is the whole point.
+        reportCommandError(`No row holds a layer to clear — nothing was sent.${refusedNote}`);
+      }
     } catch (err) {
       reportCommandError(err instanceof Error ? err.message : 'Clear all failed.');
     }
-  }, [confirm, onAirCount]);
+  }, [confirm, boundCount, bulkScope]);
 
   /**
    * C-012 — STOP All: every on-air graphic runs its OWN outro and stays
@@ -320,11 +867,25 @@ export function LayersPanel({
     });
     if (!ok) return;
     try {
-      await window.cg.stack.stopAll();
+      if (bulkScope === undefined) await window.cg.stack.stopAll();
+      else await window.cg.stack.stopAll(bulkScope);
+      /*
+        🔴 DELTA 8 §4(b) — ONE toast that states its SCOPE, never one per row. And §4(c): with
+        nothing on air there was nothing to stop, so the confirm is the whole interaction and
+        the surface stays quiet.
+
+        ⚠ It says STOPPED and not CLEARED. They are different acts and their words are not
+        interchangeable — these graphics ran their outros and are still loaded.
+      */
+      if (onAirCount > 0) {
+        reportCommandSuccess(
+          `Stopped · ${String(onAirCount)} ${onAirCount === 1 ? 'row' : 'rows'}. They stay loaded.`,
+        );
+      }
     } catch (err) {
       reportCommandError(err instanceof Error ? err.message : 'Stop all failed.');
     }
-  }, [confirm, onAirCount]);
+  }, [confirm, onAirCount, bulkScope]);
 
   /**
    * R-010 — Remove All empties every row. It is not merely a convenience: it is
@@ -340,19 +901,319 @@ export function LayersPanel({
       tone: 'remove',
     });
     if (!ok) return;
+    const emptied = items.length;
     try {
-      await window.cg.stack.removeAll();
+      if (bulkScope === undefined) await window.cg.stack.removeAll();
+      else await window.cg.stack.removeAll(bulkScope);
+      /*
+        🔴 DELTA 8 §4(b) + §2's consequence rule. REMOVE ALL is the one bulk verb that is never
+        a remedy and cannot be undone, so its line carries that clause — and it must not be
+        vaguer than the confirm that preceded it, which named the count.
+      */
+      if (emptied > 0) {
+        reportCommandSuccess(
+          `Emptied · ${String(emptied)} ${emptied === 1 ? 'row' : 'rows'}. The templates are off the rows; this cannot be undone.`,
+        );
+      }
     } catch (err) {
       reportCommandError(err instanceof Error ? err.message : 'Remove all failed.');
     }
-  }, [confirm, items.length]);
+  }, [confirm, items.length, bulkScope]);
 
-  const playoutOccupied = hasPlayoutOccupant(playout);
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 G — THE PLAYOUT TAB IS SPLIT BY CHANNEL. `CHANNEL-AUTHORITY-01` fixed
+    its hard-coded channel 1 and noted it "isn't split by channel, which will matter once a
+    station declares a second channel". Now it does: each channel's playout rows, and the foreign
+    content on its layers, are under THAT channel — the tab, its dot and its lists all read the
+    channel on screen, so the dot's own note below ("scoped to the channel whose tab is open")
+    is true. With one declared channel nothing is filtered.
+  */
+  const playoutOnScreen = useMemo(
+    () => (scopeChannel === null ? playout : playout.filter((l) => l.channel === scopeChannel)),
+    [playout, scopeChannel],
+  );
+  const orphansOnScreen = useMemo(
+    () => (scopeChannel === null ? orphans : orphans.filter((o) => o.channel === scopeChannel)),
+    [orphans, scopeChannel],
+  );
+  const playoutOccupied = hasStationLayerOccupant(playoutOnScreen);
+  /*
+    B-145 (2.8) — the live rows, resolved ONCE here and handed to the tab.
+
+    The tab dot and the list must never be able to disagree about whether anything is
+    stranded, so they are not two passes over the payload: this array IS both. The
+    owner label is the ROW's name, resolved through the ONE composition every operator
+    surface uses; the COMPOSITION rides its `title`. See `ownerLabelFor`.
+  */
+  const liveBlind = liveLayerBlindness(linkDown, stackReady, items.length > 0, deliveryPending);
+  /*
+    🔴 `PLATES-AUDIO-11` §1 — **HOW A LIVE LAYER'S OWNING ROW IS NAMED, and why it is the
+    BANK'S BINDING rather than the item's `slot`.**
+
+    `placeName` needs a `{channel, layer}`, and `StackItemState.slot` is OPTIONAL: the real
+    bridge publishes it, `MockRuntime.load()` never writes one, and the panel is already
+    rendering this list from the bank's own slots. So the join goes through the binding — the
+    same one the layer table itself renders from — and the name is therefore the SAME string
+    the operator reads one tab over, by construction rather than by two lookups agreeing.
+
+    ⚠ `placeName` and not `layerAlias` directly: the bank's configured alias, else its default
+    (`Layer N` / `Bed N`), is ONE rule and `ui/operatorNaming.ts` owns it. A second spelling
+    here is how the tab comes to call a row something the layer table does not.
+  */
+  /*
+    🔴 **WHAT THE OPERATOR CALLED THE INPUT BEHIND EACH PLATE — owner, 2026-09-14.**
+
+    The LIVE PLATES table showed the ledger's `producer` (`DECKLINK DEVICE 1`, `"m1"`), which
+    is the AMCP argument. The operator named that input `sdi` in Station setup and that is the
+    word he will use. Golden rule 11 with the halves the other way round from usual: the
+    technical string is not an ID, but it is still not HIS word.
+
+    🔴 **THROUGH `resolvePlateSourcesForLook`, which is the function the BRIDGE delegates to —
+    never a local re-read of the assignment map.** The binding has FOUR levels (the template
+    assignment, the freeze taken at the take, the per-look composition and the `R-048` patch)
+    and `PreviewPanel` has already paid for resolving only the second: its overlay named the
+    template's default while air showed the bound source. A second resolution here would
+    reintroduce that split on a third surface.
+
+    ⚠ The ACTIVE LOOK is the item's own published `activeLookId`, so the name is the one a take
+    of this row, in this look, would put on air — the same rule the PVW overlay states.
+    ⚠ `null` for an unassigned plate or a deleted catalogue entry, and it stays `null`: the
+    surface falls back to the producer rather than dressing the argument up as a name.
+  */
+  const liveSourceName = (itemId: string, plateId: string): string | null =>
+    liveSourceEntry(itemId, plateId)?.name ?? null;
+  /*
+    🔴 `PLAYOUT-FEATURES-01` C (`R-075`) — A PLATE ON THE PLAYOUT'S PLAYLIST OUTPUT IS LOCKED AT 0: every
+    audio control is disabled with the reason and its pill reads `Locked · 0`. Through the SAME resolution
+    as the name — the entry the bridge would seat — and the ONE predicate the bridge's refusal asks.
+  */
+  const liveSourceLocked = (itemId: string, plateId: string): boolean => {
+    const entry = liveSourceEntry(itemId, plateId);
+    return entry !== null && isPlaylistOutput(entry);
+  };
+  function liveSourceEntry(itemId: string, plateId: string): SourceDefinition | null {
+    const item = items.find((i) => i.itemId === itemId);
+    if (item === undefined) return null;
+    const catalogId = resolvePlateSourcesForLook({
+      templateId: item.templateId,
+      plateIds: [plateId],
+      assignments: sourceAssignments,
+      // `CHANNEL-SOURCES-01` — the row's own channel's defaults.
+      channel: itemChannelOf(item, slots, defaultsChannel),
+      ...(item.frozenAssignment !== undefined && { frozenAssignment: item.frozenAssignment }),
+      ...(item.lookSourceOverride !== undefined && { lookBindings: item.lookSourceOverride }),
+      ...(item.sourceOverride !== undefined && { overrides: item.sourceOverride }),
+      // REQUIRED, not optional: `undefined` is the positive statement *this carrier authors
+      // no looks*, and spreading the key away would make a missing look indistinguishable
+      // from a look the resolver was never told about.
+      lookId: item.activeLookId,
+    }).get(plateId);
+    if (catalogId === undefined || catalogId === null) return null;
+    return sourceCatalog.sources.find((c) => c.id === catalogId) ?? null;
+  }
+
+  const liveRowName = (itemId: string): string | null => {
+    const slot = slots.find((sl) => sl.binding?.itemId === itemId);
+    return slot === undefined
+      ? null
+      : placeName({ channel: slot.channel, layer: slot.layer }, bank);
+  };
+  const liveRows = liveLayerRows(
+    /*
+      🔴 `MULTI-CHANNEL-01` — THE PLATES TAB IS THE CHANNEL'S TOO. The ledger holds every
+      channel's seats; the tab lists the channel on screen's, so its counts, its dot and its PANIC
+      all speak for that channel and agree with each other. With one declared channel nothing is
+      filtered — the tab is exactly what it was.
+    */
+    scopeChannel === null ? live : live.filter((l) => l.channel === scopeChannel),
+    // `CHANNEL-TEMPLATES-01` — the tab's channel's list names its rows' templates.
+    ownerLabelFor(items, (id) => templates.get(id, scopeChannel ?? undefined)?.name, liveRowName),
+    /*
+      🔴 BOTH facts, through the ONE precedence helper. `stackReady` is not optional
+      here and not belt-and-braces: STRANDED is decided by an item being ABSENT from
+      the stack, and the stack is a separate snapshot that can land AFTER the ledger.
+      Read without it, every seated layer would read stranded at mount and on every
+      reconnect — and offer to cut a guest who is perfectly well owned.
+    */
+    liveBlind,
+    /*
+      `add-multibox-audio` — the plate-intent join, supplied here for `ownerLabelFor`'s
+      reason: only this panel can see the stack, and the row module must stay free of it.
+      The audio state and the stranded verdict are therefore ONE evaluation, so a strip can
+      never state a volume on a row the same pass called unknowable.
+    */
+    plateVolumeFor(items),
+    liveSourceName,
+    liveSourceLocked,
+  );
+  /*
+    🔴 `PLATES-AUDIO-11` §2 — **THE FRAMES THE LEDGER HAS NOT SEATED, APPENDED TO THE SAME
+    ARRAY.** They are not a second list and not a second pass: the tab, the tab's dot and the
+    toolbar's counts all read this one evaluation, which is the property the panel's own note
+    above is about. `declaredFrameRows` decides which rows deserve one; this supplies the
+    template's declaration, which only this panel can see.
+  */
+  const liveRowsWithFrames = [
+    ...liveRows,
+    ...declaredFrameRows(
+      liveRows,
+      (itemId) => {
+        const item = items.find((i) => i.itemId === itemId);
+        if (item === undefined) return [];
+        return (
+          templates
+            .get(item.templateId, boundChannelOf(item, slots))
+            ?.liveSources?.sources.map((p) => p.sourceId) ?? []
+        );
+      },
+      plateVolumeFor(items),
+      liveSourceName,
+      /*
+        🔴 `B-247` — and WHETHER each unseated frame was TORN DOWN or never had a producer.
+        The bridge answers it (`releaseLivePlate`); this is only the join, for the same reason
+        the two lookups above it are injected — the subscription lives with the panel.
+      */
+      plateReleases,
+      liveSourceLocked,
+    ),
+  ];
+  const liveStranded = hasStrandedLiveLayer(liveRows);
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 6 — the audio dialog opened FROM THE PLATES TAB, on one plate
+   * of one row. Hosted here rather than in the tab because the dialog needs the row's ITEM
+   * and its TEMPLATE, which only this panel holds; the tab hands up `(itemId, plateId)` and
+   * nothing else. The row's own AUDIO verb opens the same component from `LayerRow`.
+   */
+  const [plateAudioFor, setPlateAudioFor] = useState<{ itemId: string; plateId: string } | null>(
+    null,
+  );
+  /**
+   * `add-multibox-audio` — the audio door, and PANIC's scope. Both resolved HERE because
+   * both need the stack, which the tab below cannot see.
+   *
+   * ⚠ **`isOnAir` is IMPORTED, never re-derived.** It is this console's ONE on-air
+   * predicate — the same one the row verbs, the Inspector and the on-air count read — and a
+   * second local spelling of that status list is how one of them comes to disagree (golden
+   * rule 6). The `B-122` tension in gating an emergency control on status at all, and the two
+   * containments that make it acceptable here, are recorded in `add-multibox-audio`
+   * design.md §5.
+   */
+  const applyPlateVolumes = useCallback(
+    async (
+      itemId: string,
+      volumes: Record<string, number>,
+    ): Promise<{ ok: boolean; refused: string[] }> => {
+      const before = items.find((i) => i.itemId === itemId)?.plateVolumes;
+      const res = await window.cg.stack.setPlateVolumes({ itemId, volumes });
+      const refused = res.results.filter((r) => !r.ok).map((r) => r.plateId);
+      /*
+        🔴 DELTA 8 — the change announces itself, once, on the CONFIRMED result. The sentence
+        is built by `announcePlateAudio`, which both call paths into this verb share.
+      */
+      const said = announcePlateAudio(
+        volumes,
+        before,
+        refused,
+        /*
+          🔴 `PLATES-AUDIO-11` §2 — SCOPED TO THIS ITEM AND TO A ROW THAT HAS A SEAT. The
+          lookup was `r.plate === plateId` alone, which could already answer with another
+          row's coordinate for a plate id two templates share; with declared frames on the
+          tab it could also answer with a row that has no layer at all. `null` is the honest
+          answer for an unseated frame, and `announcePlateAudio` already handles it.
+        */
+        (plateId) =>
+          liveRows.find((r) => r.itemId === itemId && r.plate === plateId)?.coordinate ?? null,
+        liveRows.find((r) => r.itemId === itemId)?.ownerLabel ?? 'this row',
+      );
+      if (said !== null) reportCommandSuccess(said);
+      return {
+        ok: res.ok,
+        // The PER-PLATE verdicts, kept per-plate. Collapsing them to a count would take away
+        // the one thing an operator needs from a partial failure: WHICH guest did not move.
+        refused,
+      };
+    },
+    [],
+  );
+  /**
+   * 🔴 **PANIC TAKES NO SCOPE FROM HERE ANY MORE, and the deleted code is the point.**
+   *
+   * This used to be `items.filter(isOnAir)` joined against `liveRows` — an emergency control
+   * scoped from believed status, which is `B-122`'s shape one verb along. It cost two real
+   * cases: a row in the boot-adoption window (`B-145` — plates seated and potentially AUDIBLE,
+   * status not on air; once misnamed the `exitRehearse` window, `B-216`) was never reached, and
+   * a browser whose `useLiveLayers` snapshot had not yet
+   * arrived would have addressed nothing and reported success for it.
+   *
+   * The BRIDGE scopes it from its own ledger now. ⚠ Do not reintroduce a status filter here,
+   * or a scope prop, under any name — the whole reason the door takes no arguments is that the
+   * caller must not be able to narrow it.
+   *
+   * 🔴 `MULTI-CHANNEL-01` §2 C — **AND THE PER-CHANNEL PANIC IS A DIFFERENT DOOR, not a narrowed
+   * one.** The owner decided (2026-09-23) that PANIC on a channel's view silences that channel,
+   * so once two or more channels are declared this calls `silenceChannelLivePlates` for the
+   * channel on screen — a separate verb whose channel is REQUIRED, scoped by the bridge from its
+   * ledger exactly as the every-channel one is. The every-channel door is untouched and still
+   * takes nothing; it has its own control beside the channel strip. With one declared channel the
+   * two scopes are the same set and this is the every-channel call it always was.
+   */
+  const panic = useCallback(
+    () =>
+      scopeChannel === null
+        ? window.cg.stack.silenceAllLivePlates()
+        : window.cg.stack.silenceChannelLivePlates({ channel: scopeChannel }),
+    [scopeChannel],
+  );
   const tabs: TabSpec[] = [
-    { id: 'layers', label: 'LAYERS' },
+    { id: 'layers', label: 'Layers' },
     {
-      id: 'playout',
-      label: 'PLAYOUT',
+      /*
+        🔴 THE ID IS `live-sources` AND THE LABEL IS `Live plates`, AND THAT IS DELIBERATE.
+
+        The owner renamed the tab (2026-09-12) because the reference calls it `Live plates` and
+        so does this codebase everywhere else: a plate is a SEATED LAYER, which is exactly what
+        this tab lists, while `Live sources` is the installation-wide CATALOGUE that lives in
+        Station setup and keeps its own name. Two concepts, two names — and until now the
+        console spent one name on both, which is the confusion the panel's own scope note used
+        to have to spend a clause disowning.
+
+        ⚠ The ID DID NOT MOVE. `live-sources` is the tab id, the `aria-controls` target and the
+        `data-layer-tab` value; renaming it would change what every selector addresses for a
+        word nobody sees. Golden rule 11's distinction, one level down: the LABEL is what the
+        operator reads, the ID is the handle.
+
+        🔴 AND THE CASING WAS DECIDED THE OTHER WAY, BY THE OWNER, ON 2026-09-12. This comment
+        used to argue that the strip's own uppercase should win — "sentence-casing this one
+        alone would make the strip look broken rather than matched". The PREMISE was right and
+        the CONCLUSION was the wrong direction: the three must match, and the reference matches
+        them at SENTENCE case (`Layers` · `Live plates` · `Station layers`, measured — there is
+        no `text-transform` on `.layer-tabs button` at all). So all three moved, not one.
+
+        ⭐ Uppercase in the reference belongs to the TABLE HEADER and the bed divider — 10 px,
+        tracked, on the header's own ground — and the CONTRAST with the sentence-case tabs
+        above them is the design, not an inconsistency in it.
+      */
+      id: 'live-sources',
+      label: 'Live plates',
+      /*
+        The dot means a live producer is lit with NO ROW THAT CAN REACH IT — the
+        emergency this whole item exists for. It is deliberately NOT raised for an
+        ordinary seated layer: those are normal, they belong to a row, and a dot that
+        lit whenever a guest was on air would be noise the operator learns to ignore
+        before the one day it means something.
+
+        Not masked on `linkDown` the way the station dot is, because it does not need
+        to be: with the link down every row resolves to `Unknown` and none is stranded,
+        so the dot is already dark by the rows’ own reckoning rather than by a second
+        rule.
+      */
+      ...(liveStranded
+        ? { badge: { tone: 'warn' as const, label: 'A live layer has no row that can reach it' } }
+        : {}),
+    },
+    {
+      id: 'station-layers',
+      label: 'Station layers',
       // The dot means "something IS on a playout layer" — never raised for an
       // unknown, which is the absence of a claim rather than a claim. It is
       // scoped to the channel whose tab is open, which is why the channel axis
@@ -370,9 +1231,40 @@ export function LayersPanel({
       title="LAYERS"
       ariaLabel="Layers"
       style={{ flex: 1 }}
+      /*
+        🔴 `AUDIT-CLOSE-01` B3 — THE TABS ARE THE PANEL'S HEADING, so the card is ONE line.
+        The bar used to say `LAYERS` and a strip beneath it said `LAYERS | LIVE SOURCES |
+        STATION LAYERS`, which is the same word twice on two lines; the reference draws the
+        tabs and the bulk verbs on one. The region is still named `Layers` by `ariaLabel`, so
+        nothing that addresses this panel by name had to move.
+      */
+      heading={
+        <TabStrip
+          tabs={tabs}
+          activeId={activeTab}
+          onSelect={setActiveTab}
+          ariaLabel="Layer surfaces"
+          inPanelBar
+        />
+      }
       actions={
         <>
           {/*
+            🔴 `C-038` / `R-066` bullet 4 — **THE BULK VERBS ARE ABSENT FOR A PRINCIPAL WHO
+            MAY NOT USE THEM, not disabled.** Golden rule 13: a greyed-out STOP ALL tells the
+            operator the console is busy or the stack is empty, when the truth is that this
+            channel is not theirs — a disabled control states the wrong fact. `ReadOnlyIndicator`
+            states the right one, once, in the status bar.
+
+            ⚠ **THIS DOES NOT CONTRADICT the "ALWAYS RENDERED, present-but-disabled" rule
+            below**, and the distinction is worth keeping: that rule is about TRANSIENT state —
+            `onAirCount` going to zero must not move the target under a hand already reaching,
+            because it can change between the glance and the press. A principal's permission
+            cannot. It is fixed for the session, so there is no target to move.
+          */}
+          {canOperate && (
+            <>
+              {/*
             The bulk verbs, in C-012 order: graceful first, hard second — so the
             softer option is the one nearest to hand.
 
@@ -394,22 +1286,41 @@ export function LayersPanel({
             target under the operator's hand mid-reach. Their weight comes from
             their confirm gates, not from being hidden.
           */}
-          <Button
-            variant="neutral"
-            disabled={needsCaspar || onAirCount === 0}
-            aria-label="Stop all on-air items"
-            data-verb-tone="stop"
-            title={
-              needsCaspar
-                ? needsCasparReason
-                : 'Every on-air graphic runs its own outro and stays loaded'
-            }
-            onClick={() => void stopAll()}
-          >
-            <Icon icon={CircleArrowOutDownRight} />
-            STOP ALL
-          </Button>
-          {/*
+              {/*
+            🔴 `CONSOLE-MATCH-03` §2 — WHICH CHANNEL THESE THREE VERBS REACH, said in front
+            of them rather than inferred.
+
+            The reference draws `CH 1` at the head of the bulk group and it is not decoration:
+            STOP ALL, CLEAR ALL and REMOVE ALL are the widest presses on this console, and the
+            operator is entitled to read their SCOPE in the same glance as their names. It was
+            one number while the bank was one channel — cheap to state and expensive to omit
+            the day it became two. `MULTI-CHANNEL-01` is that day: it is the SELECTED channel's
+            number, and the channel the three verbs are scoped to.
+
+            It is rendered only when the bank has actually answered: `CH undefined` over three
+            live verbs would be worse than saying nothing.
+          */}
+              {bank !== null && (
+                <span className="cg-bulk-target" data-bulk-target="">
+                  CH {bank.channel}
+                </span>
+              )}
+              <Button
+                variant="neutral"
+                disabled={needsCaspar || onAirCount === 0}
+                aria-label="Stop all on-air items"
+                data-verb-tone="stop"
+                title={
+                  needsCaspar
+                    ? needsCasparReason
+                    : 'Every on-air graphic runs its own outro and stays loaded'
+                }
+                onClick={() => void stopAll()}
+              >
+                <Icon icon={CircleArrowOutDownRight} />
+                STOP ALL
+              </Button>
+              {/*
             CLEAR ALL is ALWAYS ENABLED — the bulk twin of the row's CLEAR escape
             hatch, and that half is unchanged: refusing the remedy because the
             STATE MODEL is confused strands graphics on air, so it is never gated
@@ -422,58 +1333,83 @@ export function LayersPanel({
             stands; reachability is a different question. With either hop down the
             command does not leave, so the button was not a remedy, only the
             appearance of one. It returns the instant both hops do.
-          */}
-          <Button
-            variant="neutral"
-            disabled={needsCaspar}
-            aria-label="Clear all on-air items"
-            data-verb-tone="clear"
-            title={
-              needsCaspar
-                ? needsCasparReason
-                : 'Every on-air graphic is cut immediately, with no outro'
-            }
-            onClick={() => void clearAll()}
-          >
-            <Icon icon={XSquare} />
-            CLEAR ALL
-          </Button>
-          <Button
-            variant="neutral"
-            disabled={linkDown || items.length === 0}
-            aria-label="Remove all items"
-            data-verb-tone="remove"
-            title="Clears anything on air and empties every row"
-            onClick={() => void removeAll()}
-          >
-            <Icon icon={Trash2} />
-            REMOVE ALL
-          </Button>
-          {/*
-            CONFIGURE — offered whether or not a bank exists.
 
-            It used to be gated on `bank !== null`, which meant the ONE screen
-            that tells the operator to go and configure something was the one
-            screen with no way to do it. The modal is still honest about which
-            parts it cannot change (channel, start and count are fixed at
-            install), and says so in words rather than pointing at a control that
-            is not there.
+            ⭐ B-122 — AND THE VERB BEHIND IT IS NOW AS BROAD AS THE BUTTON LOOKS.
+            Always-enabled was only ever half the promise: the bridge still filtered
+            its candidates on status, so an always-available button could still send
+            nothing and report success. It now clears every row holding a layer,
+            which is why the label and title no longer say "on-air" — they used to
+            describe a narrower act than the one the operator was about to commit.
           */}
-          {/* `neutral`, not `ghost`: a ghost has an icon button's tight padding, so
-              beside the bulk verbs it read as a label rather than a control. Neutral is
-              not invisible — a control still needs a boundary, a hover and a focus
-              ring, whatever colour it has been denied. */}
-          <Button
-            variant="neutral"
-            title={
-              bank === null
-                ? 'No candidate layers are declared yet — see what the bridge needs'
-                : 'Show or hide rows, and name them'
-            }
-            onClick={() => setConfigOpen(true)}
-          >
-            Configure
-          </Button>
+              <Button
+                variant="neutral"
+                disabled={needsCaspar}
+                aria-label="Clear all rows holding a layer"
+                data-verb-tone="clear"
+                title={
+                  needsCaspar
+                    ? needsCasparReason
+                    : 'Every row holding a layer is cut immediately, with no outro — whatever its status reads'
+                }
+                onClick={() => void clearAll()}
+              >
+                <Icon icon={XSquare} />
+                CLEAR ALL
+              </Button>
+              {/*
+            🔴 `R-017` — WITHHELD WHILE ANYTHING IS ON AIR, and RENDERED while it is withheld.
+            The bulk action alone is withheld: individual idle rows stay removable, because
+            "some rows are removable and one is not" is a true statement about the stack and
+            silently removing the idle ones while skipping the live one would break the
+            action's own name.
+
+            ⚠ Do NOT harmonise this with CLEAR ALL's treatment above. That one is ALWAYS
+            enabled and gated only on reachability, because it is the emergency remedy and
+            refusing a remedy strands graphics on air. This one is the opposite kind of act —
+            irreversible, and never a remedy for anything — so it is the one that waits.
+          */}
+              {/*
+            🔴 `CONSOLE-MATCH-03` §2 — THE RULE THAT SPLITS THE IRREVERSIBLE VERB OFF.
+
+            The reference puts a 1 × 17 rule between CLEAR ALL and REMOVE ALL, and the
+            comment on REMOVE ALL above already says why in words: the first two are remedies
+            and this one is never a remedy for anything. A rule costs one pixel and makes the
+            reach into a different group a deliberate act rather than a slip along a row of
+            three identical buttons.
+
+            `aria-hidden`: the grouping is already stated by every label and title beside it,
+            and a separator announced to a screen reader in the middle of three verbs is noise.
+          */}
+              <span className="cg-bulk-divider" aria-hidden="true" />
+              <Button
+                variant="neutral"
+                disabled={linkDown || items.length === 0 || removeBlockedCount > 0}
+                aria-label="Remove all items"
+                data-verb-tone="remove"
+                title={
+                  removeBlockedCount > 0
+                    ? `${String(removeBlockedCount)} row(s) are on air, and REMOVE ALL cannot be undone. Take them off air first — STOP ALL runs their outros, CLEAR ALL cuts immediately.`
+                    : 'Clears anything on air and empties every row'
+                }
+                onClick={() => void removeAll()}
+              >
+                <Icon icon={Trash2} />
+                REMOVE ALL
+              </Button>
+            </>
+          )}
+          {/*
+            🔴 `STATION-CHROME-02` §1 — CONFIGURE IS GONE FROM THIS BAR.
+
+            It was a deep link into Station setup's Layers tab, and it was the THIRD door
+            into a room the status bar already has one of. The owner's decision is one door;
+            the settings dialog opens from SETTINGS and its rail names this section.
+
+            ⚠ What it was protecting is kept, and is the reason the EMPTY STATE below still
+            deep-links: an operator with no declared bank is looking at a list that cannot
+            explain itself, and that screen must carry its own way to the explanation. A bar
+            button beside thirty populated rows was never doing that job.
+          */}
           {/* NARROW — the hamburger that brings the Inspector up as an overlay.
               Only on small screens: with two columns the Inspector is already
               there and a toggle would be a control that does nothing visible. */}
@@ -488,6 +1424,18 @@ export function LayersPanel({
               <Icon icon={PanelRight} />
             </Button>
           )}
+          {/*
+            🔴 `RUNTIME-REDESIGN-01` PHASE 5 built the SHOW / HIDE MONITORS toggle here, and
+            `AUDIT-CLOSE-01` B1 MOVED IT to the app header — `features/shell/AppHeader.tsx`.
+
+            The flag, the two names, the `aria-expanded` and the `aria-controls` are all
+            unchanged; only the placement moved, and it moved because the argument that put it
+            here has been withdrawn. Phase 5 wrote _"Placed HERE, not in a top bar — the app
+            has no app-head"_, and the app had no app-head because §1.1 recorded that absence
+            and no phase ever decided it. An unmeasured absence justifying a placement is the
+            shape the audit found; the header exists now, and the reference draws this control
+            in it.
+          */}
           {/* THE WAY BACK. Always reachable once anything is customised, so an
               operator who drags a panel somewhere useless at 2 a.m. is never
               stuck with it. */}
@@ -513,11 +1461,16 @@ export function LayersPanel({
         (`ChannelScope` in `App`), because the channel owns PGM and PVW as well as
         this list: a strip scoped to the layer panel would have left the monitors
         showing channel 1 while the tab said channel 2. The two axes still never
-        share a strip — a single "Channel 1 | Channel 2 | Playout" row could not
+        share a strip — a single "Channel 1 | Channel 2 | STATION LAYERS" row could not
         say whose playout it meant — they are simply nested at the right levels.
       */}
-      <Tabs tabs={tabs} activeId={activeTab} onSelect={setActiveTab} ariaLabel="Layer surfaces">
-        {activeTab === 'layers' ? (
+      <TabPanel activeId={activeTab}>
+        {!selectedHeld ? (
+          // `CENTRAL-BRIDGE-01` (D4) — see `selectedHeld`: a fact, in place of every tab's rows.
+          <div style={styles.empty} role="status" data-layers-not-held="">
+            This channel is not in your sign-in.
+          </div>
+        ) : activeTab === 'layers' ? (
           !listReady ? (
             /*
               §3 — WAITING, said in a way that cannot be read as EMPTY.
@@ -537,11 +1490,28 @@ export function LayersPanel({
               said on one.
             */
             <div style={styles.empty} role="status" data-layers-loading="">
-              <strong style={{ color: colors.text }}>Loading the layer list…</strong>
-              <span>
-                Waiting for the bridge to send the declared rows. This is not an empty list — the
-                rows appear as soon as it answers.
-              </span>
+              {listFailed ? (
+                /*
+                  🔴 `DELTA A` §A2 — IT WAS ANSWERED, AND THE ANSWER WAS NO.
+
+                  The owner saw the other branch survive a refused read forever: a console that
+                  was signed in, with a live link, sitting on "Loading the layer list…" with
+                  nothing coming. "Waiting" was not true — the bridge had already answered.
+
+                  It states what happened and stops. No advice and no mechanism: the read
+                  re-runs by itself when the sign-in state changes (`useBridgeSnapshot`), so
+                  there is nothing for the operator to do and nothing to tell them to press.
+                */
+                /*
+                  🔴 `R-093` (`RELEASE-0114-01` Part C) — THE STATE, AND NOTHING ELSE. Each branch
+                  used to explain itself ("Waiting for the bridge to send the declared rows. This is
+                  not an empty list — …"): read once, never again, on an operator surface that
+                  carries no explanatory prose. The title says the state; the absence is pinned.
+                */
+                <strong style={{ color: colors.text }}>The layer list was refused.</strong>
+              ) : (
+                <strong style={{ color: colors.text }}>Loading the layer list…</strong>
+              )}
             </div>
           ) : bank === null ? (
             <div style={styles.empty}>
@@ -551,11 +1521,14 @@ export function LayersPanel({
                 layers are fixed at install: set them in the bridge&rsquo;s fixed-layers config file
                 and restart it.
               </span>
+              {/* `STATION-CHROME-02` §1 — this used to name a Configure button in the bar
+                  above. That button is gone, so the sentence names where the section
+                  actually is: one door, and the rail inside it. */}
               <span>
-                Once a range exists, <strong>Configure</strong> is where you show or hide individual
-                rows and give them names.
+                Once a range exists, <strong>SETTINGS ▸ Layers</strong> is where you show or hide
+                individual rows and give them names.
               </span>
-              <Button variant="secondary" onClick={() => setConfigOpen(true)}>
+              <Button variant="secondary" onClick={() => openStationSetup('candidate-layers')}>
                 What the bridge needs
               </Button>
             </div>
@@ -580,38 +1553,253 @@ export function LayersPanel({
                 changes or the change is never announced. `status` and not `alert` —
                 nothing is wrong, this is the ordinary first second of a page.
               */}
-              <div style={styles.awaitingStrip} role="status">
-                {awaitingRows > 0 && (
-                  <>
-                    {/* The same mark the waiting ROWS wear, and it MOVES — the one
-                        thing at rest on this table never does. Shape before colour,
-                        as everywhere else on this surface. */}
-                    <Icon
-                      icon={LoaderCircle}
-                      size={13}
-                      style={{ animation: 'cg-spin 1s linear infinite' }}
-                    />
-                    <span
-                      data-layers-awaiting=""
-                      title={AWAITING_PANEL_NOTICE}
-                      style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}
-                    >
-                      {AWAITING_PANEL_NOTICE}
-                    </span>
-                  </>
-                )}
+              {showSkips && (
+                /*
+                  `role="alert"`, not `status`: rows the operator was looking at are
+                  GONE. That is not the ordinary first second of a page, which is what
+                  the strip below reports — it is a change to their list that nothing
+                  else announces, and it must interrupt.
+                */
+                <div style={styles.restoreSkipStrip} role="alert" data-restore-skips="">
+                  <Icon icon={TriangleAlert} size={13} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <strong>
+                      {restoreSkips.length} {restoreSkips.length === 1 ? 'row' : 'rows'} did not
+                      come back
+                    </strong>{' '}
+                    after the bridge restarted:{' '}
+                    {/*
+                      `B-233` — THE ROWS, IN THE OPERATOR'S WORDS. This printed
+                      `item-e602d912-… — its template is no longer registered`: a raw item id
+                      in a sentence about rows the operator knows by name, in the panel that
+                      names them. Same composition as the migrations strip below, through the
+                      same module — and each name in its own `<bdi>`, because a Persian row
+                      name beside a Latin template name with ` · ` between them is exactly
+                      the mixture whose layout the bidi algorithm would otherwise decide.
+                    */}
+                    {restoreSkips.map((s, i) => (
+                      <span key={s.itemId}>
+                        {i > 0 ? '; ' : ''}
+                        <OperatorNames name={skipName(s)} />
+                        {` — ${restoreSkipReason(s)}`}
+                      </span>
+                    ))}
+                    .
+                  </span>
+                  <Button
+                    variant="ghost"
+                    aria-label="Dismiss the restore notice"
+                    onClick={() => {
+                      setDismissedSkips(skipsKey);
+                      // `CENTRAL-BRIDGE-01` — on the bridge too, for this channel, so every console
+                      // on it stops showing it (the bulk verbs' scope: bare on one channel).
+                      void window.cg.stack
+                        .dismissRestoreReport({ part: 'skipped', ...bulkScope })
+                        .catch(() => undefined);
+                    }}
+                  >
+                    <Icon icon={X} size={13} />
+                  </Button>
+                </div>
+              )}
+              {showMigrations && (
+                /*
+                  `role="alert"` as well, and for the harder half of the same reason: the
+                  row IS there, so nothing on screen looks wrong — which is exactly why a
+                  quiet `status` would go unread. The operator has to be told that a bed
+                  came back idle, or they will take it and wonder why the old graphic is
+                  still on top.
+                */
+                <div style={styles.restoreSkipStrip} role="alert" data-restore-migrations="">
+                  <Icon icon={TriangleAlert} size={13} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <strong>
+                      {restoreMigrations.length} {restoreMigrations.length === 1 ? 'row' : 'rows'}{' '}
+                      came back on a different row
+                    </strong>{' '}
+                    after the bridge restarted:{' '}
+                    {/*
+                      `B-232` — THE ROW, IN THE OPERATOR'S WORDS. This said
+                      `item-e602d912-… — it declares live plates, so it moved…`: a raw
+                      item id in a sentence about a row the operator can see, two panels
+                      from the NAME column that names it. The row is named by where it
+                      came back (`to`), which is where he will now find it.
+                    */}
+                    {restoreMigrations.map((m, i) => (
+                      <span key={m.itemId}>
+                        {i > 0 ? '; ' : ''}
+                        <OperatorNames name={migrationName(m)} />
+                        {` — it declares live plates, so it moved from layer ` +
+                          `${String(m.from.layer)} to bed layer ${String(m.to.layer)}` +
+                          (m.demoted
+                            ? ', and came back NOT on air — clear its old layer before taking it'
+                            : '')}
+                      </span>
+                    ))}
+                    .
+                  </span>
+                  <Button
+                    variant="ghost"
+                    aria-label="Dismiss the migrated-row notice"
+                    onClick={() => {
+                      setDismissedMigrations(migrationsKey);
+                      void window.cg.stack
+                        .dismissRestoreReport({ part: 'migrated', ...bulkScope })
+                        .catch(() => undefined);
+                    }}
+                  >
+                    <Icon icon={X} size={13} />
+                  </Button>
+                </div>
+              )}
+              {/*
+                🔴 `AUDIT-CLOSE-01` B2 — THE SUB-BAR the reference draws and §1.1 row 72 said
+                was already here. A search, `Hide empty`, and the tally at the right.
+
+                It sits BETWEEN the panel bar and the sticky column header, which is where the
+                reference puts it, and OUTSIDE the scroll area — a filter that scrolled away
+                from the list it is filtering would be a control you cannot see the effect of.
+              */}
+              <div className="cg-layers-subbar" data-layers-subbar="">
+                <span className="cg-layers-subbar__search">
+                  <Icon icon={Search} size={14} />
+                  <input
+                    type="search"
+                    className="cg-field"
+                    aria-label="Find row or template"
+                    placeholder="Find row or template…"
+                    value={filter.query}
+                    data-layers-search=""
+                    onChange={(e) => setFilter((f) => ({ ...f, query: e.target.value }))}
+                  />
+                </span>
+                <label className="cg-layers-subbar__toggle">
+                  <input
+                    type="checkbox"
+                    checked={filter.hideEmpty}
+                    data-layers-hide-empty=""
+                    onChange={(e) => setFilter((f) => ({ ...f, hideEmpty: e.target.checked }))}
+                  />
+                  Hide empty
+                </label>
+                {/*
+                  🔴 THE AWAITING LIVE REGION, on a line that exists either way.
+
+                  It was a strip of its own reserving 26.4 px of the LIST permanently, for a
+                  message the operator sees for about a second at boot. The property it exists
+                  for — rows must not move under a reaching hand when the message goes — is
+                  kept and made stronger: this bar's height is declared, so nothing can shift
+                  whether the message is here or not. See `styles.awaitingInBar`.
+
+                  `role="status"` sits on the ALWAYS-PRESENT wrapper and not on the message: a
+                  live region must be in the tree before its content changes or the change is
+                  never announced.
+                */}
+                <span style={styles.awaitingInBar} role="status">
+                  {awaitingRows > 0 && (
+                    <>
+                      {/* The same mark the waiting ROWS wear, and it MOVES — the one
+                          thing at rest on this table never does. Shape before colour,
+                          as everywhere else on this surface. */}
+                      <Icon
+                        icon={LoaderCircle}
+                        size={13}
+                        style={{ animation: 'cg-spin 1s linear infinite' }}
+                      />
+                      <span
+                        data-layers-awaiting=""
+                        title={AWAITING_PANEL_NOTICE}
+                        style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      >
+                        {AWAITING_PANEL_NOTICE}
+                      </span>
+                    </>
+                  )}
+                </span>
+                {/*
+                  THE TALLY — `loaded`, the air count, and how much of the list is showing.
+
+                  The air number is `tally.onAir`, the SAME one the column header wears in the
+                  air colour, passed rather than re-counted: two numbers about air on one
+                  surface that could disagree is what `B-213` is about.
+
+                  `N of M rows` is what keeps the override honest. A query can leave a row on
+                  screen that does not match it (see `layerFilter.ts`), and the operator can
+                  always see how many rows exist to compare against.
+                */}
+                <span className="cg-layers-subbar__tally" data-layers-tally="">
+                  {/*
+                    🔴 `CONSOLE-LOOK-06` §3 — THREE FACTS, THREE WEIGHTS, and the sizes are the
+                    hierarchy rather than decoration.
+
+                    Measured in the reference: the loaded count is 10 px, borderless and
+                    unpadded; the air count is an 11 px CHIP; the results hint is 12 px. How
+                    many rows are loaded is background, how many are on air is not, and the
+                    type says so before a word is read.
+                  */}
+                  <span className="cg-layers-subbar__loaded">{filterTally.loaded} loaded</span>
+                  {/*
+                    🔴 DELTA D5 — THE TWO STATE COUNTS LIVE HERE NOW, and they are the ones that
+                    used to sit inside the table's STATE head (`LayerTableHeader` says why they
+                    left). `B-213`'s rule travels with them unchanged: on air and in error are
+                    TWO numbers meaning two things, in two colours, never added together.
+
+                    ⚠ The air count keeps §4's stale treatment. `unverifiable` does not rename
+                    it and does not hide it — it remains a true count of what OUR list says is
+                    on air; what it stops doing is wearing the air colour, because with neither
+                    hop up nothing is confirming it (`B-081`).
+                  */}
+                  <span
+                    data-layers-tally-onair=""
+                    data-air-tally={String(tally.onAir)}
+                    className="cg-layers-subbar__onair"
+                    {...(tallyUnverifiable ? { 'data-unverifiable': '' } : {})}
+                    aria-label={`${String(tally.onAir)} items on air`}
+                    title={
+                      tallyUnverifiable
+                        ? `${String(tally.onAir)} on air — what this console believes is on air. CasparCG cannot be reached, so nothing is confirming it right now.`
+                        : `${String(tally.onAir)} on air — rows this console believes are on air or unsettled: a play CasparCG accepted, or one still waiting for its answer. A refused row is counted separately.`
+                    }
+                  >
+                    {tally.onAir} on air
+                  </span>
+                  {/*
+                    🔴 `B-301` — the ROWS in error (`isRowError`, the predicate `tally` counts by),
+                    listed on a press, each dismissable. Absent with none.
+                  */}
+                  <RowErrorsBadge
+                    items={items}
+                    nameOf={(item) =>
+                      operatorRowName(
+                        {
+                          itemId: item.itemId,
+                          templateId: item.templateId,
+                          ...(item.slot !== undefined ? { slot: item.slot } : {}),
+                        },
+                        bank,
+                        templates,
+                      )
+                    }
+                  />
+                  {/*
+                    🔴 `N/M rows`, reversing `CONSOLE-MATCH-03`'s ARGUED (d).
+
+                    That argument was that "29/29 rows at plant scale reads as arithmetic" while
+                    the words do not. Standing in front of it: this sits in a tally of three
+                    facts that the operator SCANS rather than reads, the other two are already
+                    `N loaded` and `N on air`, and a fraction is the one form that says
+                    "shown out of existing" without a preposition. The plant's 29 was also the
+                    mock's number, not the station's — the real bank shows seven.
+                  */}
+                  <span data-layers-tally-rows="">
+                    {filterTally.shown}/{filterTally.total} rows
+                  </span>
+                </span>
               </div>
               <div style={styles.list} ref={listRef}>
                 {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
-                <LayerTableHeader
-                  density={density}
-                  onAirCount={onAirCount}
-                  // §4 — `unreachable` only, never the boot window: a count that
-                  // greyed itself for the first second of every reload would teach
-                  // the operator to stop reading the grey.
-                  unverifiable={linkDown || casparReach === 'unreachable'}
-                />
-                {rowBindings.map(({ slot, binding }, index) => {
+                <LayerTableHeader density={density} />
+                {shownRowBindings.map(({ slot, binding }, index) => {
                   /*
                     THE `?? null` THAT USED TO BE HERE IS THE BUG, and it is worth
                     naming because it reads as harmless: a bound slot whose item had
@@ -631,44 +1819,265 @@ export function LayersPanel({
                     after the state cell had stopped.
                   */
                   const item = binding.kind === 'bound' ? binding.item : null;
-                  const template = item !== null ? (templates.get(item.templateId) ?? null) : null;
-                  return (
+                  // `CHANNEL-TEMPLATES-01` — the row's own channel's version.
+                  const template =
+                    item !== null ? (templates.get(item.templateId, slot.channel) ?? null) : null;
+                  /*
+                    `single-clock-look-switch` — THE GROUP BREAK, drawn once, at the first
+                    bed row.
+
+                    The list is descending by layer and the beds are the lowest layers, so
+                    they already fall at the bottom — which is also where they are on air.
+                    What is missing without this is any statement that the bottom of the
+                    list is a DIFFERENT KIND of row: `wrong-bank` refuses a load across the
+                    line, and a refusal about a boundary nobody can see is not actionable.
+
+                    Derived from the canonical predicate against the previous row rather
+                    than from a layer number, so it stays correct for a station whose bed
+                    rows are not 1–9.
+                  */
+                  // Against the VISIBLE list — the break belongs above the first bed row the
+                  // operator can actually see, not above one a filter has removed.
+                  const previous = shownRowBindings[index - 1];
+                  const startsBedGroup =
+                    isLowBankLayer(bank, slot.layer) &&
+                    (previous === undefined || !isLowBankLayer(bank, previous.slot.layer));
+                  const row = (
                     <LayerRow
                       key={slot.layer}
                       slot={slot}
                       binding={binding}
                       template={template}
-                      // `#` — plain display order, 1 at the top of THIS list.
-                      displayPosition={index + 1}
-                      // The default alias's number — the layer's FIXED place in the
-                      // bank, which ticking and unticking must never renumber. See
-                      // `bankPosition` for why the two are deliberately separate.
-                      bankPosition={bankPosition(bank, slot.layer)}
+                      // 🔴 `DESKTOP-APPS-01-D` h — `#` IS THE AMCP LAYER. A search, a tick or
+                      // a filter can never renumber it, because it is not a position at all.
+                      displayPosition={slot.layer}
+                      // …and so is the default name's number (`Layer 99`, `Bed 59`).
+                      defaultAlias={defaultLayerAlias(bank, slot.layer)}
+                      // The SAME predicate the group break above is drawn from, and the
+                      // same one the bridge refuses on — one derivation, three readers.
+                      acceptsBank={isLowBankLayer(bank, slot.layer) ? 'low' : 'high'}
                       density={density}
                       selected={item !== null && item.itemId === selectedId}
-                      dirty={item !== null && isItemDirty(item.itemId, item.fields)}
+                      /*
+                        `B-232` (owner) — mark the rows the notice above is about, so the
+                        operator can SEE which rows one press of PUT BACK ON AIR would
+                        restore instead of carrying their names down from the strip.
+                        Matched on `itemId`, which is what the restore is addressed by
+                        (`emptiedAir.restore({ itemIds })`), so the mark and the press can
+                        never disagree about the set.
+                      */
+                      emptiedAir={item !== null && emptiedAirItemIds.has(item.itemId)}
+                      /*
+                        B-139 — the applied-plate baseline is SUPPLIED, through the
+                        canonical `appliedPlateSources` the Inspector already uses.
+                        Omitting it used to collapse every plate's baseline to `''`,
+                        so this chip disagreed with the Inspector's in both
+                        directions — and the UPDATE verb, which reads this same
+                        boolean, refused an un-assignment the operator had staged.
+                        The chip and the verb answer ONE question and take ONE value.
+                      */
+                      dirty={
+                        item !== null &&
+                        isItemDirty(
+                          item.itemId,
+                          item.fields,
+                          appliedPlateSources(
+                            item.templateId,
+                            template?.liveSources?.sources ?? [],
+                            itemChannelOf(item, slots, defaultsChannel),
+                          ),
+                          item.lookSourceOverride,
+                          /*
+                            🔴 The POSITION is absent here and the TIMING is present, which looks
+                            inconsistent and is not.
+
+                            A position has to be RESOLVED against the template's default before
+                            it can be compared (`defaultPositionOf`), and this row does not hold
+                            that; passing `undefined` is the honest reading of "this caller
+                            cannot answer" rather than a claim of clean. Filed as `B-250`.
+
+                            The timing needs no resolution — `timingOverride` IS the applied
+                            truth, on the item this row already has — so there is nothing to stop
+                            this chip agreeing with the Inspector's about it.
+                          */
+                          undefined,
+                          item.timingOverride,
+                        )
+                      }
                       // R-022 — read through the canonical `isRehearsing`, never a
                       // local `.some()`: the bridge refuses PLAY on the same
                       // predicate, and if the two ever disagreed the UI would offer a
                       // take the bridge rejects — or worse, allow one it thought was
                       // interlocked off.
                       rehearsing={item !== null && isRehearsing(rehearsals, item.itemId)}
+                      /*
+                        `add-multibox-audio` — the plates this row's item actually OWNS, for
+                        the read-only audio summary.
+
+                        Supplied from the SAME `liveRows` the LIVE PLATES tab renders rather
+                        than re-derived from the template's declaration. The two are not the
+                        same set — a declared plate that is not seated cannot be audible — and
+                        a summary reading `audio 2/4` while the strip below listed three
+                        plates would be the console disagreeing with itself about how many
+                        boxes a row has.
+
+                        🔴 `B-164` — `rowPlateAudioOf`, not `seatedPlatesOf`. The bare id list
+                        is still exactly right for SOLO and PANIC, which address a SET; the
+                        chip needs each plate's `held` and `volume` as well, because its
+                        denominator is what the ACTIVE LOOK SHOWS and its numerator is
+                        AUDIBILITY rather than intent. Same rows, same pass, two questions.
+                      */
+                      seatedPlates={item === null ? [] : rowPlateAudioOf(liveRows, item.itemId)}
+                      audioLockedOf={
+                        item === null
+                          ? undefined
+                          : (plateId: string) => liveSourceLocked(item.itemId, plateId)
+                      }
+                      // `FIELD-FIXES-01-A` — the ledger half of PLAY's gate, off the RAW ledger
+                      // (every channel), exactly the fact the bridge's `#ownsLiveSeats` reads.
+                      holdsLiveSeats={item !== null && live.some((l) => l.itemId === item.itemId)}
+                      /*
+                        Golden rule 11 — the row's operator name for its audio dialog, through
+                        the ONE composition, from the bank and the registry this panel holds.
+                      */
+                      operatorName={
+                        item === null
+                          ? undefined
+                          : operatorRowName(
+                              { itemId: item.itemId, templateId: item.templateId, slot: item.slot },
+                              bank,
+                              templates,
+                            )
+                      }
                       onSelect={onSelectionChange}
                       onUpdate={onUpdate}
                     />
                   );
+                  if (!startsBedGroup) return row;
+                  return (
+                    <Fragment key={slot.layer}>
+                      <div style={styles.bedGroupHead} data-bed-group-head="">
+                        Graphics beds — below the live plates
+                      </div>
+                      {row}
+                    </Fragment>
+                  );
                 })}
+              </div>
+              {/*
+                🔴 `CONSOLE-MATCH-03` §2 — THE FOOTER HINT, which this card did not have.
+
+                The reference closes the layers card with one muted line naming the three
+                things a newcomer to this table cannot guess: that CLICKING a populated row is
+                what opens the Inspector, that ON PVW composites rather than airs, and that
+                PLAY is the take. Every one of those is a thing an operator currently learns by
+                pressing something and seeing what happens, on a console where pressing
+                something is the expensive way to find out.
+
+                OUTSIDE the scroll area, like the sub-bar above it and for the mirror reason:
+                a hint that scrolls away from the list it describes is only readable by
+                accident. `role="note"` and not `status` — it never changes, so there is
+                nothing to announce.
+              */}
+              <div className="cg-layers-foothint" role="note" data-layers-foothint="">
+                <Icon icon={Info} size={12} />
+                <span>
+                  Click a populated row to inspect · ON PVW adds to the composite · Play takes the
+                  row on air
+                </span>
               </div>
             </>
           )
+        ) : activeTab === 'live-sources' ? (
+          <LiveSourcesPanel
+            // §2 — the LEDGER's rows PLUS the frames it has not seated. Every other consumer
+            // keeps `liveRows`: `rowPlateAudioOf`'s fraction is seated-only (`B-164`), and so
+            // is PANIC's scope.
+            rows={liveRowsWithFrames}
+            ledgerReady={ledgerReady}
+            // `FIELD-FIXES-01` K — through the bridge's own predicate, over the raw ledger.
+            silenceable={silenceHasTarget(
+              live,
+              ledgerReady,
+              scopeChannel === null
+                ? { kind: 'station' }
+                : { kind: 'channel', channel: scopeChannel },
+            )}
+            blind={liveBlind}
+            /*
+              OPEN ROW means OPEN THE ROW, so it selects the item AND returns to the
+              list the row lives on. Selecting alone would leave the operator looking
+              at the same live-layer list wondering whether the click did anything —
+              and the point of the control is to hand them the verbs, which are over
+              there.
+            */
+            onSelectOwner={(itemId) => {
+              onSelectionChange(itemId);
+              setActiveTab('layers');
+            }}
+            onApplyVolumes={applyPlateVolumes}
+            plateLabelOf={(itemId, plateId) => {
+              // `B-309` — `Plate N` from the row's own template, for the refused-audio toast.
+              const owner = itemById.get(itemId);
+              return owner === undefined
+                ? undefined
+                : plateLabelOf(
+                    templates.get(owner.templateId, boundChannelOf(owner, slots)),
+                    plateId,
+                  );
+            }}
+            onOpenAudio={(itemId, plateId) => {
+              if (itemById.get(itemId) === undefined) {
+                // The ledger names an item the stack no longer carries — the STRANDED case,
+                // whose only verb is RELEASE. Nothing to open, and saying so beats silence.
+                reportCommandError(
+                  'No row on the stack owns this layer, so there is no audio dialog to open — ' +
+                    'release the layer from this tab instead.',
+                );
+                return;
+              }
+              setPlateAudioFor({ itemId, plateId });
+            }}
+            onPanic={panic}
+            panicChannel={scopeChannel}
+          />
         ) : (
-          <PlayoutPanel layers={playout} />
+          <StationLayersPanel layers={playoutOnScreen} orphans={orphansOnScreen} />
         )}
-      </Tabs>
-      {configOpen && (
-        <FixedBankConfigModal bank={bank} slots={slots} onClose={() => setConfigOpen(false)} />
-      )}
+      </TabPanel>
       {confirmDialog}
+      {plateAudioFor !== null &&
+        (() => {
+          const audioItem = itemById.get(plateAudioFor.itemId);
+          if (audioItem === undefined) return null;
+          const audioTemplate = templates.get(
+            audioItem.templateId,
+            boundChannelOf(audioItem, slots),
+          );
+          if (audioTemplate === undefined) return null;
+          return (
+            <LivePlateAudioDialog
+              item={audioItem}
+              template={audioTemplate}
+              name={operatorRowName(
+                {
+                  itemId: audioItem.itemId,
+                  templateId: audioItem.templateId,
+                  slot: audioItem.slot,
+                },
+                bank,
+                templates,
+              )}
+              seatedPlates={rowPlateAudioOf(liveRows, audioItem.itemId)}
+              audioLockedOf={(plateId) => liveSourceLocked(audioItem.itemId, plateId)}
+              focusPlateId={plateAudioFor.plateId}
+              onApplyVolumes={(volumes) => applyPlateVolumes(audioItem.itemId, volumes)}
+              onClose={() => {
+                setPlateAudioFor(null);
+              }}
+            />
+          );
+        })()}
     </Panel>
   );
 }

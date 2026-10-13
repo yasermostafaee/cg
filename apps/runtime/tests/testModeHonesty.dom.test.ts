@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { StrictMode, createElement } from 'react';
+import { fillBridgeStub } from './support/authStub.js';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -40,12 +41,17 @@ function stubLink(status: 'live' | 'disconnected' | 'offline-mock'): void {
   const reach: Reachability =
     status === 'offline-mock' ? 'test-mode' : status === 'disconnected' ? 'bridge-down' : 'both-up';
   const stub = {
-    link: { status: () => status, onStatusChanged: () => () => undefined },
+    link: {
+      status: () => status,
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub(reach),
     stack: { take: noopAsync, next: noopAsync, stop: noopAsync, out: noopAsync, remove: noopAsync },
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 async function render(el: ReturnType<typeof createElement>): Promise<HTMLDivElement> {
@@ -78,6 +84,9 @@ const noop = (): Promise<{ accepted: boolean }> => Promise.resolve({ accepted: t
  */
 function row(item: StackItemState): ReturnType<typeof createElement> {
   return createElement(LayerRow, {
+    displayPosition: 1,
+    acceptsBank: 'high' as const,
+    rehearsing: false,
     slot: {
       channel: 1,
       layer: 70,
@@ -90,7 +99,7 @@ function row(item: StackItemState): ReturnType<typeof createElement> {
     // see `RowBinding`.
     binding: { kind: 'bound' as const, item },
     template: { templateId: 'tpl-1', templateType: 'clock', fields: [] },
-    bankPosition: 1,
+    defaultAlias: 'Layer 1',
     selected: false,
     dirty: false,
     onSelect: () => undefined,
@@ -166,8 +175,8 @@ describe('test mode does not claim real air — R-006', () => {
     const alert = el.querySelector('[role="alert"]');
     expect(alert?.getAttribute('aria-label')).toBe('Bridge disconnected');
     expect(alert?.textContent).toContain('NOTHING CAN REACH AIR');
-    // Refused, not queued — the operator must know to reissue.
-    expect(alert?.textContent).toContain('refused, not queued');
+    // `R-093` — takes are refused while it is gone: the one fact, said once.
+    expect(alert?.textContent).toContain('Takes are refused until it is back.');
   });
 
   it('renders NOTHING when the link is live — no banner IS the signal air is reachable', async () => {

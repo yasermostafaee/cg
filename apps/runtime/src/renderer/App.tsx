@@ -1,13 +1,39 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { mismatchedChannels, type TemplateInfo } from '@cg/shared-ipc';
+import type { StackItemState } from '@cg/shared-schema';
+import { useTemplateIndex } from './hooks/useTemplateIndex.js';
+import { boundChannelOf } from './features/channels/itemChannel.js';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
 import { AuditPanel } from './features/audit/AuditPanel.js';
 import { FailoverBanner } from './features/connections/FailoverBanner.js';
 import { ConnectionBanner } from './features/status/ConnectionBanner.js';
+import { BridgeSkewBanner } from './features/status/BridgeSkewBanner.js';
+import { BridgeSessionBanner, LicenseGraceBanner } from './features/status/BridgeSessionBanner.js';
 import { RasterMismatchBanner } from './features/status/RasterMismatchBanner.js';
-import { ServerSettingsPanel } from './features/connections/ServerSettingsPanel.js';
-import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
+import { losingAirChecks, OutputMissingBanner } from './features/status/OutputMissingBanner.js';
+import { getRefusal, onRefusal } from './features/status/refusalStore.js';
+import { unlicensedChannels } from './features/channels/channelAir.js';
+import { channelSignals, inScope } from './features/channels/channelSignals.js';
+import { UnlicensedLine } from './features/channels/UnlicensedLine.js';
+import { useChannelAirs } from './features/channels/useSelectedChannel.js';
+import { useChannelSettings } from './hooks/useChannelSettings.js';
+import { useLink } from './hooks/useLink.js';
+import { useBridgeReadable } from './hooks/useBridgeSnapshot.js';
+import { StationSetupDialog } from './features/stationSetup/StationSetupDialog.js';
+import {
+  closeStationSetup,
+  openStationSetup,
+  useStationSetupRequest,
+} from './features/stationSetup/stationSetupStore.js';
+import { OrphanLayersBanner, orphanWarningChannels } from './features/layers/OrphanLayersBanner.js';
+import { useForeignDismissals } from './features/layers/foreignNotice.js';
+import { EmptiedAirNotice, emptiedAirChannels } from './features/layers/EmptiedAirNotice.js';
 import { LayersPanel } from './features/layers/LayersPanel.js';
 import { ChannelScope } from './features/channels/ChannelScope.js';
+import { useChannelBankState } from './features/channels/useSelectedChannel.js';
+import { onChannel } from './features/stack/onAir.js';
+import { AppHeader } from './features/shell/AppHeader.js';
+import { ConsoleCloseGuard } from './features/shell/ConsoleCloseGuard.js';
 import { MonitorStrip } from './features/monitors/MonitorStrip.js';
 import { ShellDivider } from './ui/ShellDivider.js';
 import { useShellLayout } from './hooks/useShellLayout.js';
@@ -16,19 +42,29 @@ import { Inspector } from './features/inspector/Inspector.js';
 import { applyDraft } from './features/inspector/applyDraft.js';
 import { clearDraft } from './features/inspector/draftStore.js';
 import { LockOverlay } from './features/lock/LockOverlay.js';
+import { SignInOverlay } from './features/auth/SignInOverlay.js';
+import { FirstRunScreen } from './features/firstRun/FirstRunScreen.js';
+import { useAuthCapabilities } from './hooks/useAuthCapabilities.js';
 import { CommandToast } from './features/status/CommandToast.js';
+import { RefusalBanner } from './features/status/RefusalBanner.js';
+import { takeRefusalChannels } from './features/layers/takeRefusalLine.js';
+import { useFixedSlots } from './hooks/useFixedLayers.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { Tooltip } from './ui/Tooltip.js';
 import { useConnections } from './hooks/useConnections.js';
+import { useEngineSessions } from './hooks/useEngineSessions.js';
+import { useBackupChannels } from './hooks/useBackupChannels.js';
 import { initDelimiters } from './features/inspector/delimiterStore.js';
 import { initSources } from './features/sources/sourceStore.js';
-import { SourcesModal } from './features/sources/SourcesModal.js';
 import { useStackHousekeeping } from './hooks/useStackHousekeeping.js';
-import { useLink } from './hooks/useLink.js';
-import { useLock } from './hooks/useLock.js';
+import { useLock, useLockCoverage } from './hooks/useLock.js';
 import { useOrphans } from './hooks/useOrphans.js';
+import { useClearedOutside } from './hooks/useClearedOutside.js';
 import { useOwnedOccupancy } from './hooks/useOwnedOccupancy.js';
+import { useEmptiedAir } from './hooks/useEmptiedAir.js';
 import { useStack } from './hooks/useStack.js';
+import { useRehearse } from './hooks/useRehearse.js';
+import { isRehearsing } from '@cg/shared-ipc';
 import { appShell } from './layout.js';
 
 declare global {
@@ -75,20 +111,110 @@ export function isEditable(target: EventTarget | null): boolean {
 
 export function App(): JSX.Element {
   const items = useStack();
+  /*
+    `PASSES-CYCLE-ONLY-26` §A1.2 — the TEMPLATE facts an UPDATE press needs. What pass timing a
+    press may send depends on the template's stated mode, and `applyDraft` is deliberately free
+    of stores; the index is held here, beside the stack it is keyed on.
+  */
+  // `FIELD-FIXES-01` B — a mock item carries no `slot`; the bank row it is bound to says its channel.
+  const fixedSlots = useFixedSlots();
+  // `CHANNEL-TEMPLATES-01` — each row's template as ITS channel lists it.
+  const templates = useTemplateIndex(
+    items.map((i) => ({ templateId: i.templateId, channel: boundChannelOf(i, fixedSlots) })),
+  );
+  const playoutOfItem = (item: StackItemState): TemplateInfo['playout'] | undefined =>
+    templates.get(item.templateId, boundChannelOf(item, fixedSlots))?.playout;
+  // B-156 — read ONCE here and threaded to both the layer table and the Inspector.
+  const rehearsals = useRehearse();
   const lock = useLock();
+  // `DESKTOP-APPS-01` — an installed station still in first-run says so at connect.
+  const capabilities = useAuthCapabilities();
+  const setupPhase = capabilities?.setupPhase ?? null;
+  // `B-257` — the lock screen covers the console only when the lock covers ALL of it. A partly
+  // covered console keeps its other channels; the strip names the covered ones.
+  const lockCovers = useLockCoverage().kind === 'all';
   const health = useConnections();
-  const link = useLink();
+  // `RELEASE-0112-01` (`R-085`) — each engine's CG Bridge session, for the status bar's chips.
+  const engines = useEngineSessions();
+  // `RELEASE-0113-01` (`R-089`) — where each channel's lines go on the backup engine (the status bar's count).
+  const backupChannels = useBackupChannels();
   const orphans = useOrphans();
+  // `B-292` — a layer of ours cleared outside CG Control: the banner's third strip, and its mark.
+  const clearedOutside = useClearedOutside();
+  // `FIELD-FIXES-01` L — the same dismissals the orphan strips read, so a mark and its notice agree.
+  const foreignDismissals = useForeignDismissals();
   const ownedOccupancy = useOwnedOccupancy();
+  const emptiedAir = useEmptiedAir();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // R-028 part B — the operator's own workspace geometry (persisted per browser).
   const layout = useShellLayout();
   const [auditOpen, setAuditOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [sourcesOpen, setSourcesOpen] = useState(false);
+  // `STATION-SETUP-02` — ONE settings dialog, opened at a section from five surfaces; the
+  // request lives in a module store so the Inspector and the Layers panel can raise it too.
+  const stationSetup = useStationSetupRequest();
+  /*
+    🔴 `MULTI-CHANNEL-01` — THE INSPECTOR IS THE SELECTED CHANNEL'S, like the table and both
+    monitors it sits beside (`ChannelScope` wraps all four). A row chosen on channel 1 is not
+    edited under channel 2's tab, so the selection resolves among THIS channel's items — the
+    table's own `onChannel` rule. The choice itself is kept: coming back to channel 1 finds it
+    as it was, because a switch is a scope change and never a mutation.
+  */
+  const { viewChannel, verbScope, multiChannel } = useChannelBankState();
   const selected = useMemo(
-    () => items.find((i) => i.itemId === selectedId) ?? null,
-    [items, selectedId],
+    () => onChannel(items, viewChannel).find((i) => i.itemId === selectedId) ?? null,
+    [items, viewChannel, selectedId],
+  );
+
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 L — A CHANNEL'S MESSAGES STAY IN THAT CHANNEL'S VIEW (the owner's
+    rule, 2026-09-23; the classification is in `channelSignals.ts`). The five channel-scoped
+    surfaces below take `verbScope` — the channel on screen on a multi-channel station, `null` with
+    one, where nothing is filtered — and every OTHER channel whose view holds one of them carries a
+    mark on its strip tab, computed here from the SAME readings the surfaces filter, so the mark and
+    the view cannot disagree. The station-wide surfaces (the bridge link, its version, the servers,
+    the status bar, sign-in, the station lock) take no scope at all.
+  */
+  const channelSettingsState = useChannelSettings();
+  const standingRefusal = useSyncExternalStore(onRefusal, getRefusal, getRefusal);
+  const linkLive = useLink() === 'live';
+  // `UI-POLISH-01` G — the Playout's air facts, for the one playlist state that reaches our air.
+  const channelAirs = useChannelAirs();
+  const signals = useMemo(
+    () =>
+      multiChannel
+        ? channelSignals({
+            alarms: [
+              ...(linkLive && health !== null
+                ? losingAirChecks(health.primary).map((c) => c.channel)
+                : []),
+              ...mismatchedChannels(channelSettingsState).map((e) => e.channel),
+            ],
+            warnings: [
+              ...emptiedAirChannels(emptiedAir),
+              ...orphanWarningChannels(orphans, ownedOccupancy, foreignDismissals, clearedOutside),
+              ...(standingRefusal?.channel != null ? [standingRefusal.channel] : []),
+              // `FIELD-FIXES-01` B — a row carrying a refused take's line, shown in ITS view only.
+              ...takeRefusalChannels(items, fixedSlots),
+              // `UI-POLISH-01` G — unlicensed in the Playout: cleared every minute, ours included.
+              ...unlicensedChannels(channelAirs),
+            ],
+          })
+        : undefined,
+    [
+      multiChannel,
+      linkLive,
+      health,
+      channelSettingsState,
+      emptiedAir,
+      orphans,
+      foreignDismissals,
+      ownedOccupancy,
+      clearedOutside,
+      standingRefusal,
+      items,
+      fixedSlots,
+      channelAirs,
+    ],
   );
 
   // Suppress the browser's own context menu app-wide. On a playout machine its entries are
@@ -120,14 +246,19 @@ export function App(): JSX.Element {
   // rather than in the control that uses it: the list is per-STATION, not per
   // field, and a subscription per rendered field would open and close one every
   // time the operator changed selection.
-  useEffect(() => initDelimiters(window.cg), []);
+  //
+  // `DELTA-MULTI-CHANNEL-01-A` A4 — "once" means once each time the console can READ: a pull
+  // refused before the first sign-in left these stores empty for the life of the page (the
+  // bridge pushes nothing to a socket nobody has signed in on, and a sign-in pushes nothing).
+  const readable = useBridgeReadable();
+  useEffect(() => (readable ? initDelimiters(window.cg) : undefined), [readable]);
 
   // D-137 / C-015 — the installation's source CATALOG and the per-plate
   // ASSIGNMENTS, pulled once and kept subscribed for the same reason: both are
   // per-STATION, a second console must gain a binding this one just made without
   // either operator reloading, and a catalog DELETION cascades into the
   // assignments without any browser asking.
-  useEffect(() => initSources(window.cg), []);
+  useEffect(() => (readable ? initSources(window.cg) : undefined), [readable]);
 
   // Stack housekeeping — the prune of per-item state for items that have left the
   // stack, plus the file-attachment restore. HERE because `App` is the one
@@ -145,6 +276,23 @@ export function App(): JSX.Element {
   // means.
   const monitorFocused = layout.focus === 'pgm' || layout.focus === 'pvw';
   const showWorkspace = layout.focus !== 'inspector';
+  /*
+   * 🔴 `RUNTIME-REDESIGN-01` PHASE 5 — THE MONITORS ARE SHOWN OR NOT, AND NOTHING ELSE DECIDES IT.
+   *
+   * Three things stay independent here: which row is SELECTED (`selectedId`, this file),
+   * which rows are IN PVW (the bridge's rehearse set, `useRehearse`), and whether the
+   * monitors are SHOWN (`layout.monitorsShown`, the APP HEADER's toggle — `AUDIT-CLOSE-01` B1
+   * moved it off the Layers bar, and `MONITORS-01` flipped its default). Each is read and
+   * written by its own control and by nothing else in this tree — a selection never enters
+   * or leaves PVW, a PVW change never selects or deselects, and folding the strip away
+   * touches neither. `workspace-independence.spec.ts` drives all three pairs in both
+   * directions; `workspaceIndependence.dom.test.ts` is the same proof in jsdom.
+   *
+   * The two exceptions are FULLSCREEN, which is a different axis (focus) and was already
+   * here: a fullscreen monitor is still the strip, so it shows through a hidden toggle, and
+   * a fullscreen Layers list hides the strip as it always did.
+   */
+  const monitorsVisible = layout.focus !== 'layers' && (layout.monitorsShown || monitorFocused);
 
   /*
    * THE INSPECTOR IS OPEN IF, AND ONLY IF, SOMETHING IS SELECTED.
@@ -181,22 +329,62 @@ export function App(): JSX.Element {
   return (
     <ShellLayoutProvider layout={layout}>
       <main style={styles.page}>
+        {/*
+          🔴 `AUDIT-CLOSE-01` B1 — THE APP HEADER, above every banner.
+
+          Above them deliberately: the header is the shell's own chrome and the banners are
+          about the STATE of the thing inside it, so a banner appearing must not push the
+          brand, the channel tabs and the two doors down the page. It carries the CHANNEL
+          strip, so the shell gained a header without gaining a line — see the component's
+          own note for the measurement, and for the three controls the reference draws here
+          that this one deliberately does not take.
+        */}
+        <AppHeader
+          layout={layout}
+          onOpenSettings={() => openStationSetup()}
+          onOpenAudit={() => setAuditOpen(true)}
+          {...(signals !== undefined ? { channelSignals: signals } : {})}
+        />
         {/* R-006 — a not-live link means NOTHING can reach air. That is a full-width alert,
           not a pill: the pill lost to the green HEALTHY pill beside it, and the operator
           believed a graphic was on air. Renders nothing when the link is live. */}
         <ConnectionBanner />
-        {/* R-006 — the failover banner describes REAL servers. In test mode there are none,
-          and the mock now honestly reports them `disconnected`, so it would shout
-          "PRIMARY A unhealthy" about hardware that does not exist — new noise, and a fresh
-          implication that a real server is out there, broken. The TEST MODE banner is the
-          truth in that mode and supersedes it. */}
-        {link !== 'offline-mock' && <FailoverBanner health={health} />}
+        {/* B-153 — the bridge PROCESS is older than this page. Reports, never gates. */}
+        <BridgeSkewBanner />
+        {/* `CENTRAL-BRIDGE-01` (D7) — CG Bridge has no Playout session of its own: one line, and a
+          station admin's one-time sign-in. Renders nothing otherwise. */}
+        <BridgeSessionBanner />
+        <LicenseGraceBanner />
+        {/* R-006 — the failover banner describes REAL servers, so it renders NOTHING in test
+          mode. That gate lives INSIDE the component since `RUNTIME-REDESIGN-01` Phase 9 (it was
+          `link !== 'offline-mock' && …` here, where no component test could reach it and the
+          plant pass found the surface unguarded); see the component's header. */}
+        <FailoverBanner health={health} />
         {/* R-030 — a configured raster that contradicts the channel's real video mode
           mis-places EVERY graphic on that channel, and does it silently: nothing else
           in the app would notice, and it only looks wrong on air where nobody here can
           see it. Renders nothing unless the two genuinely disagree — an UNREADABLE mode
           is a gap in the check, not an alarm (see RasterMismatchBanner). */}
-        <RasterMismatchBanner />
+        <RasterMismatchBanner scope={verbScope} />
+        {/* C-029 — a consumer casparcg.config declares that CasparCG is not running means the
+          channel has no program output, and nothing else in the console would say so: AMCP
+          answers, OSC ticks, every pill reads HEALTHY. Renders nothing unless a declared
+          consumer is genuinely missing — or was, the last time the bridge could look. */}
+        <OutputMissingBanner scope={verbScope} />
+        {/* `UI-POLISH-01` G — an unlicensed channel's one line, in its own view only. */}
+        <UnlicensedLine scope={verbScope} />
+        {/*
+          🔴 `CONSOLE-LOOK-06` DELTA R — THE REFUSAL SURFACE, and it is IN FLOW on purpose.
+
+          It sits with the other banners rather than floating, because §4(c) is a hard
+          requirement and not a preference: a refusal about a row must never hide that row nor
+          the control that resolves it, and the toast it replaced did exactly that — it lay
+          over the footer hint and a whole table row. An in-flow banner pushes the workspace
+          down instead, so nothing it says can cost the operator the thing it is talking about.
+
+          It renders NOTHING when no refusal stands, like every banner around it.
+        */}
+        <RefusalBanner scope={verbScope} />
         {/*
         R-028 part B — a RESIZABLE shell. The Inspector is a real column whose
         width the operator owns (dragged or nudged, clamped so neither side can
@@ -221,13 +409,25 @@ export function App(): JSX.Element {
             Load lives on the row and does import+load in one action. */}
             {showWorkspace && (
               <section style={styles.workspace}>
-                {/* PGM / PREVIEW — reserved in their final positions, black and
-                explicitly labelled NOT CONNECTED. Hidden only when the LAYER
-                LIST is the fullscreen panel; a fullscreen monitor is still the
-                strip, showing one box. */}
-                {layout.focus !== 'layers' && (
+                {/* PGM / PREVIEW — reserved in their final positions. Hidden only
+                when the LAYER LIST is the fullscreen panel; a fullscreen monitor is
+                still the strip, showing one box.
+
+                ⚠ CORRECTED 2026-09-07 (`STALE-CLAIMS-02` §4), and again 2026-09-24
+                (`C-016`): PROGRAM shows the Playout's own return, relayed by the
+                bridge, and says "No return signal" / "Return feed stalled" whenever
+                it cannot vouch for a live picture; PREVIEW is `PreviewPanel`, a
+                LOCAL browser render of every rehearsing row (R-022), with no link
+                to be down. Neither is "black and labelled NOT CONNECTED".
+                ⚠ The strip is not rendered while hidden, and that is load-bearing
+                for PROGRAM: its picture request IS the bridge's reason to read the
+                Playout's feed, so a hidden strip pulls nothing. */}
+                {monitorsVisible && (
                   <>
                     <div
+                      /* The toggle's `aria-controls` target and the specs' anchor. */
+                      id="monitor-strip"
+                      data-monitor-strip=""
                       style={
                         /*
                           BOTH branches bound the width (`minWidth: 0` + a clip).
@@ -278,11 +478,27 @@ export function App(): JSX.Element {
                 {!monitorFocused && (
                   <>
                     <div style={styles.chrome}>
-                      <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
+                      {/* B-225 — the playout server stopped carrying what this console put
+                        on air. Here rather than with the five top-of-page banners because it
+                        names ROWS in the list below and offers to act on them; see the
+                        component's own header for the full argument. Renders nothing unless
+                        a reconnect actually took air away. */}
+                      <EmptiedAirNotice notice={emptiedAir} scope={verbScope} />
+                      <OrphanLayersBanner
+                        orphans={inScope(orphans, (o) => o.channel, verbScope)}
+                        ownedOccupancy={inScope(ownedOccupancy, (w) => w.channel, verbScope)}
+                        clearedOutside={inScope(clearedOutside, (e) => e.channel, verbScope)}
+                      />
                     </div>
                     {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed
                     Layers panels, with the playout system's layers on their own tab. */}
                     <LayersPanel
+                      /* `B-232` (owner) — the SAME notice the strip above renders, so the
+                         marked rows and the strip's list are one reading, not two. */
+                      emptiedAirRows={emptiedAir?.rows ?? []}
+                      /* `B-235` — the SAME orphan set the strip above renders, so the
+                         Station layers tab and the strip are one reading, not two. */
+                      orphans={orphans}
                       onSelectionChange={setSelectedId}
                       selectedId={selectedId}
                       layout={layout}
@@ -295,7 +511,7 @@ export function App(): JSX.Element {
                       onUpdate={(id) => {
                         const target = items.find((i) => i.itemId === id);
                         return target !== undefined
-                          ? applyDraft(target)
+                          ? applyDraft(target, playoutOfItem(target))
                           : Promise.resolve({ accepted: false });
                       }}
                     />
@@ -318,10 +534,12 @@ export function App(): JSX.Element {
               <Inspector
                 onClose={closeInspector}
                 item={selected}
+                // B-156 — ONE derivation of "is this row rehearsing", shared with the row picker.
+                rehearsing={selected !== null && isRehearsing(rehearsals, selected.itemId)}
                 onApply={(id) => {
                   const target = items.find((i) => i.itemId === id);
                   return target !== undefined
-                    ? applyDraft(target)
+                    ? applyDraft(target, playoutOfItem(target))
                     : Promise.resolve({ accepted: false });
                 }}
                 onDiscard={(id) => clearDraft(id)}
@@ -370,10 +588,12 @@ export function App(): JSX.Element {
               <Inspector
                 onClose={closeInspector}
                 item={selected}
+                // B-156 — ONE derivation of "is this row rehearsing", shared with the row picker.
+                rehearsing={selected !== null && isRehearsing(rehearsals, selected.itemId)}
                 onApply={(id) => {
                   const target = items.find((i) => i.itemId === id);
                   return target !== undefined
-                    ? applyDraft(target)
+                    ? applyDraft(target, playoutOfItem(target))
                     : Promise.resolve({ accepted: false });
                 }}
                 onDiscard={(id) => clearDraft(id)}
@@ -381,25 +601,43 @@ export function App(): JSX.Element {
             </div>
           </>
         )}
-        <StatusBar
-          onOpenAudit={() => setAuditOpen(true)}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onOpenSources={() => setSourcesOpen(true)}
-        />
+        {/* `AUDIT-CLOSE-01` B1 — the two doors are in the app header now; this bar is
+            STATUS, plus the two controls the reference draws nowhere (see its own note). */}
+        <StatusBar engines={engines} backupChannels={backupChannels} />
         <CommandToast />
         {/* THE tooltip, mounted ONCE. Every control carrying a `title` inherits it
           by delegation — nothing new has to be wired, which is the point (see
           `ui/Tooltip.tsx`). */}
         <Tooltip />
         <AuditPanel open={auditOpen} onClose={() => setAuditOpen(false)} />
-        <ServerSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-        {sourcesOpen && <SourcesModal onClose={() => setSourcesOpen(false)} />}
+        <StationSetupDialog
+          open={stationSetup.open}
+          section={stationSetup.section}
+          requestId={stationSetup.requestId}
+          onClose={closeStationSetup}
+        />
+        {/*
+          `R-066` — ABOVE the lock, because the bridge refuses `lock.release` to a socket with
+          no principal too: signing in is the outer gate and the PIN is the inner one, and the
+          screen shows them in the order the bridge enforces. Renders nothing when auth is off.
+
+          `DESKTOP-APPS-01` — while an installed station is in first-run, FIRST-RUN is the gate
+          instead: its second step IS the sign-in, and two stacked gates would ask twice.
+        */}
+        {setupPhase !== null ? (
+          <FirstRunScreen phase={setupPhase} signInUrl={capabilities?.signInUrl ?? null} />
+        ) : (
+          <SignInOverlay />
+        )}
         <LockOverlay
-          engaged={lock.engaged}
+          engaged={lockCovers}
           {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}
           {...(lock.reason !== undefined ? { reason: lock.reason } : {})}
           onRelease={(pin) => window.cg.lock.release({ pin })}
         />
+        {/* `R-094` — no close on a slip: CG Control's window close, or the tab's leave prompt.
+            Last, so its dialog (the `window` layer) sits above every gate rendered before it. */}
+        <ConsoleCloseGuard items={items} />
       </main>
     </ShellLayoutProvider>
   );

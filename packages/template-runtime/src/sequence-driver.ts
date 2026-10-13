@@ -248,6 +248,11 @@ export class SequenceDriver {
     this.incomingHooks?.applyFields?.(values);
   }
 
+  /** `B-217` — rotating right now (started, and not frozen). The look park asks before it pauses. */
+  isRunning(): boolean {
+    return this.running && !this.paused;
+  }
+
   /** Freeze the dwell timer AND any in-flight transition (lockstep pause). */
   pause(): void {
     if (!this.running || this.paused) return;

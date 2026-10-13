@@ -1,0 +1,792 @@
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import type * as LottieBridge from '@cg/lottie-bridge';
+import type { Element, Scene } from '@cg/shared-schema';
+
+/**
+ * Session V — the owner's defect: a FOLLOW-source video plays its intro, freezes at
+ * `H`, and past the composition's out point NEVER plays its outro — on the canvas and
+ * in the preview alike — while the SAME scene with manual phase marks plays intro AND
+ * outro correctly.
+ *
+ * The fixtures here use the REAL attach seeds (`state/follow-attach.ts` writes
+ * `outroStart: durationMs` as the claim-least stored decoy), not arbitrary decoy
+ * numbers: under follow the stored phases are IGNORED by contract, so any code path
+ * that still reads them must be caught by a fixture whose stored values are exactly
+ * what the product writes.
+ *
+ * Owner's recipe: out point WITH ROOM AFTER IT (out at 72 of 150 @ 50 fps ⇒ the OUT
+ * segment is 1.56 s), content start 25 (entrance 0.5 s), 5 s clip.
+ * holdAt 3000 ⇒ window [2500 → 3000] / H 3000 / [3000 → 4560].
+ * holdAt absent ⇒ H = entrance span 500 ⇒ [0 → 500] / 500 / [500 → 2060].
+ */
+
+const { handles } = vi.hoisted(() => ({
+  handles: [] as { frames: number[]; destroyed: boolean; el: HTMLElement }[],
+}));
+
+vi.mock('@cg/lottie-bridge', async (importOriginal) => ({
+  ...(await importOriginal<typeof LottieBridge>()),
+  createLottiePlayer: (container: HTMLElement) => {
+    const h = {
+      element: container,
+      el: container,
+      frames: [] as number[],
+      destroyed: false,
+      play: () => undefined,
+      pause: () => undefined,
+      stop: () => undefined,
+      destroy() {
+        h.destroyed = true;
+      },
+      goToFrame(f: number) {
+        h.frames.push(f);
+      },
+      get isAlive() {
+        return !h.destroyed;
+      },
+    };
+    handles.push(h);
+    return h;
+  },
+}));
+
+const { createRuntime } = await import('../src/runtime.js');
+
+function makeClock() {
+  let ms = 0;
+  const rafs = new Map<number, (ts: number) => void>();
+  const timers: { id: number; due: number; cb: () => void }[] = [];
+  let nextId = 1;
+  return {
+    now: () => ms,
+    raf: (cb: (ts: number) => void) => {
+      const id = nextId++;
+      rafs.set(id, cb);
+      return id;
+    },
+    cancel: (h: number) => {
+      rafs.delete(h);
+    },
+    setTimeout: (cb: () => void, delay: number) => {
+      const id = nextId++;
+      timers.push({ id, due: ms + delay, cb });
+      return id;
+    },
+    clearTimeout: (h: unknown) => {
+      const i = timers.findIndex((t) => t.id === h);
+      if (i >= 0) timers.splice(i, 1);
+    },
+    advance: (delta: number) => {
+      ms += delta;
+      const due = timers.filter((t) => t.due <= ms).sort((a, b) => a.due - b.due);
+      for (const t of due) {
+        const i = timers.indexOf(t);
+        if (i >= 0) timers.splice(i, 1);
+        t.cb();
+      }
+      const round = [...rafs.entries()];
+      for (const [id] of round) rafs.delete(id);
+      for (const [, cb] of round) cb(ms);
+    },
+  };
+}
+
+async function run(clock: ReturnType<typeof makeClock>, totalMs: number, step = 20): Promise<void> {
+  let left = totalMs;
+  while (left > 0) {
+    const d = Math.min(step, left);
+    clock.advance(d);
+    left -= d;
+    for (let i = 0; i < 6; i += 1) await Promise.resolve();
+  }
+}
+
+const baseTransform = {
+  position: { x: 0, y: 0 },
+  size: { w: 400, h: 200 },
+  scale: { x: 1, y: 1 },
+  rotation: 0,
+  anchor: { x: 0, y: 0 },
+};
+
+const DURATION_MS = 5000;
+
+/** The product's own attach seeds: stored decoys under follow are `outroStart: durationMs`. */
+function followVideo(id: string, o: { holdAt?: number; storedOutroStart?: number } = {}): Element {
+  return {
+    id,
+    name: id,
+    type: 'video',
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    assetId: `asset-${id}`,
+    durationMs: DURATION_MS,
+    holdBehavior: 'loop',
+    phases: {
+      introEnd: 2500,
+      outroStart: o.storedOutroStart ?? DURATION_MS,
+      source: 'composition',
+      ...(o.holdAt !== undefined ? { holdAt: o.holdAt } : {}),
+    },
+  } as unknown as Element;
+}
+
+/** The manual-phase CONTROL on the same clip — the configuration the owner proved works. */
+function manualVideo(id: string): Element {
+  return {
+    id,
+    name: id,
+    type: 'video',
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    assetId: `asset-${id}`,
+    durationMs: DURATION_MS,
+    holdBehavior: 'freeze',
+    phases: { introEnd: 3000, outroStart: 3000, source: 'manual' },
+  } as unknown as Element;
+}
+
+function bgShape(id: string): Element {
+  return {
+    id,
+    name: id,
+    type: 'shape',
+    shape: 'rect',
+    fill: { kind: 'solid', color: '#123456' },
+    transform: baseTransform,
+    opacity: 0,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    animation: {
+      tracks: {
+        opacity: {
+          keyframes: [
+            { frame: 0, value: 0, easing: 'linear' },
+            { frame: 50, value: 1, easing: 'linear' },
+          ],
+        },
+      },
+    },
+  } as unknown as Element;
+}
+
+/** Owner's composition: out at 72 of 150 @ 50 fps — the OUT segment is 1.56 s of room. */
+function scene(children: Element[], over: Record<string, unknown> = {}): Scene {
+  return {
+    schemaVersion: 1,
+    id: 's-follow-outro',
+    name: 'follow-outro',
+    templateType: 'custom',
+    resolution: { width: 400, height: 200 },
+    frameRate: 50,
+    safeAreas: { title: 10, action: 5 },
+    frameRange: { in: 0, out: 150 },
+    activeRange: { in: 0, out: 150 },
+    lifecycle: { outPoint: 72, contentStart: 25 },
+    editorBackdrop: 'transparent',
+    layers: [
+      { id: 'pl', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
+    ],
+    fields: [],
+    bindings: [],
+    fonts: [],
+    metadata: { createdAt: '2026-08-13T00:00:00.000Z', updatedAt: '2026-08-13T00:00:00.000Z' },
+    ...over,
+  } as unknown as Scene;
+}
+
+const onAir = (): boolean => !document.body.classList.contains('cg-pending');
+const tickerMeasure = (node: HTMLElement): number => (node.textContent?.length ?? 0) * 10;
+
+/**
+ * A LINEAR-playback media model against the injected clock (the same shape as
+ * video-driver.test.ts's mockVideo, applied at the DOM node): unlike the plain
+ * backing store the short-phase lifecycle tests use, this one ADVANCES while
+ * playing — the owner's windows here are seconds long, and a non-advancing head
+ * would trip the signed drift policy into re-basing the clock forever (an intro
+ * longer than the resume grace would never complete, in ANY configuration).
+ */
+function spyVideoTimes(clock: { now: () => number }): Map<string, () => number> {
+  const getters = new Map<string, () => number>();
+  document.querySelectorAll<HTMLVideoElement>('video[data-cg-element-id]').forEach((v) => {
+    let pos = 0;
+    let playing = false;
+    let anchor = 0;
+    const at = (): number => (playing ? pos + (clock.now() - anchor) / 1000 : pos);
+    Object.defineProperty(v, 'currentTime', {
+      get: at,
+      set: (x: number) => {
+        pos = x;
+        anchor = clock.now();
+      },
+      configurable: true,
+    });
+    Object.defineProperty(v, 'play', {
+      value: () => {
+        pos = at();
+        anchor = clock.now();
+        playing = true;
+        return Promise.resolve();
+      },
+      configurable: true,
+    });
+    Object.defineProperty(v, 'pause', {
+      value: () => {
+        pos = at();
+        playing = false;
+      },
+      configurable: true,
+    });
+    getters.set(v.dataset['cgElementId']!, at);
+  });
+  return getters;
+}
+
+beforeEach(() => {
+  document.body.innerHTML = '';
+  document.body.className = '';
+  handles.length = 0;
+});
+afterEach(() => {
+  document.body.innerHTML = '';
+  document.body.className = '';
+});
+
+describe('session V — a FOLLOW video plays its OUTRO on exit (the preview path)', () => {
+  it('holdAt set: out() plays the clip’s ENDING [3440 → 5000] (session Y re-pin), then clears', async () => {
+    const clock = makeClock();
+    const r = createRuntime(scene([bgShape('bg'), followVideo('v', { holdAt: 3000 })]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      clock,
+      tickerMeasure,
+    });
+    const times = spyVideoTimes(clock);
+    await r.play({});
+    await run(clock, 900); // intro [2500 → 3000] is 500 ms; settle the freeze at H
+    expect(times.get('v')!()).toBeCloseTo(3.0, 2); // parked at H — the intro half WORKS
+
+    const outP = r.out();
+    await run(clock, 400); // mid-outro (outro span is 1560 ms)
+    // The background exit must be WAITING on the video's element outro.
+    expect(onAir()).toBe(true);
+
+    await run(clock, 1400); // outro completes
+    await outP;
+    await run(clock, 2000); // the background OUT segment [72 → 150] is 1.56 s
+    // Session Y re-pin (deliberate): the outro is END-anchored [5000 − 1560 → 5000] — the
+    // clip's own ending, landing on its LAST moment at removal; never the static middle.
+    expect(times.get('v')!()).toBeCloseTo(5.0, 2);
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
+
+  it('holdAt absent: the ending still plays — the outro is END-anchored, independent of H (session Y)', async () => {
+    const clock = makeClock();
+    const r = createRuntime(scene([bgShape('bg'), followVideo('v')]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      clock,
+      tickerMeasure,
+    });
+    const times = spyVideoTimes(clock);
+    await r.play({});
+    await run(clock, 900); // intro [0 → 500], then freeze at H = 500
+    expect(times.get('v')!()).toBeCloseTo(0.5, 2);
+
+    const outP = r.out();
+    await run(clock, 1800); // the end-anchored outro [3440 → 5000] completes
+    await outP;
+    await run(clock, 2200);
+    expect(times.get('v')!()).toBeCloseTo(5.0, 2);
+    r.remove();
+  });
+
+  it('CONTROL — the manual-phase configuration of the same clip plays its outro', async () => {
+    const clock = makeClock();
+    const r = createRuntime(scene([bgShape('bg'), manualVideo('v')]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      clock,
+      tickerMeasure,
+    });
+    const times = spyVideoTimes(clock);
+    await r.play({});
+    await run(clock, 3400); // intro [0 → 3000], freeze at 3.0
+    expect(times.get('v')!()).toBeCloseTo(3.0, 2);
+
+    const outP = r.out();
+    await run(clock, 2400); // outro [3000 → 5000] completes
+    await outP;
+    await run(clock, 1000);
+    expect(times.get('v')!()).toBeCloseTo(5.0, 2);
+    r.remove();
+  });
+});
+
+describe('session V — a FOLLOW video maps the OUTRO window under the playhead (the canvas path)', () => {
+  it('holdAt set: ticks past the out point map the clip’s ENDING [3440 → 5000] (session Y re-pin)', () => {
+    const r = createRuntime(scene([followVideo('v', { holdAt: 3000 })]), {
+      skipFontLoad: true,
+      installGlobals: false,
+    });
+    const times = spyVideoTimes({ now: () => 0 });
+    r.tick(72); // the out point — the seam jumps to the ending's first frame (deliberate)
+    expect(times.get('v')!()).toBeCloseTo(3.44, 2);
+    r.tick(80); // 160 ms into the OUT
+    expect(times.get('v')!()).toBeCloseTo(3.6, 2);
+    r.tick(150); // the active end — the clip's LAST moment
+    expect(times.get('v')!()).toBeCloseTo(5.0, 2);
+    r.remove();
+  });
+
+  it('holdAt absent: the same ending — END-anchored, independent of H (session Y)', () => {
+    const r = createRuntime(scene([followVideo('v')]), {
+      skipFontLoad: true,
+      installGlobals: false,
+    });
+    const times = spyVideoTimes({ now: () => 0 });
+    r.tick(80);
+    expect(times.get('v')!()).toBeCloseTo(3.6, 2); // 3440 + 160
+    r.remove();
+  });
+});
+
+/** The lottie mirror: 1 s clip at fr 100 (10 ms/frame); follow with holdAt frame 60 ⇒ H 600 ms. */
+const lottieAssets = { a: { ip: 0, op: 100, fr: 100, w: 400, h: 200, layers: [] } };
+function followLottie(id: string): Element {
+  return {
+    id,
+    name: id,
+    type: 'lottie',
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    assetId: 'a',
+    speed: 1,
+    loopMode: 'none',
+    holdBehavior: 'freeze',
+    // The product's attach decoys (outroStart = op) + an authored holdAt, both clip frames.
+    phases: { introEnd: 50, outroStart: 100, source: 'composition', holdAt: 60 },
+  } as unknown as Element;
+}
+
+describe('session V — the LOTTIE mirror: the same wiring plays the follow outro on exit', () => {
+  it('out() drives the clip frames from the hold frame through the derived outro window', async () => {
+    const clock = makeClock();
+    const r = createRuntime(scene([bgShape('bg'), followLottie('lot')]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      clock,
+      tickerMeasure,
+      lottieAssets,
+    });
+    await r.play({});
+    await run(clock, 900); // intro [100 → 600] ms settles the freeze at frame 60 (H)
+    const held = handles[0]!.frames.at(-1);
+    expect(held).toBe(60);
+
+    const outP = r.out();
+    // Session Y: outSpan 1.56 s ≥ the 1 s clip ⇒ the WHOLE clip is the outro [0 → 100]
+    // (the wholeClipOutro clamp) — the ending plays in full over the clip's own 1 s.
+    await run(clock, 1200);
+    await outP;
+    await run(clock, 2000);
+    expect(handles[0]!.frames.at(-1)).toBe(100); // the clip's LAST frame, not frozen at 60
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
+});
+
+describe('session V — the FOUND SEAM, pinned: outPoint at the active end ⇒ NO OUT segment ⇒ no outro', () => {
+  // The owner's scene shape, reconstructed by instrumentation: "out at 72 of 150" where the
+  // 150 is the RULER (frameRange) and the ACTIVE range ends at 72 — reachable by ordinary
+  // authoring (shrink-then-regrow pins active.out; the out-marker drag clamps at it). The
+  // derived outSpan is 0, so the follow window has NO outro: outroEndMs === holdMs. This is
+  // the STANDING RULE (the OUT on air plays [outPoint → active.out]; zero room, zero outro),
+  // pinned here so it can never silently change shape — the operator-facing fix is the
+  // `noOutSegment` clamp flag + Inspector hint, and the store now re-clamps so the range
+  // cannot STRAND (store-scene-active-region.test.ts). If the outro should instead follow
+  // the ROOM AFTER the out point on the ruler, that is a RULE change — the owner's call.
+  const sceneC = (children: Element[]): Scene =>
+    scene(children, {
+      activeRange: { in: 0, out: 72 },
+      lifecycle: { outPoint: 72, contentStart: 25 },
+    });
+
+  it('canvas: ticks past the out point hold H — the degenerate outro takes the intro mapping', () => {
+    const r = createRuntime(sceneC([followVideo('v', { holdAt: 3000 })]), {
+      skipFontLoad: true,
+      installGlobals: false,
+    });
+    const times = spyVideoTimes({ now: () => 0 });
+    r.tick(72);
+    expect(times.get('v')!()).toBeCloseTo(3.0, 2);
+    r.tick(100); // the ruler's room after the out point — INERT on air, so the held look stands
+    expect(times.get('v')!()).toBeCloseTo(3.0, 2);
+    r.tick(150);
+    expect(times.get('v')!()).toBeCloseTo(3.0, 2);
+    r.remove();
+  });
+
+  it('preview: the exit completes WITHOUT a video outro — held look through the fade, never a wedge', async () => {
+    const clock = makeClock();
+    const r = createRuntime(sceneC([bgShape('bg'), followVideo('v', { holdAt: 3000 })]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      clock,
+      tickerMeasure,
+    });
+    const times = spyVideoTimes(clock);
+    await r.play({});
+    await run(clock, 900);
+    expect(times.get('v')!()).toBeCloseTo(3.0, 2); // parked at H
+
+    const outP = r.out();
+    await run(clock, 1000); // content fade (400 ms) + the ZERO-length background OUT
+    await outP;
+    await run(clock, 500);
+    expect(times.get('v')!()).toBeCloseTo(3.0, 2); // no outro was played — by rule, not by loss
+    expect(onAir()).toBe(false); // and the exit is clean: nothing waited on a phantom outro
+    r.remove();
+  });
+
+  it('lottie: the same zero-OUT-segment rule through the same window', () => {
+    const r = createRuntime(sceneC([followLottie('lot')]), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+    });
+    r.tick(100); // past the out point on the ruler
+    expect(handles[0]!.frames.at(-1)).toBe(60); // held at H's frame — no outro window exists
+    r.remove();
+  });
+});
+
+describe('session V (sharpened brief) — the outro BOUNDARY is exact, and it TRACKS the out point', () => {
+  // The owner's second report read the follow outro as starting LATE — delay ≈ the comp's own
+  // [active.in → outPoint] span. MEASURED at HEAD across seven variants and both preview exit
+  // mechanisms: the delay does not exist — first motion is at outPoint + 1 frame everywhere,
+  // and moving the out point moves first motion WITH it. These pins hold the boundary EXACT
+  // (the earlier pins sat 8–10 frames past it, where a comp-intro-sized delay could hide) so
+  // a wrong-anchor regression in the tick pair or the mode selection fails loudly, one frame
+  // past the out point, not "eventually".
+  const OWNER_SHARP = {
+    activeRange: { in: 0, out: 240 },
+    frameRange: { in: 0, out: 240 },
+    lifecycle: { outPoint: 140, contentStart: 25 },
+  };
+
+  it('video canvas: t(outPoint) is the ENDING’s first frame, and t(outPoint + 1) has already advanced', () => {
+    const r = createRuntime(scene([followVideo('v', { holdAt: 3000 })], OWNER_SHARP), {
+      skipFontLoad: true,
+      installGlobals: false,
+    });
+    const times = spyVideoTimes({ now: () => 0 });
+    r.tick(139);
+    expect(times.get('v')!()).toBeCloseTo(3.0, 3); // frozen at H through the hold
+    // Session Y: outSpan 2 s ⇒ the END-anchored outro is [3000 → 5000] — its start happens
+    // to EQUAL H on this fixture, so the boundary values are unchanged; the MEANING moved
+    // (the ending's first frame, not the hold's continuation).
+    r.tick(140);
+    expect(times.get('v')!()).toBeCloseTo(3.0, 3);
+    r.tick(141); // ONE frame past: 20 ms into the OUT — this is the assertion that catches a delay
+    expect(times.get('v')!()).toBeCloseTo(3.02, 3);
+    r.tick(142);
+    expect(times.get('v')!()).toBeCloseTo(3.04, 3);
+    r.remove();
+  });
+
+  it('video canvas: moving the out point moves the boundary WITH it (no residual anchor)', () => {
+    // Session Y: the boundary value is the END-anchored outro start, 5000 − outSpan·1000.
+    for (const [outP, entry] of [
+      [60, 1.4],
+      [100, 2.2],
+      [140, 3.0],
+    ] as const) {
+      document.body.innerHTML = '';
+      const r = createRuntime(
+        scene([followVideo('v', { holdAt: 3000 })], {
+          ...OWNER_SHARP,
+          lifecycle: { outPoint: outP, contentStart: 25 },
+        }),
+        { skipFontLoad: true, installGlobals: false },
+      );
+      const times = spyVideoTimes({ now: () => 0 });
+      r.tick(outP);
+      expect(times.get('v')!()).toBeCloseTo(entry, 3);
+      r.tick(outP + 1);
+      expect(times.get('v')!()).toBeCloseTo(entry + 0.02, 3);
+      r.remove();
+    }
+  });
+
+  it('lottie canvas: the same one-frame boundary through the frames adapter', () => {
+    const r = createRuntime(scene([followLottie('lot')], OWNER_SHARP), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+    });
+    // Session Y: outSpan 2 s ≥ the 1 s clip ⇒ the whole clip is the outro [0 → 100]; the
+    // boundary jumps from the held frame 60 to the ending's start.
+    r.tick(140);
+    expect(handles[0]!.frames.at(-1)).toBe(0);
+    r.tick(141); // 20 ms = 2 clip frames at fr 100
+    expect(handles[0]!.frames.at(-1)).toBe(2);
+    r.remove();
+  });
+
+  it('preview AUTO-OUT (timed hold): the outro leaves H the moment the OUT phase begins', async () => {
+    // The auto-exit path (PlayoutController.startOutro → beforeOutro → the ledger) had NO
+    // follow coverage: comp intro [0 → 140] is 2.8 s wall, hold 400 ms, so the OUT begins at
+    // 3200 ms — the clip must leave H within a tick of it, never a comp-anchored offset later.
+    const clock = makeClock();
+    const r = createRuntime(
+      scene([bgShape('bg'), followVideo('v', { holdAt: 3000 })], {
+        ...OWNER_SHARP,
+        playout: { mode: 'auto-out', holdSource: 'timed', holdMs: 400 },
+      }),
+      { skipFontLoad: true, installGlobals: false, clock, tickerMeasure },
+    );
+    const times = spyVideoTimes(clock);
+    await r.play({});
+    let firstOutroMs = -1;
+    for (let i = 0; i < 400 && firstOutroMs === -1; i++) {
+      clock.advance(20);
+      for (let j = 0; j < 6; j += 1) await Promise.resolve();
+      const t = times.get('v')!();
+      if (clock.now() > 1000 && t > 3.0005) firstOutroMs = clock.now();
+    }
+    expect(firstOutroMs).toBeGreaterThan(3150); // never EARLY (the hold is real)
+    expect(firstOutroMs).toBeLessThanOrEqual(3280); // and never late beyond timer granularity
+    r.remove();
+  });
+});
+
+/** A finite 2-pass drain ticker whose crawl OUTLIVES the out point by design. */
+function slowTicker(id: string, over: Record<string, unknown> = {}): Element {
+  return {
+    id,
+    name: id,
+    type: 'ticker',
+    transform: baseTransform,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    font: {
+      family: 'Vazirmatn',
+      weight: 500,
+      style: 'normal',
+      size: 36,
+      lineHeight: 1.4,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    direction: 'ltr',
+    speed: 50,
+    gap: 10,
+    repeat: 2,
+    cycleBoundary: 'drain',
+    items: [
+      { id: 'a', text: 'aaaaaaaaaa' },
+      { id: 'b', text: 'bbbbbbbbbb' },
+      { id: 'c', text: 'cccccccccc' },
+    ],
+    ...over,
+  } as unknown as Element;
+}
+
+describe('session X — the CONTENT-DRIVEN hold: the outro begins at content completion, NOT at the out point', () => {
+  // The owner's file, measured (design.md §10.2): auto-out + content-driven + a repeat-2 drain
+  // ticker ⇒ the video left H 4.94 s AFTER the out point's wall position — exactly the ticker's
+  // remaining crawl. That is the SHIPPED lifecycle: `outPoint` is where the HOLD begins; a
+  // content-driven hold lasts until the content completes, so the outro CANNOT begin at the out
+  // point by construction. Pinned here so the contract is explicit, with a TIMED control
+  // proving the delay is the hold source and nothing else.
+  const DOC = {
+    activeRange: { in: 0, out: 150 },
+    frameRange: { in: 0, out: 150 },
+    lifecycle: { outPoint: 75, contentStart: 25 },
+    playout: { mode: 'auto-out', holdSource: 'content-driven' },
+  };
+  // Follow window on the 5 s clip: entrance 0.5 s ⇒ H = 3000 (holdAt); OUT span 1.5 s ⇒
+  // the END-anchored outro [3500 → 5000] (session Y). The ticker's 2-pass drain crawl at
+  // 50 px/s runs ~14 s ≫ the out point's 1.5 s wall position.
+
+  async function playAndTrack(
+    over: Record<string, unknown>,
+    tickerOver: Record<string, unknown> = {},
+  ): Promise<{ leftHms: number; endMs: number; finalT: number }> {
+    const clock = makeClock();
+    document.body.innerHTML = '';
+    const r = createRuntime(
+      scene([bgShape('bg'), slowTicker('tk', tickerOver), followVideo('v', { holdAt: 3000 })], {
+        ...DOC,
+        ...over,
+      }),
+      { skipFontLoad: true, installGlobals: false, clock, tickerMeasure },
+    );
+    const times = spyVideoTimes(clock);
+    await r.play({});
+    let leftHms = -1;
+    for (let i = 1; i <= 3000; i++) {
+      clock.advance(20);
+      for (let j = 0; j < 6; j += 1) await Promise.resolve();
+      if (leftHms === -1 && clock.now() > 1000 && times.get('v')!() > 3.0005) {
+        leftHms = clock.now();
+      }
+      if (leftHms !== -1 && clock.now() >= leftHms + 2000) break;
+    }
+    const endMs = clock.now();
+    const finalT = times.get('v')!();
+    r.remove();
+    return { leftHms, endMs, finalT };
+  }
+
+  it('the video holds H well past the out point, leaves it when the crawl drains, then plays its outro', async () => {
+    const { leftHms, finalT } = await playAndTrack({});
+    // The out point sits at 1.5 s wall. The outro must NOT have begun there — the hold is
+    // content-driven and the crawl is still running (this is the owner's measured delay).
+    expect(leftHms).toBeGreaterThan(1500 + 5000); // WELL past — the content governs, not the marker
+    // And once the content completes, the follow outro itself is intact — session Y:
+    // the END-anchored [3500 → 5000], finishing on the clip's last moment.
+    expect(finalT).toBeCloseTo(5.0, 2);
+  });
+
+  it('the ticker LIFESPAN trimmed to the out point does NOT shorten the hold — the gate is visibility-only', async () => {
+    // The owner's workaround attempt: `lifespan {in: 25, out: 75}` (= contentStart → outPoint).
+    // Measured on his file: the crawl runs on regardless — the lifespan gate hides frames, it
+    // neither ends the crawl nor detaches it from the hold. Recorded for session W's design.
+    const base = await playAndTrack({});
+    const trimmed = await playAndTrack({}, { lifespan: { in: 25, out: 75 } });
+    expect(trimmed.leftHms).toBeGreaterThan(1500 + 5000); // still content-governed
+    expect(Math.abs(trimmed.leftHms - base.leftHms)).toBeLessThanOrEqual(40); // same crawl, same hold
+  });
+
+  it('CONTROL — a TIMED hold starts the outro at outPoint + holdMs: the delay IS the hold source', async () => {
+    const { leftHms, finalT } = await playAndTrack({
+      playout: { mode: 'auto-out', holdSource: 'timed', holdMs: 200 },
+    });
+    expect(leftHms).toBeGreaterThan(1600); // never early — the hold is real
+    expect(leftHms).toBeLessThanOrEqual(1840); // out point (1500) + holdMs (200) + timer granularity
+    expect(finalT).toBeCloseTo(5.0, 2);
+  });
+});
+
+describe('session Y — THE CORRECTED RULE: a follower’s outro is the CLIP’S OWN ENDING', () => {
+  // The owner's paired files (normal.cgproj / follow.cgproj), verbatim: 25 fps, comp 358 f,
+  // contentStart 125, outPoint 260; the converted clip is 358 frames @ 25 fps ⇒ clip and comp
+  // frames are 1:1. His clip: intro 0→125, static 125→260, authored build-off 260→358.
+  // The OLD rule played clip [125 → 223] (the static middle) as "the outro" and NEVER played
+  // the build-off; the corrected rule plays [260 → 358] — the clip's own ending — landing on
+  // the last frame exactly as the composition removes the element. The stored seed phases
+  // ({introEnd: durationMs/2, outroStart: durationMs} — what attach used to write) are the
+  // SEED SIGNATURE, not authored intent, and derive as if absent.
+  const OWNER_Y = {
+    frameRate: 25,
+    frameRange: { in: 0, out: 358 },
+    activeRange: { in: 0, out: 358 },
+    lifecycle: { outPoint: 260, contentStart: 125 },
+  };
+  const ownerVideo = (): Element =>
+    ({
+      id: 'v',
+      name: 'v',
+      type: 'video',
+      transform: baseTransform,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      assetId: 'asset-v',
+      durationMs: 14_320,
+      holdBehavior: 'loop',
+      phases: { introEnd: 7160, outroStart: 14_320, source: 'composition' },
+    }) as unknown as Element;
+
+  it('canvas: the OUT phase drives clip frames 260 → 358 — the build-off, ending on the last frame', () => {
+    const r = createRuntime(scene([ownerVideo()], OWNER_Y), {
+      skipFontLoad: true,
+      installGlobals: false,
+    });
+    const times = spyVideoTimes({ now: () => 0 });
+    // The intro half is UNCHANGED and must stay so: clip 0 → 125 over the entrance, hold at H.
+    r.tick(60);
+    expect(times.get('v')!()).toBeCloseTo(2.4, 3); // 60 f × 40 ms — inside the intro
+    r.tick(125);
+    expect(times.get('v')!()).toBeCloseTo(5.0, 3); // H = entrance span (holdAt absent)
+    r.tick(200);
+    expect(times.get('v')!()).toBeCloseTo(5.0, 3); // held through the static region
+    // The corrected outro: END-anchored [14320 − 3920 → 14320] = clip frames 260 → 358.
+    r.tick(260);
+    expect(times.get('v')!()).toBeCloseTo(10.4, 3); // the build-off's first frame
+    r.tick(261);
+    expect(times.get('v')!()).toBeCloseTo(10.44, 3);
+    r.tick(358);
+    expect(times.get('v')!()).toBeCloseTo(14.32, 3); // the clip's LAST frame at removal
+    r.remove();
+  });
+
+  it('preview: out() plays the build-off [10.4 → 14.32], not the static middle', async () => {
+    const clock = makeClock();
+    const r = createRuntime(scene([bgShape('bg'), ownerVideo()], OWNER_Y), {
+      skipFontLoad: true,
+      installGlobals: false,
+      clock,
+      tickerMeasure,
+    });
+    const times = spyVideoTimes(clock);
+    await r.play({});
+    await run(clock, 5600); // entrance 5 s → freeze at H
+    expect(times.get('v')!()).toBeCloseTo(5.0, 2);
+
+    const outP = r.out();
+    await run(clock, 200);
+    // The outro ENTRY is the clip's own outro start — the jump from the held static look
+    // to the build-off's first frame (deliberately accepted; static middle ⇒ no visible pop).
+    expect(times.get('v')!()).toBeGreaterThanOrEqual(10.4);
+    await run(clock, 4200); // the 3.92 s build-off completes
+    await outP;
+    await run(clock, 4200);
+    expect(times.get('v')!()).toBeCloseTo(14.32, 2); // the authored ending, fully played
+    r.remove();
+  });
+
+  it('authored phases under follow WIN: the clip’s own [outroStart → op] plays, intro finishes at content start', () => {
+    // NOT the seed signature: genuinely authored values on the same clip.
+    const authored = {
+      ...(ownerVideo() as unknown as Record<string, unknown>),
+      phases: { introEnd: 2000, outroStart: 12_000, source: 'composition' },
+    } as unknown as Element;
+    const r = createRuntime(scene([authored], OWNER_Y), {
+      skipFontLoad: true,
+      installGlobals: false,
+    });
+    const times = spyVideoTimes({ now: () => 0 });
+    // The authored intro is 2 s against a 5 s entrance: it WAITS 3 s, then plays [0 → 2000],
+    // FINISHING at the content start.
+    r.tick(25); // 1 s — inside the delay: parked on the clip's first frame
+    expect(times.get('v')!()).toBeCloseTo(0, 3);
+    r.tick(100); // 4 s — 1 s into the intro
+    expect(times.get('v')!()).toBeCloseTo(1.0, 3);
+    r.tick(125); // content start — the authored intro has just finished
+    expect(times.get('v')!()).toBeCloseTo(2.0, 3);
+    r.tick(200);
+    expect(times.get('v')!()).toBeCloseTo(2.0, 3); // hold at the AUTHORED introEnd
+    r.tick(260); // the out point — the clip's own outro begins
+    expect(times.get('v')!()).toBeCloseTo(12.0, 3);
+    r.tick(318); // 58 f × 40 ms = 2.32 s into the authored outro (which is 2.32 s long)
+    expect(times.get('v')!()).toBeCloseTo(14.32, 3);
+    r.remove();
+  });
+});

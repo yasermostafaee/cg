@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Window } from 'happy-dom';
 import type { Element, Scene } from '@cg/shared-schema';
-import { buildScene } from '../src/scene-builder.js';
+import { buildScene, smpteBarsGradient, SMPTE_BARS } from '../src/scene-builder.js';
 import { compileZoneCss } from '../src/zone-css.js';
 
 /**
@@ -55,7 +55,7 @@ function sceneWith(children: Element[]): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: 'L1', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],
@@ -98,6 +98,26 @@ describe("D-137 — 'author' mode paints the bars", () => {
     expect((g.match(/#[0-9a-f]{6} [0-9.]+%/g) ?? []).length).toBe(14);
     // No `#rrggbb A% B%` anywhere.
     expect(/#[0-9a-f]{6}\s+[0-9.]+%\s+[0-9.]+%/.test(g)).toBe(false);
+  });
+
+  it('R-049 — the painted bars ARE `smpteBarsGradient()`, the exported one', () => {
+    // The reuse guard, as an EQUALITY rather than a shape check. PVW draws these
+    // same bars over each live plate by calling this exact function, so the two
+    // surfaces must be one table: a hand-written second copy is how the paired
+    // stops above get lost on the ONE build nobody develops against.
+    const { root } = build(sceneWith([liveSource()]), 'author');
+    expect(node(root).style.backgroundImage).toBe(smpteBarsGradient());
+    // Seven bars, 75 % amplitude, in authored order. Pinned so a colour that is
+    // silently changed shows up here rather than in a gallery.
+    expect(SMPTE_BARS).toEqual([
+      '#c0c0c0',
+      '#c0c000',
+      '#00c0c0',
+      '#00c000',
+      '#c000c0',
+      '#c00000',
+      '#0000c0',
+    ]);
   });
 
   it('a POSTER replaces the bars — and still carries the label', () => {
@@ -219,7 +239,7 @@ describe('D-137 — the mode reaches a NESTED Live Source', () => {
           resolution: { width: 960, height: 540 },
           frameRate: 50,
           frameRange: { in: 0, out: 50 },
-          background: 'transparent',
+          editorBackdrop: 'transparent',
           layers: [
             {
               id: 'CL1',
@@ -238,5 +258,150 @@ describe('D-137 — the mode reaches a NESTED Live Source', () => {
     const out = node(build(scene, 'output').root, 'nested-live');
     expect(out.childElementCount).toBe(0);
     expect(out.style.backgroundImage).toBe('');
+  });
+});
+
+/**
+ * §9a.1 / task 1.5e — the plate's FRAME.
+ *
+ * Maps `specs/designer-live-source/spec.md`:
+ *   - "A Live Source may carry a FRAME, and the frame never enters the hole"
+ *
+ * The load-bearing assertion is not "a border appears" — it is that the border is
+ * OUTSIDE `transform.size`, because the declared rect is a contract with CasparCG
+ * and a frame painted inside it covers the live picture.
+ */
+describe('§9a.1 — the frame paints OUTSIDE the hole, in BOTH modes', () => {
+  const framed = liveSource({ stroke: { width: 6, color: '#ff8800' } } as never);
+
+  it.each(['author', 'output'] as const)('%s mode paints the frame as an OUTLINE', (mode) => {
+    // 'output' is the one that matters: the stroke is the ONLY thing a Live Source
+    // paints on air, and it is applied BEFORE the output-mode early return.
+    const el = node(build(sceneWith([framed]), mode).root);
+    // Longhands, not the shorthand string: happy-dom re-serialises `outline` in its
+    // own property order, so a string comparison would pin the DOM library rather
+    // than the render.
+    expect(el.style.outlineWidth).toBe('6px');
+    expect(el.style.outlineStyle).toBe('solid');
+    expect(el.style.outlineColor).toBe('#ff8800');
+  });
+
+  it.each(['author', 'output'] as const)(
+    '%s mode leaves the plate BOX untouched — no border, no padding, no box-sizing',
+    (mode) => {
+      const el = node(build(sceneWith([framed]), mode).root);
+      // THE REQUIREMENT, expressed as what is ABSENT. An outline takes no layout, so
+      // the plate's box is exactly `transform` — the rect `collectLiveSources`
+      // declares — under any box model and any scale. A `border` here would be wrong
+      // twice over: the page's own `*{box-sizing:border-box}` reset would shrink the
+      // hole, and `content-box` would slide it by the stroke width (both measured;
+      // see the note in `buildLiveSource`).
+      expect(el.style.border).toBe('');
+      expect(el.style.padding).toBe('');
+      expect(el.style.boxSizing).toBe('');
+      // …and the declared size is what it always was.
+      expect(el.style.width).toBe('640px');
+      expect(el.style.height).toBe('360px');
+    },
+  );
+
+  it('the frame shorthand is the SHARED one — identical to a shape border', () => {
+    // The reuse guard as an equality (the R-049 pattern above). The PROPERTY differs
+    // by design (outline vs border); the stroke grammar must not, or a dash rule or a
+    // unit changed in one place silently misses the other.
+    const stroke = { width: 3, color: '#00ccff' };
+    const shape = {
+      ...baseElProps,
+      id: 'shape-ref',
+      name: 'ref',
+      type: 'shape',
+      shape: 'rect',
+      stroke,
+    } as unknown as Element;
+    const { root } = build(sceneWith([liveSource({ stroke } as never), shape]), 'output');
+    const plate = node(root, 'live-a').style;
+    const box = node(root, 'shape-ref').style;
+    expect([plate.outlineWidth, plate.outlineStyle, plate.outlineColor]).toEqual([
+      box.borderTopWidth,
+      box.borderTopStyle,
+      box.borderTopColor,
+    ]);
+  });
+
+  it('a dashed stroke renders dashed — the shared shorthand decides that too', () => {
+    const el = node(
+      build(
+        sceneWith([liveSource({ stroke: { width: 2, color: '#ffffff', dash: [8, 4] } } as never)]),
+        'output',
+      ).root,
+    );
+    expect(el.style.outlineStyle).toBe('dashed');
+    expect(el.style.outlineWidth).toBe('2px');
+  });
+
+  it('NO stroke ⇒ no outline — an unframed scene DOM is byte-for-byte unchanged', () => {
+    const el = node(build(sceneWith([liveSource()]), 'output').root);
+    expect(el.style.outline).toBe('');
+    expect(el.style.outlineWidth).toBe('');
+    expect(el.style.border).toBe('');
+  });
+
+  it('width 0 is "no frame", not "unset" — it paints nothing and keeps its colour', () => {
+    // The falsy-zero trap, pinned. A zero width must not be read as an absent stroke
+    // and back-filled with a default width, and it must not paint a hairline.
+    const el = node(
+      build(sceneWith([liveSource({ stroke: { width: 0, color: '#00ff00' } } as never)]), 'output')
+        .root,
+    );
+    expect(el.style.outlineWidth).toBe('0px');
+    expect(el.style.outlineColor).toBe('#00ff00');
+    expect(el.style.width).toBe('640px');
+  });
+
+  it('the frame does not reopen the hole: output mode still paints nothing INSIDE it', () => {
+    const el = node(build(sceneWith([framed]), 'output').root);
+    expect(el.childElementCount).toBe(0);
+    expect(el.style.backgroundImage).toBe('');
+    expect(el.style.background).toBe('');
+    expect(el.style.backgroundColor).toBe('');
+  });
+
+  it('a NESTED plate is framed too — the frame is not a top-level-only affordance', () => {
+    const scene = {
+      ...sceneWith([
+        {
+          ...baseElProps,
+          id: 'inst',
+          name: 'inst',
+          type: 'composition',
+          compositionId: 'comp-1',
+        } as unknown as Element,
+      ]),
+      compositions: [
+        {
+          id: 'comp-1',
+          name: 'inner',
+          resolution: { width: 960, height: 540 },
+          frameRate: 50,
+          frameRange: { in: 0, out: 50 },
+          editorBackdrop: 'transparent',
+          layers: [
+            {
+              id: 'CL1',
+              name: 'main',
+              visible: true,
+              locked: false,
+              blendMode: 'normal',
+              children: [
+                liveSource({ id: 'nested-live', stroke: { width: 5, color: '#ff0000' } } as never),
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as Scene;
+    const el = node(build(scene, 'output').root, 'nested-live');
+    expect(el.style.outlineWidth).toBe('5px');
+    expect(el.style.outlineColor).toBe('#ff0000');
   });
 });

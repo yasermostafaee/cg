@@ -28,7 +28,7 @@
     "holdSource": "content-driven",
     "holdMs": 3000
   },
-  "background": "transparent",
+  "editorBackdrop": "transparent",
   "layers": [
     {
       "id": "root-l",
@@ -98,7 +98,7 @@
       "playout": {
         "mode": "manual"
       },
-      "background": "transparent",
+      "editorBackdrop": "transparent",
       "layers": [
         {
           "id": "childHiddenOnly-l",
@@ -179,7 +179,7 @@
         "mode": "auto-out",
         "holdMs": 2000
       },
-      "background": "transparent",
+      "editorBackdrop": "transparent",
       "layers": [
         {
           "id": "timedFinite-l",
@@ -256,7 +256,7 @@
       "playout": {
         "mode": "manual"
       },
-      "background": "transparent",
+      "editorBackdrop": "transparent",
       "layers": [
         {
           "id": "seqOnly-l",

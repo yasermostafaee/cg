@@ -32,6 +32,7 @@ function keyOf(event: OscEvent): string {
     case 'osc.layer.foreground.producer':
     case 'osc.layer.foreground.file':
     case 'osc.layer.foreground.paused':
+    case 'osc.layer.foreground.time':
     case 'osc.layer.background.producer':
       return `${event.kind}:${String(event.channel)}:${String(event.layer)}`;
     case 'osc.health':
@@ -54,6 +55,8 @@ function fingerprintOf(event: OscEvent): string {
       return event.path;
     case 'osc.layer.foreground.paused':
       return String(event.paused);
+    case 'osc.layer.foreground.time':
+      return `${String(event.elapsed)}/${String(event.total)}`;
     case 'osc.health':
       return `${String(event.healthy)}@${String(event.uptimeSec)}`;
   }

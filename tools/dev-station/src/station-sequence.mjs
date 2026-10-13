@@ -1,0 +1,112 @@
+/**
+ * 🔴 `DEV-STATION-01` — **THE LAUNCHER'S SEQUENCE**, with every side effect injected so the tests
+ * drive the same code the command runs (`dev-station-cli.mjs` wires the real ones):
+ *
+ *   1. anything on the station's ports? NAME every holder, one line per port, and refuse. 🔴 The
+ *      dev station stops NOTHING, and is given no way to: CG Bridge on a Playout machine is the
+ *      plant's bridge, and Windows restarts it five seconds after its process dies
+ *      (`CENTRAL-BRIDGE-01`). CG Control holds no port, so it is never in the way;
+ *   2. BUILD — before anything starts, so no stale compiled code ever runs;
+ *   3. the Playout — `--fake`'s own (a whole fake station, started fresh — or, with `--caspar`, the
+ *      fake Playout in front of this machine's own CasparCG), `--playout <url>`, the remembered one,
+ *      or asked for ONCE;
+ *   4. START the bridge and the console, then the banner, then the browser.
+ */
+import { CONSOLE_URL, banner, blockedLine } from './station-plan.mjs';
+
+const ASK_ADDRESS = 'Playout address (for example 192.168.21.111): ';
+
+/**
+ * @param {{ fake: boolean, pair?: boolean, playout: string | undefined, open: boolean, stateDir: string, log?: string }} options
+ * @param {object} deps — see `types/station-sequence.d.ts`
+ */
+export async function runDevStation(options, deps) {
+  // 1 — who stands in the way: named, and left exactly as it is.
+  const seen = await deps.probe();
+  if (seen.blocked.length > 0) {
+    for (const b of seen.blocked) deps.print(blockedLine(b));
+    return { outcome: 'blocked' };
+  }
+
+  // 2 — build first.
+  if ((await deps.build()) !== 0) {
+    deps.print('The build failed — nothing was started, so nothing stale runs.');
+    return { outcome: 'build-failed' };
+  }
+
+  // 3 — the Playout.
+  let playout;
+  let fake;
+  if (options.fake) {
+    /*
+      `DELTA-MULTI-CHANNEL-01-A` A1 — A FRESH FAKE STATION EVERY RUN. The fake Playout is new at
+      every start — new keys, new issuer, new port — so a remembered fake station holds a session,
+      an issuer and a CasparCG connection that nothing of this run answers: the owner's still named
+      CasparCG on the bridge's own port 5280, and no first-run would ever run again to correct it.
+      The last one is kept beside it (`.previous`), so a check can still be read after the next start.
+      After the build, so a failed build leaves the last station as it was.
+    */
+    await deps.freshFakeState();
+    /*
+      `DEV-LOCAL-CASPAR-01` — a station that cannot start is ONE line: nothing answering AMCP on this
+      machine's CasparCG (`--caspar`), or the stand-in's port taken (`--fake`). The line is the
+      station's own, and so is the clean-up: a start that fails stops what it had started
+      (`fake-station.ts` stops its Playout; `@cg/amcp-mock` closes its OSC socket and timer on a
+      failed listen — which it did not, and a failed `--fake` start then hung instead of exiting).
+    */
+    try {
+      fake = await deps.startFake();
+    } catch (err) {
+      deps.print(err instanceof Error ? err.message : String(err));
+      return { outcome: 'failed' };
+    }
+    playout = fake.address;
+    // Its port is new every start, so its issuer is too: the one writer clears the old one.
+    try {
+      await deps.setPlayoutAddress(playout);
+    } catch (err) {
+      deps.print(err instanceof Error ? err.message : String(err));
+      await fake.stop();
+      return { outcome: 'no-address' };
+    }
+  } else {
+    if (options.playout !== undefined) {
+      try {
+        await deps.setPlayoutAddress(options.playout);
+      } catch (err) {
+        deps.print(err instanceof Error ? err.message : String(err));
+        return { outcome: 'no-address' };
+      }
+    }
+    playout = deps.readPlayoutAddress();
+    while (playout === null) {
+      const typed = await deps.ask(ASK_ADDRESS);
+      if (typed === null || typed.trim() === '') {
+        deps.print('No Playout address — run pnpm dev:station --playout <address>, or --fake.');
+        return { outcome: 'no-address' };
+      }
+      try {
+        await deps.setPlayoutAddress(typed.trim());
+      } catch (err) {
+        deps.print(err instanceof Error ? err.message : String(err));
+        continue;
+      }
+      playout = deps.readPlayoutAddress();
+    }
+  }
+
+  // 4 — start, then say where it is. `RELEASE-0112-01` — with the fake, so `--pair` declares server B.
+  let running;
+  try {
+    running = await deps.start(playout, fake);
+  } catch (err) {
+    deps.print(err instanceof Error ? err.message : String(err));
+    await fake?.stop();
+    return { outcome: 'failed' };
+  }
+  for (const line of banner({ stateDir: options.stateDir, playout, fake, log: options.log })) {
+    deps.print(line);
+  }
+  if (options.open) deps.open(CONSOLE_URL);
+  return { outcome: 'running', running, fake };
+}

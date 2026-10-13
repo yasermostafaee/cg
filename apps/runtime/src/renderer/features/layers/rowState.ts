@@ -5,6 +5,7 @@ import {
   CircleQuestionMark,
   LoaderCircle,
   MonitorPlay,
+  OctagonAlert,
   RefreshCw,
   CircleArrowOutDownRight,
   TriangleAlert,
@@ -15,6 +16,7 @@ import type { FixedSlotObservation } from '@cg/shared-ipc';
 import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { airStateVisual, badgeTone, colors, readyDetail, type BadgeTone } from '../../theme.js';
 import { unverifiedTitle } from '../../ui/airStateWording.js';
+import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { occupancyLabel } from '../fixedLayers/occupancyLabel.js';
 
 /**
@@ -55,6 +57,21 @@ export interface RowStateVisual {
   icon: LucideIcon;
   /** The hue. Reinforcement for the shape, never the signal on its own. */
   color: string;
+  /**
+   * PHASE 2A — the WORD's hue, present only where it must differ from the MARK's.
+   *
+   * The state cell sets `color` on the wrapper and both the 25 px icon and the
+   * label inherit it, which is right for every state whose mark and word may be
+   * the same red/green/sky. `error` is the exception: its ✕ is a graphic judged at
+   * the 3.0 contrast floor and its word is text judged at 4.5, and one value could
+   * not clear both on this palette's surfaces.
+   *
+   * ⚠ It is dropped when the row's colour is OVERRIDDEN (greyed, or a simulated
+   * air claim) — a label colour that outlived the mark colour it was chosen
+   * against would be a word disagreeing with the mark beside it, which is the
+   * whole failure class this file exists to prevent.
+   */
+  labelColor?: string;
   /** The word an operator reads, and a test locates. */
   label: string;
   /** The role class, so the state cell can share `controls.css`'s tones. */
@@ -202,10 +219,30 @@ export interface RowStateInput {
   /** B-093 — this `unverified` came from a blind occupancy tap, not a dead link. */
   oscBlind: boolean;
   /**
+   * `R-058` — the bridge's reason for an `error` status, as published on the item.
+   *
+   * Optional because most statuses have none, and because an `error` with no code is a real
+   * (if rare) outcome the tooltip has to word honestly rather than leave blank.
+   */
+  errorCode?: string | undefined;
+  /**
+   * `FIELD-FIXES-01` B — the refused take's own line (`takeRefusalLine`), when the item carries
+   * one. It says more than the code — the source and the input — so it wins over it.
+   */
+  errorLine?: string | undefined;
+  /**
    * R-022 — this row is in REHEARSE: the graphic renders locally in PVW and PLAY
    * to air is interlocked off. Bridge-owned, so it is the same for every browser.
    */
   rehearsing: boolean;
+  /**
+   * R-021 stage 4 — the bridge's restore for THIS row PARKED: its layer is held by
+   * a producer that is provably not ours, so nothing was sent and the item is
+   * waiting. A published FACT (`binding.restoreBlocked`), decided by the bridge
+   * against a hearing tap — never re-derived here from `observed`, because the
+   * same shape from a BLIND tap means `unverified` and not this.
+   */
+  restoreBlocked: boolean;
 }
 
 /**
@@ -233,6 +270,53 @@ function withWire(explanation: string | undefined, wire: string): string {
     : `${explanation} CasparCG reports: ${wire}.`;
 }
 
+/**
+ * 🔴 **R-022's REHEARSE PRECEDENCE, AS ONE PREDICATE — `INSPECTOR-DELTA` §2.**
+ *
+ * Does REHEARSE own this row's state word? It is a pure function of the three things every
+ * surface showing a row already has, which is what makes extracting it possible at all:
+ * the item's `status`, its `pending`, and whether the bridge says the row is rehearsing.
+ * Every other input `rowState` takes (the wire observation, both link hops, the bank
+ * binding) is irrelevant to THIS question.
+ *
+ * ⚠ **WHY IT IS EXPORTED RATHER THAN LEFT INLINE.** The Inspector shows the same row's
+ * state in its own chip and knows only the item — it cannot call {@link rowState}, which
+ * wants ten inputs it has no way to obtain. Before this it printed the RAW WIRE WORD
+ * (`playing`, `loaded`) while the table two panels away said `ON AIR` and `READY` about the
+ * same row. The fix must not be a second spelling of this rule: golden rule 6 says the
+ * predicate is reused, never re-derived, and "rehearse loses to an air claim" is exactly the
+ * kind of precedence that would agree by luck until it did not.
+ *
+ * 🔴 **SUBORDINATE TO THE AIR CLAIM, and that ordering is the load-bearing part** — it is
+ * `rowState`'s own argument, kept verbatim because moving the code must not move the
+ * reasoning: if a row somehow claims air while we believe it is rehearsing, the AIR claim
+ * wins the display. The operator's one urgent question is "what is on air", and a rehearse
+ * badge over a live graphic answers it wrongly. `transient` is excluded for the same family
+ * of reason — a take in flight is a transition toward air.
+ */
+export function rehearseOwnsStateWord(
+  status: StackItemStatus,
+  pending: boolean,
+  rehearsing: boolean,
+): boolean {
+  if (!rehearsing) return false;
+  const tone = badgeTone(status, pending);
+  return tone !== 'onair' && tone !== 'transient';
+}
+
+/**
+ * The WORD a rehearsing row wears, in one place.
+ *
+ * ⚠ It is `ON PVW` and NOT `REHEARSING` — the same words as the verb that turns it on
+ * (`layerRowActions`' `ON PVW` / `OFF PVW`), so the button and the state it produces read as
+ * one thing. `REHEARSING` appears in this codebase's PROSE and nowhere on the operator's
+ * screen; do not introduce it as a label.
+ */
+export const REHEARSE_STATE_WORD = 'ON PVW';
+
+/** …and its mark colour — `R-022`'s violet, so a second surface cannot pick another. */
+export const REHEARSE_STATE_COLOR = colors.rehearsing;
+
 export function rowState({
   binding,
   pending,
@@ -242,6 +326,9 @@ export function rowState({
   simulated,
   oscBlind,
   rehearsing,
+  restoreBlocked,
+  errorCode,
+  errorLine,
 }: RowStateInput): RowStateVisual {
   const wire = occupancyLabel(observed, linkDown);
   /**
@@ -319,6 +406,51 @@ export function rowState({
     };
   }
 
+  /**
+   * ── R-021 stage 4 — RESTORE-BLOCKED, AND IT OUTRANKS THE ITEM'S OWN STATUS ──
+   *
+   * FIRST among the bound cases, and that ordering is the honesty. The item is
+   * retained as it last was — usually `on-air` — so without this the row would
+   * publish the broadcast green over a layer we have just PROVEN is carrying
+   * somebody else's producer. That is the exact inversion of what this module
+   * exists for: the one urgent question is "what is on air", and a confident air
+   * claim for a graphic that is demonstrably not there is the worst possible
+   * answer to it.
+   *
+   * It is NOT `unverified`, and the difference is knowledge rather than degree.
+   * `unverified` says the wire cannot back the claim; this says the wire ANSWERED
+   * and the answer was somebody else. So it gets its own word, and it is not
+   * greyed — grey means "we cannot see", and here we can.
+   *
+   * SHAPE and HUE, per this module's rule. The octagon is the only one in the set
+   * (everything else is a circle bar rehearse's monitor) and reads as a stop sign
+   * without needing colour at all; amber is the established ATTENTION hue here
+   * — the same one `unconfirmed` and `unknown` wear — because a blocked row is
+   * precisely something to go and look at. Green was never a candidate, and red
+   * is reserved for error and destructive intent: nothing has failed and nothing
+   * is broken. A producer is simply in the way.
+   *
+   * The tooltip carries what the row cannot: the two facts d1 requires on screen
+   * together — the item is WAITING, and (via `withWire`) what CasparCG reports is
+   * actually on the layer — plus the operator's way out, which is a deliberate
+   * two-step Clear-then-play and never one compound verb.
+   */
+  if (restoreBlocked) {
+    return {
+      icon: OctagonAlert,
+      color: colors.pending,
+      label: 'BLOCKED',
+      tone: 'attention',
+      title: withWire(
+        'BLOCKED — this row’s layer is held by a producer that is not ours, so the bridge ' +
+          'restored the item WITHOUT touching the layer: nothing was cleared and nothing was ' +
+          'put on air. It stays here waiting. CLEAR the layer and then PLAY when you are sure ' +
+          'the layer is yours to take — or it clears itself the moment that producer leaves.',
+        wire,
+      ),
+    };
+  }
+
   // ── A bound item: its reconciled status is the state. ─────────────────────
   const status = binding.item.status;
   const visual = airStateVisual(status, pending);
@@ -338,16 +470,16 @@ export function rowState({
    *
    * `transient` is also excluded: a take in flight is a transition toward air.
    */
-  if (rehearsing && !claimsAir && tone !== 'transient') {
+  if (rehearseOwnsStateWord(status, pending, rehearsing)) {
     return {
       // A MONITOR, unique among this module's circles — shape carries the state
       // before colour does, and "playing on a monitor, not on air" is exactly what
       // rehearse is.
       icon: MonitorPlay,
-      color: colors.rehearsing,
+      color: REHEARSE_STATE_COLOR,
       // ON PVW — the same words as the verb that turns it on, so the button and
       // the state it produces read as one thing.
-      label: 'ON PVW',
+      label: REHEARSE_STATE_WORD,
       // `idle` and not `attention`: rehearse is a deliberate, safe operator choice,
       // not something to go and look at. Amber here would cry wolf.
       tone: 'idle',
@@ -396,10 +528,15 @@ export function rowState({
    * `ready`, and `data-row-state` goes on saying so.
    */
   const greyed = unverifiable && tone === 'ready';
+  // PHASE 2A — the mark/word split survives only while the MARK colour is the one
+  // `airStateVisual` chose. Both overrides below replace it, so the word must go
+  // back to inheriting rather than keep a hue picked against a colour that is gone.
+  const overridden = greyed || (simulated && claimsAir);
 
   return {
     icon: iconForStatus(status, pending),
     color: greyed ? colors.textMuted : simulated && claimsAir ? colors.pending : visual.color,
+    ...(!overridden && visual.labelColor !== undefined ? { labelColor: visual.labelColor } : {}),
     label,
     tone: simulated && claimsAir ? 'attention' : tone,
     ...(unverifiable ? { unverifiable: true } : {}),
@@ -411,8 +548,37 @@ export function rowState({
     // render as READY now, and the difference between them — whether PLAY has to
     // build the producer first, which takes time and can fail — is what stops a
     // slow take reading as a bug.
+    /*
+      🔴 R-058 Part A — AN `ERROR` SAYS WHY, and the reason survived the whole way here.
+
+      The owner's words: *"if the config has a problem the operator must find out somehow,
+      not just an empty error."* He was looking at a row reading `ERROR` with nothing
+      attached — and the reason was ON that row the entire time.
+
+      Established rather than assumed: the bridge threads the AMCP code into the reconciler
+      (`reconciler.ts` — `if (errorCode !== undefined) rec.errorCode = errorCode`), it is a
+      published field on `StackItemState`, and `errorCodeMessage` has worded it since B-070,
+      `amcp-NNN` fallback included. Exactly ONE place in the runtime read `item.errorCode`
+      — `LayerRow`'s narrow `osc-unverifiable` check — so for every OTHER code the sentence
+      existed, arrived, and was dropped at the last inch.
+
+      ⚠ It goes in the TITLE beside `readyDetail` and the wire report rather than into a new
+      surface, because this cell already carries every other "why" it has and a second
+      mechanism for one status is how one row comes to explain itself two ways.
+
+      ⚠ It claims exactly what it knows. `errorCodeMessage('amcp-404')` says what the server's
+      reply means (`FIELD-FIXES-01` A's one mapping, `amcpRefusal.ts`) — never "AMCP 404", whose
+      number goes to the log. It does NOT say the config is wrong; the console cannot see
+      `casparcg.config` and must never imply that it can.
+    */
     title: withWire(
-      status === 'unverified' ? unverifiedTitle(oscBlind, linkDown) : readyDetail(status),
+      status === 'unverified'
+        ? unverifiedTitle(oscBlind, linkDown)
+        : status === 'error'
+          ? (errorLine ??
+            errorCodeMessage(errorCode) ??
+            'CasparCG did not accept this row, and reported no reason.')
+          : readyDetail(status),
       wire,
     ),
     ...(tone === 'transient' ? { transient: true } : {}),

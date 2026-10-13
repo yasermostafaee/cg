@@ -14,6 +14,7 @@ import { clearAll as clearAllLottieAssets } from './lottieAssetCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 import { VideoImportModal } from './VideoImportModal.js';
 import { fitVideoElement } from '../../state/element-defaults.js';
+import { guardedAddVideo } from '../addGuard/duration-guard.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
@@ -467,13 +468,17 @@ function countUsages(
  * same element (CanvasOverlay) — BOTH go through {@link fitVideoElement} so the
  * two paths produce an identical element for the same asset.
  */
-function placeVideoElement(
+export function placeVideoElement(
   result: { asset: AssetMeta; durationMs: number; width: number; height: number },
   scene: { resolution: { width: number; height: number } } | null,
 ): void {
   const res = scene?.resolution ?? { width: 1920, height: 1080 };
   const id = `el-${String(Date.now())}`;
-  designerStore.addElement(
+  // D-151 — through the add-time duration guard (door V1/V2): a clip longer than the host
+  // raises the Extend / backdrop / Cancel dialog INSTEAD of inserting. The guard commits via
+  // `addElement`, which also selects — the old trailing `setSelection` would have selected an
+  // id that a deferred or cancelled add never inserts.
+  guardedAddVideo(
     fitVideoElement({
       id,
       x: res.width / 2,
@@ -485,7 +490,6 @@ function placeVideoElement(
       resolution: res,
     }),
   );
-  designerStore.setSelection([id]);
 }
 
 function DeleteConfirmDialog({

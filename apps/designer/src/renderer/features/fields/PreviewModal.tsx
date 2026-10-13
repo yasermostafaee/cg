@@ -11,7 +11,7 @@ import {
 } from '@cg/shared-schema';
 import { getAll as assetUrlGetAll } from '../assets/assetUrlCache.js';
 import {
-  getAll as lottieAssetGetAll,
+  getForScene as lottieAssetsForScene,
   primeScene as primeSceneLottie,
 } from '../assets/lottieAssetCache.js';
 import { getAll as sharedUrlGetAll } from '../sharedLibrary/sharedImageUrlCache.js';
@@ -355,7 +355,9 @@ export function PreviewModal({
       // OR ticker image separator) resolves in the preview, as it does on the canvas.
       assetUrls: { ...assetUrlGetAll(), ...sharedUrlGetAll() },
       // D-125 — carry the parsed Lottie map so a rebuilt runtime keeps its players.
-      lottieAssets: lottieAssetGetAll(),
+      // B-137 — SCENE-SCOPED: the whole-cache form kept this map non-empty after a
+      // Lottie was deleted, which kept forcing the rebuild that strands a playing video.
+      lottieAssets: lottieAssetsForScene(scene),
       playoutOverride: overrides[''],
       scopeOverrides: overrides,
     });
@@ -373,13 +375,14 @@ export function PreviewModal({
       post({ action: 'asset-urls', assetUrls: { ...assetUrlGetAll(), ...sharedUrlGetAll() } });
       // D-125 — seed the parsed Lottie map too (the srcDoc boot has an empty one), so a
       // Lottie mounts its player on this dedicated preview iframe.
-      post({ action: 'lottie-assets', lottieAssets: lottieAssetGetAll() });
+      post({ action: 'lottie-assets', lottieAssets: lottieAssetsForScene(scene) });
       post({ action: 'scrub', frame: 0 });
       post({ action: 'update', fields: defaultNestedValues(aggregate) });
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [post, aggregate]);
+    // `scene` joins the deps because the seeded Lottie map is now scoped to it.
+  }, [post, aggregate, scene]);
 
   // Tear down on close — stop the runtime; the iframe unmounts with the modal.
   useEffect(() => () => post({ action: 'stop' }), [post]);

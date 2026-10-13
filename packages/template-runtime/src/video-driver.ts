@@ -53,6 +53,19 @@ import type { RuntimeClock } from './types.js';
  *     bursts) and, with two videos, is the "very slow for a few seconds then recovers"
  *     the owner saw. The WRAP and the always-recoverable paths are never suppressed.
  *
+ *     ⚠ STALE NUMBER, KEPT FOR ITS HISTORY (annotated 2026-08-12). The "~5 s keyframe
+ *     interval" above describes the assets of its own era and is NOT this project's
+ *     conversion output any more: since converter revision `2026-07-24.3` every imported
+ *     video is encoded with `-g 25 -keyint_min 25` — a FIXED 1-SECOND GOP at 25 fps (and
+ *     since `2026-07-25.5` the colour and alpha streams keyframe TOGETHER). See
+ *     `apps/designer/src/renderer/features/assets/video-convert-args.ts`, whose own
+ *     comment reads "every seek decodes ≤1s instead of ≤5s". A seek therefore decodes
+ *     ≤25 frames, not ~125. The grace window is still correct — a ramping decoder should
+ *     not be hammered — but do NOT re-derive a cost estimate from the 5 s figure: a
+ *     design (`openspec/changes/timeline-drives-loop-and-media/design.md` §9.3) did
+ *     exactly that and was overstated by 5×. Pre-`.3` assets in an existing library are
+ *     the reason the number is annotated rather than simply replaced.
+ *
  * PHASE MAPPING (clip's own ms time space; decisions (a)–(d)):
  *
  * | Composition phase | This driver                                              |
@@ -110,10 +123,34 @@ export interface VideoDriverOptions {
   handle: VideoHandle;
   /** Clip duration in ms (the schema's `durationMs`). */
   durationMs: number;
+  /**
+   * media-phases-follow-composition — where the INTRO WINDOW begins (ms). Defaults to `0`
+   * (the shipped behaviour for every manual/absent-phases clip). A FOLLOW-source clip's
+   * window is anchored at the hold time `H`: the intro is `[H − entranceSpan → H]`, skipping
+   * as much of the clip's head as the composition's entrance cannot fit. Honoured inside
+   * {@link expectedClipMs} / `elapsedForActual` (the one mapping and its inverse) and the
+   * `start()`/`reset()` seek — never a branch beside them.
+   */
+  introStartMs?: number | undefined;
+  /**
+   * Session Y — comp-side WAIT (ms of active time) before the intro starts. Non-zero only for
+   * a follow clip whose AUTHORED intro is shorter than the composition's entrance: the element
+   * parks on the intro's first frame, then plays [introStart → introEnd] so it FINISHES at the
+   * content start. Honoured inside {@link expectedClipMs} and its inverse — never beside them.
+   */
+  introDelayMs?: number | undefined;
   /** End of the intro / the hold point (ms). Absent phases ⇒ `durationMs`. */
   introEndMs: number;
-  /** Start of the outro (ms). `>= durationMs` ⇒ NO outro (degenerate). */
+  /** Start of the outro (ms). `>= outroEnd` ⇒ NO outro (degenerate). */
   outroStartMs: number;
+  /**
+   * media-phases-follow-composition — where the OUTRO WINDOW ends (ms). Defaults to
+   * `durationMs` (the shipped behaviour). A FOLLOW-source clip's outro is
+   * `[H → min(H + outSpan, clipEnd)]` — continuous from the held frame and sized to the
+   * composition's OUT segment, so `playOutro()` resolves at `outroEnd`, never playing a clip
+   * tail the OUT segment has no time for.
+   */
+  outroEndMs?: number | undefined;
   /** Hold-loop start (ms): `introEnd` with phases, `0` (whole clip) without, or `idle.start`. */
   loopStartMs: number;
   /** Hold-loop end (ms): `outroStart` with phases, `durationMs` without, or `idle.end`. */
@@ -139,8 +176,11 @@ export interface VideoDriverOptions {
   resyncThresholdMs?: number | undefined;
   /**
    * After a resume (or a large-gap re-base) the `<video>` decoder must RAMP UP — and a
-   * seek at our current ~5 s keyframe interval means decoding seconds of video in one
-   * burst. Firing drift corrections during that ramp is self-amplifying: each corrective
+   * seek at a multi-second keyframe interval means decoding seconds of video in one
+   * burst. (⚠ The "~5 s" this comment used to name is STALE — this project's converter
+   * has emitted a fixed 1-second GOP since `2026-07-24.3`; see the annotation on RESUME
+   * GRACE in this file's header.) Firing drift corrections during that ramp is
+   * self-amplifying: each corrective
    * seek is another keyframe burst that stalls the decoder more, accruing more drift and
    * more seeks (very slow for a few seconds, then it self-heals — the owner's report,
    * doubled with two videos). For this window (ms) drift correction is SUPPRESSED so the
@@ -157,14 +197,23 @@ export interface ElementOutroDriver {
   playOutro(): Promise<void>;
 }
 
-/** Backstop margin past the outro's own duration before the wall-clock timer force-settles it. */
-const OUTRO_BACKSTOP_MARGIN_MS = 2000;
+/**
+ * Backstop margin past the outro's own duration before the wall-clock timer force-settles
+ * it. Exported because it bounds the {@link ElementOutroDriver} CONTRACT, not this class:
+ * the Lottie driver arms the same backstop from the same number (session Z — it had none,
+ * so §D6.4.1's "playOutro() ALWAYS resolves" was true of one implementer and merely
+ * intended of the other).
+ */
+export const OUTRO_BACKSTOP_MARGIN_MS = 2000;
 
 export class VideoDriver implements ElementOutroDriver {
   private readonly o: {
     durationMs: number;
+    introStartMs: number;
+    introDelayMs: number;
     introEndMs: number;
     outroStartMs: number;
+    outroEndMs: number;
     loopStartMs: number;
     loopEndMs: number;
     holdBehavior: 'loop' | 'freeze';
@@ -202,8 +251,13 @@ export class VideoDriver implements ElementOutroDriver {
     this.handle = options.handle;
     this.o = {
       durationMs: options.durationMs,
+      // The window bounds default to the clip's own ([0, durationMs]) — every
+      // manual/absent-phases clip maps exactly as it always has (follow passes a window).
+      introStartMs: options.introStartMs ?? 0,
+      introDelayMs: options.introDelayMs ?? 0,
       introEndMs: options.introEndMs,
       outroStartMs: options.outroStartMs,
+      outroEndMs: options.outroEndMs ?? options.durationMs,
       loopStartMs: options.loopStartMs,
       loopEndMs: options.loopEndMs,
       holdBehavior: options.holdBehavior,
@@ -240,17 +294,19 @@ export class VideoDriver implements ElementOutroDriver {
     this.mode = 'intro';
     this.complete = this.armComplete();
     this.handle.pause();
-    this.handle.seek(0);
+    // Park at the WINDOW start — 0 unless a follow window offsets the intro (the clip's
+    // head is then deliberately outside the window and never played).
+    this.handle.seek(this.o.introStartMs / 1000);
   }
 
-  /** Begin the intro from the start. Idempotent while running or already frozen. */
+  /** Begin the intro from the window start. Idempotent while running or already frozen. */
   start(): void {
     if (this.destroyed || this.running || this.settledHold) return;
     this.mode = 'intro';
     this.running = true;
     this.startedAt = this.now();
     this.lastTickNow = this.now();
-    this.handle.seek(0);
+    this.handle.seek(this.o.introStartMs / 1000);
     this.handle.play();
     this.tick();
     if (this.running) this.schedule();
@@ -262,6 +318,16 @@ export class VideoDriver implements ElementOutroDriver {
     this.running = false;
     this.cancelFrame();
     this.handle.pause();
+  }
+
+  /**
+   * `B-217` — whether this driver is advancing the clip right now. The look park asks BEFORE
+   * it pauses, because `resume()` below STARTS a driver that was never running (it is a
+   * continue-or-start, deliberately — see its header) and a park must not turn a hidden,
+   * never-started editor `<video>` into a playing one on the way back.
+   */
+  isRunning(): boolean {
+    return this.running;
   }
 
   /**
@@ -327,7 +393,10 @@ export class VideoDriver implements ElementOutroDriver {
    */
   playOutro(): Promise<void> {
     if (this.destroyed) return Promise.resolve();
-    if (this.o.outroStartMs >= this.o.durationMs) return Promise.resolve();
+    // Degenerate/absent outro — the window has no length (`outroEnd` is `durationMs`
+    // unless a follow window bounds it, so this is the shipped `>= durationMs` check
+    // for every manual/absent-phases clip).
+    if (this.o.outroStartMs >= this.o.outroEndMs) return Promise.resolve();
     this.settleOutro();
     this.cancelFrame();
     this.recoverIfDead(true); // the outro seek below must land on a LIVE element
@@ -346,7 +415,7 @@ export class VideoDriver implements ElementOutroDriver {
     // resolves wedges the whole exit permanently (the freeze). The wall-clock backstop
     // guarantees resolution even if the rAF is throttled/paused mid-outro. Generous
     // (the outro's own length + a margin), so a normal outro finishes on its own first.
-    const outroMs = Math.max(0, this.o.durationMs - this.o.outroStartMs);
+    const outroMs = Math.max(0, this.o.outroEndMs - this.o.outroStartMs);
     this.outroBackstop = this.setTimer(
       () => this.settleOutro(),
       outroMs + OUTRO_BACKSTOP_MARGIN_MS,
@@ -366,18 +435,70 @@ export class VideoDriver implements ElementOutroDriver {
 
   /**
    * Clip-time (ms) the injected clock expects at `elapsedMs` of active time.
-   * Intro is `[0, introEnd]`; a `freeze` hold clamps to `introEnd`; a `loop`
-   * hold wraps within `[loopStart, loopEnd]`; the outro is `[outroStart → end]`.
+   * Intro is `[introStart, introEnd]` (introStart 0 unless a follow window offsets it);
+   * a `freeze` hold clamps to `introEnd`; a `loop` hold wraps within
+   * `[loopStart, loopEnd]`; the outro is `[outroStart → outroEnd]`.
+   *
+   * THE ONE MAPPING (D-135 §5 / §9.5 (a)) — the driver's own clock (`tick`) and the
+   * Designer's playhead ({@link positionAt}) both resolve the clip time HERE. `mode`
+   * defaults to the driver's own lifecycle mode for the clock path; the playhead path
+   * passes it explicitly, because the playhead's phase comes from the composition's
+   * frame, not from this driver's state. Negative elapsed clamps to the window start
+   * (the playhead can sit before the composition's active-in) — never extrapolated back.
    */
-  private expectedClipMs(elapsedMs: number): number {
-    if (this.mode === 'outro') {
-      return Math.min(this.o.outroStartMs + elapsedMs, this.o.durationMs);
+  private expectedClipMs(rawElapsedMs: number, mode: 'intro' | 'outro' = this.mode): number {
+    const elapsedMs = Math.max(0, rawElapsedMs);
+    if (mode === 'outro') {
+      return Math.min(this.o.outroStartMs + elapsedMs, this.o.outroEndMs);
     }
-    if (elapsedMs < this.o.introEndMs) return elapsedMs;
+    // Session Y — an AUTHORED follow intro can be shorter than the composition's entrance:
+    // the element PARKS on the intro's first frame for `introDelayMs`, then plays, so the
+    // intro FINISHES at the content start. Zero for every other configuration.
+    const active = elapsedMs - this.o.introDelayMs;
+    if (active < 0) return this.o.introStartMs;
+    const introSpanMs = this.o.introEndMs - this.o.introStartMs;
+    if (active < introSpanMs) return this.o.introStartMs + active;
     if (this.o.holdBehavior === 'freeze') return this.o.introEndMs;
     const span = this.o.loopEndMs - this.o.loopStartMs;
     if (span <= 0) return this.o.loopStartMs;
-    return this.o.loopStartMs + ((elapsedMs - this.o.introEndMs) % span);
+    return this.o.loopStartMs + ((active - introSpanMs) % span);
+  }
+
+  /**
+   * D-135 §5 — POSITION the element at the Designer playhead, through the same mapping
+   * the driver's own clock reconciles against ({@link expectedClipMs}). The Designer
+   * canvas has no `play()` path at all — its transport advances the store's frame and
+   * the canvas posts one `scrub` per change — so SCRUB and PLAY on that surface are the
+   * same stream of calls into here, which is why they cannot disagree (§9.5 (a): ONE
+   * mechanism for all four transport modes; the forward-1× hybrid was REJECTED).
+   *
+   * `introElapsedMs` is time since the composition's IN; `outroElapsedMs`, when
+   * non-null, is time since the composition's OUT-POINT and WINS. A DEGENERATE outro
+   * (`outroStart >= outroEnd` — a clip with no OUT phase) takes the INTRO mapping past
+   * the out-point, exactly the Lottie's rule: the mapping then freezes (or idles) on
+   * the held look, which is what a degenerate `playOutro()` leaves painted on air —
+   * never a clamp to the clip's end frame.
+   *
+   * PAUSED, ALWAYS: this never calls `play()` — it seeks a paused element, and a seek
+   * that finds one still in flight SKIPS, never queues (the same `seeking()` guard the
+   * clock path uses): the canvas shows the NEAREST DECODABLE frame, which is the
+   * measured, specified contract (§5.2–§5.3), not a defect. The seek goes through the
+   * handle, whose members resolve the node via `live()` on EVERY access — B-137's
+   * constraint (§1.8/§5.5): the canvas reparents nodes across `scene-replace`.
+   *
+   * 🔴 A driver RUNNING its own lifecycle — or holding a frame it drove to — OWNS the
+   * element, and this is a no-op for it: the playhead may position what nothing else is
+   * driving; it may never fight a live one.
+   */
+  positionAt(introElapsedMs: number, outroElapsedMs: number | null): void {
+    if (this.destroyed || this.running || this.settledHold) return;
+    if (this.handle.seeking()) return; // skip, never queue — the seek-storm guard
+    const hasOutro = this.o.outroStartMs < this.o.outroEndMs;
+    const ms =
+      outroElapsedMs === null || !hasOutro
+        ? this.expectedClipMs(introElapsedMs, 'intro')
+        : this.expectedClipMs(outroElapsedMs, 'outro');
+    this.handle.seek(ms / 1000);
   }
 
   private tick(): void {
@@ -398,8 +519,8 @@ export class VideoDriver implements ElementOutroDriver {
 
     const elapsedMs = this.now() - this.startedAt;
     if (this.mode === 'outro') {
-      if (this.o.outroStartMs + elapsedMs >= this.o.durationMs) {
-        this.seekMs(this.o.durationMs); // clamp the final paint to the clip end
+      if (this.o.outroStartMs + elapsedMs >= this.o.outroEndMs) {
+        this.seekMs(this.o.outroEndMs); // clamp the final paint to the window end
         this.handle.pause();
         this.running = false;
         this.cancelFrame();
@@ -409,7 +530,7 @@ export class VideoDriver implements ElementOutroDriver {
       this.reconcile(this.expectedClipMs(elapsedMs));
       return;
     }
-    if (elapsedMs < this.o.introEndMs) {
+    if (elapsedMs < this.o.introDelayMs + (this.o.introEndMs - this.o.introStartMs)) {
       this.reconcile(this.expectedClipMs(elapsedMs)); // intro
       return;
     }
@@ -491,14 +612,18 @@ export class VideoDriver implements ElementOutroDriver {
 
   /** The active-elapsed that maps (via {@link expectedClipMs}) back to the media's actual clip-ms. */
   private elapsedForActual(actualMs: number): number {
+    const delay = this.o.introDelayMs;
+    const introSpanMs = this.o.introEndMs - this.o.introStartMs;
     if (this.mode === 'outro') return Math.max(0, actualMs - this.o.outroStartMs);
-    if (actualMs < this.o.introEndMs) return Math.max(0, actualMs);
-    if (this.o.holdBehavior === 'freeze') return this.o.introEndMs;
+    // Media parked at/behind the intro start reads as delay CONSUMED (never re-parking a
+    // clip that already started), which keeps a rebase during the park benign.
+    if (actualMs < this.o.introEndMs) return delay + Math.max(0, actualMs - this.o.introStartMs);
+    if (this.o.holdBehavior === 'freeze') return delay + introSpanMs;
     const span = this.o.loopEndMs - this.o.loopStartMs;
-    if (span <= 0) return this.o.introEndMs;
+    if (span <= 0) return delay + introSpanMs;
     // First-cycle phase that matches the media; the loop simply continues from there.
     const within = Math.min(Math.max(0, actualMs - this.o.loopStartMs), span);
-    return this.o.introEndMs + within;
+    return delay + introSpanMs + within;
   }
 
   private armComplete(): Promise<void> {

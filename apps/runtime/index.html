@@ -2,33 +2,52 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- FIELD-FIXES-01 G: the browser tab carries the title and the Apasai logo (brand/apasai-icon.svg). -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      B-136 — `media-src` IS LOAD-BEARING FOR PVW, and its absence is why PVW never
+      showed a video. This page EMBEDS an exported single-file template in an
+      `<iframe srcDoc>` (`RehearsalFrame.tsx:236`), and a `srcdoc` document INHERITS
+      its embedder's CSP — enforced IN ADDITION to the artifact's own, intersection
+      wins. The artifact has declared `media-src data:` since D-128 Phase 5, but this
+      page declared no `media-src` at all, so media fell through to
+      `default-src 'self'` and every base64 `data:video/webm` was refused. Images and
+      fonts survived the intersection because they ARE listed — media was the only
+      class omitted, which is exactly why only video was invisible.
+
+      `data:` is what the exporter inlines; `'self'` covers same-origin media. NO
+      `blob:` — unlike the Designer (which plays video off object URLs) nothing in
+      this app creates one, so admitting it would widen the policy past the need.
+      ⚠ PARITY WITH THE DESIGNER IS NOT A REASON TO ADD IT (owner's call, 2026-08-12):
+      two apps are allowed to have different policies because they have different
+      needs. If a future change genuinely needs `blob:` here, that change adds it —
+      with a test that proves the need.
+      Pinned by `tests/e2e/pvw-video.spec.ts` in a REAL browser: jsdom does not
+      enforce CSP, so no unit test can observe this.
+
+      CENTRAL-BRIDGE-01 (D9) — `img-src` ADMITS `http:`/`https:` BECAUSE THE PROGRAM PICTURE IS
+      NOT SAME-ORIGIN ANY MORE. The console is CG Control's bundled page (or Vite's, or a
+      browser's), and the picture is CG Bridge's: `/pgm/<n>?ticket=…` on its control port, on
+      the Playout's host or wherever an admin says — any host, any port the service was given.
+      `connect-src` already admits the same (the socket, the reachability probe). Measured: with
+      `img-src 'self' data: blob:` Chromium refused the picture ("violates … img-src") and the
+      PROGRAM strip never left "No return signal". A rehearsed template stays narrow: its srcdoc
+      frame enforces its OWN policy as well (`img-src data:`), and the intersection wins.
+      Pinned by `tests/e2e/pgm-return.spec.ts` and `dev-station.spec.ts`, in a real browser.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob:; font-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
     />
     <!--
-      R-035 — LOADED NON-BLOCKING (`media="print"` until `onload`), and that is not a
-      micro-optimisation: a plain `<link rel="stylesheet">` to a CDN blocks the FIRST
-      PAINT until the CDN answers or the socket times out. The splash below exists to own
-      the first frame, and on a LAN-only broadcast machine — which is most of them —
-      jsdelivr never answers, so the render-blocking form would hand the operator a blank
-      screen for the whole TCP timeout. Nothing about WHICH faces load changes: the sheet
-      still applies the moment it arrives.
-
-      The face itself is a leftover: the Designer self-hosts its fonts and this app already
-      ships the same Vazirmatn faces in `src/renderer/fonts.css` — but that file is imported
-      only as `?inline` for template delivery, so the app UI still reads Persian off this
-      CDN. Moving it to the self-hosted faces is filed as item 4 in
-      `openspec/changes/runtime-splash-screen/DEBT.md`, not done here.
+      P-001 — NO FONT COMES OFF THE NETWORK. The UI's Vazirmatn faces are the ones this app
+      already ships in `src/renderer/fonts.css`, imported by `main.tsx`; the jsdelivr link
+      that used to load them is gone, and so is `cdn.jsdelivr.net` from `style-src` and
+      `font-src` above. A LAN-only broadcast machine — which is most of them — renders
+      Persian in Vazirmatn with no request leaving it. Pinned by `tests/e2e/fonts-offline.spec.ts`.
     -->
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/@fontsource/vazirmatn@5/index.min.css"
-      media="print"
-      onload="this.media = 'all'"
-    />
-    <title>cg Runtime</title>
+    <title>APASAI CG CONTROL</title>
 
     <!--
       ══ R-035 · STARTUP SPLASH — CRITICAL CSS ═════════════════════════════════════
@@ -87,7 +106,7 @@
         /* The PLAY triangles and the ticker bed are the console's OWN success green — the
            colour that already means go/healthy in this app — so this one is a token
            mirror, not a splash-local invention. mirrors: --r-success */
-        --cg-ok: #10b981;
+        --cg-ok: #85e4b6;
 
         position: fixed;
         inset: 0;
@@ -966,6 +985,11 @@
           return;
         }
 
+        // CENTRAL-BRIDGE-01 — this splash is the FIRST thing CG Control's window shows: the app
+        // bundles this page, and there is no starting page before it to continue (FIELD-FIXES-01
+        // J's "continued" mark went with the bridge the window used to wait for). So it makes its
+        // entrance there exactly as in a browser.
+
         // Mirrors of `splashTiming.ts` — see this block's header.
         var COLD_FLOOR_MS = 8000;
         var WARM_FLOOR_MS = 3000;
@@ -976,7 +1000,7 @@
         // THREE LABELS, THREE WORK STEPS, each naming the work happening NOW. There is no
         // terminal label: see `splashTiming.ts` and the `#cg-splash-phase` rule above for
         // why the label leaves on completion instead of settling on a word.
-        var PHASES = ['INITIALIZING', 'PROBING BRIDGE', 'STARTING INTERFACE'];
+        var PHASES = ['INITIALIZING', 'CONNECTING', 'STARTING INTERFACE'];
 
         var t0 = Date.now();
 

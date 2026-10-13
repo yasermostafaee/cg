@@ -29,6 +29,7 @@ import {
   type PathInsertSpec,
 } from '../path-structure.js';
 import { designerStore } from '../store.js';
+import { commitToActiveCell } from './arrangements.js';
 
 /**
  * Apply an immutable transform to the located element's `animation` field.
@@ -471,6 +472,13 @@ export const timelineSlice = {
    */
   commitAnimatable(elementId: string, property: AnimatableProperty, value: KeyframeValue): void {
     if (current.scene === null) return;
+    // 🔴 D-154 — with an arrangement active, a BOX's geometry belongs to that arrangement's
+    // CELL, not to the element's transform. Intercepted HERE because this is the one
+    // chokepoint every geometry edit passes through: the gizmo drag, the gizmo resize, the
+    // group move and the Transform panel's number fields. One intercept is what makes "the
+    // gizmo and the CELLS fields are two views of one value" true by construction rather
+    // than by four call sites remembering to agree.
+    if (commitToActiveCell(elementId, property, value)) return;
     const found = locate(current.scene, elementId);
     if (found === null) return;
     const el = found.layer.children[found.elIdx];

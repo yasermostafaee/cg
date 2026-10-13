@@ -40,11 +40,17 @@ const BACKING_METHODS = [
   'stackSnapshot',
   'config',
   'setConfig',
+  // `PLAYOUT-SOURCES-01` §1.F — `sources.set-config` is the plate band's door on both backends.
+  'setSourceBand',
   'health',
   'failover',
   'orphans',
   'clearLayer',
   'ownedOccupancy',
+  // B-225 — the notice and its two operator acts.
+  'emptiedAir',
+  'restoreEmptiedAir',
+  'dismissEmptiedAir',
   'engage',
   'release',
   'lockState',
@@ -52,11 +58,10 @@ const BACKING_METHODS = [
   'templateList',
   'templateImport',
   'auditRecent',
+  'auditHealth',
   'updateRequest',
   'updateState',
   'updateCancel',
-  'settingsGet',
-  'settingsSet',
 ] as const;
 
 /** Every emitter the bridge's `wirePublishes()` subscribes to. */
@@ -66,9 +71,9 @@ const BACKING_EMITTERS = [
   'configChanged',
   'orphansChanged',
   'ownedOccupancyChanged',
+  'emptiedAirChanged',
   'lockChanged',
   'updateChanged',
-  'settingsChanged',
 ] as const;
 
 type BridgeMethodName = {
@@ -89,7 +94,83 @@ const BRIDGE_SURFACE: {
 } = {
   methods: ['getAppInfo'],
   groups: {
-    link: ['status', 'onStatusChanged'],
+    // `TEXT-DIGITS-01` — the shell's keyboard language (both ask the same shell door).
+    keyboard: ['language', 'reportsLanguage'],
+    // `R-094` — the window's close, held by the shell (both hold through the same shell door).
+    closeGuard: ['closeNow', 'held', 'hold'],
+    // §4 — `resyncing` says whether an EMPTY stack is an answer or a not-yet.
+    // `B-153` — `skew` names the channels the connected bridge PROCESS does not route.
+    // `CENTRAL-BRIDGE-01` — `versionMismatch`: another release than CG Bridge (the mock: never).
+    link: [
+      'status',
+      'onStatusChanged',
+      'resyncing',
+      'onResyncingChanged',
+      'skew',
+      'onSkewChanged',
+      'versionMismatch',
+      'onVersionMismatchChanged',
+      // `CENTRAL-BRIDGE-01` (D8) — where CG Bridge is, for the "not reachable" line.
+      'bridgeAddress',
+    ],
+    // `C-037`/`R-066` — the Playout sign-in. The mock reports `off` (test mode has no bridge
+    // process and no Playout), so the shapes match while the ANSWERS differ, which is exactly
+    // what this guard is for: it compares the surface, never the behaviour.
+    auth: ['capabilities', 'onCapabilitiesChanged', 'state', 'onStateChanged', 'signIn', 'signOut'],
+    // `DESKTOP-APPS-01` — first-run. The mock answers empty and has no desktop door.
+    setup: [
+      'check',
+      // `B-317` — the one CG Bridge address Set up's fields resolve to (the mock: none).
+      'bridgeAddressFor',
+      'routeAddress',
+      'catalogue',
+      // `DESKTOP-APPS-01-D` d — what is on air on a channel before it is declared.
+      'channelOccupancy',
+      'canSetPlayoutAddress',
+      'setPlayoutAddress',
+      // `CENTRAL-BRIDGE-01` (D8) — a separate server's CG Bridge address, and forgetting the station.
+      'bridgeOverride',
+      'forgetStation',
+      // `R-091` — CG Bridge on this machine (the mock: not CG Control).
+      'localBridgeState',
+      'localBridgeAct',
+    ],
+    // `DESKTOP-APPS-01-D` j — items of ours on a channel this station does not declare.
+    strays: ['list', 'onChanged', 'takeOffAir'],
+    // `CENTRAL-BRIDGE-01` (D7) — CG Bridge's own Playout session (the mock: `off`).
+    // `RELEASE-0112-01` (`R-085`) — and each engine's session, and the backup engine's own sign-in.
+    bridgeSession: ['state', 'onChanged', 'signIn', 'engines', 'onEnginesChanged', 'signInBackup'],
+    // `PLAYOUT-FEATURES-01` D — the CG license (the mock: nothing read).
+    license: ['state', 'onChanged'],
+    // `RELEASE-0113-01` (`R-089`) — each channel's backup line (the mock: no backup engine).
+    backupChannels: ['state', 'onChanged', 'setEntries'],
+    // `PLAYOUT-FEATURES-01` E — the Playout's meters (the mock: none).
+    meters: ['onReading'],
+    /*
+      🔴 **SESSION BR — `delimiters` AND `sources` were BOTH missing from this expected tree,
+      so the one guard that exists to prove the mock shim matches the real bridge has never
+      compared either group.**
+
+      Nothing caught it because `apps/runtime`'s typecheck did not include `tests/`: the
+      literal is declared as a full `{ [G in BridgeGroupName]: … }`, so the two absent keys
+      were a type error the compiler was never asked to look at. Both groups ARE implemented
+      by the mock (`createRuntimeBridge`), so this is a hole in the GUARD rather than a
+      missing capability — but the guard could not have told anyone that, which is the point.
+    */
+    delimiters: ['list', 'set', 'onChanged'],
+    sources: [
+      'config',
+      'setConfig',
+      'onConfigChanged',
+      'assignments',
+      'setAssignments',
+      'onAssignmentsChanged',
+      // `PLAYOUT-SOURCES-01` — the picker's two reads, on both backends.
+      'mediaSearch',
+      'refresh',
+      // `MEDIA-PLATES-01` — a bound clip's Loop and When hidden, on the bound-media reference.
+      'setMediaPlayback',
+    ],
     stack: [
       'load',
       'take',
@@ -101,21 +182,86 @@ const BRIDGE_SURFACE: {
       'out',
       'remove',
       'setPosition',
+      // R-048 — the per-plate live-source swap. The mock has no producers, so it
+      // models the OVERRIDE half only (record + publish) and answers the same
+      // contract; the wire half is integration-tested bridge-side, which is the
+      // only place a REPLACE on an occupied layer can be observed at all.
+      'swapLiveSource',
+      // §14 (LOOKS) Stage E — the row’s look picker.
+      'setActiveLook',
+      // `TIMING-WIRE-22` (c) — the per-row pass-timing configuration verb.
+      'setPassTiming',
+      // C-015 (6.5f) — the per-plate audio intent. The mock has no producers, so it
+      // models the INTENT half only (record + publish) and answers the same
+      // contract; the wire assertion is integration-tested bridge-side.
+      'setPlateVolume',
+      // `add-multibox-audio` — the MAP door (FADER / ON-OFF / SOLO / PANIC). The mock
+      // composes its own single-plate writer exactly as the bridge composes its one, so the
+      // offline console cannot teach the UI a model the bridge does not have. It takes no
+      // lock: the bridge's exists to keep a look switch out of the middle of a SOLO, and the
+      // offline mock has neither a wire nor a reconcile to interleave with.
+      'setPlateVolumes',
+      // `PATCH-BX-01` B — PANIC. It takes NO arguments on either side, because the scope is the
+      // LEDGER's and not the caller's; the mock scopes it from `liveLayersState()` for exactly
+      // that reason, rather than from `isOnAir` (which would teach the UI a model the bridge
+      // does not have — the B-070 / B-072 class).
+      'silenceAllLivePlates',
+      // `MULTI-CHANNEL-01` §2 C — PANIC for one channel, a new verb beside the one above.
+      'silenceChannelLivePlates',
+      // `MEDIA-PLATES-01` — Play/Pause and Restart on a clip of an on-air row. The mock answers
+      // from its seeded clips (`CG_E2E_MEDIA_STATE`) with the bridge's refusals.
+      'mediaPlateTransport',
       'removeAll',
       'clearAll',
       'stopAll',
       'snapshot',
       'onStateChanged',
+      // B-108 — the rows the last restore could not bring back. The mock has no
+      // bridge and so no restore; it answers the contract with the true value for
+      // such a session (an empty report), which is why parity holds here.
+      'onRestoreSkips',
+      // `single-clock-look-switch` — and its sibling, the rows a restore brought back on a
+      // DIFFERENT row. Same reasoning: no restore, so an empty report is the true one.
+      'onRestoreMigrations',
+      // `CENTRAL-BRIDGE-01` — the report is the bridge's, dismissed there for every console. The
+      // mock has nothing to dismiss and says so (`ok: false`), as the bridge does for an empty half.
+      'dismissRestoreReport',
+      // `B-301` — a row's error, dismissed for every console; the mock settles its own (a take
+      // refused at the wire) back to `loaded`, and refuses as the bridge refuses.
+      'dismissError',
     ],
     connections: [
       'config',
       'setConfig',
+      // `C-024` — WHAT IS IN FORCE, as distinct from what is STORED. Declared here because the
+      // mock owes an answer too: offline it reports nothing masked and no candidates, which is
+      // the TRUE answer in a browser rather than a stand-in, and a mock that invented either
+      // would teach test mode a surface air does not have.
+      'templateServe',
       'health',
       'failover',
       'onHealthChanged',
       'onConfigChanged',
     ],
-    layers: ['orphans', 'clear', 'onOrphansChanged', 'ownedOccupancy', 'onOwnedOccupancyChanged'],
+    layers: [
+      'orphans',
+      'clear',
+      'onOrphansChanged',
+      'ownedOccupancy',
+      'onOwnedOccupancyChanged',
+      // `B-292` — a layer of ours cleared outside CG Control. Offline: honestly never.
+      'clearedOutside',
+      'onClearedOutsideChanged',
+    ],
+    /*
+      B-225 — the playout server stopped carrying what this console put on air. Listed here
+      for the reason this guard exists at all: the SPA's notice is developed and E2E'd against
+      the offline mock, where a notice can never be raised, so a `restore` that existed on one
+      backend and not the other would go unnoticed until the plant.
+    */
+    emptiedAir: ['notice', 'restore', 'dismiss', 'onNoticeChanged'],
+    // C-016 — the programme return. The mock has no relay: `feedUrl` is `null`, nothing is watched.
+    pgmReturn: ['feedUrl', 'audioUrl', 'status', 'onStatusChanged'],
     // R-028 part B — `fixedLayers` was MISSING from this guard (recorded as a
     // part-A seam): `tests/**` is not typechecked, so the mapped type above
     // never caught the omission and any mock↔bridge divergence in the fixed
@@ -131,6 +277,10 @@ const BRIDGE_SURFACE: {
     fixedLayers: [
       'config',
       'setConfig',
+      // `MULTI-CHANNEL-01` — every declared bank, the plural door, and its push.
+      'banks',
+      'setBanks',
+      'onBanksChanged',
       'load',
       'clearLayer',
       'state',
@@ -138,17 +288,45 @@ const BRIDGE_SURFACE: {
       'onStateChanged',
     ],
     playoutLayers: ['state', 'clear', 'onStateChanged'],
+    // B-145 (2.8) — the bridge-owned Live Source ledger. READ-ONLY by design: the
+    // verbs that reach a seated layer are item-scoped and already on `stack`, and
+    // `layers.clear` refuses a live-source coordinate by name. A `clear` appearing
+    // here later would be that refusal being re-opened from a different surface.
+    /*
+      `B-247` — `onPlateReleased` carries the bridge's own sentence for a plate the look
+      reconcile let go. Listed here for this guard's founding reason: the mock CANNOT fire it
+      (no reconcile offline), so it is exactly the kind of method that could exist on one
+      backend and not the other and go unnoticed until the plant — which is what happened to
+      the emitter behind it for the whole life of `multibox-layout-switch`.
+    */
+    // `MEDIA-PLATES-01` — and each seated clip's transport state, pulled and pushed.
+    liveLayers: ['state', 'onStateChanged', 'onPlateReleased', 'mediaState', 'onMediaStateChanged'],
     lock: ['engage', 'release', 'state', 'onStateChanged'],
     // R-028 (o1) — `onChanged`: the bridge-owned catalogue push.
-    // R-022 — `html` is the RETAINED self-contained page for a template, read from
-    // THIS browser's local library. Declared here like every other method because
-    // both implementations must answer it: the live one from its `LibraryStore`, the
-    // mock with `null` (it retains no rendered page, so the rehearsal panel shows
-    // its honest "unavailable in this browser" state).
-    templates: ['get', 'list', 'import', 'remove', 'onChanged', 'html'],
-    audit: ['recent'],
+    // `RELEASE-091-01` §1 — `page` is PVW's page: the live one asks the bridge first and
+    // falls back to its `LibraryStore` only when the bridge cannot be reached; the mock answers
+    // `unreachable` (it retains no rendered page), so the rehearsal panel shows its one-line
+    // reason. It replaced R-022's `html`, a read of this browser's copy alone.
+    // `CONSOLE-POLISH-01` (`B-300`) — `onActed`: who changed the catalogue.
+    templates: ['get', 'list', 'import', 'remove', 'onChanged', 'onActed', 'page'],
+    /*
+      🔴 `OPERATOR-NAME-SWEEP-01` — **`operatorName` / `setOperatorName` LEFT THIS LIST, and
+      this guard is the reason the removal is safe.**
+
+      They were here because the self-declared console label was browser-local in BOTH
+      backends, so test mode recorded the same actor as a live one. Identity is proven now
+      (`C-037`/`C-038`), the label is retired, and the members are gone from the contract.
+
+      ⚠ This list is asserted with `toEqual` in BOTH directions against the mock AND the live
+      bridge, so it could not be bypassed: leaving the two names here after the contract lost
+      them is red, and so is dropping a member that still exists. The guard is UPDATED as a
+      consumer, which is the only correct way to move a census.
+    */
+    // `FIELD-FIXES-01` G — and the log-folder door the native menu held until it was removed.
+    // `CENTRAL-BRIDGE-01` §1 A — CG Bridge's logs are downloaded now; the folder is on another machine.
+    // `CONSOLE-POLISH-01` (`R-083`) — `page` and `onAppended`: the Log a page at a time, and live.
+    audit: ['recent', 'page', 'onAppended', 'health', 'canDownloadLogs', 'downloadLogs'],
     update: ['request', 'state', 'cancel', 'onStateChanged'],
-    settings: ['get', 'set', 'onChanged'],
     /**
      * R-022 — REHEARSE belongs in this guard for exactly the reason
      * `playoutLayers.clear` and `fixedLayers.clearLayer` do: it is a SAFETY
@@ -164,6 +342,9 @@ const BRIDGE_SURFACE: {
      * refuses would let the UI be built against the wrong gate.
      */
     channelSettings: ['get', 'set', 'onChanged'],
+    // `R-062` gap 2 — the channel-discovery call. The mock answers as an auth-OFF bridge does:
+    // the bank and settings, no catalogue names and no `permitted`.
+    stationChannels: ['list', 'onChanged'],
   },
 };
 
@@ -199,7 +380,7 @@ function methodKeys(target: object): string[] {
 /** Loopback config for a NEVER-STARTED `CasparRuntime` — the ctor is pure (no I/O). */
 function offlineConnection(): ConnectionConfig {
   return {
-    servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+    servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
     strategy: 'mirror-sync',
     autoFailoverEnabled: false,
   };

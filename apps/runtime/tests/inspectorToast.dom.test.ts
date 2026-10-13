@@ -5,12 +5,14 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
+import { applyDraft } from '../src/renderer/features/inspector/applyDraft.js';
 import { PositionPicker } from '../src/renderer/features/inspector/PositionPicker.js';
 import {
   onCommandError,
   reportCommandError,
 } from '../src/renderer/features/status/commandFeedback.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * #334 finished the migration to toast-only feedback for the Library and Stack rows, but the
@@ -44,26 +46,48 @@ function itemWith(status: StackItemState['status'] = 'on-air'): StackItemState {
     fields: { title: 'عنوان' },
     status,
     pending: false,
-    slot: { channel: 1, layer: 10, server: 'primary' },
+    // `LAYER-BANDS-16` — a TEMPLATE layer (80-99). Layer 10 is the playout server's now.
+    slot: { channel: 1, layer: 84, server: 'primary' },
   };
 }
 
 /** The slice of `window.cg` these panels touch. */
 function stubBridge(over: Record<string, unknown> = {}): void {
   const stub = {
-    link: { status: () => 'live', onStatusChanged: () => () => undefined },
     // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
     // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
-    link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+    //
+    // ⚠ SESSION BR — a SECOND `link` key sat above this one, with `status: () => 'live'`.
+    // The later key wins in an object literal, so the first was dead and this one is what
+    // every spec in the file has actually been running against. Removing the dead copy is
+    // behaviour-identical; leaving two keys with DIFFERENT values would not have stayed that
+    // way.
+    link: {
+      status: () => linkFor('both-up'),
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub('both-up'),
-    templates: { get: () => Promise.resolve(null), list: () => Promise.resolve([]) },
+    templates: {
+      get: () => Promise.resolve(null),
+      list: () => Promise.resolve([]),
+      onChanged: () => () => undefined,
+    },
+    // Phase 6 — the Inspector names the ROW (`useOperatorNames`), so it reads the bank too.
+    fixedLayers: {
+      config: () => Promise.resolve(null),
+      onConfigChanged: () => () => undefined,
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
     stack: {
       setPosition: () => Promise.resolve({ ok: true }),
       update: () => Promise.resolve({ accepted: true }),
       ...over,
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 async function render(element: ReturnType<typeof createElement>): Promise<void> {
@@ -76,8 +100,15 @@ async function render(element: ReturnType<typeof createElement>): Promise<void> 
   });
 }
 
+/**
+ * ⚠ MATCHED ON THE LABEL'S OPENING WORDS, not the whole attribute — `INSPECTOR-AUDIT-05` §3.
+ * The Inspector's commit control now tells a screen-reader operator which kind of row it is
+ * about (`Apply staged edits` off air, `Apply staged edits to the on-air row` on it), and the
+ * items here are on air by default. A full-attribute match would pin the state rather than
+ * the control, which is the opposite of what every caller in this file means.
+ */
 async function clickByLabel(label: string): Promise<void> {
-  const btn = container?.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  const btn = container?.querySelector<HTMLButtonElement>(`button[aria-label^="${label}"]`);
   if (btn === null || btn === undefined) throw new Error(`no button labelled ${label}`);
   await act(async () => {
     btn.click();
@@ -97,16 +128,32 @@ function inlineErrors(): string[] {
 }
 
 describe('Inspector feedback is toast-only (#334)', () => {
-  it('a refused Apply position TOASTS and pins nothing inline', async () => {
+  /**
+   * 🔴 **RE-POINTED — `INSPECTOR-DELTA`, owner 2026-09-14.** `Apply position` is gone and
+   * UPDATE commits the placement, so the reporter under test moved from that button to
+   * `applyDraft`'s own position half. The CLAIM is untouched and is still the one this file
+   * exists for: ONE message per refusal, on the toast, and nothing pinned inline.
+   *
+   * ⚠ `setPosition` still does not self-report — its answer is a reason CODE with no
+   * sentence — so `applyDraft` is the only reporter and the wording comes from the same
+   * `errorCodeMessage` table the button read. That is why the expected string is unchanged.
+   */
+  it('a refused position TOASTS once through UPDATE, and pins nothing inline', async () => {
     const messages: string[] = [];
     const unsub = onCommandError((m) => messages.push(m));
     try {
-      // R-011 — refused while the item is on air. `setPosition` does NOT self-report, so
-      // this button is the only reporter: the toast must carry it.
-      stubBridge({ setPosition: () => Promise.resolve({ ok: false, reason: 'unknown-item' }) });
-      await render(createElement(PositionPicker, { item: itemWith('loaded') }));
-
-      await clickByLabel('Apply position');
+      const subject = itemWith('loaded');
+      stubBridge({
+        setPosition: () => Promise.resolve({ ok: false, reason: 'unknown-item' }),
+        update: () => Promise.resolve({ accepted: true }),
+      });
+      await render(createElement(PositionPicker, { item: subject }));
+      // Stage a real move — an unstaged press sends no position at all (the blast-radius
+      // guard in `positionPicker.dom.test.ts`), so without this the refusal never happens.
+      await clickByLabel('Anchor top-right');
+      await act(async () => {
+        await applyDraft(subject);
+      });
 
       expect(messages).toHaveLength(1);
       // Placement moved; the WORDING is the same mapping the inline message used.
@@ -117,14 +164,20 @@ describe('Inspector feedback is toast-only (#334)', () => {
     }
   });
 
-  it('an accepted Apply position says nothing at all', async () => {
+  it('an accepted position says nothing at all', async () => {
     const messages: string[] = [];
     const unsub = onCommandError((m) => messages.push(m));
     try {
-      stubBridge({ setPosition: () => Promise.resolve({ ok: true }) });
-      await render(createElement(PositionPicker, { item: itemWith('loaded') }));
-
-      await clickByLabel('Apply position');
+      const subject = itemWith('loaded');
+      stubBridge({
+        setPosition: () => Promise.resolve({ ok: true }),
+        update: () => Promise.resolve({ accepted: true }),
+      });
+      await render(createElement(PositionPicker, { item: subject }));
+      await clickByLabel('Anchor top-right');
+      await act(async () => {
+        await applyDraft(subject);
+      });
 
       expect(messages).toEqual([]);
       expect(inlineErrors()).toEqual([]);

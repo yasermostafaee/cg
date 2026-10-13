@@ -16,6 +16,7 @@ import { RealtimeNumberInput } from './controls.js';
 import { DynamicDataSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { MultiSelectSection } from './MultiSelectSection.js';
+import { LooksSection } from './LooksSection.js';
 import { PlayoutSection } from './PlayoutSection.js';
 import { selectedElements } from './shared-properties.js';
 import { StyleSection } from './StyleSection.js';
@@ -84,8 +85,14 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
       <DurationRow scene={scene} />
       <FrameRateRow scene={scene} />
       <Row label="elements" value={String(countElements(scene))} />
-      <BackgroundControl background={scene.background} variant="full" />
+      <BackgroundControl editorBackdrop={scene.editorBackdrop} variant="full" />
       <PlayoutSection scene={scene} />
+      {/* `multibox-layout-switch` C2 — beside Playout, because an arrangement is a property
+          of the COMPOSITION: the thing that becomes the `.vcg` on one layer. */}
+      {/* A′'s ArrangementsSection is DISABLED, not deleted (owner, 2026-08-19):
+          authoring uses LOOKS only, and the A′ code stays compiling-but-unreachable so a
+          bug in the new surface cannot strand the owner. `tasks.md` §1b P2.DEL deletes it. */}
+      <LooksSection scene={scene} />
       {(scene.fields.length > 0 || compositionInstancesOf(scene).length > 0) && (
         <>
           <h3 className={s.heading}>FIELDS</h3>

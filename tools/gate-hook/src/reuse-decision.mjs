@@ -7,12 +7,29 @@
  * on it. `[skip ci]` cannot help — a fast-forward creates no commit whose message
  * could carry it — so the decision has to be made from the Actions API.
  *
- * 🔴 **THE THIRD RULE IS THE ONE A NAIVE VERSION GETS WRONG.** A prior run can be
- * green having SKIPPED the E2E: `e2e` is gated on `needsE2e` (P-029), so a
- * docs-only push to `dev` produces a completed, successful run in which nothing
- * heavy executed. The merge run is precisely the COMPLETENESS BACKSTOP that
- * catches the day's render changes, so "green" is not enough — the prior run must
- * have actually EXECUTED what this run would need.
+ * 🔴 **GREEN IS NOT ENOUGH — a prior run can be green having SKIPPED the E2E.**
+ * `e2e` is gated on `needsE2e` (P-029), so a docs-only push to `dev` produces a
+ * completed, successful run in which nothing heavy executed. The merge run is
+ * precisely the COMPLETENESS BACKSTOP that catches the day's render changes, so
+ * the prior run must have actually EXECUTED what this run would need.
+ *
+ * 🔴 **AND GREEN ON THE RIGHT *KIND* OF RUN IS ALSO PART OF THE MATCH.** The whole
+ * safety argument is about the **TREE** a prior run verified: classification gates
+ * WHETHER the heavy jobs run, but the jobs themselves are whole-tree, so a run
+ * that EXECUTED both verifies the tree at that SHA. That argument holds for a
+ * `push` run, which tests the tree of that exact commit — and NOT for a
+ * `pull_request` run, which checks out `refs/pull/N/merge`: its `head_sha` names
+ * the commit, but the tree it tested is `merge(head, base)`. Those are the same
+ * tree only while base is already an ancestor of head. When they diverge — a
+ * squash-merged PR, a base that advanced independently of `dev` — a
+ * `pull_request` run is green about a tree that may never land, and reusing it
+ * would skip the backstop on that strength. Candidates are therefore `push` runs
+ * ONLY, which ELIMINATES the ancestry assumption rather than documenting it.
+ *
+ * The event check is POSITIVE: only `event === 'push'` qualifies. A missing,
+ * empty, or unrecognised `event` is an uncertainty, not a permission — it is
+ * never written as `!== 'pull_request'`, because that phrasing turns every event
+ * GitHub adds later into an automatic pass.
  *
  * Every uncertainty resolves to "run everything". This function may only ever
  * return `reuse: true` on a positive, complete match.
@@ -40,6 +57,7 @@ function jobSucceeded(job) {
 /**
  * @param {object} input
  * @param {unknown} input.runs           `workflow_runs` for this workflow at this head_sha.
+ *   Each entry's `event` is read: only `'push'` is reusable (see the header).
  * @param {(runId: number) => unknown} input.jobsFor  jobs for a candidate run, or null/undefined.
  * @param {number|string} input.currentRunId          this run, which can never verify itself.
  * @returns {{reuse: boolean, reason: string, priorRunUrl: string|null, priorRunId: number|null}}
@@ -54,12 +72,29 @@ export function decideReuse({ runs, jobsFor, currentRunId }) {
   // A cancelled or in-progress run is NOT A RESULT: `concurrency` cancels PR runs
   // and a burst can supersede a queued one, so `conclusion` is checked explicitly
   // rather than inferred from the run merely existing.
-  const candidates = runs
+  const green = runs
     .filter((r) => String(r?.id) !== current)
     .filter((r) => r?.status === 'completed' && r?.conclusion === 'success');
 
-  if (candidates.length === 0) {
+  if (green.length === 0) {
     return no(`no COMPLETED, SUCCESSFUL prior run for this head_sha (${runs.length} run(s) seen)`);
+  }
+
+  // 🔴 POSITIVE, and deliberately not `!== 'pull_request'`. A `push` run tests the
+  // tree of THIS commit; a `pull_request` run tests `merge(head, base)`, which is
+  // the same tree only while base is an ancestor of head. An absent or unfamiliar
+  // `event` is an uncertainty, and uncertainties run everything — writing this as
+  // the absence of a known-bad value would make every event GitHub adds later an
+  // automatic pass.
+  const candidates = green.filter((r) => r?.event === 'push');
+
+  if (candidates.length === 0) {
+    return no(
+      `no COMPLETED, SUCCESSFUL PUSH run for this head_sha ` +
+        `(${runs.length} run(s) seen, ${green.length} green, ` +
+        `all ${green.length} dropped as non-push) — only a \`push\` run tests this ` +
+        `commit's own tree, so this run does the work`,
+    );
   }
 
   for (const run of candidates) {
@@ -74,7 +109,7 @@ export function decideReuse({ runs, jobsFor, currentRunId }) {
     if (missing.length === 0) {
       return {
         reuse: true,
-        reason: `prior run ${String(run.id)} is completed+successful and RAN both ${REQUIRED_JOB_NAMES.join(' and ')}`,
+        reason: `prior push run ${String(run.id)} is completed+successful and RAN both ${REQUIRED_JOB_NAMES.join(' and ')}`,
         priorRunUrl: typeof run.html_url === 'string' ? run.html_url : null,
         priorRunId: run.id ?? null,
       };

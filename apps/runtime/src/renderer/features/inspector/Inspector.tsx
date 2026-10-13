@@ -1,10 +1,16 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
+import { useFixedSlots } from '../../hooks/useFixedLayers.js';
+import { useOperatorNames } from '../../hooks/useOperatorNames.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import {
   aggregateHasFields,
+  fieldAllowsFileSource,
+  fieldDigitsOf,
+  fieldTypeTakesFileSource,
   isFieldNamespace,
+  isOnAirStatus,
   type CompositionFieldGroup,
   type DynamicField,
   type FieldValue,
@@ -12,21 +18,45 @@ import {
   type StackItemState,
 } from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
-import { airStateVisual, colors } from '../../theme.js';
+import { airStateVisual, colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { AutoGrowTextarea } from '../../ui/AutoGrowTextarea.js';
 import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { Panel } from '../../ui/Panel.js';
+import { IsolatedName } from '../../ui/OperatorNames.js';
 import { EDITOR_DIR } from '../../ui/editorTextDirection.js';
+import { writeFieldText } from '../../ui/fieldDigitsInput.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
+import {
+  BACKUP_UNMIRRORED_LINE,
+  BackupNoCopyText,
+  backupNoCopyLine,
+  plateLabelOf,
+  takeRefusalLine,
+  TakeRefusalText,
+} from '../layers/takeRefusalLine.js';
+import { currentSourceCatalog } from '../sources/sourceStore.js';
+import { defaultPositionOf } from '../stack/defaultPositionStore.js';
+import {
+  REHEARSE_STATE_COLOR,
+  REHEARSE_STATE_WORD,
+  rehearseOwnsStateWord,
+} from '../layers/rowState.js';
+import { grantedFileSourcePaths } from './fileSourceGrants.js';
+import { detachUngrantedSources } from './fromFileStore.js';
 import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import { LivePlatesSection } from './LivePlatesSection.js';
+import { LooksBindingsSection } from './LooksBindingsSection.js';
+import { TimingSection } from './TimingSection.js';
 import { appliedPlateSources } from './livePlates.js';
+import { boundChannelOf, itemChannelOf } from '../channels/itemChannel.js';
+import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { PositionPicker } from './PositionPicker.js';
+import { Tag } from '../../ui/Tag.js';
 import {
   draftsVersion,
   effectiveValue,
@@ -34,9 +64,16 @@ import {
   isItemDirty,
   stageField,
   subscribeDrafts,
+  unstageField,
   valueAt,
   type FieldPath,
 } from './draftStore.js';
+import {
+  formatNumberLike,
+  parseLocalizedNumber,
+  readLocalizedNumber,
+  writeFieldDigits,
+} from '@cg/text-shaping';
 
 /** The shared field class, plus the dirty accent (border only — no layout shift). */
 function fieldClass(dirty: boolean): string {
@@ -49,6 +86,13 @@ function fieldClass(dirty: boolean): string {
  * glance beside a name.
  */
 const ID_STUB_LENGTH = 6;
+
+/**
+ * What a `color` field shows when the template gave it no value. It is the
+ * OPERATOR'S DATA, not this console's chrome, which is why it is a plain constant
+ * here rather than a `--r-*` token — see the note at its use.
+ */
+const DEFAULT_COLOR_FIELD_VALUE = '#FFFFFF';
 
 /**
  * ⭐ R-040's CLASS, ARRIVING ON A SECOND SURFACE — a display label derived from a
@@ -99,6 +143,13 @@ interface Props {
    * rather than hiding a still-selected row — the two can never disagree.
    */
   onClose?: (() => void) | undefined;
+  /**
+   * `B-156` — is this row REHEARSING? Threaded from the caller, which already reads the
+   * canonical `isRehearsing(rehearsals, itemId)` for the row's own picker, so the Inspector's
+   * look badge and the row's `PVW LOOK` label answer to ONE derivation rather than two that
+   * agree until they do not.
+   */
+  rehearsing?: boolean | undefined;
 }
 
 const styles = {
@@ -114,7 +165,9 @@ const styles = {
     // No BOTTOM padding: the sticky commit bar owns the space down there, and a
     // container pad would sit BELOW the stuck bar (sticky offsets resolve against
     // the padding box), leaving a stripe of scrolling content under it.
-    padding: 'var(--r-space-6) var(--r-space-4) 0',
+    // `RUNTIME-REDESIGN-01` Phase 5 — `12px` on both axes, the reference's
+    // `.inspector-body{padding:12px}` as rendered (it was 24 / 16).
+    padding: 'var(--r-space-3) var(--r-space-3) 0',
     minHeight: 0,
     flex: 1,
     overflowY: 'auto' as const,
@@ -124,6 +177,16 @@ const styles = {
     fontSize: '15px',
     fontWeight: 600,
     lineHeight: 1.35,
+    margin: '0 0 var(--r-space-1)',
+    overflowWrap: 'anywhere' as const,
+  },
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 6 (`R-061` (a)) — the TEMPLATE's line, under the row's name.
+   * The name the heading used to carry, one rank down: what the row CARRIES, not what it IS.
+   */
+  templateLine: {
+    color: colors.textSecondary,
+    fontSize: 'var(--r-text-md)',
     margin: '0 0 var(--r-space-3)',
     overflowWrap: 'anywhere' as const,
   },
@@ -171,10 +234,15 @@ const styles = {
   actions: {
     display: 'flex',
     // CENTRED (owner request). Everything else about this bar — the sticky
-    // behaviour, the padding, the top border, the raised background and the DOM
-    // position — is unchanged and load-bearing; see the block comment above.
+    // behaviour, the top border, the raised background and the DOM position — is
+    // unchanged and load-bearing; see the block comment above.
     justifyContent: 'center',
-    gap: 'var(--r-space-3)',
+    // `RUNTIME-REDESIGN-01` Phase 5 — the reference's own footer, as rendered
+    // (`design.md` §12.3): buttons gapped 10, padded `9px 12px`, a stronger top rule
+    // and an upward shadow that lifts the pinned bar off the list scrolling under it.
+    // The bleed margin matches the body's `12px` pad above, so the bar still reaches
+    // the panel's edges. All from `INSPECTOR_PX` in the token home.
+    gap: 'var(--r-insp-foot-gap)',
     alignItems: 'center',
     flexWrap: 'wrap' as const,
     position: 'sticky' as const,
@@ -184,9 +252,10 @@ const styles = {
     // RAISED, matching the panel bar at the other end — the two pieces of chrome
     // that are not content read as the same kind of thing.
     background: colors.panelMuted,
-    borderTop: `1px solid ${colors.border}`,
-    marginInline: 'calc(var(--r-space-4) * -1)',
-    padding: 'var(--r-space-3) var(--r-space-4)',
+    borderTop: `1px solid ${cssVars['--r-border-strong']}`,
+    boxShadow: cssVars['--r-insp-foot-shadow'],
+    marginInline: 'calc(var(--r-space-3) * -1)',
+    padding: 'var(--r-insp-foot-pad)',
   },
   /*
    * THE FIELD HEADER — the authored name in PRIMARY ink, the binding key beside
@@ -225,6 +294,10 @@ const styles = {
     textTransform: 'uppercase' as const,
     margin: '0 0 var(--r-space-1)',
   },
+  /** `FIELD-FIXES-01` B — a refused take's line, in the error WORD's ink, as the file error is. */
+  refusal: { fontSize: 'var(--r-text-sm)', color: colors.errorText, margin: 0 },
+  /** `ROUTE-PLATES-01` C4 — the backup line: a state fact, not an error, so in the muted ink. */
+  backupLine: { fontSize: 'var(--r-text-sm)', color: colors.textMuted, margin: 0 },
 } as const;
 
 /**
@@ -259,7 +332,7 @@ function MetaChip({
   dotColor?: string;
 }): JSX.Element {
   return (
-    <span className="cg-meta-chip">
+    <Tag className="cg-meta-chip">
       {/*
         THE DOT CARRIES THE STATE'S OWN COLOUR — owner's call, and it supersedes
         the constant sky dot that stood here.
@@ -285,7 +358,7 @@ function MetaChip({
       )}
       {label !== undefined && <span className="cg-meta-chip__label">{label}</span>}
       <span className="cg-meta-chip__value">{value}</span>
-    </span>
+    </Tag>
   );
 }
 
@@ -301,7 +374,7 @@ function MetaChip({
  * registry doesn't know the template we fall back to type inference so the
  * inspector is never empty.
  */
-export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Element {
+export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Props): JSX.Element {
   const [info, setInfo] = useState<TemplateInfo | null>(null);
   /**
    * Every template this browser holds — read ONLY to answer "does another
@@ -319,6 +392,37 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
    * after typing an edit sent him to the wrong machine.
    */
   const applyRefusal = casparRefusalReason(linkDown, casparReach);
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 6 (`R-061` (a)) — golden rule 11: the heading names the ROW in
+   * the operator's words. Through the one composition (`operatorRowName`, fed by the bank and
+   * the registry), never a label composed here; the ids ride on the heading's `title`.
+   * Unconditional, like every hook: an empty ref list when nothing is selected.
+   */
+  const nameOf = useOperatorNames(
+    item === null ? [] : [{ itemId: item.itemId, templateId: item.templateId, slot: item.slot }],
+  );
+  /**
+   * WHICH ROW the item is on — the bank's own BINDING, which is what "the row I am editing"
+   * means to the operator, with the item's playout `slot` as the first answer when it carries
+   * one. The two agree on a bridge that sets `slot` at load; the offline mock binds a row
+   * without writing `slot` on the item, and a heading that fell back to the template there
+   * would be the same surface saying two different things on two backends.
+   */
+  const slots = useFixedSlots();
+  const boundSlot =
+    item === null ? undefined : slots.find((s) => s.binding?.itemId === item.itemId);
+  const rowSlot =
+    item?.slot ??
+    (boundSlot === undefined ? undefined : { channel: boundSlot.channel, layer: boundSlot.layer });
+  // `CHANNEL-SOURCES-01` — the row's channel, whose own Source defaults this panel reads.
+  const { selected: selectedChannel } = useSelectedChannel();
+  const itemChannel = itemChannelOf(item, slots, selectedChannel);
+  /*
+    `CHANNEL-TEMPLATES-01` — the channel whose LIST this row's template is read from: two channels
+    may list one template at two versions, and the fields, looks and plates shown here must be the
+    ones this row will take. A row on no channel reads the station-wide entry.
+  */
+  const templateChannel = boundChannelOf(item, slots);
   // Re-render on any draft change so dirty markers + the draft-or-applied
   // values stay live (a push to `item` also re-renders via props).
   useSyncExternalStore(subscribeDrafts, draftsVersion);
@@ -333,34 +437,84 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
     // rejection handler is kept as a guard so a failed lookup can NEVER become an
     // unhandled promise rejection: on failure we keep `info` null and the
     // Inspector falls back to type-inferred fields rather than throwing.
-    window.cg.templates.get({ templateId: item.templateId }).then(
-      (resolved) => {
-        if (!cancelled) setInfo(resolved);
-      },
-      () => {
-        if (!cancelled) setInfo(null);
-      },
-    );
+    window.cg.templates
+      .get({
+        templateId: item.templateId,
+        ...(templateChannel !== undefined && { channel: templateChannel }),
+      })
+      .then(
+        (resolved) => {
+          if (!cancelled) setInfo(resolved);
+        },
+        () => {
+          if (!cancelled) setInfo(null);
+        },
+      );
     // Same guard, same reason: a failed lookup leaves the heading without its
     // disambiguator rather than throwing.
-    void window.cg.templates.list().then(
-      (list) => {
-        if (!cancelled) setSiblings(list);
-      },
-      () => {
-        if (!cancelled) setSiblings([]);
-      },
-    );
+    void window.cg.templates
+      .list(templateChannel === undefined ? undefined : { channel: templateChannel })
+      .then(
+        (list) => {
+          if (!cancelled) setSiblings(list);
+        },
+        () => {
+          if (!cancelled) setSiblings([]);
+        },
+      );
     return () => {
       cancelled = true;
     };
-  }, [item]);
+  }, [item, templateChannel]);
+
+  /*
+   * TEXT-FILE-OPT-01 — reconcile this item's file attachments against what its
+   * template actually GRANTS. An attachment on a field whose grant the author turned
+   * off is detached, durably, rather than left live behind a hidden control.
+   *
+   * 🔴 THE THREE CONDITIONS ON `known: true` ARE THE SAFETY, and each rules out a
+   * different way of deleting on absent information rather than on a decision:
+   *
+   *   - `item !== null`   — nothing selected, nothing to reconcile.
+   *   - `info !== null`   — the schema has NOT resolved. This is the state on every
+   *     selection change (`info` starts null and is filled asynchronously) and the
+   *     permanent state for a template the registry does not know. Every field looks
+   *     un-granted from here, so acting on it would delete every attachment the
+   *     operator has, on every selection — the `pruneDrafts`/`pruneFromFile` bootstrap
+   *     class of bug (see `useStackHousekeeping`), one store over.
+   *   - the ids MATCH — `info` is NOT cleared when `item` changes, so between
+   *     selecting item B and B's `templates.get` resolving, `info` still holds item
+   *     A's template. Reconciling B's attachments against A's grants would detach
+   *     whatever A does not happen to grant. Nothing on screen would say why.
+   *
+   * Anything short of all three resolves to `{known: false}`, which deletes nothing.
+   */
+  useEffect(() => {
+    detachUngrantedSources(
+      item !== null && info !== null && info.templateId === item.templateId
+        ? {
+            known: true,
+            itemId: item.itemId,
+            grantedPaths: grantedFileSourcePaths({
+              fields: info.fields,
+              groups: info.groups ?? [],
+            }),
+          }
+        : { known: false },
+    );
+  }, [item, info]);
 
   if (item === null) {
     return (
       <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
         <div className="cg-inspector-body" style={styles.scroll}>
-          <p style={styles.empty}>Select a stack item to inspect its fields.</p>
+          {/*
+            🔴 `MODAL-CHROME-10` ADDENDUM C §C4(c), FOUND IN PASSING. It read _"Select a stack
+            item"_. `stack item` is our word for `StackItemState` and it is not on the
+            operator's screen anywhere — he selects a ROW. Found by the second sweep axis while
+            taking the same vocabulary out of the deletion refusal; one defect, two surfaces.
+          */}
+          <p style={styles.empty}>Select a row to inspect its fields.</p>
         </div>
       </Panel>
     );
@@ -401,7 +555,22 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
   const dirty = isItemDirty(
     itemId,
     item.fields,
-    appliedPlateSources(item.templateId, info?.liveSources?.sources ?? []),
+    appliedPlateSources(item.templateId, info?.liveSources?.sources ?? [], itemChannel),
+    // BM-2 — and the per-look composition, which stages here too and is the SAME fact.
+    item.lookSourceOverride,
+    /*
+      🔴 …and the POSITION, since UPDATE commits it now (owner, 2026-09-14). The chip and
+      the enabled verb both read this ONE function, so a staged move that did not answer here
+      would leave the bar reporting itself clean with a placement still to send — and
+      DISCARD, which now drops it, would throw it away with nothing having said it was there.
+    */
+    item.position ?? defaultPositionOf(item.templateId),
+    /*
+      🔴 …and the TIMING (`DELTA B4`). It stages like every other edit now and `Update` spends
+      it, so the bar has to see it: a pass count staged against a bar reporting itself clean is
+      an Update the operator cannot press and a Discard that reads as nothing to discard.
+    */
+    item.timingOverride,
   );
   const isEmpty = rootFields.length === 0 && groups.length === 0;
 
@@ -415,20 +584,90 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
   // name, so the ordinary heading stays a name and nothing else.
   const ambiguous =
     info !== null && siblings.filter((t) => templateDisplayName(t) === label).length > 1;
+  /**
+   * The ROW's name for the heading — its alias or default (`Layer N` / `Bed N`) when it has a
+   * slot in the bank; `operatorRowName`'s own fallback order otherwise (the template, then a
+   * shortened id), so the heading is never empty. `names[0]` is that first choice by the
+   * module's contract ("in reading order: WHICH ROW, then WHAT IT WAS SHOWING").
+   */
+  const rowName = nameOf({ itemId: item.itemId, templateId: item.templateId, slot: rowSlot });
+  const heading = rowName.names[0] ?? label;
+  /*
+   * §3 — IS THIS ROW ON AIR? Read ONCE, here, and used by the commit control below for
+   * BOTH its hue and its word, so the two can never describe different rows.
+   */
+  const onAir = isOnAirStatus(item);
+  /*
+   * §2 — THE ROW'S STATE, IN THE ROW'S WORDS. One evaluation of the canonical visual, one
+   * ask of the canonical rehearse precedence; the chip below renders both.
+   */
+  const stateVisual = airStateVisual(item.status, item.pending);
+  const onPvw = rehearseOwnsStateWord(item.status, item.pending, rehearsing === true);
+  const stateWord = onPvw ? REHEARSE_STATE_WORD : stateVisual.label;
+  const stateColor = onPvw ? REHEARSE_STATE_COLOR : stateVisual.color;
 
   return (
     <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
-      <div style={styles.scroll}>
-        <h3 style={styles.title} title={item.templateId}>
-          {label}
-          {ambiguous && (
+      {/*
+        `cg-inspector-body` on THIS branch too. It was only on the empty branch above, so the
+        container query `controls.css` writes against it (`@container inspector`) matched no
+        field the operator could ever see — and the Phase 5 field-box rules scope to it.
+      */}
+      <div className="cg-inspector-body" style={styles.scroll}>
+        {/*
+          `RUNTIME-REDESIGN-01` Phase 6 (`R-061` (a)) — THE ROW'S NAME IS THE HEADING, in its own
+          `<bdi>` (a Persian alias beside Latin chrome), with every id the row has on `title`.
+          Golden rule 11: now that drafts are per-row and survive a round trip, the risk of
+          editing the wrong row's draft is real, and the heading is what the operator reads.
+        */}
+        <h3 style={styles.title} title={rowName.title} data-inspector-heading="">
+          {/*
+            `MODAL-CHROME-10` ADDENDUM B, through the one component. The `<bdi>` was already
+            INLINE here and therefore already correct; what `IsolatedName` adds is the
+            explicit `dir="ltr"` on the box, which is what makes the pattern immune to an
+            ancestor that ever resolves RTL — and it puts this surface on the SAME
+            implementation as the four that had to be repaired, so a future change reaches
+            all of them. The isolation itself is never removed (see `OperatorNames.tsx`).
+          */}
+          <IsolatedName>{heading}</IsolatedName>
+          {/* A row with no place in the bank is headed by its template; the stub stays with it. */}
+          {heading === label && ambiguous && (
             <span style={styles.titleStub} data-template-stub={templateIdStub(item.templateId)}>
               {' '}
               · {templateIdStub(item.templateId)}
             </span>
           )}
         </h3>
-        {contentTitle !== '' && <div style={styles.contentTitle}>{contentTitle}</div>}
+        {/*
+          The TEMPLATE, one rank down — what the row carries. R-004's rule stands: the id is a
+          correlation key, tooltip only; `templateIdStub` appears only when another template
+          answers to the same name. Omitted when the heading already IS the template name (a
+          row with no slot), so nothing is said twice.
+        */}
+        {heading !== label && (
+          <div style={styles.templateLine} title={item.templateId} data-inspector-template="">
+            <IsolatedName>{label}</IsolatedName>
+            {ambiguous && (
+              <span style={styles.titleStub} data-template-stub={templateIdStub(item.templateId)}>
+                {' '}
+                · {templateIdStub(item.templateId)}
+              </span>
+            )}
+          </div>
+        )}
+        {/*
+          🔴 §2(c) — THE SIXTH SURFACE, CAUGHT BEFORE IT SHIPPED. This is the item's own
+          `title` FIELD: operator-typed content, in this station overwhelmingly Persian, and
+          it was rendered as a bare text node with no isolation of any kind. A headline
+          mixing a Persian phrase with a Latin name or a digit run reorders around its own
+          neutrals with nothing to stop it — the `B-232` defect exactly, on a surface the
+          sweep for `<bdi>` could not find precisely BECAUSE it had none.
+        */}
+        {contentTitle !== '' && (
+          <div style={styles.contentTitle}>
+            <IsolatedName>{contentTitle}</IsolatedName>
+          </div>
+        )}
         {/* ALWAYS SHOWN, including the no-layer case: "no layer" is not an absence of
           information, it is the answer to "why is this not on air?". The old line rendered
           only when a slot existed, so it went blank exactly when the operator was trying to
@@ -437,10 +676,32 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
         <div className="cg-meta-chips">
           {/* The status word names itself, so it carries no label — only the dot
               that marks it as the state among the coordinates. */}
-          <MetaChip
-            value={`${item.status}${item.pending ? ' (pending)' : ''}`}
-            dotColor={airStateVisual(item.status, item.pending).color}
-          />
+          {/*
+            🔴 THE ROW'S OWN VOCABULARY — `INSPECTOR-DELTA` §2.
+
+            This printed the RAW WIRE STATUS: `playing`, `loaded`, `idle`, `on-air`,
+            `unverified`, with a ` (pending)` suffix bolted on. Those are the words of
+            `StackItemState['status']`, which is a transport enum — they are not on the
+            operator's screen anywhere else, and the layers table two panels away was
+            already calling the very same row `ON AIR`, `READY`, `TAKING`. One row, two
+            vocabularies, and the operator has to learn that `playing` and `ON AIR` are the
+            same thing (golden rule 11: the operator's words, and they are the words
+            already on screen).
+
+            ⚠ `airStateVisual` was ALREADY BEING CALLED HERE — for the dot's colour — and
+            its `.label` was dropped on the floor. So this is not a new derivation; it is
+            the other half of a value already in hand, read ONCE and used for both, which
+            is why the word and the hue can never describe different states.
+
+            ⚠ THE ` (pending)` SUFFIX IS GONE because the word now carries it:
+            `playing` + pending IS `TAKING` (`airStateVisual`), and `badgeTone` consults
+            `pending` for no other status. `TAKING (pending)` would say it twice.
+
+            ⚠ REHEARSE through the ONE predicate (`rehearseOwnsStateWord`), never a local
+            re-spelling of its precedence: the rule that an AIR claim beats a rehearse
+            badge is `rowState`'s, and two copies of it would agree by luck.
+          */}
+          <MetaChip value={stateWord} dotColor={stateColor} />
           {item.slot === undefined ? (
             <MetaChip value={layerDetail(undefined)} />
           ) : (
@@ -452,16 +713,71 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
             </>
           )}
         </div>
+        {/*
+          🔴 `FIELD-FIXES-01` B — A REFUSED TAKE, IN THE ROW'S OWN LINE: the same composition the
+          row shows (`takeRefusalLine`), right under the state it explains, named with this
+          heading's name. It stands until the bridge withdraws it (the row taken, or cleared).
+        */}
+        {item.takeRefusal !== undefined && (
+          <p style={styles.refusal} data-inspector-take-refusal="" dir="ltr">
+            <TakeRefusalText
+              line={takeRefusalLine(heading, item.takeRefusal, {
+                // `PLAYOUT-SOURCES-01` §1.C — `Plate N`, and the entry as it stands now.
+                plateLabel: plateLabelOf(info, item.takeRefusal.plateId),
+                entry: currentSourceCatalog().sources.find(
+                  (s) => s.id === item.takeRefusal?.sourceId,
+                ),
+                channel: rowSlot?.channel,
+              })}
+            />
+          </p>
+        )}
+        {/* `PLAYOUT-FEATURES-01` A (`B-286`) — the clips server B was sent nothing for. */}
+        {(() => {
+          const noCopy = backupNoCopyLine(item.backupNoCopy ?? []);
+          return noCopy === null ? null : (
+            <p style={styles.backupLine} data-inspector-backup-no-copy="" dir="ltr">
+              <BackupNoCopyText line={noCopy} />
+            </p>
+          );
+        })()}
+        {/* `ROUTE-PLATES-01` C4 — the backup carries this row without its live boxes. */}
+        {item.backupUnmirrored === true && (
+          <p style={styles.backupLine} data-inspector-backup-unmirrored="" dir="ltr">
+            {BACKUP_UNMIRRORED_LINE}
+          </p>
+        )}
         {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
         <PositionPicker key={`pos-${itemId}`} item={item} />
         {/* D-137 / C-015 — bind this template's live plates. Renders nothing at
             all for a template that declares none, which is most of them. */}
-        <LivePlatesSection item={item} info={info} />
+        <LivePlatesSection item={item} info={info} channel={itemChannel} />
+        {/* BM-2 — the per-look inputs sit BELOW the default they fall back to, so the two
+            levels read top-down in the order they resolve. */}
+        <LooksBindingsSection
+          item={item}
+          info={info}
+          rehearsing={rehearsing}
+          channel={itemChannel}
+        />
+        {/* `TIMING-WIRE-22` §4 — the template's timing: `mode`/`hold` as FACTS, and the
+            operator's passes/gap as controls. Renders nothing for a template imported before
+            `TemplateInfo.playout` existed, rather than guessing what it does. */}
+        <TimingSection item={item} info={info} />
         {/* `cg-inspector-section` carries the shared rhythm — the heading's rule,
             its tracking, and the largest gap in the gradient beneath it. Same
             class as POSITION, so the two sections cannot drift apart. */}
         <div className="cg-inspector-section">
-          <h2>FIELDS</h2>
+          {/*
+            §31.4 / §2(b) — SENTENCE CASE IN THE SOURCE; the CAPS are the STYLESHEET's
+            (`.cg-inspector-section > h2 { text-transform: uppercase }`). Nothing on screen moves.
+            What moves is the ACCESSIBLE NAME, which is computed from the text node and not from
+            the transform: a screen reader was being handed `FIELDS` and now gets `Fields`. The
+            reference does exactly this — measured in Chromium at 1280 × 800 on
+            `05-row-inspector.html`, its `.inspector-section h3` sources read `Position` and
+            `Fields` and compute `text-transform: uppercase`.
+          */}
+          <h2>Fields</h2>
           {isEmpty ? (
             <p style={styles.empty}>No fields.</p>
           ) : (
@@ -502,6 +818,37 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
             36px floor meant for the layer table's header. Same defect the field
             footers had. Layout stays in `styles.actions`. */}
         <div className="cg-inspector-actions" style={styles.actions}>
+          {/*
+            `RUNTIME-REDESIGN-01` Phase 5 — DISCARD FIRST, UPDATE LAST, as the reference
+            renders its `.inspector-save-bar` (`Discard · Update`): the commit sits at the
+            trailing end, where the primary action of a bar conventionally is, and the
+            keyboard reaches the reversible control before the one that reaches air. Both
+            buttons keep their names, variants, gates and behaviour; only the order moved.
+          */}
+          {/* NEUTRAL IS NOT INVISIBLE. This was a `ghost` — transparent fill,
+            transparent border, muted text — and it read as a line of static text
+            rather than a control. Removing COLOUR from a control never removes its
+            need for an AFFORDANCE: it still owes a visible boundary, a hover state
+            and a focus ring. `neutral` is the variant that carries all three without
+            a hue. See the `--ghost` warning in `controls.css`.
+
+            …AND NEITHER IS DISABLED, which is the half that was still missing.
+            `neutral:disabled` used to drop BOTH its fill and its border, so this
+            control vanished for exactly as long as there was nothing staged to
+            discard — i.e. every moment before the operator's first edit, which is
+            when they are learning where things are. An operator who cannot find how
+            to ABANDON an edit presses Update to get out of the panel, which is the
+            opposite of what they wanted and reaches air. `--neutral:disabled` keeps
+            its boundary now (`controls.css`); the row verbs' bare-glyph disabled
+            shape is untouched, because there a column of peers makes it legible. */}
+          <Button
+            variant="neutral"
+            aria-label="Discard staged edits"
+            disabled={!dirty}
+            onClick={() => onDiscard(itemId)}
+          >
+            Discard
+          </Button>
           {/* Apply stays enabled even with nothing staged — re-sending unchanged
             values is the operator's documented B-048 recovery path. */}
           {/* #334 — feedback goes to the command TOAST, never pinned inline in the panel.
@@ -556,41 +903,73 @@ export function Inspector({ item, onApply, onDiscard, onClose }: Props): JSX.Ele
             reaches air when the link returns. That is the whole point of the
             offline surface, and gating the fields instead would destroy it.
           */}
+          {/*
+            🔴 GREEN IS THE ON-AIR CASE AND NOTHING ELSE — owner decision,
+            `INSPECTOR-AUDIT-05` §3, and it supersedes the block above rather than
+            contradicting it.
+
+            What the block above argues is still exactly right: a FILLED GREEN BUTTON means
+            AN ACTION THAT REACHES AIR, and Update joining PLAY in that class was truthful
+            — on a row that is on air. On a row that is NOT, it was the class making a
+            claim the press cannot keep: the change lands in STATE and the next take seats
+            it (golden rule 10), and a green button is the loudest way this console has of
+            saying otherwise. So the hue now follows the FACT rather than the verb, and off
+            air the control takes `accent` — the same sky, the same weight, as
+            `Apply position` one section up, which is likewise the action its section
+            exists to perform and likewise reaches no output.
+
+            ⚠ AND THE LABEL MOVES WITH IT, which is the half that makes the colour
+            legible: green + `Update on air` says what it is in the operator's words, so
+            the hue is reinforcement and never the signal — the same construction the
+            status chip uses one panel up. The reference greens its Update in BOTH states
+            (measured in Chromium at 1280 × 800: `rgb(34 221 122)` off air as well); this
+            is a deliberate departure from the drawing, on the owner's call.
+
+            THE PREDICATE IS `isOnAirStatus`, the ONE definition both sides of the seam
+            read — never a second local spelling of the state list (golden rule 6), and
+            never `rehearsing`, which seats nothing on the channel (`B-216`). It counts
+            `updating` / `exiting` / `unconfirmed` / `pending` as on air, and that is the
+            right way for a LABEL to fail too: saying `Update on air` about a row whose air
+            state is unknown is the honest reading, where a bare `Update` would be a quiet
+            promise that nothing is live.
+
+            ⚠ NOTHING ABOUT WHAT THE PRESS DOES CHANGES. Same `onApply`, same
+            `applyDraft`, same CasparCG gate, same refusal CONDITION. This is appearance and
+            copy only — a configuration verb stays a configuration verb.
+          */}
           <AsyncButton
-            variant="commit"
-            aria-label="Apply staged edits"
+            variant={onAir ? 'commit' : 'accent'}
+            /*
+              The accessible name keeps `Apply staged edits` as its opening words in both
+              states — it is what every finder and every voice command already says — and
+              GAINS the fact the colour carries, so a screen-reader operator is told the row
+              is live by the control itself rather than only by the chip above it.
+            */
+            aria-label={onAir ? 'Apply staged edits to the on-air row' : 'Apply staged edits'}
             disabled={applyRefusal !== undefined}
             {...(applyRefusal !== undefined ? { title: applyRefusal } : {})}
             run={() => onApply(itemId)}
             onError={() => undefined}
+            data-inspector-commit={onAir ? 'on-air' : 'off-air'}
           >
-            Update
+            {onAir ? 'Update on air' : 'Update'}
           </AsyncButton>
-          {/* NEUTRAL IS NOT INVISIBLE. This was a `ghost` — transparent fill,
-            transparent border, muted text — and it read as a line of static text
-            rather than a control. Removing COLOUR from a control never removes its
-            need for an AFFORDANCE: it still owes a visible boundary, a hover state
-            and a focus ring. `neutral` is the variant that carries all three without
-            a hue. See the `--ghost` warning in `controls.css`.
-
-            …AND NEITHER IS DISABLED, which is the half that was still missing.
-            `neutral:disabled` used to drop BOTH its fill and its border, so this
-            control vanished for exactly as long as there was nothing staged to
-            discard — i.e. every moment before the operator's first edit, which is
-            when they are learning where things are. An operator who cannot find how
-            to ABANDON an edit presses Update to get out of the panel, which is the
-            opposite of what they wanted and reaches air. `--neutral:disabled` keeps
-            its boundary now (`controls.css`); the row verbs' bare-glyph disabled
-            shape is untouched, because there a column of peers makes it legible. */}
-          <Button
-            variant="neutral"
-            aria-label="Discard staged edits"
-            disabled={!dirty}
-            onClick={() => onDiscard(itemId)}
-          >
-            Discard
-          </Button>
           {dirty && <DraftChip label="unapplied edits" />}
+          {/*
+            🔴 THE `.target-hint` SUB-LINE IS GONE — owner decision, `INSPECTOR-AUDIT-05`
+            §3. It read _"Saves this row’s configuration. No Take is sent."_ and
+            `design.md` §25.6 required it to stay "exactly this honest"; that requirement is
+            SUPERSEDED, not forgotten, and §25.6 is annotated where it stands.
+
+            The reasoning, recorded because deleting a golden-rule-10 sentence is the kind of
+            thing a later reader will want to re-add: the sentence existed to disown a claim
+            the BUTTON was making. A green Update on an off-air row said "this reaches air",
+            and a line of 11 px muted prose underneath said it does not — a hint whose job is
+            to contradict the control above it, which §25.8 already named as a heading that
+            needs fixing rather than a hint that needs keeping. With the hue now telling the
+            truth by itself and the on-air case saying exactly what it is in its own label,
+            the sentence has nothing left to disown.
+          */}
         </div>
       </div>
     </Panel>
@@ -619,7 +998,10 @@ function FieldGroup({
   const itemId = item.itemId;
   return (
     <section style={styles.group} aria-label={`${group.label ?? group.name} fields`}>
-      <h3 style={styles.groupHeading}>{group.label ?? group.name}</h3>
+      {/* Authored too — a composition's label comes from the template package. */}
+      <h3 style={styles.groupHeading}>
+        <IsolatedName>{group.label ?? group.name}</IsolatedName>
+      </h3>
       {group.aggregate.fields.map((f) => (
         <FieldEditor
           key={`${itemId}-${[...path, f.id].join('/')}`}
@@ -665,9 +1047,23 @@ function FieldEditor({
   const kind = field?.type ?? inferKind(value);
   const dirty = isFieldDirty(itemId, path, applied);
   const stage = (next: FieldValue): void => stageField(itemId, path, next);
-  // R-018 — text-carrying fields can source their value from a text file.
+  const unstage = (): void => unstageField(itemId, path);
+  /*
+   * R-018 + TEXT-FILE-OPT-01 — a field sources its value from a text file only when
+   * its AUTHOR granted it one. The kind test is still the outer condition, but it is
+   * no longer the WHOLE condition and it is no longer spelled here: gating on kind
+   * alone is a decision about a TYPE, so it rendered this control identically under a
+   * twelve-character `title` and under a four-hundred-word crawl — once per text /
+   * multiline / list field on the template.
+   *
+   * Asked of the FIELD, never of `kind`. `kind` falls back to `inferKind(value)` when
+   * the template schema has not resolved, and an inferred row was never authored, so
+   * it can carry no grant — reading it here would be reading a guess as a decision.
+   */
   const fromFileKind =
-    kind === 'text' || kind === 'multiline' || kind === 'list' ? kind : undefined;
+    field !== null && fieldAllowsFileSource(field) && fieldTypeTakesFileSource(field.type)
+      ? field.type
+      : undefined;
   // Built ONCE and placed in one of two spots (see below), so the two placements
   // cannot drift into two differently-configured controls.
   const fromFile =
@@ -683,7 +1079,16 @@ function FieldEditor({
         twice at two sizes, which is noise dressed as hierarchy.
       */}
       <span style={styles.fieldLabel}>
-        <span style={styles.fieldName}>{label}</span>
+        {/*
+          The AUTHORED name is the template author's string, not this console's chrome — a
+          Persian field label beside a Latin binding key is the ordinary case here — so its
+          characters are isolated and its BOX stays the LTR flex item it already was
+          (`MODAL-CHROME-10` ADDENDUM B: a `<bdi>` made a flex item would flush its own text
+          to the wrong side).
+        */}
+        <span style={styles.fieldName}>
+          <IsolatedName>{label}</IsolatedName>
+        </span>
         {label !== fieldId && (
           <span style={styles.fieldKey} title={fieldId}>
             {fieldId}
@@ -702,9 +1107,11 @@ function FieldEditor({
           kind={kind}
           field={field}
           value={value}
+          applied={applied}
           fieldId={fieldId}
           dirty={dirty}
           onStage={stage}
+          onUnstage={unstage}
           {...(fromFileKind !== undefined ? { fromFile } : {})}
         />
         {/* A LIST field's from-file control is rendered INSIDE the editor, beside
@@ -722,17 +1129,23 @@ function FieldControl({
   kind,
   field,
   value,
+  applied,
   fieldId,
   dirty,
   onStage,
+  onUnstage,
   fromFile,
 }: {
   kind: DynamicField['type'] | 'unknown';
   field: DynamicField | null;
   value: FieldValue | undefined;
+  /** The value on air for this field — what a withdrawn draft falls back to. */
+  applied: FieldValue | undefined;
   fieldId: string;
   dirty: boolean;
   onStage: (next: FieldValue) => void;
+  /** Withdraw this field's draft (`unstageField`). */
+  onUnstage: () => void;
   /** Only a LIST consumes this — it shares its footer row with "Add item". */
   fromFile?: ReactNode;
 }): JSX.Element {
@@ -748,10 +1161,24 @@ function FieldControl({
     );
   }
   if (kind === 'number') {
-    return <NumberField value={value} fieldId={fieldId} dirty={dirty} onStage={onStage} />;
+    return (
+      <NumberField
+        field={field}
+        value={value}
+        applied={applied}
+        fieldId={fieldId}
+        dirty={dirty}
+        onStage={onStage}
+        onUnstage={onUnstage}
+      />
+    );
   }
   if (kind === 'color') {
-    const v = typeof value === 'string' ? value : '#FFFFFF';
+    // NOT CHROME, AND DELIBERATELY NOT A TOKEN (STATION-CHROME-01 §1): this is the
+    // fallback VALUE of a template's own colour field — the operator's data, headed
+    // for the graphic on air. A theme token here would put the console's palette
+    // inside the broadcast, and would move the graphic the day the palette moved.
+    const v = typeof value === 'string' ? value : DEFAULT_COLOR_FIELD_VALUE;
     return (
       <input
         type="color"
@@ -797,6 +1224,9 @@ function FieldControl({
       />
     );
   }
+  // `FIELD-DIGITS-01` — a text or multiline field shows and stages its value in the field's
+  // digits, written as each key lands (`as-typed`, and an unresolved schema, write nothing).
+  const digits = fieldDigitsOf(field);
   if (kind === 'multiline') {
     const v = typeof value === 'string' ? value : '';
     // Grows with its CONTENT (wrapped height, not newline count) — see
@@ -805,15 +1235,24 @@ function FieldControl({
     return (
       <AutoGrowTextarea
         className={dirty ? 'is-dirty' : undefined}
-        value={v}
-        onChange={(e) => onStage(e.target.value)}
+        value={writeFieldDigits(v, digits)}
+        onChange={(e) => onStage(writeFieldText(e.currentTarget, field, e.nativeEvent))}
         aria-label={fieldId}
       />
     );
   }
   if (kind === 'list') {
-    // R-003 — the structured list editor stages its ops (no remount key).
-    return <ListFieldEditor fieldId={fieldId} value={value} onStage={onStage} footer={fromFile} />;
+    // R-003 — the structured list editor stages its ops (no remount key). `TEXT-DIGITS-01` — its
+    // cells are typed in the list field's digits.
+    return (
+      <ListFieldEditor
+        fieldId={fieldId}
+        field={field}
+        value={value}
+        onStage={onStage}
+        footer={fromFile}
+      />
+    );
   }
   // Default: text input (controlled — stages on change, no blur/Enter commit).
   const v = typeof value === 'string' ? value : value === undefined ? '' : String(value);
@@ -825,8 +1264,8 @@ function FieldControl({
       className={fieldClass(dirty)}
       type="text"
       dir={EDITOR_DIR}
-      value={v}
-      onChange={(e) => onStage(e.target.value)}
+      value={writeFieldDigits(v, digits)}
+      onChange={(e) => onStage(writeFieldText(e.currentTarget, field, e.nativeEvent))}
       aria-label={fieldId}
     />
   );
@@ -840,55 +1279,100 @@ function FieldControl({
  * via the standard "adjust state during render" pattern. This is the fix for
  * the review finding that the old frozen-key trick dropped focus on the first
  * digit and could diverge across same-id fields.
+ *
+ * 🔴 `PERSIAN-DIGITS-01` — **THE OPERATOR'S DIGITS STAY ON SCREEN; THE NUMBER GOES TO AIR.**
+ *
+ * - The text is the operator's, exactly as typed (`digits="as-typed"`): `۱۲٫۵` stays `۱۲٫۵`. It
+ *   is READ through `@cg/text-shaping`'s one reader, and the staged value is the NUMBER — the wire
+ *   contract of a `number` field is unchanged, so the template renders it through `String(n)`.
+ * - Text that is not a number WITHDRAWS the draft (`unstageField`) instead of leaving the last
+ *   parsing prefix staged. Measured before: `۱۲a` sent 12 and `۱٬۲۳۴` sent 1, with nothing on
+ *   screen saying so. Now Update leaves this field exactly as it is on air.
+ * - Only an IMPOSSIBLE text is refused aloud, in one line. A half-typed one (empty, `-`, `۱٬`)
+ *   stages nothing and says nothing — refuse the impossible, never the incomplete.
+ *
+ * `FIELD-DIGITS-01` — the box is written in the FIELD's digits (`fieldDigitsOf`): the author's set,
+ * `latin` for a field that carries none (what air draws for it), and as typed only while the
+ * template schema is unresolved. So what the operator sees is what the page draws. The reading,
+ * the refusal and the staging above are unchanged; the value sent is still the number.
  */
 function NumberField({
+  field,
   value,
+  applied,
   fieldId,
   dirty,
   onStage,
+  onUnstage,
 }: {
+  field: DynamicField | null;
   value: FieldValue | undefined;
+  applied: FieldValue | undefined;
   fieldId: string;
   dirty: boolean;
   onStage: (next: FieldValue) => void;
+  onUnstage: () => void;
 }): JSX.Element {
-  const external = typeof value === 'number' ? String(value) : '';
-  const [text, setText] = useState(external);
+  const refusalId = useId();
+  const digits = fieldDigitsOf(field);
+  const [text, setText] = useState(typeof value === 'number' ? String(value) : '');
   const [seen, setSeen] = useState(value);
   if (value !== seen) {
     setSeen(value);
-    // Keep the in-progress text if it already represents the new value; else
-    // reseed from outside (push / discard / apply changed the applied value).
-    const parsed = Number(text);
-    const represents = text.trim() !== '' && Number.isFinite(parsed) && parsed === value;
-    if (!represents) setText(external);
+    // Keep the in-progress text if it already represents the new value; else reseed from
+    // outside (push / discard / apply changed the value) — in the digits the operator was
+    // using, so a Discard on `۱۲` does not answer in Latin.
+    const represents = typeof value === 'number' && parseLocalizedNumber(text) === value;
+    if (!represents) setText(typeof value === 'number' ? formatNumberLike(value, text) : '');
   }
-  // R-020 — the shared NumericInput (type="text" under the hood) so Persian /
-  // Arabic-Indic digits are accepted and commit as Latin. `step`/`min`/`max`
-  // are not rendered any more: on the old `type="number"` they only drove the
-  // spinner and the :invalid style — the staged value was never clamped.
-  // `scrub` — drag horizontally or press ↑/↓ to adjust, the Designer's feel (owner
-  // request). `step: 1` with Shift for tenths and Ctrl/Cmd for tens; no min/max,
-  // because a dynamic field's range is not declared here (R-020 removed the old
-  // `step`/`min`/`max` rendering precisely because they never clamped the value).
+  // Shown in the field's digits whatever wrote `text` — a keystroke, a reseed, or a schema that
+  // resolved after the box first rendered. The writer is idempotent and one-for-one.
+  const shown = writeFieldDigits(text, digits, 'number');
+  const refused = readLocalizedNumber(shown).kind === 'invalid';
+  // R-020 — the shared NumericInput (type="text" under the hood: a `type="number"` box drops
+  // Persian digits before script sees them). `step`/`min`/`max` are not rendered: on the old
+  // `type="number"` they only drove the spinner and the :invalid style — the staged value was
+  // never clamped. `scrub` — drag horizontally or press ↑/↓ to adjust, the Designer's feel
+  // (owner request). `step: 1` with Shift for tenths and Ctrl/Cmd for tens; no min/max, because
+  // a dynamic field's range is not declared here.
   return (
-    <NumericInput
-      className={fieldClass(dirty)}
-      decimal
-      scrub={{ step: 1 }}
-      value={text}
-      onValueChange={(raw) => {
-        setText(raw);
-        const n = Number(raw);
-        if (raw.trim() !== '' && Number.isFinite(n)) {
-          setSeen(n); // our own edit — don't let the resync reseed over it
-          onStage(n);
-        }
-      }}
-      aria-label={fieldId}
-    />
+    <>
+      <NumericInput
+        className={fieldClass(dirty)}
+        decimal
+        digits={digits}
+        scrub={{ step: 1 }}
+        value={shown}
+        {...(refused ? { 'aria-invalid': true, 'aria-describedby': refusalId } : {})}
+        onValueChange={(raw) => {
+          setText(raw);
+          const reading = readLocalizedNumber(raw);
+          if (reading.kind === 'number') {
+            setSeen(reading.value); // our own edit — don't let the resync reseed over it
+            onStage(reading.value);
+          } else {
+            // The withdrawn draft makes the effective value the APPLIED one; seeing it first
+            // keeps the resync from overwriting the text the operator is still editing.
+            setSeen(applied);
+            onUnstage();
+          }
+        }}
+        aria-label={fieldId}
+      />
+      {refused && (
+        <p id={refusalId} className="cg-field-refusal" data-field-refusal="">
+          {NOT_A_NUMBER}
+        </p>
+      )}
+    </>
   );
 }
+
+/**
+ * The one sentence a template number field says when its text can never be a number. It states
+ * the fact and its consequence — the air is not touched — and nothing else.
+ */
+const NOT_A_NUMBER = 'Not a number — Update will not change it.';
 
 function inferKind(value: FieldValue | undefined): DynamicField['type'] | 'unknown' {
   if (typeof value === 'boolean') return 'boolean';

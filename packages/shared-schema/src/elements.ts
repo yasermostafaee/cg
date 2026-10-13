@@ -15,7 +15,8 @@ import {
 } from './primitives.js';
 import { ElementAnimationSchema, FrameRangeSchema } from './animation.js';
 import { AnchorPointSchema, type AnchorPoint } from './path-points.js';
-import { ListItemSchema } from './fields.js';
+import { FieldDigitsSchema, ListItemSchema, type FieldDigits } from './fields.js';
+import { LiveFitModeSchema } from './live-fit.js';
 
 const TextDirectionSchema = z.enum(['auto', 'ltr', 'rtl']);
 
@@ -123,6 +124,30 @@ export const ElementBaseSchema = z.object({
    */
   lifespan: FrameRangeSchema.optional(),
   /**
+   * 🔴 D4 (`multibox-layout-switch` §13.7.2) — hide this element while an ARRANGEMENT
+   * TRANSITION is running, so the move does not look messy.
+   *
+   * Authored beside the ELEMENT rather than on the arrangement, because the distinction
+   * being authored is a property of the element: a box title should leave during the move,
+   * while a logo inside the multi-box must not blink on every switch. An arrangement-level
+   * flag would force one answer for everything the arrangement contains.
+   *
+   * ⚠ **This is the THIRD input to {@link resolveVisibility} and is read NOWHERE ELSE.**
+   * A local `if (el.hideDuringTransition)` at a point of use looks obviously correct in
+   * isolation and is the breach `visibility.ts` exists to prevent. Absent ⇒ `false`, so
+   * every scene authored before this field resolves exactly as it did.
+   *
+   * 🔴 **PARKED (2026-08-19 — LOOKS adopted, `design.md` §14.4).** v1's look switch is a
+   * CUT, and a cut has no transition window, so this flag has NOTHING TO GATE: no shipped
+   * code path ever sets a transition active. It stays because deleting it would re-cost
+   * the D4 decision when the window returns; it is parked EXPLICITLY so it is not the next
+   * written-but-unreachable field (`B-147`'s class). **What un-parks it:** an ANIMATED
+   * look-switch mode — the phase that gives `resolveVisibility`'s transition input a
+   * window at all. Until then, do not surface it in new UI and do not read it anywhere
+   * but `resolveVisibility`.
+   */
+  hideDuringTransition: z.boolean().optional(),
+  /**
    * Operator-chosen colour for this element's timeline lifespan bar
    * (set via the layer right-click → Color menu). Absent means the
    * timeline falls back to its deterministic per-id colour.
@@ -210,6 +235,13 @@ export const TextElementSchema = ElementBaseSchema.extend({
   wrap: z.boolean().optional(),
   /** D-010-pic-5 — vertical alignment inside the text box. */
   verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
+  /**
+   * `TEXT-DIGITS-01` — the digits the text its AUTHOR typed into this element is drawn in (a value a
+   * field binds is drawn by the field's own choice). Absent is `as-typed` — Keyboard — the identity,
+   * so a template made before this draws exactly as it did; optional, never defaulted, so parsing an
+   * old document adds no key. Read it through {@link elementDigitsOf}.
+   */
+  digits: FieldDigitsSchema.optional(),
 }).merge(BoxStyleSchema);
 export type TextElement = z.infer<typeof TextElementSchema>;
 
@@ -320,6 +352,12 @@ export const TickerElementSchema = ElementBaseSchema.extend({
    * bump. HOLD only: the ticker still STARTS and crawls regardless. Non-keyframable.
    */
   drivesHold: z.boolean().optional(),
+  /**
+   * `TEXT-DIGITS-01` — the digits the ticker's AUTHORED items and text separator are drawn in; a
+   * bound `list` field's items are drawn by the list field's own choice. Absent is `as-typed`
+   * (Keyboard), the identity. Read it through {@link elementDigitsOf}.
+   */
+  digits: FieldDigitsSchema.optional(),
 }).merge(BoxStyleSchema);
 export type TickerElement = z.infer<typeof TickerElementSchema>;
 
@@ -655,8 +693,33 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
    * only: the sequence still advances/renders regardless. Non-keyframable.
    */
   drivesHold: z.boolean().optional(),
+  /**
+   * `TEXT-DIGITS-01` — the digits the sequence's AUTHORED text items are drawn in; an item bound to
+   * a field, and a bound `list` field's items, are drawn by that field's own choice. Absent is
+   * `as-typed` (Keyboard), the identity. Read it through {@link elementDigitsOf}.
+   */
+  digits: FieldDigitsSchema.optional(),
 }).merge(BoxStyleSchema);
 export type SequenceElement = z.infer<typeof SequenceElementSchema>;
+
+/**
+ * `TEXT-DIGITS-01` — THE ANSWER to "which digits is the text an author typed into this element drawn
+ * in", read by the page and the Designer alike (golden rule 6): the element's choice, absent read as
+ * `as-typed` (Keyboard) — the identity, so a template made before the setting draws unchanged.
+ */
+export function elementDigitsOf(element: {
+  readonly type: string;
+  readonly digits?: FieldDigits | undefined;
+}): FieldDigits {
+  switch (element.type) {
+    case 'text':
+    case 'ticker':
+    case 'sequence':
+      return element.digits ?? 'as-typed';
+    default:
+      return 'as-typed';
+  }
+}
 
 /**
  * Repeater / data-driven layout (D-030) — a clipped box that renders one
@@ -984,14 +1047,34 @@ export function migratePathGeometry(el: PathElement): PathElement {
  * no distinct intro/outro — the whole clip is the intro, held at `op`, empty outro.
  */
 export const LottiePhasesSchema = z.object({
-  /** Animation frame where the intro ends and the hold begins. */
-  introEnd: z.number().nonnegative(),
-  /** Animation frame where the outro begins. `introEnd ≤ outroStart`. */
-  outroStart: z.number().nonnegative(),
-  /** Optional `[in, out]` idle-loop range inside the hold window. */
+  /**
+   * Animation frame where the intro ends and the hold begins.
+   *
+   * Session Y — under `source: 'composition'` an AUTHORED value WINS (the clip's own intro,
+   * scheduled to finish at the effective content start); ABSENT (what attach writes now) the
+   * window is DERIVED (`followWindowMs` / `lottieFollowWindow`). The pre-Y attach SEED
+   * SIGNATURE (`introEnd == lottieClipMidpoint`, `outroStart == op`) derives as if absent —
+   * see `lottieFollowClipFacts`. OPTIONAL since session Y so attach can write the source alone.
+   */
+  introEnd: z.number().nonnegative().optional(),
+  /** Animation frame where the outro begins. `introEnd ≤ outroStart`. Session Y: optional; authored wins under follow (the clip's own `[outroStart → op]`), absent derives END-anchored. */
+  outroStart: z.number().nonnegative().optional(),
+  /** Optional `[in, out]` idle-loop range inside the hold window. Under `'composition'` it COMPOSES with the derived hold time (idle is never derived — absent means freeze). */
   idle: z.tuple([z.number().nonnegative(), z.number().nonnegative()]).optional(),
-  /** Whether the frames came from bodymovin markers or manual marking. */
-  source: z.enum(['markers', 'manual']),
+  /**
+   * Where the mapping comes from: bodymovin markers, manual marking, or — the third source
+   * (media-phases-follow-composition) — DERIVED from the composition's lifecycle
+   * (`'composition'`): intro settles at the effective content start, outro fits the OUT segment.
+   * The element stores the RELATIONSHIP, not numbers, so a marker drag moves the window with no
+   * re-sync step.
+   */
+  source: z.enum(['markers', 'manual', 'composition']),
+  /**
+   * The clip time whose look the composition HOLDS (`H`), in ANIMATION frames — meaningful ONLY
+   * under `source: 'composition'`, ignored otherwise. Absent ⇒ `H` = clip start + entrance span,
+   * which degenerates exactly to "play the clip from its head". Optional + additive.
+   */
+  holdAt: z.number().nonnegative().optional(),
 });
 export type LottiePhases = z.infer<typeof LottiePhasesSchema>;
 
@@ -1105,8 +1188,56 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    * Inspector offers it as `— not specified —`.
    */
   expectedAspect: z.number().positive().optional(),
-  /** The FILL source's symbolic id, e.g. `guest-1`. */
-  routeKey: LiveSourceIdSchema,
+  /**
+   * ⭐ `C-028` — **how the picture is placed in this plate's box: `contain` (fit the
+   * whole picture, centred, margins showing the template) or `cover` (scale to cover
+   * and centre-crop).**
+   *
+   * 🔴 **PER ELEMENT, and that is a decision rather than a default.** The same catalog
+   * source seated in a 16:9 box and a 3:4 box needs DIFFERENT fits, so a per-SOURCE
+   * field would have to be wrong in one of them. The mode is a property of the PAIRING
+   * of a picture with a box, and the element is where that pairing is authored.
+   *
+   * OPTIONAL, and absent means `contain` — the default, never `cover`. That flip
+   * changes what an existing template puts on air for any plate whose source aspect is
+   * both known and different from its box; permitted under `P-031`'s compatibility
+   * floor and named as an on-air change in the change's proposal rather than left to
+   * be discovered.
+   *
+   * ⚠ Distinct from {@link expectedAspect} and resolved by a different chain. That one
+   * is the author's ASSERTION about the feed and is outranked by the SOURCE (`D-147` —
+   * the author cannot see the feed). This one is a presentation choice the author
+   * states and the OPERATOR may revise on the day, so it is outranked by the
+   * per-assignment override instead. Two chains, opposite orders, deliberately
+   * separate concerns.
+   */
+  fitMode: LiveFitModeSchema.optional(),
+  /**
+   * The FILL source's symbolic id, e.g. `guest-1` — **or absent, meaning UNASSIGNED.**
+   *
+   * ⭐ **`B-183` — a new plate points at NOTHING until the author says otherwise.** It used
+   * to default to `live-1` (and, from the canvas tool, to `nextLiveSourceId`'s first free
+   * `live-N`), which was the placeholder text of the Looks panel's source input — a
+   * SUGGESTION the author had not accepted. The owner's principle: **nothing lands
+   * unconfirmed.**
+   *
+   * 🔴 **`B-188` — THIS FIELD IS THE ONLY PLACE A SOURCE ID IS WRITTEN NOW.** The multi-frame
+   * group used to declare a list beside it and `LookSource.routeKey` was the required half of
+   * an asymmetry recorded here. That declaration is deleted: the group's source list is
+   * DERIVED from these fields (`deriveLookSources`), so this optional field is the whole truth
+   * and there is no second copy for it to contradict. A source comes into existence by being
+   * typed here.
+   *
+   * ⚠ **Absent is not "invalid".** The export refuses it — `live-source-unset` in
+   * `live-source-preflight.ts`, in DOCUMENT scope, so it refuses whether or not the template
+   * has a group. (Its companion `look-source-undeclared` — "you chose something that does not
+   * exist" — went with the declaration; there is nothing left to not-exist.)
+   *
+   * Two rejected alternatives, recorded so they are not relitigated: defaulting to the first
+   * source already in use silently binds two plates to one input and the error is never seen;
+   * keeping `live-N` means drawing a box invents a source the author never asked for.
+   */
+  routeKey: LiveSourceIdSchema.optional(),
   /**
    * ⚠ DEPRECATED (owner, 2026-08-10; `live-source-multibox` design.md §1a).
    *
@@ -1123,6 +1254,36 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    * which is why the control went and this did not.
    */
   keySourceId: LiveSourceIdSchema.optional(),
+  /**
+   * ⭐ The plate's FRAME (owner, 2026-08-10; `live-source-multibox` design.md
+   * §9a.1). Optional and additive — no schema-version bump, and every stored scene
+   * keeps parsing with it absent.
+   *
+   * **This is `StrokeSchema`, unchanged — NOT a second stroke concept.** The shared
+   * schema is `{ width, color, dash? }` and has NO alignment notion; box kinds render
+   * it as a CSS `border`, and for a Live Source the renderer places that border
+   * OUTSIDE the declared `width`/`height` by declaring `box-sizing: content-box` on
+   * the plate.
+   *
+   * ⚠ That placement is DECLARED, not inherited from the CSS default: every surface
+   * the page renders on ships a `*{box-sizing:border-box}` reset (`cgCss` in both
+   * exporters and the Preview, `@cg/ui`'s `theme.css` on the canvas), so the default
+   * never applies. `scene-builder.ts`'s `buildLiveSource` carries the detail.
+   *
+   * 🔴 **That is the property the rest of the feature rests on: the declared rect
+   * stays the CONTENT box.** `collectLiveSources` reads `transform.size`, so a
+   * stroke of any width leaves the declared hole — and the overlap preflight that
+   * reads it — exactly where they were. Two plates whose FRAMES overlap is not a
+   * fault; two plates whose HOLES overlap is.
+   *
+   * `width: 0` is legal and means NO FRAME with the colour REMEMBERED: it renders
+   * identically to an absent stroke, so nothing may read the zero as "unset" and
+   * substitute a default (the falsy-zero trap this repo has already met twice).
+   *
+   * If shapes ever gain a stroke ALIGNMENT notion, a Live Source offers only
+   * `outside` — for the reason above, not as a limitation of the control.
+   */
+  stroke: StrokeSchema.optional(),
 });
 export type VideoPlaceholderElement = z.infer<typeof VideoPlaceholderElementSchema>;
 
@@ -1137,19 +1298,42 @@ export type VideoPlaceholderElement = z.infer<typeof VideoPlaceholderElementSche
  */
 export const VideoPhasesSchema = z
   .object({
-    /** End of the IN phase (ms from clip start). The hold point. */
-    introEnd: z.number().nonnegative(),
-    /** Start of the OUT phase (ms); the outro is `[outroStart → clip end]`. */
-    outroStart: z.number().nonnegative(),
-    /** Optional hold segment looped instead of `[introEnd → outroStart]`. */
+    /**
+     * End of the IN phase (ms from clip start). The hold point.
+     *
+     * Session Y — under `source: 'composition'` an AUTHORED value WINS (the clip's own intro,
+     * scheduled to finish at the effective content start); ABSENT (what attach writes now) the
+     * window is DERIVED (`followWindowMs`). The pre-Y attach SEED SIGNATURE
+     * (`introEnd == round(durationMs/2)`, `outroStart == durationMs`) derives as if absent —
+     * see `videoFollowClipFacts`. OPTIONAL since session Y so attach can write the source alone.
+     */
+    introEnd: z.number().nonnegative().optional(),
+    /** Start of the OUT phase (ms); the outro is `[outroStart → clip end]`. Session Y: optional; authored wins under follow, absent derives END-anchored. */
+    outroStart: z.number().nonnegative().optional(),
+    /** Optional hold segment looped instead of `[introEnd → outroStart]`. Under `'composition'` it COMPOSES with the derived hold time (idle is never derived — absent means freeze at `H`). */
     idle: z
       .object({ start: z.number().nonnegative(), end: z.number().nonnegative() })
       .refine((r) => r.start <= r.end, { message: 'idle.start must not exceed idle.end' })
       .optional(),
+    /**
+     * Where the marks come from (media-phases-follow-composition). Video had NO source field —
+     * manual was the only possibility — so this is OPTIONAL and absent ⇒ exactly
+     * `'manual'`-equivalent: every stored scene round-trips unchanged. `'composition'` DERIVES
+     * the window from the composition's lifecycle (see `introEnd`'s note). Units are NOT unified
+     * with the Lottie's: video stays in the clip's own ms.
+     */
+    source: z.enum(['manual', 'composition']).optional(),
+    /**
+     * The clip time whose look the composition HOLDS (`H`), in MS — meaningful ONLY under
+     * `source: 'composition'`, ignored otherwise. Absent ⇒ `H` = entrance span ("play the clip
+     * from its head"). Optional + additive.
+     */
+    holdAt: z.number().nonnegative().optional(),
   })
-  .refine((p) => p.introEnd <= p.outroStart, {
-    message: 'introEnd must not exceed outroStart',
-  });
+  .refine(
+    (p) => p.introEnd === undefined || p.outroStart === undefined || p.introEnd <= p.outroStart,
+    { message: 'introEnd must not exceed outroStart' },
+  );
 export type VideoPhases = z.infer<typeof VideoPhasesSchema>;
 
 /**

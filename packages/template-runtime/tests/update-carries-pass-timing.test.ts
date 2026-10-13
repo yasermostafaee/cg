@@ -1,0 +1,412 @@
+/** @vitest-environment jsdom */
+import { describe, expect, it } from 'vitest';
+import { withCgControl, type FieldValues, type Scene } from '@cg/shared-schema';
+import { createRuntime } from '../src/runtime.js';
+
+/**
+ * 🔴 `TIMING-WIRE-22` (b) — A `CG UPDATE` CHANGES THE RUNNING LOOP, AND DOES NOT RESTART IT.
+ *
+ * The far end of the road. `cg-control-timing.test.ts` proves the payload survives the wire;
+ * this proves the page ACTS on it — against the real `createRuntime`, through the real
+ * `update()`, with no seam invented for the test.
+ *
+ * ⚠ The thing being guarded is that this is NOT a rebuild. Every other route to a playout knob
+ * goes through `scene-replace` → `remove()` + `createRuntime()`, which on air is a black frame
+ * in the middle of a live graphic. If this ever starts rebuilding, the graphic on screen dies
+ * for a frame and the tests below would still pass unless they watch for it — so they watch the
+ * settle events, which a rebuild would reset.
+ */
+
+function makeClock() {
+  let ms = 0;
+  let rafQueue: ((ts: number) => void)[] = [];
+  const timers: { id: number; due: number; cb: () => void }[] = [];
+  let nextId = 1;
+  return {
+    now: () => ms,
+    raf: (cb: (ts: number) => void) => {
+      rafQueue.push(cb);
+      return rafQueue.length;
+    },
+    cancel: () => {
+      rafQueue = [];
+    },
+    setTimeout: (cb: () => void, delay: number) => {
+      const id = nextId++;
+      timers.push({ id, due: ms + delay, cb });
+      return id;
+    },
+    clearTimeout: (h: unknown) => {
+      const i = timers.findIndex((t) => t.id === h);
+      if (i >= 0) timers.splice(i, 1);
+    },
+    advance: (delta: number) => {
+      ms += delta;
+      const due = timers.filter((t) => t.due <= ms).sort((a, b) => a.due - b.due);
+      for (const t of due) {
+        const i = timers.indexOf(t);
+        if (i >= 0) timers.splice(i, 1);
+        t.cb();
+      }
+      const cbs = rafQueue;
+      rafQueue = [];
+      for (const cb of cbs) cb(ms);
+    },
+  };
+}
+
+/** A looping composition whose pass is exactly its hold (no animation ⇒ instant legs). */
+const PASS_MS = 1000;
+
+function loopingScene(): Scene {
+  return {
+    schemaVersion: 1,
+    id: 'scene-1',
+    name: 'Looper',
+    templateType: 'custom',
+    resolution: { width: 1920, height: 1080 },
+    frameRate: 50,
+    safeAreas: { title: 10, action: 5 },
+    frameRange: { in: 0, out: 50 },
+    lifecycle: { outPoint: 40 },
+    editorBackdrop: 'transparent',
+    playout: { mode: 'loop-cycle', holdSource: 'timed', holdMs: PASS_MS, repeat: 'infinite' },
+    layers: [
+      { id: 'L1', name: 'l', visible: true, locked: false, blendMode: 'normal', children: [] },
+    ],
+    fields: [],
+    bindings: [],
+    fonts: [],
+    metadata: { createdAt: '2026-09-15T00:00:00.000Z', updatedAt: '2026-09-15T00:00:00.000Z' },
+  } as unknown as Scene;
+}
+
+interface Live {
+  rt: ReturnType<typeof createRuntime>;
+  settles: number;
+  clock: ReturnType<typeof makeClock>;
+  host: HTMLDivElement;
+}
+
+async function onAir(): Promise<Live> {
+  const clock = makeClock();
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+  let settles = 0;
+  rt.on('stop.end', () => {
+    settles += 1;
+  });
+  await rt.play({});
+  return {
+    rt,
+    clock,
+    host,
+    get settles() {
+      return settles;
+    },
+  } as unknown as Live;
+}
+
+const runPasses = (l: Live, n: number): void => {
+  for (let i = 0; i < n; i++) l.clock.advance(PASS_MS);
+};
+
+/**
+ * 🔴 **`TIMING-WIRE-22 · DELTA B6` — AND THE SAME PAYLOAD DELIVERED THROUGH `play()`.**
+ *
+ * ── THE DEFECT THIS FILE DID NOT COVER, AND HOW IT REACHED AIR ──────────────
+ *
+ * The bridge attaches the operator's count to the `CG ADD` data payload (`#sendAdd`), and
+ * CasparCG hands a template's LOAD-TIME data to the page through whichever global it uses — for
+ * many hosts that is `play(data)`, not `update(data)`. `play()` already lifted the control
+ * payload and honoured `control.look` for exactly that reason; `control.timing` was never added
+ * beside it, so on the `play` delivery path the count was read and then DROPPED.
+ *
+ * The consequence on the plant (owner, 2026-09-15): «روی تعداد هم فرقی نداره هر تعدادی باشه» —
+ * whatever count is set, the take ignores it. `DELTA B0` made `play()` honour a count seated
+ * before it, and this is the other half of that promise: seating it.
+ *
+ * ⚠ **THE ORDER IS LOAD-BEARING AND IT IS THE OPPOSITE OF THE LOOK'S.** The look is entered
+ * LAST, because `restoreContent()` would otherwise un-hide what it hid. The timing must be
+ * seated BEFORE the controller cascade, because `PlayoutController.play()` SNAPSHOTS the count
+ * into `cyclesLeft` — applied afterwards it would be read as a live edit to a loop that had
+ * already chosen its total, which is a different quantity (`DELTA A1`).
+ */
+/**
+ * 🔴 **`DELTA B · R1` — THE OTHER DELIVERY HOST: `update(data)` THEN `play()`.**
+ *
+ * ── THE GAP THIS CLOSES, NAMED ─────────────────────────────────────────────
+ *
+ * "An off-air count set before the take is the count that airs" was pinned in three places and
+ * by NONE of them end to end:
+ *
+ *   - `pass-count-is-relative.test.ts` drives a BARE `PlayoutController` — `setRemainingPasses`
+ *     then `play()`. It pins B0's ARITHMETIC and touches no payload, no `__cg`, no page global.
+ *   - this file's `TIMING-WIRE-22 (b)` block calls `rt.update(...)`, but every case goes through
+ *     an `onAir()` harness that has ALREADY played — so it pins the ON-AIR relative edit
+ *     ("Passes remaining"), which is a different quantity (`DELTA A1`).
+ *   - the `DELTA B6` block below drives `rt.play(data)` — the host that hands load data to
+ *     `play`, and the one whose defect the owner met on the plant.
+ *
+ * So the sequence an ordinary CasparCG host actually performs — **`CG ADD` delivering data to
+ * `update()` while the controller is still idle, then `CG PLAY` with no arguments** — was
+ * covered by nothing. It is the path most hosts take, and it is the one B0's promise is made to.
+ *
+ * ⚠ This is NOT a restatement of the `(b)` block. There the count is relative to a pass already
+ * on screen; here there is no pass yet, the count is a TOTAL, and what is being tested is that
+ * `play()` SEATS it instead of overwriting it from the authored `repeat`.
+ */
+describe('DELTA B · R1 — a count delivered on the ADD, through update(), then played', () => {
+  /** A fresh runtime that has NOT played — the state a `CG ADD` arrives in. */
+  function loaded(): {
+    rt: ReturnType<typeof createRuntime>;
+    clock: ReturnType<typeof makeClock>;
+    host: HTMLDivElement;
+    settles: () => number;
+  } {
+    const clock = makeClock();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    let n = 0;
+    rt.on('stop.end', () => {
+      n += 1;
+    });
+    return { rt, clock, host, settles: () => n };
+  }
+
+  it('🔴 two passes on the ADD end the loop after exactly two', async () => {
+    const l = loaded();
+    await l.rt.update(withCgControl({} as FieldValues, { timing: { passes: 2 } }));
+    await l.rt.play({});
+
+    l.clock.advance(PASS_MS);
+    expect(l.settles(), 'it ended after one pass — the count was read as relative').toBe(0);
+    l.clock.advance(PASS_MS);
+    expect(l.settles(), 'the count set before the take did not survive play()').toBe(1);
+    l.host.remove();
+  });
+
+  it('🔴 INFINITE on the ADD keeps it looping', async () => {
+    // The owner's report on the plant, on this host: «با اینکه روی بینهایت میذارم ولی فقط یکبار
+    // پخش میشه». The template's own repeat is already infinite, so this can only fail if the
+    // payload is applied WRONGLY rather than dropped.
+    const l = loaded();
+    await l.rt.update(withCgControl({} as FieldValues, { timing: { passes: 'infinite' } }));
+    await l.rt.play({});
+
+    for (let i = 0; i < 12; i++) l.clock.advance(PASS_MS);
+    expect(l.settles(), 'an infinite loop closed itself').toBe(0);
+    l.host.remove();
+  });
+
+  it('🔴 ZERO on the ADD settles after the FIRST pass, not after one more', async () => {
+    // `0` is an instruction and it is a TOTAL here, not a remainder: one pass plays and the
+    // graphic goes. Reading it as absent is the silent-clamp failure; reading it as relative
+    // would give two passes.
+    const l = loaded();
+    await l.rt.update(withCgControl({} as FieldValues, { timing: { passes: 0 } }));
+    await l.rt.play({});
+
+    l.clock.advance(PASS_MS);
+    expect(l.settles()).toBe(1);
+    l.host.remove();
+  });
+
+  it('a LATER play() payload does not discard what the ADD set', async () => {
+    // The documented CasparCG flow is update-then-play-with-no-args, but a host may pass data
+    // to both. A play payload carrying no `timing` member must leave the seated count alone —
+    // "no opinion" and "reset to the authored value" are different instructions.
+    const l = loaded();
+    await l.rt.update(withCgControl({} as FieldValues, { timing: { passes: 2 } }));
+    await l.rt.play({ title: 'x' } as FieldValues);
+
+    l.clock.advance(PASS_MS);
+    expect(l.settles()).toBe(0);
+    l.clock.advance(PASS_MS);
+    expect(l.settles(), 'the play payload wiped the count the ADD had seated').toBe(1);
+    l.host.remove();
+  });
+
+  it('the gap set on the ADD is honoured from the first boundary', async () => {
+    const l = loaded();
+    await l.rt.update(withCgControl({} as FieldValues, { timing: { passes: 2, delayMs: 500 } }));
+    await l.rt.play({});
+
+    l.clock.advance(PASS_MS); // pass 1 ends; the gap starts
+    l.clock.advance(499);
+    expect(l.settles(), 'the gap was skipped').toBe(0);
+    // ⚠ Separate advances: this harness fires the timers due at the new `now` in ONE round, and
+    // the gap timer SCHEDULES the next hold when it fires.
+    l.clock.advance(1);
+    l.clock.advance(PASS_MS);
+    expect(l.settles(), 'the gap was ignored, or the count was').toBe(1);
+    l.host.remove();
+  });
+});
+
+describe('DELTA B6 — a count delivered on the TAKE, through play()', () => {
+  it('🔴 two passes on the ADD payload end the loop after exactly two', async () => {
+    const clock = makeClock();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    let settles = 0;
+    rt.on('stop.end', () => {
+      settles += 1;
+    });
+
+    // The bridge's `CG ADD <layer> <tpl> 0 <data>` → this page's `play(data)`.
+    await rt.play(withCgControl({} as FieldValues, { timing: { passes: 2 } }));
+
+    clock.advance(PASS_MS);
+    expect(settles, 'it ended after one pass').toBe(0);
+    clock.advance(PASS_MS);
+    expect(settles, 'two passes were asked for on the take and the loop did not end').toBe(1);
+    host.remove();
+  });
+
+  it('🔴 and INFINITE on the ADD payload keeps it looping', async () => {
+    /*
+      The owner's actual report: «لوگو رو با اینکه روی بینهایت میذارم ولی فقط یکبار پخش میشه».
+      The template's own `repeat` is already infinite, so this case can only fail if the payload
+      is applied WRONGLY — which is the hazard of fixing the drop by seating the value in the
+      wrong place, or of reading an absent member as a zero.
+    */
+    const clock = makeClock();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    let settles = 0;
+    rt.on('stop.end', () => {
+      settles += 1;
+    });
+
+    await rt.play(withCgControl({} as FieldValues, { timing: { passes: 'infinite' } }));
+
+    for (let i = 0; i < 12; i++) clock.advance(PASS_MS);
+    expect(settles, 'an infinite loop closed itself').toBe(0);
+    host.remove();
+  });
+
+  it('a take with NO timing member leaves the authored count alone', async () => {
+    // "No opinion" and "reset to the template's value" are different instructions, and only the
+    // first one is being given here. The authored `repeat` is infinite, so it must keep looping.
+    const clock = makeClock();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    let settles = 0;
+    rt.on('stop.end', () => {
+      settles += 1;
+    });
+
+    await rt.play({});
+
+    for (let i = 0; i < 12; i++) clock.advance(PASS_MS);
+    expect(settles).toBe(0);
+    host.remove();
+  });
+
+  it('the gap on the ADD payload is honoured from the FIRST boundary', async () => {
+    // `delayMs` is read at every boundary rather than snapshotted, so the only way it can be
+    // wrong on a take is if the payload never reached the controller at all.
+    const clock = makeClock();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    let settles = 0;
+    rt.on('stop.end', () => {
+      settles += 1;
+    });
+
+    await rt.play(withCgControl({} as FieldValues, { timing: { passes: 2, delayMs: 500 } }));
+
+    clock.advance(PASS_MS); // pass 1 ends; the gap starts
+    clock.advance(499); // still inside the gap — pass 2 has not begun
+    expect(settles, 'the gap was skipped').toBe(0);
+    /*
+      ⚠ THREE SEPARATE ADVANCES, and that is this HARNESS rather than the product: `advance`
+      fires the timers due at the new `now` in ONE round, and the gap timer SCHEDULES the next
+      hold when it fires. Rolling the gap and the pass into a single jump leaves that hold due in
+      the future, and the case then reads as "the loop never ended" — a harness artefact
+      indistinguishable from a real defect, which is how it first failed here.
+    */
+    clock.advance(1); // the gap elapses; pass 2 begins
+    expect(settles).toBe(0);
+    clock.advance(PASS_MS); // pass 2 runs out — the second of the two asked for
+    expect(settles, 'the gap was ignored, or the count was').toBe(1);
+    host.remove();
+  });
+});
+
+describe('TIMING-WIRE-22 (b) — the page applies __cg.timing to the running controller', () => {
+  it('a CG UPDATE carrying two passes ends the loop after exactly two more', async () => {
+    const l = await onAir();
+    l.clock.advance(PASS_MS / 2); // mid-pass 1
+
+    await l.rt.update(withCgControl({} as FieldValues, { timing: { passes: 2 } }));
+
+    runPasses(l, 1);
+    expect(l.settles, 'the pass on screen was counted — it must not be').toBe(0);
+    runPasses(l, 2);
+    expect(l.settles, 'two more passes were asked for and did not end the loop').toBe(1);
+    l.host.remove();
+  });
+
+  it('ZERO takes it out after the current pass, without cutting it', async () => {
+    const l = await onAir();
+    l.clock.advance(PASS_MS / 2);
+
+    await l.rt.update(withCgControl({} as FieldValues, { timing: { passes: 0 } }));
+
+    expect(l.settles, 'zero cut the graphic instead of letting the pass finish').toBe(0);
+    runPasses(l, 1);
+    expect(l.settles).toBe(1);
+    l.host.remove();
+  });
+
+  it('an ordinary field update leaves a running count alone', async () => {
+    // ABSENT MEANS UNCHANGED. If an update without a timing member reset the count, every text
+    // correction during a show would silently re-arm the loop.
+    const l = await onAir();
+    l.clock.advance(PASS_MS / 2);
+    await l.rt.update(withCgControl({} as FieldValues, { timing: { passes: 1 } }));
+
+    await l.rt.update({ headline: 'new text' } as unknown as FieldValues);
+
+    runPasses(l, 1);
+    expect(l.settles, 'a plain field update disturbed the count').toBe(0);
+    runPasses(l, 1);
+    expect(l.settles).toBe(1);
+    l.host.remove();
+  });
+
+  it('a malformed timing member changes nothing rather than throwing', async () => {
+    // A page that throws inside update() takes the whole graphic off air.
+    const l = await onAir();
+    l.clock.advance(PASS_MS / 2);
+
+    await expect(
+      l.rt.update({ __cg: { timing: { passes: 'lots' } } } as unknown as FieldValues),
+    ).resolves.toBeUndefined();
+
+    runPasses(l, 4);
+    expect(l.settles, 'a malformed count stopped an infinite loop').toBe(0);
+    l.host.remove();
+  });
+
+  it('the delay arrives and holds the graphic off screen between passes', async () => {
+    const l = await onAir();
+
+    await l.rt.update(withCgControl({} as FieldValues, { timing: { delayMs: 400, passes: 1 } }));
+
+    runPasses(l, 1); // current pass ends; the gap begins
+    expect(l.settles, 'it settled instead of entering the gap').toBe(0);
+    l.clock.advance(400); // gap over → the last pass runs
+    runPasses(l, 1);
+    expect(l.settles).toBe(1);
+    l.host.remove();
+  });
+});

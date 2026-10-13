@@ -1,0 +1,114 @@
+# Program output missing is SAID — the declared-versus-running output check, its banner, and a bounded, off-by-default re-creation (C-029)
+
+## Why
+
+The plant lost its program output on 2026-09-01 and **nothing said so.** The DeckLink card was
+replaced; `casparcg.config` kept the old card's persistent ID (`<decklink><device>23487013</device>`);
+the consumer failed at boot and never appeared in `INFO`. AMCP answered, OSC ticked, every pill
+read `HEALTHY`, and the station had no SDI output. The absence was discoverable only by reading
+`INFO 1`'s XML and noticing that `<output>` listed `system-audio` and `screen` and nothing else.
+
+That is the `B-141` / `B-143` / `B-144` family — _the system knows something and does not say
+it_ — one layer further out than any of them: here the system did not even look. `R-058`'s
+`NOT PRODUCING` chip cannot help, by construction: it reports a channel that ticked and STOPPED,
+and a channel whose consumer failed at boot ticks normally on its remaining consumers. The
+recorded decision under `R-058` (_"the console does not read casparcg.config … AMCP does not
+expose it"_) was also **wrong on the fact**: the 2026-08-25 walk had already measured that
+`INFO CONFIG` returns the parsed configuration, and the same walk's Q2 correctly recorded that
+this is _what the operator wrote_, not what the card reports. Both facts are what this change is
+built on: the declaration is the boot-time baseline the operator intended; `INFO <channel>` is
+what runs; the difference is the alarm.
+
+## What changes
+
+1. **The bridge reads two documents over the AMCP axis and publishes one verdict.**
+   `INFO CONFIG` once per connection (what each channel DECLARES), and the `<output>` block of
+   the `INFO <channel>` reply the `R-030` mode read already sends (what RUNS), re-read every
+   60 s while reachable and again after a reconnect. A declared consumer kind with fewer
+   running instances than declared is `missing`; the verdict travels in `ServerHealth.outputs`
+   and is kept across a disconnect so its last value is never silently lost.
+
+2. **A full-width alarm banner in the Runtime**, in the same strip language as
+   `ConnectionBanner` and `RasterMismatchBanner`: it names the channel, the declared consumer
+   and its device, what IS running, and the next action. When the bridge cannot reach CasparCG
+   after a `missing` verdict, the banner stays and re-labels itself UNVERIFIED rather than going
+   quiet. `outputVerdictOf` in `@cg/shared-ipc` is the one authority for every arm.
+
+3. **The honest limit is stated where an operator reads it.** Nothing enumerates DeckLink
+   devices over AMCP (measured: `INFO SYSTEM` degrades to `INFO`; `INFO CONFIG` echoes the
+   config; the device list exists only in the startup log, which the bridge does not read). So
+   "auto-detect" cannot mean discovery. What it means here: **the operator names the device in
+   `casparcg.config`; the bridge verifies that the declared consumer is running and complains
+   when it is not.** Probing with `ADD` is not a substitute for enumeration (measured — see
+   `design.md` §3).
+
+4. **A bounded re-creation behind `--create-missing-consumers`, OFF by default.** (RETIRED
+   2026-09-28 — see the correction below.) On, the
+   bridge sends ONE `ADD` per connection per channel, built from the declaration's OWN
+   parameters (never a different device), records the wire's answer in the health snapshot,
+   and verifies a `202` by re-reading `INFO`. A test reddens if the default flips.
+
+5. **Two lying errors on the consumer side are filed as `B-208`**, measured on the plant and the
+   dev host: an `ADD` for a device CasparCG cannot open answers `403 ADD FAILED` with
+   " Check syntax." in the log (the same code as a bad parameter), and the prompt's spelling
+   `ADD 1 DECKLINK DEVICE <n>` is itself a grammar error that answers `404 ADD FAILED` exactly
+   like `ADD 1 FOOBAR`. `REMOVE`'s `202` precedes the consumer's destruction by 13–16 ms, and an
+   `ADD` at an index that is already running REPLACES it (old destroyed ~28 ms after the new
+   one's `202`).
+
+## Correction 2026-09-05 — severity by air-criticality (`B-223`, session `TICKER-JUDDER-01` §B)
+
+The plant's screen consumer was stopped by hand to measure the ticker, and this change's banner
+went full-width orange at the operator — DECLARED OUTPUT NOT RUNNING, then five lines about
+persistent IDs, slot indexes, drivers and the server log — over a preview window that has nothing
+to do with air. The owner: _"this should not matter to the operator at all."_ He is right, and
+the "softer voice" this change shipped for a monitor was the wrong answer: a quieter alarm is still
+an alarm.
+
+What changes: **severity is decided by air-criticality, in one place** (`outputSeverityOf` in
+`@cg/shared-ipc`): a consumer whose output leaves the playout machine (`decklink`, `bluefish`,
+`ndi`, `ffmpeg`, `artnet` — and any kind the console does not recognise, so a stale list can only
+make it louder) is a program output and keeps the alarm exactly as loud as it was; `screen` and
+`system-audio` render on the box itself and raise **nothing** for the operator. **The operator's
+banner keeps one actionable line** (the channel, the declared thing, "CasparCG is not running it",
+"the fix is on the playout machine", where the detail is); **the engineering detail moves to a
+read-only Outputs section in the Server connection dialog** — the technical surface — which also
+shows a missing preview as a note. The bridge's stderr line follows the same rule. Nothing gates on
+a missing consumer of either severity (verified by grep: the check's only consumers are the two
+surfaces, `health()` and the flag-gated, off-by-default re-creation).
+
+## Correction 2026-09-28 — the re-creation retired (`FOLLOWUPS-01` A, the owner's decision)
+
+Item 4 above is RETIRED. A consumer `ADD` on a programme channel is one of the Playout's C5
+commands this station never sends, and since `ROUTE-PLATES-01` the send seam refused it anyway, so
+the flag could only ever record "not attempted". The flag, its resolver, `#createMissingConsumer`,
+the boot line and the check's `creation` record (IPC field and the Outputs section's sentence) are
+removed; the check itself (items 1–3) is unchanged. A start script that still passes the flag boots
+and is told the flag is ignored. `missingConsumerAddCommand` stays for one caller, the lab
+instrument `@cg/skew-harness` (`C-033`); the bridge never sends it.
+
+## Capabilities
+
+- `runtime-caspar-bridge` — ADDED: the declared-versus-running output check; ADDED: a missing
+  consumer is reported and never created (was: bounded, off-by-default missing-consumer creation —
+  superseded 2026-09-28).
+- `runtime-ui` — ADDED: a missing program output is a one-line full-width alarm that does not go
+  quiet when its source dies; ADDED (`B-223`): a missing local monitor raises no operator alarm,
+  and the technical surface carries every check in full.
+
+## Impact
+
+- `@cg/shared-ipc`: `ServerHealth.outputs?` (additive, optional), `outputVerdictOf`, and a new
+  `outputs.ts` with the two parsers and the per-kind diff. No channel is added or renamed.
+- `@cg/caspar-bridge`: the check in `CasparRuntime` (two reads, one verdict, reconnect reset,
+  the slow re-read), `output-check.ts` (policy + the `ADD` builder), `--create-missing-consumers`,
+  a boot line that reads the default back. The integration harness's quiescence control now
+  also waits for the check's first latch.
+- `@cg/amcp-mock`: `INFO CONFIG` answered in the real dialect; `INFO <channel>` carries a
+  realistic `<output>`; top-level `ADD`/`REMOVE` refuse with the measured codes by default.
+- Runtime: `OutputMissingBanner` mounted beside the other banners; the `R-058` chip's last
+  sentence no longer claims the console cannot read the config.
+- Docs: `C-029` (caspar.md), `B-208` (bugs-runtime.md), an addendum under `R-058`, the operator
+  guide's new "Program output" section.
+- Out of scope, deliberately (the brief's §5): `B-192` term (b), the mixer `DEFER` exposure, the
+  orphan html layers 95–99 on the plant, and `B-204`/`B-205` (already closed 2026-09-02).

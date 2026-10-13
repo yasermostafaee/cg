@@ -98,7 +98,7 @@ function comp(id: string, children: Element[], resolution = { width: W, height: 
     name: id,
     resolution,
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: `L-${id}`, name: 'L', visible: true, locked: false, blendMode: 'normal', children },
     ],
@@ -117,7 +117,7 @@ function sceneWith(comps: Composition[]): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [],
     compositions: comps,
     metadata: { createdAt: '2026-06-21T00:00:00.000Z', updatedAt: '2026-06-21T00:00:00.000Z' },

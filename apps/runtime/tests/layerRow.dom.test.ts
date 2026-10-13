@@ -7,6 +7,11 @@ import {
   MISSING_TEMPLATE_REASON,
 } from '../src/renderer/features/layers/layerRowActions.js';
 import type { StackItemState } from '@cg/shared-schema';
+// `add-multibox-audio` — the row's own declaration of how wide the verb block is. Asserted
+// against, never restated as a literal: a test carrying its own `6` would keep passing on the
+// day the block grew a seventh button and the header words slid off their glyphs.
+import { VERB_COUNT } from '../src/renderer/features/layers/layerTable.js';
+import type { RowPlateAudio } from '../src/renderer/features/layers/plateAudio.js';
 import {
   bindingFor,
   itemWith,
@@ -296,7 +301,31 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     clear: () => Promise.resolve({ accepted: true }),
     clearLayer: () => Promise.resolve({ accepted: true }),
     remove: () => Promise.resolve({ accepted: true }),
+    /*
+      🔴 **SESSION BR — THESE FOUR WERE MISSING, AND THEIR ABSENCE MADE THE SHAPE TEST BELOW
+      ASSERT SOMETHING NARROWER THAN ITS OWN TITLE.**
+
+      `LayerRowActionDeps` requires them; this builder omitted them, and nothing caught it
+      because `apps/runtime`'s typecheck did not include `tests/` and Vitest transpiles
+      without checking. At runtime `deps.hasLivePlates` was therefore `undefined` — falsy —
+      so `swap-source` and `plate-audio` were **structurally absent from every action list
+      this file has ever built**. See the SHAPE test for what that cost.
+
+      `restoreBlocked: false` is likewise the honest default (R-021 stage 4's "this layer is
+      not ours to command" is a state a spec must opt INTO), and the two handlers are stubs
+      of the same shape as their neighbours.
+    */
+    restoreBlocked: false,
+    hasLivePlates: false,
+    swapSource: () => Promise.resolve({ accepted: true }),
+    plateAudio: () => Promise.resolve({ accepted: true }),
     onError: () => undefined,
+    // DELTA 8 — the words each verb toasts with.
+    rowName: 'Row 1',
+    layerName: '1-89',
+    // `C-038` — this file's subject is the per-verb availability rules, so the identity gate
+    // is OPEN here. The gate itself is proved in `viewerReadOnly.dom.test.ts`.
+    canOperate: true,
   });
 
   it('R-022 — REHEARSE interlocks PLAY, stays a toggle, and never disables CLEAR', () => {
@@ -418,13 +447,18 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     ).toBe(false);
 
     // AND NOT ON `unconfirmed`, where the air result is UNKNOWN. Painting the air
-    // colour on a guess is what B-087 exists to prevent, and PLAY stays ENABLED
-    // there precisely because the take may still be needed.
+    // colour on a guess is what B-087 exists to prevent — so the fill stays off.
+    //
+    // 🔴 `FIELD-FIXES-01-A` Decision 2 REVERSED the second half of this. PLAY used to stay
+    // ENABLED here "because the take may still be needed"; the owner's rule is that a slow
+    // reply leaves the row `unconfirmed` with PLAY UNAVAILABLE until the bridge resolves the
+    // take — the bridge refuses one meanwhile, and a second take re-`PLAY`ed plates that were
+    // working. Disabled, and not lit.
     const unconfirmed = layerRowActions(deps(itemWith('unconfirmed'), true)).find(
       (a) => a.key === 'play',
     );
     expect(unconfirmed?.active).toBe(false);
-    expect(unconfirmed?.disabled).toBe(false);
+    expect(unconfirmed?.disabled).toBe(true);
   });
 
   it('every menu item is disabled exactly when its declaration is — no second door', () => {
@@ -519,7 +553,26 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     // OFF PVW), exactly like `load-remove`: one key, one position, so the shape
     // assertion keeps its meaning and the control never moves under the
     // operator's finger.
-    const SHAPE = [
+    /*
+      🔴 **SESSION BR — THIS TEST WAS NARROWER THAN ITS OWN TITLE, AND THE TITLE IS THE
+      PROPERTY THE OWNER ASKED FOR.**
+
+      It asserted ONE shape, over four row states × next × linkDown — and every one of those
+      was built by a `deps()` that OMITTED `hasLivePlates`. Undefined is falsy, so
+      `swap-source` and `plate-audio` could not appear in any of them: the list it pinned was
+      the no-live-plates list, and the "the shape never changes" claim was simply never made
+      about a row that HAS live plates — which is the row this whole feature exists for.
+
+      Nothing caught it because `apps/runtime`'s typecheck did not include `tests/`. The
+      required deps were missing from the object and TypeScript never saw the call.
+
+      So the shape is now asserted for BOTH kinds of row. The property is unchanged and still
+      the owner's: a control never moves under the operator's finger. `hasLivePlates` is a
+      property of the bound TEMPLATE, so it cannot flip while the operator is looking at the
+      row — which is why two fixed shapes, one per kind, is the honest statement of it rather
+      than a weakening.
+    */
+    const BASE = [
       // §6 — 'load-library' is GONE: LOAD opens the picker, so there is no second
       // similarly-named entry point to keep in the shape.
       'load-remove',
@@ -530,17 +583,33 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
       'stop',
       'clear',
     ];
-    // Empty, loaded, on air, with and without a next step, link up and down:
-    // the control set is identical every time. Only `disabled` moves. This is
-    // the property the owner asked for after watching NEXT appear and vanish.
+    // C-015 — SOURCE and AUDIO are offered together, on a row whose template declares live
+    // plates, and they sit BEFORE `next`. Their position is part of the shape.
+    const WITH_PLATES = [
+      'load-remove',
+      'play',
+      'rehearse',
+      'swap-source',
+      'plate-audio',
+      'next',
+      'update',
+      'stop',
+      'clear',
+    ];
+    // Empty, loaded, on air, with and without a next step, link up and down, with and
+    // without live plates: the control set is identical every time for a given kind of row.
+    // Only `disabled` moves. This is the property the owner asked for after watching NEXT
+    // appear and vanish.
     for (const item of [null, itemWith('loaded'), itemWith('on-air'), itemWith('idle')]) {
       for (const hasNext of [true, false]) {
         for (const linkDown of [true, false]) {
-          const actions = actionsFor({ ...deps(item, hasNext), linkDown });
-          expect(
-            actions.map((a) => a.key),
-            `item=${String(item?.status ?? 'empty')} hasNext=${String(hasNext)} linkDown=${String(linkDown)}`,
-          ).toEqual(SHAPE);
+          for (const hasLivePlates of [false, true]) {
+            const actions = actionsFor({ ...deps(item, hasNext), linkDown, hasLivePlates });
+            expect(
+              actions.map((a) => a.key),
+              `item=${String(item?.status ?? 'empty')} hasNext=${String(hasNext)} linkDown=${String(linkDown)} plates=${String(hasLivePlates)}`,
+            ).toEqual(hasLivePlates ? WITH_PLATES : BASE);
+          }
         }
       }
     }
@@ -942,5 +1011,219 @@ describe('LayerRow — CasparCG reachability gates the AMCP verbs', () => {
     }
     expect(actions.find((x) => x.key === 'stop')?.disabled).toBe(false);
     expect(actions.find((x) => x.key === 'clear')?.disabled).toBe(false);
+  });
+});
+
+/**
+ * `add-multibox-audio` — **THE ROW'S READ-ONLY AUDIO SUMMARY, AND THE INVARIANT IT MUST NOT
+ * TOUCH.**
+ *
+ * A row carries a VARIABLE number of live plates while the verb block is a FIXED six-column
+ * grid whose sticky header prints the word above each glyph. A conditional control inside that
+ * block would put every header word from its column rightward above the WRONG glyph — and this
+ * product's STOP (graceful) and CLEAR (hard kill) are the inverse of the reference product's,
+ * so the header word is precisely the channel that retires the misread. The summary therefore
+ * rides the ALIAS cell, adds no column, and is not pressable.
+ */
+describe('LayerRow — the live-plate audio summary', () => {
+  let rendered: Awaited<ReturnType<typeof renderLayerRow>> | null = null;
+
+  afterEach(async () => {
+    await rendered?.unmount();
+    rendered = null;
+  });
+
+  const summary = (el: HTMLElement): Element | null => el.querySelector('[data-audio-summary]');
+
+  /** One plate, said the way the ledger says it. */
+  const plate = (plateId: string, volume: number | undefined, held = false): RowPlateAudio => ({
+    plateId,
+    volume,
+    held,
+  });
+
+  /*
+    🔴 B-164 — THE OWNER'S TABLE, DRIVEN.
+
+    ONE row, ONE template declaring three plates, three looks showing 1, 2 and 3 boxes. The
+    bridge pre-seats the UNION of every look, so all three plates are seated in all three
+    cases and only `held` moves. `guest-1` is the one raised plate throughout.
+
+    | look   | boxes | measured before | expected |
+    | ------ | ----- | --------------- | -------- |
+    | ghab-1 | 1     | `audio 1/2`     | `1/1`    |
+    | ghab-2 | 2     | `audio 1/3`     | `1/2`    |
+    | ghab-3 | 3     | `audio 1/3`     | `1/3`    |
+
+    The old denominator counted SEATS, which is why it climbed with the pre-seat instead of
+    with the boxes on screen.
+  */
+  it("🔴 the owner's table: the denominator is what the ACTIVE LOOK SHOWS, not what is seated", async () => {
+    const seated = (shown: number): RowPlateAudio[] => [
+      plate('guest-1', 1, shown < 1),
+      plate('guest-2', undefined, shown < 2),
+      plate('guest-3', undefined, shown < 3),
+    ];
+
+    for (const [shown, expected] of [
+      [1, 'audio 1/1'],
+      [2, 'audio 1/2'],
+      [3, 'audio 1/3'],
+    ] as const) {
+      rendered = await renderLayerRow({
+        item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+        seatedPlates: seated(shown),
+      });
+      expect(summary(rendered.container)?.textContent, `${String(shown)} box(es) on screen`).toBe(
+        expected,
+      );
+      await rendered.unmount();
+      rendered = null;
+    }
+  });
+
+  /*
+    🔴 B-164's SECOND half, and the one the owner has not hit yet.
+
+    A HELD plate armed at 100% is exactly what the audio dialog exists to permit — you arm the
+    box BEFORE switching to its look. Counting it as raised makes the chip claim sound that
+    §12.4's hold is actively muting: `2/2` with one plate audible.
+  */
+  it('🔴 a HELD plate armed at 100% is NOT counted audible — it is reported separately', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1, 'guest-2': 1 } }),
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', 1, true)],
+    });
+    expect(summary(rendered.container)?.textContent).toBe('audio 1/1 · 1 armed');
+  });
+
+  it('the armed count is OUTSIDE the fraction and absent when it is zero', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      // Held but NOT armed: nothing is waiting, so nothing is said.
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', 0, true)],
+    });
+    expect(summary(rendered.container)?.textContent).toBe('audio 1/1');
+  });
+
+  it('🔴 an explicit 0 is NOT audible, and neither is an absent key — but they are not merged', async () => {
+    // Zero is falsy and this repo has paid for that three times. Both read as not-audible
+    // here; what must not happen is either of them counting as audible.
+    rendered = await renderLayerRow({
+      item: itemWith('on-air'),
+      seatedPlates: [plate('guest-1', 0), plate('guest-2', undefined)],
+    });
+    expect(summary(rendered.container)?.textContent).toBe('audio 0/2');
+  });
+
+  /*
+    A plate the look SHOWS whose volume assert FAILED must not read as audible.
+
+    The bridge is what makes this expressible: `setLivePlateVolume` returns on `!ack.ok`
+    BEFORE writing `#plateVolumes` (`caspar-runtime.ts` — "a ledger claiming a volume the layer
+    never received would be re-asserted onto every future swap"), so a failed assert leaves the
+    intent ABSENT rather than optimistically raised. The chip sees that absence and must call
+    it silent — the same reading an absent key gets, and for the same reason.
+  */
+  it('🔴 a SHOWN plate whose volume assert failed reads silent, not audible', async () => {
+    rendered = await renderLayerRow({
+      // The operator pressed raise on `guest-2` and the MIXER VOLUME did not land, so no
+      // intent was recorded for it. `guest-1` succeeded.
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', undefined)],
+    });
+    expect(summary(rendered.container)?.textContent).toBe('audio 1/2');
+  });
+
+  it('a row that owns NO live plates shows no summary at all — never `audio 0/0`', async () => {
+    rendered = await renderLayerRow({ item: itemWith('on-air'), seatedPlates: [] });
+    expect(summary(rendered.container)).toBeNull();
+  });
+
+  /*
+    A row whose look shows NOTHING still summarises, because it has something to say: the
+    suppression is `no plates at all`, never `shown === 0`. An operator who armed a box and
+    then switched away must still see it waiting.
+  */
+  it('an all-HELD row still summarises when something is armed and waiting', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      seatedPlates: [plate('guest-1', 1, true), plate('guest-2', undefined, true)],
+    });
+    expect(summary(rendered.container)?.textContent).toBe('audio 0/0 · 1 armed');
+  });
+
+  /*
+    2d — THE TOOLTIP CLAIMS ONLY WHAT THE CONSOLE KNOWS.
+
+    "raised" was an intent word sitting where a reader takes it as a report about air. Nothing
+    here can know a sample reached the output, so the sentence says what was ASKED FOR and
+    says out loud that it is not a measurement.
+  */
+  it('🔴 the tooltip does not say "raised", and states plainly that it is not a measurement', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1, 'guest-2': 1 } }),
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', 1, true)],
+    });
+    const chip = summary(rendered.container);
+    const title = chip?.getAttribute('title') ?? '';
+    expect(title).not.toMatch(/raised/i);
+    expect(title).toContain('Nothing here measures the output');
+    expect(title).toContain('armed but hidden by this look');
+    // The accessible name carries the same sentence — one wording, both channels.
+    expect(chip?.getAttribute('aria-label')).toBe(title);
+  });
+
+  /*
+    §3 — LEGIBILITY. The chip was small muted text in every state and did not read at a
+    glance. It now takes the state colour the pills already use, so one word plus one colour
+    mean the same thing here as in LIVE PLATES.
+  */
+  it('carries the AUDIBLE state class when a shown plate is asking for sound', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', undefined)],
+    });
+    expect(summary(rendered.container)?.className).toContain('cg-chip-audio--audible');
+  });
+
+  it('does NOT carry it when every shown plate is silent — including an armed-but-held one', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-2': 1 } }),
+      seatedPlates: [plate('guest-1', 0), plate('guest-2', 1, true)],
+    });
+    expect(summary(rendered.container)?.className).not.toContain('cg-chip-audio--audible');
+  });
+
+  it('🔴 the verb block still holds exactly SIX buttons, and the summary is not one of them', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', undefined)],
+    });
+    const block = rendered.container.querySelector('[data-verb-block]');
+    expect(block?.querySelectorAll('button')).toHaveLength(VERB_COUNT);
+    expect(block?.querySelector('[data-audio-summary]'), 'it is OUTSIDE the grid').toBeNull();
+  });
+
+  it('it is READ-ONLY — no button, no input, and the pointer does not promise one', async () => {
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', undefined)],
+    });
+    const chip = summary(rendered.container);
+    expect(chip?.tagName).toBe('SPAN');
+    expect(chip?.querySelector('button, input')).toBeNull();
+  });
+
+  it('🔴 nothing about it is drawn as a METER', async () => {
+    // There is no per-input level to draw: CasparCG's programme channel reports ONE peak pair
+    // for the whole channel. A bar here would claim "sound is present" from data that only
+    // says "we asked for it". The §3 colour change is TWO FLAT STATES and no ramp, which is
+    // why adding it does not weaken this assertion.
+    rendered = await renderLayerRow({
+      item: itemWith('on-air', { plateVolumes: { 'guest-1': 1 } }),
+      seatedPlates: [plate('guest-1', 1), plate('guest-2', undefined)],
+    });
+    expect(rendered.container.querySelector('meter, progress, [role="progressbar"]')).toBeNull();
   });
 });

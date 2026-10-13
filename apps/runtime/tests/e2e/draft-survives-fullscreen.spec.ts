@@ -21,6 +21,22 @@ import { test, expect, buildValidVcg } from './fixtures/runtime.js';
 
 const DIRTY = 'draft text that was never applied';
 
+/*
+ * 🔴 `MONITORS-01` — THE STRIP IS FOLDED AWAY WHEN THE CONSOLE BOOTS, and this file's
+ * subject lives inside it, so it is opened first.
+ *
+ * The default moved from SHOWN to HIDDEN because neither box was confidence monitoring:
+ * PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default), and PVW is a LOCAL browser
+ * render of the rehearsing rows (`R-022` — nothing is ever sent to CasparCG). None of
+ * that changes what this file proves, so the state each test was written against is
+ * established rather than its assertions being rewritten.
+ *
+ * `app.showMonitors()` asserts the strip is actually up before returning — see the
+ * fixture. Boot state itself is proved in `shell-chrome.spec.ts` §B4.
+ */
+test.beforeEach(async ({ app }) => {
+  await app.showMonitors();
+});
 test('a draft survives a MONITOR fullscreen round-trip', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1400, height: 900 });

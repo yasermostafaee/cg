@@ -1,0 +1,416 @@
+// @vitest-environment jsdom
+import { afterEach, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { act } from 'react-dom/test-utils';
+import type { SourceAssignments, SourceCatalog } from '@cg/shared-ipc';
+import { LooksBindingsSection } from '../src/renderer/features/inspector/LooksBindingsSection.js';
+import { colors } from '../src/renderer/theme.js';
+import {
+  __resetSourcesForTest,
+  initSources,
+} from '../src/renderer/features/sources/sourceStore.js';
+import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
+import { itemWith, templateWith } from './support/layerRow.js';
+import { choosePickerOption, pickerValue } from './support/sourcePicker.js';
+import { fillBridgeStub } from './support/authStub.js';
+
+/**
+ * ⭐ **SESSION BM-2 §2 / §3 — THE PER-LOOK INPUT LIST, AND THE HAZARD IT MUST NOT SHIP.**
+ *
+ * The hazard is stated in the section's own header and is the reason these are DOM tests
+ * rather than a screenshot: an emergency patch (`R-048`, level 4) MASKS every per-look
+ * binding (level 3) for that plate, so a list that renders the bindings faithfully can be
+ * confidently wrong about what is on air. What has to be true is a property of the rendered
+ * markup — the masked rows say so, and the patch can be ended from where it is seen — and a
+ * picture cannot show that the CONTROL is still usable or that the label means "overridden"
+ * rather than "disabled".
+ */
+
+const CATALOG: SourceCatalog = {
+  sources: [
+    { id: 'studio-1', name: 'Studio 1', producer: { kind: 'route', channel: 2 } },
+    { id: 'studio-2', name: 'Studio 2', producer: { kind: 'route', channel: 3 } },
+    { id: 'studio-3', name: 'Studio 3', producer: { kind: 'route', channel: 4 } },
+    { id: 'studio-5', name: 'Studio 5', producer: { kind: 'route', channel: 6 } },
+  ],
+  layerRange: { start: 60, end: 79 },
+};
+
+const ASSIGNMENTS: SourceAssignments = {
+  assignments: [
+    { templateId: 'tpl-1', plateId: 'l-1', sourceId: 'studio-1' },
+    { templateId: 'tpl-1', plateId: 'l-2', sourceId: 'studio-2' },
+  ],
+};
+
+const rect = (x: number) => ({ x, y: 0, width: 640, height: 360 });
+
+/** A 2-box / solo template: `two` shows both frames, `solo` shows `l-1` full frame. */
+const TEMPLATE = templateWith({
+  liveSources: {
+    resolution: { width: 1920, height: 1080 },
+    defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+    sources: [
+      { elementId: 'e1', sourceId: 'l-1', rect: rect(0), dynamic: false },
+      { elementId: 'e2', sourceId: 'l-2', rect: rect(640), dynamic: false },
+    ],
+    looks: [
+      {
+        id: 'two',
+        name: '2-box',
+        entered: { mode: 'cut' },
+        rects: { 'l-1': rect(0), 'l-2': rect(640) },
+      },
+      {
+        id: 'solo',
+        name: 'Solo',
+        entered: { mode: 'cut' },
+        rects: { 'l-1': { x: 0, y: 0, width: 1920, height: 1080 } },
+      },
+    ],
+    defaultLookId: 'two',
+  },
+} as Partial<Parameters<typeof templateWith>[0]>);
+
+let root: Root | null = null;
+let host: HTMLElement | null = null;
+
+afterEach(() => {
+  act(() => root?.unmount());
+  root = null;
+  host?.remove();
+  host = null;
+  __resetSourcesForTest();
+  __resetDraftsForTest();
+  vi.restoreAllMocks();
+  // A spec's own bridge (the §6.4 swap) must not leak into the next spec's render.
+  delete (globalThis as unknown as { window: { cg?: object } }).window.cg;
+});
+
+async function render(
+  over: Parameters<typeof itemWith>[1] = {},
+  props: { rehearsing?: boolean } = {},
+): Promise<HTMLElement> {
+  initSources({
+    sources: {
+      config: () => Promise.resolve(CATALOG),
+      assignments: () => Promise.resolve(ASSIGNMENTS),
+      onConfigChanged: () => () => undefined,
+      onAssignmentsChanged: () => () => undefined,
+    },
+  } as unknown as Parameters<typeof initSources>[0]);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  /*
+    `MEDIA-PLATES-01` — the section reads each seated clip's transport state (through the link), so
+    the bridge it renders against is COMPLETED with the quiet answers: no clips, a live link. A
+    spec's own members (the §6.4 swap) are kept — `fillBridgeStub` fills only what is absent.
+  */
+  const w = globalThis as unknown as { window: { cg?: object } };
+  w.window.cg = fillBridgeStub(w.window.cg ?? {});
+  host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  const item = itemWith('on-air', { activeLookId: 'two', ...over });
+  await act(async () => {
+    root?.render(
+      createElement(LooksBindingsSection, { item, info: TEMPLATE, channel: 1, ...props }),
+    );
+  });
+  return host;
+}
+
+/**
+ * 🔴 `INSPECTOR-DELTA` §4 — **PRESS A LOOK TAB.**
+ *
+ * The section used to stack every look on screen at once, so a spec could reach any look's
+ * rows straight after render. The reference draws it as TABS with one look's frames below
+ * (`05-row-inspector.html`: `div.look-tabs` + `#look-mappings`), and the owner took that
+ * shape, so reaching a look is now an ACT the operator performs and the specs perform it too.
+ *
+ * ⚠ The specs below are RE-POINTED, not relaxed: every assertion they made about a look's
+ * frames still has to hold, of the same look, with the same values — what changed is that
+ * the look must be SELECTED first. An assertion that quietly became "and the row is absent"
+ * would be this change erasing its own coverage.
+ */
+async function selectLook(el: HTMLElement, lookId: string): Promise<void> {
+  const tab = el.querySelector<HTMLButtonElement>(`[data-look-tab="${lookId}"]`);
+  if (tab === null) throw new Error(`no tab for look ${lookId}`);
+  await act(async () => {
+    tab.click();
+  });
+}
+
+it('🔴 §6.5 — the LIVE look is distinguishable from the others, in the markup', async () => {
+  const el = await render();
+
+  /*
+    EVERY look is reachable — one TAB each. That replaces "both are listed": the section shows
+    one look's frames at a time now, and what must stay true is that none of them is
+    unreachable, which is the property the old assertion was really protecting.
+  */
+  expect(el.querySelector('[data-look-tab="two"]')).not.toBeNull();
+  expect(el.querySelector('[data-look-tab="solo"]')).not.toBeNull();
+  // …and the LIVE look is the one selected on open, with its frames showing.
+  expect(el.querySelector('[data-look-tab="two"]')?.hasAttribute('data-look-tab-active')).toBe(
+    true,
+  );
+  expect(el.querySelector('[data-look-row="two"]')).not.toBeNull();
+  expect(el.querySelector('[data-look-row="solo"]')).toBeNull();
+  // …and exactly ONE is marked live, the one the row is actually showing.
+  expect(el.querySelector('[data-look-live="two"]')).not.toBeNull();
+  expect(el.querySelector('[data-look-live="solo"]')).toBeNull();
+  expect(el.querySelectorAll('[data-look-live]')).toHaveLength(1);
+  // The mark says ON AIR NOW in words, not by colour alone.
+  expect(el.querySelector('[data-look-live="two"]')?.textContent).toContain('ON AIR');
+});
+
+it('each look lists ONLY its own frames — solo has one, 2-box has two', async () => {
+  const el = await render();
+  // `two` is live, so it is the look on open.
+  expect(el.querySelector('[data-look-binding="two:l-1"]')).not.toBeNull();
+  expect(el.querySelector('[data-look-binding="two:l-2"]')).not.toBeNull();
+
+  await selectLook(el, 'solo');
+  expect(el.querySelector('[data-look-binding="solo:l-1"]')).not.toBeNull();
+  // `l-2` is not in solo, so solo must not offer an input for it.
+  expect(el.querySelector('[data-look-binding="solo:l-2"]')).toBeNull();
+  /*
+    ⚠ AND THE POSITIVE CONTROL FOR THE TAB ITSELF. `solo:l-2` being absent is the claim, and
+    it is TRUE and WORTHLESS if the tab press did nothing and we are still looking at `two`.
+    So the switch is proved by the row that only `solo` has.
+  */
+  expect(el.querySelector('[data-look-row="solo"]'), 'the tab press switched looks').not.toBeNull();
+  expect(el.querySelector('[data-look-row="two"]')).toBeNull();
+});
+
+it('🔴 §6.3 — an emergency patch is VISIBLE on every row it masks, and says what is on air', async () => {
+  /*
+    THE HAZARD, asserted. Without this the list would show `solo → studio-3` in good faith
+    while studio-5 was on air in every look — a surface that is confidently wrong.
+  */
+  const el = await render({
+    sourceOverride: { 'l-1': 'studio-5' },
+    lookSourceOverride: { solo: { 'l-1': 'studio-3' } },
+  });
+
+  /*
+    The patch is on `l-1`, so EVERY look's `l-1` row is masked — it is in force everywhere.
+    ⚠ `INSPECTOR-DELTA` §4: one look shows at a time now, so "every look" is walked by
+    PRESSING each tab rather than read off one screen. The claim is unchanged and so is its
+    strength; only the reaching of it is.
+  */
+  for (const [lookId, key] of [
+    ['two', 'two:l-1'],
+    ['solo', 'solo:l-1'],
+  ] as const) {
+    await selectLook(el, lookId);
+    const select = el.querySelector(`[data-look-binding="${key}"]`);
+    expect(select, `${key} is reachable once its tab is pressed`).not.toBeNull();
+    expect(select?.hasAttribute('data-look-binding-masked'), key).toBe(true);
+    // 🔴 STRUCK THROUGH, NOT DISABLED. Grey reads as "this control is broken"; the operator
+    // must be able to tell "overridden" from "unavailable", and must still be able to edit.
+    // `PLAYOUT-SOURCES-01` §2.A — the picker's field carries the strike as `is-struck` (the
+    // stylesheet's `.cg-combo-field.is-struck`), never as an inline style on a control.
+    expect((select as HTMLButtonElement | null)?.disabled, `${key} stays usable`).toBe(false);
+    expect(select?.classList.contains('is-struck'), key).toBe(true);
+
+    // …and the row NAMES what is actually on air, in words — in EVERY look, not just one.
+    const note = el.querySelector('[data-look-binding-patched="l-1"]');
+    expect(note?.textContent, key).toContain('not in force');
+    expect(note?.textContent, key).toContain('Studio 5');
+  }
+
+  // `l-2` has no patch, so its row is untouched — masking is per PLATE, not per row.
+  await selectLook(el, 'two');
+  expect(
+    el.querySelector('[data-look-binding="two:l-2"]')?.hasAttribute('data-look-binding-masked'),
+  ).toBe(false);
+});
+
+it('🔴 §6.4 — CLEAR PATCH sits on the masked row, and ends the patch in ONE action', async () => {
+  const swapLiveSource = vi.fn(() => Promise.resolve({ ok: true }));
+  (globalThis as unknown as { window: { cg: unknown } }).window.cg = {
+    stack: { swapLiveSource },
+  };
+  const el = await render({
+    sourceOverride: { 'l-1': 'studio-5' },
+    lookSourceOverride: { solo: { 'l-1': 'studio-3' } },
+  });
+
+  const clear = el.querySelector('[data-clear-patch="l-1"]') as HTMLButtonElement | null;
+  expect(clear, 'reachable from where the patch is shown').not.toBeNull();
+  await act(async () => {
+    clear?.click();
+    await Promise.resolve();
+  });
+
+  /*
+    ONE action, and `null` is the whole payload: the patch is REMOVED rather than replaced,
+    which is what puts the per-look bindings underneath it back in force. It applies
+    immediately because the patch it undoes did too — `R-048` is an on-air emergency, not a
+    draft, and making its removal wait for UPDATE would put the two halves of one decision on
+    different clocks.
+  */
+  expect(swapLiveSource).toHaveBeenCalledTimes(1);
+  expect(swapLiveSource).toHaveBeenCalledWith({
+    itemId: 'item-1',
+    plateId: 'l-1',
+    sourceId: null,
+  });
+});
+
+it('🔴 §2.3 — editing a MASKED binding is ACCEPTED and staged, and says it waits', async () => {
+  /*
+    The third option §2.3 rejects is silence: an edit that does nothing, or one that silently
+    clears the patch. Both leave the operator with a surface that did not do what it looked
+    like it did. The edit stages, and the chip says what it is waiting for.
+  */
+  const el = await render({
+    sourceOverride: { 'l-1': 'studio-5' },
+  });
+
+  // `INSPECTOR-DELTA` §4 — `solo` is not the live look, so reach it the way an operator does.
+  await selectLook(el, 'solo');
+  const select = el.querySelector<HTMLElement>('[data-look-binding="solo:l-1"]');
+  expect(select).not.toBeNull();
+  // `PLAYOUT-SOURCES-01` §2.A — through the ONE picker, as an operator chooses.
+  if (select !== null) await choosePickerOption(select, 'studio-3');
+
+  // It took the edit…
+  expect(pickerValue(el.querySelector<HTMLElement>('[data-look-binding="solo:l-1"]'))).toBe(
+    'studio-3',
+  );
+  // …marked it unapplied, and said WHY it will not be seen yet — VISIBLY, not as an
+  // accessible name only (`DraftChip` renders fixed text and carries its label on aria).
+  expect(el.querySelector('[data-look-binding-waiting="l-1"]')).not.toBeNull();
+  expect(el.textContent).toContain('takes effect when the patch is cleared');
+});
+
+// ───────── `B-156` — THE BADGE SAYS WHAT IS TRUE, IN EACH OF THE THREE ROW STATES ─────────
+
+/**
+ * 🔴 **SESSION BP §2.3 — THE EXPECTED COLOUR, PUT THROUGH THE SAME NORMALISER THE DOM USES.**
+ *
+ * The assertion has to name the TOKEN (`colors.onAir`), never the hex, or the test pins a
+ * literal and goes on passing while the badge and the row's own mark drift apart — which is
+ * the exact failure `B-156` was, one layer down, on a predicate instead of a colour. But
+ * `HTMLElement.style.color` reads back in the browser's canonical form (`rgb(44, 255, 122)`),
+ * so comparing a raw token string to it fails for reasons that have nothing to do with the
+ * badge. Running the token through a scratch element normalises both sides identically, and
+ * the assertion still names the token.
+ */
+function asRendered(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = token;
+  return probe.style.color;
+}
+
+/**
+ * The label used to read `ON AIR NOW` whenever `activeLookOf` picked the look — and that
+ * function answers *which look the ROW is set to*, never *whether the row is playing*. So a
+ * merely LOADED row claimed air, which the owner met with a screenshot: `ON AIR NOW` in the
+ * Inspector beside `READY` in the layer table.
+ *
+ * One test per state, because the defect was that two of the three were never distinguished.
+ */
+it('🔴 B-156 — a LOADED row does NOT claim air: the badge says a take would show it', async () => {
+  const el = await render({ status: 'loaded' });
+  const badge = el.querySelector('[data-look-live="two"]');
+  expect(badge, 'the selected look is still marked').not.toBeNull();
+  expect(badge?.textContent, 'but it must not claim air').not.toContain('ON AIR');
+  expect(badge?.textContent).toContain('TAKE');
+  expect(badge?.getAttribute('data-look-badge')).toBe('not-on-air');
+  /*
+    🔴 SESSION BP §1.3 — …and it wears READY's own sky, because READY is precisely the row
+    state this badge is describing. ⚠ `colors.ready`, NOT `--r-accent`: identical value,
+    opposite rule (the accent is explicitly not a state colour). See `theme.ts`.
+  */
+  expect((badge as HTMLElement | null)?.style.color).toBe(asRendered(colors.ready));
+});
+
+it('B-156 — an ON-AIR row DOES say so, which is the state the label was right about', async () => {
+  const el = await render({ status: 'on-air' });
+  const badge = el.querySelector('[data-look-live="two"]');
+  expect(badge?.textContent).toContain('ON AIR NOW');
+  expect(badge?.getAttribute('data-look-badge')).toBe('on-air');
+  /*
+    🔴 SESSION BP §1.3 — GREEN, and this reverses a decision the file shipped with. Amber was
+    right while the badge was gated on `activeLookOf` and therefore meant something other than
+    "playing"; `B-156` rewired it to `isOnAir`, and `FIELD-FIXES-01` C to `claimsAir` — the row's
+    own green mark, which `isOnAir` was not (it is true for `error`). The badge and the row's
+    green mark now make ONE claim from ONE derivation in ONE colour, which is the whole argument
+    for taking the sacred hue here.
+  */
+  expect((badge as HTMLElement | null)?.style.color).toBe(asRendered(colors.onAir));
+});
+
+/**
+ * 🔴 `FIELD-FIXES-01` C — **A LOOK IS ON AIR ONLY WHEN THE SERVER CONFIRMED IT.** The badge asked
+ * `isOnAir`, which is true for `error` too: on 2026-09-26 it said `ON AIR NOW` for Bed 59's
+ * `look-2` while the row read ERROR over a take the server had refused. It now asks `claimsAir`,
+ * the row's own green mark: `on-air`, or a take the server acknowledged.
+ */
+it('🔴 FIELD-FIXES-01 C — a row whose take was REFUSED does not claim air for its look', async () => {
+  const el = await render({
+    status: 'error',
+    errorCode: 'amcp-403',
+    takeRefusal: { code: 'amcp-403', command: 'PLAY 2-60 DECKLINK DEVICE 1' },
+  });
+  const badge = el.querySelector('[data-look-live="two"]');
+  expect(badge?.textContent).not.toContain('ON AIR');
+  expect(badge?.getAttribute('data-look-badge')).toBe('not-on-air');
+});
+
+it.each([
+  ['unconfirmed — the take is unresolved', { status: 'unconfirmed' as const }],
+  ['unverified — the link cannot confirm it', { status: 'unverified' as const }],
+  ['a take still in flight', { status: 'playing' as const, pending: true }],
+])('C — %s: not ON AIR NOW', async (_, over) => {
+  const el = await render(over);
+  expect(el.querySelector('[data-look-live="two"]')?.textContent).not.toContain('ON AIR');
+});
+
+it('C — CONTROL: a take the server ACKNOWLEDGED (playing, settled) says ON AIR NOW', async () => {
+  const el = await render({ status: 'playing', pending: false });
+  const badge = el.querySelector('[data-look-live="two"]');
+  expect(badge?.textContent).toContain('ON AIR NOW');
+  expect(badge?.getAttribute('data-look-badge')).toBe('on-air');
+});
+
+it('🔴 B-156 — a REHEARSING row says PVW, the distinction session BL shipped on the row', async () => {
+  /*
+    BL gave the row's own picker `PVW LOOK` vs `LOOK`, decided from `rehearsing`; this section
+    never learned it — the `B-151` shape, one surface knowing a state and its neighbour not.
+    `rehearsing` arrives as a PROP from the caller, which reads the canonical
+    `isRehearsing(rehearsals, itemId)`, so the badge and the row picker answer to ONE
+    derivation rather than two that agree until they do not.
+  */
+  const el = await render({ status: 'on-air' }, { rehearsing: true });
+  const badge = el.querySelector('[data-look-live="two"]');
+  expect(badge?.textContent).toContain('PVW');
+  expect(badge?.textContent).not.toContain('ON AIR');
+  /*
+    ⚠ REHEARSING WINS OVER ON-AIR HERE, and that ordering is safe because `R-022`'s interlock
+    makes the pair unreachable — a rehearse is refused for an on-air row and a take for a
+    rehearsing one. The interlock itself is asserted on the WIRE in
+    `live-look-reconcile.integration.test.ts`; this asserts only what the badge does with the
+    answer, rather than assuming the pair cannot occur.
+
+    🔴 **SESSION BP — THE TONE IS NOW ITS OWN VALUE, `rehearsing`, NOT `not-on-air`.** Two
+    states sharing one attribute value was the same collapse `B-156` fixed in the WORDS: a
+    reader (or a test, or a screenshot diff) could not tell a rehearsing row from a merely
+    loaded one, which is precisely the distinction session BL shipped on the row and this
+    section was missing. The attribute now carries all three.
+  */
+  expect(badge?.getAttribute('data-look-badge')).toBe('rehearsing');
+  /*
+    🔴 SESSION BP §1.3 — `R-022`'s violet, the same hue the row's own REHEARSING mark wears,
+    so the two cannot disagree about which row is rehearsing. The token's rule in `theme.ts`
+    was widened for this deliberately: it bans CONTROLS that advertise availability, and a
+    badge naming the mode is a state INDICATOR in the same category as that mark.
+  */
+  expect((badge as HTMLElement | null)?.style.color).toBe(asRendered(colors.rehearsing));
+});

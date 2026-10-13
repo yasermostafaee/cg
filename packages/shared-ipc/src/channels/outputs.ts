@@ -1,0 +1,365 @@
+import type { DeclaredConsumer, MissingConsumer, RunningConsumer } from './connections.js';
+
+/**
+ * `C-029` — the two targeted extractions behind the program-output alarm, and the diff
+ * between them.
+ *
+ * Deliberately NOT an XML parse, for the reason `parseVideoModeFromInfo` gives: the bridge
+ * needs a few leaves out of documents whose shape differs across CasparCG versions, and an
+ * unexpected surrounding structure should still yield the facts rather than throw. Both
+ * shapes below are captured VERBATIM from the plant's 2.5.0 `69e8ad5` on 2026-09-04 and
+ * pinned in `outputs.test.ts`; a dialect drift reddens there first, not on air.
+ *
+ * ── THE TWO DOCUMENTS ───────────────────────────────────────────────────────
+ *
+ * `INFO <channel>` — what is RUNNING. CasparCG builds it from the channel's monitor state,
+ * where `output/port/<index>/consumer` is each consumer's own `name()`; the XML writer
+ * prefixes the digit-only node, so a consumer at index 600 reads:
+ *
+ *     <output><port><port_600><consumer>screen</consumer>…</port_600></port></output>
+ *
+ * `INFO CONFIG` — what is DECLARED. The server writes its parsed `casparcg.config` back, so
+ * `<channels><channel><consumers>` holds one element per declared consumer, named by kind:
+ *
+ *     <consumers><decklink><device>23487013</device>…</decklink><screen/><system-audio/></consumers>
+ *
+ * ── WHY THE KINDS COMPARE BY THE SAME TOKEN ─────────────────────────────────
+ *
+ * The config ELEMENT NAME and the running consumer's `name()` are the same word for every
+ * consumer 2.5.0 ships (`decklink`, `screen`, `system-audio`, `bluefish`, `ndi`, `ffmpeg`,
+ * `artnet`): the preconfigured factory is registered under the element name and the
+ * consumer reports that same name on the wire. Verified at the wire for the three kinds
+ * this plant declares; the comparison is therefore identity, with no mapping table to drift.
+ */
+
+/** The `<output>…</output>` block of an `INFO <channel>` reply, or null when there is none. */
+function outputBlock(xml: string): string | null {
+  const match = /<output>([\s\S]*?)<\/output>/i.exec(xml);
+  return match?.[1] ?? null;
+}
+
+/**
+ * The consumers RUNNING on a channel, from an `INFO <channel>` reply, sorted by port.
+ *
+ * Returns `null` when the reply carries no `<output>` element at all — a build or a reply
+ * shape this parser does not know, which must read as "could not check" rather than as an
+ * empty channel. An `<output>` with no ports (`<port/>`) is a real, empty answer: `[]`.
+ */
+export function parseRunningConsumersFromInfo(xml: string): RunningConsumer[] | null {
+  const block = outputBlock(xml);
+  if (block === null) return null;
+  const running: RunningConsumer[] = [];
+  const port = /<port_(\d+)>([\s\S]*?)<\/port_\1>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = port.exec(block)) !== null) {
+    const kind = /<consumer>\s*([^<\s]+)\s*<\/consumer>/i.exec(m[2] ?? '')?.[1];
+    if (kind === undefined) continue;
+    running.push({ port: Number(m[1]), kind });
+  }
+  return running.sort((a, b) => a.port - b.port);
+}
+
+/** One channel's declared consumers, 1-based in `<channels>` order as CasparCG numbers them. */
+export interface DeclaredChannelConsumers {
+  channel: number;
+  consumers: DeclaredConsumer[];
+}
+
+/** The text of the first `<name>…</name>` leaf inside `body`, or undefined. */
+function leaf(body: string, name: string): string | undefined {
+  const m = new RegExp(`<${name}>\\s*([^<]*?)\\s*</${name}>`, 'i').exec(body);
+  return m?.[1];
+}
+
+function leafBool(body: string, name: string): boolean | undefined {
+  const value = leaf(body, name);
+  if (value === undefined) return undefined;
+  return value.trim().toLowerCase() === 'true';
+}
+
+/**
+ * The consumers each channel DECLARES, from an `INFO CONFIG` reply.
+ *
+ * Returns `null` when the document has no `<channels>` block — not a configuration, so
+ * nothing can be judged against it. A channel whose `<consumers>` is absent or empty
+ * declares nothing, which is a real answer (`[]`), not a gap.
+ */
+export function parseDeclaredConsumersFromConfig(xml: string): DeclaredChannelConsumers[] | null {
+  const stripped = xml.replace(/<!--[\s\S]*?-->/g, '');
+  const channels = /<channels>([\s\S]*?)<\/channels>/i.exec(stripped)?.[1];
+  if (channels === undefined) return null;
+  const out: DeclaredChannelConsumers[] = [];
+  const channel = /<channel>([\s\S]*?)<\/channel>/gi;
+  let c: RegExpExecArray | null;
+  let index = 0;
+  while ((c = channel.exec(channels)) !== null) {
+    index += 1;
+    const consumersBody = /<consumers>([\s\S]*?)<\/consumers>/i.exec(c[1] ?? '')?.[1] ?? '';
+    out.push({ channel: index, consumers: parseConsumerElements(consumersBody) });
+  }
+  return out;
+}
+
+/**
+ * The direct child elements of a `<consumers>` body, in file order. A consumer element is
+ * either self-closing (`<screen/>`) or a container whose children are its parameters
+ * (`<decklink><device>…</device></decklink>`); consumer elements never nest their own kind,
+ * so the first matching close tag ends the element.
+ */
+function parseConsumerElements(body: string): DeclaredConsumer[] {
+  const consumers: DeclaredConsumer[] = [];
+  const open = /<([a-z][a-z0-9-]*)(\s[^>]*)?(\/?)>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = open.exec(body)) !== null) {
+    const kind = (m[1] ?? '').toLowerCase();
+    if (m[3] === '/') {
+      consumers.push({ kind });
+      continue;
+    }
+    const closeAt = body.indexOf(`</${m[1] ?? ''}>`, open.lastIndex);
+    const inner = closeAt === -1 ? '' : body.slice(open.lastIndex, closeAt);
+    const device = leaf(inner, 'device');
+    const embeddedAudio = leafBool(inner, 'embedded-audio');
+    const keyOnly = leafBool(inner, 'key-only');
+    const keyer = leaf(inner, 'keyer');
+    consumers.push({
+      kind,
+      ...(device !== undefined && device !== '' ? { device } : {}),
+      ...(embeddedAudio !== undefined ? { embeddedAudio } : {}),
+      ...(keyOnly !== undefined ? { keyOnly } : {}),
+      ...(keyer !== undefined && keyer !== '' ? { keyer } : {}),
+    });
+    if (closeAt !== -1) open.lastIndex = closeAt;
+  }
+  return consumers;
+}
+
+/**
+ * Declared kinds with fewer running instances than declared — the alarm's content, in the
+ * declaration's own order. Counted per kind: a channel declaring two DeckLinks with one
+ * running is `{ kind: 'decklink', declared: 2, running: 1 }`.
+ */
+export function missingConsumers(
+  declared: readonly DeclaredConsumer[],
+  running: readonly RunningConsumer[],
+): MissingConsumer[] {
+  const runningByKind = new Map<string, number>();
+  for (const r of running) runningByKind.set(r.kind, (runningByKind.get(r.kind) ?? 0) + 1);
+  const order: string[] = [];
+  const byKind = new Map<string, DeclaredConsumer[]>();
+  for (const d of declared) {
+    if (!byKind.has(d.kind)) {
+      byKind.set(d.kind, []);
+      order.push(d.kind);
+    }
+    byKind.get(d.kind)?.push(d);
+  }
+  const missing: MissingConsumer[] = [];
+  for (const kind of order) {
+    const wanted = byKind.get(kind) ?? [];
+    const have = runningByKind.get(kind) ?? 0;
+    if (have >= wanted.length) continue;
+    missing.push({
+      kind,
+      declared: wanted.length,
+      running: have,
+      devices: wanted.flatMap((d) => (d.device !== undefined ? [d.device] : [])),
+    });
+  }
+  return missing;
+}
+
+/**
+ * 🔴 `DESKTOP-APPS-01-D` g — **THE CONSUMER KINDS STOCK CASPARCG 2.5.0 SHIPS, and the one
+ * reading they license.**
+ *
+ * `missingConsumers` reads "declared, not listed in `INFO <channel>`" as "not running". That
+ * holds on stock CasparCG, whose `<output>` lists every running consumer by its own `name()`
+ * (the header of this file). It does NOT hold on the Playout's fork: its `INFO 1` on
+ * `192.168.21.111` (2026-09-22, `tools/caspar-amcp-probe/evidence/…apasai-core/b5-teardown-info
+ * .ndjson`) lists only `pgm` and `ndi`, while its `INFO CONFIG` declares `pgm`, `decklink`,
+ * `ffmpeg` and `ndi` and its operators state the SDI and RTP outputs are live. The bridge read
+ * that as a missing DeckLink and FFmpeg and put a red programme-output banner up while the
+ * owner watched the output work — an alarm that was false.
+ *
+ * A running kind outside this list is proof the build is not stock, and so that its `<output>`
+ * list is not known to be complete. Absence from such a list is evidence of nothing: the
+ * reader says UNKNOWN rather than MISSING ({@link judgeConsumers}). A channel listing NO
+ * consumer, or only stock ones, is judged exactly as before — a truly dead output still alarms.
+ */
+export const STOCK_CONSUMER_KINDS: readonly string[] = [
+  'decklink',
+  'bluefish',
+  'ffmpeg',
+  'artnet',
+  'screen',
+  'system-audio',
+  'ndi',
+];
+
+/** The running kinds a stock 2.5.0 would never report, in port order, deduplicated. */
+export function nonStockRunningKinds(running: readonly RunningConsumer[]): string[] {
+  const kinds: string[] = [];
+  for (const r of running) {
+    const kind = r.kind.toLowerCase();
+    if (!STOCK_CONSUMER_KINDS.includes(kind) && !kinds.includes(kind)) kinds.push(kind);
+  }
+  return kinds;
+}
+
+/**
+ * `DESKTOP-APPS-01-D` g — the declared-versus-running verdict, split by what `INFO` can PROVE.
+ *
+ * `missing` is the alarm and is unchanged on a stock build. `unknown` is the same absence read
+ * from a build whose output list is not stock ({@link STOCK_CONSUMER_KINDS}): reported, never
+ * alarmed. Exactly one of the two is non-empty when anything is absent.
+ */
+export function judgeConsumers(
+  declared: readonly DeclaredConsumer[],
+  running: readonly RunningConsumer[],
+): { missing: MissingConsumer[]; unknown: MissingConsumer[] } {
+  const absent = missingConsumers(declared, running);
+  if (absent.length === 0) return { missing: [], unknown: [] };
+  if (nonStockRunningKinds(running).length > 0) return { missing: [], unknown: absent };
+  return { missing: absent, unknown: [] };
+}
+
+/**
+ * `B-223` — SEVERITY BY AIR-CRITICALITY, not by "declared".
+ *
+ * The owner's judgement (2026-09-05, the screen consumer stopped on the plant and the Runtime
+ * shouting DECLARED OUTPUT NOT RUNNING at the operator): _"this should not matter to the
+ * operator at all."_ The alarm was built for a dead DeckLink — air off — and it must stay exactly
+ * that loud for that; a preview window on the playout machine is not the operator's business.
+ *
+ * ── THE PRINCIPLE, AND THE ONE LIST IT PRODUCES ──────────────────────────────
+ *
+ * The question is **does anything OUTSIDE the playout machine depend on this consumer?** A
+ * consumer whose output leaves the box is a program output: if it is declared and not running,
+ * something downstream is missing what it was promised, and the operator must know NOW. A
+ * consumer that renders on the box itself is a local monitor: its loss is a fact for the
+ * engineer, never an alarm for the operator.
+ *
+ * Only the LOCAL kinds are enumerated, so that an UNKNOWN kind — a consumer added in a later
+ * CasparCG, or a name this code has never seen — is treated as a program output and stays
+ * LOUD. Fail-safe by construction: the one list that could go stale is the list that makes
+ * things quieter, and a kind missing from it can only make the console shout about a preview,
+ * never fall silent about air.
+ *
+ * ── EVERY CONSUMER KIND 2.5.0 CAN DECLARE, AND WHERE EACH FALLS ─────────────
+ *
+ * From `src/shell/casparcg.config` and the `src/modules/` tree at `v2.5.0-stable` (`decklink`,
+ * `bluefish`, `ffmpeg`, `artnet`, `screen`, `oal` = system-audio, `newtek` = the NDI consumer):
+ *
+ * | kind           | leaves the machine?                                          | severity |
+ * | -------------- | ------------------------------------------------------------ | -------- |
+ * | `decklink`     | SDI/HDMI out of a DeckLink card — the plant's air path       | air      |
+ * | `bluefish`     | SDI out of a Bluefish card                                   | air      |
+ * | `ndi`          | video over the network to whatever subscribes to it          | air      |
+ * | `ffmpeg`       | a stream or a recording; the console cannot tell which, and  | air      |
+ * |                | a missing recording is still something to say now            |          |
+ * | `artnet`       | DMX to a lighting rig; nobody declares Art-Net for a preview | air      |
+ * | `screen`       | a window on the playout machine's own display                | local    |
+ * | `system-audio` | the playout machine's own sound device — the audio twin of   | local    |
+ * |                | `screen`; this plant's air audio is embedded in the SDI      |          |
+ *
+ * The names compare by the same token `casparcg.config` and `INFO` use (see the header above).
+ */
+export const LOCAL_MONITOR_KINDS: readonly string[] = ['screen', 'system-audio'];
+
+/** The severity a missing consumer of this kind carries for the OPERATOR. */
+export type OutputSeverity = 'air' | 'local';
+
+export function outputSeverityOf(kind: string): OutputSeverity {
+  return LOCAL_MONITOR_KINDS.includes(kind.toLowerCase()) ? 'local' : 'air';
+}
+
+/**
+ * Whether a missing consumer of this kind takes the channel OFF AIR. Everything that is not a
+ * known local monitor — including a kind this code has never heard of — answers yes.
+ */
+export function isAirOutputKind(kind: string): boolean {
+  return outputSeverityOf(kind) === 'air';
+}
+
+/**
+ * `B-223` — the checks whose missing set contains at least one PROGRAM output. This is the
+ * operator alarm's whole content: a channel missing only local monitors contributes nothing
+ * here, however many it is missing, and belongs on the technical surface instead.
+ */
+export function checksLosingAir(
+  checks: readonly ChannelOutputCheckLike[],
+): readonly ChannelOutputCheckLike[] {
+  return checks.filter((c) => c.missing.some((m) => isAirOutputKind(m.kind)));
+}
+
+/** The shape `checksLosingAir` needs — `ChannelOutputCheck` without the import cycle. */
+interface ChannelOutputCheckLike {
+  channel: number;
+  missing: readonly MissingConsumer[];
+}
+
+/**
+ * `C-030` — the plain-words reading of a `<device>` value, for an operator who has never seen
+ * `casparcg.config`.
+ *
+ * ── THE RULE THIS READS, AND WHY IT IS A READING ────────────────────────────
+ *
+ * 2.5.0 `69e8ad5` addresses a DeckLink through ONE `int64_t` field that its own header
+ * annotates _"Either an index, or a persistent id"_ (`decklink/consumer/config.h:34`). The
+ * lookup (`decklink/util/util.h` `get_device`) walks the cards in enumeration order and, for
+ * each, matches the slot ordinal FIRST (`n == device_index`) and the persistent ID SECOND
+ * (`id == device_index`). There is no threshold, no separate element, no marker on the
+ * number: a value that equals some card's ordinal IS that slot, whatever else it might also
+ * be; anything else is tried as an ID. So the words below are how an operator should READ the
+ * number, and {@link DEVICE_ADDRESSING_RULE} must travel with them so the reading is never
+ * mistaken for something CasparCG enforces.
+ *
+ * Slot indices are 1-based and small (a box has a handful of cards, never hundreds);
+ * persistent IDs are the driver's `BMDDeckLinkPersistentID`, a long number (the plant's is
+ * `23487013`). The band between is called `unknown` rather than guessed.
+ */
+export type DeviceAddressingForm = 'slot-index' | 'persistent-id' | 'unknown';
+
+export interface DeviceAddressing {
+  form: DeviceAddressingForm;
+  /** "slot index 1" / "hardware persistent ID 23487013" / the value, said to be neither. */
+  words: string;
+}
+
+const SLOT_INDEX_MAX = 64;
+const PERSISTENT_ID_MIN = 1000;
+
+export function describeDeviceAddressing(device: string): DeviceAddressing {
+  const trimmed = device.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const n = Number(trimmed);
+    if (n >= 1 && n <= SLOT_INDEX_MAX) {
+      return { form: 'slot-index', words: `slot index ${String(n)}` };
+    }
+    if (n >= PERSISTENT_ID_MIN) {
+      return { form: 'persistent-id', words: `hardware persistent ID ${trimmed}` };
+    }
+  }
+  return {
+    form: 'unknown',
+    words: `device "${trimmed}" (neither a slot index nor a persistent ID)`,
+  };
+}
+
+/** `C-030` — how CasparCG reads the number; carried wherever a form is named. */
+export const DEVICE_ADDRESSING_RULE =
+  'CasparCG matches the number against each card’s slot position first and its persistent ID ' +
+  'second — the number itself carries no marker, so a small number is a slot and a long one is ' +
+  'a card.';
+
+/**
+ * `C-030` — where the number comes from. The only place CasparCG prints its DeckLink cards is
+ * the startup log (`decklink.cpp` `init`: `Decklink devices found:` then one ` - <model> [n]
+ * (id)` line per card, printed only when at least one card was found).
+ */
+export const DEVICE_NUMBER_RECIPE =
+  'The number comes from CasparCG’s startup log on the playout machine: search the newest ' +
+  'caspar_<date>.log in the server’s log folder for "Decklink devices found:" — each line ' +
+  'beneath reads <model> [slot] (persistent ID). Copy the number in [ ] for a slot index or the ' +
+  'one in ( ) for a hardware ID. No such line means the server saw no card at all, or no driver.';

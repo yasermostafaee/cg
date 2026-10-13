@@ -32,7 +32,7 @@ function childComp(id = 'child'): Composition {
     name: 'Child',
     resolution: { width: 200, height: 100 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'l1',

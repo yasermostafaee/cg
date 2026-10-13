@@ -25,6 +25,43 @@ export const label = style({
   letterSpacing: '0.02em',
 });
 
+/**
+ * `DESIGNER-FIX-0905` — a WITHHELD row: the control is present, disabled, and dimmed as a
+ * whole (label included), so the row reads as "this exists and is unavailable here" at a
+ * glance, with the reason on the control's tooltip. Hiding the row would teach nothing.
+ */
+export const rowWithheld = style({
+  opacity: 0.55,
+  cursor: 'not-allowed',
+});
+
+/**
+ * `DESIGNER-FIX-0905` — a READ-ONLY fact in a field row (a video's source file, its size,
+ * its conform): the value column of an ordinary row, in text colour, truncating rather than
+ * wrapping so a long filename never turns a row back into a paragraph.
+ */
+export const readout = style({
+  color: colors.text,
+  fontSize: '0.74rem',
+  fontVariantNumeric: 'tabular-nums',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  minWidth: 0,
+});
+
+/**
+ * `PERSIAN-DIGITS-01` — the ONE line under a template number field whose text can never be a
+ * number. It takes the row's value column, so it sits directly under the box it refuses.
+ */
+export const fieldRefusal = style({
+  gridColumn: '2 / 3',
+  color: colors.danger,
+  fontSize: '0.66rem',
+  fontWeight: 600,
+  lineHeight: 1.3,
+});
+
 export const inputInner = style({
   background: 'transparent',
   color: colors.text,

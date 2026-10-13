@@ -1,47 +1,155 @@
+import * as fs from 'node:fs';
+import * as http from 'node:http';
+import * as path from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { bridgeHealth, HEALTH_PATH, type BridgeHealth, type HealthProblem } from './health.js';
+import { HttpTickets, type TicketGrant } from './http-tickets.js';
+import { checkReservedPorts, type BridgePort } from './reserved-ports.js';
+import { entriesUnder, fileEntries, MAX_ZIP_INPUT, zipEntries, type ZipEntry } from './zip.js';
 import {
   AppInfoChannel,
+  AuditAppendedChannel,
+  AuditHealthChannel,
+  AuditPageChannel,
   AuditRecentChannel,
+  type AuditCursor,
+  type AuditFilter,
+  AUTH_NO_TOKEN,
+  AUTH_REQUIRED_REFUSAL,
+  AuthStateChangedChannel,
+  type AuthMode,
+  AUTHZ_ROLE_REFUSAL,
+  authzChannelRefusal,
+  channelNotDeclaredRefusal,
+  StationChannelsChangedChannel,
+  StationChannelsListChannel,
+  ChannelsCatalogueChannel,
+  CHECK_BEFORE_SIGN_IN_REFUSAL,
+  normalisePlayoutAddress,
+  SetupCheckChannel,
+  SetupRouteAddressChannel,
+  SetupChannelOccupancyChannel,
+  StationStraysChannel,
+  StationStraysChangedChannel,
+  StationTakeOffAirChannel,
+  type ConnectionCheckRequest,
+  type ConnectionCheckResult,
+  type SetupPhase,
+  type StationChannels,
+  type StationChannelSource,
+  type PermissionClass,
+  grantsChannel,
+  isUnlicensedPlaylist,
+  grantedChannels,
+  holdsPermissionClass,
+  AuthSignInFailureChannel,
+  AuthSignOutChannel,
+  AuthStateChannel,
+  type AuthState,
+  type AuthStatus,
+  type WsAuthFrame,
   ConnectionsConfigChangedChannel,
   ConnectionsConfigChannel,
   ConnectionsFailoverChannel,
   ConnectionsHealthChangedChannel,
   ConnectionsHealthChannel,
   ConnectionsSetConfigChannel,
+  ConnectionsTemplateServeChannel,
   DEFAULT_BRIDGE_HOST,
+  type RestoreSkip,
+  DEFAULT_OSC_PORT,
+  RESERVED_OSC_PORT,
+  RESERVED_OSC_PORT_REASON,
   DEFAULT_BRIDGE_PORT,
+  FixedLayersBanksChangedChannel,
+  FixedLayersBanksChannel,
   FixedLayersConfigChangedChannel,
   FixedLayersClearLayerChannel,
   FixedLayersConfigChannel,
   FixedLayersLoadChannel,
+  FixedLayersSetBanksChannel,
   FixedLayersSetConfigChannel,
   FixedLayersStateChangedChannel,
   FixedLayersStateChannel,
   LayersClearChannel,
+  LayersClearedOutsideChangedChannel,
+  LayersClearedOutsideChannel,
   LayersOrphansChangedChannel,
   LayersOrphansChannel,
   LayersOwnedOccupancyChangedChannel,
   LayersOwnedOccupancyChannel,
+  EmptiedAirDismissChannel,
+  EmptiedAirNoticeChangedChannel,
+  EmptiedAirNoticeChannel,
+  EmptiedAirRestoreChannel,
+  PgmReturnStatusChangedChannel,
+  PgmReturnStatusChannel,
+  PgmReturnTicketChannel,
+  BridgeLogsTicketChannel,
+  BRIDGE_LOGS_PATH,
+  PGM_RETURN_PATH_PREFIX,
+  pgmReturnPath,
+  pgmAudioPath,
+  PgmMetersChangedChannel,
+  type PgmReturnStatus,
+  LOCK_ENGAGED_REFUSAL,
   LockEngageChannel,
   LockReleaseChannel,
   LockStateChangedChannel,
   LockStateChannel,
-  SettingsChangedChannel,
-  SettingsGetChannel,
-  SettingsSetChannel,
   PlayoutLayersClearChannel,
   PlayoutLayersStateChangedChannel,
   PlayoutLayersStateChannel,
+  LiveLayersStateChangedChannel,
+  LiveLayersStateChannel,
+  LivePlateReleasedChannel,
+  // `MEDIA-PLATES-01` — a clip's settings, its transport on air, and its clock.
+  LiveLayersMediaStateChangedChannel,
+  LiveLayersMediaStateChannel,
+  SourcesSetMediaPlaybackChannel,
+  StackMediaPlateTransportChannel,
+  type MediaPlateTransportAction,
+  type MediaWhenHidden,
   StackLoadChannel,
   StackNextChannel,
-  StackRestoreChannel,
+  BridgeCapabilitiesChannel,
+  StackRestoreReportChangedChannel,
+  StackRestoreReportChannel,
+  BridgeSessionSignInChannel,
+  BridgeSessionStateChangedChannel,
+  BridgeSessionStateChannel,
+  BridgeBackupSignInChannel,
+  BridgeEnginesChangedChannel,
+  BridgeEnginesChannel,
+  // `RELEASE-0113-01` (`R-089`) — each channel's mirror on the backup engine, and the admin's entries.
+  BackupChannelEntriesSetChannel,
+  BackupChannelsChangedChannel,
+  BackupChannelsStateChannel,
+  type BackupChannelEntry,
+  type BackupChannelsState,
+  isServerReachable,
+  type EngineLine,
+  type EngineSessions,
+  LicenseStateChangedChannel,
+  LicenseStateChannel,
+  cgUnlicensedReason,
+  type PlayoutLicense,
+  StackRestoreReportDismissChannel,
   StackStopAllChannel,
   StackStopChannel,
   StackOutChannel,
   StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackDismissErrorChannel,
+  StackSetActiveLookChannel,
+  StackSetPassTimingChannel,
+  StackSetPlateVolumeChannel,
+  StackSetPlateVolumesChannel,
+  StackSilenceAllLivePlatesChannel,
+  StackSilenceChannelLivePlatesChannel,
   StackSetPositionChannel,
+  StackSwapLiveSourceChannel,
   StackSnapshotChannel,
   StackStateChangedChannel,
   StackTakeChannel,
@@ -60,13 +168,18 @@ import {
   SourcesAssignmentsChannel,
   SourcesConfigChangedChannel,
   SourcesConfigChannel,
+  SourcesMediaSearchChannel,
+  SourcesRefreshChannel,
   SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
+  TemplatesActedChannel,
   TemplatesChangedChannel,
   TemplatesGetChannel,
+  TemplatesPageChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
   TemplatesRemoveChannel,
+  TEMPLATE_REDELIVERY_REFUSAL,
   UpdateCancelChannel,
   UpdateRequestChannel,
   UpdateStateChangedChannel,
@@ -74,42 +187,143 @@ import {
   parseWsFrame,
   serializeWsFrame,
   defaultFixedLayerBank,
+  firstBank,
   reservedLayerNumbers,
+  sortBanks,
+  consoleSourceCatalog,
+  migrateAssignmentsToChannels,
+  validateSourceCatalogAgainstBanks,
   type AnyChannel,
   type AnyPublishChannel,
   type ChannelSettings,
   type ConnectionConfig,
   type FixedLayerBank,
+  type LockState,
+  type PlayoutPrincipal,
+  type LiveSourceLayerRange,
+  type PlateBandInForce,
   type ReservedLayers,
   type SourceAssignments,
+  type SourceBandConfig,
   type SourceCatalog,
+  type TemplateInfo,
   type WsPublishFrame,
   type WsResponseFrame,
 } from '@cg/shared-ipc';
 import { DEFAULT_LAYER_POLICY, type LayerPolicy, type LayerSlot } from '@cg/caspar-client';
-import { CasparRuntime } from './caspar-runtime.js';
+import {
+  CONSOLE_ADDRESS_MAX_LENGTH,
+  retainedFromStackItem,
+  type RetainedStackItem,
+} from '@cg/shared-schema';
+import { loadPersistedStack, savePersistedStack } from './stack-store.js';
+import {
+  auditRowTold,
+  PUBLISH_SCOPE,
+  ROUTE_SCOPE,
+  scopePayload,
+  TELL_NOTHING,
+  type Holds,
+  type ScopeContext,
+} from './channel-scope.js';
+import { currentAuthSession, runAsActor } from './actor-context.js';
+import { AmcpLog, type AmcpLogEntry } from './amcp-log.js';
+import { startBankBringIn } from './bank-bring-in.js';
+import { CasparRuntime, configuredCasparHosts } from './caspar-runtime.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
 import {
   FixedLayersConfigError,
-  loadFixedLayerBank,
-  saveFixedLayerBank,
+  loadFixedLayerBanks,
+  saveFixedLayerBanks,
   validateFixedBank,
 } from './fixed-layers-store.js';
 import { loadReservedLayers } from './reserved-layers-store.js';
+import { loadPersistedLiveLayers, savePersistedLiveLayers } from './live-layers-store.js';
 import {
   resolveSourceCatalog,
-  saveSourceCatalog,
-  validateSourceCatalog,
+  saveSourceBand,
   type SourceCatalogSource,
 } from './source-catalog-store.js';
 import {
-  pruneAssignmentsForCatalog,
   resolveSourceAssignments,
   saveSourceAssignments,
+  SourceAssignmentsConfigError,
   validateSourceAssignments,
   type SourceAssignmentsSource,
 } from './source-assignments-store.js';
-import type { TemplateServeOverride } from './template-http-server.js';
+import {
+  hostsUnableToFetchTemplates,
+  isLoopbackHost,
+  templateServeUnreachableWarning,
+  type TemplateServeOverride,
+} from './template-http-server.js';
+import { detectServeHostCandidates, normalizeServeHost } from './serve-host-config.js';
+import { AuthSession } from './auth-session.js';
+import {
+  AMCP_PROBE_TIMEOUT_MS,
+  AMCP_TRUST_WINDOW_MS,
+  portHolderOf,
+  probeRoute,
+  realProbes,
+  runConnectionCheck,
+  withStationLines,
+  type CheckOptions,
+  type CheckProbes,
+  type PortHolder,
+} from './connection-check.js';
+import { pinnedIPv4, playoutFetchForSession } from './playout-http.js';
+import { BridgeSession } from './bridge-session.js';
+import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
+import { PgmAudioRelay } from './pgm-audio.js';
+import { PlayoutMetersReader, type PlayoutMetersTuning } from './playout-meters.js';
+import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
+import { PlayoutLicenseReader, type PlayoutLicenseReaderOptions } from './playout-license.js';
+import {
+  PlayoutVersionReader,
+  playoutVersionUrl,
+  type PlayoutVersionReaderOptions,
+} from './playout-version.js';
+import { BackupMediaLookup } from './backup-media.js';
+import { BackupEngine, backupSessionPath, type BackupEngineOptions } from './backup-engine.js';
+import { engineState } from './engine-state.js';
+import { CoreGuard, type CoreGuardOptions } from './core-guard.js';
+import { BackupChannels } from './backup-channels.js';
+import {
+  backupChannelsPath,
+  entriesFor,
+  loadBackupEntries,
+  saveBackupEntries,
+} from './backup-channels-store.js';
+import type { BackupChannelMap } from './server-b-line.js';
+import {
+  airOf,
+  casparJoinOf,
+  hostIsOursFor,
+  hostJoinsStation,
+  isLoopbackCasparHost,
+  PlayoutCatalogue,
+  type CasparJoin,
+  type CatalogueRow,
+  type PlayoutCatalogueOptions,
+} from './playout-catalogue.js';
+import {
+  HttpPlayoutSources,
+  PICKER_FRESH_MS,
+  PlayoutSources,
+  type MediaQuery,
+  type PlayoutSourcesProvider,
+} from './playout-sources.js';
+import {
+  AUTH_OFF,
+  loadPlayoutFile,
+  persistAdoptedIssuer,
+  playout292Url,
+  PLAYOUT_CONTRACT_VERSION,
+  resolvePlayoutSettings,
+  type PlayoutAuthConfig,
+  type PlayoutFlags,
+  type PlayoutSettings,
+} from './playout-config.js';
 
 export interface BridgeOptions {
   /** Bind host. Defaults to loopback (`127.0.0.1`) — enforced at the socket bind. */
@@ -119,10 +333,26 @@ export interface BridgeOptions {
   /** CasparCG server(s) + OSC bind. Phase 2 drives server A. */
   connection?: ConnectionConfig;
   /**
+   * 🔴 `CENTRAL-BRIDGE-01` rule 7 (`C-046`) — **THIS MACHINE'S OSC PORT**, the service
+   * configuration's: server A binds it and server B binds it plus one, whatever connection is in force
+   * — a flag's, the persisted file's, the default, or one a station admin applies. It is a fact about
+   * the bridge's host (which ports its firewall rule opens, which ports the Playout's engine owns), not
+   * a per-server choice, so it overrides the connection's own `oscPort` values rather than competing
+   * with them. Absent: every connection's own values stand (every dev bridge). `6250` is refused.
+   */
+  oscPort?: number;
+  /**
    * B-038 Phase 3 — overrides for the template HTTP server (`/template/<id>`).
    * Defaults derive from where CasparCG runs: loopback bind + serve-host when
-   * CasparCG is local; an opt-in routable bind + guessed/configured serve-host
-   * when remote. The control WebSocket is unaffected and stays loopback.
+   * EVERY declared server is local; an opt-in routable bind + guessed/configured
+   * serve-host when ANY of them is remote (B-162 — the decision is about the
+   * whole configured set, because one URL is handed to all of them). The control
+   * WebSocket is unaffected and stays loopback.
+   *
+   * `serveHost` here is what `--template-serve-host` sets: an EXPLICIT answer
+   * that replaces the guess rather than refining it. It is the operator's, not
+   * the derivation's — `guessLanHost()` takes the first non-internal IPv4, which
+   * on a machine with virtual adapters is routinely the wrong one (C-024).
    */
   templateServe?: TemplateServeOverride;
   /**
@@ -133,12 +363,29 @@ export interface BridgeOptions {
    */
   persistPath?: string;
   /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **WHERE THE BRIDGE KEEPS ITS OWN STACK** (`stack-store.ts`).
+   * When set, the stack is restored from it at start — before any console connects, through the same
+   * `restore()` a console's re-delivery used — and saved back on every change. Omitted: nothing
+   * persists (an embedder; most tests). No console re-delivers a stack any more.
+   */
+  stackPath?: string;
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (D7, rule 8) — **WHERE CG BRIDGE KEEPS ITS OWN PLAYOUT SESSION**
+   * (`bridge-session.json`: the rotating refresh token, never a password). Named, the bridge signs
+   * itself in to the Playout and reads with its own bearer; omitted (a development bridge, most
+   * tests), it has no session and borrows a signed-in console's, as before.
+   */
+  bridgeSessionPath?: string;
+  /**
    * R-021 stage 1 — the fixed operator layer bank, explicit. Highest
    * precedence; see {@link resolveFixedBank} for the full order. The bank is
    * VALIDATED at boot (`validateFixedBank`) and a violation throws BEFORE the
    * WebSocket binds — conflicts resolve loudly at startup.
+   *
+   * `MULTI-CHANNEL-01` — ONE bank, or the station's LIST of them (one per declared channel,
+   * `FixedLayerBanksSchema`'s rule).
    */
-  fixedLayers?: FixedLayerBank;
+  fixedLayers?: FixedLayerBank | readonly FixedLayerBank[];
   /**
    * R-021 stage 1 — where the fixed bank persists (JSON). An ABSENT file at a
    * CONFIGURED path means the BUILT-IN DEFAULT bank (70–99, top five ticked) —
@@ -155,6 +402,20 @@ export interface BridgeOptions {
    * Validated against the fixed bank at boot; fenced from allocation for the
    * life of the process.
    */
+  /**
+   * 🔴 `LAYER-BANDS-16` — **the DEPLOYMENT's dynamic allocation ranges, if it declares any.**
+   *
+   * The product ships NONE: `DEFAULT_LAYER_POLICY` is empty since the owner retired
+   * type-keyed dynamic allocation, because every range it used to carry lay in 1-49 — the
+   * span the layer map leaves to the playout server. An installation that genuinely wants
+   * `layers.load` to place a graphic by `templateType` declares its own ranges here, and
+   * every fence that reads the policy (`overlaps-policy` at config time, `reservedLayers`
+   * at allocation time) applies to them unchanged.
+   *
+   * Absent means absent, not "the old six ranges": a bridge with no policy refuses a dynamic
+   * load rather than guessing a layer, which is the whole point of the retirement.
+   */
+  layerPolicy?: LayerPolicy;
   reservedLayers?: ReservedLayers;
   /**
    * R-028 / C-015 — where the reserved playout layers load from (JSON). An
@@ -170,10 +431,25 @@ export interface BridgeOptions {
    */
   templatesDir?: string;
   /**
-   * D-137 / C-015 — the installation's SOURCE CATALOG, explicit. Highest
-   * precedence (tests, embedders); see {@link resolveSourceCatalog}.
+   * D-137 / C-015 — a PRE-RESOLVED source catalogue, explicit (tests, embedders). When given it is
+   * the catalogue in force as-is, and the Playout's lists are not read.
+   *
+   * `PLAYOUT-SOURCES-01` — a station never passes it: its catalogue is built from the Playout's D10
+   * and D11 reads ({@link playoutSources}).
    */
   sourceCatalog?: SourceCatalog;
+  /**
+   * 🔴 `PLAYOUT-SOURCES-01` §1.G — **TEST-ONLY: the local provider for a bridge with auth off**
+   * (`tests/support/local-playout-sources.ts`). A station reads the Playout over HTTP with the
+   * signed-in operator's bearer; with auth off and nothing injected there are no lists.
+   */
+  playoutSources?: PlayoutSourcesProvider;
+  /** `PLAYOUT-SOURCES-01` — where the last good D10 list persists (JSON). Absent = memory only. */
+  playoutInputsPath?: string;
+  /** `PLAYOUT-SOURCES-01` — where the BOUND media items persist (JSON). Absent = memory only. */
+  boundMediaPath?: string;
+  /** TEST-ONLY — the Playout sources' tick and clock. */
+  playoutSourcesOptions?: { readonly tickMs?: number; readonly now?: () => number };
   /**
    * D-137 / C-015 — where the source catalog persists (JSON).
    *
@@ -205,10 +481,183 @@ export interface BridgeOptions {
    */
   sourceAssignmentsPath?: string;
   /**
+   * B-145 — where the LIVE LAYER LEDGER persists (JSON).
+   *
+   * Configured → the ledger is written on every change and ADOPTED at boot, corrected
+   * against what the server actually has. Omitted → no persistence, which is the
+   * pre-B-145 behaviour: a restart loses the ledger and the seated producers are stranded.
+   *
+   * 🔴 **A STATION NEVER REACHES THE OMITTED CASE.** `bin/caspar-bridge.mjs` resolves this
+   * through `resolveLiveLayersPath`, so an unconfigured station gets
+   * `~/.cg-runtime/bridge-live-layers.json` and persistence is ON; omitting it here is the
+   * EMBEDDER case the repo already ruled on for the fixed bank — *"`createBridge({})` is
+   * not a station"* (`tests/default-bank-boot.integration.test.ts:164`). Defaulting it in
+   * this function instead would have every bridge a unit test constructs read, and any
+   * test that seats a live layer WRITE, the developer's real station ledger.
+   *
+   * ⚠ Like {@link sourceAssignmentsPath}, it must NOT live inside {@link templatesDir}
+   * (B-116).
+   */
+  liveLayersPath?: string;
+  /**
+   * B-141 — the NDJSON audit record. ABSENT = no writer configured, which the
+   * operator surface reports AS SUCH rather than as an empty log. Unlike the
+   * stores above, an unusable audit file is NEVER a boot failure.
+   */
+  auditLogPath?: string;
+  /**
+   * 🔴 `FIELD-FIXES-01-A` — where the AMCP log is written: every command the bridge sends, its
+   * reply line and its time (`amcp-log.ts`). The CLI derives it from `--state-home` —
+   * `<state-home>/logs/amcp.log`, beside the installed app's `bridge.log` — so every launcher gets
+   * it without a flag of its own. ABSENT means no AMCP log (unit tests, embedders). Like the audit
+   * log, a file that cannot be written is never a boot failure.
+   */
+  amcpLogPath?: string;
+  /**
+   * `B-174` — the look switch's mixer hold, in ms (`--look-mixer-hold-ms`). ABSENT means
+   * ONE CHANNEL FRAME of the channel's observed video mode (40 ms at the plant's
+   * `1080i5000`), which is the measured page lag; `0` disables the hold while keeping the
+   * page-first order. A FIRST-CLASS operator knob, not test tuning: the right value is a
+   * property of the installation (its mode, its page hardware), so the plant must be able
+   * to retune it without a rebuild.
+   */
+  lookMixerHoldMs?: number;
+  /**
+   * 🔴 `C-037` — the Playout link's CLI/explicit layer: the auth MODE and the
+   * `playout.*` addresses. Highest precedence, exactly as `connection` is for `R-010`
+   * — flags are session overrides and win without clobbering the file.
+   *
+   * ⚠ Deliberately NOT part of `ConnectionConfig`: that schema is the
+   * `connections.set-config` REQUEST body, so auth configuration living there would be
+   * rewritable over the very socket this gate exists to protect. See `playout-config.ts`.
+   */
+  playout?: PlayoutFlags;
+  /**
+   * `C-037` — where the `playout.*` group persists (JSON,
+   * `~/.cg-runtime/bridge-playout.json` by default in the CLI). ABSENT is normal: a station
+   * that does not authenticate has no file. PRESENT-but-unusable is a HARD boot failure
+   * (`PlayoutConfigError`) rather than the connection file's warn-and-ignore — a bridge
+   * told to authenticate must never fall back to not authenticating.
+   */
+  playoutConfigPath?: string;
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`R-068`, D3) — **THIS BRIDGE NEVER RUNS WITH AUTH OFF.** CG Bridge, the
+   * service on the Playout machine, serves consoles across the network, and every connection must
+   * present a valid Playout token. With this set, a start with no Playout configured is a start
+   * FAILURE with a sentence ({@link AUTH_REQUIRED_START_FAILURE}) — never a bridge that answers
+   * anyone. Absent (the dev bridge, every test) = auth follows the configuration, as before.
+   */
+  requireAuth?: boolean;
+  /**
+   * `CENTRAL-BRIDGE-01` rule 12 (D11) — once listening, read Windows' reserved port ranges and say
+   * any of this bridge's ports inside one (log and `/health`). The CLI sets it; absent, no `netsh`
+   * is spawned (every test).
+   */
+  checkReservedPorts?: boolean;
+  /**
+   * `CENTRAL-BRIDGE-01` §1 A — the folder a station admin downloads as `/logs.zip` (the service's
+   * `%ProgramData%\CG Bridge\logs\`). Absent: this bridge offers no logs download.
+   */
+  logsDir?: string;
+  /**
+   * `CENTRAL-BRIDGE-01` (`R-068`) — the release this bridge is (`0.10.0`), told to every console on
+   * `bridge.capabilities` so a console on another release line sends nothing. Absent = this
+   * package's own `package.json` version (the number `tools/release` stamps), or none if unreadable.
+   */
+  version?: string;
+  /**
+   * 🔴 `DESKTOP-APPS-01` — **THIS BRIDGE IS AN INSTALLED STATION THAT MAY STILL BE IN FIRST-RUN**
+   * (`--first-run`, which only the desktop app passes). Two things follow, and nothing else:
+   *
+   *   - `bridge.capabilities` advertises the first-run phase (`target` while no Playout is
+   *     configured, `channel` while no channel is declared), so the console shows first-run;
+   *   - an ABSENT fixed-bank file means NO bank rather than the built-in default, so the
+   *     `station-admin`'s first `fixedLayers.set-config` takes the existing "no bank yet" path and
+   *     DECLARES the channel. The built-in default is channel 1 — on a client's Playout, its
+   *     programme channel — and a station that has not chosen must not drive it.
+   *
+   * No gate, fence or refusal changes. Absent (every dev bridge, every test) = today exactly.
+   */
+  firstRun?: boolean;
+  /** `DESKTOP-APPS-01` — the console's port when the CLI serves it, so the check can name it. */
+  consolePort?: number;
+  /**
+   * TEST-ONLY seam — `C-016`'s relay bounds and its feed port, so a suite need not wait seconds
+   * for a stall and need not hold the real `9250 + n − 1`. Absent = the product's rule and bounds.
+   */
+  pgmReturn?: {
+    readonly tuning?: Partial<PgmReturnTuning>;
+    readonly portFor?: (channel: number) => number;
+  };
+  /**
+   * TEST-ONLY seam — clock and `fetch` for the Playout reads, so a suite can drive expiry
+   * and the D9 cadence without sleeping for a minute.
+   */
+  playoutAuthOptions?: PlayoutAuthOptions;
+  /** TEST-ONLY seam — the connection check's probes (`realProbes()` by default). */
+  connectionCheckProbes?: CheckProbes;
+  /** TEST-ONLY seam — who holds a port this bridge could not open (`R-090`; `portHolderOf` by default). */
+  portHolderOf?: (protocol: 'tcp' | 'udp', port: number) => Promise<PortHolder>;
+  /** TEST-ONLY seam — the check's bounds and AMCP window, so a suite need not wait 30 s. */
+  connectionCheckOptions?: Pick<CheckOptions, 'amcpTrustWindowMs' | 'lineMs' | 'connectMs'>;
+  /**
+   * TEST-ONLY seam — clock, `fetch` and tick period for the D4 catalogue read, so a suite can
+   * drive the 5 s floor and a Playout outage without sleeping.
+   */
+  playoutCatalogueOptions?: PlayoutCatalogueOptions;
+  /** TEST-ONLY seam — clock, `fetch` and tick for the CG license read (`PLAYOUT-FEATURES-01` D). */
+  playoutLicenseOptions?: PlayoutLicenseReaderOptions;
+  /** TEST-ONLY seam — `fetch` and period for the Playout's version read (`R-084`). */
+  playoutVersionOptions?: PlayoutVersionReaderOptions;
+  /**
+   * 🔴 `RELEASE-0112-01` (`R-085`) — the BACKUP engine's API address, outright. In production it is the
+   * primary engine's address at server B's host (`backupEngineAddress`); a suite or the dev station's
+   * `--pair`, whose two fake engines share `127.0.0.1` and differ by port, names it (the CLI's
+   * `--backup-playout-address`). It replaces `PLAYOUT-FEATURES-01`'s media-URL seam: every backup read
+   * derives from it now.
+   */
+  backupPlayoutAddress?: string;
+  /**
+   * `RELEASE-0112-01` (`R-085`) — the BACKUP engine's session file. Default: `bridge-session-backup.json`
+   * beside {@link bridgeSessionPath}; with no session path there is no backup session either.
+   */
+  backupBridgeSessionPath?: string;
+  /**
+   * TEST-ONLY seam — `B-313`: the port a CG Bridge on a core's machine answers `/health` on. Default:
+   * this bridge's own control port (an installed CG Bridge's is `5280` everywhere). A suite whose two
+   * bridges share `127.0.0.1` names the other's.
+   */
+  coreGuardPort?: number;
+  /** TEST-ONLY seam — the guard's `fetch` and period (`B-313`). */
+  coreGuardOptions?: Pick<CoreGuardOptions, 'fetchImpl' | 'pollMs'>;
+  /** TEST-ONLY seam — the backup engine's reads and session timings (`R-085`). */
+  backupEngineOptions?: Pick<
+    BackupEngineOptions,
+    | 'readFetch'
+    | 'sessionTimings'
+    | 'versionOptions'
+    | 'licenseOptions'
+    | 'catalogueOptions'
+    | 'now'
+  >;
+  /** TEST-ONLY seam — the Playout meters stream's backoff, silence and linger (`PLAYOUT-FEATURES-01` E). */
+  playoutMetersTuning?: Partial<PlayoutMetersTuning>;
+  /**
+   * `RELEASE-0113-01` (`R-089`) — where a station admin's backup channel entries are kept. Default:
+   * `bridge-backup-channels.json` beside {@link persistPath}; with neither they live in memory only.
+   */
+  backupChannelsPath?: string;
+  /**
+   * TEST-ONLY seam — `B-316`: the backup channel map the runtime uses INSTEAD of the one read from the
+   * backup engine's D4, for a wire test on a pair with no Playout (auth off: no D4 on either side). The
+   * consoles' lines still describe the D4 resolver. Never set in production.
+   */
+  backupChannelMap?: BackupChannelMap;
+  /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
    */
-  runtimeTuning?: { sweepMs?: number; occupancyStaleMs?: number };
+  runtimeTuning?: { sweepMs?: number; occupancyStaleMs?: number; outputRecheckMs?: number };
 }
 
 export interface BridgeHandle {
@@ -216,19 +665,78 @@ export interface BridgeHandle {
   readonly port: number;
   readonly url: string;
   /**
+   * `C-037` — the RESOLVED auth mode and Playout addresses, so the CLI can say at boot
+   * which Playout this bridge trusts and a test can assert the precedence without
+   * re-deriving it.
+   */
+  readonly auth: PlayoutSettings;
+  /** The verifier, or `null` when auth is off. Exposed for the D9 cadence test's control. */
+  readonly playoutAuth: PlayoutAuth | null;
+  /**
+   * `C-039` — the Playout's channel catalogue (D4) reader, or `null` when auth is off. Exposed for
+   * the cadence test's positive control (`readCount`) and to drive a read without waiting a floor.
+   */
+  readonly playoutCatalogue: PlayoutCatalogue | null;
+  /**
    * B-038 Phase 3 — the template HTTP serve address: the base URL CasparCG fetches
    * `/template/<id>` from, plus whether the bind is LAN-exposed (non-loopback).
    */
-  readonly templateServe: { url: string; serveHost: string; port: number; exposed: boolean };
+  readonly templateServe: {
+    url: string;
+    serveHost: string;
+    port: number;
+    exposed: boolean;
+    /**
+     * `B-162` — declared CasparCG hosts that cannot fetch this address. Empty is
+     * the healthy case; non-empty means those servers get NO TEMPLATE and
+     * nothing else anywhere reports it.
+     */
+    unreachable: readonly string[];
+    /**
+     * `C-024` — **WHICH OF THE THREE LAYERS ANSWERED**, so the boot line can name it.
+     *
+     * The layers are flag > config file > derivation, and only the first and last used to exist.
+     * A boot line reporting a value that came from the CONFIG FILE as "the built-in derivation"
+     * would be a lie on the one line whose entire job is to answer "why this one, and what do I
+     * change?" — and the derivation is a GUESS, so the difference between "this machine guessed"
+     * and "you configured this" is exactly what the operator needs to see.
+     */
+    source: 'flag' | 'config' | 'derived';
+  };
   /** The real `@cg/caspar-client`-backed runtime (Reconciler is the truth). */
   readonly runtime: CasparRuntime;
+  /**
+   * `C-016` — the programme return relay. The CLI hands it to the console server, which serves
+   * `/pgm/<n>` from it; its state rides `pgmReturn.status` on the control socket.
+   */
+  readonly pgmReturn: PgmReturnRelay;
+  /** `PLAYOUT-FEATURES-01` E (`R-076`) — the programme SOUND relay, served at `/pgm/<n>/sound`. */
+  readonly pgmAudio: PgmAudioRelay;
+  /**
+   * `PLAYOUT-FEATURES-01` E (`R-076`) — the Playout meters stream, or `null` with auth off. Exposed for the
+   * "read ONCE" test's instrument (`connectCount`).
+   */
+  readonly playoutMeters: PlayoutMetersReader | null;
   /**
    * WHERE the candidate-layer bank in force came from, so the CLI can SAY it at
    * boot. Two machines ran different banks for two days and nothing anywhere
    * announced the difference; the bank alone does not answer "why this one?",
    * and the source is the half that does.
+   *
+   * `MULTI-CHANNEL-01` — `bank` is the v1 view (the first declared channel's bank); the CLI's
+   * boot line reads every bank from the runtime, and `source` is the station's, not a bank's.
    */
   readonly fixedBankSource: { bank: FixedLayerBank | null; source: FixedBankSource };
+  /**
+   * `C-031` — how many templates the registry loaded at boot, how many persisted
+   * files it skipped, and from where, so the CLI can SAY it. The boot line already
+   * names the bank, the sources, the assignments, the ledger, the mixer hold and the
+   * consumer setting; the one number it did not name is the one every take depends
+   * on, and on 2026-09-04 it was the first question with no line to answer it.
+   */
+  readonly templates: { loaded: number; skipped: number; dir: string | null };
+  /** `FIELD-FIXES-01-A` — the AMCP log being written, or `null` when none was asked for. */
+  readonly amcpLog: AmcpLog | null;
   /**
    * D-137 / C-015 — the source catalog in force AND where it came from, so the
    * CLI can SAY it at boot.
@@ -239,31 +747,1045 @@ export interface BridgeHandle {
    * change?". Here it also answers a question with no other surface — a station
    * where NOTHING reaches air because the file was never written looks, from
    * every screen, like a station whose sources are simply not configured yet.
-   */
-  readonly sourceCatalog: { value: SourceCatalog; source: SourceCatalogSource };
-  /**
-   * D-137 / C-015 — the assignments in force, where they came from, and what
-   * the boot PRUNED because the catalog no longer defines its source.
    *
-   * `pruned` is not diagnostics: each entry is a plate that was bound and now is
-   * not, so the boot line names them. Silence there would be a station starting
-   * with a plate the operator believes is assigned.
+   * `PLAYOUT-SOURCES-01` — `value` is the catalogue IN FORCE at boot (the Playout's persisted list
+   * and bound media, with the band); `source` says where the BAND came from, the one catalogue fact
+   * the file still carries.
+   *
+   * `PLATE-BAND-01` — `band` is the plate band IN FORCE at boot and where it came from: the declared
+   * band, or a Playout-linked station's default (never in `value`, which is what the file holds), or
+   * `null` when none is in force and a take with plates is refused.
+   */
+  readonly sourceCatalog: {
+    value: SourceCatalog;
+    source: SourceCatalogSource;
+    band: PlateBandInForce | null;
+  };
+  /**
+   * `PLAYOUT-SOURCES-01` — the Playout's D10/D11 reader, or `null` when this bridge was given a
+   * pre-resolved catalogue (tests, embedders).
+   */
+  readonly playoutSources: PlayoutSources | null;
+  /**
+   * D-137 / C-015 — the assignments in force, and where they came from.
+   *
+   * `PLAYOUT-SOURCES-01` §1.C — the boot no longer PRUNES them, so there is nothing to name: a
+   * binding whose entry the Playout stopped offering is KEPT (shown unavailable, its take refused),
+   * and only an operator action removes one (ADR 0010 rule 14).
    */
   readonly sourceAssignments: {
     value: SourceAssignments;
     source: SourceAssignmentsSource;
-    pruned: readonly { templateId: string; plateId: string; sourceId: string }[];
   };
+  /**
+   * B-145 — the LIVE-LAYER LEDGER's provenance, so the CLI can SAY it at boot.
+   *
+   * Same reason as every sibling above, with one that is sharper here: this is the store
+   * whose whole purpose is to be believed after a restart. A bridge that adopted nothing
+   * and a bridge that is not persisting at all look identical from every screen — and the
+   * second is the pre-B-145 bug, which for one release shipped as the DEFAULT.
+   *
+   * `path: null` means persistence is deliberately OFF (`--no-live-layers`), never that
+   * nobody configured it: absence now resolves to the station default.
+   */
+  readonly liveLayers: {
+    readonly path: string | null;
+    readonly source: 'file' | 'absent' | 'unusable' | 'off';
+    readonly adopted: number;
+    readonly unverified: number;
+    readonly dropped: number;
+  };
+  /**
+   * `CENTRAL-BRIDGE-01` (`B-294`) — the bridge's own stack at start: where it is kept, what was read
+   * and what `restore()` made of it, for the boot line. `null` when no stack path was given.
+   */
+  readonly stack: StackProvenance | null;
   /** Force-close every client socket — used by tests to simulate a mid-session drop. */
   dropConnections(): void;
   /** Stop the WebSocket server, the CasparCG session, and close all clients. */
   close(): Promise<void>;
 }
 
-/** One request route: a channel + a (possibly async) handler producing its response. */
+/** `CENTRAL-BRIDGE-01` (`B-294`) — the bridge's own stack at start, for the boot line. */
+export interface StackProvenance {
+  readonly path: string;
+  readonly source: 'absent' | 'file' | 'unusable';
+  /** Rows restored. */
+  readonly restored: number;
+  /** Rows the file held that `restore()` skipped, and why. */
+  readonly skipped: readonly { readonly itemId: string; readonly reason: string }[];
+  /** Rows the file held that were not usable at all. */
+  readonly unusable: number;
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **RESTORE THE BRIDGE'S OWN STACK, AND KEEP IT.** Reads
+ * `stackPath`, hands the rows to `restore()` (seeds them, sends nothing), then saves the stack on
+ * every change — debounced to one write per burst, and flushed at close. Strays (our items on a
+ * channel this station does not declare) are kept with the rows, so a restart remembers them too.
+ */
+async function restoreOwnStack(
+  runtime: CasparRuntime,
+  stackPath: string,
+): Promise<{ provenance: StackProvenance; flush: () => void }> {
+  const persisted = loadPersistedStack(stackPath);
+  const result =
+    persisted.items.length === 0
+      ? { restored: 0, skipped: [] as readonly RestoreSkip[] }
+      : await runtime.restore(persisted.items);
+  const save = (): void => {
+    const strays: RetainedStackItem[] = runtime.strays().map((stray) => ({
+      itemId: stray.itemId,
+      templateId: stray.templateId,
+      fields: {},
+      state: 'on-air',
+      slot: { channel: stray.casparChannel, layer: stray.layer, server: 'primary' },
+    }));
+    savePersistedStack(stackPath, [
+      ...runtime.stackSnapshot().map(retainedFromStackItem),
+      ...strays,
+    ]);
+  };
+  let timer: NodeJS.Timeout | null = null;
+  /*
+    At close, ALWAYS written — not only when a save is pending: a change whose publish is still
+    coalescing when the bridge stops has scheduled nothing yet (measured: a close right after two
+    takes left no file), and the stack at close is exactly what the next start must restore.
+  */
+  const flush = (): void => {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    save();
+  };
+  const schedule = (): void => {
+    if (timer !== null) return;
+    timer = setTimeout(() => {
+      timer = null;
+      save();
+    }, STACK_SAVE_DEBOUNCE_MS);
+    timer.unref();
+  };
+  runtime.stackChanged.subscribe(schedule);
+  runtime.straysChanged.subscribe(schedule);
+  return {
+    provenance: {
+      path: stackPath,
+      source: persisted.source,
+      restored: result.restored,
+      skipped: result.skipped.map((s) => ({ itemId: s.itemId, reason: s.reason })),
+      unusable: persisted.dropped.length,
+    },
+    flush,
+  };
+}
+
+/** `CENTRAL-BRIDGE-01` — one stack write per burst of changes (a take publishes several). */
+const STACK_SAVE_DEBOUNCE_MS = 150;
+
+/**
+ * 🔴 `B-229` — **IS THIS CHANNEL REACHABLE WHILE THE CONSOLE IS LOCKED?**
+ *
+ * Every route declares one of these and the argument is REQUIRED, so a channel cannot be
+ * added without someone deciding — and, because the `B-074` route-coverage guard already
+ * asserts that every runtime channel is routed here, the classification is total by
+ * construction. A hand-maintained list of "locked channels" beside the table would be the
+ * second thing to remember, and `B-153`'s note two hundred lines down is about exactly
+ * that failure.
+ *
+ * ── THE OWNER'S ANSWER (2026-09-06), AND ITS REASONING ──────────────────────
+ *
+ * **The lock refuses EVERYTHING — `CLEAR`, `CLEAR ALL` and `STOP` included.** A lock is a
+ * DELIBERATE act with a KNOWN PIN: the operator who engaged it ends it in the time it
+ * takes to type four digits, so an emergency verb behind the lock is two seconds away and
+ * not unreachable.
+ *
+ * ⚠ **This is NOT `B-226`'s shape, and the distinction is why they must not be
+ * "harmonised".** `B-226` withholds CLEAR on a SYSTEM CONDITION the operator cannot undo —
+ * withholding the verb there strands him, so the verb stays. The lock is the opposite
+ * situation wearing the same face: `B-226` is "you cannot fix this", the lock is "you
+ * already know how".
+ *
+ * ── WHY FOUR NAMES AND NOT A BOOLEAN ────────────────────────────────────────
+ *
+ * Three of these mean "reachable", and they are kept apart because the REASON is what a
+ * future author needs in order to classify a new channel. A boolean would record the
+ * answer and lose the question.
+ */
+type LockPolicy =
+  /** Answers a question and changes nothing. Always reachable — the overlay itself is drawn
+   *  from `lock.state`, and a browser reconnecting to a locked bridge must still be able to
+   *  SEE the stack it is not allowed to touch. */
+  | 'read'
+  /** It IS the way out. A lock that refused this would need a bridge restart to escape,
+   *  which is strictly worse than the bug being fixed. */
+  | 'unlock'
+  /**
+   * An operator intent. REFUSED while locked.
+   *
+   * ⚠ `CENTRAL-BRIDGE-01` (`B-294`) retired the two classes that sat beside this one — `resync`
+   * (`stack.restore`) and `operator-unless-redelivery` (`templates.import`'s replay flag). Both
+   * existed for a console's reconnect machinery, and a console re-delivers nothing now: the bridge
+   * keeps the stack and the library itself, and a replay frame is refused before any gate.
+   */
+  | 'operator';
+
+/**
+ * One request route: a channel, its handler, and the two policy axes that decide whether a
+ * given press gets through.
+ *
+ * ⚠ **`lock` and `perm` are DIFFERENT QUESTIONS and must not be collapsed.** The lock asks
+ * _"is this console currently accepting intents at all"_ — a station-level safety gate whose
+ * key is a PIN. The permission class asks _"may THIS PRINCIPAL do this"_ — an identity gate
+ * whose key is a token. `lock.release` is the sharpest illustration: it is exempt from the
+ * lock (it IS the way out) and it still requires the `operator` class, because a viewer must
+ * not unlock a console an operator deliberately locked.
+ */
 interface Route {
   readonly channel: AnyChannel;
   readonly handle: (req: unknown) => unknown;
+  readonly lock: LockPolicy;
+  /**
+   * 🔴 `C-038` — the rung of the principal hierarchy this route sits on. The FOURTH field,
+   * and REQUIRED, for the identical reason `lock` is the third: a new channel cannot be
+   * routed without answering the question, which is what keeps the claim true a year from
+   * now. See `PermissionClass` in `@cg/shared-ipc` for the three values and why `read` is a
+   * statement about WHO rather than about what the route writes.
+   */
+  readonly perm: PermissionClass;
+}
+
+/**
+ * The single decision. Exported for the lock-policy census in
+ * `tests/lock-refuses-intents.integration.test.ts`, which walks every route rather than
+ * sampling — "the lock refuses everything" is a claim about each channel, and no sample
+ * can make it.
+ */
+export function refusedWhileLocked(route: Route): boolean {
+  switch (route.lock) {
+    case 'read':
+    case 'unlock':
+      return false;
+    case 'operator':
+      return true;
+  }
+}
+
+/**
+ * 🔴 `B-257` — **THE CHANNELS A LOCK ENGAGED NOW WOULD COVER: the engager's, and nothing
+ * else.** `undefined` means every channel — auth OFF, or an engager holding `'*'` — which is
+ * the lock exactly as it was.
+ *
+ * A principal may only restrict what it holds authority over. It is EXACTLY the engager's
+ * `permittedChannels` — the same `grantedChannels` composition `authStateFor` sends the console,
+ * over the station's declared channels and hosts as they are at this moment — so the set the
+ * lock stores and the set the engaging console displays as its own cannot differ.
+ *
+ * ⚠ CAPTURED by the caller at engage and stored on the lock. Never re-derived later: a token
+ * refresh, a principal swap on the engaging console or a server-list edit must not move what a
+ * lock that is already engaged covers.
+ */
+export function lockScopeAtEngage(
+  principal: PlayoutPrincipal | null,
+  runtime: CasparRuntime,
+): readonly number[] | undefined {
+  if (principal === null || principal.channels === '*') return undefined;
+  return grantedChannels(
+    principal.channels,
+    configuredCasparHosts(runtime.config()),
+    runtime.declaredChannels(),
+  );
+}
+
+/**
+ * 🔴 `B-257` — **WHICH OF A LOCK'S COVERED CHANNELS THIS PRINCIPAL HOLDS.** An empty answer
+ * means the lock does not reach this console at all: it holds nothing the lock covers, so the
+ * lock has nothing of its to restrict — and that console must not present itself as locked.
+ *
+ * `null` (no principal) holds nothing. The every-channel lock never asks this; it refuses as
+ * it always has.
+ */
+export function coveredChannelsHeld(
+  covered: readonly number[],
+  principal: PlayoutPrincipal | null,
+  runtime: CasparRuntime,
+): readonly number[] {
+  if (principal === null) return [];
+  const hosts = configuredCasparHosts(runtime.config());
+  return covered.filter((c) => grantsChannel(principal.channels, hosts, c));
+}
+
+/**
+ * 🔴 `B-257` — **DOES THIS LOCK REACH THIS PRINCIPAL AT ALL?** The every-channel lock reaches
+ * everybody; a covered-set lock reaches a principal who holds one of its channels. The ONE
+ * answer to "is this console locked", asked by the request gate, by the `auth` frame
+ * (`B-259`), and mirrored — from the same two inputs — by the console's lock surfaces.
+ */
+export function lockReaches(
+  lock: LockState,
+  principal: PlayoutPrincipal | null,
+  runtime: CasparRuntime,
+): boolean {
+  if (!lock.engaged) return false;
+  if (lock.channels === undefined) return true;
+  return coveredChannelsHeld(lock.channels, principal, runtime).length > 0;
+}
+
+/**
+ * 🔴 `B-257` / `B-260` — **DOES THE LOCK REFUSE THIS REQUEST, FROM THIS PRINCIPAL?** The one
+ * decision the gate asks. {@link refusedWhileLocked} is kept exactly as it was — the census in
+ * `lock-refuses-intents` pins it — and answers "is this an intent at all"; this answers the
+ * rest.
+ *
+ * ── THE EVERY-CHANNEL LOCK — BYTE-IDENTICAL ─────────────────────────────────
+ *
+ * `lock.channels` absent (auth OFF, or an engager holding `'*'`): every intent is refused, for
+ * every socket, exactly as before. `B-229` stands unchanged there, no-carve-out answer and all.
+ *
+ * ── THE COVERED-SET LOCK ────────────────────────────────────────────────────
+ *
+ * It refuses an intent only when it touches a covered channel THIS PRINCIPAL HOLDS:
+ *
+ *   - a principal holding none of the covered channels is not locked at all. An intent of
+ *     theirs that touches a covered channel is one they hold no grant for, so the PERMISSION
+ *     gate refuses it with the sentence that names the real obstacle — a PIN they do not have
+ *     is not it (my audit's B2);
+ *   - an intent that resolves to channels is refused iff one of them is covered and held;
+ *   - an intent that resolves to NO channel — the station-wide verbs, and a verb on a row with
+ *     no layer — touches every channel the principal holds, so it is refused;
+ *   - PANIC is judged by where it REACHES: the channels its ledger holds seats on
+ *     ({@link CasparRuntime.liveLedgerChannels}). It is not scoped by this — it silences the
+ *     whole ledger or nothing (A16) — this only decides whether the lock lets the press through.
+ *
+ * (`B-260` (b)'s re-delivery branch is gone with the re-delivery: `CENTRAL-BRIDGE-01`, `B-294`.)
+ */
+export function lockRefuses(
+  route: Route,
+  req: unknown,
+  lock: LockState,
+  principal: PlayoutPrincipal | null,
+  runtime: CasparRuntime,
+): boolean {
+  if (!lock.engaged) return false;
+  if (!refusedWhileLocked(route)) return false;
+
+  if (lock.channels === undefined) return true;
+  const held = coveredChannelsHeld(lock.channels, principal, runtime);
+  if (held.length === 0) return false;
+  const footprint =
+    route.channel.name === StackSilenceAllLivePlatesChannel.name
+      ? runtime.liveLedgerChannels()
+      : channelsForRequest(route, req, runtime);
+  if (footprint.length === 0 && route.channel.name !== StackSilenceAllLivePlatesChannel.name) {
+    return true;
+  }
+  return footprint.some((c) => held.includes(c));
+}
+
+/**
+ * 🔴 `C-037` — **WHAT THE AUTH GATE IS LOOKING AT, as four names.**
+ *
+ * A boolean would collapse the two that matter most: a socket that has never signed in and a
+ * socket whose session stopped holding are different situations, and `auth.state` tells them
+ * apart for the console (a sign-in, or a sign-in AGAIN). ADR 0010 rule 4 gave them different
+ * GATES too — an expired one _"`read` routes keep answering"_; `CENTRAL-BRIDGE-01` (`R-068`)
+ * amended that: both are refused everything but the open doors ({@link refusedByAuth}).
+ *
+ * ⚠ It IS `@cg/shared-ipc`'s `AuthStatus`, aliased rather than redeclared: the same four
+ * names travel on `auth.state`, and two spellings of one verdict is how a surface comes to
+ * claim a state the gate does not hold.
+ */
+export type AuthGateState = AuthStatus;
+
+/**
+ * ⭐ **THE DOOR ADR 0010 RULE 4 LEAVES OPEN, spelled once.**
+ *
+ * `bridge.capabilities` because it is asked at CONNECT and is how a console DISCOVERS that it
+ * must sign in (`B-153`) — it carries the bridge's version and no state; `auth.*` because it is
+ * the sign-in itself. Both are open in every not-signed-in state, EXPIRED included — the way back
+ * in must not need the thing that expired, which is the inverse half `B-229` insisted on for the
+ * lock.
+ *
+ * 🔴 `DELTA-MULTI-CHANNEL-01-B` B1 — **AND `setup.check`, because it is how a console learns
+ * whether a sign-in CAN work.** The owner pressed Check on a station whose Playout was down and
+ * was told to sign in — the one thing the check was there to tell him he could not do. It probes,
+ * reports and changes nothing; and before a sign-in it is NARROW — this station's own Playout
+ * only (`checksThisStation` in `buildRoutes`), so the open door cannot turn the station into a
+ * network probe for an unsigned caller.
+ *
+ * ⚠ `CENTRAL-BRIDGE-01` (D3) closes this door when CG Control signs in to the Playout itself
+ * (tasks 7.2/7.3) — the console then learns whether a sign-in can work from its own sign-in, and the
+ * sign-in surface stops asking the bridge. Until then the sign-in surface still runs this check.
+ */
+export function openToUnauthenticated(channelName: string): boolean {
+  return (
+    channelName === BridgeCapabilitiesChannel.name ||
+    channelName === SetupCheckChannel.name ||
+    channelName.startsWith('auth.')
+  );
+}
+
+/**
+ * 🔴 `DELTA-MULTI-CHANNEL-01-B` B3 — **THE PLAYOUT'S ANSWER TO A FAILED SIGN-IN, AS ONE LOG LINE.**
+ *
+ * It arrives on an `auth.*` channel — open before a sign-in, which is the only time it is sent —
+ * so its text is UNTRUSTED: every control character (line breaks included) becomes a space, so it
+ * can never forge a second log line, and it is cut to {@link SIGN_IN_NOTE_MAX} characters. The
+ * code is the console's mapping; the body is the Playout's own words, kept for whoever reads the
+ * log and never shown on a console.
+ */
+export const SIGN_IN_NOTE_MAX = 500;
+export const SIGN_IN_NOTES_PER_MINUTE = 10;
+
+export function signInFailureLine(note: {
+  readonly code: string;
+  readonly status: number | null;
+  readonly body: string;
+}): string {
+  const clean = (text: string, max: number): string => {
+    let out = '';
+    for (const ch of text) {
+      const cp = ch.codePointAt(0) ?? 0;
+      out += cp < 0x20 || cp === 0x7f ? ' ' : ch;
+    }
+    out = out.replace(/ {2,}/g, ' ').trim();
+    return out.length > max ? `${out.slice(0, max)}…` : out;
+  };
+  const code = clean(note.code, 64);
+  if (note.status === null) {
+    return `[caspar-bridge] sign-in: the Playout did not answer (${code})`;
+  }
+  const body = clean(note.body, SIGN_IN_NOTE_MAX);
+  return (
+    `[caspar-bridge] sign-in refused by the Playout: ${code} (HTTP ${String(note.status)})` +
+    (body === '' ? '' : ` - ${body}`)
+  );
+}
+
+/** At most `limit` admissions in any `windowMs` — a sliding window, no timers. */
+function rateWindow(limit: number, windowMs: number): { admit: (nowMs: number) => boolean } {
+  const recent: number[] = [];
+  return {
+    admit: (nowMs) => {
+      while (recent.length > 0 && nowMs - (recent[0] ?? 0) >= windowMs) recent.shift();
+      if (recent.length >= limit) return false;
+      recent.push(nowMs);
+      return true;
+    },
+  };
+}
+
+/**
+ * The single decision. Exported for the auth census in
+ * `tests/auth-gate.integration.test.ts`, which walks every route rather than sampling —
+ * exactly as `refusedWhileLocked` is, and for the same reason: "everything else is refused"
+ * is a claim about each channel, and no sample can make it.
+ *
+ * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — **AN EXPIRED OR REVOKED TOKEN IS REFUSED LIKE NONE.** ADR 0010
+ * rule 4 let an invalid session keep every `read` ("reads keep answering"); with one CG Bridge
+ * serving consoles across the network, the rule is "no valid token → no state, no command", and a
+ * token that stopped being valid is no token. The socket stays open and its open doors stay open,
+ * so a fresh sign-in restores everything at once — the way back never needs what expired.
+ */
+export function refusedByAuth(route: Route, state: AuthGateState): boolean {
+  if (state === 'off' || state === 'signed-in') return false;
+  return !openToUnauthenticated(route.channel.name);
+}
+
+/**
+ * `CENTRAL-BRIDGE-01` (`R-068`) — a console socket's peer address as the audit record names the
+ * machine: an IPv4-mapped IPv6 address (`::ffff:192.0.2.50`) reduced to its IPv4 form, anything
+ * else kept as the socket reports it; `null` when the socket reports none — or one longer than a
+ * row may carry, since a shortened address would name a machine that does not exist.
+ */
+export function consoleAddressOf(remote: string | undefined): string | null {
+  if (remote === undefined || remote === '') return null;
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(remote);
+  const address = mapped?.[1] ?? remote;
+  return address.length <= CONSOLE_ADDRESS_MAX_LENGTH ? address : null;
+}
+
+/**
+ * `CENTRAL-BRIDGE-01` (`R-068`) — this package's own version, the number `tools/release` stamps into
+ * `tools/caspar-bridge/package.json` (`src/` and `dist/` both sit one level below it). `null` when it
+ * cannot be read — a console then reads the bridge as another release and sends nothing, which is
+ * the safe direction.
+ */
+function ownPackageVersion(): string | null {
+  try {
+    const manifest = fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+    const version = (JSON.parse(manifest) as { version?: unknown }).version;
+    return typeof version === 'string' ? version : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (D3) — the start failure of a bridge that must authenticate and has no
+ * Playout to authenticate against. Names what is missing and where it is set.
+ */
+export const AUTH_REQUIRED_START_FAILURE =
+  'CG Bridge cannot start without its Playout address: every console connection signs in to the ' +
+  'Playout. Set "playout" in the CG Bridge configuration file.';
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — **MAY THIS SOCKET BE TOLD ANYTHING?** The publish gate's
+ * verdict, and the request gate's for a read, from the ONE state: auth off, or a valid principal.
+ * An expired or revoked session is told nothing, as a socket that never signed in is not.
+ */
+export function mayBeTold(state: AuthGateState): boolean {
+  return state === 'off' || state === 'signed-in';
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (D4) — **WHICH CHANNELS THIS SOCKET IS TOLD ABOUT** (`channel-scope.ts`).
+ * `null` is every channel: auth OFF (byte-identical, as every auth-off door is) and a `*` grant.
+ * Otherwise the principal's grant through the ONE predicate the request gate asks
+ * (`grantsChannel` over `configuredCasparHosts`, golden rule 6), so what a console may be told and
+ * what it may press are the same judgement. A socket with no principal is told nothing —
+ * {@link mayBeTold} already keeps every push and read from it; answering "no channel" here too
+ * means a slip there still leaks nothing.
+ */
+export function socketScope(
+  session: AuthSession | null,
+  playoutAuth: PlayoutAuth | null,
+  runtime: CasparRuntime,
+): Holds | null {
+  if (playoutAuth === null) return null;
+  const principal = session?.token?.principal ?? null;
+  if (principal === null) return () => false;
+  const grant = principal.channels;
+  if (grant === '*') return null;
+  const hosts = configuredCasparHosts(runtime.config());
+  return (channel) => grantsChannel(grant, hosts, channel);
+}
+
+/** What a projection may ask the runtime (`channel-scope.ts`). */
+function scopeContext(runtime: CasparRuntime): ScopeContext {
+  return { channelsForItem: (itemId) => runtime.channelsForItem(itemId) };
+}
+
+/**
+ * The answer a scoped socket gets on a route `channel-scope.ts` does not classify — which its
+ * coverage test keeps from ever happening. Said rather than silently dropped: a request with no
+ * answer would hang its caller.
+ */
+export const UNCLASSIFIED_ANSWER_REFUSAL =
+  'CG Bridge has not been told whether this answer belongs to your channels, so it was not sent.';
+
+/**
+ * ⭐ **THE ONE PLACE A SOCKET'S AUTH STATE IS DECIDED.** Golden rule 6: every door — the
+ * request gate, the publish gate and `auth.state` — asks THIS, so they cannot come to
+ * disagree about what "signed in" means. A second local derivation is how a name comes to lie
+ * about what it tests.
+ *
+ * Read PER REQUEST and never latched, for `B-229`'s reason one axis over: a state captured at
+ * connect would leave a console refused for the life of its socket after it signed in, and the
+ * inverse half — that a fresh `auth` frame restores every control with no reload — matters as
+ * much as the refusal.
+ *
+ * ⚠ It has a side effect, named rather than hidden: a live principal keeps the D9 bearer
+ * fresh and the revocation poller ticking. The poller therefore runs exactly while somebody is
+ * signed in, which is correct — with no principal there is no verdict a revocation could
+ * change.
+ */
+export function authGateState(
+  session: AuthSession | null,
+  playoutAuth: PlayoutAuth | null,
+): AuthGateState {
+  if (playoutAuth === null) return 'off';
+  // No session at all is a request outside a socket — `auth.state` reached from a bare route
+  // table in a census, for instance. It has presented nothing, which is `absent`.
+  const held = session?.token ?? null;
+  if (held === null) return 'absent';
+  if (playoutAuth.isExpired(held.expEpochSec)) return 'invalid';
+  /*
+    🔴 **THE CLOCK KEEPS RUNNING; THE CREDENTIAL DOES NOT CHANGE HANDS.**
+
+    Two failures were possible here and the first two spellings each hit one of them. Checking
+    revocation first and returning left nothing to kick the poller, so a station whose last
+    signed-in socket went revoked would never poll again and could not learn it was wrong.
+    Calling `noteLiveToken` first installed the REVOKED token as the process-wide D9 bearer,
+    and the Playout answers `401` to that — which `#pollRevoked` correctly swallows, freezing
+    the list for the whole bridge.
+
+    So: a revoked token arms the tick and is never adopted as the credential.
+  */
+  if (playoutAuth.isRevoked(held.jti)) {
+    playoutAuth.noteVerifiedButRevoked();
+    return 'invalid';
+  }
+  playoutAuth.noteLiveToken(held);
+  return 'signed-in';
+}
+
+/**
+ * 🔴 `OPERATOR-NAME-SWEEP-01` § 3(a) — **THIS SOCKET'S WHOLE AUTH STATE. The ONE composition.**
+ *
+ * Extracted so that the `auth.state` READ and the `auth.state-changed` PUBLISH cannot answer
+ * differently. They did not, yet — the publish is new — and that is exactly when to make it
+ * impossible: two spellings of one verdict is how a surface comes to claim a state the gate
+ * does not hold, which `C-037` already had to fix once on this very field.
+ *
+ * ⚠ It reads the configuration at CALL time, through `configuredCasparHosts`. That is what
+ * makes the publish meaningful: the event says "the server list moved", and this recomputes
+ * the answer against the list as it now is.
+ */
+export function authStateFor(
+  session: AuthSession | null,
+  /**
+   * The gate's verdict for this socket, supplied by whichever caller can compute it.
+   *
+   * ⚠ Taken rather than derived, because the two callers reach `authGateState` by different
+   * routes: the publish holds the `PlayoutAuth` directly, while `buildRoutes` is given the
+   * verdict as an injected function so a census can build the table with no verifier at all.
+   * Passing the ANSWER keeps one predicate with one implementation and lets both in.
+   */
+  status: AuthGateState,
+  mode: AuthMode,
+  runtime: CasparRuntime,
+): AuthState {
+  const principal = session?.token?.principal ?? null;
+  return {
+    mode,
+    principal,
+    status,
+    /*
+      🔴 `C-038` — **THE PERMITTED-CHANNEL LIST, COMPUTED HERE AND NOWHERE ELSE.**
+
+      `grantsChannel` stays the ONE implementation and this is its one caller, because this is
+      the side that holds the connection config. A console re-deriving the same verdict would
+      need `configuredCasparHosts` in a second package (`B-162`'s hole) and could disagree with
+      the gate whenever its config read were stale — a control offered that the bridge refuses.
+
+      ⚠ Gated on `signed-in` rather than on the principal being non-null: a principal survives
+      expiry and revocation on purpose (see `AuthStateSchema.principal`), and a session that
+      has stopped holding must not go on advertising channels.
+    */
+    permittedChannels:
+      principal === null || status !== 'signed-in'
+        ? []
+        : [
+            ...grantedChannels(
+              principal.channels,
+              configuredCasparHosts(runtime.config()),
+              runtime.declaredChannels(),
+            ),
+          ],
+  };
+}
+
+/**
+ * 🔴 `R-062` gap 2 / `C-039` — **THE CHANNEL-DISCOVERY ANSWER FOR ONE SOCKET. The ONE
+ * composition** — the `channels.list` read and the `channels.changed` publish both call it, for
+ * `authStateFor`'s reason: a read and a push answering the same question from two places is the
+ * drift this file has already paid for once.
+ *
+ * ── THE THREE FACTS, KEPT APART ─────────────────────────────────────────────
+ *
+ *   - `named`    — a D4 row whose `casparHost` is one this bridge drives (`configuredCasparHosts`,
+ *                  the SAME host rule `grantsChannel` applies, so a row naming another station's
+ *                  host joins nothing) and whose `casparChannel` is the channel. A LABEL.
+ *   - `declared` — `isDeclaredChannel`, the predicate the station fence refuses on. The only one
+ *                  of the three that says what this bridge writes to.
+ *   - `permitted`— `grantsChannel` for a signed-in principal; `false` for a session that has
+ *                  stopped holding; ABSENT with auth OFF.
+ *
+ * ── THE SOURCES, IN ORDER ───────────────────────────────────────────────────
+ *
+ * The Playout's catalogue when it answered, then the bank, then channel settings — the two the
+ * console unioned before this call existed, kept as fallbacks. With auth OFF there is no bearer,
+ * so no catalogue, and the answer is exactly those two.
+ *
+ * ⚠ **Only indices a source NAMES are returned.** Nothing here derives or iterates channel numbers
+ * — CasparCG's preview channels `N+1..2N` are published by no source and so can never appear, and
+ * nothing that reads this list probes a channel it contains (the mode read and the output check
+ * walk `#declaredChannels()`, never this list).
+ */
+export function stationChannelsFor(
+  session: AuthSession | null,
+  status: AuthGateState,
+  mode: AuthMode,
+  runtime: CasparRuntime,
+  catalogue: readonly CatalogueRow[] | null,
+): StationChannels {
+  const hosts = configuredCasparHosts(runtime.config());
+  const principal = session?.token?.principal ?? null;
+  const entries = new Map<
+    number,
+    {
+      named: { id: string; name: string } | null;
+      air: Pick<
+        CatalogueRow,
+        'output' | 'playlist' | 'videoMode' | 'pendingRestart' | 'cgLicensed'
+      >;
+      sources: StationChannelSource[];
+    }
+  >();
+  const note = (
+    channel: number,
+    source: StationChannelSource,
+    named: { id: string; name: string } | null = null,
+    air: Pick<
+      CatalogueRow,
+      'output' | 'playlist' | 'videoMode' | 'pendingRestart' | 'cgLicensed'
+    > = {},
+  ): void => {
+    const entry = entries.get(channel);
+    if (entry === undefined) {
+      entries.set(channel, { named, air, sources: [source] });
+      return;
+    }
+    if (!entry.sources.includes(source)) entry.sources.push(source);
+  };
+
+  for (const row of catalogue ?? []) {
+    // The join: this station's host, or nothing. The first row naming a channel wins.
+    if (!hostJoinsStation(row.casparHost, hosts)) continue;
+    // `UI-POLISH-01` G — the row's `output` and `playlist` ride the join with its name: labels.
+    note(row.casparChannel, 'catalogue', { id: row.id, name: row.name }, airOf(row));
+  }
+  // `MULTI-CHANNEL-01` — every declared bank's channel, in channel order.
+  for (const bank of runtime.fixedLayerBanks()) note(bank.channel, 'bank');
+  for (const s of runtime.channelSettingsState().settings) note(s.channel, 'channel-settings');
+
+  return {
+    channels: [...entries.entries()].map(([channel, entry]) => ({
+      channel,
+      named: entry.named,
+      ...airOf(entry.air),
+      declared: runtime.isDeclaredChannel(channel),
+      ...(mode === 'off'
+        ? {}
+        : {
+            permitted:
+              principal !== null &&
+              status === 'signed-in' &&
+              grantsChannel(principal.channels, hosts, channel),
+          }),
+      sources: entry.sources,
+    })),
+  };
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (D12, rule 11) — **THE PLAYOUT'S `playlist` FOR ONE OF THIS STATION'S
+ * CHANNELS**, from the D4 row that JOINS it — the join {@link stationChannelsFor} makes (this
+ * station's host; the first row naming the channel wins), so the channel line the console shows
+ * and the take the bridge refuses read the same row. `null` with no catalogue or no joined row.
+ */
+export function joinedPlaylist(
+  catalogue: readonly CatalogueRow[] | null,
+  hosts: readonly string[],
+  channel: number,
+): string | null {
+  for (const row of catalogue ?? []) {
+    if (!hostJoinsStation(row.casparHost, hosts)) continue;
+    if (row.casparChannel === channel) return row.playlist ?? null;
+  }
+  return null;
+}
+
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` D — **MAY CG COMMAND THIS CHANNEL, by the Playout's license?** D4's
+ * `cgLicensed` from the row that JOINS it (the join {@link joinedPlaylist} makes); while D4 is unread —
+ * it goes absent on any failure — the license's own station-level `channels` list, which the license
+ * reader KEEPS through an outage, so a cap does not lapse because the Playout stopped answering.
+ * `undefined` when neither says (a Playout before `2.9.2`, nothing read): never a reason to refuse.
+ */
+export function joinedCgLicensed(
+  catalogue: readonly CatalogueRow[] | null,
+  hosts: readonly string[],
+  channel: number,
+  license: Pick<PlayoutLicense, 'licensed'> | null,
+  licenseChannels: readonly { casparHost: string; casparChannel: number }[] | null,
+): boolean | undefined {
+  if (catalogue !== null) {
+    for (const row of catalogue) {
+      if (!hostJoinsStation(row.casparHost, hosts)) continue;
+      if (row.casparChannel === channel) return row.cgLicensed;
+    }
+    return undefined;
+  }
+  if (license?.licensed !== true || licenseChannels === null || licenseChannels.length === 0) {
+    return undefined;
+  }
+  return licenseChannels.some(
+    (c) => c.casparChannel === channel && hostJoinsStation(c.casparHost, hosts),
+  );
+}
+
+/**
+ * 🔴 `C-038` — **WHICH CHANNELS A REQUEST TOUCHES. The ONE resolver.**
+ *
+ * Exported for the census in `tests/authz-classes.integration.test.ts`, which walks every
+ * route rather than sampling — the same discipline `refusedWhileLocked` and `refusedByAuth`
+ * are held to, and for the same reason: "every channel-bearing route is scoped" is a claim
+ * about each route, and no sample can make it.
+ *
+ * ── THREE WAYS A REQUEST BECOMES A CHANNEL, AND THEY ARE NOT INTERCHANGEABLE ─
+ *
+ *   (a) **the request SAYS so** — `layers.clear`, `playoutLayers.clear`, `fixedLayers.load`,
+ *       `fixedLayers.clear-layer`, `fixedLayers.set-config` and `channelSettings.set`; and,
+ *       inside a list, the channels `fixedLayers.set-banks` and `sources.set-assignments` CHANGE
+ *       (not every one they name);
+ *   (b) **an `itemId` resolves through the runtime's ledgers** — every per-item verb, via
+ *       {@link CasparRuntime.channelsForItem}, which unions `#slots` and `#liveLayers`;
+ *   (c) **the verb's scope is the whole stack** — the bulk verbs, which union every member's
+ *       channels and are then decided ALL-OR-NOTHING.
+ *
+ * ⭐ **AN EMPTY ARRAY MEANS "NOTHING TO AUTHORISE", AND IS NOT A REFUSAL.** See `design.md`
+ * §4: `slot` is optional and the unbound state is deliberately reachable, so a `remove` on a
+ * row that never bound a layer touches no channel and nothing on air. Refusing it would take
+ * away an action that works today and call it a safety property — the exact shape this
+ * change exists to prevent. The ROLE check still applies; only the channel check is vacuous.
+ *
+ * 🔴 **`stack.silence-all-live-plates` IS ABSENT ON PURPOSE.** Owner answer A16 and
+ * CLAUDE.md's cadence floor both say it STAYS UNSCOPED. An emergency control must not depend
+ * on the bookkeeping whose failure is the emergency — the argument that deleted `B-122`'s
+ * status predicate, one door over. Adding it here would be the same defect with a fresh coat.
+ */
+export function channelsForRequest(
+  route: Route,
+  req: unknown,
+  runtime: CasparRuntime,
+): readonly number[] {
+  const name = route.channel.name;
+
+  // 🔴 A16 — unscoped, deliberately. Named FIRST so it cannot be reached by a later branch.
+  if (name === StackSilenceAllLivePlatesChannel.name) return [];
+
+  /*
+    🔴 `CHANNEL-TEMPLATES-01` — A TEMPLATE LIST IS READ, NOT ACTED ON. `templates.list` and
+    `templates.get` name a channel (the list they read), and a read-only channel still needs its
+    rows NAMED: the strip shows a bank channel the principal does not hold (`R-066` bullet 3), and
+    its rows resolve their templates through that channel's list. So the grant does not judge a
+    read — it is `read` class for everybody. The station fence still refuses a channel this
+    station does not declare, because it reads the coordinate itself (`stationRefusal`).
+  */
+  if (
+    name === TemplatesListChannel.name ||
+    name === TemplatesGetChannel.name ||
+    // `RELEASE-091-01` §1 — PVW's page is a read of the same list, for the same reason.
+    name === TemplatesPageChannel.name
+  ) {
+    return [];
+  }
+
+  // (a) the request carries the coordinate itself.
+  const explicit = explicitChannel(req);
+  if (explicit !== undefined) return [explicit];
+
+  /*
+    (a⁗) 🔴 `CHANNEL-TEMPLATES-01` decision 4 — **AN IMPORT OR A REMOVAL THAT NAMES NO CHANNEL IS
+    JUDGED ON EVERY CHANNEL IT CHANGES.** The console names its channel (case (a) above), so a
+    channel-2 operator imports, re-imports and removes on channel 2 needing nothing else. A request
+    without one is the station-wide act it always was — every declared channel for an import, every
+    channel listing it for a removal — so a principal who does not hold one of them is refused,
+    never let through a door that names nothing.
+  */
+  if (name === TemplatesImportChannel.name || name === TemplatesRemoveChannel.name) {
+    return runtime.templateActionFootprint(
+      name === TemplatesImportChannel.name ? 'import' : 'remove',
+      (req ?? {}) as { templateId?: string; template?: TemplateInfo },
+    );
+  }
+
+  /*
+    (a″) 🔴 `MULTI-CHANNEL-01` — `fixedLayers.set-banks` names its channels INSIDE the list, and
+    the ones it TOUCHES are the ones whose declaration it changes: added, edited or removed
+    (`bankChangeFootprint`). A bank sent back unchanged is not an act on its channel, so a
+    station-admin granted channel 2 may edit channel 2's rows on a station that also declares
+    channel 1; removing a channel IS an act on it, so they may not take channel 1 away. Decided
+    all-or-nothing by the caller, like every other multi-channel footprint.
+  */
+  if (name === FixedLayersSetBanksChannel.name) {
+    const banks = (req as { banks?: readonly FixedLayerBank[] } | null)?.banks ?? [];
+    return runtime.bankChangeFootprint(banks);
+  }
+
+  /*
+    (a‴) 🔴 `PLATE-BAND-01` (the owner, 2026-09-28) — **SOURCE DEFAULTS OBEY THE CHANNEL GRANT.**
+    `sources.set-assignments` names its channels INSIDE the list, and the ones it TOUCHES are the ones
+    whose defaults it changes (`assignmentChangeFootprint`). The console sends the whole set on every
+    save, so a channel whose defaults come back as they were is not an act on it: a station-admin
+    granted channel 2 changes channel 2's defaults on a station that also declares channel 1, and is
+    refused channel 1's with the channel sentence. The lock judges the same footprint, as it does
+    `set-banks`'s. Decided all-or-nothing by the caller.
+  */
+  if (name === SourcesSetAssignmentsChannel.name) {
+    const assignments =
+      (req as { assignments?: SourceAssignments['assignments'] } | null)?.assignments ?? [];
+    return runtime.assignmentChangeFootprint({ assignments });
+  }
+
+  // (b) one item, resolved through the runtime's two ledgers.
+  const itemId = (req as { itemId?: unknown } | null)?.itemId;
+  if (typeof itemId === 'string') return runtime.channelsForItem(itemId);
+
+  // (b′) `air.restore` carries a LIST of item ids; every one of them must be permitted.
+  const itemIds = (req as { itemIds?: unknown } | null)?.itemIds;
+  if (Array.isArray(itemIds)) {
+    const channels = new Set<number>();
+    for (const id of itemIds as unknown[]) {
+      if (typeof id === 'string') for (const c of runtime.channelsForItem(id)) channels.add(c);
+    }
+    return [...channels];
+  }
+
+  /*
+    (c) THE BULK VERBS — the union of every member's channels, decided all-or-nothing by the
+    caller. The ordering is the requirement `#removeRefusal` already forces on `removeAll`: a
+    gate that refused as it went would act on every permitted row it reached before meeting a
+    forbidden one, and then report that the action did not happen — while it had.
+  */
+  if (
+    name === StackRemoveAllChannel.name ||
+    name === StackClearAllChannel.name ||
+    name === StackStopAllChannel.name
+  ) {
+    const channels = new Set<number>();
+    for (const item of runtime.stackSnapshot()) {
+      for (const c of runtime.channelsForItem(item.itemId)) channels.add(c);
+    }
+    return [...channels];
+  }
+
+  return [];
+}
+
+/**
+ * The channel a request NAMES — case (a) of {@link channelsForRequest}, spelled once so the
+ * permission gate and the station fence read the coordinate the same way. `undefined` when the
+ * request carries no top-level `channel`.
+ */
+function explicitChannel(req: unknown): number | undefined {
+  const explicit = (req as { channel?: unknown } | null)?.channel;
+  return typeof explicit === 'number' ? explicit : undefined;
+}
+
+/**
+ * 🔴 `CHANNEL-AUTHORITY-01` — **THE ROUTES WHOSE `channel` DECLARES RATHER THAN ADDRESSES.**
+ *
+ * Every other route that names a channel names one to WRITE TO, and is fenced by
+ * {@link stationRefusal}. These two are `station-admin` configuration routes whose channel is the
+ * subject of the configuration, and they are exempt for two different reasons:
+ *
+ *   - `fixedLayers.set-config` — the bank's `channel` IS the declaration. Fencing it by the
+ *     declaration it writes would make the first bank uninstallable on a bank-less bridge, and a
+ *     channel CHANGE on an existing bank is already refused by `validateFixedBankChange`.
+ *   - `channelSettings.set` — NOT a declaration door, whatever it looks like: it cannot introduce
+ *     a channel. Its store refuses one the station does not declare with `unknown-channel`, on the
+ *     SAME predicate (`#isDeclaredChannel`, read at call time). A second, gate-level refusal of
+ *     the same fact would be two sentences for one condition.
+ *
+ * ⚠ **A NEW ROUTE WITH A TOP-LEVEL `channel` IS FENCED BY DEFAULT.** The exemption is the list,
+ * and the fence is everything else, so the route that forgets is the route that is refused — the
+ * failure a reader can see, rather than a clear that reaches somebody else's output. The census in
+ * `station-channel-fence.integration.test.ts` pins this set by name.
+ */
+export const CHANNEL_DECLARING_ROUTES: ReadonlySet<string> = new Set([
+  FixedLayersSetConfigChannel.name,
+  ChannelSettingsSetChannel.name,
+]);
+
+/**
+ * 🔴 `CHANNEL-AUTHORITY-01` — **DOES THIS STATION OPERATE THE CHANNEL THIS REQUEST NAMES? The
+ * station fence, and the sentence it refuses with.** `null` means it does, or the request names
+ * none.
+ *
+ * ── WHY THIS IS NOT THE PERMISSION GATE ─────────────────────────────────────
+ *
+ * The grant answers "may THIS PRINCIPAL operate channel N" and the declared bank answers "does
+ * THIS STATION operate channel N", and only the second decides what the bridge writes to. Measured
+ * before this existed, on a bank declaring channel 2 with a principal granted channels 1 and 2 —
+ * the test Playout's real `cg-op2` shape, whose channel 1 is the Playout's own programme output:
+ * `layers.clear` put `CLEAR 1-20` on the wire and `playoutLayers.clear` put `CLEAR 1-60`, with auth
+ * ON and with auth OFF. The permission gate passed them because the grant was TRUE.
+ *
+ * ── WHAT IT READS, AND WHAT IT DELIBERATELY DOES NOT ────────────────────────
+ *
+ * Only the coordinate a request NAMES (case (a) of {@link channelsForRequest}), through
+ * `CasparRuntime.isDeclaredChannel` — the one predicate the restore door, the orphan sweep and the
+ * playout tab also ask. It does not read:
+ *
+ *   - an `itemId`'s channel — the bridge's own ledger put that row there, through a door this
+ *     fence already guards, and refusing an Out or a Clear on it would strand exactly the graphic
+ *     an operator is trying to take off air;
+ *   - PANIC — A16: it stays unscoped, and this does not scope it.
+ *
+ * (A restored row on a channel the station does not declare is fenced INSIDE the runtime's
+ * `restore()` as a `not-declared` SKIP; no socket reaches `restore()` since `CENTRAL-BRIDGE-01`.)
+ *
+ * ⚠ **AUTH OFF IS NOT EXEMPT.** This is a fact about the station, not about a principal. It is the
+ * one refusal this change adds to an auth-OFF bridge, and it only ever meets a stale or crafted
+ * client: the console never offers a channel the station does not declare.
+ */
+export function stationRefusal(route: Route, req: unknown, runtime: CasparRuntime): string | null {
+  if (CHANNEL_DECLARING_ROUTES.has(route.channel.name)) return null;
+  const channel = explicitChannel(req);
+  if (channel === undefined || runtime.isDeclaredChannel(channel)) return null;
+  return channelNotDeclaredRefusal(channel);
+}
+
+/**
+ * 🔴 `C-038` — **MAY THIS PRINCIPAL SEND THIS REQUEST? The single decision, and the sentence
+ * it is refused with.** `null` means yes.
+ *
+ * ⚠ **AUTH OFF RETURNS FIRST, BEFORE ANYTHING IS READ.** No role lookup, no channel
+ * resolution, no config read. That is what makes "auth OFF is byte-identical" a property of
+ * the code rather than a claim about it — and it is why the mode check is here rather than at
+ * the call site, where a future second caller could forget it.
+ *
+ * ⚠ **THE ROLE IS CHECKED BEFORE THE CHANNEL, and the order is the message.** A viewer who
+ * presses TAKE should be told their sign-in does not allow that command — not that it does
+ * not cover channel 1, which is true, useless, and sends them to ask for a channel they still
+ * could not use. The narrower sentence is only right once the broader one passes.
+ */
+/**
+ * A permission refusal: the sentence the operator reads, and — when the refusal was about a
+ * CHANNEL rather than the role — which one.
+ *
+ * ⚠ **The channel rides the verdict rather than being re-derived by the caller**, because the
+ * audit row and the sentence must name the SAME channel. Two derivations is how they would come
+ * to disagree in exactly the dispute the row exists to settle (golden rule 6).
+ */
+export interface AuthzRefusal {
+  readonly message: string;
+  readonly casparChannel?: number;
+}
+
+export function authzRefusal(
+  route: Route,
+  req: unknown,
+  session: AuthSession | null,
+  playoutAuth: PlayoutAuth | null,
+  runtime: CasparRuntime,
+): AuthzRefusal | null {
+  if (playoutAuth === null) return null;
+
+  /*
+    `openToUnauthenticated` names the door that has to be open before there is anybody to
+    authorise — `bridge.capabilities` and `auth.*`. A principal-less socket has already been
+    refused above for everything else, so what reaches here is the door itself.
+  */
+  if (openToUnauthenticated(route.channel.name)) return null;
+
+  const principal = session?.token?.principal ?? null;
+  if (principal === null) return null; // `refusedByAuth` owns this case; never double-refuse.
+
+  if (!holdsPermissionClass(principal.roles, route.perm)) {
+    return { message: AUTHZ_ROLE_REFUSAL };
+  }
+
+  const channels = channelsForRequest(route, req, runtime);
+  if (channels.length === 0) return null; // nothing here to authorise — `design.md` §4.
+
+  const hosts = configuredCasparHosts(runtime.config());
+  const refused = channels.find((c) => !grantsChannel(principal.channels, hosts, c));
+  return refused === undefined
+    ? null
+    : { message: authzChannelRefusal(refused), casparChannel: refused };
 }
 
 /**
@@ -285,7 +1807,8 @@ const WS_MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
 function defaultConnection(): ConnectionConfig {
   return {
     servers: {
-      A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 },
+      // `CENTRAL-BRIDGE-01` rule 7 — never 6250, the Playout engine's (`RESERVED_OSC_PORT`).
+      A: { host: '127.0.0.1', amcpPort: 5250, oscPort: DEFAULT_OSC_PORT },
     },
     strategy: 'mirror-sync',
     autoFailoverEnabled: true,
@@ -293,11 +1816,44 @@ function defaultConnection(): ConnectionConfig {
 }
 
 /**
+ * 🔴 `CENTRAL-BRIDGE-01` — **THE BRIDGE'S OSC PORT OVER A CONNECTION** ({@link BridgeOptions.oscPort}):
+ * server A's `oscPort` becomes `oscPort`, server B's `oscPort + 1`. `undefined` returns the config
+ * untouched. The ONE place the rule is written: boot and `connections.set-config` both call it.
+ */
+export function withBridgeOscPort(
+  config: ConnectionConfig,
+  oscPort: number | undefined,
+): ConnectionConfig {
+  if (oscPort === undefined) return config;
+  const { A, B } = config.servers;
+  return {
+    ...config,
+    servers: {
+      A: { ...A, oscPort },
+      ...(B !== undefined ? { B: { ...B, oscPort: oscPort + 1 } } : {}),
+    },
+  };
+}
+
+/**
+ * `DESKTOP-APPS-01-A` A4 — the host of the configured Playout address, which is where a loopback
+ * `casparHost` actually lives. An issuer-configured station has no address; its D4 URL's host is
+ * the same machine. IPv6 brackets are stripped so the value compares with a D4 host.
+ */
+export function playoutHostOf(playout: PlayoutAuthConfig): string | undefined {
+  try {
+    return new URL(playout.address ?? playout.channelsUrl).hostname.replace(/^\[|\]$/g, '');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Where the fixed bank in force came from — named in the CLI's boot line and,
  * for the default, in a boot refusal. `none` is the embedder case: no explicit
  * bank and no path, so no bank at all.
  */
-export type FixedBankSource = 'explicit' | 'file' | 'built-in default' | 'none';
+export type FixedBankSource = 'explicit' | 'file' | 'built-in default' | 'first-run' | 'none';
 
 /**
  * THE fixed-bank boot precedence, in one place and in this order:
@@ -319,16 +1875,39 @@ export type FixedBankSource = 'explicit' | 'file' | 'built-in default' | 'none';
  * is what `fixed-layers-boot` T18 pins and what every integration test that
  * declares its own layers relies on.
  */
-function resolveFixedBank(options: BridgeOptions): {
-  bank: FixedLayerBank | null;
+function resolveFixedBanks(options: BridgeOptions): {
+  banks: FixedLayerBank[];
   source: FixedBankSource;
 } {
-  if (options.fixedLayers !== undefined) return { bank: options.fixedLayers, source: 'explicit' };
-  if (options.fixedLayersPath === undefined) return { bank: null, source: 'none' };
-  const persisted = loadFixedLayerBank(options.fixedLayersPath);
-  return persisted !== null
-    ? { bank: persisted, source: 'file' }
-    : { bank: defaultFixedLayerBank(), source: 'built-in default' };
+  // `MULTI-CHANNEL-01` — the explicit option is one bank or the list; the file is v1 (one bank)
+  // or `{ banks }` (`loadFixedLayerBanks`). Same precedence, same sources, plural answer.
+  if (options.fixedLayers !== undefined) {
+    const explicit = options.fixedLayers;
+    // Passed through as given (the embedder's objects, exactly as the one-bank option always
+    // was); only the list's one rule is checked here — one bank per channel.
+    const banks = isBankList(explicit) ? [...explicit] : [explicit];
+    const channels = banks.map((bank) => bank.channel);
+    const twice = channels.find((channel, index) => channels.indexOf(channel) !== index);
+    if (twice !== undefined) {
+      throw new Error(
+        `fixedLayers declares channel ${String(twice)} twice — a station holds one bank per channel`,
+      );
+    }
+    return { banks: sortBanks(banks), source: 'explicit' };
+  }
+  if (options.fixedLayersPath === undefined) return { banks: [], source: 'none' };
+  const persisted = loadFixedLayerBanks(options.fixedLayersPath);
+  if (persisted !== null) return { banks: persisted, source: 'file' };
+  // `DESKTOP-APPS-01` — an installed station that has not picked its channel declares NONE.
+  if (options.firstRun === true) return { banks: [], source: 'first-run' };
+  return { banks: [defaultFixedLayerBank()], source: 'built-in default' };
+}
+
+/** The explicit option's plural spelling. */
+function isBankList(
+  value: FixedLayerBank | readonly FixedLayerBank[],
+): value is readonly FixedLayerBank[] {
+  return Array.isArray(value);
 }
 
 /**
@@ -377,21 +1956,165 @@ function validateDeclaredBank(
  * `handle.runtime.whenServerHealthy()` before driving playout.
  */
 export async function createBridge(options: BridgeOptions = {}): Promise<BridgeHandle> {
+  // `CENTRAL-BRIDGE-01` (D10) — `/health`'s `startedAt`.
+  const startedAtMs = Date.now();
   const host = options.host ?? DEFAULT_BRIDGE_HOST;
   const requestedPort = options.port ?? DEFAULT_BRIDGE_PORT;
+  /*
+    🔴 `C-037` — THE PLAYOUT LINK, RESOLVED BEFORE ANYTHING BINDS.
+
+    First, so that a bridge told to authenticate and told nothing else fails with a sentence
+    naming the key rather than binding a socket and then discovering it cannot verify
+    anything. Same doctrine as the fixed bank and the source catalog: present-but-unusable
+    throws BEFORE the port is listening, so a failed boot leaves nothing serving.
+  */
+  const auth = resolvePlayoutSettings(
+    options.playout ?? {},
+    options.playoutConfigPath !== undefined ? loadPlayoutFile(options.playoutConfigPath) : null,
+    (message) =>
+      process.stderr.write(`${message}
+`),
+  );
+  const playoutConfigPath = options.playoutConfigPath;
+  // `CENTRAL-BRIDGE-01` (`R-068`) — the release this bridge is: given, or its own package's.
+  const bridgeVersion = options.version ?? ownPackageVersion();
+  // `CENTRAL-BRIDGE-01` (D3) — CG Bridge never answers a socket with auth off.
+  if (options.requireAuth === true && auth.playout === null) {
+    throw new Error(AUTH_REQUIRED_START_FAILURE);
+  }
+  const playoutAuth =
+    auth.playout === null
+      ? null
+      : new PlayoutAuth(auth.playout, {
+          ...(options.playoutAuthOptions ?? {}),
+          // `B-297` — a loopback grant names the Playout's own machine, as D4's loopback row does.
+          playoutHost: playoutHostOf(auth.playout),
+          /*
+            🔴 `DESKTOP-APPS-01-A` A2 — an address-configured station LEARNS its issuer from the first
+            `station-admin` sign-in, and keeps it: persisted as `playout.issuer`, after which it is an
+            ordinary configured issuer. Written from the verified token, never from a socket's payload.
+          */
+          onIssuerAdopted: (issuer) => {
+            if (playoutConfigPath === undefined) {
+              process.stderr.write(
+                `[caspar-bridge] playout issuer ADOPTED from the first station-admin sign-in: ${issuer} ` +
+                  `- held in memory only (no --playout-config-path), so a restart adopts again\n`,
+              );
+              return;
+            }
+            persistAdoptedIssuer(playoutConfigPath, issuer);
+            process.stderr.write(
+              `[caspar-bridge] playout issuer ADOPTED from the first station-admin sign-in: ${issuer} ` +
+                `- saved to ${playoutConfigPath}\n`,
+            );
+          },
+        });
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (D7, the Playout team's rule 8) — **CG BRIDGE'S OWN PLAYOUT SESSION**, when
+    a session file is named (the service configuration names one). Its access token becomes the
+    bearer for every Playout read (`PlayoutAuth.useOwnBearer`) and keeps the revocation list polled
+    with no console signed in; each token it gains makes the introducing D9 read (C4) at once. With
+    no file named — a development bridge, every test that does not ask — nothing changes: reads use
+    a signed-in console's bearer, as before, and the state reads `off`.
+  */
+  const bridgeSession =
+    playoutAuth === null || auth.playout === null || options.bridgeSessionPath === undefined
+      ? null
+      : new BridgeSession({
+          file: options.bridgeSessionPath,
+          tokenUrl: auth.playout.tokenUrl,
+          refreshUrl: auth.playout.refreshUrl,
+          verify: async (accessToken) => {
+            const verified = await playoutAuth.verify(accessToken);
+            return verified.ok
+              ? {
+                  ok: true,
+                  name: verified.token.principal.name,
+                  sub: verified.token.principal.sub,
+                }
+              : { ok: false, reason: verified.refusal };
+          },
+          fetchImpl: playoutFetchForSession,
+          onAccess: (accessToken) => {
+            playoutAuth.startPolling();
+            void playoutAuth.introduce(accessToken);
+          },
+        });
+  if (bridgeSession !== null) {
+    playoutAuth?.useOwnBearer(() => bridgeSession.accessToken());
+    void bridgeSession.start();
+  }
+  /*
+    🔴 `C-039` — THE PLAYOUT'S CHANNEL CATALOGUE (D4). Built only with auth ON: with auth OFF there
+    is no principal, so no bearer, so no read — and the discovery answer is exactly the two sources
+    the console unioned before. Its bearer is `usableBearer`, checked at USE (never expired, never
+    revoked, gone once its principal signs out). It names channels; it never makes one writable —
+    the station fence reads the bank alone.
+  */
+  const playoutCatalogue =
+    playoutAuth === null || auth.playout === null
+      ? null
+      : new PlayoutCatalogue(auth.playout.channelsUrl, () => playoutAuth.usableBearer(), {
+          ...(options.playoutCatalogueOptions ?? {}),
+          // `DESKTOP-APPS-01-A` A4 — a loopback `casparHost` names the Playout's own machine.
+          playoutHost: playoutHostOf(auth.playout),
+        });
+  playoutCatalogue?.start();
+  /*
+    🔴 `PLAYOUT-FEATURES-01` D (`R-077`) — THE CG LICENSE (`GET /api/cg/license`, `2.9.2`), read beside
+    D9 about every 60 s with the same bearer rule, and KEPT while the Playout cannot be reached (their
+    §3.3). A take reads it at take time (`useCgLicenseCheck` below); it is pushed to every console.
+  */
+  const playoutLicense =
+    playoutAuth === null || auth.playout === null
+      ? null
+      : new PlayoutLicenseReader(
+          playout292Url(auth.playout, 'license'),
+          () => playoutAuth.usableBearer(),
+          {
+            ...(options.playoutLicenseOptions ?? {}),
+            playoutHost: playoutHostOf(auth.playout),
+          },
+        );
+  playoutLicense?.start();
+  /*
+    🔴 `R-084` (`RELEASE-0111-01-A` A1) — THE PLAYOUT'S OWN VERSION (`GET /api/v1/system/version`, every
+    Playout from `2.1.0`), read at start and then with D9's cadence — at most once a minute — with no
+    token and no `Origin` (`playout-version.ts`). Logged when it changes; `not served` refuses nothing.
+  */
+  const playoutVersionAddress = auth.playout?.address ?? null;
+  const playoutVersion =
+    playoutVersionAddress === null
+      ? null
+      : new PlayoutVersionReader(
+          playoutVersionUrl(playoutVersionAddress),
+          options.playoutVersionOptions ?? {},
+        );
+  playoutVersion?.onChanged((version) => {
+    process.stderr.write(`[caspar-bridge] Playout version: ${version ?? 'not served'}\n`);
+  });
+  playoutVersion?.start();
+  // The bridge's own session arriving is a reason to read at once (the sign-in's short floor).
+  bridgeSession?.onChanged((state) => {
+    if (state.state === 'signed-in') void playoutLicense?.refresh({ soon: true });
+  });
   // R-010 boot precedence: explicit connection (CLI flags) > persisted file >
   // the single-server default. Flags are session overrides — they win without
   // clobbering the persisted file.
-  const connection =
+  // `CENTRAL-BRIDGE-01` rule 7 — refused before anything binds, in the sentence every refusal says.
+  if (options.oscPort === RESERVED_OSC_PORT) throw new Error(RESERVED_OSC_PORT_REASON);
+  const connection = withBridgeOscPort(
     options.connection ??
-    (options.persistPath !== undefined ? loadPersistedConnection(options.persistPath) : null) ??
-    defaultConnection();
+      (options.persistPath !== undefined ? loadPersistedConnection(options.persistPath) : null) ??
+      defaultConnection(),
+    options.oscPort,
+  );
   // R-021 stage 1 — resolve the fixed bank (explicit > persisted file > none)
   // and VALIDATE it before anything binds: a bad bank is a hard boot failure,
   // never a warning (fixed-layers-store.ts header). The policy is resolved
   // ONCE and the SAME object goes to both the validator and the LayerManager —
   // never two copies of the policy.
-  const layerPolicy = DEFAULT_LAYER_POLICY;
+  const layerPolicy = options.layerPolicy ?? DEFAULT_LAYER_POLICY;
   // R-028 / C-015 — the reserved playout layers, from REAL config (explicit >
   // persisted file > nothing). Resolved ONCE; the SAME list goes to the boot
   // validator, every live-change validation, and the LayerManager's
@@ -403,53 +2126,795 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       : null);
   const reservedLayers =
     reserved !== null && reserved !== undefined ? reservedLayerNumbers(reserved) : [];
-  const { bank: fixedBank, source: fixedBankSource } = resolveFixedBank(options);
-  const fixedSlots =
-    fixedBank !== null
-      ? // R-028 (2.5) — the candidate ceiling must never intersect the
-        // reserved playout range: refused HERE at load, and again at every
-        // change (`setFixedLayers` reads the same list). A violation throws
-        // BEFORE the WebSocket binds — conflicts resolve loudly at startup.
-        validateDeclaredBank(fixedBank, fixedBankSource, options.fixedLayersPath, {
-          policy: layerPolicy,
-          reservedLayers,
-        })
-      : [];
+  const { banks: fixedBanks, source: fixedBankSource } = resolveFixedBanks(options);
+  // R-028 (2.5) — the candidate ceiling must never intersect the reserved playout range:
+  // refused HERE at load, and again at every change (`setFixedLayers` reads the same list).
+  // A violation throws BEFORE the WebSocket binds — conflicts resolve loudly at startup.
+  // `MULTI-CHANNEL-01` — EVERY declared bank, each through the same validator.
+  const fixedSlots = fixedBanks.flatMap((bank) => [
+    ...validateDeclaredBank(bank, fixedBankSource, options.fixedLayersPath, {
+      policy: layerPolicy,
+      reservedLayers,
+    }),
+  ]);
   // D-137 / C-015 — the installation's Live Source mapping, loaded and
-  // VALIDATED here, BEFORE the WebSocket binds and against the SAME bank and
+  // VALIDATED here, BEFORE the WebSocket binds and against the SAME banks and
   // reserved list the fixed-bank validator just saw. Both halves are deliberate:
   // an unusable file must stop the boot rather than serve a station that
-  // resolves three of its four ids, and a band overlapping the bank or the
+  // resolves three of its four ids, and a band overlapping a bank or the
   // reservation must resolve loudly at startup rather than at a take.
   const sourceCatalog = resolveSourceCatalog(options);
-  validateSourceCatalog(sourceCatalog.value, { fixedBank, reservedLayers });
-  // The ASSIGNMENTS half, loaded against the catalog just resolved. A dangling
-  // reference is PRUNED rather than fatal — see `source-assignments-store.ts`'s
-  // header — but a duplicated plate is still a refusal, because two answers for
-  // one hole is not a state anything downstream can read.
-  const resolvedAssignments = resolveSourceAssignments(options);
-  // PRUNE FIRST, then validate. The order is the doctrine: a dangling reference
-  // is dropped (it has a clear reading — that plate is unassigned) while a
-  // DUPLICATED plate is still fatal, because two answers for one hole is not a
-  // state anything downstream can read. Validating first would make the ordinary
-  // restored-file case a boot failure.
-  const prunedAssignments = pruneAssignmentsForCatalog(
-    resolvedAssignments.value,
-    sourceCatalog.value,
-  );
-  validateSourceAssignments(prunedAssignments.value, { catalog: sourceCatalog.value });
+  /*
+    🔴 `PLAYOUT-SOURCES-01` — THE PLAYOUT DEFINES THE SOURCES NOW. The hand-made file's `sources` are
+    no longer read (P-031: not migrated, and not deleted either — a band save keeps them byte for
+    byte); its `layerRange` still is, because the plate band is the one fact CG Control owns. An
+    explicit in-process catalogue (tests, embedders) is pre-resolved and stays in force as-is.
+  */
+  const explicitCatalog = options.sourceCatalog;
+  /*
+    The DECLARED band, and only it. `PLATE-BAND-01` — the band IN FORCE may also be a Playout-linked
+    station's default, which the runtime computes (`plateBandInForce`) and nothing here holds: the
+    default is never put into the catalogue, so it can never reach the file.
+  */
+  const declaredBand = sourceCatalog.value.layerRange;
+  const bootCatalog: SourceCatalog = explicitCatalog ?? {
+    sources: [],
+    ...(declaredBand !== undefined ? { layerRange: declaredBand } : {}),
+  };
+  validateSourceCatalogAgainstBanks(bootCatalog, fixedBanks, reservedLayers);
+  // The ASSIGNMENTS half. `PLAYOUT-SOURCES-01` §1.C — NEVER PRUNED on load any more: the catalogue is
+  // rebuilt from Playout reads, and a binding is never deleted because its entry is gone (ADR 0010
+  // rule 14). A duplicated plate is still a refusal: two answers for one hole is not a state anything
+  // downstream can read.
+  const loadedAssignments = resolveSourceAssignments(options);
+  try {
+    validateSourceAssignments(loadedAssignments.value, { catalog: null });
+  } catch (err) {
+    // `B-309` — the refusal's sentence carries no id; the ids go to the log, beside it.
+    if (err instanceof SourceAssignmentsConfigError && err.detail !== undefined) {
+      process.stderr.write(`[caspar-bridge] source defaults refused at start: ${err.detail}\n`);
+    }
+    throw err;
+  }
+  /*
+    🔴 `CHANNEL-SOURCES-01` decision 2 (the owner, 2026-09-28) — **SOURCE DEFAULTS BELONG TO A
+    CHANNEL, and the station's stored ones become every declared channel's own copy on the first
+    load.** Nothing on air changes: on every channel the same source answers as before. The copy is
+    written back at once, so a second load finds no station-wide entry and copies nothing again
+    (`migrateAssignmentsToChannels` is idempotent). Only the station's FILE is migrated; an in-process
+    set (tests, embedders) is used as given, its station-wide entries answering on every channel.
+  */
+  const migratedAssignments =
+    loadedAssignments.source === 'file'
+      ? migrateAssignmentsToChannels(loadedAssignments.value, [
+          ...new Set(fixedBanks.map((bank) => bank.channel)),
+        ])
+      : { value: loadedAssignments.value, copied: 0 };
+  if (migratedAssignments.copied > 0 && options.sourceAssignmentsPath !== undefined) {
+    try {
+      saveSourceAssignments(options.sourceAssignmentsPath, migratedAssignments.value);
+    } catch (err) {
+      process.stderr.write(
+        `[caspar-bridge] ⚠ failed to persist the per-channel source defaults to ` +
+          `${options.sourceAssignmentsPath}: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+    }
+    process.stderr.write(
+      `[caspar-bridge] source defaults: the station-wide defaults were copied to every declared ` +
+        `channel (${String(migratedAssignments.copied)} entries) — each channel keeps its own now\n`,
+    );
+  }
+  const resolvedAssignments = { ...loadedAssignments, value: migratedAssignments.value };
+  /*
+    🔴 `DESKTOP-APPS-01-C` C6 — **ONE IPv4 FOR THE PLAYOUT'S READS AND FOR AMCP.** The Playout lets
+    in the ADDRESS the introducing D9 read came from, so AMCP must leave from the same one: the
+    Playout's host is resolved ONCE to an IPv4 literal (`pinnedIPv4`, the same cache every
+    `playoutFetch` uses), and a session whose configured host IS that host dials the literal. The
+    configured host itself is untouched (grants, the serve-host derivation, the console).
+  */
+  const playoutName = auth.playout === null ? undefined : playoutHostOf(auth.playout);
+  // Bounded: a slow resolver must never hold the bridge's start. Unresolved, AMCP dials the name.
+  const playoutIPv4 =
+    playoutName === undefined
+      ? null
+      : await Promise.race([
+          pinnedIPv4(playoutName).catch(() => null),
+          new Promise<null>((resolve) => {
+            setTimeout(() => resolve(null), AMCP_PROBE_TIMEOUT_MS).unref();
+          }),
+        ]);
+  const amcpAddressFor = (host: string): string =>
+    playoutIPv4 !== null && host.toLowerCase() === playoutName?.toLowerCase() ? playoutIPv4 : host;
+  /*
+    🔴 `FIELD-FIXES-01-A` — THE AMCP LOG, handed to the runtime at construction, so the first
+    command it sends (the connect handshake) is written too. Every exchange of every session.
+  */
+  const amcpLog = options.amcpLogPath === undefined ? null : new AmcpLog(options.amcpLogPath);
+  /*
+    🔴 `R-090` — A PORT THIS BRIDGE CANNOT OPEN, AND WHAT HOLDS IT, for `/health` (`port-refused`): the
+    console says it naming this machine ("CG Bridge on <host> cannot open UDP 6251 …"). The holder is
+    read when the bind fails — never on the `/health` request path — one problem per port.
+  */
+  const portRefusals = new Map<string, HealthProblem>();
+  /** `CENTRAL-BRIDGE-01` rule 12 — reserved-range port problems, filled once the bridge is up (below). */
+  const portProblems: HealthProblem[] = [];
+  /** `R-090` — every problem about this bridge's OWN ports, for `/health` and for the check's answer. */
+  const ownPortProblems = (): HealthProblem[] => [...portProblems, ...portRefusals.values()];
+  const notePortRefused = (protocol: 'tcp' | 'udp', port: number, role: string): void => {
+    const key = `${protocol}:${String(port)}`;
+    if (portRefusals.has(key)) return;
+    const head = `cannot open ${protocol.toUpperCase()} ${String(port)} (${role})`;
+    portRefusals.set(key, { code: 'port-refused', message: `${head}.` });
+    void (options.portHolderOf ?? portHolderOf)(protocol, port)
+      .then((holder) => {
+        if (holder.kind !== 'other') return;
+        const pid = holder.pid === null ? '' : ` (PID ${String(holder.pid)})`;
+        portRefusals.set(key, {
+          code: 'port-refused',
+          message: `${head}: held by ${holder.name}${pid}.`,
+        });
+      })
+      .catch(() => undefined);
+  };
   const runtime = new CasparRuntime(connection, options.templateServe ?? {}, {
+    amcpAddressFor,
+    onOscUnbound: (_server, port) => {
+      notePortRefused('udp', port, 'OSC from CasparCG');
+    },
+    ...(amcpLog !== null
+      ? {
+          onAmcpExchange: (exchange: AmcpLogEntry) => {
+            amcpLog.write(exchange);
+          },
+        }
+      : {}),
+    // `DESKTOP-APPS-01-D` j — an installed station in first-run declares nothing until its bank.
+    declaresNothingWithoutBank: options.firstRun === true,
+    /*
+      🔴 `PLATE-BAND-01` — LINKED TO THE PLAYOUT is the auth config naming one (`C-037`: an address or
+      an issuer, flags > file). Such a station's layers are the contract's, so with no band declared
+      its plates go in 60–79 unless its own config claims a layer there. A local test provider with
+      auth off (`playoutSources`) is not a link: nothing about the plant is known from it.
+    */
+    playoutLinked: auth.mode === 'playout',
     fixedSlots,
     layerPolicy,
     reservedLayers,
-    ...(fixedBank !== null ? { fixedBank } : {}),
+    fixedBanks,
     ...(options.templatesDir !== undefined ? { templatesDir: options.templatesDir } : {}),
-    sourceCatalog: sourceCatalog.value,
-    sourceAssignments: prunedAssignments.value,
+    sourceCatalog: bootCatalog,
+    sourceAssignments: resolvedAssignments.value,
+    ...(options.auditLogPath !== undefined ? { auditLogPath: options.auditLogPath } : {}),
+    ...(options.lookMixerHoldMs !== undefined ? { lookMixerHoldMs: options.lookMixerHoldMs } : {}),
     ...(options.runtimeTuning ?? {}),
   });
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (D12, rule 11) — a take on a channel the Playout reports `unlicensed` is
+    refused before anything is sent. The verdict is read at TAKE time from the D4 reader's last rows,
+    joined as the console's line joins them; with no catalogue (auth OFF, the Playout unread)
+    nothing is unlicensed and nothing changes.
+  */
+  runtime.useUnlicensedCheck((channel) =>
+    isUnlicensedPlaylist(
+      joinedPlaylist(
+        playoutCatalogue?.rows() ?? null,
+        configuredCasparHosts(runtime.config()),
+        channel,
+      ),
+    ),
+  );
+  /*
+    🔴 `PLAYOUT-FEATURES-01` D (`R-077`, LICENSE §4) — A TAKE WHERE CG IS NOT LICENSED is refused before
+    anything is sent, with the Playout's own message. Read at TAKE time: the license reader's last
+    value (kept through an outage) and the joined D4 row's `cgLicensed` — or, while D4 cannot be read,
+    the license's own station-level channel list. The ONE predicate (`cgUnlicensedReason`) is the
+    console's strip mark's too. With nothing read, nothing is refused.
+  */
+  runtime.useCgLicenseCheck((channel) => {
+    const hosts = configuredCasparHosts(runtime.config());
+    return cgUnlicensedReason(
+      playoutLicense?.license() ?? null,
+      joinedCgLicensed(
+        playoutCatalogue?.rows() ?? null,
+        hosts,
+        channel,
+        playoutLicense?.license() ?? null,
+        playoutLicense?.channels() ?? null,
+      ),
+      channel,
+    );
+  });
+  /*
+    🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — THE BACKUP'S OWN CLIPS. With a Playout and a server B, every bound
+    clip's fingerprint is looked up in the BACKUP Playout's own D11 (the configured Playout's address at
+    server B's host) — on every catalogue change, after server B reconnects, and every 30 s — and cached. A
+    clip's `PLAY` then reaches server B with B's own path, or not at all; a take never waits on it. With no
+    Playout (auth off) there is no lookup, and a clip's `PLAY` mirrors as it always did.
+  */
+  /*
+    🔴 `RELEASE-0112-01` (`R-085`) — THE BACKUP ENGINE, READ WITH ITS OWN SESSION. Each engine signs with
+    its own key and keeps its own users, so the primary's token is `401` on every backup endpoint. The
+    backup's session (its own D1/D2, file and in-flight mark) is the ONLY bearer for the backup's reads —
+    D11 below, its D4, its license and its AMCP introduction. With no session path (a development bridge)
+    there is no backup session, and the backup is read by nothing: today's empty boxes, with their reason.
+  */
+  const primaryEngineAddress =
+    auth.playout === null
+      ? null
+      : (auth.playout.address ?? new URL(auth.playout.channelsUrl).origin);
+  const backupEngine =
+    playoutAuth === null || auth.playout === null || primaryEngineAddress === null
+      ? null
+      : new BackupEngine({
+          primaryAddress: primaryEngineAddress,
+          backupHost: () => runtime.config().servers.B?.host,
+          addressOverride: options.backupPlayoutAddress,
+          sessionFile:
+            options.backupBridgeSessionPath ??
+            (options.bridgeSessionPath !== undefined
+              ? backupSessionPath(options.bridgeSessionPath)
+              : undefined),
+          audience: auth.playout.audience,
+          sessionFetch: playoutFetchForSession,
+          ...(options.backupEngineOptions ?? {}),
+        });
+  backupEngine?.start();
+  const backupMedia =
+    backupEngine === null
+      ? null
+      : new BackupMediaLookup({
+          url: () => backupEngine.mediaUrl(),
+          // 🔴 `R-085` — the backup engine's own token, never the primary's (`usableBearer` was that).
+          bearer: () => backupEngine.accessToken(),
+          log: (line) => {
+            process.stderr.write(`[caspar-bridge] ${line}\n`);
+          },
+        });
+  if (backupEngine !== null && backupMedia !== null) {
+    // The backup's session gaining a token is a reason to read its list at once.
+    let hadToken = backupEngine.accessToken() !== null;
+    backupEngine.onChanged(() => {
+      const hasToken = backupEngine.accessToken() !== null;
+      if (hasToken && !hadToken) void backupMedia.refreshAll();
+      hadToken = hasToken;
+    });
+  }
+  if (backupMedia !== null) {
+    runtime.useBackupMedia((fingerprint) => backupMedia.lookup(fingerprint));
+    const fingerprintsOf = (catalog: SourceCatalog): string[] =>
+      catalog.sources.flatMap((s) =>
+        s.media?.fingerprint !== undefined ? [s.media.fingerprint] : [],
+      );
+    runtime.sourceCatalogChanged.subscribe((catalog) => {
+      void backupMedia.track(fingerprintsOf(catalog));
+    });
+    runtime.onServerConnected((label) => {
+      if (label === 'B') void backupMedia.refreshAll();
+    });
+    let backupHost = runtime.config().servers.B?.host;
+    runtime.configChanged.subscribe(() => {
+      const host = runtime.config().servers.B?.host;
+      if (host === backupHost) return;
+      backupHost = host;
+      // `R-085` — a backup on another machine is another engine: its session is rebuilt there first.
+      backupEngine?.refresh();
+      void backupMedia.reset();
+    });
+    void backupMedia.track(fingerprintsOf(runtime.sourceCatalog()));
+    backupMedia.start();
+  }
+  /*
+    🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — EACH DECLARED CHANNEL'S MIRROR ON THE BACKUP ENGINE. From the
+    backup engine's own D4 (`mirrorOf`, Playout `2.9.5`) by the Playout team's rule, or a station admin's
+    entry checked against it; the redundancy seam reads it on every line, so nothing reaches server B with the
+    primary's channel number, and nothing at all for a channel with no mapping. Re-judged on every input
+    change and every 5 s; B's D4 is re-read at B's sign-in (the backup engine does that) and on B's reconnect.
+  */
+  const backupEntriesFile =
+    options.backupChannelsPath ??
+    (options.persistPath !== undefined ? backupChannelsPath(options.persistPath) : undefined);
+  let storedBackupEntries =
+    backupEntriesFile === undefined ? null : loadBackupEntries(backupEntriesFile);
+  const serverBEndpoint = (): { host: string; amcpPort: number } | undefined => {
+    const b = runtime.config().servers.B;
+    return b === undefined ? undefined : { host: b.host, amcpPort: b.amcpPort };
+  };
+  const primaryEngineHost =
+    primaryEngineAddress === null ? null : new URL(primaryEngineAddress).hostname;
+  const backupChannels = new BackupChannels({
+    declared: () => runtime.declaredChannels(),
+    serverAHost: () => runtime.config().servers.A.host,
+    serverB: serverBEndpoint,
+    primaryEngineHost: () => primaryEngineHost,
+    primaryRows: () => playoutCatalogue?.rows() ?? null,
+    backupRows: () => backupEngine?.rows() ?? null,
+    backupReadAtMs: () => backupEngine?.lastReadAtMs() ?? null,
+    entries: () => entriesFor(storedBackupEntries, serverBEndpoint()),
+    liveOn: (channel) => runtime.holdsLiveLayersOn(channel),
+  });
+  // TEST-ONLY — a wire test on a pair with no Playout hands the runtime its own map instead.
+  const backupChannelsInForce: BackupChannelMap = options.backupChannelMap ?? backupChannels;
+  /*
+    🔴 `RELEASE-0113-01` + `B-313` — THE RUNTIME USES A BACKUP CHANNEL ONLY ONCE THE GUARD HAS CLEARED IT. The
+    mapping is in force the moment it resolves, but the guard reads server B's machine for another CG Bridge
+    driving THAT channel only on its next reading — and every line in between went to the core unguarded (red on
+    `950aa2a2`'s CI: `MIXER 2-88 VOLUME 1` to a core another bridge drove). So the seam's map answers a channel
+    only when the guard's last COMPLETED reading was made with it and found nobody driving it
+    (`CoreGuard.clearsB`); until then server B gets nothing for it, as for an unmapped one. `/health` and the
+    guard itself read the mapping in force (`backupChannelsInForce`) — what this bridge INTENDS to write there —
+    so another CG Bridge's guard sees it before we clear it, and two bridges mapping one channel hold each other.
+  */
+  let coreGuard: CoreGuard | null = null;
+  const clearedOnB = (onB: number | null): number | null =>
+    onB !== null && coreGuard?.clearsB(onB) === true ? onB : null;
+  runtime.useBackupChannels({
+    channelOnB: (channel) => clearedOnB(backupChannelsInForce.channelOnB(channel)),
+    channelOnBAtTake: (channel) => clearedOnB(backupChannelsInForce.channelOnBAtTake(channel)),
+    stationChannelOf: (onB) =>
+      coreGuard?.clearsB(onB) === true ? backupChannelsInForce.stationChannelOf(onB) : null,
+    release: (channel) => {
+      backupChannelsInForce.release(channel);
+    },
+  });
+  const recomputeBackupChannels = (): void => {
+    backupChannels.recompute();
+  };
+  playoutCatalogue?.onChanged(recomputeBackupChannels);
+  backupEngine?.onChanged(recomputeBackupChannels);
+  runtime.configChanged.subscribe(recomputeBackupChannels);
+  runtime.fixedConfigChanged.subscribe(recomputeBackupChannels);
+  runtime.onServerConnected((label) => {
+    if (label === 'B') void backupEngine?.refreshChannels().then(recomputeBackupChannels);
+  });
+  backupChannels.start();
+  /** `R-089` — a station admin's entries, saved durably for the server B in force, then in force. */
+  const setBackupEntries = (
+    entries: readonly BackupChannelEntry[],
+  ): { ok: boolean; message?: string } => {
+    const b = serverBEndpoint();
+    if (b === undefined) return { ok: false, message: 'No backup server is declared.' };
+    const declared = new Set(runtime.declaredChannels());
+    const stray = entries.find((e) => !declared.has(e.channel));
+    if (stray !== undefined) {
+      return {
+        ok: false,
+        message: `CH ${String(stray.channel)} is not a channel of this station.`,
+      };
+    }
+    const next = { server: b, entries: [...entries].sort((x, y) => x.channel - y.channel) };
+    if (backupEntriesFile !== undefined) {
+      try {
+        saveBackupEntries(backupEntriesFile, next);
+      } catch (err) {
+        return {
+          ok: false,
+          message:
+            `The entries could not be saved: ${err instanceof Error ? err.message : String(err)}`.slice(
+              0,
+              300,
+            ),
+        };
+      }
+    }
+    storedBackupEntries = next;
+    backupChannels.recompute();
+    return { ok: true };
+  };
+  /*
+    🔴 `RELEASE-0112-01` (`R-085`) — EACH ENGINE'S LINE, decided once (`engineState`) from what is held:
+    the session, the last sign-in's code, the license, whether the engine's API answers, the core's
+    AMCP, and the guard's verdict (`B-313`, assigned before the runtime connects). Pushed to every
+    console on change (`bridgeSession.engines-changed`); re-judged every 5 s so the AMCP trust window
+    is crossed on time. The backup's line never refuses anything on the primary. (`coreGuard` is declared
+    above, with the backup channel map that reads it.)
+  */
+  let primarySignedInAtMs: number | null =
+    bridgeSession?.state().state === 'signed-in' ? Date.now() : null;
+  bridgeSession?.onChanged((state) => {
+    if (state.state === 'signed-in') primarySignedInAtMs = Date.now();
+  });
+  const amcpUpOf = (label: 'A' | 'B'): boolean | null => {
+    const h = runtime.health();
+    const server = [h.primary, h.backup].find((s) => s?.label === label);
+    return server === undefined ? null : isServerReachable(server.state);
+  };
+  const lineOf = (
+    engine: EngineLine['engine'],
+    address: string | null,
+    verdict: { state: EngineLine['state']; message?: string },
+    session: { state: string; name?: string | undefined },
+    version: string | null,
+  ): EngineLine => ({
+    engine,
+    address,
+    state: verdict.state,
+    ...(verdict.state === 'signed-in' && session.name !== undefined ? { name: session.name } : {}),
+    ...(verdict.message !== undefined ? { message: verdict.message.slice(0, 300) } : {}),
+    version,
+  });
+  const engineSessionsNow = (): EngineSessions => {
+    const nowMs = Date.now();
+    const servers = runtime.config().servers;
+    const verdict = coreGuard?.verdict() ?? null;
+    const primarySession = bridgeSession?.state() ?? { state: 'off' as const };
+    const primary = lineOf(
+      'primary',
+      primaryEngineAddress,
+      engineState({
+        configured: auth.playout !== null,
+        session: primarySession,
+        lastSignInFailure: bridgeSession?.lastSignInFailure() ?? null,
+        licensed: playoutLicense?.license()?.licensed ?? null,
+        reachable: playoutVersion?.reachable() ?? null,
+        amcpUp: amcpUpOf('A'),
+        amcpRemote: !isLoopbackCasparHost(servers.A.host),
+        signedInAtMs: primarySignedInAtMs,
+        nowMs,
+        coreSharedWith: verdict?.sharedA ?? null,
+      }),
+      primarySession,
+      playoutVersion?.version() ?? null,
+    );
+    if (servers.B === undefined || backupEngine === null) return { primary, backup: null };
+    const backupSession = backupEngine.session();
+    const backup = lineOf(
+      'backup',
+      backupEngine.address(),
+      engineState({
+        configured: true,
+        session: backupSession,
+        lastSignInFailure: backupEngine.lastSignInFailure(),
+        licensed: backupEngine.license()?.licensed ?? null,
+        reachable: backupEngine.reachable(),
+        amcpUp: amcpUpOf('B'),
+        amcpRemote: !isLoopbackCasparHost(servers.B.host),
+        signedInAtMs: backupEngine.signedInAtMs(),
+        nowMs,
+        coreHeldBy: verdict?.heldB ?? null,
+      }),
+      backupSession,
+      backupEngine.version(),
+    );
+    return { primary, backup };
+  };
+  const enginesListeners = new Set<(sessions: EngineSessions) => void>();
+  let lastEngines = JSON.stringify(engineSessionsNow());
+  const publishEngines = (): void => {
+    const next = engineSessionsNow();
+    const text = JSON.stringify(next);
+    if (text === lastEngines) return;
+    lastEngines = text;
+    for (const listener of [...enginesListeners]) listener(next);
+  };
+  const subscribeEngines = (listener: (sessions: EngineSessions) => void): (() => void) => {
+    enginesListeners.add(listener);
+    return () => {
+      enginesListeners.delete(listener);
+    };
+  };
+  bridgeSession?.onChanged(publishEngines);
+  backupEngine?.onChanged(publishEngines);
+  playoutLicense?.onChanged(publishEngines);
+  playoutVersion?.onChanged(publishEngines);
+  playoutVersion?.onReachChanged(publishEngines);
+  runtime.healthChanged.subscribe(publishEngines);
+  runtime.configChanged.subscribe(publishEngines);
+  const enginesTicker = setInterval(publishEngines, 5_000);
+  enginesTicker.unref();
+  /*
+    🔴 `PLAYOUT-SOURCES-01` — THE STATION'S SOURCES, FROM THE PLAYOUT. D10 and the bound media are
+    read with the signed-in operator's bearer, checked at use (D4's rule 3); with auth off a test
+    injects a local provider behind the same interface, and with neither there are no lists. The
+    catalogue in force is rebuilt from what was read — by the ONE builder — and nothing a read does
+    can delete a binding. An explicit in-process catalogue (tests) is pre-resolved: no reader.
+  */
+  const sourcesPlayoutHost = auth.playout === null ? undefined : playoutHostOf(auth.playout);
+  // 🔴 `B-327` — the ONE "is this host ours?": the meters, the sources and the check's join line read it.
+  const hostIsOurs = hostIsOursFor(sourcesPlayoutHost, () =>
+    configuredCasparHosts(runtime.config()),
+  );
+  const sourcesProvider: PlayoutSourcesProvider | null =
+    options.playoutSources ??
+    (playoutAuth !== null && auth.playout !== null
+      ? new HttpPlayoutSources(
+          { inputsUrl: auth.playout.inputsUrl, mediaUrl: auth.playout.mediaUrl },
+          () => playoutAuth.usableBearer(),
+        )
+      : null);
+  const playoutSources =
+    explicitCatalog !== undefined
+      ? null
+      : new PlayoutSources({
+          provider: sourcesProvider,
+          // The local test provider answers with nobody signed in; the Playout never does.
+          signedIn:
+            options.playoutSources !== undefined
+              ? (): boolean => true
+              : (): boolean => playoutAuth !== null && playoutAuth.usableBearer() !== null,
+          hostIsOurs,
+          channelFor: (host, channel) =>
+            hostIsOurs(host) && runtime.isDeclaredChannel(channel) ? channel : null,
+          inputsPath: options.playoutInputsPath,
+          boundMediaPath: options.boundMediaPath,
+          layerRange: declaredBand,
+          ...(options.playoutSourcesOptions ?? {}),
+        });
+  if (playoutSources !== null) {
+    runtime.setResolvedSourceCatalog(playoutSources.catalog());
+    playoutSources.onCatalogChanged((catalog) => runtime.setResolvedSourceCatalog(catalog));
+    // §1.C — the one retry's read, the only Playout read a verb may make (on its failure path).
+    runtime.setMediaFreshener((sourceId, played) => playoutSources.freshClipFor(sourceId, played));
+    // `ROUTE-PLATES-01` rule 5 — the bounded D10 re-read a Playout route waits on (1.5 s).
+    runtime.setInputsConfirmer((timeoutMs) => playoutSources.confirmInputs(timeoutMs));
+    // `MEDIA-PLATES-01` §1.A — a clip's two playback settings live on its bound-media reference.
+    runtime.setMediaPlaybackWriter((sourceId, playback) =>
+      playoutSources.setMediaPlayback(sourceId, playback),
+    );
+    playoutSources.start();
+    // A local provider can answer before anybody signs in; the Playout's first read is at sign-in.
+    if (options.playoutSources !== undefined) void playoutSources.refresh(0);
+  }
+  // B-145 — adopt the persisted ledger, then keep it written.
+  //
+  // 🔴 ADOPT BEFORE SUBSCRIBING TO THE CHANGES, and the order is load-bearing: subscribing
+  // first would have the adopt's own publish write the file back before it has been
+  // corrected, which for one moment persists a claim nothing had verified.
+  const liveLayersProvenance: {
+    path: string | null;
+    source: 'file' | 'absent' | 'unusable' | 'off';
+    adopted: number;
+    unverified: number;
+    dropped: number;
+  } = {
+    path: options.liveLayersPath ?? null,
+    source: options.liveLayersPath === undefined ? 'off' : 'absent',
+    adopted: 0,
+    unverified: 0,
+    dropped: 0,
+  };
+  if (options.liveLayersPath !== undefined) {
+    const loaded = loadPersistedLiveLayers(options.liveLayersPath);
+    if (loaded.problem !== undefined) {
+      liveLayersProvenance.source = 'unusable';
+      process.stderr.write(
+        `[caspar-bridge] ⚠ the live-layer ledger at ${loaded.problem.file} is present but ` +
+          `unusable (${loaded.problem.reason}) — booting with an EMPTY ledger, so any layers ` +
+          `still lit from a previous run are unreachable until they are cleared by hand
+`,
+      );
+    }
+    if (loaded.ledger !== null) {
+      // Occupancy is not knowable at this point — no session has connected yet — so every
+      // record adopts UNVERIFIED rather than being dropped. Absence of knowledge is not
+      // knowledge of absence: dropping here would strand exactly the producers this item
+      // exists to stop stranding. A later reading corrects the ledger; a wrong drop cannot
+      // be undone.
+      const adoption = runtime.adoptLiveLayers(loaded.ledger, () => 'unknown');
+      liveLayersProvenance.source = 'file';
+      liveLayersProvenance.adopted = adoption.adopted.size;
+      liveLayersProvenance.unverified = adoption.unverified.length;
+      liveLayersProvenance.dropped = adoption.dropped.length;
+      process.stderr.write(
+        `[caspar-bridge] adopted ${String(adoption.adopted.size)} item(s) of live layers from ` +
+          `${options.liveLayersPath} (${String(adoption.unverified.length)} unverified until the ` +
+          `first occupancy reading)
+`,
+      );
+    }
+    const liveLayersPath = options.liveLayersPath;
+    runtime.liveLayersChanged.subscribe((ledger) => {
+      try {
+        savePersistedLiveLayers(liveLayersPath, ledger);
+      } catch (err) {
+        process.stderr.write(
+          `[caspar-bridge] ⚠ failed to persist the live-layer ledger to ${liveLayersPath}: ` +
+            `${err instanceof Error ? err.message : String(err)} — seated layers will not ` +
+            `survive a bridge restart
+`,
+        );
+      }
+    });
+  }
+
+  /*
+    🔴 `DESKTOP-APPS-01-B` B1, as REVISED by `-01-C` C4 — **AMCP WAITS FOR A STATION-ADMIN.**
+
+    A Playout 2.8.54 refuses AMCP to a machine it has not let in. It lets a machine in from ONE
+    kind of request: a SERVER-SIDE D9 read (no `Origin`) by an account holding `station-admin`
+    (D4 and D8 introduce nothing) — the FIRST machine automatically, once per install; every later
+    one after its administrator approves it in the Playout's app. So on a station that
+    authenticates:
+
+      1. until a `station-admin` signs in, an AMCP failure is WAITING, not an alarm — the runtime
+         carries the fact on its health and the console says so (the reconnect loop runs as ever);
+      2. a `station-admin`'s sign-in reads D9 AT ONCE with that admin's own token
+         (`PlayoutAuth.introduce`) — the introducing read — rather than at the next 60 s tick;
+      3. then the ONE reconnect loop retries promptly for `AMCP_TRUST_WINDOW_MS`, so the link comes
+         up within seconds of the Playout letting this machine in;
+      4. and the connection check judges its AMCP line from that moment (C7).
+
+    ⚠ `-01-C` C5 — nothing but a `station-admin` ever reaches the Playout with its token before the
+    issuer is adopted: a refused sign-in is refused before `noteLiveToken`, so it is never a bearer
+    for D4, D8 or D9 (pinned by `amcp-introduction.integration.test.ts`). An operator's first
+    contact would otherwise seal the Playout's automatic path.
+
+    Keyed on the token's FIRST acceptance: a reload or a reconnect re-presents a token already seen,
+    and is not a sign-in. Per process, like the acceptance set itself.
+  */
+  let stationAdminSignedInAt: number | null = null;
+  if (playoutAuth !== null) runtime.setAmcpAwaitsSignIn(true);
+  const introduceOnSignIn = ({ token, first }: SeatedSignIn): void => {
+    if (!first || !holdsPermissionClass(token.principal.roles, 'station-admin')) return;
+    stationAdminSignedInAt = Date.now();
+    runtime.setAmcpAwaitsSignIn(false);
+    void playoutAuth?.introduce(token.rawToken);
+    runtime.retryAmcpPromptly(AMCP_TRUST_WINDOW_MS);
+  };
+
+  /*
+    `DESKTOP-APPS-01` — first-run's phase, read per call: the channel is declared LIVE through
+    `fixedLayers.set-config`, and the phase must end the moment it is.
+  */
+  const setupPhase = (): SetupPhase | null => {
+    if (options.firstRun !== true) return null;
+    if (auth.mode === 'off') return 'target';
+    return runtime.fixedLayerBanks().length === 0 ? 'channel' : null;
+  };
+  // The control port is known only once it has bound; the check reads it at call time.
+  const bound = { port: requestedPort };
+  const connectionCheck = (req: ConnectionCheckRequest): Promise<ConnectionCheckResult> => {
+    // This bridge's own ports, so a probe of one (the proxy's listener) never names CG Bridge itself.
+    const probes =
+      options.connectionCheckProbes ??
+      realProbes([
+        { proto: 'tcp', port: bound.port },
+        { proto: 'tcp', port: runtime.templateServe?.port ?? 0 },
+        { proto: 'udp', port: runtime.config().servers.A.oscPort },
+        ...(options.consolePort !== undefined
+          ? [{ proto: 'tcp' as const, port: options.consolePort }]
+          : []),
+      ]);
+    // 🔴 `R-090` — no `ports` option: the check judges no port of the machine it runs on.
+    return runConnectionCheck(req, probes, {
+      // C7 — the AMCP line's phase: waiting for a sign-in, for the Playout, or for approval.
+      amcpSignInAt: stationAdminSignedInAt,
+      ...(options.connectionCheckOptions ?? {}),
+      /*
+        `DESKTOP-APPS-01-C` C1 — ONE log line per check: every line's time and outcome, in the
+        order they finished. The owner's first timed-out check left nothing in any log to say which
+        probe hung; this is what would have.
+      */
+      onTimed: (timings, totalMs) => {
+        process.stderr.write(
+          `[caspar-bridge] connection check ${req.playoutAddress}: ` +
+            `${timings.map((t) => `${t.id} ${String(t.ms)} ms ${t.status}`).join(' · ')}` +
+            ` — ${String(totalMs)} ms\n`,
+        );
+      },
+    }).then((result) => {
+      /*
+        🔴 `R-090` — CG Bridge's own port trouble rides the check's answer: a console page cannot read
+        `/health` itself (CG Control's webview does not reach loopback HTTP; measured on the clean runner).
+      */
+      const own = ownPortProblems().filter(
+        (p) => p.code === 'port-refused' || p.code === 'reserved-port',
+      );
+      return own.length === 0 ? result : { ...result, bridgeProblems: own };
+    });
+  };
+
+  /*
+    🔴 `C-016` / `PGM-RETURN-01` — **THE PROGRAMME RETURN, read from the Playout's own `pgm` feed.**
+
+    The feed's server runs inside the playout core and is not hardened, so the relay is exactly one
+    well-behaved reader per watched channel (`pgm-return.ts` carries the rules). Its HOST is the
+    Playout's, reached the way every other Playout-bound read reaches it:
+
+      - a Playout is configured → its host name, through `pinnedIPv4` — the ONE IPv4 C6 pins for
+        the D9 read and the AMCP session — with the name kept in `Host`;
+      - none (auth off, development) → server A's configured host, through the same
+        `amcpAddressFor` the AMCP session dials.
+
+    Resolved at each connect attempt, so a changed connection is picked up by the next dial; a
+    change to server A's host also redials at once (below). The feed's audio (`GET /audio.wav`,
+    same port — never `935x`) and a backup Playout's return are named in `design.md` §6, not built.
+  */
+  const pgmTarget = async (): Promise<{ address: string; hostHeader: string } | null> => {
+    if (playoutName !== undefined) {
+      const ip = await pinnedIPv4(playoutName).catch(() => null);
+      return ip === null ? null : { address: ip, hostHeader: playoutName };
+    }
+    const host = runtime.config().servers.A.host;
+    return { address: amcpAddressFor(host), hostHeader: host };
+  };
+  const pgmSeams = {
+    ...(options.pgmReturn?.portFor !== undefined ? { portFor: options.pgmReturn.portFor } : {}),
+    ...(options.pgmReturn?.tuning !== undefined ? { tuning: options.pgmReturn.tuning } : {}),
+  };
+  const pgmReturn = new PgmReturnRelay({ resolveTarget: pgmTarget, ...pgmSeams });
+  /*
+    🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — THE PROGRAMME'S SOUND: the core's `GET /audio.wav` on the SAME port
+    as the picture (never `935x`, the preview's), read by one well-behaved client per channel under the
+    picture relay's rules and at the picture relay's host (`pgm-audio.ts`). Served at `/pgm/<n>/sound`
+    behind a ticket for that channel; nothing is read until a console turns its speaker on.
+  */
+  const pgmAudio = new PgmAudioRelay({ resolveTarget: pgmTarget, ...pgmSeams });
+  if (playoutName === undefined) {
+    let pgmHost = runtime.config().servers.A.host;
+    runtime.configChanged.subscribe((config) => {
+      if (config.servers.A.host === pgmHost) return;
+      pgmHost = config.servers.A.host;
+      pgmReturn.reconnectAll();
+      pgmAudio.reconnectAll();
+    });
+  }
+  /*
+    🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — THE PLAYOUT'S METERS (`GET /api/cg/meters`, `2.9.2`): ONE stream, read
+    with this bridge's own session while any console is connected, each reading joined to this station's
+    channel by the D10 reader's own join and told to a console only for a channel its sign-in holds.
+  */
+  const playoutMeters =
+    playoutAuth === null || auth.playout === null
+      ? null
+      : new PlayoutMetersReader({
+          url: playout292Url(auth.playout, 'meters'),
+          bearer: () => playoutAuth.usableBearer(),
+          channelFor: (host, channel) =>
+            hostIsOurs(host) && runtime.isDeclaredChannel(channel) ? channel : null,
+          ...(options.playoutMetersTuning !== undefined
+            ? { tuning: options.playoutMetersTuning }
+            : {}),
+          log: (line) => {
+            process.stderr.write(`[caspar-bridge] ${line}\n`);
+          },
+        });
+  /*
+    The bridge's OWN session arriving reopens the stream with it: until then the stream reads with a
+    console's token (D7's fallback) and the Playout sends only that console's channels.
+  */
+  bridgeSession?.onChanged((state) => {
+    if (state.state === 'signed-in') playoutMeters?.restart();
+  });
+
+  /*
+    `CENTRAL-BRIDGE-01` (D9) — the tickets for CG Bridge's HTTP resources (`/pgm/<n>`, `/logs.zip`):
+    issued by the routes below over the verified socket, redeemed by the control port's own server.
+  */
+  const tickets = new HttpTickets();
   const routes = buildRoutes(runtime, {
+    issueTicket: (grant) => tickets.issue(grant),
+    logsAvailable: options.logsDir !== undefined,
+    setupPhase,
+    // `CENTRAL-BRIDGE-01` — this bridge's release, told to every console at connect.
+    ...(bridgeVersion !== null ? { bridgeVersion } : {}),
+    // `CENTRAL-BRIDGE-01` (D4) — the acting principal's channels, through the actor context.
+    actorScope: () => socketScope(currentAuthSession(), playoutAuth, runtime),
+    // `CENTRAL-BRIDGE-01` (D7) — the bridge's own Playout session, for its state and its sign-in.
+    bridgeSession,
+    // `RELEASE-0112-01` (`R-085`) — each engine's line, and the backup engine's own sign-in.
+    engines: engineSessionsNow,
+    backupEngine,
+    publishEngines,
+    backupChannels: () => backupChannels.state(),
+    setBackupEntries,
+    // `PLAYOUT-FEATURES-01` D — the CG license as last read, for `license.state`.
+    license: () => playoutLicense?.license() ?? null,
+    playoutSources,
+    catalogueRows: () => playoutCatalogue?.rows() ?? null,
+    refreshCatalogue: () => playoutCatalogue?.refresh() ?? Promise.resolve(),
+    pgmReturnStatus: () => pgmReturn.status(),
+    connectionCheck,
+    // 🔴 `B-327` — does server A join the Playout's? Through the same `hostIsOurs` the meters read.
+    casparJoin: () =>
+      casparJoinOf(
+        playoutCatalogue?.rows() ?? null,
+        (channel) => runtime.isDeclaredChannel(channel),
+        runtime.config().servers.A.host,
+        sourcesPlayoutHost,
+        hostIsOurs,
+      ),
     ...(options.persistPath !== undefined ? { persistPath: options.persistPath } : {}),
+    ...(options.oscPort !== undefined ? { oscPort: options.oscPort } : {}),
     ...(options.fixedLayersPath !== undefined ? { fixedLayersPath: options.fixedLayersPath } : {}),
     ...(options.sourceCatalogPath !== undefined
       ? { sourceCatalogPath: options.sourceCatalogPath }
@@ -457,35 +2922,423 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     ...(options.sourceAssignmentsPath !== undefined
       ? { sourceAssignmentsPath: options.sourceAssignmentsPath }
       : {}),
+    auth,
+    authState: (session) => authGateState(session, playoutAuth),
+    releaseBearer: (rawToken) => playoutAuth?.releaseBearer(rawToken),
+    stationChannels: (session) =>
+      stationChannelsFor(
+        session,
+        authGateState(session, playoutAuth),
+        auth.mode,
+        runtime,
+        playoutCatalogue?.rows() ?? null,
+      ),
   });
 
-  const wss = new WebSocketServer({
-    host,
-    port: requestedPort,
-    maxPayload: WS_MAX_PAYLOAD_BYTES,
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (`B-294`) — THE BRIDGE'S OWN STACK, restored BEFORE the control socket
+    listens, so no console can ever see this bridge without its stack, and saved on every change.
+    `restore()` seeds rows and sends nothing; the first connection's start check (`INFO`) decides each
+    row: adopted where our page still plays, off air with the restart notice where the layer is empty.
+  */
+  const stack =
+    options.stackPath === undefined ? null : await restoreOwnStack(runtime, options.stackPath);
+
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (D9) — ONE PORT, ONE `http.Server`: the control socket's upgrade AND
+    `/health` (rule 13 — the Playout's engine reads it on `5280`). Every other plain request is
+    answered `426`, exactly what `ws`'s own server answered before. `/health` answers `503` for the
+    moment between the listen and the end of the start below, never a half-built body.
+  */
+  let healthNow: (() => BridgeHealth) | null = null;
+  const controlHttp = http.createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://cg-bridge');
+    const pathname = url.pathname;
+    /*
+      `CENTRAL-BRIDGE-01` (D9) — the programme return for a console on another machine, behind a
+      ticket its verified socket was given for THIS channel. No ticket, a spent one, or one for
+      another channel: 403, and nothing is relayed.
+    */
+    if (
+      (req.method === 'GET' || req.method === 'HEAD') &&
+      pathname.startsWith(PGM_RETURN_PATH_PREFIX)
+    ) {
+      // `PLAYOUT-FEATURES-01` E — `/pgm/<n>/sound` is the sound, behind a ticket for the SOUND.
+      const match = /^\/pgm\/([1-9]\d{0,3})(\/sound)?$/.exec(pathname);
+      const channel = match?.[1] === undefined ? Number.NaN : Number(match[1]);
+      const stream = match?.[2] === undefined ? 'picture' : 'audio';
+      const grant = tickets.redeem(
+        url.searchParams.get('ticket'),
+        (g) => g.kind === 'pgm' && g.channel === channel && (g.stream ?? 'picture') === stream,
+      );
+      if (grant === null) {
+        res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('forbidden');
+        return;
+      }
+      if (stream === 'audio') {
+        /*
+          The console reads the sound with `fetch` from its own origin (never an `<audio>`, which
+          buffers seconds): the answer must be readable cross-origin, as the core's own is (`*`, their
+          §2.1). The ticket, single-channel and short-lived, is the door; this header opens no other.
+        */
+        res.setHeader('access-control-allow-origin', '*');
+        pgmAudio.serve(req, res, channel);
+        return;
+      }
+      pgmReturn.serve(req, res, channel);
+      return;
+    }
+    // `CENTRAL-BRIDGE-01` §1 A — CG Bridge's logs, one zip, behind a station admin's one-use ticket.
+    if (req.method === 'GET' && pathname === BRIDGE_LOGS_PATH) {
+      const logsDir = options.logsDir;
+      const grant = tickets.redeem(url.searchParams.get('ticket'), (g) => g.kind === 'logs');
+      if (grant === null || logsDir === undefined) {
+        res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('forbidden');
+        return;
+      }
+      /*
+        🔴 `CONSOLE-POLISH-01` (`R-083`) — and the AUDIT, every kept file of it, under `audit/`: the
+        record lives in `.cg-runtime`, not in `logs\`, so the download used to leave it out — and now
+        that it rotates, a download that gave only the current file would give one day of it.
+      */
+      /*
+        A rotation between listing the files and reading them renames one away: its rows would be
+        missing from this zip under either name. A file that vanished mid-read means the list is
+        stale, so it is listed and read again (as the paged read does).
+      */
+      const auditEntries = async (): Promise<ZipEntry[]> => {
+        let entries: ZipEntry[] = [];
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const files = await runtime.auditFiles();
+          entries = await fileEntries(
+            files.map((f) => ({ path: f.path, name: `audit/${path.basename(f.path)}` })),
+          );
+          if (entries.length === files.length) break;
+        }
+        return entries;
+      };
+      void Promise.all([entriesUnder(logsDir), auditEntries()])
+        .then(([logs, audit]) => {
+          const all = [...logs, ...audit];
+          if (all.reduce((sum, e) => sum + e.data.length, 0) > MAX_ZIP_INPUT) {
+            throw new Error(`the logs are larger than ${String(MAX_ZIP_INPUT)} bytes`);
+          }
+          return zipEntries(all);
+        })
+        .then((zip) => {
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+          res.writeHead(200, {
+            'content-type': 'application/zip',
+            'content-disposition': `attachment; filename="cg-bridge-logs-${stamp}.zip"`,
+            'content-length': zip.length,
+            'cache-control': 'no-store',
+          });
+          res.end(zip);
+        })
+        .catch((err: unknown) => {
+          res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+          res.end(err instanceof Error ? err.message : String(err));
+        });
+      return;
+    }
+    if (req.method === 'GET' && pathname === HEALTH_PATH) {
+      if (healthNow === null) {
+        res.writeHead(503, { 'content-type': 'text/plain', 'retry-after': '1' });
+        res.end('CG Bridge is starting');
+        return;
+      }
+      const body = JSON.stringify(healthNow());
+      res.writeHead(200, {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+      });
+      res.end(body);
+      return;
+    }
+    const body = http.STATUS_CODES[426] ?? 'Upgrade Required';
+    res.writeHead(426, { 'content-type': 'text/plain', 'content-length': Buffer.byteLength(body) });
+    res.end(body);
   });
+  const wss = new WebSocketServer({ server: controlHttp, maxPayload: WS_MAX_PAYLOAD_BYTES });
 
   await new Promise<void>((resolve, reject) => {
-    wss.once('listening', resolve);
-    wss.once('error', reject);
+    controlHttp.once('listening', resolve);
+    controlHttp.once('error', reject);
+    controlHttp.listen(requestedPort, host);
   });
 
-  const address = wss.address();
+  const address = controlHttp.address();
   const port = typeof address === 'object' && address !== null ? address.port : requestedPort;
+  bound.port = port;
 
-  wss.on('connection', (socket) => {
-    const unsubscribers = wirePublishes(socket, runtime);
+  /*
+    🔴 `C-037` / ADR 0010 rule 11 — **AN UNAUTHENTICATED CONTROL SOCKET THAT IS NOT ON
+    LOOPBACK SAYS SO.**
+
+    ⚠ Written NEW, and the acceptance bullet that asks for it says "the existing warning
+    prints" — so state plainly what was measured: there was no such warning. The two that
+    exist (`bridge.ts` at boot and `caspar-runtime.ts` on reconfigure) are about the TEMPLATE
+    HTTP server, a different socket on a different port, and the second of them even ends
+    _"Control WebSocket remains loopback-bound"_ — a sentence `--host 0.0.0.0` makes false.
+    `--host 0.0.0.0` has been permitted for development since the beginning and nothing
+    anywhere announced it.
+
+    The owner's default is unchanged: auth OFF + loopback is today and stays, auth OFF +
+    `--host 0.0.0.0` stays PERMITTED. What changes is that it is no longer silent. The
+    stricter rule — "an unauthenticated control socket never leaves loopback" — is recorded
+    in the ADR as NOT adopted now and as a candidate golden rule once auth ships; this line is
+    what makes the interim state visible rather than assumed.
+  */
+  if (playoutAuth === null && !isLoopbackHost(host)) {
+    process.stderr.write(
+      `[caspar-bridge] ⚠ control WebSocket is LAN-EXPOSED on ${host}:${String(port)} with ` +
+        `auth OFF — any machine that can reach this port can drive this station. Permitted ` +
+        `for development (ADR 0010 rule 11); the plant runs with auth ON.
+`,
+    );
+  }
+
+  wss.on('connection', (socket, request) => {
+    /*
+      🔴 `C-037` — ONE PRINCIPAL HOLDER PER SOCKET, created here because here is where a
+      connection begins. Two browsers are two people; see `auth-session.ts` for why this is
+      not a field on the bridge. `CENTRAL-BRIDGE-01` — it carries the console machine too.
+    */
+    const session = new AuthSession(consoleAddressOf(request.socket.remoteAddress));
+    /*
+      🔴 **THE PUBLISH GATE — the SECOND door, and it used to be wide open.**
+
+      `wirePublishes` subscribed every socket to stack state, health, the lock, the live-layer
+      ledger and the emptied-air notice the instant it connected, before a single frame was
+      read. A request-level gate does not touch that path: an unauthenticated socket would be
+      refused every command and still be told everything. ADR 0010 rule 4 says a
+      never-authenticated socket gets `bridge.capabilities` and the `auth.*` door and
+      **nothing else**, and a stream of state is something else.
+
+      ⚠ Spelled as a DELIVERY predicate rather than by deferring the subscription, because
+      sign-out has to close it again on the same socket — and a wire/unwire pair is two
+      operations that must stay in step, where one predicate read at push time cannot fall out
+      of step with itself. The console's own `#resync` re-delivers on sign-in, which is the
+      same machinery it already runs on every (re)connect.
+
+      ⚠ Auth OFF returns `true` always, so not one byte of today's behaviour moves.
+    */
+    // `CENTRAL-BRIDGE-01` (D4) — the channels THIS socket is told about, read at each push.
+    const scopeOfSocket = (): Holds | null => socketScope(session, playoutAuth, runtime);
+    const unsubscribers = wirePublishes(
+      socket,
+      runtime,
+      // `CENTRAL-BRIDGE-01` (`R-068`) — an expired or revoked session is told nothing either.
+      () => mayBeTold(authGateState(session, playoutAuth)),
+      // § 3(a) — THIS socket's principal, through the one composition `auth.state` answers with.
+      () => authStateFor(session, authGateState(session, playoutAuth), auth.mode, runtime),
+      scopeOfSocket,
+    );
+    /*
+      🔴 `R-062` gap 2 — THIS socket's discovery answer, pushed when an input to it moves: the
+      Playout's catalogue, the bank, channel settings, the server list (the host join) — and this
+      socket's own sign-in, because `permitted` is per principal and the console's sign-in resync
+      re-pulls the stack, health and lock and nothing else.
+
+      ⚠ Beside `wirePublishes` rather than inside it: every emitter it subscribes is already
+      forwarded there (the `B-247` guard's subject), and this one's payload is per socket.
+      Deduplicated, so a settings publish that does not move the answer sends nothing — with auth
+      OFF the answer cannot move short of a bank installed live on a bank-less bridge, so an
+      auth-OFF console receives no traffic it did not have.
+    */
+    const pushStationChannels = stationChannelsPusher(
+      socket,
+      () => mayBeTold(authGateState(session, playoutAuth)),
+      () =>
+        stationChannelsFor(
+          session,
+          authGateState(session, playoutAuth),
+          auth.mode,
+          runtime,
+          playoutCatalogue?.rows() ?? null,
+        ),
+    );
+    unsubscribers.push(
+      runtime.fixedConfigChanged.subscribe(pushStationChannels),
+      runtime.channelSettingsChanged.subscribe(pushStationChannels),
+      runtime.configChanged.subscribe(pushStationChannels),
+      ...(playoutCatalogue !== null ? [playoutCatalogue.onChanged(pushStationChannels)] : []),
+      /*
+        `C-016` — the programme return's state, behind the SAME delivery gate as every other push.
+        Beside `wirePublishes` rather than in it: that function forwards `CasparRuntime`'s
+        emitters (the `B-247` guard's subject), and the relay is not the runtime.
+      */
+      pgmReturn.subscribe((status) => {
+        if (!mayBeTold(authGateState(session, playoutAuth))) return;
+        // `CENTRAL-BRIDGE-01` (D4) — through the same table as every other push.
+        const told = scopePayload(
+          PUBLISH_SCOPE,
+          PgmReturnStatusChangedChannel.name,
+          PgmReturnStatusChangedChannel.payload.parse(status),
+          scopeOfSocket(),
+          scopeContext(runtime),
+        );
+        if (told === TELL_NOTHING) return;
+        send(socket, {
+          type: 'publish',
+          channel: PgmReturnStatusChangedChannel.name,
+          payload: told,
+        });
+      }),
+      // `RELEASE-0112-01` (`R-085`) — each engine's line, station-wide, behind the same delivery gate.
+      subscribeEngines((sessions) => {
+        if (!mayBeTold(authGateState(session, playoutAuth))) return;
+        send(socket, {
+          type: 'publish',
+          channel: BridgeEnginesChangedChannel.name,
+          payload: BridgeEnginesChangedChannel.payload.parse(sessions),
+        });
+      }),
+      // `RELEASE-0113-01` (`R-089`) — each channel's backup line, station-wide, behind the same gate.
+      backupChannels.onChanged((state) => {
+        if (!mayBeTold(authGateState(session, playoutAuth))) return;
+        send(socket, {
+          type: 'publish',
+          channel: BackupChannelsChangedChannel.name,
+          payload: BackupChannelsChangedChannel.payload.parse(state),
+        });
+      }),
+      // `CENTRAL-BRIDGE-01` (D7) — the bridge's own session, behind the same delivery gate.
+      ...(bridgeSession !== null
+        ? [
+            bridgeSession.onChanged((state) => {
+              if (!mayBeTold(authGateState(session, playoutAuth))) return;
+              send(socket, {
+                type: 'publish',
+                channel: BridgeSessionStateChangedChannel.name,
+                payload: BridgeSessionStateChangedChannel.payload.parse(state),
+              });
+            }),
+          ]
+        : []),
+      // `PLAYOUT-FEATURES-01` D — the CG license, station-wide, behind the same delivery gate.
+      ...(playoutLicense !== null
+        ? [
+            playoutLicense.onChanged((license) => {
+              if (!mayBeTold(authGateState(session, playoutAuth))) return;
+              send(socket, {
+                type: 'publish',
+                channel: LicenseStateChangedChannel.name,
+                payload: LicenseStateChangedChannel.payload.parse({ license }),
+              });
+            }),
+          ]
+        : []),
+      /*
+        🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — the Playout's meters, behind the same delivery gate, and told
+        per reading only for a channel THIS socket's sign-in holds (the scope table's projection). This
+        subscription is also what keeps the one upstream stream open: the last socket's close releases it.
+      */
+      ...(playoutMeters !== null
+        ? [
+            playoutMeters.subscribe((readings) => {
+              if (!mayBeTold(authGateState(session, playoutAuth))) return;
+              const told = scopePayload(
+                PUBLISH_SCOPE,
+                PgmMetersChangedChannel.name,
+                readings,
+                scopeOfSocket(),
+                scopeContext(runtime),
+              );
+              if (told === TELL_NOTHING) return;
+              send(socket, {
+                type: 'publish',
+                channel: PgmMetersChangedChannel.name,
+                payload: told,
+              });
+            }),
+          ]
+        : []),
+    );
     socket.on('message', (data) => {
-      void handleMessage(socket, routes, data.toString());
+      // `B-229` — the lock is read PER REQUEST from the live runtime, never captured.
+      void handleMessage(
+        socket,
+        routes,
+        data.toString(),
+        () => runtime.lockState(),
+        session,
+        playoutAuth,
+        runtime,
+        (signIn) => {
+          // A principal was just seated on this socket: its `permitted` moved, and its bearer
+          // may be the first this bridge has had — read the catalogue now rather than at the
+          // next tick, so the names arrive with the sign-in. A station-admin's sign-in also reads
+          // D9 at once with that admin's own token (C4) — the read that introduces this machine.
+          pushStationChannels();
+          void playoutCatalogue?.refresh();
+          // `PLAYOUT-FEATURES-01` D — and the CG license, through its sign-in floor.
+          void playoutLicense?.refresh({ soon: true });
+          // `PLAYOUT-FEATURES-01` E — a meters stream waiting for a bearer connects now.
+          playoutMeters?.kick();
+          // `PLAYOUT-SOURCES-01` — D10 and the bound media are read at sign-in too.
+          void playoutSources?.refresh(PICKER_FRESH_MS);
+          introduceOnSignIn(signIn);
+        },
+      );
     });
-    socket.on('close', () => {
+    const dropSocket = (): void => {
       for (const off of unsubscribers) off();
-    });
-    socket.on('error', () => {
-      for (const off of unsubscribers) off();
-    });
+      /*
+        ⚠ A CLOSED TAB IS A SIGN-OUT THE OPERATOR NEVER PRESSED. Without this the bridge keeps
+        calling the Playout with that console's token until `exp` — twelve hours — and nothing
+        anywhere reports it, because the token is still perfectly valid.
+      */
+      const raw = session.token?.rawToken;
+      if (raw !== undefined) playoutAuth?.releaseBearer(raw);
+    };
+    socket.on('close', dropSocket);
+    socket.on('error', dropSocket);
   });
 
+  /*
+    🔴 `B-313` (`RELEASE-0112-01` Part B) — NEVER A SECOND SENDER ON THE BACKUP CORE. Built before the
+    runtime connects: a declared server B is HELD until the guard's first reading of its machine, so not
+    one line reaches a core another CG Bridge drives. Server A is read and only ever said.
+  */
+  const guardSelf = { startedAt: new Date(startedAtMs).toISOString(), controlPort: () => port };
+  coreGuard = new CoreGuard({
+    servers: () => {
+      const s = runtime.config().servers;
+      return {
+        A: { host: s.A.host, amcpPort: s.A.amcpPort },
+        ...(s.B !== undefined ? { B: { host: s.B.host, amcpPort: s.B.amcpPort } } : {}),
+      };
+    },
+    peerPort: () => options.coreGuardPort ?? port,
+    // `RELEASE-0113-01` — what this bridge writes on each core, in that core's own numbers: on B the mapping IN
+    // FORCE, not the cleared one — a reading must be made WITH a channel before that channel is cleared.
+    channels: () => {
+      const declared = runtime.declaredChannels();
+      return {
+        A: declared,
+        B: declared.flatMap((channel) => {
+          const onB = backupChannelsInForce.channelOnB(channel);
+          return onB === null ? [] : [onB];
+        }),
+      };
+    },
+    self: guardSelf,
+    holdB: (held) => runtime.holdServerB(held),
+    ...(options.coreGuardOptions ?? {}),
+  });
+  coreGuard.onChanged(publishEngines);
+  const guard = coreGuard;
+  runtime.configChanged.subscribe(() => {
+    void guard.serversChanged();
+  });
+  // `RELEASE-0113-01` — a backup channel newly in force is read for another CG Bridge at once.
+  backupChannels.onChanged(() => {
+    void guard.refresh();
+  });
+  await coreGuard.start();
   runtime.start();
   // B-038 Phase 3 — start the template HTTP server so `CG ADD` can reference a
   // real, loadable `/template/<id>` URL. Awaited so the bound port is known.
@@ -495,11 +3348,35 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const servePort = serve?.port ?? 0;
   const exposed =
     serve !== null && serve.bindHost !== '127.0.0.1' && serve.bindHost !== 'localhost';
+  // B-162 — the CORRECTNESS verdict, from the SAME predicate the apply path
+  // uses, over EVERY declared server rather than the primary alone — and (`B-326`) against this
+  // machine's own addresses, the list Station setup's chips show.
+  const ownAddresses = detectServeHostCandidates();
+  const unreachable =
+    serve === null
+      ? []
+      : hostsUnableToFetchTemplates(configuredCasparHosts(connection), serve, ownAddresses);
+  /*
+    C-024 — WHICH LAYER ANSWERED, computed from the same two inputs the resolution used.
+
+    ⚠ Deliberately NOT inferred from the resulting value. A stored host can be byte-identical to
+    the derived one (`127.0.0.1` on an all-local install is the common case), so comparing them
+    would report "derived" for a value the operator explicitly configured — and would flip between
+    the two labels as the servers changed, with nothing in the address itself having moved.
+  */
+  const serveSource: 'flag' | 'config' | 'derived' =
+    options.templateServe?.serveHost !== undefined
+      ? 'flag'
+      : normalizeServeHost(connection.templateServeHost) !== undefined
+        ? 'config'
+        : 'derived';
   const templateServe = {
     url: `http://${serveHost}:${String(servePort)}`,
     serveHost,
     port: servePort,
     exposed,
+    unreachable,
+    source: serveSource,
   };
   // Loud warning ONLY when the template server is LAN-exposed (remote CasparCG):
   // a wrong serve-host guess must be obvious. Loopback (the common case) is quiet.
@@ -509,41 +3386,232 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         `— CG ADD URL host is ${serveHost}. Ensure this is the bridge's address as CasparCG sees it.\n`,
     );
   }
+  // B-162 — its complement, and the one that costs graphics rather than
+  // privacy. Quiet when every declared server can reach us; loud, naming the
+  // servers and the flag that fixes it, when one cannot.
+  if (unreachable.length > 0 && serve !== null) {
+    process.stderr.write(templateServeUnreachableWarning(unreachable, serve, ownAddresses));
+  }
+
+  /*
+    🔴 `RELEASE-091-01` §7 (`B-291`) — a bank no operator ever applied is brought to the five-row rule
+    once, as soon as its channel reads. Only on a station that PERSISTS its banks: an embedder that
+    hands the bank in (`fixedLayers`) owns it, and nothing here writes to a file it did not name.
+  */
+  const fixedLayersFile = options.fixedLayersPath;
+  const bankBringIn =
+    fixedLayersFile === undefined
+      ? null
+      : startBankBringIn({
+          banks: () => runtime.fixedLayerBanks(),
+          occupancy: (channel) => runtime.channelOccupancy(channel, 0),
+          apply: (next) => runtime.setFixedLayerBanks(next),
+          persist: () => {
+            try {
+              saveFixedLayerBanks(fixedLayersFile, runtime.fixedLayerBanks());
+            } catch (err) {
+              process.stderr.write(
+                `[caspar-bridge] ⚠ failed to persist fixed layers to ${fixedLayersFile}: ` +
+                  `${err instanceof Error ? err.message : String(err)}\n`,
+              );
+            }
+          },
+          log: (line) => process.stderr.write(`${line}\n`),
+        });
+
+  /*
+    🔴 `CENTRAL-BRIDGE-01` rule 12 (D11) — the ports this bridge listens on, judged against Windows'
+    reserved ranges once it is up (the check never delays the start). A port inside one is said in
+    the log and on `/health`, and never changed. Asked for by the CLI; a bridge in a test does not
+    spawn `netsh`.
+  */
+  const oscPortA = runtime.config().servers.A.oscPort;
+  const bridgePorts: BridgePort[] = [
+    { port, protocol: 'tcp' as const, role: 'consoles' },
+    { port: templateServe.port, protocol: 'tcp' as const, role: 'template pages' },
+    { port: oscPortA, protocol: 'udp' as const, role: 'OSC from CasparCG' },
+  ].filter((p) => p.port > 0);
+  if (options.checkReservedPorts === true) {
+    void checkReservedPorts(bridgePorts).then((problems) => {
+      for (const p of problems ?? []) {
+        process.stderr.write(`[caspar-bridge] 🔴 ${p.message}\n`);
+        portProblems.push({ code: 'reserved-port', message: p.message });
+      }
+    });
+  }
+
+  // `CENTRAL-BRIDGE-01` (D10) — `/health`, from what is held: no I/O on the request path.
+  healthNow = () => {
+    const servers = runtime.config().servers;
+    const endpoints = new Map<'A' | 'B', { host: string; amcpPort: number }>([
+      ['A', { host: servers.A.host, amcpPort: servers.A.amcpPort }],
+    ]);
+    if (servers.B !== undefined) {
+      endpoints.set('B', { host: servers.B.host, amcpPort: servers.B.amcpPort });
+    }
+    return bridgeHealth({
+      version: bridgeVersion ?? 'unknown',
+      startedAtMs,
+      nowMs: Date.now(),
+      connection: runtime.health(),
+      endpoints,
+      oscStatus: runtime.oscStatus(),
+      playoutAddress: auth.playout?.address ?? null,
+      session: bridgeSession?.state() ?? { state: 'off' },
+      lastPlayoutReadAtMs: playoutCatalogue?.lastGoodReadAtMs() ?? null,
+      // `RELEASE-0112-01` — what this bridge drives (`B-313` reads it), and the engines' lines.
+      channels: runtime.declaredChannels(),
+      // `RELEASE-0113-01` — each declared channel's backup channel in force, on server B's own numbers: what
+      // this bridge intends to write there, which another CG Bridge's guard must see before we clear it.
+      ...(servers.B !== undefined
+        ? {
+            backupChannels: new Map(
+              runtime
+                .declaredChannels()
+                .map((channel) => [channel, backupChannelsInForce.channelOnB(channel)]),
+            ),
+          }
+        : {}),
+      ...(() => {
+        const engines = engineSessionsNow();
+        return {
+          primaryLine: engines.primary,
+          backup:
+            engines.backup === null || backupEngine === null
+              ? null
+              : {
+                  line: engines.backup,
+                  session: backupEngine.session(),
+                  lastReadAtMs: backupEngine.lastReadAtMs(),
+                },
+        };
+      })(),
+      consoles: wss.clients.size,
+      ports: { control: port, templates: templateServe.port, osc: servers.A.oscPort },
+      portProblems: ownPortProblems(),
+    });
+  };
 
   return {
     host,
     port,
     url: `ws://${host}:${port}`,
+    auth,
+    playoutAuth,
+    playoutCatalogue,
     templateServe,
     runtime,
-    fixedBankSource: { bank: fixedBank, source: fixedBankSource },
-    sourceCatalog,
-    sourceAssignments: {
-      value: prunedAssignments.value,
-      source: resolvedAssignments.source,
-      pruned: prunedAssignments.dropped,
+    pgmReturn,
+    pgmAudio,
+    playoutMeters,
+    fixedBankSource: { bank: firstBank(fixedBanks), source: fixedBankSource },
+    templates: runtime.templateProvenance,
+    amcpLog,
+    sourceCatalog: {
+      value: runtime.sourceCatalog(),
+      source: sourceCatalog.source,
+      band: runtime.plateBandInForce(),
     },
+    sourceAssignments: {
+      value: resolvedAssignments.value,
+      source: resolvedAssignments.source,
+    },
+    playoutSources,
+    liveLayers: liveLayersProvenance,
+    stack: stack?.provenance ?? null,
     dropConnections() {
       for (const client of wss.clients) client.terminate();
     },
     async close() {
       for (const client of wss.clients) client.terminate();
+      // `CENTRAL-BRIDGE-01` — the stack's last change is on disk before anything stops.
+      stack?.flush();
+      // `C-037` — stop the D9 tick with the bridge. It is `unref`'d, so it never held the
+      // process open; clearing it is what keeps a test suite from leaving one per bridge.
+      playoutAuth?.dispose();
+      // `CENTRAL-BRIDGE-01` (D7) — and the bridge's own session refresh.
+      bridgeSession?.dispose();
+      backupEngine?.dispose();
+      backupChannels.dispose();
+      coreGuard?.dispose();
+      clearInterval(enginesTicker);
+      // `C-039` — and the D4 tick, for the same reason.
+      playoutCatalogue?.dispose();
+      // `PLAYOUT-FEATURES-01` D — and the license's.
+      playoutLicense?.dispose();
+      playoutVersion?.dispose();
+      // `PLAYOUT-FEATURES-01` A — and the backup media lookup's.
+      backupMedia?.dispose();
+      // `PLAYOUT-SOURCES-01` — and the D10 / bound-media tick.
+      playoutSources?.dispose();
+      // `C-016` — every upstream feed socket and every relayed viewer.
+      pgmReturn.dispose();
+      // `PLAYOUT-FEATURES-01` E — and the sound's, and the meters stream.
+      pgmAudio.dispose();
+      playoutMeters?.dispose();
+      // `RELEASE-091-01` §7 — and the bank bring-in's tick.
+      bankBringIn?.dispose();
       await runtime.stop();
       await new Promise<void>((resolve, reject) => {
         wss.close((err) => (err ? reject(err) : resolve()));
       });
+      // `CENTRAL-BRIDGE-01` (D9) — the socket's own `http.Server` (a `ws` server given one does not
+      // close it), and any `/health` reader still holding a keep-alive connection.
+      controlHttp.closeAllConnections();
+      await new Promise<void>((resolve) => {
+        controlHttp.close(() => resolve());
+      });
     },
   };
+}
+
+/** A principal just seated on a socket, and whether its token is new to this bridge process. */
+interface SeatedSignIn {
+  readonly token: VerifiedToken;
+  /** The token's FIRST acceptance by this process — a sign-in, not a reconnect or a reload. */
+  readonly first: boolean;
 }
 
 async function handleMessage(
   socket: WebSocket,
   routes: Map<string, Route>,
   raw: string,
+  lockState: () => LockState,
+  session: AuthSession,
+  playoutAuth: PlayoutAuth | null,
+  runtime: CasparRuntime,
+  /** `R-062` gap 2 — a principal was just seated on this socket. */
+  afterSignIn: (signIn: SeatedSignIn) => void = () => undefined,
 ): Promise<void> {
   const frame = parseWsFrame(raw);
-  // Only `request` frames are inbound to the bridge; ignore anything else.
-  if (frame === null || frame.type !== 'request') return;
+  if (frame === null) return;
+
+  /*
+    🔴 `C-037` — THE `auth` FRAME, HANDLED BEFORE THE ROUTE TABLE IS EVEN CONSULTED.
+
+    It is not a channel and it deliberately has no route: the gate that refuses every channel
+    has to be able to run BEFORE a principal exists, and a door spelled as one of the things
+    behind the door is a carve-out somebody has to remember. As a frame type it is outside the
+    route table by construction, so the census that walks every route cannot miss it.
+
+    ⚠ The SCHEMA already refused anything but a non-empty string `token` (`parseWsFrame`), so
+    the verifier never sees a malformed input — cryptographic code should not be the first
+    thing to meet one.
+  */
+  if (frame.type === 'auth') {
+    /*
+      ⚠ REGISTERED BEFORE IT IS AWAITED, so a frame dispatched on the very next message event
+      already sees it. Registering after the await would be registering after the window it
+      exists to cover.
+    */
+    const verification = handleAuthFrame(socket, frame, session, playoutAuth, runtime, afterSignIn);
+    session.trackVerification(verification);
+    await verification;
+    return;
+  }
+
+  // Only `request` frames are otherwise inbound to the bridge; ignore anything else.
+  if (frame.type !== 'request') return;
 
   const route = routes.get(frame.channel);
   if (route === undefined) {
@@ -557,19 +3625,361 @@ async function handleMessage(
     return;
   }
 
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **A RE-DELIVERY IS REFUSED BEFORE EVERY GATE, AND WRITES NO
+    ROW.** The bridge keeps the library for every console; a console's replay of its own copy is how
+    a removed template came back and an older version replaced a newer one. Only a console older
+    than this change sends one — the version check turns such a console away at connect — so this is
+    the fence behind that fence. Ahead of the lock and the permission gate on purpose: it is no
+    press, so it must not be recorded as one (`B-258`), and no sign-in or PIN would make it right.
+  */
+  if (
+    route.channel.name === TemplatesImportChannel.name &&
+    (parsedReq.data as { redelivery?: boolean }).redelivery === true
+  ) {
+    send(socket, errorResponse(frame.id, TEMPLATE_REDELIVERY_REFUSAL));
+    return;
+  }
+
+  /*
+    🔴 `B-229` — THE LOCK GATE, AT THE ONE CHOKEPOINT EVERY REQUEST PASSES.
+
+    Here and not inside each handler, for the reason `P-013` put the gate lock at the
+    single `gate` script and `B-100`/`P-012` keep restating: a rule spelled per call site
+    is a rule that is already broken at the site nobody looked at. Sixty routes would have
+    been sixty chances to forget, and the sixty-first would arrive next month.
+
+    It reads `isLocked()` PER REQUEST, never latched at connect: a gate armed when the
+    socket opened would leave a browser refused for the life of its connection after the
+    operator unlocked, and the inverse half of this bug — that unlocking restores every
+    control immediately, with no reload — matters as much as the refusal.
+
+    It sits AFTER the request parse so a locked bridge still answers a MALFORMED request
+    with the shape error. The alternative tells a page with a genuine skew that the console
+    is locked, sending the operator to type a PIN at a problem a PIN cannot fix.
+
+    ⚠ The refusal is an ERROR FRAME, not a channel response. Sixty channels have sixty
+    response schemas and most could not carry a refusal without being widened; the frame
+    error is the one shape every channel already has. `bridgeErrorFrom` (`B-152`) passes a
+    non-skew message through verbatim, so this reaches every existing `err.message` surface
+    already worded for an operator, with no renderer change.
+  */
+  /*
+    🔴 `B-257` — a COVERED-SET lock's verdict turns on WHO is asking, so it waits for a
+    sign-in that is still landing (see the wait below) before it decides, and re-reads the
+    lock after that wait rather than judging on a value from before it. The every-channel
+    lock does not depend on the principal and decides at once, exactly as it always did.
+  */
+  let lock = lockState();
+  if (lock.engaged && lock.channels !== undefined) {
+    await session.whenSettled();
+    lock = lockState();
+  }
+  if (lockRefuses(route, parsedReq.data, lock, session.token?.principal ?? null, runtime)) {
+    send(socket, errorResponse(frame.id, LOCK_ENGAGED_REFUSAL));
+    return;
+  }
+
+  /*
+    🔴 `C-037` / ADR 0010 rule 1 — **THE AUTHORISATION GATE, BESIDE THE LOCK GATE, AT THE
+    ONE CHOKEPOINT EVERY REQUEST PASSES.**
+
+    Here for the reason the lock gate is here, quoted in the ADR as the whole argument: _"a
+    rule spelled per call site is a rule that is already broken at the site nobody looked
+    at."_ Sixty routes would be sixty chances to forget, and the sixty-first arrives next
+    month.
+
+    ⚠ **AFTER the lock gate and not before**, deliberately. A locked console is a fact the
+    operator already knows and can act on in four keystrokes; being told to sign in when the
+    real obstacle is the lock would send them to the wrong remedy. The ORDER is the message.
+
+    ⚠ It reads the state PER REQUEST, never latched at connect — which is what makes a fresh
+    `auth` frame on the SAME socket restore every control with no reload.
+
+    🔴 `C-037` itself changed no refusal CONDITION on the path to air: the lock is untouched,
+    PANIC is untouched, and golden rule 10's gate has not moved. What it changed is that a
+    socket without a principal gets two answers instead of every answer — when, and only when,
+    auth is ON. ⚠ `CHANNEL-AUTHORITY-01`'s station fence, further down, DOES add one, and with
+    auth OFF too: a request naming a channel this station does not declare. It says so there.
+  */
+  /*
+    🔴 **WAIT FOR A SIGN-IN THAT IS STILL LANDING, BEFORE JUDGING THIS FRAME.**
+
+    Frames are dispatched concurrently — `socket.on('message')` calls `void handleMessage(…)`
+    and nothing serializes them — so a console that writes its `auth` frame and then, in the
+    same tick, its whole resync would have every one of those frames gated while the token was
+    still being verified. All of them would be refused and the console would come back with an
+    empty library and no stack. See `AuthSession.whenSettled`.
+
+    ⚠ AFTER the lock gate and the request parse, and BEFORE the auth gate: a malformed frame
+    still gets its shape error without waiting on a network fetch, and a locked console is
+    still told it is locked.
+  */
+  await session.whenSettled();
+  const gate = authGateState(session, playoutAuth);
+  if (refusedByAuth(route, gate)) {
+    send(socket, errorResponse(frame.id, AUTH_REQUIRED_REFUSAL));
+    return;
+  }
+
+  /*
+    🔴 `CHANNEL-AUTHORITY-01` — **THE STATION FENCE: AFTER AUTHENTICATION, BEFORE PERMISSION.**
+
+    Both neighbours are the order being the message, argued from each side:
+
+    ⚠ **AFTER the auth gate**, because ADR 0010 rule 4 gives a socket that has not signed in
+    `bridge.capabilities` and the `auth.*` door and NOTHING ELSE. A fence answering first would
+    tell an unauthenticated socket which channels this station drives, one probe at a time.
+    (Behind the lock gate too, as a consequence: a locked console is told it is locked, and is
+    told this on the next press — a PIN it already knows is not the wrong remedy.)
+
+    ⚠ **BEFORE the permission gate**, because this is the broader fact. An operator granted
+    channel 1 and refused because this station does not operate channel 1 must be told THAT —
+    the permission gate would have PASSED them, which is precisely how `CLEAR 1-20` reached the
+    wire. And an operator NOT granted channel 1 must not be sent to ask for a grant that would
+    change nothing: no grant makes this station operate a channel it does not declare.
+
+    Silent, like the lock and the auth gate, and unlike a permission refusal — which is recorded
+    because a dispute turns on WHO. This turns on nothing a principal did; it is a request
+    naming a channel that is not here.
+  */
+  const unoperated = stationRefusal(route, parsedReq.data, runtime);
+  if (unoperated !== null) {
+    send(socket, errorResponse(frame.id, unoperated));
+    return;
+  }
+
+  /*
+    🔴 `C-038` — **THE AUTHORISATION GATE, AFTER AUTHENTICATION AND BEFORE THE HANDLER.**
+
+    The order is the requirement, not a style choice. A socket with no principal must be told
+    it is not signed in (the gate above), never that its permissions are insufficient — the
+    second sentence names a remedy that would send an unauthenticated operator to an account
+    manager for a problem a sign-in fixes.
+
+    ⚠ **AUTH OFF RETURNS HERE, BEFORE ANYTHING IS RESOLVED.** `authzRefusal` reads the mode
+    first, so a station that has not federated identity does no role lookup, no channel
+    resolution and no config read on any request. That is what makes "auth OFF is
+    byte-identical" a property of the code rather than a claim about it.
+  */
+  const authz = authzRefusal(route, parsedReq.data, session, playoutAuth, runtime);
+  if (authz !== null) {
+    /*
+      🔴 `C-038` acceptance — **THE REFUSAL IS RECORDED, WITH THE VERIFIED ACTOR.**
+
+      A permission refusal is the one kind a dispute turns on the next day: somebody says the
+      console would not let them do their job, and the log is what settles it. `C-037`'s gate
+      and `B-229`'s lock both refuse SILENTLY — that is their own decision and this does not
+      change it — but neither of those turns on WHO, and this one does.
+
+      ⚠ Written here rather than inside `authzRefusal`, so that the predicate stays pure and
+      the census can walk it without writing rows. The gate acts; the predicate decides.
+    */
+    const principal = session?.token?.principal;
+    /*
+      🔴 `B-258` — a row never names a person for an act they did not perform. It used to exempt
+      the console's reconnect machinery here; `CENTRAL-BRIDGE-01` (`B-294`) removed that machinery
+      (`stack.restore` is gone, and a re-delivery is refused before any gate, above), so no
+      reconnect frame reaches this line to be exempted.
+    */
+    if (principal !== undefined) {
+      runtime.recordAuthzRefusal({
+        actor: principal.name,
+        actorSub: principal.sub,
+        channel: route.channel.name,
+        ...(authz.casparChannel !== undefined ? { casparChannel: authz.casparChannel } : {}),
+      });
+    }
+    send(socket, errorResponse(frame.id, authz.message));
+    return;
+  }
+
   try {
-    // Stack ops are async (they await their AMCP ack); await every handler.
-    const result = await route.handle(parsedReq.data);
+    /*
+      Stack ops are async (they await their AMCP ack); await every handler.
+
+      B-141 follow-up — the handler runs inside the acting console's actor context,
+      so every audit append it reaches records WHO asked, at any depth and across
+      every await, without a single call site taking an actor parameter. Two browsers
+      interleaving their requests each keep their own; see `actor-context.ts` for why
+      that rules out a mutable "current actor" field.
+
+      ⭐ `BRIDGE-TRUTH-01` §4 — with auth OFF this records `console` (a console did it, nobody
+      proved who), with auth ON the verified principal's name. The wire's `actor` field is not
+      read: it was the self-declared name `OPERATOR-NAME-SWEEP-01` retired.
+    */
+    /*
+      `C-037` — the session travels into the actor context so a verified name reaches the
+      record, `sub` rides beside it, and the `auth.*` routes can reach their own socket's
+      principal. One decision, in `actor-context.ts`.
+    */
+    const result = await runAsActor(session, () => route.handle(parsedReq.data));
     const parsedRes = route.channel.response.safeParse(result);
     if (!parsedRes.success) {
       send(socket, errorResponse(frame.id, `invalid response for ${frame.channel}`));
       return;
     }
-    const response: WsResponseFrame = { type: 'response', id: frame.id, payload: parsedRes.data };
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (D4) — the answer is what THIS socket may be told: a read of what is
+      on a channel is narrowed to the channels its sign-in holds (`channel-scope.ts`). The scope
+      is read now, after the handler, so a sign-in landing meanwhile is the one judged.
+    */
+    const told = scopePayload(
+      ROUTE_SCOPE,
+      route.channel.name,
+      parsedRes.data,
+      socketScope(session, playoutAuth, runtime),
+      scopeContext(runtime),
+    );
+    if (told === TELL_NOTHING) {
+      send(socket, errorResponse(frame.id, UNCLASSIFIED_ANSWER_REFUSAL));
+      return;
+    }
+    const response: WsResponseFrame = { type: 'response', id: frame.id, payload: told };
     send(socket, response);
   } catch (err) {
     send(socket, errorResponse(frame.id, err instanceof Error ? err.message : 'handler error'));
   }
+}
+
+/**
+ * 🔴 `C-037` — **VERIFY A PRESENTED TOKEN AND SEAT (OR DROP) THIS SOCKET'S PRINCIPAL.**
+ *
+ * The reply is an ordinary `response` frame correlated by the frame's own `id`, carrying the
+ * `auth.state` payload on success and a sentence on refusal — so a console needs no second
+ * mechanism to learn the answer, and `bridgeErrorFrom` (`B-152`) carries the sentence to the
+ * surface verbatim.
+ *
+ * ⚠ **A bridge with auth OFF answers, and answers honestly.** A console that presents a
+ * token to a bridge that does not authenticate is not an error: it is a console that has been
+ * pointed at a development bridge. It is told `mode: 'off'`, which is exactly what
+ * `bridge.capabilities` told it, and it stops offering a sign-in.
+ *
+ * ⚠ Every failure leaves the PREVIOUS principal in place. A bad second `auth` frame must not
+ * sign an operator out mid-shift — that would make a stray frame a way to take a console off
+ * the air, which is the shape of defect this whole change exists to remove.
+ */
+async function handleAuthFrame(
+  socket: WebSocket,
+  frame: WsAuthFrame,
+  session: AuthSession,
+  playoutAuth: PlayoutAuth | null,
+  runtime: CasparRuntime,
+  afterSignIn: (signIn: SeatedSignIn) => void,
+): Promise<void> {
+  if (playoutAuth === null) {
+    send(socket, {
+      type: 'response',
+      id: frame.id,
+      payload: {
+        mode: 'off',
+        principal: null,
+        status: 'off',
+        // Auth off: no principal to scope to, and every control is reachable.
+        permittedChannels: [],
+      } satisfies AuthState,
+    });
+    return;
+  }
+  if (frame.token.trim() === '') {
+    send(socket, errorResponse(frame.id, AUTH_NO_TOKEN));
+    return;
+  }
+  const result = await playoutAuth.verify(frame.token);
+  if (!result.ok) {
+    send(socket, errorResponse(frame.id, result.refusal));
+    return;
+  }
+  /*
+    🔴 A ROW WHEN THE PRINCIPAL CHANGES, NOT WHEN A TOKEN ARRIVES.
+
+    The obvious spelling records on every accepted `auth` frame, and it over-counts: the console
+    re-presents a REFRESHED token on this same socket about ten minutes before expiry (D2), and
+    a reader counting sign-ins would see two people where there was one. A refresh changes
+    nobody — same `sub`, same person, same session — so it is silent.
+
+    ⚠ A RECONNECT still records one, and that is correct rather than an inconsistency: a
+    reconnect is a new socket, so it is a new connection establishing an identity, which is
+    exactly what this row exists to answer.
+
+    Computed BEFORE `adopt`, because after it the previous principal is gone.
+  */
+  /*
+    🔴 `B-259` — **A LOCKED CONSOLE DOES NOT CHANGE HANDS BY TOKEN.**
+
+    A principal change is sign-out plus sign-in in one frame, and sign-out is refused while the
+    lock reaches this socket (`B-229`'s no-carve-out answer, pinned at
+    `lock-refuses-intents.integration.test.ts:281`). This frame is outside the route table, so
+    the request gate never saw it and the swap went through; `B-259` measured it.
+
+    ⚠ **The REFRESH passes — same `sub`.** The console re-presents a refreshed token about ten
+    minutes before expiry (D2); refusing that would lapse the session of a console locked across
+    a token's lifetime. A FIRST sign-in on a socket passes too (there is nobody to displace) —
+    a console reloaded under a lock must still be able to sign in.
+
+    Judged against the socket's CURRENT principal, read AFTER the verification's await.
+  */
+  const current = session.token?.principal ?? null;
+  if (
+    current !== null &&
+    current.sub !== result.token.principal.sub &&
+    lockReaches(runtime.lockState(), current, runtime)
+  ) {
+    send(socket, errorResponse(frame.id, LOCK_ENGAGED_REFUSAL));
+    return;
+  }
+  session.adopt(result.token);
+  playoutAuth.noteLiveToken(result.token);
+  /*
+    🔴 `DELTA B` — **A RESUME IS NOT A SIGN-IN, AND THE RECORD MUST NOT SAY IT IS.**
+
+    Keyed on the TOKEN, not on the socket and not on the person. The previous spelling compared
+    `sub` against the socket's previous principal, which is `null` on every new socket — so
+    every reconnect wrote a row, and the owner's record showed 37 sign-ins for one password.
+
+    The audit answers WHAT OPERATORS DID. A reconnect is the console's own machinery, the same
+    class `LockPolicy`'s `resync` exists to name — _"the client's own reconnect machinery, not a
+    press"_ — so it is recorded as nothing at all. There is no `session-resumed` row either:
+    one per reconnect over a twelve-hour shift is the network's diary, not the operator's, and
+    it would bury the rows that are.
+  */
+  const first = playoutAuth.markAccepted(result.token);
+  if (first) {
+    /*
+      `actorNameTruncated` rides here and nowhere else: it is a fact about this session, and a
+      flag repeated on every take would be noise about something that does not change.
+    */
+    runtime.recordIdentityEvent({
+      action: 'sign-in',
+      actor: result.token.principal.name,
+      actorSub: result.token.principal.sub,
+      ...(result.token.principal.nameTruncated ? { actorNameTruncated: true as const } : {}),
+    });
+  }
+  send(socket, {
+    type: 'response',
+    id: frame.id,
+    payload: {
+      mode: 'playout',
+      principal: result.token.principal,
+      status: 'signed-in',
+      /*
+        ⭐ Carried on the `auth` REPLY as well as on `auth.state`, so a console knows which
+        channels are its the moment it signs in rather than after a second round trip. Both
+        come from the same call, so they cannot describe different permissions.
+      */
+      permittedChannels: [
+        ...grantedChannels(
+          result.token.principal.channels,
+          configuredCasparHosts(runtime.config()),
+          runtime.declaredChannels(),
+        ),
+      ],
+    } satisfies AuthState,
+  });
+  // AFTER the reply, so the console holds its principal before the channel answer that is
+  // computed for it arrives.
+  afterSignIn({ token: result.token, first });
 }
 
 function errorResponse(id: string, message: string): WsResponseFrame {
@@ -580,36 +3990,194 @@ function send(socket: WebSocket, frame: WsResponseFrame | WsPublishFrame): void 
   if (socket.readyState === socket.OPEN) socket.send(serializeWsFrame(frame));
 }
 
-/** Subscribe a connection to every publish channel; returns unsubscribers. */
-function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[] {
+/**
+ * `R-062` gap 2 — a per-socket `channels.changed` pusher: computes THIS socket's discovery answer
+ * and sends it only when it differs from the last one this socket was actually sent.
+ *
+ * ⚠ The last-sent answer is recorded only when it is DELIVERED. A socket that has not signed in
+ * receives nothing (ADR 0010 rule 4), and recording an answer it never got would suppress the
+ * very push its sign-in needs.
+ */
+function stationChannelsPusher(
+  socket: WebSocket,
+  deliver: () => boolean,
+  compute: () => StationChannels,
+): () => void {
+  /*
+    ⚠ SEEDED with the answer the socket's own `channels.list` pull returns — when, and only when,
+    the socket can already be delivered to. That is auth OFF, where the answer cannot move short
+    of a bank installed live on a bank-less bridge: without the seed, the first input event after
+    connect (the mode read's settings publish) pushed an unchanged copy, one frame of traffic an
+    auth-OFF console never had. With auth ON a socket connects signed out, the seed stays empty,
+    and its sign-in push always goes — which it must: a viewer's answer can be identical before
+    and after sign-in, and its pre-sign-in pull was refused, so that push is the only copy it gets.
+  */
+  let lastSent: string | null = deliver() ? JSON.stringify(compute()) : null;
+  return () => {
+    if (!deliver()) return;
+    const next = StationChannelsChangedChannel.payload.safeParse(compute());
+    if (!next.success) return;
+    const json = JSON.stringify(next.data);
+    if (json === lastSent) return;
+    lastSent = json;
+    send(socket, {
+      type: 'publish',
+      channel: StationChannelsChangedChannel.name,
+      payload: next.data,
+    });
+  };
+}
+
+/**
+ * Subscribe a connection to every publish channel; returns unsubscribers.
+ *
+ * 🔴 **EXPORTED FOR THE `B-247` PUBLISH-COVERAGE GUARD, exactly as {@link buildRoutes} is
+ * exported for `B-074`'s route-coverage guard.** An emitter `CasparRuntime` declares and this
+ * function does not subscribe is invisible in every other way — it is not a type error (the
+ * far end is a WebSocket), it breaks no test, and the bridge simply never sends the event. That
+ * is how `livePlateReleased` came to be computed, emitted and delivered nowhere for the life of
+ * `multibox-layout-switch`. `tests/publish-coverage.test.ts` calls this and asserts every
+ * emitter got a subscriber; do not make it private again.
+ */
+export function wirePublishes(
+  socket: WebSocket,
+  backing: CasparRuntime,
+  /**
+   * 🔴 `C-037` — **MAY THIS SOCKET BE TOLD ANYTHING RIGHT NOW?** Read at PUSH time, so
+   * signing in opens the stream and signing out closes it on the same socket, with no
+   * subscribe/unsubscribe pair that could fall out of step.
+   *
+   * Defaults to `true`, which is auth OFF and is also what the `B-247` publish-coverage guard
+   * calls with — so not one byte of today's behaviour moves and the guard needs no edit.
+   */
+  deliver: () => boolean = () => true,
+  /**
+   * 🔴 `OPERATOR-NAME-SWEEP-01` § 3(a) — **THIS SOCKET'S OWN AUTH STATE, recomputed on
+   * demand.**
+   *
+   * Optional and defaulting to `null`, so the `B-247` publish-coverage guard — which calls
+   * this function with two arguments to prove every emitter is forwarded — needs no edit, and
+   * so a caller that has no session (a census, a test) simply pushes nothing.
+   *
+   * ⚠ A FUNCTION, not a value. The point is that it is read at PUSH time, exactly as
+   * `deliver` is: the configuration that decides the answer changes underneath, which is the
+   * whole reason this channel exists.
+   */
+  authState: (() => AuthState) | null = null,
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (D4) — **THE CHANNELS THIS SOCKET IS TOLD ABOUT**, read at PUSH time
+   * for `deliver`'s reason (a sign-in or a new token moves it on the same socket). Every push goes
+   * through `channel-scope.ts`'s table. Defaults to every channel — auth OFF, and the `B-247`
+   * guard's two-argument call.
+   */
+  scope: () => Holds | null = () => null,
+): (() => void)[] {
+  const ctx = scopeContext(backing);
   const push = (channel: AnyPublishChannel, payload: unknown): void => {
+    if (!deliver()) return;
     const parsed = channel.payload.safeParse(payload);
-    if (parsed.success)
-      send(socket, { type: 'publish', channel: channel.name, payload: parsed.data });
+    if (!parsed.success) return;
+    const told = scopePayload(PUBLISH_SCOPE, channel.name, parsed.data, scope(), ctx);
+    if (told === TELL_NOTHING) return;
+    send(socket, { type: 'publish', channel: channel.name, payload: told });
+  };
+  const pushAuthState = (): void => {
+    if (authState === null) return;
+    const next = authState();
+    /*
+      🔴 **AUTH OFF PUSHES NOTHING HERE.** A station that does not federate identity must
+      gain no traffic it did not have — "byte-identical" is a claim about the wire, not only
+      about behaviour, and a spec measured this one: the first spelling pushed
+      `{ mode: 'off', permittedChannels: [] }` on every config change, to every console, for
+      a station with no principal to scope to.
+
+      ⚠ The check is on the MODE rather than on the list being empty. An empty list is a real
+      answer for a signed-in viewer, and suppressing that would leave a strip asserting
+      channels the viewer had just lost.
+    */
+    if (next.mode === 'off') return;
+    push(AuthStateChangedChannel, next);
   };
   return [
     backing.stackChanged.subscribe((s) => push(StackStateChangedChannel, s)),
     backing.healthChanged.subscribe((h) => push(ConnectionsHealthChangedChannel, h)),
     backing.configChanged.subscribe((c) => push(ConnectionsConfigChangedChannel, c)),
+    /*
+      🔴 `OPERATOR-NAME-SWEEP-01` § 3(a) — **THE PERMITTED CHANNELS FOLLOW THE CONFIG.**
+
+      A second subscription to the SAME emitter, deliberately, rather than folding this into
+      the push above. The two say different things to different readers: one is "the server
+      list changed", which every console shows; the other is "what YOU may drive changed",
+      which is per principal. Merging them would make one channel carry two facts and would
+      force every reader of the config to know about permissions.
+
+      ⚠ **Why the config event is the right trigger.** `grantsChannel` resolves a grant's
+      host against `configuredCasparHosts(config)`, so the server list is the only input to
+      the verdict that can move without the principal changing — a token change already
+      re-pushes through `#setPrincipal` on the console side.
+    */
+    backing.configChanged.subscribe(pushAuthState),
+    /*
+      🔴 `DESKTOP-APPS-01-D` i — **AND THEY FOLLOW THE BANK, the verdict's OTHER input.**
+
+      `authStateFor` composes the grants with `runtime.declaredChannels()` as well as with the
+      server list, and the note above named only the server list. First-run writes the
+      connection and THEN the bank, so the one push this socket got carried the bank-less
+      answer (channel 1) and the declaration of channel 2 re-pushed nothing: the console showed
+      `کانال دوم (تست CG) · READ ONLY` with no controls until a reload re-pulled `auth.state`.
+      Both inputs of the one composition re-push it; there is no third.
+    */
+    backing.fixedConfigChanged.subscribe(pushAuthState),
+    // `DESKTOP-APPS-01-D` j — the strays Station setup shows.
+    backing.straysChanged.subscribe((s) => push(StationStraysChangedChannel, s)),
     backing.orphansChanged.subscribe((o) => push(LayersOrphansChangedChannel, o)),
+    // `RELEASE-091-01` (DELTA B, B1) — a layer of ours cleared outside CG Control.
+    backing.clearedOutsideChanged.subscribe((o) =>
+      push(LayersClearedOutsideChangedChannel, [...o]),
+    ),
     backing.ownedOccupancyChanged.subscribe((w) => push(LayersOwnedOccupancyChangedChannel, w)),
+    // B-225 — air was emptied under us (or the notice was acted on / dismissed).
+    backing.emptiedAirChanged.subscribe((n) => push(EmptiedAirNoticeChangedChannel, n)),
+    // `CENTRAL-BRIDGE-01` (`B-294`) — what the start's restore did not bring back (or a dismissal).
+    backing.restoreReportChanged.subscribe((r) => push(StackRestoreReportChangedChannel, r)),
     backing.lockChanged.subscribe((l) => push(LockStateChangedChannel, l)),
     backing.updateChanged.subscribe((u) => push(UpdateStateChangedChannel, u)),
-    backing.settingsChanged.subscribe((s) => push(SettingsChangedChannel, s)),
     // R-021 stage 2a — fixed-bank config + per-slot state.
     backing.fixedConfigChanged.subscribe((c) => push(FixedLayersConfigChangedChannel, c)),
+    // `MULTI-CHANNEL-01` — the whole set, which the console's per-channel views read.
+    backing.fixedBanksChanged.subscribe((b) => push(FixedLayersBanksChangedChannel, b)),
     backing.fixedStateChanged.subscribe((s) => push(FixedLayersStateChangedChannel, s)),
     // R-028 (o1) — the bridge-owned template catalogue.
     backing.templatesChanged.subscribe((t) => push(TemplatesChangedChannel, t)),
+    // `CONSOLE-POLISH-01` (`B-300`) — who imported, re-imported or removed which template.
+    backing.templatesActed.subscribe((a) => push(TemplatesActedChannel, a)),
+    // `CONSOLE-POLISH-01` (`R-083`) — a row just recorded, to the consoles its channel allows.
+    backing.auditAppended.subscribe((e) => push(AuditAppendedChannel, e)),
     // R-028 part B — the declared playout layers' occupancy.
     backing.playoutStateChanged.subscribe((s) => push(PlayoutLayersStateChangedChannel, s)),
+    // B-145 (2.8) — the ledger, projected through the SAME projectLiveLayers the
+    // pull uses. It rides the emitter the ledger's ONE write path already fires,
+    // so the persister and the browser learn of a change from the same call — a
+    // surface that polled instead would be free to disagree with the file about
+    // what is on air.
+    // 🔴 The emitter is the SIGNAL; the payload comes from the runtime’s own
+    // `liveLayersState()`, which is now the single caller of `projectLiveLayers`. It
+    // holds the unverified marks, so projecting the emitted ledger here instead would
+    // be a second projection missing the one field that is always true after a restart.
+    backing.liveLayersChanged.subscribe(() =>
+      push(LiveLayersStateChangedChannel, backing.liveLayersState()),
+    ),
     // R-034 — the shared delimiter list.
     backing.delimitersChanged.subscribe((d) => push(DelimitersChangedChannel, d)),
     // R-030 — the per-channel raster + the configured-vs-real mode reading.
     backing.channelSettingsChanged.subscribe((s) => push(ChannelSettingsChangedChannel, s)),
     // D-137 / C-015 — the installation's Live Source mapping, so a second
     // console sees the binding an operator just made without reloading.
-    backing.sourceCatalogChanged.subscribe((c) => push(SourcesConfigChangedChannel, c)),
+    // `PLAYOUT-SOURCES-01` §1.E — a console never holds a stream URL's credentials.
+    // `PLATE-BAND-01` — and it is told the plate band in force beside the catalogue.
+    backing.sourceCatalogChanged.subscribe((c) =>
+      push(SourcesConfigChangedChannel, consoleSourceCatalog(c, backing.plateBandInForce())),
+    ),
     // …and the assignments, which a catalog DELETION changes without any
     // browser asking. A console still showing the old binding is a console
     // showing a plate as bound that is not.
@@ -617,6 +4185,22 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     // R-022 — the rehearsing set, so a second browser never sees a rehearsing row
     // as an ordinary loaded one and loads onto it.
     backing.rehearseChanged.subscribe((r) => push(RehearseStateChangedChannel, r)),
+    /*
+      🔴 `B-247` — WHY a plate left the ledger, beside the ledger change itself.
+
+      The line above it (`liveLayersChanged`) says the seat is GONE; this says whether it was
+      HELD or TORN DOWN and what the bridge's reason was. Without it the console can see a
+      three-seat row become a one-seat row and has no way to tell a frame that was never seated
+      from one that was seated and cleared — which is precisely the state §12.4 promised would
+      be observable. It was emitted from the reconcile all along and subscribed by nothing.
+
+      ⚠ It rides the SAME emitter the reconcile already fires, after the wire and the ledger
+      agree (`caspar-runtime.ts` emits these only once both are settled), so a browser that
+      reads the ledger on this event sees the state the sentence describes.
+    */
+    backing.livePlateReleased.subscribe((r) => push(LivePlateReleasedChannel, r)),
+    // `MEDIA-PLATES-01` §1.E — the clips' clock, pushed when what a console shows would change.
+    backing.mediaStateChanged.subscribe((s) => push(LiveLayersMediaStateChangedChannel, s)),
   ];
 }
 
@@ -632,18 +4216,185 @@ export function buildRoutes(
   b: CasparRuntime,
   paths: {
     persistPath?: string;
+    /** `CENTRAL-BRIDGE-01` — this machine's OSC port over every applied config ({@link withBridgeOscPort}). */
+    oscPort?: number;
+    /** `CENTRAL-BRIDGE-01` — the release this bridge is, for `bridge.capabilities` (`0.10.0`). */
+    bridgeVersion?: string;
+    /**
+     * `CENTRAL-BRIDGE-01` (D4) — the ACTING principal's channels (`null`: every channel), read
+     * inside a handler through the actor context. A dismissal reaches only what its console was
+     * told. Absent — auth OFF, and the route-coverage guard — is every channel.
+     */
+    actorScope?: () => Holds | null;
+    /**
+     * `CENTRAL-BRIDGE-01` (D7) — CG Bridge's own Playout session, or `null`/absent when this bridge
+     * keeps none (auth OFF, a development bridge, the route-coverage guard): its state then reads
+     * `off` and a sign-in has nothing to sign in.
+     */
+    bridgeSession?: BridgeSession | null;
+    /**
+     * `RELEASE-0112-01` (`R-085`) — each engine's line (`engineState`), the backup engine (for its own
+     * sign-in), and the push that follows a sign-in. Absent (the route-coverage guard): the primary
+     * reads `off` and there is no backup.
+     */
+    engines?: () => EngineSessions;
+    backupEngine?: BackupEngine | null;
+    publishEngines?: () => void;
+    /** `RELEASE-0113-01` (`R-089`) — each channel's mirror on the backup engine, and the admin's entries. */
+    backupChannels?: () => BackupChannelsState;
+    setBackupEntries?: (entries: readonly BackupChannelEntry[]) => {
+      ok: boolean;
+      message?: string;
+    };
+    /** `PLAYOUT-FEATURES-01` D — the CG license as last read, or `null`. Absent: nothing read. */
+    license?: () => PlayoutLicense | null;
     fixedLayersPath?: string;
     sourceCatalogPath?: string;
     sourceAssignmentsPath?: string;
+    /**
+     * `C-037` — the RESOLVED Playout link: what `auth.state` reports as the MODE, and the
+     * addresses `bridge.capabilities` advertises. ONE input rather than a mode beside a
+     * config, because {@link PlayoutSettings} already makes "mode is `playout`" and "there
+     * is a config" the same fact — two inputs would be two things that must agree.
+     *
+     * ⚠ The PRINCIPAL is per socket and comes from the actor context, never from here: a
+     * mode is a property of the bridge, an identity is a property of a connection, and a
+     * route reading both from one place would answer one socket's question with another
+     * socket's answer.
+     */
+    auth?: PlayoutSettings;
+    /**
+     * `C-037` — THE ONE PREDICATE, injected so `auth.state` answers with the same verdict the
+     * gate uses rather than deriving a second one. Defaults to `off`, which is what a bridge
+     * built with no Playout link is.
+     */
+    authState?: (session: AuthSession | null) => AuthGateState;
+    /** `C-037` — give up the D9 bearer when the socket that supplied it signs out. */
+    releaseBearer?: (rawToken: string) => void;
+    /**
+     * `R-062` gap 2 — THE ONE COMPOSITION, injected for `authState`'s reason: `channels.list`
+     * answers with the same function the `channels.changed` publish uses. Defaults to the
+     * auth-OFF answer with no catalogue — what a bridge built with no Playout link is.
+     */
+    stationChannels?: (session: AuthSession | null) => StationChannels;
+    /**
+     * `DESKTOP-APPS-01` — where this station is in first-run, read per call (the bank is declared
+     * live). Defaults to `null`: a bridge not started as an installed station is never in one.
+     */
+    setupPhase?: () => SetupPhase | null;
+    /** `DESKTOP-APPS-01` — the one D4 reader's rows as held (A4 applied); `null` when absent. */
+    catalogueRows?: () => readonly CatalogueRow[] | null;
+    /**
+     * `UI-POLISH-01` G — read D4 now if its 5 s floor allows (`PlayoutCatalogue.refresh`); resolves
+     * when that read has settled and never rejects. Defaults to nothing to read.
+     */
+    refreshCatalogue?: () => Promise<void>;
+    /** `DESKTOP-APPS-01` §2F — the connection check, bound to this station's own ports. */
+    connectionCheck?: (req: ConnectionCheckRequest) => Promise<ConnectionCheckResult>;
+    /**
+     * 🔴 `B-327` (`SERVERS-SIMPLIFY-01` T6) — whether server A joins the Playout's `casparHost`, through the one
+     * `hostIsOurs`; `null` when the Playout's list is not read. Absent (auth OFF, the route-coverage guard):
+     * nothing to judge.
+     */
+    casparJoin?: () => CasparJoin | null;
+    /** `DESKTOP-APPS-01` §2E — this machine's address on the route to a host. */
+    routeAddress?: (host: string) => Promise<string | null>;
+    /**
+     * `C-016` — every watched channel's programme-return state, from the one relay. Defaults to
+     * nothing watched — what a bridge with no relay is.
+     */
+    pgmReturnStatus?: () => PgmReturnStatus[];
+    /**
+     * `PLAYOUT-SOURCES-01` — the Playout's D10/D11 reader; `null` / absent for a bridge with none (an
+     * explicit in-process catalogue, or auth off with nothing injected).
+     */
+    playoutSources?: PlayoutSources | null;
+    /** `CENTRAL-BRIDGE-01` (D9) — a ticket for one of CG Bridge's HTTP resources. */
+    issueTicket?: (grant: TicketGrant) => string;
+    /** Does this bridge keep a log folder to download? */
+    logsAvailable?: boolean;
   } = {},
 ): Map<string, Route> {
   // NAMED, not positional. Four optional string paths in a row is a signature
   // where transposing two of them type-checks and writes each config into the
   // other's file.
   const { persistPath, fixedLayersPath, sourceCatalogPath, sourceAssignmentsPath } = paths;
-  const route = (channel: AnyChannel, handle: (req: never) => unknown): Route => ({
+  const { mode: authMode, playout: playoutUrls } = paths.auth ?? AUTH_OFF;
+  const authState = paths.authState ?? ((): AuthGateState => 'off');
+  const releaseBearer = paths.releaseBearer ?? ((): void => undefined);
+  const actorScope = paths.actorScope ?? ((): Holds | null => null);
+  const stationChannels =
+    paths.stationChannels ??
+    ((session: AuthSession | null): StationChannels =>
+      stationChannelsFor(session, 'off', 'off', b, null));
+  const setupPhase = paths.setupPhase ?? ((): SetupPhase | null => null);
+  // B3 — the sign-in failure notes this bridge will write, bridge-wide: a flood cannot fill the log.
+  const signInNotes = rateWindow(SIGN_IN_NOTES_PER_MINUTE, 60_000);
+  const catalogueRows = paths.catalogueRows ?? ((): readonly CatalogueRow[] | null => null);
+  // `CENTRAL-BRIDGE-01` (D9) — with no ticket issuer (a routes-only test), none is ever valid.
+  const fallbackTickets = new HttpTickets();
+  const issueTicket =
+    paths.issueTicket ?? ((grant: TicketGrant): string => fallbackTickets.issue(grant));
+  const logsAvailable = paths.logsAvailable ?? false;
+  const refreshCatalogue = paths.refreshCatalogue ?? ((): Promise<void> => Promise.resolve());
+  const connectionCheck =
+    paths.connectionCheck ??
+    ((req: ConnectionCheckRequest): Promise<ConnectionCheckResult> =>
+      runConnectionCheck(req, realProbes(), {}));
+  /*
+    🔴 `DELTA-MULTI-CHANNEL-01-B` B1 — **BEFORE ANY SIGN-IN, THE CHECK PROBES THIS STATION'S
+    PLAYOUT AND NOTHING ELSE.** The check reaches out — HTTP to the address it is given, AMCP to
+    that host — so an open door that took any address would let an unsigned caller use the station
+    to probe the network. The console asks for exactly this Playout before a sign-in (the origin it
+    reads off `signInUrl`, which is this `tokenUrl`'s), so the narrowing costs it nothing. A named
+    CasparCG host is a signed-in principal's question.
+  */
+  /*
+    🔴 `SERVERS-SIMPLIFY-01` (`B-327`) — **TWO QUESTIONS, NO LONGER ONE.** "Is this the station's own Playout?"
+    decides whether CG Bridge's own lines (its session, OSC, the license, the channels, the CasparCG join) belong
+    in the answer; "may an unsigned caller ask this?" is the narrowing above. They were one predicate, so a
+    signed-in console naming the CasparCG host it judges — what Station setup now does, so the AMCP line probes
+    what this bridge actually drives — lost every line of its own station. The narrowing is unchanged, byte for
+    byte: before a sign-in, only this Playout, and never a named CasparCG host.
+  */
+  const isThisStationsPlayout = (r: ConnectionCheckRequest): boolean => {
+    if (playoutUrls === null) return false;
+    const typed = normalisePlayoutAddress(r.playoutAddress);
+    if (typed === null) return false;
+    try {
+      return new URL(typed).origin === new URL(playoutUrls.tokenUrl).origin;
+    } catch {
+      return false;
+    }
+  };
+  const checksThisStation = (r: ConnectionCheckRequest): boolean =>
+    r.casparHost === undefined && isThisStationsPlayout(r);
+  const routeAddress =
+    paths.routeAddress ??
+    (async (host: string): Promise<string | null> =>
+      (await probeRoute(host).catch(() => null))?.address ?? null);
+  const pgmReturnStatus = paths.pgmReturnStatus ?? ((): PgmReturnStatus[] => []);
+  /*
+    `B-229` — `lock` is the THIRD ARGUMENT AND IT IS REQUIRED. A new channel cannot be
+    routed without classifying it, which is what keeps "the lock refuses everything"
+    true a year from now. See {@link LockPolicy} for the four values and the owner's
+    reasoning behind the no-carve-out answer.
+
+    🔴 `C-038` — and `perm` is the FOURTH, required for the identical reason one axis over.
+    Deliberately a POSITIONAL argument rather than a field on an options bag with a default:
+    a default is the mechanism by which every future route silently becomes `operator`, and
+    the compiler refusing to build is the only version of this rule nobody can forget.
+  */
+  const route = (
+    channel: AnyChannel,
+    lock: LockPolicy,
+    perm: PermissionClass,
+    handle: (req: never) => unknown,
+  ): Route => ({
     channel,
     handle: handle as (req: unknown) => unknown,
+    lock,
+    perm,
   });
 
   /**
@@ -659,13 +4410,39 @@ export function buildRoutes(
         `but will not survive a bridge restart\n`,
     );
   };
-  const persistCatalog = (filePath: string | undefined, value: SourceCatalog): void => {
+  /**
+   * `PLAYOUT-SOURCES-01` §1.F — persist the PLATE BAND, and only it: the file's hand-made `sources`
+   * are kept byte for byte (not migrated, not deleted — P-031).
+   */
+  const persistBand = (
+    filePath: string | undefined,
+    range: LiveSourceLayerRange | undefined,
+  ): void => {
     if (filePath === undefined) return;
     try {
-      saveSourceCatalog(filePath, value);
+      saveSourceBand(filePath, range);
     } catch (err) {
-      persistFailed('the source catalog', filePath, err);
+      persistFailed('the plate band', filePath, err);
     }
+  };
+  const playoutSources = paths.playoutSources ?? null;
+  /**
+   * 🔴 `PLAYOUT-SOURCES-01` §1.B — every media id a request names that is not yet in the catalogue in
+   * force is bound from the BRIDGE'S OWN reads (its recent search answers, or an `ids=` read) before
+   * the request is applied; nothing a console sends about the item is ever used. Which of the new
+   * bindings are bindable at all is the runtime's check, against the catalogue that results.
+   */
+  const bindMedia = async (
+    ids: readonly string[],
+  ): Promise<{ ok: true } | { ok: false; message: string }> => {
+    if (playoutSources === null) return { ok: true };
+    const known = new Set(b.sourceCatalog().sources.map((s) => s.id));
+    for (const id of new Set(ids)) {
+      if (known.has(id)) continue;
+      const bound = await playoutSources.ensureBound(id);
+      if (!bound.ok) return bound;
+    }
+    return { ok: true };
   };
   const persistAssignments = (filePath: string | undefined, value: SourceAssignments): void => {
     if (filePath === undefined) return;
@@ -675,81 +4452,493 @@ export function buildRoutes(
       persistFailed('the source assignments', filePath, err);
     }
   };
+  /**
+   * `MULTI-CHANNEL-01` — persist the set IN FORCE after either door applied it. One bank is written
+   * as the v1 object, byte for byte (`saveFixedLayerBanks`), so a one-channel station's file is
+   * exactly what `set-config` always wrote.
+   */
+  /**
+   * 🔴 `CHANNEL-SOURCES-01` decision 2 — a channel that JOINED the set was given a copy of each
+   * template's current defaults by the runtime (`#copyDefaultsToJoiningChannels`); that copy is
+   * persisted beside the banks, so a restart keeps the new channel's own defaults.
+   */
+  const persistDefaultsIfCopied = (before: SourceAssignments): void => {
+    const now = b.sourceAssignments();
+    if (now !== before) persistAssignments(sourceAssignmentsPath, now);
+  };
+  const persistBanks = (): void => {
+    if (fixedLayersPath === undefined) return;
+    try {
+      saveFixedLayerBanks(fixedLayersPath, b.fixedLayerBanks());
+    } catch (err) {
+      process.stderr.write(
+        `[caspar-bridge] ⚠ failed to persist fixed layers to ${fixedLayersPath}: ` +
+          `${err instanceof Error ? err.message : String(err)}\n`,
+      );
+    }
+  };
 
   const entries: Route[] = [
-    route(AppInfoChannel, () => ({ name: 'cg Bridge', version: '0.0.0', platform: 'node' })),
+    /*
+      🔴 `C-037` — the `auth.*` door, as ORDINARY ROUTES.
 
-    route(StackLoadChannel, (r: { itemId: string; templateId: string; fields: never }) =>
-      b.load(r.itemId, r.templateId, r.fields),
+      They could have been special-cased in `handleMessage` beside the frame, and were not, so
+      that the route census walks them like everything else and `B-074`'s coverage guard
+      requires them to exist. They reach their own socket's principal through the actor
+      context, which is what lets a per-connection answer come out of a process-wide table.
+
+      ⚠ `auth.state` is a `read` — it changes nothing and a console reconnecting to a bridge
+      it is not signed in to must still be able to ASK. `auth.sign-out` is an `operator`
+      intent: the lock refuses everything (the owner's no-carve-out answer) and signing out is
+      something the operator does, not something they read.
+    */
+    route(AuthStateChannel, 'read', 'read', () => {
+      /*
+        🔴 IT ASKS THE ONE PREDICATE. It used to report `token?.principal` directly, and that
+        was a lie a spec MEASURED: with intents already refused for a revoked `jti`, this read
+        still answered a full principal. The principal is still reported — a surface has to be
+        able to say WHOSE session ended — but the verdict beside it is the gate's own.
+
+        ⭐ `OPERATOR-NAME-SWEEP-01` § 3(a) — and the composition now lives in `authStateFor`,
+        which the `auth.state-changed` PUBLISH also calls. A read and a push that answered the
+        same question from two places is the drift this file has already paid for once.
+      */
+      const session = currentAuthSession();
+      return authStateFor(session, authState(session), authMode, b);
+    }),
+    /*
+      🔴 `DELTA-MULTI-CHANNEL-01-B` B3 — the Playout's own answer to a failed sign-in, into this
+      bridge's log (the sign-in itself is browser → Playout; nothing else of it reaches a log).
+      `read` on both axes: it changes nothing. The text is untrusted — see `signInFailureLine`.
+    */
+    route(
+      AuthSignInFailureChannel,
+      'read',
+      'read',
+      (r: { code: string; status: number | null; body: string }) => {
+        const line = signInNotes.admit(Date.now()) ? signInFailureLine(r) : null;
+        if (line !== null) process.stderr.write(`${line}\n`);
+        return { ok: true as const };
+      },
     ),
-    route(StackTakeChannel, (r: { itemId: string }) => b.take(r.itemId)),
+    route(AuthSignOutChannel, 'operator', 'read', () => {
+      const session = currentAuthSession();
+      const leaving = session?.token?.principal ?? null;
+      // The bridge must stop calling the Playout with a token whose operator has left.
+      const raw = session?.token?.rawToken;
+      if (raw !== undefined) releaseBearer(raw);
+      /*
+        🔴 `CONSOLE-POLISH-01` (`R-083`) — CLEARED BEFORE THE ROW IS RECORDED. Recording a row now
+        PUBLISHES it (`audit.appended`), and a publish asks each socket's auth state — which keeps a
+        live principal's bearer fresh (`authGateState`). Recorded first, the row's own push re-noted the
+        token this route had just released, and CG Bridge read the Playout on behalf of nobody. The row
+        names the leaver from `leaving`, captured above, so nothing it says depends on the session.
+      */
+      session?.clear();
+      if (leaving !== null) {
+        b.recordIdentityEvent({
+          action: 'sign-out',
+          actor: leaving.name,
+          actorSub: leaving.sub,
+        });
+      }
+      return { ok: true as const };
+    }),
+    route(AppInfoChannel, 'read', 'read', () => ({
+      name: 'cg Bridge',
+      version: '0.0.0',
+      platform: 'node',
+    })),
+
+    route(
+      StackLoadChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; templateId: string; fields: never }) =>
+        b.load(r.itemId, r.templateId, r.fields),
+    ),
+    route(StackTakeChannel, 'operator', 'operator', (r: { itemId: string }) => b.take(r.itemId)),
+    // Session BM-2 — the texts AND the row's per-look inputs, in ONE atomic call.
     route(
       StackUpdateChannel,
-      (r: { itemId: string; fields: never; mergeMode: 'merge' | 'replace' }) =>
-        b.update(r.itemId, r.fields, r.mergeMode),
+      'operator',
+      'operator',
+      async (r: {
+        itemId: string;
+        fields: never;
+        mergeMode: 'merge' | 'replace';
+        lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+      }) => {
+        // `PLAYOUT-SOURCES-01` §1.B — a media id the row newly binds is bound from the bridge's own
+        // reads first; a refusal refuses the whole update, BM-2's atomic rule.
+        if (r.lookBindings !== undefined) {
+          const bound = await bindMedia(
+            Object.values(r.lookBindings).flatMap((plates) => Object.values(plates)),
+          );
+          if (!bound.ok) {
+            return { accepted: false, errorCode: 'source-unusable', message: bound.message };
+          }
+        }
+        return b.update(r.itemId, r.fields, r.mergeMode, r.lookBindings);
+      },
     ),
     // C-012 — the graceful stop (outro runs, producer stays resident).
-    route(StackStopChannel, (r: { itemId: string }) => b.stopItem(r.itemId)),
+    route(StackStopChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.stopItem(r.itemId),
+    ),
     // R-028 (o2 / 5.4) — advance the template's sequence.
-    route(StackNextChannel, (r: { itemId: string }) => b.nextItem(r.itemId)),
-    route(StackOutChannel, (r: { itemId: string }) => b.out(r.itemId)),
-    route(StackRemoveChannel, (r: { itemId: string }) => b.remove(r.itemId)),
+    route(StackNextChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.nextItem(r.itemId),
+    ),
+    route(StackOutChannel, 'operator', 'operator', (r: { itemId: string }) => b.out(r.itemId)),
+    route(StackRemoveChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.remove(r.itemId),
+    ),
+    // `B-301` — dismiss a row's error: judged as its removal is (an operator verb on its channel).
+    route(StackDismissErrorChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.dismissError(r.itemId),
+    ),
     // R-011 — the operator's per-item on-air position override.
-    route(StackSetPositionChannel, (r: { itemId: string; position: never }) =>
-      b.setPosition(r.itemId, r.position),
+    route(
+      StackSetPositionChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; position: never }) => b.setPosition(r.itemId, r.position),
+    ),
+    // R-048 — the operator repoints ONE plate of ONE row, on air. A per-item
+    // override: the template assignment and the installation catalog are untouched.
+    // Session BM — and, with a `lookId`, the DELIBERATE per-look composition. One verb, two
+    // scopes: absent is the emergency (every look), present is one look's binding.
+    route(
+      StackSwapLiveSourceChannel,
+      'operator',
+      'operator',
+      async (r: { itemId: string; plateId: string; sourceId: string | null; lookId?: string }) => {
+        // `PLAYOUT-SOURCES-01` §1.B — a media item is bound from the bridge's own reads first.
+        if (r.sourceId !== null) {
+          const bound = await bindMedia([r.sourceId]);
+          if (!bound.ok) return { ok: false, reason: 'source-unusable', message: bound.message };
+        }
+        return b.swapLiveSource(r.itemId, r.plateId, r.sourceId, r.lookId);
+      },
+    ),
+    // §14 (LOOKS) Stage E — the operator picks a look on the row. ONE seam: the bridge
+    // validates the plan, tells the page on the CG UPDATE payload so it moves the HOLES,
+    // then moves the FILLS after the B-174 mixer hold. Both halves off the same look id;
+    // nothing else switches a look.
+    route(
+      StackSetActiveLookChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; lookId: string }) => b.setActiveLook(r.itemId, r.lookId),
+    ),
+    // `TIMING-WIRE-22` (c) — a CONFIGURATION verb: it carries no Take, and changes what the
+    // graphic already on the channel will do next.
+    route(
+      StackSetPassTimingChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; passes?: number | 'infinite'; delayMs?: number }) =>
+        b.setPassTiming(r.itemId, { passes: r.passes, delayMs: r.delayMs }),
+    ),
+    // C-015 (6.5f) — the explicit recorded intent that raises a plate's audio.
+    route(
+      StackSetPlateVolumeChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; plateId: string; volume: number }) =>
+        b.setLivePlateVolume(r.itemId, r.plateId, r.volume),
+    ),
+    /*
+      `MEDIA-PLATES-01` §1.D — Play/Pause and Restart for one media plate of an on-air row. It names
+      its row, so the station fence, the principal's grant on that row's channel and a lock covering
+      it all judge it (`channelsForRequest` case (b)); audited by the runtime with the clip's name.
+    */
+    route(
+      StackMediaPlateTransportChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; plateId: string; action: MediaPlateTransportAction }) =>
+        b.mediaPlateTransport(r.itemId, r.plateId, r.action),
+    ),
+    // `add-multibox-audio` — the same intent for SEVERAL plates as ONE action, which is what
+    // SOLO and PANIC are. It composes the writer above rather than duplicating it, and holds
+    // the item's live-seat lock so a look switch cannot interleave into the middle of a SOLO.
+    route(
+      StackSetPlateVolumesChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; volumes: Readonly<Record<string, number>> }) =>
+        b.setLivePlateVolumes(r.itemId, r.volumes),
+    ),
+    // PANIC — the audio sibling of `clearAll`: silence every plate the LEDGER holds a seat
+    // for, whatever any status claims. It takes NO arguments, and that is the point: the
+    // scope is not the caller's to choose (B-122 — a browser-resolved scope is an emergency
+    // control gated on bookkeeping that may not have arrived).
+    route(StackSilenceAllLivePlatesChannel, 'operator', 'operator', () => b.silenceAllLivePlates()),
+    /*
+      🔴 `MULTI-CHANNEL-01` §2 C — PANIC FOR ONE CHANNEL: a NEW verb beside the one above, never a
+      parameter on it (`R-062`). It NAMES its channel, so it is scoped like every verb that does:
+      the station fence, the principal's grant and a lock covering that channel all judge it.
+    */
+    route(StackSilenceChannelLivePlatesChannel, 'operator', 'operator', (r: { channel: number }) =>
+      b.silenceChannelLivePlates(r.channel),
     ),
     // R-010 — the sanctioned clear-everything path (unblocks set-config).
-    route(StackRemoveAllChannel, () => b.removeAll()),
-    route(StackClearAllChannel, () => b.clearAll()),
+    /*
+      🔴 `MULTI-CHANNEL-01` §2 B — the four housekeeping verbs take an OPTIONAL channel. Bare, every
+      item, byte for byte as before; with `{ channel }`, that channel's items alone — and because
+      the request NAMES the channel, the station fence, the permission gate and a covered-set lock
+      all judge that channel alone (`channelsForRequest` case (a)).
+    */
+    route(StackRemoveAllChannel, 'operator', 'operator', (r?: { channel: number }) =>
+      b.removeAll(r?.channel),
+    ),
+    route(StackClearAllChannel, 'operator', 'operator', (r?: { channel: number }) =>
+      b.clearAll(r?.channel),
+    ),
     // C-012 / R-028 — the GRACEFUL bulk: every on-air item runs its own outro.
-    route(StackStopAllChannel, () => b.stopAll()),
-    route(StackSnapshotChannel, () => b.stackSnapshot()),
-    // B-092 — the browser re-delivers its RETAINED stack intent on every
-    // (re)connect, so the stack survives a restart of this process. Seeds state
-    // and publishes; sends nothing to CasparCG until occupancy is knowable.
-    route(StackRestoreChannel, (r: { items: never }) => b.restore(r.items)),
+    route(StackStopAllChannel, 'operator', 'operator', (r?: { channel: number }) =>
+      b.stopAll(r?.channel),
+    ),
+    route(StackSnapshotChannel, 'read', 'read', (r?: { channel: number }) =>
+      b.stackSnapshot(r?.channel),
+    ),
+    // `CENTRAL-BRIDGE-01` (`B-294`) — there is no `stack.restore`: the bridge restores its own
+    // stack at start. What survives is the restore's REPORT, standing state like `air.emptied`.
+    route(StackRestoreReportChannel, 'read', 'read', () => b.restoreReport()),
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (D7, rule 8) — CG Bridge's own Playout session: its state, which every
+      console reads (the needs-admin line), and a station admin's one-time sign-in. The sign-in is
+      an operator-lock verb (a locked console gives the bridge no credential) and `station-admin`
+      only; its row names the admin and never carries the password, which leaves this handler with
+      its one D1 request.
+    */
+    route(
+      BridgeSessionStateChannel,
+      'read',
+      'read',
+      () => paths.bridgeSession?.state() ?? { state: 'off' as const },
+    ),
+    // `PLAYOUT-FEATURES-01` D — the CG license as last read; `null` with none read (nothing refused).
+    route(LicenseStateChannel, 'read', 'read', () => ({ license: paths.license?.() ?? null })),
+    route(
+      BridgeSessionSignInChannel,
+      'operator',
+      'station-admin',
+      async (r: { username: string; password: string }) => {
+        const session = paths.bridgeSession ?? null;
+        if (session === null) return { ok: false, failure: 'unexpected' as const };
+        const result = await session.signIn(r.username, r.password);
+        b.recordBridgeSignIn(
+          result.ok ? { outcome: 'ok' } : { outcome: 'failed', errorCode: result.failure },
+        );
+        paths.publishEngines?.();
+        return result;
+      },
+    ),
+    /*
+      🔴 `RELEASE-0112-01` (`R-085`) — EACH ENGINE'S LINE, read by every console, and a station admin's
+      sign-in of CG Bridge on the BACKUP engine with that engine's own account and password: the same
+      rung and the same lock as the primary's, its row naming the server (`server: 'backup'`), the
+      password left in this one request.
+    */
+    route(
+      BridgeEnginesChannel,
+      'read',
+      'read',
+      () =>
+        paths.engines?.() ?? {
+          primary: {
+            engine: 'primary' as const,
+            address: null,
+            state: 'off' as const,
+            version: null,
+          },
+          backup: null,
+        },
+    ),
+    route(
+      BridgeBackupSignInChannel,
+      'operator',
+      'station-admin',
+      async (r: { username: string; password: string }) => {
+        const engine = paths.backupEngine ?? null;
+        if (engine === null || engine.address() === null) {
+          return { ok: false, failure: 'unexpected' as const };
+        }
+        const result = await engine.signIn(r.username, r.password);
+        b.recordBridgeSignIn({
+          ...(result.ok ? { outcome: 'ok' } : { outcome: 'failed', errorCode: result.failure }),
+          server: 'backup',
+        });
+        return result;
+      },
+    ),
+    /*
+      🔴 `RELEASE-0113-01` (`R-089`) — WHERE EACH CHANNEL'S LINES GO ON THE BACKUP ENGINE, read by every
+      console; and a station admin's entries for a backup engine that publishes no mirror (`2.9.5`), on the
+      same rung and lock as the backup's sign-in, recorded with what was asked. An entry is used only once
+      the backup engine's own D4 confirms it.
+    */
+    route(BackupChannelsStateChannel, 'read', 'read', () => ({
+      backup: paths.backupChannels?.().backup ?? null,
+    })),
+    route(
+      BackupChannelEntriesSetChannel,
+      'operator',
+      'station-admin',
+      (r: { entries: { channel: number; backupChannel: number }[] }) => {
+        const set = paths.setBackupEntries;
+        const result =
+          set === undefined
+            ? { ok: false, message: 'This CG Bridge keeps no backup channels.' }
+            : set(r.entries);
+        b.recordBackupChannels({
+          outcome: result.ok ? 'ok' : 'failed',
+          backupChannels: r.entries,
+        });
+        return result;
+      },
+    ),
+    route(
+      StackRestoreReportDismissChannel,
+      'operator',
+      'operator',
+      // `CENTRAL-BRIDGE-01` (D4) — it reaches only the rows this console was told.
+      (r: { part: 'skipped' | 'migrated'; channel?: number }) =>
+        b.dismissRestoreReport(r.part, r.channel, actorScope()),
+    ),
 
-    route(ConnectionsConfigChannel, () => b.config()),
+    route(ConnectionsConfigChannel, 'read', 'read', () => b.config()),
     // R-010 — runtime reconfiguration; persisted only after a successful apply.
-    route(ConnectionsSetConfigChannel, async (r: ConnectionConfig) => {
-      const result = await b.setConfig(r);
-      if (result.ok && persistPath !== undefined) savePersistedConnection(persistPath, r);
+    route(ConnectionsSetConfigChannel, 'operator', 'station-admin', async (r: ConnectionConfig) => {
+      // `CENTRAL-BRIDGE-01` — this machine's OSC port stands over whatever the panel sent.
+      const applied = withBridgeOscPort(r, paths.oscPort);
+      const result = await b.setConfig(applied);
+      if (result.ok && persistPath !== undefined) savePersistedConnection(persistPath, applied);
       return result;
     }),
-    route(ConnectionsHealthChannel, () => b.health()),
-    route(ConnectionsFailoverChannel, () => b.failover()),
+    /*
+      `C-024` — WHAT IS IN FORCE, as distinct from what is STORED.
+
+      `connections.config` above returns the stored intent the panel edits; this returns the serve
+      address actually in effect plus WHY — which fields a command-line flag is masking, and this
+      machine's interface candidates. Two reads rather than one because a panel that could only
+      learn about a mask by CHANGING something would show a wrong value for as long as the operator
+      merely looked at it, and a panel showing an address the bridge is not using is the defect this
+      whole item exists to remove.
+    */
+    route(ConnectionsTemplateServeChannel, 'read', 'read', () => b.templateServeInfo()),
+    route(ConnectionsHealthChannel, 'read', 'read', () => b.health()),
+    route(ConnectionsFailoverChannel, 'operator', 'operator', () => b.failover()),
 
     // R-009 — orphan-layer surface + explicit per-layer Clear.
-    route(LayersOrphansChannel, () => b.orphans()),
-    route(LayersClearChannel, (r: { channel: number; layer: number }) =>
+    route(LayersOrphansChannel, 'read', 'read', () => b.orphans()),
+    route(LayersClearedOutsideChannel, 'read', 'read', () => [...b.clearedOutside()]),
+    route(LayersClearChannel, 'operator', 'operator', (r: { channel: number; layer: number }) =>
       b.clearLayer(r.channel, r.layer),
     ),
     // B-056 — owned-slot occupancy warnings (no Clear: the remedy is Out/Remove).
-    route(LayersOwnedOccupancyChannel, () => b.ownedOccupancy()),
+    route(LayersOwnedOccupancyChannel, 'read', 'read', () => b.ownedOccupancy()),
+
+    /*
+      B-225 — the playout server stopped carrying what this console had put on air. The
+      notice is a READ plus TWO deliberate operator acts, and there is no third door: nothing
+      on the bridge restores by itself (the owner's 2026-09-05 decision — an unattended
+      machine must not put a graphic on air), so `restore` is reachable only from a press.
+    */
+    route(EmptiedAirNoticeChannel, 'read', 'read', () => b.emptiedAir()),
+    route(EmptiedAirRestoreChannel, 'operator', 'operator', (r: { itemIds: string[] }) =>
+      b.restoreEmptiedAir(r.itemIds),
+    ),
+    // `CENTRAL-BRIDGE-01` (D4) — a dismissal reaches only the rows and seats this console was told.
+    route(EmptiedAirDismissChannel, 'operator', 'operator', () =>
+      b.dismissEmptiedAir(actorScope()),
+    ),
+
+    /*
+      `C-016` — the programme return's STATE per watched channel. A read: it says whether the
+      bridge can see the feed, and changes nothing. The picture itself is not on this socket —
+      it is relayed on the console's own origin (`/pgm/<n>`, `pgm-return.ts`).
+    */
+    route(PgmReturnStatusChannel, 'read', 'read', () => pgmReturnStatus()),
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (D9) — the picture is fetched by the console's `<img>`, which carries no
+      token, from CG Bridge's control port: a ticket issued HERE, over the verified socket, opens
+      `/pgm/<n>` for thirty seconds. The request names its channel at the top level, so the gates
+      in front of every route judge it with their one predicate each: the station fence (a channel
+      this station declares) and the permission gate (`authzChannelRefusal` — a channel the sign-in
+      holds). No second copy of either lives here.
+    */
+    route(
+      PgmReturnTicketChannel,
+      'read',
+      'read',
+      (req: { channel: number; stream?: 'picture' | 'audio' | undefined }) => {
+        // `PLAYOUT-FEATURES-01` E — the SOUND's ticket opens `/pgm/<n>/sound` and nothing else.
+        if (req.stream === 'audio') {
+          const ticket = issueTicket({ kind: 'pgm', channel: req.channel, stream: 'audio' });
+          return { path: `${pgmAudioPath(req.channel)}?ticket=${ticket}` };
+        }
+        return {
+          path: `${pgmReturnPath(req.channel)}?ticket=${issueTicket({ kind: 'pgm', channel: req.channel })}`,
+        };
+      },
+    ),
+    /*
+      `CENTRAL-BRIDGE-01` §1 A — CG Bridge's logs, for a station admin, as one zip: a ticket used
+      once, for `/logs.zip` on the control port. A bridge with no log folder of its own (a dev bridge
+      given none) says so.
+    */
+    route(BridgeLogsTicketChannel, 'read', 'station-admin', () => {
+      if (!logsAvailable) throw new Error('This CG Bridge keeps no log folder.');
+      return { path: `${BRIDGE_LOGS_PATH}?ticket=${issueTicket({ kind: 'logs' })}` };
+    }),
 
     // R-021 stage 2a — the fixed-bank wire contract: config read/update +
     // per-slot state. Order on an applied change: validate → apply → persist
     // (non-fatal, the R-010 savePersistedConnection stance) → publish (the
     // runtime publishes from setFixedLayers itself, after apply).
-    route(FixedLayersConfigChannel, () => b.fixedLayersConfig()),
-    route(FixedLayersSetConfigChannel, (r: FixedLayerBank) => {
+    route(FixedLayersConfigChannel, 'read', 'read', () => b.fixedLayersConfig()),
+    route(FixedLayersSetConfigChannel, 'operator', 'station-admin', (r: FixedLayerBank) => {
+      const defaultsBefore = b.sourceAssignments();
       const result = b.setFixedLayers(r);
-      if (result.ok && fixedLayersPath !== undefined) {
-        try {
-          saveFixedLayerBank(fixedLayersPath, r);
-        } catch (err) {
-          process.stderr.write(
-            `[caspar-bridge] ⚠ failed to persist fixed layers to ${fixedLayersPath}: ` +
-              `${err instanceof Error ? err.message : String(err)}\n`,
-          );
-        }
+      if (result.ok) {
+        persistBanks();
+        persistDefaultsIfCopied(defaultsBefore);
       }
       return result;
     }),
-    route(FixedLayersStateChannel, () => b.fixedLayersState()),
+    /*
+      🔴 `MULTI-CHANNEL-01` — the station's banks: every one of them, and the plural door that sets
+      them. `station-admin`, like every declaration door; it names its channels inside the list
+      (`req.banks[].channel`), so the station fence — which reads a top-level `channel` — does not
+      stand in its way (a declaration cannot be fenced by the declaration it writes), while the
+      permission gate and the lock judge the channels it ADDS, EDITS or REMOVES
+      (`CasparRuntime.bankChangeFootprint`).
+    */
+    route(FixedLayersBanksChannel, 'read', 'read', () => b.fixedLayerBanks()),
+    route(
+      FixedLayersSetBanksChannel,
+      'operator',
+      'station-admin',
+      (r: { banks: FixedLayerBank[] }) => {
+        const defaultsBefore = b.sourceAssignments();
+        const result = b.setFixedLayerBanks(r.banks);
+        if (result.ok) {
+          persistBanks();
+          persistDefaultsIfCopied(defaultsBefore);
+        }
+        return result;
+      },
+    ),
+    route(FixedLayersStateChannel, 'read', 'read', () => b.fixedLayersState()),
     // R-021 stage 3 — the EXACT-SLOT load: `bindFixed`, never `reserve`/allocate.
     route(
       FixedLayersLoadChannel,
+      'operator',
+      'operator',
       (r: { channel: number; layer: number; itemId: string; templateId: string; fields: never }) =>
         b.loadFixed({ channel: r.channel, layer: r.layer }, r.itemId, r.templateId, r.fields),
     ),
@@ -757,89 +4946,352 @@ export function buildRoutes(
     // reserved), never by occupancy — so it still works when occupancy is `unknown`,
     // which is exactly when the operator needs it. The guard lives in
     // `clearBankLayer`, bridge-side, so no UI state can bypass it.
-    route(FixedLayersClearLayerChannel, (r: { channel: number; layer: number }) =>
-      b.clearBankLayer(r.channel, r.layer),
+    route(
+      FixedLayersClearLayerChannel,
+      'operator',
+      'operator',
+      (r: { channel: number; layer: number }) => b.clearBankLayer(r.channel, r.layer),
     ),
 
     // R-028 part B — the declared playout layers + the operator's DELIBERATE,
     // kind-gated clear. A separate door from `layers.clear` (which still
     // refuses reserved layers): only an operator who opened the playout tab
     // can reach this, and the bridge holds the html-only gate.
-    route(PlayoutLayersStateChannel, () => b.playoutLayersState()),
-    route(PlayoutLayersClearChannel, (r: { channel: number; layer: number }) =>
-      b.playoutClear(r.channel, r.layer),
+    route(PlayoutLayersStateChannel, 'read', 'read', () => b.playoutLayersState()),
+    route(
+      PlayoutLayersClearChannel,
+      'operator',
+      'operator',
+      (r: { channel: number; layer: number }) => b.playoutClear(r.channel, r.layer),
     ),
 
-    route(LockEngageChannel, (r: { pin: string }) => b.engage(r.pin)),
-    route(LockReleaseChannel, (r: { pin: string }) => b.release(r.pin)),
-    route(LockStateChannel, () => b.lockState()),
+    // B-145 acceptance 1, display half (tasks.md 2.8) — the bridge's OWN Live
+    // Source ledger. A READ and nothing else: the sanctioned verbs for a seated
+    // layer are item-scoped and already routed (stack.swap-live-source,
+    // stack.set-plate-volume, stack.out / stack.remove), and layers.clear refuses
+    // a live-source coordinate BY NAME. This channel exists so the operator can
+    // SEE which row owns a lit layer, never to add a fourth way to cut one.
+    route(LiveLayersStateChannel, 'read', 'read', () => b.liveLayersState()),
+    // `MEDIA-PLATES-01` §1.E — each seated clip's remaining time (from OSC only), pause and end.
+    route(LiveLayersMediaStateChannel, 'read', 'read', () => b.mediaPlateStates()),
 
-    route(TemplatesGetChannel, (r: { templateId: string }) => b.templateGet(r.templateId)),
-    route(TemplatesListChannel, () => b.templateList()),
+    /*
+      🔴 `B-257` — the engage CAPTURES the engager's channels. `lockScopeAtEngage` answers
+      `undefined` (every channel) with auth OFF — no session, no principal — and for an engager
+      holding `'*'`, so both keep today's lock byte for byte.
+    */
+    route(LockEngageChannel, 'operator', 'operator', (r: { pin: string }) =>
+      b.engage(r.pin, lockScopeAtEngage(currentAuthSession()?.token?.principal ?? null, b)),
+    ),
+    route(LockReleaseChannel, 'unlock', 'operator', (r: { pin: string }) => b.release(r.pin)),
+    route(LockStateChannel, 'read', 'read', () => b.lockState()),
+
+    // `CHANNEL-TEMPLATES-01` — each channel has its own template list; every template request
+    // names the channel it reads or changes (absent = the station-wide reading it always was).
+    route(TemplatesGetChannel, 'read', 'read', (r: { templateId: string; channel?: number }) =>
+      b.templateGet(r.templateId, r.channel),
+    ),
+    route(TemplatesListChannel, 'read', 'read', (r: { channel?: number } | undefined) =>
+      b.templateList(r?.channel),
+    ),
+    // `RELEASE-091-01` §1 (`B-288`) — the page this bridge serves CasparCG, for PVW: a read.
+    route(TemplatesPageChannel, 'read', 'read', (r: { templateId: string; channel?: number }) =>
+      b.templatePage(r.templateId, r.channel),
+    ),
     // B-038 Phase 2 — retain the browser-produced self-contained HTML alongside
-    // the TemplateInfo (held, not served yet).
-    route(TemplatesImportChannel, (r: { template: never; html: string; redelivery?: boolean }) =>
-      b.templateImport(r.template, r.html, r.redelivery ?? false),
+    // the TemplateInfo. A frame marked `redelivery` never gets here (refused before every gate).
+    route(
+      TemplatesImportChannel,
+      'operator',
+      'operator',
+      (r: { template: never; html: string; channel?: number }) =>
+        b.templateImport(r.template, r.html, r.channel),
     ),
     // R-005 — the bridge is authoritative for the refusal (refuse-while-referenced).
-    route(TemplatesRemoveChannel, (r: { templateId: string }) => b.templateRemove(r.templateId)),
-
-    route(AuditRecentChannel, (r: { limit?: number; action?: never; actor?: string }) =>
-      b.auditRecent(r.limit, r.action, r.actor),
+    route(
+      TemplatesRemoveChannel,
+      'operator',
+      'operator',
+      (r: { templateId: string; channel?: number }) => b.templateRemove(r.templateId, r.channel),
     ),
 
-    route(UpdateRequestChannel, (r: { version: string; notes?: string }) =>
+    route(
+      AuditRecentChannel,
+      'read',
+      'read',
+      (r: { limit?: number; action?: never; actor?: string }) =>
+        b.auditRecent(r.limit, r.action, r.actor),
+    ),
+    /*
+      🔴 `CONSOLE-POLISH-01` (`R-083`) — the Log, a page at a time. The asking console's channel grant
+      is applied BY THE READ, before the page is cut (`audit.recent` scoped after its limit, so a
+      scoped console could be handed fewer rows than exist); the route's projection asks the same
+      predicate again, as every read's does.
+    */
+    route(AuditPageChannel, 'read', 'read', (r: { cursor?: AuditCursor; filter?: AuditFilter }) => {
+      const holds = actorScope();
+      return b.auditPage(
+        r.cursor,
+        r.filter ?? {},
+        holds === null ? (): boolean => true : (e): boolean => auditRowTold(e, holds),
+      );
+    }),
+    // B-141 — the POSITIVE CONTROL for the panel's empty state. Without it "no
+    // entries" and "no writer" and "the writer is failing" are one indistinguishable
+    // sentence, and the operator reads the third as the first.
+    route(AuditHealthChannel, 'read', 'read', () => b.auditHealth()),
+
+    route(UpdateRequestChannel, 'operator', 'operator', (r: { version: string; notes?: string }) =>
       b.updateRequest(r.version, r.notes),
     ),
-    route(UpdateStateChannel, () => b.updateState()),
-    route(UpdateCancelChannel, () => b.updateCancel()),
+    route(UpdateStateChannel, 'read', 'read', () => b.updateState()),
+    route(UpdateCancelChannel, 'operator', 'operator', () => b.updateCancel()),
 
     // R-034 — the station's delimiter list, bridge-owned so every browser sees one list.
-    route(DelimitersListChannel, () => b.delimitersList()),
-    route(DelimitersSetChannel, (r: { delimiters: never[] }) => b.delimitersSet(r.delimiters)),
+    route(DelimitersListChannel, 'read', 'read', () => b.delimitersList()),
+    route(DelimitersSetChannel, 'operator', 'station-admin', (r: { delimiters: never[] }) =>
+      b.delimitersSet(r.delimiters),
+    ),
+
+    /*
+      🔴 `R-062` gap 2 / `C-039` — THE CHANNEL-DISCOVERY CALL. A read: it answers for the asking
+      socket's principal and changes nothing. It NAMES channels and says which this station
+      operates; it decides nothing — the station fence reads `isDeclaredChannel` directly, so no
+      catalogue row can make a channel writable.
+    */
+    route(StationChannelsListChannel, 'read', 'read', () => stationChannels(currentAuthSession())),
+
+    /*
+      🔴 `DESKTOP-APPS-01` §2E step 3 — THE PLAYOUT'S CHANNELS, UNJOINED, IN THE ASKER'S GRANT. The
+      same rows the one D4 reader holds — `usableBearer`, the 5 s floor, `ETag`, and A4's loopback
+      rule all already applied there — filtered by `grantsChannel` against each row's OWN host.
+      `station-admin`, because only first-run and the station's own setup need a channel this
+      station does not yet drive. A read: the choice itself goes through `fixedLayers.set-config`.
+
+      ⭐ `UI-POLISH-01` G — THE ON-DEMAND READ. First-run and Change channel… ask for this list as
+      they open, and each row now carries its `output` and `playlist`; so the ask reads D4 first,
+      through the reader's own 5 s floor — a list opened 2 s after the last read is answered from
+      what is held, never with a second read.
+    */
+    route(ChannelsCatalogueChannel, 'read', 'station-admin', async () => {
+      await refreshCatalogue();
+      const rows = catalogueRows();
+      if (rows === null) return { rows: null };
+      const principal = currentAuthSession()?.token?.principal ?? null;
+      return {
+        rows: rows
+          .filter(
+            (r) =>
+              principal !== null &&
+              grantsChannel(principal.channels, [r.casparHost], r.casparChannel),
+          )
+          .map((row) => ({
+            id: row.id,
+            name: row.name,
+            casparHost: row.casparHost,
+            casparChannel: row.casparChannel,
+            ...airOf(row),
+          })),
+      };
+    }),
+
+    /*
+      `DESKTOP-APPS-01` §2F — the connection check and the route address. Reads: they probe and
+      report and change nothing, so `read` on both axes. The route address is for a signed-in
+      principal; the CHECK is open before any sign-in too (`DELTA-MULTI-CHANNEL-01-B` B1,
+      {@link openToUnauthenticated}) — and then it checks this station's own Playout, nothing else.
+      🔴 `CENTRAL-BRIDGE-01` — "before any sign-in" includes an EXPIRED or revoked session now: the
+      narrowing applies to every socket without a valid principal.
+    */
+    route(SetupCheckChannel, 'read', 'read', async (r: ConnectionCheckRequest) => {
+      // The narrowing before a sign-in — unchanged (`DELTA-MULTI-CHANNEL-01-B` B1).
+      if (!mayBeTold(authState(currentAuthSession())) && !checksThisStation(r)) {
+        throw new Error(CHECK_BEFORE_SIGN_IN_REFUSAL);
+      }
+      // `B-327` — whose lines belong in the answer: the station's own Playout, whatever CasparCG host is named.
+      const ownPlayout = isThisStationsPlayout(r);
+      const result = await connectionCheck(r);
+      /*
+        🔴 `R-081` — **CG BRIDGE'S OWN STATE, IN THE SAME LIST**: its Playout session, OSC, the CG
+        license and the channels the ASKER's sign-in holds. Only for this station's own Playout: a
+        candidate address being typed is checked for reach and sign-in, and CG Bridge's state says
+        nothing about it. (With auth off there is no Playout: OSC alone.)
+      */
+      if (authMode !== 'off' && !ownPlayout) return result;
+      const principal = currentAuthSession()?.token?.principal ?? null;
+      const rows = authMode === 'off' ? null : catalogueRows();
+      const health = b.health();
+      /*
+        🔴 `B-327` (`SERVERS-SIMPLIFY-01` T6) — **WHETHER SERVER A JOINS THE PLAYOUT'S**, for the console's After
+        sign-in line and its `Use the Playout's`. A FACT beside the lines rather than a line of its own: an older
+        console parses line ids strictly and would refuse the whole answer, while an unknown field is dropped.
+        Told to a signed-in asker only: it names the station's hosts.
+      */
+      const join = authMode !== 'off' && principal !== null ? (paths.casparJoin?.() ?? null) : null;
+      const answered = withStationLines(result, {
+        playout: authMode !== 'off',
+        session: paths.bridgeSession?.state() ?? { state: 'off' },
+        primary: health.primary,
+        oscPort: b.config().servers.A.oscPort,
+        license: paths.license?.() ?? null,
+        channels:
+          principal === null
+            ? 'no-sign-in'
+            : rows === null
+              ? null
+              : rows.filter((row) =>
+                  grantsChannel(principal.channels, [row.casparHost], row.casparChannel),
+                ).length,
+      });
+      return join === null ? answered : { ...answered, casparJoin: join };
+    }),
+    route(SetupRouteAddressChannel, 'read', 'read', async (r: { host: string }) => ({
+      address: await routeAddress(r.host),
+    })),
+    // `DESKTOP-APPS-01-D` d — what is on air on a channel before it is declared. A read of the tap.
+    route(SetupChannelOccupancyChannel, 'read', 'station-admin', (r: { casparChannel: number }) =>
+      b.channelOccupancy(r.casparChannel),
+    ),
+    /*
+      🔴 `DESKTOP-APPS-01-D` j — items of ours on a channel this station does not declare. The
+      READ is open to any signed-in principal (a console keeps them in its retention so they
+      survive a restart); only a `station-admin` sees them and may act, and the one act is
+      `station.take-off-air`: STOP then CLEAR on a recorded stray's exact layer.
+    */
+    route(StationStraysChannel, 'read', 'read', () => b.strays()),
+    route(
+      StationTakeOffAirChannel,
+      'operator',
+      'station-admin',
+      (r: { casparChannel: number; layer: number }) => b.takeStrayOffAir(r.casparChannel, r.layer),
+    ),
 
     // R-030 — the per-channel output raster, bridge-owned for the same reasons
     // the template catalogue is: several browsers must not disagree about where
     // graphics land, and it has to survive a bridge restart.
-    route(ChannelSettingsGetChannel, () => b.channelSettingsState()),
-    route(ChannelSettingsSetChannel, (r: ChannelSettings) => b.setChannelSettings(r)),
+    route(ChannelSettingsGetChannel, 'read', 'read', () => b.channelSettingsState()),
+    route(ChannelSettingsSetChannel, 'operator', 'station-admin', (r: ChannelSettings) =>
+      b.setChannelSettings(r),
+    ),
 
     // D-137 / C-015 — the installation's SOURCE CATALOG. The order on an applied
     // change is the fixed-bank one: validate → apply → persist (non-fatal) →
     // publish (the runtime publishes from `setSourceCatalog` itself, after the
     // apply).
-    route(SourcesConfigChannel, () => b.sourceCatalog()),
-    route(SourcesSetConfigChannel, (r: SourceCatalog) => {
-      const result = b.setSourceCatalog(r);
+    // `PLAYOUT-SOURCES-01` — the catalogue in force is the PLAYOUT'S, and what a console holds of it
+    // has every stream URL's credentials redacted (§1.E): the console never shows a URL at all.
+    // `PLATE-BAND-01` — with the plate band in force beside it (declared, or a linked station's default).
+    route(SourcesConfigChannel, 'read', 'read', () =>
+      consoleSourceCatalog(b.sourceCatalog(), b.plateBandInForce()),
+    ),
+    // §1.F — the PLATE BAND only. It cascades nothing: no set-config can delete a binding.
+    route(SourcesSetConfigChannel, 'operator', 'station-admin', (r: SourceBandConfig) => {
+      const result = b.setSourceBand(r.layerRange);
       if (result.ok) {
-        persistCatalog(sourceCatalogPath, r);
-        // A DELETION cascaded through the assignments, so the OTHER file is
-        // stale on disk too. Persisting only the catalog would resurrect the
-        // dropped bindings on the next boot — the dangle this cascade exists to
-        // prevent, arriving one restart later.
-        if (result.droppedAssignments !== undefined) {
-          persistAssignments(sourceAssignmentsPath, b.sourceAssignments());
-        }
+        persistBand(sourceCatalogPath, r.layerRange);
+        playoutSources?.setLayerRange(r.layerRange);
       }
       return result;
     }),
-    route(SourcesAssignmentsChannel, () => b.sourceAssignments()),
-    route(SourcesSetAssignmentsChannel, (r: SourceAssignments) => {
-      const result = b.setSourceAssignments(r);
-      if (result.ok) persistAssignments(sourceAssignmentsPath, r);
-      return result;
+    route(SourcesAssignmentsChannel, 'read', 'read', () => b.sourceAssignments()),
+    route(
+      SourcesSetAssignmentsChannel,
+      'operator',
+      'station-admin',
+      async (r: SourceAssignments) => {
+        // §1.B — a media id is bound from the bridge's OWN reads, before the set is checked.
+        const bound = await bindMedia(r.assignments.map((a) => a.sourceId));
+        if (!bound.ok)
+          return { ok: false, reason: 'source-unusable' as const, message: bound.message };
+        const result = b.setSourceAssignments(r);
+        if (result.ok) persistAssignments(sourceAssignmentsPath, r);
+        return result;
+      },
+    ),
+    // §1.A — search the Playout's media on the Playout's side. A viewer may search.
+    route(SourcesMediaSearchChannel, 'read', 'read', (r: MediaQuery) =>
+      playoutSources === null
+        ? {
+            ok: false as const,
+            reason: 'playout-unreachable' as const,
+            message: 'The Playout did not answer.',
+          }
+        : playoutSources.searchMedia(r),
+    ),
+    // §1.A — a picker opened: read again if the last read is older than 5 s. Never waits.
+    route(SourcesRefreshChannel, 'read', 'read', () => {
+      void playoutSources?.refresh(PICKER_FRESH_MS);
+      return { ok: true as const };
     }),
+    /*
+      `MEDIA-PLATES-01` §1.A — a bound clip's Loop and When hidden, STATION-WIDE: the operator's, not
+      the station admin's (it is how a clip plays, like a volume). It names no channel, so the grant
+      is the role alone and a channel-scoped lock refuses it. Audited by the runtime with the clip's
+      name; a Loop change reaches that clip on air at once.
+    */
+    route(
+      SourcesSetMediaPlaybackChannel,
+      'operator',
+      'operator',
+      (r: { mediaId: string; loop: boolean; whenHidden: MediaWhenHidden }) =>
+        b.setMediaPlayback(r.mediaId, { loop: r.loop, whenHidden: r.whenHidden }),
+    ),
 
     // R-022 — REHEARSE. Bridge-owned so several browsers agree about which rows
     // are interlocked, and every guard (on-air, not-loaded, mute-failed) lives
     // bridge-side where no UI state can bypass it.
-    route(RehearseStateChannel, () => b.rehearseState()),
-    route(RehearseEnterChannel, (r: { itemId: string }) => b.enterRehearse(r.itemId)),
-    route(RehearseExitChannel, (r: { itemId: string }) => b.exitRehearse(r.itemId)),
-
-    route(SettingsGetChannel, () => b.settingsGet()),
-    route(SettingsSetChannel, (r: Partial<{ telemetry: never }>) => b.settingsSet(r)),
+    route(RehearseStateChannel, 'read', 'read', () => b.rehearseState()),
+    route(RehearseEnterChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.enterRehearse(r.itemId),
+    ),
+    route(RehearseExitChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.exitRehearse(r.itemId),
+    ),
   ];
 
-  return new Map(entries.map((e) => [e.channel.name, e]));
+  const routes = new Map(entries.map((e) => [e.channel.name, e]));
+  /*
+    🔴 `B-153` — THE CAPABILITY HANDSHAKE, ANSWERED FROM THE MAP ITSELF.
+
+    Added AFTER the map is built and reading `routes.keys()` at CALL time, so what this
+    reports is what this process genuinely routes rather than a list somebody maintains
+    beside it. Delete a route above and it vanishes from here; add one and it appears. A
+    hand-written capability list would be the third thing that has to be remembered — and
+    the whole reason this channel exists is that the last thing needing to be remembered
+    was not, and an operator found out on air.
+
+    It includes ITSELF, which is correct: a bridge that can answer this question can, in
+    fact, answer this question.
+  */
+  const capabilities = route(BridgeCapabilitiesChannel, 'read', 'read', () => ({
+    channels: [...routes.keys()].sort(),
+    /*
+      🔴 `C-037` / ADR 0010 rule 9 — the auth MODE and the SIGN-IN ADDRESS, answered to a
+      socket that has not signed in, because that is the socket that needs them. `B-153`'s own
+      reason, quoted: it is asked at connect, "before the operator can press anything".
+
+      ⚠ The addresses are the PLAYOUT's, and the browser calls them DIRECTLY (rule 9: the
+      bridge never sees a password; rule 13: never via the template origin). Advertised rather
+      than guessed by the console, because the console has no other way to know WHICH Playout
+      this bridge trusts — and one that signed in to a different one would be refused here
+      with "not for this station" and never find out why.
+    */
+    auth: authMode,
+    ...(playoutUrls !== null
+      ? {
+          signInUrl: playoutUrls.tokenUrl,
+          refreshUrl: playoutUrls.refreshUrl,
+          authContractVersion: PLAYOUT_CONTRACT_VERSION,
+        }
+      : {}),
+    // `DESKTOP-APPS-01` — absent unless this is an installed station still in first-run.
+    ...((): { setup?: SetupPhase } => {
+      const phase = setupPhase();
+      return phase === null ? {} : { setup: phase };
+    })(),
+    // `CENTRAL-BRIDGE-01` — the release a console compares by release line (`sameReleaseLine`).
+    ...(paths.bridgeVersion !== undefined ? { bridgeVersion: paths.bridgeVersion } : {}),
+  }));
+  routes.set(capabilities.channel.name, capabilities);
+  return routes;
 }

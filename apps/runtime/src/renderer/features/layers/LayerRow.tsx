@@ -1,27 +1,45 @@
-import { useRef } from 'react';
+import { useState } from 'react';
+import { useCanOperate } from '../../hooks/useCanOperate.js';
 import type { FixedSlotState, TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
+import { Button } from '../../ui/Button.js';
+import { Volume2 } from 'lucide-react';
 import { Icon } from '../../ui/Icon.js';
+import { directionOf } from '../../ui/OperatorNames.js';
+import { Tag } from '../../ui/Tag.js';
 import { ContextMenu } from '../../ui/ContextMenu.js';
-import { useContextMenu } from '../../ui/useContextMenu.js';
+import { isContextMenuKey, useContextMenu } from '../../ui/useContextMenu.js';
+import { operatorRowName, type OperatorRowName } from '../../ui/operatorNaming.js';
 import { buttonActions, toMenuItems, withConfirm } from '../../ui/rowAction.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { DraftChip } from '../../ui/DraftChip.js';
-import { pickFile } from '../../ui/pickFile.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
-import { reportCommandError } from '../status/commandFeedback.js';
+import { casparRefusalReason } from '../../ui/reachWording.js';
+import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import { displayLabel } from '../library/templateName.js';
+import { recentRemovalElsewhere } from '../library/templateActs.js';
 import { isOnAir } from '../stack/onAir.js';
-import {
-  importAndLoadOntoFixedSlot,
-  loadTemplateOntoFixedSlot,
-} from '../fixedLayers/fixedSlotLoad.js';
+import { loadTemplateOntoFixedSlot } from '../fixedLayers/fixedSlotLoad.js';
 import { useTemplatePicker } from '../fixedLayers/useTemplatePicker.js';
 import { layerRowActions, MISSING_TEMPLATE_REASON } from './layerRowActions.js';
+import { LiveSourceSwapDialog } from './LiveSourceSwapDialog.js';
+import { LookPicker, lookOptionsOf } from './LookPicker.js';
+import { lookSwitchBanner, lookSwitchRefusal } from './lookSwitch.js';
+import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
+import { announcePlateAudio, audioSummary, type RowPlateAudio } from './plateAudio.js';
 import { rowState, type RowBinding } from './rowState.js';
+import {
+  BACKUP_UNMIRRORED_LINE,
+  BackupNoCopyText,
+  backupNoCopyLine,
+  plateLabelOf,
+  takeRefusalLine,
+  TakeRefusalText,
+} from './takeRefusalLine.js';
+import { currentSourceCatalog } from '../sources/sourceStore.js';
 import {
   ROW_GEOMETRY,
   VERBS_GRID,
@@ -54,22 +72,50 @@ interface Props {
   /** The bound item's template, for the name and the `hasNext` bit. */
   template: TemplateInfo | null;
   /**
-   * The row's position in the RENDERED list, 1 at the top — the `#` column.
-   *
-   * Plain display order, by owner decision. Deliberately NOT the layer's place in the
-   * bank: that number belongs to the default ALIAS below.
+   * The `#` column: the row's AMCP LAYER (`DESKTOP-APPS-01-D` h, the owner's decision of
+   * 2026-09-23). It used to be display order, so the top row read `#1` while the Inspector said
+   * layer 99 — on a shared channel the number an operator reads must be the one CasparCG obeys.
    */
   displayPosition: number;
   /**
-   * The layer's 1-based place within its BANK, counting DOWN from the highest layer —
-   * what the default alias (`Layer 1`, `Layer 2`, …) is built from.
+   * The row's default NAME when it has no configured alias — `Layer 99`, `Bed 59`.
    *
-   * Comes from the canonical `bankPosition`, so it is fixed to the layer and survives
-   * ticking, unticking and filtering. See `bankPosition`'s own comment for why a
-   * handle that renumbers is worse than none.
+   * 🔴 `B-201` — THE WHOLE STRING, resolved by the PANEL through the canonical
+   * `defaultLayerAlias`, not a bare position this row formats itself.
+   *
+   * It used to be `bankPosition: number` and this file built `Layer ${bankPosition}` from
+   * it. That is right for exactly one half of the bank. `defaultLayerAlias` picks the WORD
+   * from `isLowBankLayer` — beds are `Bed N`, and each half counts down from its OWN top —
+   * so the restated version called bed row 9 `Layer 1`, which is ALSO what it calls operator
+   * row 89: two rows, the same name, on the surface an operator drives air from. The config
+   * modal and the rehearsal overlay both called `defaultLayerAlias` all along, so the same
+   * row answered to two different names depending on which panel was asking.
+   *
+   * Like `acceptsBank` below, the row is handed the ANSWER rather than a bank to derive it
+   * from: one derivation, in the panel, for every row.
    */
-  bankPosition: number;
+  defaultAlias: string;
+  /**
+   * `single-clock-look-switch` — which half of the bank this row belongs to, resolved by
+   * the PANEL through the canonical `isLowBankLayer` (the row is handed no bank of its own,
+   * exactly like `defaultAlias`). The template picker refuses the other half's packages with
+   * a reason, so the operator meets `wrong-bank` on the surface rather than at the bridge.
+   */
+  acceptsBank: 'low' | 'high';
   selected: boolean;
+  /**
+   * `B-232` (owner) — is this one of the rows the emptied-air notice is about, and that
+   * its PUT BACK ON AIR press would restore?
+   *
+   * Resolved by the PANEL from the one standing notice, for the same reason `rehearsing`
+   * and `seatedPlates` are: one snapshot for the whole table keeps thirty rows agreeing
+   * by construction, and a per-row subscription to the same fact is how two rows come to
+   * disagree about it.
+   *
+   * Optional and defaulted, so every existing caller — the tests included — keeps its
+   * current meaning: a row nobody says anything about is not marked.
+   */
+  emptiedAir?: boolean;
   dirty: boolean;
   /**
    * R-022 — is this row in REHEARSE? Resolved by the PANEL from the bridge's
@@ -77,6 +123,40 @@ interface Props {
    * one snapshot for the whole table keeps thirty rows agreeing by construction.
    */
   rehearsing: boolean;
+  /**
+   * `add-multibox-audio` — the LIVE PLATES this row's item actually owns, resolved by the
+   * PANEL from the bridge's ledger for `rehearsing`'s reason: one snapshot for the whole
+   * table, and the SAME array the LIVE PLATES tab renders.
+   *
+   * ⚠ SEATED, not DECLARED. A declared plate with no producer cannot be audible, so a
+   * summary counting declarations would name a denominator the audio strips do not have.
+   * `B-164` did NOT change this — the wrong axis was seated vs SHOWN, not seated vs
+   * declared, and the fraction is narrowed inside `audioSummary` rather than here.
+   *
+   * 🔴 It carries each plate's `volume` and `held` rather than just its id (`B-164`). The
+   * bare id list could only support an INTENT count over a SEATED denominator, which is the
+   * pair of wrong numbers this prop's consumer used to print. `held` is §12.4's disposition
+   * and is what separates the plates the active look SHOWS from the ones it hides.
+   *
+   * Defaults to empty — a row rendered on its own (a test, a story) shows no summary, which
+   * is the correct reading for a row that owns no live layers.
+   */
+  seatedPlates?: readonly RowPlateAudio[];
+  /** `PLAYOUT-FEATURES-01` C — which of this row's plates show the playlist output (audio locked at 0). */
+  audioLockedOf?: ((plateId: string) => boolean) | undefined;
+  /**
+   * `FIELD-FIXES-01-A` Decision 2 — does the bridge's ledger hold a seat for this row's item?
+   * Resolved by the PANEL from the one ledger snapshot, for `rehearsing`'s reason, and handed to
+   * PLAY's gate (`LayerRowActionDeps.holdsLiveSeats`). Defaults to false.
+   */
+  holdsLiveSeats?: boolean;
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 6 — the row named in the OPERATOR's words (golden rule 11),
+   * resolved by the PANEL through `operatorRowName` (it holds the bank and the registry) and
+   * handed to the audio dialog, which names the row it is about. Optional for a row rendered
+   * on its own, where the dialog falls back to the module's own last resort.
+   */
+  operatorName?: OperatorRowName | undefined;
   /**
    * How much text this width can carry (see `layerTable.ts`). Defaults to the
    * widest — a row rendered on its own shows everything it has.
@@ -92,9 +172,17 @@ const styles = {
     display: 'grid',
     alignItems: 'center',
     columnGap: ROW_GEOMETRY.columnGap,
+    // The gap between the main line and the LOOK line. Inert until Stage E: every
+    // row before it was a single grid row, so this adds nothing to any other row.
+    rowGap: '0.4rem',
+    // `RUNTIME-REDESIGN-01` Phase 3 — the token (`--r-row-pad`), through the shared
+    // geometry, so the row and the header cannot be padded from two spellings.
     padding: ROW_GEOMETRY.padding,
     minHeight: `${String(VERB_TARGET_PX + 10)}px`,
-    borderBottom: `1px solid ${colors.border}`,
+    // `AUDIT-CLOSE-01` C2 — the rule the reference's table PAINTS (`1px solid rgb(55, 65, 81)`),
+    // not `--r-border`. It was the border role, which Phase 2 moved to the reference's `--line`
+    // — and the reference does not use its own `--line` here. See `--r-row-rule`.
+    borderBottom: `1px solid ${cssVars['--r-row-rule']}`,
   },
   /** The bank position — LEFT-aligned, not centred (see the header comment). */
   rowNumber: {
@@ -152,14 +240,6 @@ const styles = {
     whiteSpace: 'nowrap' as const,
     textAlign: 'center' as const,
   },
-  /** The description column reads quieter than the template name beside it. */
-  description: {
-    fontSize: '0.85rem',
-    color: colors.textMuted,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap' as const,
-  },
   empty: {
     fontSize: '0.85rem',
     color: colors.emptyRow,
@@ -174,42 +254,40 @@ const styles = {
   onEmptyRow: { color: colors.emptyRow },
   /** The 'template is not here' marker, quieter than the name it qualifies. */
   missingTemplate: { color: colors.textMuted, fontStyle: 'italic' as const },
+  /**
+   * `B-232` §R2 — the MUTED texts on a MARKED row take a legible ink. The mark's opaque
+   * amber puts `textMuted` at 2.03:1; this is 5.06:1 on it (`theme.ts`). Applied LAST in
+   * the spread so it wins over the empty-row grey too: on that fill, legibility is the
+   * only role that matters. (There is no description column any more — see the note by
+   * the template cell — so the two muted texts are the bank number and this marker.)
+   */
+  onMarkedRow: { color: colors.markedRowInk },
+  /** `FIELD-FIXES-01` B — a refused take's line, in the error WORD's ink (`colors.errorText`). */
+  refusal: { color: colors.errorText },
 } as const;
 
 /**
  * R-028 (4.1/4.2) — ONE layer row: the whole operator surface for one declared
  * layer, as a real table row under the list's sticky header.
  *
- * WHAT IDENTIFIES A ROW — two numbers that answer two different questions, settled
- * separately by the owner and normally reading the same.
+ * WHAT IDENTIFIES A ROW — ONE NUMBER, THE REAL ONE (`DESKTOP-APPS-01-D` h, the owner, 2026-09-23).
  *
- *   - `#` is PLAIN DISPLAY ORDER: 1 at the top of the rendered list, counting down.
- *   - the default ALIAS is `Layer <bankPosition>`, the layer's FIXED place in the bank
- *     counting down from its highest layer — so `Layer 1` is the top layer, the one
- *     that draws over the others and therefore the one an operator means by it.
+ *   - `#` is the row's AMCP LAYER: `99` for the top operator row.
+ *   - the default ALIAS comes from `defaultLayerAlias` — `Layer 99` for an operator row,
+ *     `Bed 59` for a bed row: the word, then the same layer.
  *
- * With the shipped bank (70–99 declared, the top five ticked) these read identically:
- * `#1` is layer 99, which is `Layer 1`. They diverge only if a NON-CONTIGUOUS set is
- * ticked — untick 97 and the third visible row is `#3` while still being `Layer 4`.
- * That is the accepted cost of the constraint below, taken knowingly.
+ * It used to be two numbers: `#` was display order and the alias counted each half of the
+ * bank down from its top, so the owner's top row read `#1 · Layer 1` while the Inspector said
+ * layer 99. On a channel shared with a playout server the number an operator reads must be
+ * the number CasparCG obeys, and a layer number cannot be renumbered by a tick, a filter or a
+ * search — it is not a position at all.
  *
- * THE ALIAS NUMBER IS BOUND TO THE BANK, not to what is displayed, and that is what
- * makes it safe to say out loud. Ticking and unticking change what is shown; neither
- * renumbers anything. `Layer 1` is always layer 99 whether or not it is ticked. If
- * unticking renumbered the rows past it, "Layer 2" would mean different rows on
- * different days — a positional handle that silently renumbers is worse than none.
- *
- * THE REAL CasparCG LAYER NUMBER IS NOT A COLUMN. The owner took it off the row —
- * it lives in the Inspector, and in this row's own tooltip and accessible name
- * (`rowTitle`), so it stays one hover or one focus away at every density without
- * spending a column. That mitigation is what made removing it safe: the layer
- * number is the vocabulary shared with the playout side (the reservation is 60–69,
- * not rows 1–4), and on a narrow screen the Inspector is an overlay behind a
- * hamburger — so it must not be reachable ONLY there.
+ * The row's tooltip and accessible name (`rowTitle`) still say `CasparCG layer N` in words,
+ * for the reader who does not know what the `#` column is.
  *
  * WHAT THE ROW SHOWS, in the column order the header declares:
  *
- *   - `#`, the display position;
+ *   - `#`, the AMCP layer;
  *   - the STATE, as icon + colour + word (`rowState`). This is where colour lives
  *     now that the verbs are neutral, and it is the one thing on the row allowed
  *     to shout;
@@ -236,10 +314,16 @@ export function LayerRow({
   binding,
   template,
   displayPosition,
-  bankPosition,
+  defaultAlias,
+  acceptsBank,
   selected,
+  emptiedAir = false,
   dirty,
   rehearsing,
+  seatedPlates = [],
+  audioLockedOf,
+  holdsLiveSeats = false,
+  operatorName,
   density = 'full',
   onSelect,
   onUpdate,
@@ -252,12 +336,7 @@ export function LayerRow({
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
   const { pickTemplate, pickerDialog } = useTemplatePicker();
-  const { menu, open, close } = useContextMenu<number>();
-  // The row's own hidden `.vcg` input. `pickFile` turns it into a promise so the
-  // whole import+load chain is ONE action's `run` — the button and its menu twin
-  // then share it by construction, rather than the real work living in an
-  // undeclared `onChange`.
-  const fileRef = useRef<HTMLInputElement>(null);
+  const { menu, open, openAt, close } = useContextMenu<number>();
   const spec = densitySpec(density);
 
   /**
@@ -281,7 +360,74 @@ export function LayerRow({
    * It used to default to the CasparCG layer number (`Layer 70`), which read as a
    * name while actually being wire vocabulary, and now contradicts the `#` column.
    */
-  const rowName = slot.alias ?? `Layer ${String(bankPosition)}`;
+  const rowName = slot.alias ?? defaultAlias;
+
+  /*
+    §14.5 / `tasks.md` 7.1 — THE LOOK PICKER’S THREE FACTS.
+
+    `looks` is `null` for BOTH “no look group” and “a group authoring zero looks” —
+    `lookOptionsOf` collapses them once so no call site has to remember which emptiness
+    is which. The zero-look case is a broken template and is refused at the TAKE door
+    (`looks-none-authored`); it is not this control’s job to explain it.
+  */
+  const looks = lookOptionsOf(template?.liveSources);
+  // The SAME helper every other AMCP-emitting verb on this row uses. Not a look-specific
+  // rule: with either hop down the switch cannot leave the browser, so an enabled picker
+  // would be the appearance of a capability rather than one (see `lookSwitch.ts`).
+  const lookRefusal = casparRefusalReason(linkDown, casparReach);
+  /**
+   * Send the switch, and report a refusal where the operator is looking.
+   *
+   * 🔴 ONE SEAM. This is `stack.set-active-look` and nothing else: the bridge records the
+   * look, `reconcileLivePlates` moves the FILLS, and the page is told on the `CG UPDATE`
+   * payload so it moves the HOLES. There is deliberately no second path here — no local
+   * optimistic state, no direct plate call — because the picker reads `item.activeLookId`
+   * straight back off the published stack, so what it shows is what the bridge did.
+   */
+  const switchLook = async (itemId: string, lookId: string): Promise<void> => {
+    /*
+      🔴 THE REJECTION IS CAUGHT, not only the `ok: false`.
+
+      A refused-by-the-bridge switch answers `{ ok: false }`; a switch that cannot BE MADE
+      throws. `#invoke` rejects on a disconnected socket (R-006 refuses every request by
+      design) and on a bridge whose build disagrees about this channel’s shape. Awaiting it
+      without a catch meant an unhandled rejection and — worse — an operator who pressed a
+      look, saw the segment move, and was told nothing at all.
+    */
+    try {
+      const res = await window.cg.stack.setActiveLook({ itemId, lookId });
+      // `LOOK-SWITCH-01` — a refused PLATE is said on this row (`takeRefusalLine`, below), in this
+      // channel's view only, so no banner repeats it (`lookSwitchBanner`).
+      const banner = lookSwitchBanner(res);
+      if (banner !== null) reportCommandError(banner);
+    } catch (err) {
+      reportCommandError(
+        lookSwitchRefusal(undefined, err instanceof Error ? err.message : undefined),
+      );
+    }
+  };
+
+  /*
+    🔴 `FIELD-FIXES-01` B — A REFUSED TAKE IS SAID ON THIS ROW, in one line naming the row and the
+    refused source (`takeRefusalLine`), read off the item's `takeRefusal`: the SAME line the
+    Inspector shows, in this channel's view only, and withdrawn by the bridge when the row is next
+    taken or cleared. It takes the template cell (the widest text column) while it stands, and the
+    state cell's title carries it at every density, so no banner has to.
+  */
+  const refusalLine =
+    item?.takeRefusal !== undefined
+      ? takeRefusalLine(operatorName?.names[0] ?? rowName, item.takeRefusal, {
+          // `PLAYOUT-SOURCES-01` §1.C — `Plate N`, and the entry as it stands now.
+          plateLabel: plateLabelOf(template, item.takeRefusal.plateId),
+          entry: currentSourceCatalog().sources.find((s) => s.id === item.takeRefusal?.sourceId),
+          channel: slot.channel,
+        })
+      : null;
+  // `ROUTE-PLATES-01` C4 — the backup carries this row without its live boxes: one line, here.
+  const backupLine = item?.backupUnmirrored === true ? BACKUP_UNMIRRORED_LINE : null;
+  // `PLAYOUT-FEATURES-01` A (`B-286`) — the clips server B was sent nothing for: one line, here.
+  const noCopyLine = backupNoCopyLine(item?.backupNoCopy ?? []);
+
   const templateLabel =
     template !== null
       ? (displayLabel(template) ?? template.templateId)
@@ -299,8 +445,54 @@ export function LayerRow({
    */
   const templateMissing = item !== null && template === null;
 
+  /**
+   * R-021 stage 4 — the bridge PARKED this row's restore: a producer that is not
+   * ours holds its layer, so the item is on the row but not on the layer.
+   *
+   * Read ONCE here and handed to both consumers — the state cell's word and the
+   * verbs' gate — so the row cannot come to say BLOCKED while offering PLAY. The
+   * bridge decided it (`binding.restoreBlocked`); nothing here re-derives it from
+   * `observed`, which cannot tell a decided block from a blind tap's ignorance.
+   */
+  const restoreBlocked = slot.binding?.restoreBlocked === true;
+
+  // R-048 (6.9e) — the per-plate source picker for THIS row. Local state, because
+  // it is one row opening its own dialog and nothing outside the row needs to know.
+  const [swapOpen, setSwapOpen] = useState(false);
+  // C-015 (6.5f) — and this row's per-plate audio panel, beside it.
+  const [audioOpen, setAudioOpen] = useState(false);
+
   const coord = { channel: slot.channel, layer: slot.layer };
+  /*
+    🔴 `CONSOLE-LOOK-06` DELTA D8a — **ONE DOOR, THREE HANDLES.**
+
+    The audio dialog is reachable from the row's own button, from the context MENU, and from
+    the menu's two keyboard twins (`ContextMenu`, `Shift+F10`). They must be one code path or
+    they will come to disagree about when the dialog may open at all — so the handler is named
+    once here and both the button and `layerRowActions`' `plateAudio` dep call THIS.
+
+    It is not a convenience: the menu item is gated (`empty || blocked || needsCaspar`) and a
+    button wired to its own `setAudioOpen` would be a second, ungated door to the same
+    dialog. The gate lives with the CONTROL; the opening lives here.
+  */
+  /*
+    The reference's own condition for drawing the audio control:
+    `templatePlateIds(template(row)).length`. Spelled ONCE and read by both the button and the
+    menu item's gate, so the two can never offer different answers to "does this row have
+    sound at all".
+  */
+  // `C-038` — the ONE console-side permission answer; the verbs read it, nothing else does.
+  const canOperate = useCanOperate();
+  const hasPlates = (template?.liveSources?.sources.length ?? 0) > 0;
+
+  const openPlateAudio = (): Promise<{ accepted: true }> => {
+    setAudioOpen(true);
+    return Promise.resolve({ accepted: true });
+  };
+
   const actions = layerRowActions({
+    // `C-038` — the LAST gate: may this principal press anything on this channel at all?
+    canOperate,
     // THE UNION, not `item`. See the `binding` prop's note: this is the whole of
     // the fix, and passing `item` here again is exactly how it would come undone.
     binding,
@@ -310,6 +502,8 @@ export function LayerRow({
     casparReach,
     dirty,
     rehearsing,
+    restoreBlocked,
+    holdsLiveSeats,
     // R-022 — one toggle, both directions. The bridge answers
     // `{ ok, reason?, message? }`; the row's verbs speak `AsyncResult`, so the
     // guard's `reason` rides through as `errorCode` for operator wording — the
@@ -321,7 +515,7 @@ export function LayerRow({
       return { accepted: res.ok, ...(res.reason !== undefined ? { errorCode: res.reason } : {}) };
     },
     /**
-     * §6 — LOAD OPENS THE PICKER, and importing is one option inside it.
+     * §6 — LOAD OPENS THE PICKER.
      *
      * It used to go straight to the file chooser, with "use one I already have"
      * exiled to a context-menu entry called LOAD FROM LIBRARY — a control naming a
@@ -329,19 +523,54 @@ export function LayerRow({
      * with it, and R-005's remove-a-template inside the picker, so the picker moved
      * here instead.
      *
-     * BOTH OUTCOMES END IN THE SAME BINDING. `importAndLoadOntoFixedSlot` and
-     * `loadTemplateOntoFixedSlot` were already the two halves of one flow (the
-     * first calls the second once the bytes are registered), so this is one verb
-     * with two sources for the template, not two loads sharing a button.
+     * ⭐ `RUNTIME-REPAIR-05` — AND NOW THERE IS EXACTLY ONE BINDING PATH. The picker
+     * used to answer with a template, a request to open the OS chooser, or a dropped
+     * file, and this function ran a different chain for each; importing has since
+     * become a STATION act in its own dialog, which registers a package and hands it
+     * back as a SELECTION. So the picker answers with a template or with nothing, and
+     * a row is bound in one place — there is no second path to keep in agreement.
      */
     load: async () => {
-      const chosen = await pickTemplate(`Load onto ${rowName}`);
+      /*
+        `RUNTIME-REPAIR-04` — the picker's aside names the DESTINATION, so the row hands over
+        what it already knows about itself. The reference draws this as `Destination · Layer 5`
+        over `Graphic row · Empty`; nothing here is fetched or derived for it.
+      */
+      const chosen = await pickTemplate(`Load onto ${rowName}`, acceptsBank, {
+        rowName,
+        coord: layerName,
+        channel: slot.channel,
+        holding: templateLabel,
+      });
       // The operator's own dismissal: not a success, not a refusal to report.
       if (chosen === null) return { accepted: false, cancelled: true };
-      if (chosen !== 'import') return loadTemplateOntoFixedSlot(coord, chosen);
-      const input = fileRef.current;
-      if (input === null) return { accepted: false };
-      return importAndLoadOntoFixedSlot(coord, () => pickFile(input));
+      const res = await loadTemplateOntoFixedSlot(coord, chosen);
+      /*
+        🔴 DELTA 8 — THE LOAD ANNOUNCES ITSELF, AND ITS SENTENCE NAMES WHAT LANDED.
+
+        It is said HERE and not in `layerRowActions`' catalogue because only this scope holds
+        `chosen`: the actions were built while the row was still empty.
+
+        ⚠ AND THE NAME IS WHAT MAKES IT SAFE TO REPLACE THE IMPORT'S MESSAGE. Importing and
+        loading are two presses in one picker session, and the toast REPLACES rather than
+        stacks — so the load's line must stand alone, saying both what arrived and where it
+        landed. The earlier cut silenced the load instead, which left a load that followed no
+        import saying nothing at all.
+      */
+      if (res.accepted) {
+        reportCommandSuccess(`${rowName} loaded · ${displayLabel(chosen) ?? chosen.templateId}`);
+        return res;
+      }
+      /*
+        🔴 `CONSOLE-POLISH-01` (`B-300`) — a Load that was on its way when another console removed the
+        template is refused `unknown-template`, and that code's sentence ("re-import it") is about a
+        different situation. Within `REMEMBERED_MS` of such a removal the refusal says what happened.
+      */
+      const elsewhere =
+        res.errorCode === 'unknown-template'
+          ? recentRemovalElsewhere(chosen.templateId, slot.channel)
+          : null;
+      return elsewhere === null ? res : { ...res, message: elsewhere };
     },
     /**
      * The post-CLEAR re-ADD: put the row's OWN bound template back, no picking.
@@ -379,7 +608,20 @@ export function LayerRow({
       return { accepted: res.ok, ...(res.reason !== undefined ? { errorCode: res.reason } : {}) };
     },
     remove: (itemId) => window.cg.stack.remove({ itemId }),
+    // R-048 (6.9 / 6.9e) — the per-plate source swap, offered only where the bound
+    // template actually declares plates. The verb OPENS the picker; the swap itself
+    // is committed from inside it, which is what keeps the whole act to two actions.
+    hasLivePlates: hasPlates,
+    swapSource: () => {
+      setSwapOpen(true);
+      return Promise.resolve({ accepted: true });
+    },
+    plateAudio: openPlateAudio,
     onError: reportCommandError,
+    // DELTA 8 — the operator words each verb toasts with, and the real layer for the one
+    // sentence that needs it. Composed once here, never a second time inside the actions.
+    rowName,
+    layerName,
   }).map((action) => {
     // Confirm gates attached at DECLARATION time, so button and menu share them.
     // CLEAR destroys a live producer; REMOVE additionally takes the item off the
@@ -390,12 +632,40 @@ export function LayerRow({
       // it is the escape hatch for exactly the situation where the console's model is
       // wrong, so the wording promises only what is certain — the layer is cleared,
       // whatever happens to be on it — and never implies we know it is empty.
+      /**
+       * R-021 task 4.3 (owner decision b1) — WHAT THE DIALOG SAYS ABOUT OCCUPANCY.
+       *
+       * The hard Clear is PERMITTED on a declared row under OSC silence — that is
+       * the whole of b1, and it is why `clearBankLayer` is gated by STRUCTURE (in
+       * the bank, not reserved) rather than by observation. The price of allowing
+       * it blind is that the dialog must not imply we can see: an operator who
+       * believes the console checked will press through a confirmation they would
+       * otherwise have read.
+       *
+       * So the sentence is chosen by what the WIRE actually says about the layer,
+       * and every branch names the layer NUMBER — under silence that number is the
+       * only thing the operator can carry to a rack.
+       *
+       *   unknown  → say so outright, and say what will happen anyway.
+       *   producer → name the KIND. "There is an ffmpeg on 1-72" is the fact that
+       *              stops a wrong click, and it is exactly the state a
+       *              `restore-blocked` row is in.
+       *   empty    → say that too. A confirmation that warns about destroying a
+       *              graphic when the layer is observably free trains the operator
+       *              to click through the ones that matter.
+       */
+      const occupancySentence =
+        slot.observed.kind === 'unknown'
+          ? `CasparCG is not reporting layer ${layerName} right now, so the console CANNOT tell you what is on it — this clears it anyway, whatever it is.`
+          : slot.observed.kind === 'producer'
+            ? `CasparCG reports a ${slot.observed.producer} producer on layer ${layerName}; it leaves air immediately, with no outro.`
+            : `CasparCG reports layer ${layerName} as empty, so this should have nothing to destroy.`;
       return withConfirm(action, () =>
         confirm(
           item !== null
             ? {
                 title: `Clear ${rowName}?`,
-                body: `Layer ${layerName} is cleared immediately — the graphic leaves air with no outro. The template stays on the row and can be played again.`,
+                body: `Layer ${layerName} is cleared immediately — the graphic leaves air with no outro. The template stays on the row and can be played again. ${occupancySentence}`,
                 confirmLabel: 'Clear layer',
                 tone: 'clear',
               }
@@ -404,8 +674,7 @@ export function LayerRow({
                 body:
                   `This row holds no template, so this clears the LAYER itself: ` +
                   `whatever is on ${layerName} leaves air immediately, with no outro. ` +
-                  `Use it when a layer is stuck or the console cannot tell you what is ` +
-                  `on it — it does not need to know in order to clear it.`,
+                  `${occupancySentence}`,
                 confirmLabel: 'Clear layer',
                 tone: 'clear',
               },
@@ -500,6 +769,12 @@ export function LayerRow({
     simulated,
     oscBlind,
     rehearsing,
+    restoreBlocked,
+    // R-058 Part A — the bridge's reason for an `error`, which was published on the item all
+    // along and read by nothing. See the title note in `rowState`.
+    ...(item?.errorCode !== undefined ? { errorCode: item.errorCode } : {}),
+    // `FIELD-FIXES-01` B — and the refused take's own line, which says more than its code.
+    ...(refusalLine !== null ? { errorLine: refusalLine.text } : {}),
   });
 
   // The wire's occupancy report is no longer rendered as a column — `rowState` folds
@@ -513,7 +788,7 @@ export function LayerRow({
    * claiming about itself.
    *
    * Deselecting is a real operator need, not just symmetry: with nothing selected the
-   * Inspector returns to "Select a stack item", which is how you stop an accidental
+   * Inspector returns to "Select a row", which is how you stop an accidental
    * edit from being staged against a live graphic you did not mean to touch. On a
    * narrow screen it is also how you dismiss the Inspector overlay from the row.
    *
@@ -535,14 +810,25 @@ export function LayerRow({
    * density — the same trade this surface already makes for the occupancy report
    * and, now, for the READY distinction.
    */
-  const rowTitle = `Row ${String(displayPosition)} · ${rowName} · CasparCG layer ${layerName}`;
+  // `DESKTOP-APPS-01-D` h — no `Row N` any more: `#` IS the layer, and saying it twice would be
+  // noise at best and, for a custom name, a second number to reconcile.
+  const rowTitle = `${rowName} · CasparCG layer ${layerName}`;
 
   return (
     <div
       // `has-template` lifts a row that holds something above the empty ones — a
       // semantic difference, not a striping pattern (see `controls.css`).
-      className={`cg-row${item !== null ? ' has-template' : ''}${selected ? ' is-selected' : ''}`}
+      className={`cg-row${item !== null ? ' has-template' : ''}${selected ? ' is-selected' : ''}${
+        emptiedAir ? ' is-emptied-air' : ''
+      }`}
       style={{ ...styles.row, gridTemplateColumns: gridTemplateColumns(density) }}
+      /*
+        `B-232` — the hook a test asserts on, rather than the amber. Same rule as
+        `data-row-state` directly below: the claim is "this row is one the notice is
+        about", and a test matching a hex value would fail the next palette tune while
+        saying nothing about the property that matters.
+      */
+      {...(emptiedAir ? { 'data-emptied-air': '' } : {})}
       // The row's stable anchor is the LAYER NUMBER — the declared identity that
       // survives every load, unlike an itemId.
       data-layer={String(slot.layer)}
@@ -580,6 +866,17 @@ export function LayerRow({
       title={rowTitle}
       aria-label={`${rowTitle} · ${state.label}`}
       onKeyDown={(e) => {
+        /*
+          `RUNTIME-REDESIGN-01` Phase 6 — KEYBOARD PARITY for the row's menu: the `ContextMenu`
+          key and `Shift+F10` open the same menu a right-click does, anchored on the row, from
+          anywhere inside it (a focused verb button included — the reference resolves the
+          closest row, and so does this). The menu carries AUDIO, so the audio dialog is two
+          keys and one Enter away with no pointer.
+        */
+        if (isContextMenuKey(e)) {
+          openAt(e, e.currentTarget, slot.layer);
+          return;
+        }
         if (e.key !== 'Enter' && e.key !== ' ') return;
         // Never swallow a key aimed at a control inside the row.
         if (e.target !== e.currentTarget) return;
@@ -588,7 +885,11 @@ export function LayerRow({
       }}
     >
       <span
-        style={item === null ? { ...styles.rowNumber, ...styles.onEmptyRow } : styles.rowNumber}
+        style={{
+          ...styles.rowNumber,
+          ...(item === null ? styles.onEmptyRow : {}),
+          ...(emptiedAir ? styles.onMarkedRow : {}),
+        }}
       >
         {displayPosition}
       </span>
@@ -635,20 +936,179 @@ export function LayerRow({
             ? { style: { animation: 'cg-spin 1s linear infinite' } }
             : {})}
         />
-        {spec.showStateLabel && <span style={styles.stateLabel}>{state.label}</span>}
+        {/*
+          PHASE 2A — the WORD may need a different red from the MARK beside it.
+
+          The wrapper's `color` paints the 25px icon, which is a GRAPHIC and is
+          judged at the 3.0 contrast floor; this label is TEXT and is judged at 4.5,
+          and on these surfaces one red could not clear both. `rowState` supplies
+          `labelColor` for exactly the states where the two must differ (today:
+          `error`) and nothing otherwise, so every other state's word goes on
+          inheriting the mark's hue — which is what keeps the two agreeing.
+        */}
+        {spec.showStateLabel && (
+          <span
+            style={
+              state.labelColor !== undefined
+                ? { ...styles.stateLabel, color: state.labelColor }
+                : styles.stateLabel
+            }
+          >
+            {state.label}
+          </span>
+        )}
       </span>
       {/* THE ALIAS — primary. Dimmed on a row with nothing on it, so occupied rows
           own the attention. */}
-      <span
-        style={item === null ? { ...styles.alias, ...styles.aliasEmpty } : styles.alias}
-        data-row-body=""
-        title={rowName}
-      >
-        {rowName}
-        {dirty && <DraftChip label={`${rowName} has unapplied edits`} />}
+      <span style={item === null ? { ...styles.alias, ...styles.aliasEmpty } : styles.alias}>
+        {/*
+          🔴 `data-row-body` WRAPS THE NAME AND NOTHING ELSE, and that is a bug fix rather
+          than tidying — see the audio button below.
+
+          It used to be the whole alias CELL. Once a control moved into that cell, the cell's
+          centre could land ON the control: a click aimed at "the row's name" hit a button
+          instead, so the row did not select. Linux CI caught it and Windows did not, which is
+          exactly what makes it worth structuring away rather than nudging — the overlap
+          depends on TEXT METRICS, so which host sees it is a lottery and the next name long
+          enough to move the centre brings it back.
+
+          The cell is still ONE grid child, so `VERB_COUNT` and `gridTemplateColumns` are
+          untouched; what changed is where the name's own box ends.
+        */}
+        <span data-row-body="" title={rowName}>
+          {/*
+            `B-303` — a row's name is operator data (`Bed 59`, or a station's own Persian alias): it
+            sits in its own inline isolate, in its own direction, inside the row's LTR box.
+          */}
+          <bdi dir={directionOf(rowName)}>{rowName}</bdi>
+          {dirty && <DraftChip label={`${rowName} has unapplied edits`} />}
+        </span>
+        {/*
+          🔴 `add-multibox-audio` — THE ROW'S AUDIO SUMMARY, READ-ONLY, AND **OUTSIDE THE VERB
+          BLOCK**.
+
+          ── WHY IT IS HERE AND NOT A SEVENTH BUTTON ────────────────────────────────────
+
+          `layerTable.ts` fixes `VERB_COUNT` at SIX, and the sticky header prints the word each
+          glyph stands for directly ABOVE it. A seventh control — or a conditional one, which
+          is what a plate-bearing row would need — moves every header word from that column
+          rightward onto the WRONG glyph. That file names it as the dangerous failure for a
+          specific reason: this product's STOP (graceful) and CLEAR (hard kill) are the inverse
+          of the reference product's, and the header word is precisely the channel that retires
+          the misread.
+
+          So this rides the ALIAS cell beside the draft chip. It adds no column, `VERB_COUNT`
+          stays 6, `gridTemplateColumns(density)` is untouched and `minWidthFor` still sums the
+          same columns — the same "no new column" discipline the look picker's second line
+          keeps, reached a different way.
+
+          ── AND IT IS READ-ONLY, WHICH IS THE OTHER HALF ───────────────────────────────
+
+          A row carries a VARIABLE number of plates; a control here would have to be one
+          control for several values. The number is the whole job: an operator scanning thirty
+          rows learns which ones have sound at all, and the strip in LIVE PLATES — or this
+          row's own audio dialog — is where a value is changed.
+        */}
+        {/*
+          🔴 `CONSOLE-LOOK-06` DELTA D8a — THE ROW'S AUDIO BUTTON, and it rides the ALIAS CELL
+          for the reason the summary beside it already gives at length.
+
+          The reference draws a `.row-audio-button` in the row. Ours could not put one in the
+          VERB BLOCK: `layerTable.ts` fixes `VERB_COUNT` at SIX and the sticky header prints a
+          word directly above each glyph, so a seventh — or worse, a CONDITIONAL seventh, which
+          is what a plate-bearing row needs — slides every header word onto the wrong glyph.
+          This product's STOP (graceful) and CLEAR (hard kill) are the inverse of the reference
+          product's, which is exactly the misread the header word retires.
+
+          So it goes where the audio SUMMARY already goes: the alias cell. No new column,
+          `VERB_COUNT` stays 6, `gridTemplateColumns(density)` untouched.
+
+          ⚠ THE CONDITION IS THE REFERENCE'S, and it already was: the reference renders it on
+          `templatePlateIds(template(row)).length`, and ours is `hasLivePlates` —
+          `(template?.liveSources?.sources.length ?? 0) > 0`, the BOUND TEMPLATE's declaration.
+          Same question, same answer; nothing about the gate changed here.
+
+          ⚠ Its `title` names BOTH doors, as the reference's does, because the right-click
+          route is the one an operator will not discover on their own.
+        */}
+        {hasPlates && (
+          <Button
+            variant="icon"
+            className="cg-row-audio-btn"
+            data-row-audio=""
+            title="Live audio · right-click this row"
+            aria-label={`Audio controls for ${rowName}`}
+            onClick={(e) => {
+              // The row itself selects on click; this button is a different act.
+              e.stopPropagation();
+              void openPlateAudio();
+            }}
+          >
+            <Icon icon={Volume2} size={16} />
+          </Button>
+        )}
+        {item !== null &&
+          (() => {
+            const summary = audioSummary(seatedPlates);
+            return summary === null ? null : (
+              <Tag
+                /*
+                  §3 — IT NOW CARRIES THE STATE COLOUR THE PILLS ALREADY USE, and the earlier
+                  argument for muted-only is retired rather than overridden by taste: it said a
+                  second coloured mark would compete with the row's STATE cell. SKY is not a
+                  state hue on this surface — that is the same reason `plateAudio.ts` chose it
+                  for AUDIBLE over green, which is the sacred ON AIR mark — so it competes with
+                  nothing and the vocabulary matches LIVE PLATES word for word.
+
+                  🔴 STILL A PILL. Colour is the only thing that changed: no track, no fill, no
+                  bar, no ramp. There is no per-input level to draw, and a shape that implied
+                  one would be this product claiming a measurement it cannot take.
+                */
+                className={
+                  summary.audible > 0 ? 'cg-chip-audio cg-chip-audio--audible' : 'cg-chip-audio'
+                }
+                data-audio-summary={summary.label}
+                title={summary.detail}
+                aria-label={summary.detail}
+              >
+                {summary.label}
+              </Tag>
+            );
+          })()}
       </span>
       {spec.showTemplate &&
-        (templateLabel !== null ? (
+        (refusalLine !== null ? (
+          <span
+            style={{ ...styles.secondary, ...styles.refusal }}
+            data-take-refusal=""
+            title={
+              templateLabel === null ? refusalLine.text : `${refusalLine.text} — ${templateLabel}`
+            }
+            dir="ltr"
+          >
+            <TakeRefusalText line={refusalLine} />
+          </span>
+        ) : noCopyLine !== null ? (
+          <span
+            style={styles.secondary}
+            data-backup-no-copy=""
+            title={
+              templateLabel === null ? noCopyLine.text : `${noCopyLine.text} — ${templateLabel}`
+            }
+            dir="ltr"
+          >
+            <BackupNoCopyText line={noCopyLine} />
+          </span>
+        ) : backupLine !== null ? (
+          <span
+            style={styles.secondary}
+            data-backup-unmirrored=""
+            title={templateLabel === null ? backupLine : `${backupLine} — ${templateLabel}`}
+            dir="ltr"
+          >
+            {backupLine}
+          </span>
+        ) : templateLabel !== null ? (
           <span
             style={styles.secondary}
             /*
@@ -662,10 +1122,29 @@ export function LayerRow({
             title={
               templateMissing ? `${templateLabel} — ${MISSING_TEMPLATE_REASON}` : templateLabel
             }
-            dir="auto"
+            /*
+              🔴 `MODAL-CHROME-10` ADDENDUM B — **NO `dir="auto"` ON THE LINE.** It was here, and
+              it is the exact mistake `OperatorNames`'s header warns against: this cell is a LINE
+              carrying operator data AND English chrome (`(not in this browser)` below), so a
+              Persian template name flipped the whole cell to RTL and took the English clause
+              with it — measured in Chromium as `direction: rtl` on a blockified cell. The line
+              is chrome and stays LTR; the NAME alone is isolated.
+            */
           >
-            {templateLabel}
-            {templateMissing && <span style={styles.missingTemplate}> (not in this browser)</span>}
+            {/* `B-303` — the name's OWN direction, not its first letter's. */}
+            <bdi dir={directionOf(templateLabel)}>{templateLabel}</bdi>
+            {templateMissing && (
+              <span
+                style={
+                  emptiedAir
+                    ? { ...styles.missingTemplate, ...styles.onMarkedRow }
+                    : styles.missingTemplate
+                }
+              >
+                {' '}
+                (not in this browser)
+              </span>
+            )}
           </span>
         ) : (
           <span style={styles.empty}>Empty</span>
@@ -681,7 +1160,14 @@ export function LayerRow({
         The verb block. It needs no click handler of its own: the row's handler
         ignores anything that came from a control (see `onClick` above).
       */}
-      <span style={VERBS_GRID}>
+      {/*
+        `data-verb-block` — a stable hook for the ONE invariant this block has: it contains
+        exactly `VERB_COUNT` buttons, so every sticky header word sits above its own glyph.
+        Asserted rather than trusted because the failure is silent and dangerous: this
+        product's STOP (graceful) and CLEAR (hard kill) are the inverse of the reference
+        product's, and the header word is what retires that misread.
+      */}
+      <span style={VERBS_GRID} data-verb-block="">
         {buttons.map((action) => (
           <AsyncButton
             key={action.key}
@@ -709,13 +1195,57 @@ export function LayerRow({
           </AsyncButton>
         ))}
       </span>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".vcg"
-        style={{ display: 'none' }}
-        aria-label={`Import .vcg for ${rowName}`}
-      />
+      {/*
+        🔴 §14.5 / `tasks.md` 7.2 — THE LOOK PICKER, ON A SECOND LINE OUTSIDE THE VERB BLOCK.
+
+        ── WHY HERE, AND WHY THE SHAPE RULE DOES NOT GOVERN IT ────────────────────────
+
+        The SHAPE RULE is a rule about the VERB BLOCK — *“every row declares the SAME verbs
+        in the SAME order, always”* — and it exists because a verb that appears and vanishes
+        moves its neighbours under a hand already reaching for one. This control is not a
+        verb and is not in that block, so the rule does not reach it; it is stated rather
+        than implied because the picker IS conditional (only look-bearing rows have one) and
+        a reader who assumed the rule applied would call that a violation.
+
+        What it must not disturb is the COLUMN model, and it does not: `gridColumn: 1 / -1`
+        adds no column, so `VERB_COUNT` stays 6, `gridTemplateColumns(density)` is untouched,
+        `minWidthFor` still sums the same columns, and the header's words stay above their
+        own glyphs — the invariant with a recorded on-air failure behind it (`VERB_COUNT`).
+
+        DENSITY: the line spans whatever columns exist, so it is correct at all three; and
+        it can never widen the row, because the strip scrolls inside itself instead.
+      */}
+      {looks !== null && item !== null && (
+        <LookPicker
+          looks={looks}
+          activeId={item.activeLookId}
+          /*
+            🔴 `B-151` — DISABLED ONLY WHEN THE TARGET IS AIR.
+
+            `casparRefusalReason` exists because an ON-AIR switch cannot leave the browser
+            with the link down, so an enabled control would be the appearance of a
+            capability. A REHEARSING row is off air: the bridge records the look and sends
+            nothing, so the server's reachability has no bearing on whether the press can be
+            done. Disabling it there would refuse a rehearsal for a reason that belongs to
+            air — and rehearsing with the plant unreachable is precisely when a preview is
+            most useful.
+          */
+          /*
+            🔴 DELTA 11 — the ROW's own rendered tone, not a second derivation of "on air".
+            `state.tone` is what `data-row-state` carries three lines up, so the segment's green
+            and the state cell's green cannot come apart — including when §4 masks an
+            unconfirmable claim down to `attention`.
+          */
+          onAir={state.tone === 'onair'}
+          refusal={rehearsing ? undefined : lookRefusal}
+          rowName={rowName}
+          // The row's own state decides what the press changes, and says so on the control.
+          target={rehearsing ? 'preview' : 'air'}
+          onPick={(lookId) => {
+            void switchLook(item.itemId, lookId);
+          }}
+        />
+      )}
       {menu !== null && (
         <ContextMenu
           items={toMenuItems(actions)}
@@ -727,6 +1257,70 @@ export function LayerRow({
       )}
       {confirmDialog}
       {pickerDialog}
+      {audioOpen && item !== null && template !== null && (
+        <LivePlateAudioDialog
+          item={item}
+          template={template}
+          /*
+            Golden rule 11 — the panel's `operatorRowName` when it supplied one; otherwise the
+            SAME module's composition against what this row holds (no bank, this one template),
+            never a label composed here.
+          */
+          name={
+            operatorName ??
+            operatorRowName(
+              { itemId: item.itemId, templateId: item.templateId, slot: item.slot },
+              null,
+              new Map([[template.templateId, template]]),
+            )
+          }
+          seatedPlates={seatedPlates}
+          audioLockedOf={audioLockedOf}
+          /*
+            `add-multibox-audio` — the MAP door, not the single-plate one. SOLO is a
+            cross-plate statement and the bridge holds the row's live-seat lock for the whole
+            map, so a look switch cannot land in the middle of one. `refused` carries the
+            per-plate verdicts through unchanged: which guest did not move is the one thing an
+            operator needs from a partial failure.
+          */
+          onApplyVolumes={async (volumes) => {
+            const before = item.plateVolumes;
+            const res = await window.cg.stack.setPlateVolumes({ itemId: item.itemId, volumes });
+            const refused = res.results.filter((r) => !r.ok).map((r) => r.plateId);
+            /*
+              🔴 `CONSOLE-LOOK-06` DELTA 8 — the change announces itself, through the SAME
+              `announcePlateAudio` `LayersPanel`'s path uses. Two call paths into one verb, one
+              sentence: a toast written at each site is two spellings of one thing, which is
+              how they come to disagree (golden rule 6).
+            */
+            const said = announcePlateAudio(
+              volumes,
+              before,
+              refused,
+              (plateId) => seatedPlates.find((pl) => pl.plateId === plateId)?.coordinate ?? null,
+              rowName,
+            );
+            if (said !== null) reportCommandSuccess(said);
+            return { ok: res.ok, refused };
+          }}
+          onClose={() => {
+            setAudioOpen(false);
+          }}
+        />
+      )}
+      {swapOpen && item !== null && template !== null && (
+        <LiveSourceSwapDialog
+          item={item}
+          template={template}
+          channel={slot.channel}
+          onSwap={(plateId, sourceId) =>
+            window.cg.stack.swapLiveSource({ itemId: item.itemId, plateId, sourceId })
+          }
+          onClose={() => {
+            setSwapOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

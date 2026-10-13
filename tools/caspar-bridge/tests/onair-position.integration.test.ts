@@ -4,7 +4,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { StackItemState } from '@cg/shared-schema';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-011 — operator position overrides ride the served URL query, through the
@@ -78,7 +78,11 @@ function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
 async function boot(): Promise<void> {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  runtime = new CasparRuntime(singleServer(mock.amcpPort, oscPort));
+  runtime = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
@@ -93,7 +97,8 @@ it('R-011: a stored position rides the ADD URL query; no override, no query; the
   expect((await runtime!.load('item1', 'lower-third', { headline: 'x' })).accepted).toBe(true);
   const bare = mock!.lastCgAdd(SLOT)?.template;
   expect(bare).toMatch(
-    new RegExp(`^http://127\\.0\\.0\\.1:\\d+/template/lower-third\\?${RASTER_QUERY}$`),
+    // `B-293` — the path names the version: `<templateId>~<versionId>`.
+    new RegExp(`^http://127\\.0\\.0\\.1:\\d+/template/lower-third~[0-9a-f]{16}\\?${RASTER_QUERY}$`),
   );
   expect(bare).not.toContain('pos=');
   expect(bare).not.toContain('dx=');
@@ -103,7 +108,7 @@ it('R-011: a stored position rides the ADD URL query; no override, no query; the
   //    (served, never a bare id: the B-064 contract untouched).
   expect(await runtime!.setPosition('item1', POSITION)).toEqual({ ok: true });
   const withQuery = mock!.lastCgAdd(SLOT)?.template;
-  expect(withQuery).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third\?/);
+  expect(withQuery).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third~[0-9a-f]{16}\?/);
   expect(withQuery).toContain(QUERY);
   await expect(mock!.waitForCgAddResolution(SLOT)).resolves.toBe('resolved');
 
@@ -135,7 +140,7 @@ it('R-011: a stored position rides the ADD URL query; no override, no query; the
   //    raster is shared because it is a property of the CHANNEL, not the item.
   expect((await runtime!.load('item2', 'lower-third', {})).accepted).toBe(true);
   const second = mock!.lastCgAdd({ channel: 1, layer: 11 })?.template;
-  expect(second).toMatch(new RegExp(`/template/lower-third\\?${RASTER_QUERY}$`));
+  expect(second).toMatch(new RegExp(`/template/lower-third~[0-9a-f]{16}\\?${RASTER_QUERY}$`));
   expect(second).not.toContain('pos=');
 }, 30000);
 

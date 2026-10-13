@@ -1,0 +1,924 @@
+## ADDED Requirements
+
+### Requirement: A redesign never deletes a surface merely because the reference omits it
+
+The Runtime SHALL keep every operator surface it has today that the approved design reference does
+not draw, each still rendering under the condition that raises it. A visual reference is a design
+for the console WORKING; the surfaces at risk exist because something has gone wrong, so a
+prototype has no reason to draw one and a redesign that ships only what is drawn deletes all of
+them at once.
+
+The set is enumerated in this change's `design.md` §3, built from the source tree rather than from
+any list supplied with the reference. Each entry SHALL name where the surface lives now, what it
+becomes after the redesign, and a test.
+
+An entry SHALL NOT be discharged by a test that merely renders the component. The test SHALL assert
+that the surface APPEARS under its own condition, and — where the surface has a silent state — that
+it renders NOTHING when the condition is absent. Presence-only assertions pass against an
+implementation that renders the thing and means nothing by it.
+
+#### Scenario: An alarm still fires after the surface is re-dressed
+
+- **WHEN** the condition that raises a guarded alarm holds — a reconnect that took air away, an
+  unowned lit layer, a bridge older than the page, a declared output that is not running, a
+  configured raster contradicting the server, a link that is not live, a restore that came back
+  short **THEN** that alarm renders, carrying the same claim it carried before the redesign
+
+#### Scenario: A guarded surface stays silent when its condition is absent
+
+- **WHEN** a guarded surface's condition does not hold **THEN** it renders nothing at all, and no
+  reassuring or placeholder variant is rendered in its place
+
+#### Scenario: A footer pill is not accepted as a full-width alarm
+
+- **WHEN** the link is not live **THEN** the not-live state is stated by a full-width alert and not
+  by a status pill alone, because a pill beside a healthy-looking pill is the failure `R-006`
+  records
+
+#### Scenario: Every guarded surface names a test that runs
+
+- **WHEN** the programme's final phase is reported **THEN** each entry in `design.md` §3 cites a
+  test that exists in the tree and asserts that entry's condition, and no entry cites a test that
+  only constructs the component
+
+#### Scenario: A guard entry's test reddens when the surface is removed
+
+- **WHEN** a guarded surface's render is deleted or its raising condition is made unreachable, in
+  a plant that is then reverted **THEN** at least one test the entry cites fails, and an entry
+  whose cited tests stay green under such a plant is recorded as UNGUARDED regardless of how many
+  tests mention the component — a surface having tests is not the same as a surface being guarded
+
+### Requirement: The failover banner is a strip whose tone is the situation's, and it is silent in test mode
+
+The failover banner SHALL be an in-flow strip in the shell's banner region, never a fixed slab, and
+SHALL take its tone from what it reports rather than from one alarm colour: a manual failover that
+succeeded is a neutral notice announced as a status; an automatic failover is the caution pair
+announced as an alert; a degraded or disconnected primary is the alarm, announced as an alert and
+offering no dismissal. Every tone SHALL be a token of the token home, asserted by identity and
+never by hex.
+
+While the link is the offline mock the banner SHALL render nothing whatever the mock's health
+says, because in test mode there are no real servers to describe and the TEST MODE banner is the
+truth in that mode.
+
+#### Scenario: A completed manual failover is information
+
+- **WHEN** the health reading carries a manual failover event and the primary is healthy **THEN**
+  the strip renders in the neutral notice pair with a status role, names the server that is now
+  primary, and can be dismissed
+
+#### Scenario: A new failover re-shows a dismissed strip
+
+- **WHEN** the operator has dismissed one failover event and a later event with a different
+  timestamp arrives **THEN** the strip renders again
+
+#### Scenario: An unhealthy primary is the alarm and cannot be hidden
+
+- **WHEN** the primary's state is degraded or disconnected **THEN** the strip renders in the alarm
+  fill with an alert role and no dismiss control exists
+
+#### Scenario: The offline mock suppresses it
+
+- **WHEN** the link is `offline-mock` and the health reading would otherwise raise the strip
+  **THEN** nothing renders, and the same reading on a live link renders
+
+### Requirement: The caution hue is an ink, and its one saturated fill has its own role
+
+The caution token read as `color:` SHALL NOT be the same token any surface reads as a ground. The
+bridge-skew banner SHALL fill with the caution pair the reference draws — the caution ink on the
+caution ground — and SHALL be that pair and not any alarm fill, asserted by token identity; the
+one remaining saturated amber fill, the CLEAR verb, SHALL read its own fill role.
+
+#### Scenario: The bridge-skew banner is amber, never red
+
+- **WHEN** the bridge reports commands this page can issue that it does not route **THEN** the
+  banner renders as an alert filled with the caution ground, and its fill is none of the alarm,
+  danger or error fills
+
+#### Scenario: The skew banner is silent on an unanswered handshake
+
+- **WHEN** no skew is known, or the reported set is empty **THEN** the banner renders nothing
+
+### Requirement: The console lock keeps its own chrome and its no-exit contract
+
+The lock screen SHALL NOT be built on the shared modal primitive, and SHALL offer no dismissal path
+other than a correct PIN. A lock with a way out is not a lock. The reference draws its own lock as a
+dialog inside the Station-setup shadow root; that is a property of a prototype whose lock guards
+nothing, and it SHALL NOT be read as an argument to move the product's lock onto a primitive that
+closes on Escape, on a backdrop click, or on a dismiss control.
+
+While engaged, the lock SHALL contain the keyboard as well as the pointer, and on release SHALL
+hand the keyboard back to the application.
+
+#### Scenario: The lock cannot be dismissed except by its PIN
+
+- **WHEN** the console is locked and the operator presses Escape, clicks outside the card, or
+  reaches for a close control **THEN** the lock stays engaged and no close control exists to reach
+
+#### Scenario: The lock takes the reference's look and not its primitive
+
+- **WHEN** the console is locked **THEN** the lock renders the reference's look — an icon box, the
+  `Console locked` title, the PIN field and one full-width submit — as its own element that is not
+  a `<dialog>`, every control in it is the release path, Escape and a press on the scrim leave it
+  engaged, a wrong PIN is refused legibly with the lock still up, and it leaves only when the lock
+  state reports released
+
+#### Scenario: The keyboard cannot leave the lock
+
+- **WHEN** the console is locked and focus is on the last control inside the lock and Tab is
+  pressed **THEN** focus returns to the first control inside the lock rather than moving to any
+  element of the application behind it
+
+### Requirement: The layers table takes its geometry from the token home and is measured in a real engine
+
+The Runtime SHALL render the layers table's geometry — a row's padding, the box of each of its six
+verbs, the gap between them, the verb glyph and the Graphics-beds band — from the `--r-row-*`
+tokens declared in the token home, and the column model SHALL do its arithmetic on the same
+declared numbers rather than on a second spelling. The values SHALL be those the approved reference
+PAINTS in a browser, not the first rules its stylesheet happens to contain; a token transcribed
+from a rule the reference does not render is corrected, not applied.
+
+The six verbs SHALL keep a fixed place and size on every row, under the header words `Item`,
+`Play`, `On PVW`, `Next`, `Stop` and `Clear` in that order. The sticky header's ground SHALL be one
+on which the muted column labels clear the 4.5:1 AA text floor, and the ink SHALL NOT be re-tuned
+to reach it.
+
+Every geometry claim about this table SHALL be verified in a real layout engine. A jsdom assertion
+about a box, an edge or a height compares zeros and is not evidence.
+
+#### Scenario: A row is what the token home declares
+
+- **WHEN** the table is rendered in a browser **THEN** a row's padding equals `--r-row-pad`, its
+  height equals the padding above plus the verb height plus the padding below plus its rule, each
+  of its six verbs is `--r-row-icon-btn-w` by `--r-row-icon-btn-h` in a six-column grid gapped by
+  `--r-row-verb-gap`, and the Graphics-beds band is `--r-bed-divider-h` tall
+
+#### Scenario: The header's labels clear AA on the header's ground
+
+- **WHEN** the sticky header is rendered **THEN** the contrast of its label ink against its ground,
+  computed from the colours the browser resolved, is at least 4.5:1
+
+#### Scenario: Hover and selection are distinct and honest
+
+- **WHEN** the pointer rests on a loaded row **THEN** the row lifts to the raised surface; **WHEN**
+  it rests on an empty row **THEN** the row does not react; **WHEN** a row is selected **THEN** it
+  carries the selection wash and a two-pixel inset frame in the interactive accent
+
+#### Scenario: The top bar's bulk verbs hover to their own colours and a refused one does not light
+
+- **WHEN** the pointer rests on STOP ALL or CLEAR ALL while they are enabled **THEN** each takes
+  its own verb colour; **WHEN** REMOVE ALL is withheld because a row is on air **THEN** it does not
+  take the remove colour under the pointer
+
+### Requirement: A row's looks are the template's own declaration, and nothing is invented from a frame count
+
+The Runtime SHALL offer, on a row whose template declares looks, exactly the looks that template
+declares — read from the template's carrier (`TemplateLiveSources.looks`, the export of the
+scene's authored look group) — in authored order, each labelled by its authored name and each
+carrying its own frames (the rects the look itself places over the scene). Frame count, look count
+and look id are three different things: the Runtime SHALL NOT derive a look from the template's
+number of frames, number looks by position, or read a frame count out of a look id. A template
+declaring an irregular look set — six frames, five looks of one, two, three, four and six frames,
+with word ids whose membership is irregular — SHALL render exactly those five and no sixth. A
+template with no look group SHALL show no picker and be refused nothing.
+
+The look strip's geometry — the button's height, its width floor, its padding, radius and text
+size, the frame thumbnail's box, and the gaps between label, strip and buttons — SHALL come from
+the `--r-look-*` tokens in the token home, and those SHALL be the values the approved reference
+PAINTS in a browser; every such claim SHALL be verified in a real layout engine.
+
+#### Scenario: An irregular look set renders exactly its own looks
+
+- **WHEN** a six-frame template declaring looks `solo` (one frame), `pair` (frames two and five),
+  `trio` (three frames), `quad` (four frames) and `panel` (six frames) is loaded onto a row **THEN**
+  the row's picker shows those five segments in that order, labelled by their authored names, each
+  segment's thumbnail holds that look's own frames — one, two, three, four and six cells, `pair`'s
+  being frames two and five — no segment declares five frames, and the authored default is the
+  one segment marked current
+
+#### Scenario: A look's frame count is its own, not the template's
+
+- **WHEN** a segment's tooltip is read **THEN** it states that look's frame count in the operator's
+  words (`1 frame`, `2 frames`) and the authored id, and never the template's total
+
+#### Scenario: The strip is what the token home declares
+
+- **WHEN** a look-bearing row is rendered in a browser **THEN** each look button is
+  `--r-look-btn-h` tall with a `--r-look-btn-min-w` floor, padded `--r-look-btn-pad`, cornered
+  `--r-look-btn-radius`, set in `--r-look-btn-text`, its thumbnail `--r-look-thumb-w` by
+  `--r-look-thumb-h`, the buttons gapped `--r-look-strip-gap` and the label column
+  `--r-look-ctx-min-w` wide, gapped `--r-look-ctx-gap` from the strip
+
+#### Scenario: Switching a look on the console preserves the source on its frame
+
+- **WHEN** a row rehearsing on PVW has one frame of its current look bound, for that look only, to
+  a source other than the template's default, and the operator switches the row to a look placing
+  none of the current frames and back **THEN** every placeholder PVW drew before the round trip is
+  drawn again with the same source name in the same box, the bound frame on its bound source
+
+### Requirement: The selection, the PVW set and the monitors' visibility are three independent things
+
+The Runtime SHALL keep three facts about the workspace independent of one another: which row is
+SELECTED, which rows are IN PVW, and whether the monitors are SHOWN. Each SHALL be read and
+written by its own control and by nothing else: selecting or deselecting a row SHALL neither enter
+nor leave PVW and SHALL neither show nor hide the monitors; putting a row on PVW or taking it off
+SHALL neither select nor deselect any row and SHALL neither show nor hide the monitors; showing or
+hiding the monitors SHALL neither select nor deselect any row and SHALL leave the PVW set exactly
+as it was. The PVW set is the bridge's rehearse state and is judged from the bridge, never from a
+badge.
+
+The monitors SHALL be shown or hidden by ONE toggle that carries `aria-expanded` and names the
+strip it controls. Its state is session state: it SHALL NOT be persisted, and the persisted shell
+layout SHALL keep its existing shape. The strip SHALL default to shown, and the layout reset SHALL
+bring it back. A fullscreen monitor is a different axis and SHALL still show through a hidden
+toggle; a fullscreen layer list SHALL still hide the strip.
+
+Each of the three pairs SHALL be proved by test in BOTH directions, because a single-direction
+test passes against a coupling that runs the other way.
+
+#### Scenario: Selecting a row leaves the PVW set and the monitors alone
+
+- **WHEN** row A is on PVW and the operator selects row B, then row A, then deselects row A
+  **THEN** the bridge's rehearse set still holds exactly row A throughout, and the monitors are
+  still in whichever state they were in — shown, or hidden
+
+#### Scenario: Putting a row on PVW leaves the selection and the monitors alone
+
+- **WHEN** row A is selected and the operator puts row B on PVW and then takes it off **THEN** row A
+  is still the selection and its Inspector is still open, row B is never selected, and the
+  monitors are still in whichever state they were in
+
+#### Scenario: Hiding the monitors leaves the selection and the PVW set alone
+
+- **WHEN** row A is selected and rows A and B are on PVW and the operator hides the monitors and
+  shows them again **THEN** row A is still the selection with its Inspector open, and the rehearse
+  set still holds exactly rows A and B, with each row's own verb still reading OFF PVW
+
+#### Scenario: The toggle folds the strip away and the reset brings it back
+
+- **WHEN** the operator hides the monitors **THEN** the strip and its resize divider are gone, the
+  layer list takes the height, nothing is written to the persisted layout for it, and the layout
+  reset control shows the strip again
+
+### Requirement: Every kind of staged edit survives a selection round trip
+
+The Runtime SHALL keep each row's draft — its staged field values, plate assignments, per-look
+inputs AND its unapplied on-air position, anchor and offsets as typed — for the session, keyed by
+the row, so that selecting another row and coming back shows the draft exactly as it was left. A
+draft is session state: no persisted key, file or schema carries it. The position draft has its
+own lifecycle — its own dirty mark and its own `Apply position` — and is NOT read by the row's
+UPDATE verb or dropped by DISCARD, because UPDATE does not send the position and a chip that lit
+for an edit UPDATE would not apply would be a control whose word lies. A draft for a row that has
+left the stack SHALL be swept with the rest.
+
+#### Scenario: A position draft survives deselect and reselect
+
+- **WHEN** the operator moves a row's anchor and types an in-progress offset, selects another row,
+  and selects the first row again **THEN** the anchor is where they left it, the offset reads
+  exactly what they typed, the position's dirty mark is up, and nothing was sent
+
+### Requirement: The Inspector's geometry is the reference's as rendered, measured in a real engine
+
+The Inspector SHALL keep its Update button pinned at the foot of the panel at every panel height,
+with content shorter and longer than the panel and at every scroll position of the field list. Its
+two position inputs SHALL align — same top, same height, same width, growing with the panel and
+staying equal — with `Apply position` on their baseline. An input's focus SHALL draw ONE ring: the
+browser's outline is off wherever a ring is drawn, exactly one shadow is drawn, and no ancestor
+draws a ring of its own. Subtitle items SHALL reorder by their grip handle under a pointer drag as
+well as by the keyboard.
+
+Its column default, body padding, section heading, field box, position box, footer padding,
+button floor and hint SHALL be the values the approved reference PAINTS in a browser, held in the
+token home as `--r-insp-*` and read from there. Every such claim SHALL be verified in a real
+layout engine; a jsdom assertion about a box, an edge or a pinned footer compares zeros and is not
+evidence.
+
+#### Scenario: The foot is pinned at more than one panel height
+
+- **WHEN** the Inspector is rendered at three viewport heights with a field list longer than the
+  panel, scrolled to its top and to its bottom each time **THEN** the foot's bottom edge is the
+  panel's bottom edge and Update is inside the foot and inside the viewport every time
+
+#### Scenario: X and Y align
+
+- **WHEN** the position section is rendered docked and then fullscreen **THEN** X and Y share a
+  top, a height and a width, `Apply position` shares their baseline, and at fullscreen both have
+  grown and are still equal
+
+#### Scenario: One ring
+
+- **WHEN** a position box, a text field or a subtitle item takes focus **THEN** its computed outline
+  is none, its box shadow is a single shadow, and no element between it and the panel has an
+  outline or a shadow
+
+### Requirement: No surface makes a second claim about air on a row that already says what is on air
+
+A surface SHALL NOT restate, on a row, whether that row is on air when the row's state cell
+already says so — not as a label, a caption, a badge or a count. Two claims about air on one row
+can disagree during a transition and the operator then has to choose which to believe. The one
+qualifier the console already spells for immediacy is `· NOW` (`B-168`), and it is not a second
+claim. This is why the reference's `ON AIR LOOK` / `Cut · now` look label and its `3 rows on air`
+monitor caption are not adopted (owner answer A12).
+
+#### Scenario: A row carries one air claim
+
+- **WHEN** any row is rendered on air **THEN** exactly one element on that row states it — the
+  state cell — and the look picker, the Inspector and the monitors say which look, which fields
+  and which rehearsal, never whether the row is on air
+
+### Requirement: Live plates are the seated layers, never the source catalogue
+
+The Live plates tab SHALL list the layers the bridge itself has seated for rows' live plates —
+read from the bridge's live-layer ledger and nothing else — and SHALL NOT read, list or edit the
+installation's source catalogue, which is Station setup's. A plate is a seated layer; the
+catalogue is the set of inputs a plate may be pointed at. The tab SHALL say so in its own words,
+and SHALL keep every disposition's sentence visible where that sentence is an alarm or a caveat
+(stranded, blind, adopted-unconfirmed, held).
+
+#### Scenario: The tab lists seats and only seats
+
+- **WHEN** the bridge's ledger holds two seated layers for one row and the catalogue holds six
+  inputs **THEN** the tab shows two rows, one per seat, each naming its coordinate, its plate
+  handle, the producer actually sent and its owning row, and no input appears that is not seated
+
+### Requirement: The plate controls and the audio dialog open by right-click and by the keyboard
+
+The console SHALL open a row's context menu — which carries AUDIO — on a right-click on the row
+and, equally, on the `ContextMenu` key or `Shift+F10` while the row (or a control inside it) has
+focus. On the Live plates tab the console SHALL open the audio dialog of a seated plate's OWNING
+ROW, with that plate's fader focused, on a right-click on the plate's row and, equally, on the
+same two keys while the plate's row has focus. Keyboard parity is not optional: every pointer
+door SHALL have a keyboard twin that reaches the same dialog. The app-wide suppression of the
+browser's own menu SHALL stay in force, with editable fields exempt (guard item 23), and a plate
+that has no owner to open (stranded, blind) SHALL open nothing and SHALL NOT cancel the event.
+
+#### Scenario: The row's menu opens by pointer and by keyboard
+
+- **WHEN** the operator right-clicks a row, or focuses it and presses `Shift+F10` or the
+  `ContextMenu` key **THEN** the row's own menu opens with AUDIO in it, the browser's menu does
+  not, and AUDIO opens the row's audio dialog listing every plate the row's template declares
+
+#### Scenario: A seated plate opens its owner's audio on that plate
+
+- **WHEN** the operator right-clicks a seated plate on LIVE PLATES, or focuses its row and
+  presses `Shift+F10` or the `ContextMenu` key **THEN** the owning row's audio dialog opens,
+  named in the operator's words with the row's ids on hover, listing every plate of that row —
+  its hidden frames included, each reading `on <coordinate>` — and focus is on the fader of the
+  plate pointed at
+
+#### Scenario: A text field keeps the browser's menu
+
+- **WHEN** the operator right-clicks inside an Inspector text field **THEN** the browser's own
+  menu is not suppressed, and a right-click on chrome with no menu of its own is
+
+### Requirement: The audio dialog says what the ledger says, and ON is full volume
+
+The audio dialog SHALL state each plate's audio in the console's one vocabulary, read from the
+ledger — `Audible`, `Silent`, `Hidden by look`, `Armed · hidden by look` — and SHALL
+read a plate with no seat as `Not seated`, never as audible: a raised plate on a row that owns
+nothing is a recorded intent, not sound on air. The dialog's footer SHALL carry
+`ON = 100% · OFF = 0%` and the fact that SOLO silences every other frame of the row, hidden
+frames included; the two facts that qualify an irreversible write — that ON does not restore the
+previous fader level, and that there is no un-solo — SHALL be on the controls that perform them.
+The dialog SHALL offer ON, OFF and SOLO per plate with no second name for OFF.
+
+#### Scenario: A ready row's raised plate does not read as audible
+
+- **WHEN** a plate is raised on a row that owns no seats and the dialog is opened **THEN** that
+  plate reads `Not seated` at the raised percentage, and no plate in the dialog reads `Audible`
+
+#### Scenario: A held plate reads as hidden
+
+- **WHEN** the dialog is opened on a row whose ledger holds a held seat **THEN** that plate
+  reads `Hidden by look` with its coordinate beside it, and its ON, OFF and SOLO stay live
+
+#### Scenario: The no-un-solo warning is on the SOLO control
+
+- **WHEN** the dialog is open **THEN** every SOLO button's tooltip states that there is no
+  un-solo and that the others must be raised again on their own faders, and the footer does not
+  repeat it
+
+### Requirement: The LIVE PLATES tab names the owning ROW and lists every frame
+
+The LIVE PLATES tab SHALL name each layer's owner by the ROW the operator knows — the bank's
+alias for the layer that row sits on, else the bank's default name — with the composition name
+on a `title` and never in the visible sentence. It SHALL name each plate's INPUT by the source
+name the operator configured, resolving the binding through the same resolver the bridge uses,
+with the producer argument on a `title`. No cell's value may push the table's columns out of
+line: a state word that does not fit its column is shortened, never allowed to widen it. It SHALL list, for every row that owns at least
+one seat, the frames that row's template declares which the ledger has not seated, each reading
+`Not seated` in place of a coordinate and carrying live audio controls, so that no frame of a
+live row is unreachable from the surface that carries the faders. The toolbar's counts SHALL
+partition the rows on screen.
+
+#### Scenario: The source column names the configured input
+
+- **WHEN** a seated plate's binding resolves to a catalogue entry **THEN** the `Plate / source`
+  cell reads that entry's NAME, the producer argument is on its `title`, and where nothing
+  resolves the cell falls back to the producer rather than to an invented name
+
+#### Scenario: The owner cell names the row, not the composition
+
+- **WHEN** a seated live layer's owning row is bound to a named bank layer **THEN** the Owner
+  cell reads that row's name, the composition name is on the link's `title`, and the row name is
+  rendered in its own bidi isolate
+
+#### Scenario: An unseated declared frame is listed and controllable
+
+- **WHEN** a row owns one seat and its template declares three frames **THEN** the tab lists
+  three rows for it, the two with no layer read `Not seated`, their faders and ON/OFF/SOLO are
+  live, and the toolbar reads one occupied layer plus two not seated
+
+#### Scenario: A row the console cannot speak for contributes no frames
+
+- **WHEN** the link is down, or a layer is stranded **THEN** no declared-frame row is added for
+  it, because the console has declined to state that row's audio at all
+
+### Requirement: The audio dialog's frame does not move with its content
+
+The audio dialog SHALL draw one box whatever the number of frames it lists, taking the same
+declared height and inner scroll region as the console's other framed dialogs, and SHALL clamp
+that height on a short viewport rather than running off the screen. The row it is about SHALL
+stay visible when the frame list scrolls.
+
+#### Scenario: The box is identical across frame counts
+
+- **WHEN** the dialog is opened on a four-frame row, then on a two-frame row **THEN** the
+  dialog's box is identical, and an empty frame list does not collapse it
+
+#### Scenario: A short viewport clamps the frame
+
+- **WHEN** the viewport is 1280 × 600 **THEN** the dialog is 536 px tall, the same height the
+  console's other framed dialogs clamp to
+
+### Requirement: The Inspector is headed by the selected row's operator name
+
+The Inspector SHALL head its body with the SELECTED ROW's name in the operator's words, through
+the one naming composition (`operatorRowName`) fed by the declared bank and the registry — in its
+own bidi isolate, with every id the row has on the heading's `title` and never in the sentence —
+and SHALL change that heading when the selection changes. The template the row carries SHALL move
+to the line beneath, with its disambiguating stub when two templates share a name and its id on
+hover; a row with no place in the bank SHALL be headed by its template, stub included.
+
+#### Scenario: The heading names the row and follows the selection
+
+- **WHEN** the operator selects a row **THEN** the Inspector's heading is exactly what the naming
+  composition names that row from the bank the bridge publishes, the row's ids are on its
+  `title` and absent from its text, and selecting a different row changes the heading to that
+  row's name
+
+### Requirement: A control that shows or hides a monitoring surface does not persist its state
+
+A showing or hiding control SHALL NOT persist its state across a reload — that is, a control
+whose effect is to SHOW or HIDE a surface that shows the operator what is about to go to air or
+what is on it, the monitors' `Show monitors` / `Hide monitors` first among them. The console
+boots in a KNOWN state decided by its designers rather than a state remembered from the last
+session, the same call as the unpersisted rehearsal flag and reset-to-idle on reconnect (owner
+answer A13, `R-060`).
+
+⚠ A13 answered PERSISTENCE and did not decide which state the console boots in. That default is
+`MONITORS-01`'s and is HIDDEN. When it was set, neither monitor pane rendered the channel (PGM was
+an empty placeholder for `C-016`; PVW is a local browser render of the rehearsing rows,
+`R-022`); `C-016` has since built PGM as the Playout's own return (`pgm-return`), whose own
+acceptance keeps the pane OFF by default and pulls nothing from the Playout while it is hidden.
+The rule above is unaffected by which way the default points, and the flip is not A13 being
+overturned (`design.md` §19.2).
+
+#### Scenario: The monitor strip returns to the shipped default on reload
+
+- **WHEN** the operator brings the monitors up and reloads the console **THEN** the monitor
+  strip is back in its shipped boot state, nothing was written for it, and the shell's other
+  persisted geometry is unaffected
+
+### Requirement: The console boots with the monitor strip folded away and says that it exists
+
+The console SHALL boot with the monitor strip NOT rendered, and SHALL carry, in the app header
+and in every state, exactly one control that names the monitors in words as well as a glyph,
+reports whether they are shown, and brings the strip up in one press. In the boot state that
+control is the only thing on the surface that mentions PREVIEW or PROGRAM, so it may not be
+gated on any other condition nor reduced to an icon.
+
+#### Scenario: The boot state announces the surface it is hiding
+
+- **WHEN** the console is opened **THEN** no monitor strip is rendered, and the app header
+  carries one visible `Show monitors` control whose text names the monitors, which reports
+  itself collapsed and which on one press produces the strip with both the PREVIEW and PROGRAM
+  panes in it
+
+### Requirement: The live plates pane and the audio dialog take their geometry from the token home, measured in a real engine
+
+The LIVE PLATES pane and the audio dialog SHALL take their rendered geometry — the toolbar, the
+table head and rows, the fader and its readout, the verb boxes, the dialog's rows and verbs —
+from `--r-plate-*` and `--r-audio-*` tokens declared in the token home from the reference as
+RENDERED (`07-live-plates.html`, `08-live-audio.html` at 1280 × 800), never from a stylesheet
+rule quoted from the file; every claim about a box SHALL be measured in Chromium, never in jsdom.
+
+#### Scenario: The plates table and the dialog verbs measure to their tokens
+
+- **WHEN** the built console shows a seated plate at 1280 × 800 and its owner's audio dialog is
+  opened **THEN** the table head, the ordinary row, the fader, the `ON`/`OFF`/`SOLO` boxes and the
+  dialog's rows and verbs measure to the token home's values, read back from the page
+
+### Requirement: The channel list is a list of the channels the bridge names, and the selection is keyed by channel id
+
+The console's channel strip SHALL render one tab per channel the station declares — the bridge's
+discovery answer, falling back to the declared banks and channel settings until it arrives — and
+SHALL keep the operator's selection as a channel id, session-only, readable by every per-channel
+surface. It SHALL NOT persist the selection.
+
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` (2026-09-24).** This requirement read _"the union of the fixed
+> bank's channel and every declared entry of the channel settings … It SHALL NOT invent a
+> channel-discovery call, a channel name, or any persisted key to do so; where the bridge is
+> single-channel the gap is filed (`R-062`), not closed."_ `R-062` is closed: gap 2 by
+> `CHANNEL-AUTHORITY-01`'s discovery call and the catalogue's names, gaps 1 and 3 by
+> `MULTI-CHANNEL-01`, which declares one bank per channel. What stands is the keyed, session-only
+> selection; no persisted key was ever added.
+
+#### Scenario: Two declared channels are two tabs
+
+- **WHEN** the station declares banks on channels 1 and 2 **THEN** the strip renders
+  `CHANNEL 1` and `CHANNEL 2` in that order, and selecting the second records the choice `2`
+  where Station setup can read it
+
+#### Scenario: A choice the bridge stops naming falls back honestly
+
+- **WHEN** the operator has chosen channel 2 and the bridge then names only channel 1 **THEN** the
+  strip shows channel 1 selected, and the recorded choice is not written over
+
+### Requirement: Station setup reports the selected channel and keeps station-wide sections station-wide
+
+Station setup's Channel tab SHALL report the console's selected channel — its raster verdict and
+its outputs — and SHALL show nothing of any other channel's report; the dialog SHALL name that
+channel under its title. The Servers, Live sources and Text file delimiters sections SHALL NOT
+read the selection: they are the station's, and render the same whatever channel is selected. The
+Layers section SHALL edit the selected channel's bank, because each declared channel has its own;
+with one declared channel that is the one bank, as before.
+
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` (2026-09-24).** This requirement read _"SHALL report exactly
+> one channel … The Servers, Live sources, Text file delimiters and Layers sections SHALL NOT read
+> the selection"_. With one bank per declared channel, Layers edits the bank of the channel on
+> screen. The Channel tab's two station-wide cards — the channel SET (Change channel…) and the
+> strays (On air on another channel) — name the channels they concern; they are the station's,
+> not a report about another channel.
+
+#### Scenario: Channel 2's verdict and outputs, and none of channel 1's
+
+- **WHEN** channels 1 and 2 are declared, channel 2's server contradicts its raster and has lost a
+  program output, and the operator selects channel 2 **THEN** the Channel tab shows channel 2's
+  `MISMATCH` and its AIR row, shows no block for channel 1, and the subtitle reads `Channel 2`
+
+#### Scenario: The station-wide sections do not move with the selection
+
+- **WHEN** the same dialog is opened under channel 1 and under channel 2 **THEN** the Servers, Live
+  sources and Text file delimiters sections render identical content
+
+### Requirement: The outputs check is a table over its engineering detail
+
+The Channel tab's Outputs block SHALL render, per server and per checked channel, one row per
+consumer `casparcg.config` declares — `Slot · Configured output · Runtime status` — with a `N of
+M running` count, the verdict counted per kind exactly as the bridge's `MissingConsumer` counts
+it; and SHALL keep every `B-223` sentence beneath the table: the declared and running sets, the
+AIR row with its addressing reading, restart paragraph and log recipe, the creation outcome and
+the local-monitor sentence. A missing PROGRAM output SHALL take the alarm word's ink; a missing
+local monitor the caution.
+
+#### Scenario: A missing DeckLink is a marked row and still the AIR row
+
+- **WHEN** the declaration is a DeckLink, a screen and system audio and only the last two run
+  **THEN** the table shows three rows, the first marked missing at air severity reading `Not
+running`, the count reads `2 of 3 running`, and exactly one AIR row with the remedy stands
+  beneath the table
+
+### Requirement: Station setup takes its geometry from the token home, measured in a real engine
+
+Station setup SHALL take its rendered geometry — the fixed frame, the head and its subtitle, the
+rail and its tabs, the pane inset, the section head, the cards and the footer's floor — from
+`--r-modal-*-fixed`, `--r-setup-*`, `--r-video-*` and `--r-output-*` tokens declared in the token
+home from the reference as RENDERED (`09-channel-settings.html` at 1280 × 800, through its shadow
+root), never from a stylesheet rule quoted from the file; every claim about a box SHALL be
+measured in Chromium, never in jsdom. `--r-modal-foot-h` SHALL remain a floor.
+
+#### Scenario: The frame, the rail, the pane and the footer measure to their tokens
+
+- **WHEN** the built console opens Station setup at 1280 × 800 **THEN** the frame is 1140 × 736,
+  the rail, a tab, the pane's inset and the footer's floor measure to the token home's values read
+  back from the page, and the frame is one box on every tab with its footer's top edge still
+
+### Requirement: A removal the reference implies is recorded with its wire evidence
+
+A control the app had that the reference does not draw SHALL NOT be removed on the reference's
+authority alone; its removal SHALL be recorded in the deletion guard with the evidence that the
+surviving control reaches the same wire command and the same stores, or the control SHALL be
+restored. The audio dialog's MUTE was removed on that evidence (owner question A15): OFF sends the
+same `MIXER c-l VOLUME 0` through the same intent record.
+
+#### Scenario: OFF is the one silence and reaches the wire as MUTE did
+
+- **WHEN** OFF is pressed on a seated, audible plate **THEN** the bridge sends one `MIXER c-l
+VOLUME 0` for that plate and records `0` as its intent, exactly what MUTE sent and recorded
+
+### Requirement: The audit log records an actor, names it in its own column, and keeps the field that writes it beside that column
+
+The audit log SHALL render an ACTOR column — headed `Actor`, second, between `Time` and `Action`
+— carrying each record's actor verbatim in its own bidi isolate, whatever the approved reference
+draws; a log that names nobody is the `B-143` failure with the sign flipped. The actor SHALL be
+the principal the bridge verified for that socket; where none exists, `console` for an action a
+console sent and `unattributed` for one no console caused (amended in place 2026-09-23 by
+`BRIDGE-TRUTH-01` §4). The actor FILTER SHALL keep narrowing the tail on the bridge by the same
+column.
+
+⚠ **This requirement used to fix the actor as a browser-held console name, typed into a
+`This console` field kept in one strip with its caveat above the table.
+`OPERATOR-NAME-SWEEP-01` retired the field, the strip and the caveat: `C-037` establishes a
+principal from a verified Playout token and `C-038` gates on it, so the value is no longer
+self-declared and the sentence qualifying it had become false above the rows it sat on. Rewritten
+here rather than contradicted by a later change, because this delta has not archived yet and
+would otherwise write the retired strip into the living spec.**
+
+#### Scenario: The column is on the surface
+
+- **WHEN** the audit log is opened with records from two principals and an unattributed one
+  **THEN** the table's head reads `Time · Actor · Action · Item / detail · Outcome` and each
+  row's actor cell reads that record's actor in a `<bdi>`
+
+#### Scenario: No console-name control is offered
+
+- **WHEN** the audit log is opened **THEN** there is no field for typing an actor name, and no
+  statement on the surface describes the recorded actor as self-declared or unverified
+
+### Requirement: The template picker and the audit log take their geometry from the token home, and the import path is untouched
+
+The template picker SHALL take the reference's rendered geometry — the search box, the three kind
+chips, a row's padding, thumbnail and ranks, the footer sentence — from `--r-tpl-*` tokens declared
+in the token home from `01-template-picker.html` as RENDERED at 1280 × 800, and the audit log SHALL
+take its frame (`--r-modal-w-ledger`), tools, head, cells, tags and console strip from
+`--r-audit-*` likewise from `03-audit-log.html`; every claim about a box SHALL be measured in
+Chromium, never in jsdom. The picker's wrong-bank refusal SHALL be the bridge's own predicate.
+
+⭐ **AMENDED 2026-09-09 (`RUNTIME-REPAIR-05`), by the owner.** This requirement used to read
+_"one press on a row's load control loads that template onto the row that opened the picker …
+and `Import a .vcg…` opens the OS chooser."_ Both halves are reversed: a row is SELECTED and the
+footer commits, and importing is a separate station-level dialog that registers a package and
+loads nothing. The requirement that replaces them is **"A template is selected, then committed"**
+below. A search SHALL narrow by the name the operator sees; the
+kind chips SHALL split beds from graphics by the same predicate the bridge refuses on; a search that
+finds nothing SHALL say so and never claim the browser holds no templates.
+
+The import path SHALL remain `verify` → `unpack` → the runtime-contract guard → the render,
+registering nothing on refusal, proved by the existing import tests unchanged. A package DROPPED on
+the picker SHALL import through that SAME chain (`UI-POLISH-01` D — it used to resolve the pick,
+then to stage an Import dialog); the picker SHALL check nothing itself, not even the extension — the
+chain's `verify` is the one gate.
+
+#### Scenario: The picker and the log measure to their tokens
+
+- **WHEN** the built console opens the picker and the audit log at 1280 × 800 **THEN** the search
+  box, a chip, a row's thumbnail and ranks, the footer sentence, the ledger frame, a head cell, a
+  row cell, the outcome tag and the console field measure to the token home's values read back
+  from the page
+
+#### Scenario: A dropped package meets the chain's own verify
+
+- **WHEN** bytes that are not a package are dropped on the picker opened from a row **THEN** the
+  picker's own message region reports `“<file>” failed verification…`, exactly as the OS chooser's
+  path would, and nothing is registered
+
+### Requirement: A template is selected, then committed
+
+The Templates dialog SHALL express choosing and loading as two acts. Clicking a template row
+SHALL select it and SHALL NOT load anything; the dialog's footer SHALL carry one primary that
+commits the selection onto the row the dialog was opened from, named in the operator's word for
+that row. Pressing `Enter` and double-clicking a row SHALL commit through the same call as that
+primary, so no gesture can reach a load the primary would refuse.
+
+The aside SHALL read the selection out — what the template is, and whether it can go onto this
+row — and SHALL state the full reason when it cannot.
+
+The condition under which a template cannot be loaded SHALL remain exactly the bank predicate
+the bridge refuses on. A template that cannot go onto the row SHALL still be listed and SHALL
+still be selectable, so its reason can be read; the commit SHALL be refused instead.
+
+#### Scenario: Clicking selects and loads nothing
+
+- **WHEN** the operator clicks a template row **THEN** the row is marked as the selection, the
+  dialog stays open, and no load reaches the bridge
+
+#### Scenario: The footer commits, and names the row
+
+- **WHEN** a loadable template is selected **THEN** the footer's primary is enabled and names
+  the destination row in the operator's word for it, and pressing it loads that template onto
+  that row
+
+#### Scenario: Every commit gesture is the same call
+
+- **WHEN** the operator presses `Enter` or double-clicks the selected row **THEN** the same
+  template is committed onto the same row as the footer's primary would commit
+
+#### Scenario: A template the row cannot take is readable but not loadable
+
+- **WHEN** the operator selects a template whose bank does not match the row **THEN** the row
+  carries a short chip, the aside carries the whole reason, the footer's primary is disabled,
+  and no gesture commits it
+
+### Requirement: Importing registers a package to the station and loads nothing
+
+The Templates dialog SHALL offer `Import a .vcg` in its tools row, and pressing it SHALL open the
+operating system's file chooser directly, with no dialog of the console's own in between. A `.vcg`
+dropped on the Templates dialog's list SHALL import through the same chain as a file from that
+chooser. On success the import SHALL register the package to the station, SHALL NOT bind or load
+any row, and SHALL leave the imported template selected on the list, so the load is still the
+operator's separate press.
+
+Every refusal of the import path SHALL be unchanged in its conditions, and SHALL be shown as one
+line in the Templates dialog's own message region rather than in a surface rendered beneath it.
+
+🔴 **REVERSED BY THE OWNER, 2026-09-26 (`UI-POLISH-01` D).** This requirement used to read
+_"Importing SHALL be a dialog of its own, opened from the Templates dialog … It SHALL offer a drop
+target with a control to browse for a file inside it"_ — the owner's own "Templates and Import as
+two dialogs" decision of 2026-09-09 (`RUNTIME-REPAIR-05`, `design.md` §22). The owner wanted the
+second dialog for CHECKING a file before it came in; the product's checks run inside the import
+chain itself (verify, unpack, the runtime-contract guard, the render), and the dialog in front of
+them checked nothing, so it was one extra press on every import. Those checks are unchanged — only
+the dialog in front of them is gone. The drop moved from that dialog's drop zone onto the list, and
+it depends on the installed app letting an OS drag reach the page (`FIELD-FIXES-01` F).
+
+#### Scenario: Import opens the file chooser directly
+
+- **WHEN** the operator presses `Import a .vcg` **THEN** the operating system's file chooser opens
+  and no other dialog opens in front of it
+
+#### Scenario: A package is registered and no row is bound
+
+- **WHEN** a valid package is imported **THEN** it appears in the station's template list, it is
+  the selected template, the Templates dialog is still open, and no row is loaded
+
+#### Scenario: A refused package registers nothing and says why, in one line
+
+- **WHEN** a package fails verification **THEN** the reason names the file on one line in the
+  Templates dialog's own message region, nothing is registered, and no row is touched
+
+#### Scenario: A dropped package is imported, not loaded
+
+- **WHEN** the operator drops a `.vcg` on the Templates dialog's list **THEN** it is imported
+  through the same chain as a chosen file and selected, and nothing is loaded until the load is
+  pressed
+
+### Requirement: A station-wide deletion is offered on each row of the picker, behind the same gate
+
+The template picker SHALL offer the station-wide deletion on each template row as a small icon
+control, NEUTRAL at rest, whose accessible name reads `Delete <name> from this station`; it SHALL
+be a separate control from the row's select control, so selecting or double-clicking a row never
+reaches it. There SHALL be no `Manage` control or management view. What the deletion DOES SHALL be
+unchanged: it confirms first, the confirm names the scope and the plate bindings it takes with it,
+the bridge remains the authority on the refusal, and a refused deletion still names the places that
+hold the template with a remedy beside each.
+
+The selected template's details MAY state how many rows hold it, and that count SHALL NOT gate the
+control: a snapshot the console has not yet received may not stand in front of a lawful deletion.
+
+🔴 **REVERSED BY THE OWNER, 2026-09-26 (`UI-POLISH-01` C).** This requirement used to read _"The
+template picker SHALL NOT place `Delete from station` on any template row. It SHALL offer a
+`Manage` control that opens a management view … and the station-wide deletion SHALL be reachable
+only from there."_ (`RUNTIME-REPAIR-04`, `design.md` §18.4 / §21.2). The owner found `Manage` an
+extra view whose only act was the delete, so the act returns to the row — as a neutral ICON, not
+the red button §18.4 took off it, which keeps §18.4's reason (a red destructive control repeated
+down a list) answered. The management view's usage line moved to the selected template's details.
+
+#### Scenario: Every row carries its own deletion, and there is no Manage
+
+- **WHEN** the operator opens the picker on a row **THEN** every template row offers its select
+  control and, beside it, a neutral delete icon named `Delete <name> from this station`, and no
+  `Manage` control exists
+
+#### Scenario: Selecting or double-clicking never deletes
+
+- **WHEN** the operator selects a row, or double-clicks it **THEN** nothing is asked of the bridge's
+  removal and no confirm opens — a double-click commits the load, as it always did
+
+#### Scenario: The deletion is one press away, and unchanged
+
+- **WHEN** the operator presses a row's delete icon **THEN** the confirm appears BEFORE anything is
+  asked of the bridge, names that the template goes for every browser and cannot be undone, and
+  names the plate bindings deleted with it
+
+#### Scenario: A refused deletion still says where the template is held
+
+- **WHEN** the bridge refuses the deletion because a row still references the template **THEN** the
+  reason appears in the dialog's own message region, the template is still listed, and each place
+  that holds it is named with the way there beside it
+
+#### Scenario: The count informs and does not forbid
+
+- **WHEN** the selected template's details report that it is used by one or more rows **THEN** its
+  deletion control is still pressable and the refusal, if any, comes from the bridge
+
+### Requirement: The picker takes the reference's frame and its second column
+
+The template picker SHALL take the reference's own base modal width and its two-column split from
+the token home, measured by opening the reference dialog at 1280 × 800 rather than read from its
+stylesheet. The second column SHALL name the DESTINATION the picker was opened from — the row's
+operator-facing name with its real coordinate — and SHALL carry the drop zone, which SHALL NOT
+require scrolling past the template list to be seen.
+
+#### Scenario: The dialog is the reference's frame with its aside beside the list
+
+- **WHEN** the picker is open at 1280 × 800 **THEN** the dialog is the reference's base width, the
+  aside is the reference's fixed column width, the list column takes the remainder, and the drop
+  zone is inside the aside
+
+#### Scenario: The aside names where the load is going
+
+- **WHEN** the picker is opened from a row **THEN** the aside names that row as the destination and
+  states its real channel-layer coordinate in the sentence
+
+The `.vcg` validation and import path SHALL be preserved exactly: `importVcgFile` → `verify` →
+
+### Requirement: The plates toolbar's panic names its scope in the operator's words
+
+The LIVE PLATES toolbar's panic control SHALL name its scope on its label, its accessible name and
+its tooltip. On a station that declares one channel its scope is every live plate the bridge has
+seated — `stack.silenceAllLivePlates`, unscoped (owner answer A16) — and its accessible name and
+tooltip say every channel. On a station that declares two or more it is the channel on screen —
+`stack.silenceChannelLivePlates` (owner decision, 2026-09-23) — and all three carriers name that
+channel, while a separate control in the header, beside the channel strip, silences every channel.
+
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` (2026-09-24) — the label changed as it was built to.** This
+> requirement said that when a multi-channel plant arrived the label would be the thing that must
+> change; the owner answered A16's scope question on 2026-09-23, and it did. The one-channel
+> control's FACE reads `Silence all plates` since `CONSOLE-LOOK-06` DELTA 8, which read it from the
+> reference; its accessible name and tooltip still say every channel, exactly as A16 shipped them.
+
+#### Scenario: One declared channel says every channel
+
+- **WHEN** the Live plates tab is shown with a seated plate on a one-channel station **THEN** the
+  panic control reads `Silence all plates`, its accessible name begins
+  `Silence all boxes on every channel`, its tooltip names every channel this bridge drives and not
+  only the selected one, and one press still makes exactly one unscoped call to the bridge
+
+#### Scenario: Two declared channels name the channel on screen
+
+- **WHEN** the tab is shown for channel 2 of a two-channel station **THEN** the control reads
+  `Silence all plates · CH 2`, its accessible name begins `Silence all boxes on channel 2`, one
+  press makes exactly one `stack.silenceChannelLivePlates` call carrying channel 2, and the
+  header's `SILENCE ALL PLATES · EVERY CHANNEL` is the every-channel control
+
+### Requirement: The programme's phase state is recorded where the next session reads it
+
+Each phase of this programme SHALL record its completion in this change's `tasks.md`, and a session
+SHALL read that state before choosing a phase rather than inferring it. The phases are ordered and
+the ordering is load-bearing; a later phase is not started because an earlier one looks easy.
+
+A phase that alters what the operator surface renders SHALL cite, beside its ticked item, the URL
+of a completed, green Linux `e2e` job that RAN on the commit carrying the change. A ticked item with
+no URL is a claim, not a discharge.
+
+#### Scenario: A session picks the next phase from the recorded state
+
+- **WHEN** a session begins work on this programme **THEN** it reads the phase state in `tasks.md`
+  and takes the next unfinished phase, and reports at the top of its report which phase it took and
+  which remain
+
+#### Scenario: A render phase is not reported complete on a green gate alone
+
+- **WHEN** a phase that changes what a surface renders is reported **THEN** its evidence is a
+  completed green Linux `e2e` job on the code head, cited by URL, and a green `pnpm gate` is not
+  offered in its place
+
+### Requirement: A row verb is addressed by its item, and only the bulk verbs are station-wide
+
+The Runtime SHALL address every per-row playout verb by the item it acts on, never by a channel or
+a layer coordinate. The channel a row belongs to is a fact carried inside the item
+(`StackItemState.slot.channel`), so two rows sharing a layer number on different channels are two
+distinct addresses; a surface that dispatched by layer would collide there and behave correctly
+everywhere else, which is why the property is asserted on exactly that case.
+
+The every-channel PANIC, `stack.silenceAllLivePlates`, takes no argument and is station-wide BY
+CONTRACT — the owner's decision (A16: the scope of a panic is not the caller's to choose). The four
+housekeeping verbs — `stack.removeAll`, `stack.clearAll`, `stack.stopAll` and `stack.snapshot` —
+take an OPTIONAL channel: bare, they are station-wide exactly as before; with a channel, they act
+on that channel alone. The per-channel PANIC is its own verb, `stack.silenceChannelLivePlates`, and
+requires a channel. A test SHALL pin these request shapes so that a change to any of them cannot
+land without this ledger being read.
+
+Channel independence SHALL be claimed only where it is measured: with two declared channels on the
+fake CasparCG, a take, a clear, each housekeeping verb with a channel and the per-channel PANIC
+write nothing to the other channel (`multi-channel-banks`, `channel-independence`).
+
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` (2026-09-24).** This requirement read _"The five bulk verbs …
+> take no argument … for the other four it is the state `R-062` describes"_ and _"Channel
+> independence beyond this is NOT claimed. The bridge is single-channel in three places…"_. `R-062`
+> gaps 1 and 3 are closed — one bank per declared channel, and an optional channel on the four
+> housekeeping verbs — so the property is now measured at the wire rather than disclaimed.
+
+#### Scenario: Two rows on the same layer number, different channels
+
+- **WHEN** a playout verb is pressed on a row belonging to one channel, while another row on a
+  different channel declares the same layer number **THEN** exactly one dispatch is made, carrying
+  that row's item id in the verb channel's own request shape, and the other row is unchanged
+
+#### Scenario: The bulk verbs' request shapes are pinned
+
+- **WHEN** the bulk verbs' request shapes are read **THEN** the four housekeeping verbs accept no
+  argument and a `{ channel }`, `stack.silenceAllLivePlates` accepts no argument and rejects a
+  channel, the per-channel PANIC requires one, and the ledger entry that explains each is cited
+  beside the assertion

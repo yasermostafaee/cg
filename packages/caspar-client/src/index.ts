@@ -3,6 +3,10 @@ export type { AmcpTransportEvents, ParsedAmcpResponse } from './amcp/transport.j
 export { AmcpResponseParser } from './amcp/response-parser.js';
 export { escape, quote } from './amcp/escape.js';
 
+// `BRIDGE-TRUTH-01` §3 — a band's layer volumes, one write burst and one read.
+export { bandVolumeQuery, parseBandVolumeReplies, readBandVolumes } from './mixer/band-volumes.js';
+export type { BandVolume } from './mixer/band-volumes.js';
+
 export { OscTransport } from './osc/transport.js';
 export type { OscTransportEvents, OscTransportOptions } from './osc/transport.js';
 export { OscInterestFilter } from './osc/interest.js';
@@ -10,12 +14,15 @@ export { OscRateLimiter } from './osc/rate-limiter.js';
 export { OscChangeTracker } from './osc/change-tracker.js';
 export { OscOccupancyTap } from './osc/occupancy-tap.js';
 export type { OccupiedLayer } from './osc/occupancy-tap.js';
+export { OscChannelTickTap } from './osc/channel-tick-tap.js';
+export { OscClipTimeTap, type ClipTime } from './osc/clip-time-tap.js';
 export { parsePacket, flatten } from './osc/parser.js';
 export type { OscPacket, OscBundle, OscMessage, OscArgValue } from './osc/parser.js';
-export { messageToEvent } from './osc/event-mapper.js';
+export { messageToEvent, oscProducerKind } from './osc/event-mapper.js';
 
 export { CommandQueue } from './queue/command-queue.js';
 export type {
+  AmcpExchange,
   CommandQueueEvents,
   CommandQueueOptions,
   EnqueueOptions,
@@ -39,6 +46,7 @@ export type { HeartbeatEvents, HeartbeatOptions, HeartbeatStatus } from './sessi
 export {
   LayerManager,
   DEFAULT_LAYER_POLICY,
+  assertPolicyAboveFloor,
   FixedPinnedConflictError,
   OutOfLayersError,
   UnknownTemplateTypeError,
@@ -64,10 +72,9 @@ export type {
   PairedSessions,
   RedundancySendResult,
   SendOptions,
-  SendTarget,
   ServerLabel,
 } from './redundancy/types.js';
-export { InMemoryJournal } from './redundancy/journal.js';
+export { InMemoryJournal, journalLineFor } from './redundancy/journal.js';
 export type { CommandJournal, JournalEntry, JournalOutcome } from './redundancy/journal.js';
 
 export { Reconciler } from './reconciler/reconciler.js';

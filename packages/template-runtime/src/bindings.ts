@@ -1,17 +1,95 @@
-import type {
-  DynamicField,
-  FieldBinding,
-  FieldValues,
-  NestedFieldValues,
-  Scene,
+import {
+  fieldDigitsOf,
+  type BindingTransform,
+  type DynamicField,
+  type FieldBinding,
+  type FieldValues,
+  type NestedFieldValues,
+  type Scene,
 } from '@cg/shared-schema';
 import type { FieldScope } from './types.js';
+import { itemsInDigits, typedDigitsOf } from './typed-digits.js';
 import { coerceRepeaterItems, repeaterDriverFor } from './repeater-driver.js';
 import { coerceSequenceItems, sequenceDriverFor } from './sequence-driver.js';
 import { textRenderNode } from './text-render-node.js';
 import { coerceTickerItems, tickerDriverFor } from './ticker-driver.js';
 import { lottiePlayerFor } from './lottie-registry.js';
 import { applyTransform, stringifyValue } from './transforms.js';
+import { parseLocalizedNumber, writeFieldDigits } from '@cg/text-shaping';
+
+/**
+ * How a field's value is written wherever the page writes it as TEXT: its digits
+ * (`FIELD-DIGITS-01`) and, for a `text` field, its code-point cap.
+ */
+interface FieldTextRule {
+  readonly field: DynamicField;
+  readonly maxLength?: number | undefined;
+}
+
+/** Each field's default, and its text rule, keyed by field id. */
+function fieldLookups(fields: readonly DynamicField[]): {
+  defaults: Map<string, unknown>;
+  rules: Map<string, FieldTextRule>;
+} {
+  const defaults = new Map<string, unknown>();
+  const rules = new Map<string, FieldTextRule>();
+  for (const field of fields) {
+    defaults.set(field.id, 'default' in field ? field.default : undefined);
+    rules.set(field.id, { field, maxLength: field.type === 'text' ? field.maxLength : undefined });
+  }
+  return { defaults, rules };
+}
+
+/**
+ * `FIELD-DIGITS-01` — a bound value as the text the page draws: in its field's digits, BEFORE the
+ * binding's own transform (so an explicit per-binding `latin-digits` still wins). Whatever sent
+ * the value — CG Control, a GDD client, a retained value — draws the same, because the one writer
+ * is idempotent. Exported for the sequence driver's `textValueFor` seam (`runtime.ts`), which
+ * writes a bound item's text outside this walk.
+ */
+export function fieldValueText(raw: unknown, field: DynamicField | undefined): string {
+  return writeFieldDigits(
+    stringifyValue(raw),
+    fieldDigitsOf(field),
+    field?.type === 'number' ? 'number' : 'text',
+  );
+}
+
+/**
+ * `TEXT-DIGITS-01` — a bound value as the text the page draws, its binding's transform applied. A
+ * DATE transform (`date-fa`, `date-en`) is different: its digits are the DATE's, an output, not the
+ * operator's typing. So the value is handed to it as it came — `@cg/text-shaping` reads a date in any
+ * digit set — and the date is written in its field's choice; Keyboard (or no choice) keeps the
+ * transform's own, Persian for `date-fa`, exactly as before. Writing the field's digits INTO the value
+ * first handed `dateFa` `۲۰۲۶-۰۵-۱۹`, which it could not read, and the apply walk threw.
+ */
+function boundText(
+  raw: unknown,
+  field: DynamicField | undefined,
+  transform: BindingTransform | undefined,
+): string {
+  if (transform === 'date-fa' || transform === 'date-en') {
+    const date = applyTransform(stringifyValue(raw), transform);
+    const digits = fieldDigitsOf(field);
+    return digits === 'as-typed' ? date : writeFieldDigits(date, digits);
+  }
+  return applyTransform(fieldValueText(raw, field), transform);
+}
+
+/**
+ * A `transform` target's value as a number.
+ *
+ * `Number()` FIRST, so every value that reached this line before keeps exactly the meaning it had
+ * (`'1e3'`, `'0x10'`, `' 12 '` — a GDD client may send any of them). Only when that is not a
+ * number does the shared reader get a turn (`PERSIAN-DIGITS-01`): `Number('۰٫۵')` is NaN, and a
+ * value typed on a Persian keyboard used to be dropped here without a word.
+ */
+function transformNumber(raw: unknown): number {
+  if (typeof raw === 'number') return raw;
+  const plain = Number(raw);
+  if (Number.isFinite(plain)) return plain;
+  return typeof raw === 'string' ? (parseLocalizedNumber(raw) ?? Number.NaN) : Number.NaN;
+}
 
 /**
  * Apply a snapshot of field values to the live DOM by walking the scene's
@@ -26,20 +104,13 @@ export function applyFieldValues(
   container: HTMLElement,
 ): void {
   // Build a quick field-defaults lookup so missing values fall back cleanly,
-  // plus per-field `maxLength` caps for text fields.
-  const defaults = new Map<string, unknown>();
-  const maxLengths = new Map<string, number>();
-  for (const field of scene.fields) {
-    defaults.set(field.id, 'default' in field ? field.default : undefined);
-    if (field.type === 'text' && field.maxLength !== undefined) {
-      maxLengths.set(field.id, field.maxLength);
-    }
-  }
+  // plus each field's text rule (its digits, and a text field's `maxLength` cap).
+  const { defaults, rules } = fieldLookups(scene.fields);
 
   for (const binding of scene.bindings) {
     const raw = binding.fieldId in values ? values[binding.fieldId] : defaults.get(binding.fieldId);
     if (raw === undefined) continue;
-    applyOne(binding, raw, elementMap, textOriginals, container, maxLengths.get(binding.fieldId));
+    applyOne(binding, raw, elementMap, textOriginals, container, rules.get(binding.fieldId));
   }
 }
 
@@ -72,14 +143,7 @@ function applyDocScope(
   values: NestedFieldValues,
   scope: FieldScope,
 ): void {
-  const defaults = new Map<string, unknown>();
-  const maxLengths = new Map<string, number>();
-  for (const field of doc.fields ?? []) {
-    defaults.set(field.id, 'default' in field ? field.default : undefined);
-    if (field.type === 'text' && field.maxLength !== undefined) {
-      maxLengths.set(field.id, field.maxLength);
-    }
-  }
+  const { defaults, rules } = fieldLookups(doc.fields ?? []);
   for (const binding of doc.bindings ?? []) {
     const raw = binding.fieldId in values ? values[binding.fieldId] : defaults.get(binding.fieldId);
     if (raw === undefined) continue;
@@ -89,7 +153,7 @@ function applyDocScope(
       scope.elementMap,
       scope.textOriginals,
       scope.container,
-      maxLengths.get(binding.fieldId),
+      rules.get(binding.fieldId),
     );
   }
   for (const child of scope.children) {
@@ -117,14 +181,15 @@ function applyOne(
   elementMap: ReadonlyMap<string, HTMLElement>,
   textOriginals: ReadonlyMap<string, string>,
   container: HTMLElement,
-  maxLength?: number,
+  rule?: FieldTextRule,
 ): void {
   const target = binding.target;
+  const maxLength = rule?.maxLength;
   switch (target.kind) {
     case 'text': {
       const el = elementMap.get(target.elementId);
       if (!el) return;
-      let stringValue = applyTransform(stringifyValue(raw), binding.transform);
+      let stringValue = boundText(raw, rule?.field, binding.transform);
       // Cap to the field's maxLength by code point (so a surrogate pair or a
       // ZWNJ counts as one and isn't split); the element's own auto-size /
       // auto-squeeze then handles fit.
@@ -142,7 +207,13 @@ function applyOne(
         // every occurrence, keeps regex metacharacters in the placeholder
         // inert, and never expands `$`-patterns in the VALUE (replaceAll
         // would — an operator's literal "$&" must render exactly as typed).
-        glyph.textContent = original.split(target.placeholder).join(stringValue);
+        // `TEXT-DIGITS-01` — each part by its own rule: the author's pieces in the ELEMENT's
+        // Digits choice, the value in its field's.
+        const authorDigits = typedDigitsOf(el);
+        glyph.textContent = original
+          .split(target.placeholder)
+          .map((piece) => writeFieldDigits(piece, authorDigits))
+          .join(stringValue);
       } else {
         glyph.textContent = stringValue;
       }
@@ -187,7 +258,7 @@ function applyOne(
     case 'transform': {
       const el = elementMap.get(target.elementId);
       if (!el) return;
-      const num = typeof raw === 'number' ? raw : Number(raw);
+      const num = transformNumber(raw);
       if (!Number.isFinite(num)) return;
       switch (target.property) {
         case 'opacity':
@@ -231,7 +302,7 @@ function applyOne(
       const player = lottiePlayerFor(el);
       if (player === undefined) return;
       if (target.prop === 'text') {
-        let text = applyTransform(stringifyValue(raw), binding.transform);
+        let text = boundText(raw, rule?.field, binding.transform);
         // Same code-point cap as the `text` target — the SAME field must behave the
         // same whether it lands on a native text element or a Lottie text layer.
         if (maxLength !== undefined && [...text].length > maxLength) {
@@ -253,7 +324,10 @@ function applyOne(
       // Bare string arrays get positional ids (degraded fallback).
       const el = elementMap.get(target.elementId);
       if (!el || !Array.isArray(raw)) return;
-      tickerDriverFor(el)?.setItems(coerceTickerItems(raw));
+      // `TEXT-DIGITS-01` — a bound list's items in the LIST field's Digits choice.
+      tickerDriverFor(el)?.setItems(
+        itemsInDigits(coerceTickerItems(raw), fieldDigitsOf(rule?.field)),
+      );
       return;
     }
     case 'sequence-items': {
@@ -264,7 +338,10 @@ function applyOne(
       // stringify/transform, same as ticker-items.
       const el = elementMap.get(target.elementId);
       if (!el || !Array.isArray(raw)) return;
-      sequenceDriverFor(el)?.setItems(coerceSequenceItems(raw));
+      // `TEXT-DIGITS-01` — a bound list's items in the LIST field's Digits choice.
+      sequenceDriverFor(el)?.setItems(
+        itemsInDigits(coerceSequenceItems(raw), fieldDigitsOf(rule?.field)),
+      );
       return;
     }
     case 'sequence-item-text': {

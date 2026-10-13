@@ -8,7 +8,8 @@
   missing"_ premise does **not**, and is reversed here.
 - **Related:** ADR 0006 (AMCP update mechanism unresolved), ADR 0004/0005 (OSC
   schema / frame-rate sync), PRD C-001, OpenSpec change
-  `caspar-bridge-architecture`.
+  `caspar-bridge-architecture`, ADR 0010 (the Playout link — this bridge becomes the one
+  authorisation point).
 
 ## Context
 

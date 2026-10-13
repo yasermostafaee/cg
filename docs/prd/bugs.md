@@ -558,6 +558,22 @@ baseline — no wall-clock cost; the 64 processes were thrashing, not doing more
 `gate:e2e` untouched (its `--concurrency=1` is explicitly preserved) — no Linux e2e run owed. Remaining to reach `[x]`: owner confirms the
 flake stays gone across subsequent real-use runs.
 
+**Seen again 2026-09-05 (`ARRANGEMENT-DEADWOOD-01`), under the BOUNDED gate — one red, a different
+assertion.** The pre-push gate for `a14353ef` (a docs-only commit: four markdown files, no source)
+reddened `@cg/caspar-bridge#test` once — `tools/caspar-bridge/tests/two-bank-refusal.integration.test.ts:212`,
+_"a retained BED held against an operator row MIGRATES to a bed row, reported, off air"_, which
+asserts NOTHING reaches layer `1-95` during the migration and saw one line, `MIXER 1-95 VOLUME 1`
+— the shape of `#reassertDeclaredVolumes`'s boot-time blanket over the declared bank
+(`live-layers.ts:92`) landing inside the test's `recvLines()` window. Every control was green: the
+same suite alone (`pnpm --filter @cg/caspar-bridge test`: 93 files, 782 tests), the same full
+`pnpm gate` fifteen minutes earlier (`93 successful, 93 total`, `0 cached`, 3 m 45 s;
+`.gate-logs/gate-20260905T112049Z-7396.log`), and CI for the parent commit
+(<https://github.com/yasermostafaee/cg/actions/runs/33936819497>, `success`). Isolation-asymmetry
+again, so it is filed here and not as a bridge defect — but it is a WIRE line on a layer a test
+says must see none, which is [[B-198]] / [[B-221]]'s subject by neighbourhood, so whoever next
+touches the reassert blanket or the staging batch should read this test's window first. Nothing was
+changed: no timeout raised, no test loosened, the bridge untouched (`.gate-logs/gate-20260905T113604Z-12268.log`).
+
 **Evidence gathered 2026-07-23 (the fix session).** Five afternoon occurrences under the
 unbounded gate, spanning THREE workspaces: `@cg/caspar-client` (amcp-probed-liveness),
 `@cg/caspar-bridge` (stop-verb, update-producer-state, reconnect-reconciliation), and
@@ -1033,7 +1049,7 @@ already rode through it (the B-080 duplicate; the #317 misdiagnosis that reverte
 declare narrower inputs than the files they actually read. Listed for an owner decision rather
 than guessed.
 
-## [~] B-111 — the `tools/template-fixtures` Persian lower-third renders its RTL text off-canvas: the fixture still said `fitMode: 'autosize'`, which D-060 later made real — its §F repair swept `@cg/starter-templates` but not this workspace ⟨priority: medium⟩ — fix authored in the filing PR (both text nodes → `fitMode: 'fixed'` + a pinning regression test); pending merge
+## [x] B-111 — the `tools/template-fixtures` Persian lower-third renders its RTL text off-canvas: the fixture still said `fitMode: 'autosize'`, which D-060 later made real — its §F repair swept `@cg/starter-templates` but not this workspace ⟨priority: medium⟩ — MERGED (#426, `4dc0daf`, 2026-07-28): both text nodes → `fitMode: 'fixed'`, plus a regression test that renders the fixture through the REAL runtime and asserts the fixed-box styles (left 140px, width 1140px, no right pin) — `tools/template-fixtures/tests/roundtrip.test.mjs`. The heading's earlier "pending merge" was stale and is superseded. Covered by the green `dev` run <https://github.com/yasermostafaee/cg/actions/runs/31414808016> (commit `bd88ede`, which contains `4dc0daf`; `Lint • Typecheck • Test • Build` and `E2E (Playwright)` both RAN and are `success`). No hardware gate was ever declared on this item; the ORIGINAL sighting was on CasparCG 2.3.2/2.5.0 during C-018 recon, so a re-observation on the next hardware session is welcome confirmation but is not an owed gate. Focused fix, no change dir
 
 **Repro:** build the fixture (`pnpm --filter @cg/template-fixtures build`), `PLAY 1-30 [HTML]` the
 unpacked `persian-lower-third/index.html` in CasparCG, look at the lower third. Observed during
@@ -1145,7 +1161,7 @@ that made the field real — not a defect in D-060, which repaired what its own 
 
 -->
 
-## [ ] B-132 — a push to `dev` created NO GitHub Actions run at all, and nothing reported it ⟨priority: high — the landing gate can go silently absent for ONE commit⟩
+## [ ] B-132 — a push to `dev` created NO GitHub Actions run at all, and nothing reported it ⟨priority: medium — RE-SCORED 2026-08-11: it costs the PER-COMMIT SIGNAL and bisectability, NOT merge-time coverage⟩
 
 **Observed 2026-08-10.** The push of **`d32fa13`** to `dev` (at ~`18:05Z`) produced **no workflow run
 whatsoever**. Not a failed run, not a cancelled one, not a `startup_failure` — **no run object
@@ -1210,13 +1226,50 @@ That is CORRECT behaviour, not a second fault: [[P-027]] classifies a push again
 of the ref**, and `4c93d05` is docs-only relative to `d32fa13`. So the run is green, it contains the
 code, and it **proves nothing about it**.
 
-🔴 **The two mechanisms compose into a hole neither has on its own:** a dropped event means one
-commit's code is never gated, and per-push classification means **no subsequent `dev` push will ever
-gate it either**, because each push only ever sees its own diff.
+**The two mechanisms compose into a real gap neither has on its own:** a dropped event means one
+commit gets no run, and per-push classification means **no subsequent `dev` push will give it a run of
+its own either**, because each push only ever sees its own diff. The commit that lost its run is never
+again the thing being classified.
 
-**What actually closes it** is the completeness backstop CLAUDE.md already names: the owner's
-`dev` → `main` merge is classified against the previous `main` tip, so it sweeps the WHOLE span and
-will pick up `d32fa13`'s files. Until that merge, **`d32fa13`'s code is unverified by CI**.
+### 🔴 RE-SCORED 2026-08-11 — high → medium. What this actually endangers, and what it does not
+
+**The original severity was written on the assumption that a dropped run leaves code unverified until
+a merge sweeps it, and that the two mechanisms above compose into an unverified merge. That assumption
+is WRONG**, and it is corrected here so nobody plans work against the larger version of the problem.
+
+**The fact that dissolves it: `ci` and `e2e` are NOT diff-scoped.** `ci` runs `pnpm format:check` /
+`typecheck` / `lint` / `test` / `build` — each a bare workspace-wide `turbo run <task>` — and `e2e`
+runs the entire Playwright suite. Changed-path classification decides only **WHETHER** those jobs run,
+never **WHAT** they cover (recorded in full under [[P-030]] and in CLAUDE.md beside the daily-merge
+backstop). So **any** later run that EXECUTES them verifies the whole **TREE** at its SHA — including
+the code of the commit whose event was dropped.
+
+**Both paths therefore fail safe, and there is no third path:**
+
+| At the `dev` → `main` merge                               | Outcome                                                                         |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| A run for that SHA **executed** `ci` + `e2e` green        | The guard skips — but that run already verified the whole tree, change included |
+| No such run exists (or one exists that **skipped** a job) | The guard **refuses to skip**; the merge run does the full gate over the span   |
+
+**A dropped event cannot produce an unverified merge.** Reuse is only ever granted on evidence of
+whole-tree execution; absent that evidence the work is done.
+
+**What it DOES cost — and this is still a real defect:**
+
+- 🔴 **The per-commit signal.** You learn **later** — at the next code push or at the merge — instead
+  of at the push. The window between is a window where nothing is known.
+- 🔴 **Bisectability and attribution.** You **cannot point at one run for one commit**. If the later
+  whole-tree run is RED, it tells you the tree is broken, not **which** commit broke it — and the
+  discharge rule needs a completed green run **for the specific commit that carries the change**, which
+  no longer exists for that commit.
+- **Verification of a state that was never gated.** Whole-tree coverage verifies the tree **as it is
+  now**. If a later commit touched the same lines, the intermediate state the dropped run would have
+  gated is never checked by anything.
+- **Silence is indistinguishable from "nothing was pushed"** — the point made above, unchanged.
+
+**Why it stays OPEN at medium rather than closing:** a dropped event delivery is a genuine defect in
+the landing gate, its composition with [[P-027]]'s per-push classification is worth recording, and
+nothing in the repo yet **detects** the absence. What changed is the blast radius, not the existence.
 
 ### Acceptance
 
@@ -1226,8 +1279,112 @@ will pick up `d32fa13`'s files. Until that merge, **`d32fa13`'s code is unverifi
   ⚠ **The obvious fix cannot live in the workflow** — a workflow that never starts cannot report that
   it never started. It needs something outside Actions, or a check at the next push / at merge time
   that the PREVIOUS head has a run.
-- **`d32fa13`'s code is verified.** It carries [[P-030]] and got no run of its own, and the next
-  push's run skipped the heavy jobs (above), so the debt is open until the `dev` → `main` merge
-  sweeps the span — **read that run rather than assuming it**. (`f384d16`, pushed in the same push
-  event, is docs-only and owes nothing.) Both were pushed on a **full green local gate**
+- ~~**`d32fa13`'s code is verified.**~~ — **DONE, 2026-08-11, read rather than assumed.** Run
+  **https://github.com/yasermostafaee/cg/actions/runs/31469356886** (`a9ecfaa`, `success`) executed
+  **both** `Lint • Typecheck • Test • Build` and `E2E (Playwright)` green, and `d32fa13` is an
+  ancestor of `a9ecfaa` — so its files were covered whole-tree. The `main` merge run
+  (**https://github.com/yasermostafaee/cg/actions/runs/31470347819**) then classified the whole
+  31-file span as `kind=code needsE2e=true` and reused that run. (`f384d16`, pushed in the same push
+  event, is docs-only and owes nothing.) Both were originally pushed on a **full green local gate**
   (85/85, 0 cached), which is fast pre-push feedback and explicitly **not** the landing gate.
+  ⚠ Note what this cost even though it ended green: the verification arrived a day late and is
+  **not attributable** to `d32fa13` — exactly the re-scored damage above.
+
+## [ ] B-176 — `.cgproj` re-packing is asserted BYTE-IDENTICAL and is not, under load: a determinism test that only holds on an idle machine ⟨priority: medium — a false red that reads exactly like a product regression, over a property the format may actually need⟩ — OPEN, observed 2026-08-24
+
+**Observed** on the `R-058` turn's Stop-hook gate: `@cg/vcg-format#test` failed at
+
+```
+tests/project-package.test.ts:107
+  it('re-packing the same input is byte-identical', async () => {
+    expect(await packFixture()).toEqual(await packFixture());
+```
+
+Two packs of the SAME pinned input produced different bytes. The gate went red on a commit whose
+diff cannot reach `vcg-format` at all.
+
+### 🔴 It is LOAD-DEPENDENT, and that was measured rather than assumed
+
+| check                                                   | result                                                                                                                                         |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| the failing test, alone, 12 consecutive runs            | **12 × green**                                                                                                                                 |
+| `pnpm --filter @cg/vcg-format test` alone               | **144/144 green**                                                                                                                              |
+| the full `pnpm gate` re-run                             | **green, 89/89, 0 cached**                                                                                                                     |
+| the same suite on Linux CI for the same commit          | **green** (run `32761345618`)                                                                                                                  |
+| does `vcg-format` depend on anything that turn changed? | **no** — its deps are `@cg/shared-schema`, `@noble/*`, `jszip`; the turn touched `shared-ipc`, `caspar-client`, `caspar-bridge` and runtime UI |
+
+So it is neither a regression nor attributable to the commit it reddened. It reproduces only when
+the machine is loaded, which is exactly when the gate runs it.
+
+### The inputs are pinned — the nondeterminism is downstream of them
+
+Checked so the next reader need not re-check: `packFixture()` passes a fixed `savedAt` and a
+module-level `index`/`files`; `packProject` embeds no wall clock (`savedAt` is its only time value
+and it is an argument); and `writeZip` already sorts paths and pins every entry date to a
+`FIXED_DATE` constant. `packProject`'s own header states the property outright — _"Deterministic
+for a fixed `savedAt`: the same input produces byte-identical output"_.
+
+⚠ **A hypothesis, explicitly NOT established.** JSZip's `generateAsync` compresses asynchronously
+in chunks driven by the event loop, and streaming DEFLATE can emit different — equally valid —
+block boundaries for identical input when the chunking differs, which under load it would.
+`compressionOptions: { level: 9 }` and `streamFiles: false` do not pin that. **This was not
+proven**: the byte offset of the first difference was not captured before the log rolled, and a
+direct 300× probe was abandoned when the hand-built fixture failed schema validation. **Whoever
+takes this must capture the first differing offset and decode what sits there** — a DEFLATE block
+header would confirm it, a date or a length field would refute it — rather than acting on the
+paragraph above.
+
+### 🔴 Why this is worth fixing rather than muting
+
+1. **A false red that reads as a product regression.** Byte-equality failing in the package format
+   is exactly the shape of a real corruption bug, and it lands on whichever unrelated commit
+   happened to be in the gate.
+2. **The property may be genuinely load-bearing.** `writeZip` is shared by `.cgproj` AND by `.vcg`
+   (`pack.ts:127`), and `.vcg` packages are signed and integrity-checked. Nothing re-packs and
+   compares today — but "the same project saves to the same bytes" is what a diff, a cache key or a
+   reproducible-build check would later assume, and it is currently false under load while being
+   documented as true.
+
+⚠ **The test must NOT be weakened to go green.** If the property cannot be provided, the DOC
+COMMENT and the test both stop claiming it — deliberately, in one change, with the reason written
+down. Loosening the assertion while `packProject`'s header goes on asserting determinism would
+leave the codebase claiming something it knows is false, which is worse than the flake.
+
+**Repro:** run `pnpm gate` on a loaded machine; intermittent. A tighter repro is the first thing
+this item owes.
+**Expected:** two packs of one input are byte-identical, as `packProject`'s header states.
+**Actual:** they differ under load; identical when idle.
+**Env:** Windows, `pnpm gate` (bounded fan-out, 4 tasks × 2 workers). Not seen on Linux CI — a
+weaker claim than it sounds, since CI runs the same suite far less contended.
+
+- **Cross-refs:** [[B-098]]/[[B-073]] (the contention-flake family this belongs to — and the
+  reminder that the answer is never a longer timeout), [[B-097]] (the other gate collision that
+  fails an innocent suite), [[B-078]] (the stale-process Playwright collision the repair rules
+  already carve out as "not a code bug").
+
+## [x] B-290 — CG Control and CG Designer showed the same icon in the Windows taskbar ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §3 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
+
+**Seen (owner, installed `0.9.0`):** the desktop shortcuts carry different icons — CG Control dark, CG
+Designer light — but in the taskbar both apps show the same light icon. **Cause (§0):** both apps'
+five icon files (`src-tauri/icons/*`) are byte-identical since `FIELD-FIXES-01` G ([[B-281]],
+`f9c9b816`), so both executables embed the same icon and both windows — title bar, taskbar, Alt+Tab
+— show it; nothing sets an icon at run time. The first installer (`42af1a96`) had given each app its
+own tile, CG Control dark and CG Designer light, both from the Apasai logo; the shortcuts the owner
+sees still show those from Windows' icon cache (inferred — his machine was not read). The two apps do
+NOT share an AppUserModelID: Tauri 2.11.5's NSIS writes each shortcut's ID from its bundle identifier
+(`utils.nsh`, `SetLnkAppUserModelId`), `app.cgbroadcast.control` and `app.cgbroadcast.designer`, and
+neither process sets one of its own. **Fix:** each app gets its own icon set again — CG Control the
+dark tile, CG Designer the light one — so every place Windows draws an app (taskbar, Alt+Tab, title
+bar, Start menu, desktop shortcut, Installed apps) shows that app's own. **Regression test:** the
+clean-Windows smoke reads each installed exe's icon resource, each shortcut's icon and each
+shortcut's AppUserModelID; control: the two apps' values differ.
+
+**Closed in code (2026-09-30, `RELEASE-091-01` §3; archived 2026-09-30).** `42af1a96`'s two sets are back
+(`src-tauri/icons/*`, byte for byte). The smoke's drive phase, once both apps are installed, reads for
+each app the SHA-256 of the icon the shell extracts from its exe, every `<product>.lnk` under Start and
+the desktop (all users and this user) with its icon and AppUserModelID, and the Installed-apps
+`DisplayIcon`; each app must show its own exe's icon and carry its own identifier (read from its
+`tauri.conf.json`), and the controls require the two apps' icons and ids to differ — the checks `0.9.0`
+would have failed. The judgement is `app-identity.mjs`, unit-tested (`installerAppIdentity.test.ts`,
+where the `0.9.0` reading fails exactly the controls); the Windows read was proven on this host against
+another app before CI ran it.

@@ -1,12 +1,17 @@
-import { useState } from 'react';
+import { useSyncExternalStore } from 'react';
+import { isOnAirStatus } from '@cg/shared-schema';
 import type { PositionAnchor, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
-import { DraftChip } from '../../ui/DraftChip.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
-import { reportCommandError } from '../status/commandFeedback.js';
+import {
+  draftsVersion,
+  positionDraftOf,
+  stagePosition,
+  subscribeDrafts,
+  type PositionDraft,
+} from './draftStore.js';
 
 /** Row-major 3×3 anchor grid (the 9-point Position model). */
 const ANCHOR_GRID: readonly (readonly PositionAnchor[])[] = [
@@ -26,33 +31,161 @@ const ANCHOR_GRID: readonly (readonly PositionAnchor[])[] = [
  */
 const styles = {
   /** The grid and the nudge inputs side by side — one control, read left to right. */
+  /*
+   * 🔴 ONE GRID, SO EVERY CONTROL IN THIS SECTION SHARES AN EDGE — the owner, 2026-09-14:
+   * «در قسمت پوزیشن دکمه‌ها و اینپوتها باید با هم هماهنگی داشته باشن و المانها نسبت به هم
+   * تراز باشن و در جای مناسب قرار داشته باشن.»
+   *
+   * ── WHAT WAS ACTUALLY OUT OF LINE, measured in Chromium at 1280 × 800 ──────────────
+   *
+   * The section was a flex row (anchor grid + stacked fields) with the button on a
+   * free-standing row beneath, and that arrangement gave the eye THREE left edges:
+   *
+   *     anchor grid   left   0    top  43
+   *     dx / dy       left  112   top  43
+   *     Apply         left   0    top 171
+   *
+   * So `Apply position` — the control that commits exactly those two boxes — sat under the
+   * ANCHOR GRID, sharing an edge with the one thing it does not act on, and sharing none
+   * with the two it does. A 12 px dead band sat between them on top of that.
+   *
+   * ── THE FIX IS STRUCTURAL, not a margin ───────────────────────────────────────────
+   *
+   * Two columns: the anchor grid spans both rows on the left; the fields and the button
+   * stack in the right column, so they resolve to ONE left edge by construction rather than
+   * by two paddings that agree today. `justify-content: start` keeps the block at the
+   * section's left rather than spreading it across 370 px.
+   *
+   * ⚠ The column is `auto`, so it takes the width of its widest child — the BUTTON, at its
+   * natural 112.3 — while the inputs keep the reference's measured 90 px cap inside it.
+   * Left-aligned with equal heights is the harmony that matters here; forcing the two to one
+   * width would mean either stretching the fields off the drawing's size or shrinking the
+   * button into the corner §3 forbids.
+   */
   placement: {
-    display: 'flex',
-    gap: 'var(--r-space-4)',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap' as const,
+    display: 'grid',
+    gridTemplateColumns: 'auto auto',
+    justifyContent: 'start',
+    columnGap: 'var(--r-space-4)',
+    rowGap: 'var(--r-space-3)',
+    alignItems: 'start',
+  },
+  /** The 3 × 3 grid pairs with the FIELDS, so it starts at their top and spans both rows. */
+  anchorCell: { gridColumn: '1', gridRow: '1', alignSelf: 'start' },
+  /*
+   * 🔴 `MONITORS-01` — AUDIT ROW 30: the gap is `--r-space-2` (8), not `--r-space-3` (12).
+   * Measured in Chromium at 1280 × 800, the reference's `.position-controls` renders
+   * `gap: 8px`. Phase 5 argued "the scale's step", which is true of both — 8 and 12 are
+   * BOTH steps on this scale — so the argument never chose between them and the drawing
+   * did. It buys the two fields 4 px each.
+   */
+  /*
+   * 🔴 STACKED — `INSPECTOR-DELTA` §3, the owner's call. The three controls used to share
+   * one line, and in a 396 px panel that line was the complaint: two number boxes and a
+   * two-word button competing for the same width, the button crowded against them.
+   *
+   * ⚠ **A DELIBERATE DEPARTURE FROM THE DRAWING, recorded as one** so a later parity pass
+   * does not "restore" it. Measured in Chromium at 1280 × 800: the reference puts the anchor
+   * grid, X, Y and `Apply position` on ONE grid row — `.position-controls` is 370 × 64,
+   * `grid-template-columns: 66px 90.2969px 90.2969px 99.4062px`. Ours is now two stacked
+   * fields beside the grid, with the button on its own row beneath.
+   *
+   * The CAP is the reference's own measured field width (`--r-insp-position-field-w`, 90 px
+   * against the 90.3 it paints). Stacking removes the competition that stretched ours to
+   * 120.86 × 32; WITHOUT the cap they would take the whole 370 px section instead, which is
+   * further from the drawing than where they started.
+   */
+  /*
+   * 🔴 LABEL BESIDE ITS INPUT, ON ONE LINE — the owner, 2026-09-14: «لیبل اینپوتهای
+   * پوزیشن با خود اینپوتها در یه خط باشن بهتره و منظمتر دیده میشه.»
+   *
+   * A two-column grid — BOX, then label — so `dx` and `dy` align with each other, the two
+   * boxes align with each other, and the pairing is read across rather than down.
+   *
+   * 🔴 **THE LABEL TRAILS ITS BOX, and that is the owner's reason rather than a taste
+   * call** (2026-09-14): «لیبل‌ها در انتها باشن بهتره چون باعث میشه ابتدای دکمه با
+   * ابتدای اینپوتها در یک راستا باشد.» With the labels leading, the boxes began one label-width
+   * in and `Apply position` — which spans the row — began at the LABEL edge, so the button
+   * and the boxes it commits started on two different verticals. Put the label last and the
+   * box column IS column one: the button's start and the boxes' start become the same line
+   * by construction.
+   *
+   * ⚠ The swap is in the DOM, not a CSS `order`. Only one element per row is focusable, so
+   * tab order is untouched either way — but a visual order that disagrees with the source is
+   * a trap for the next reader, and there is nothing here that requires one.
+   *
+   * The label column is `auto`: it takes the wider of the two words and no more.
+   *
+   * ⚠ The previous spelling stacked a label ABOVE each box and is gone; the reference does
+   * the same thing (`X px` over its input), so this is a second deliberate departure from
+   * the drawing on the owner's call, recorded beside the first.
+   */
+  offsets: {
+    // Column 2 of the outer grid — beside the anchor pad.
+    gridColumn: '2',
+    gridRow: '1',
+    display: 'grid',
+    // BOX first, LABEL second — see the note above for why that order and not the other.
+    gridTemplateColumns: 'var(--r-insp-position-field-w) auto',
+    columnGap: 'var(--r-space-2)',
+    /*
+      ⚠ `--r-space-3` (12), and it is HALF OF A PAIR rather than a free choice: the two
+      32 px boxes with 12 between them stand 76 px, which is exactly the anchor pad's
+      24 + 2 + 24 + 2 + 24. That is what makes the pad's top and bottom edges land on the two
+      boxes' own. Change one and the other has to be re-derived — `controls.css`
+      (`.cg-anchor-grid`) carries the same warning from the other side.
+    */
+    rowGap: 'var(--r-space-3)',
+    alignItems: 'center',
+    justifyItems: 'start',
+    minWidth: 0,
   },
   /*
-   * The two nudge inputs AND "Apply position", bottom-aligned (the mock's
-   * `.nudge`). `flex-end` is the load-bearing bit: each nudge field is a label
-   * STACKED over its input, so aligning on the top would hang the button level
-   * with the 11px labels instead of with the boxes it acts on. Aligned on the
-   * baseline of the controls, the three read as one row of controls.
+   * `Apply position` ON ITS OWN ROW, at its own size — §3: "it must not shrink into a
+   * corner". The row is `flex-start`, so the button is the width of its own words rather
+   * than the section's.
    */
-  offsets: { display: 'flex', gap: 'var(--r-space-3)', alignItems: 'flex-end' },
-  /** One nudge input with its own label ABOVE it, so the two never compete for a row. */
-  offsetField: {
+  applyRow: {
+    // SPANS the label and box columns, so it starts on the edge every row here shares.
+    gridColumn: '1 / -1',
     display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 'var(--r-space-1)',
+    alignItems: 'center',
+    gap: 'var(--r-space-2)',
+    flexWrap: 'wrap' as const,
+    marginTop: 'var(--r-space-1)',
   },
+  /**
+   * One nudge input with its own label ABOVE it, so the two never compete for a row.
+   *
+   * ⚠ **SUPERSEDED, `INSPECTOR-DELTA` §3.** This said the two fields FILL the row between
+   * the anchor grid and the button, growing with the panel — the reference's
+   * `66px minmax(48px,1fr) minmax(48px,1fr) auto`. They are STACKED and CAPPED now, so they
+   * neither share a row nor grow. The reference's own shape is recorded at `offsets` above;
+   * the claim that ours matches it is the part that is no longer true.
+   */
+  /*
+   * 🔴 `display: contents` — THE WRAPPER STAYS IN THE JSX AND LEAVES THE LAYOUT.
+   *
+   * Each field is still one element in the markup (its label and its box belong together,
+   * and a reader should not have to pair them by eye), but a wrapper between the grid and
+   * its cells would make each PAIR one cell and defeat the alignment entirely: the two
+   * labels would size independently and the boxes would not line up. `display: contents`
+   * promotes the label and the input into the parent grid while keeping the grouping.
+   *
+   * ⚠ It renders no box of its own, so it must carry no border, background or padding —
+   * there would be nothing to paint them on.
+   */
+  offsetField: { display: 'contents' as const },
+  /** The reference's label rank: 12 px, medium, the second ink — not the muted caption. */
   offsetLabel: {
-    color: colors.textMuted,
-    fontSize: '11px',
-    fontWeight: 600,
-    letterSpacing: '0.04em',
+    color: colors.textSecondary,
+    fontSize: 'var(--r-insp-label-text)',
+    fontWeight: 'var(--r-weight-medium)',
+    lineHeight: 'var(--r-insp-label-line)',
+    // Beside its box now, so it must not wrap mid-row and push the grid's rows apart.
+    whiteSpace: 'nowrap' as const,
   },
-  offsetInput: { width: '74px' },
+  offsetInput: { width: '100%' },
   lock: {
     color: colors.textMuted,
     fontSize: 'var(--r-text-sm)',
@@ -61,16 +194,19 @@ const styles = {
   },
 } as const;
 
-/** The on-air lock mirrors the bridge's set-position refusal predicate. */
+/**
+ * The on-air lock, which is R-011's refusal asked from the UI side.
+ *
+ * ⚠ It KEEPS ITS NAME AND DELEGATES, where `isOnAirOrUnsettled` was deleted outright —
+ * and the difference is real rather than a lapse. That one was a SYNONYM for the shared
+ * predicate, so it was a second name for one rule; this one names a different question
+ * ("is the position control locked") that today happens to be answered by that rule. What
+ * it must not do is re-derive the answer: it used to spell the six terms out, mirroring
+ * `setPosition`'s own inline copy rather than the canonical predicate, so the lock and the
+ * refusal were two derivations that agreed by luck (`operator-surface` §5(B)).
+ */
 export function isPositionLocked(item: StackItemState): boolean {
-  return (
-    item.pending ||
-    item.status === 'playing' ||
-    item.status === 'on-air' ||
-    item.status === 'updating' ||
-    item.status === 'exiting' ||
-    item.status === 'unconfirmed'
-  );
+  return isOnAirStatus(item);
 }
 
 /**
@@ -98,9 +234,29 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
   // published state — never a renderer-local store, which would go stale on
   // reload/reconnect and miss delete-on-remove.
   const seed = item.position ?? defaultPositionOf(item.templateId);
-  const [anchor, setAnchor] = useState<PositionAnchor>(seed.anchor);
-  const [dx, setDx] = useState(String(seed.offset.x));
-  const [dy, setDy] = useState(String(seed.offset.y));
+  /*
+   * `RUNTIME-REDESIGN-01` PHASE 5 — THE DRAFT LIVES IN THE STORE, NOT HERE.
+   *
+   * This was three `useState`s. The picker is keyed by item so that switching items
+   * re-seeds it — and that same remount threw away whatever the operator had staged but not
+   * applied: move the anchor, glance at another row, come back, and the anchor was where the
+   * bridge last put it. Every other staged edit in the panel survives that round trip through
+   * `draftStore`; the position now does too (its header there says why it is a separate map
+   * and why DISCARD leaves it alone). The seed rule is unchanged (B-072): a draft when one is
+   * staged, else the APPLIED override, else the manifest default.
+   */
+  useSyncExternalStore(subscribeDrafts, draftsVersion);
+  const draft: PositionDraft = positionDraftOf(item.itemId) ?? {
+    anchor: seed.anchor,
+    x: String(seed.offset.x),
+    y: String(seed.offset.y),
+  };
+  const { anchor, x: dx, y: dy } = draft;
+  const stage = (patch: Partial<PositionDraft>): void =>
+    stagePosition(item.itemId, { ...draft, ...patch });
+  const setAnchor = (next: PositionAnchor): void => stage({ anchor: next });
+  const setDx = (next: string): void => stage({ x: next });
+  const setDy = (next: string): void => stage({ y: next });
   const locked = isPositionLocked(item);
 
   const offset = (raw: string): number => {
@@ -129,8 +285,9 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
 
   return (
     <div className="cg-inspector-section" aria-label="On-air position">
+      {/* Sentence case in the source; the CAPS are the stylesheet's — see `Inspector.tsx`. */}
       <h2>
-        POSITION
+        Position
         {/* The SAME mark a dirty field carries, from the same class — so "not
             applied yet" looks identical wherever it appears in this panel. */}
         {dirty && (
@@ -152,7 +309,12 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
           painting moves to `controls.css`, where a selected fill and a hover can
           actually be expressed.
         */}
-        <div className="cg-anchor-grid" role="group" aria-label="Position anchor">
+        <div
+          className="cg-anchor-grid"
+          style={styles.anchorCell}
+          role="group"
+          aria-label="Position anchor"
+        >
           {ANCHOR_GRID.flat().map((a) => (
             <Button
               key={a}
@@ -188,7 +350,6 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
               that was missing. The a11y contract here is unchanged by this pass;
               only the stacking of the visible text is new. */}
           <div style={styles.offsetField}>
-            <span style={styles.offsetLabel}>dx</span>
             <NumericInput
               className="cg-field"
               style={styles.offsetInput}
@@ -199,9 +360,9 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
               onValueChange={setDx}
               aria-label="Position offset X"
             />
+            <span style={styles.offsetLabel}>dx</span>
           </div>
           <div style={styles.offsetField}>
-            <span style={styles.offsetLabel}>dy</span>
             <NumericInput
               className="cg-field"
               style={styles.offsetInput}
@@ -212,45 +373,23 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
               onValueChange={setDy}
               aria-label="Position offset Y"
             />
+            <span style={styles.offsetLabel}>dy</span>
           </div>
-          {/* ONE OF THE THREE ACCENTED ACTIONS (owner request), with Add item and
-              Update — this is the action the POSITION section exists to perform.
-              See `.cg-btn--accent` in `controls.css` for why colour may mean
-              hierarchy here and must not on the layer table.
+          {/*
+            🔴 `Apply position` IS GONE — the owner, 2026-09-14: «دکمه apply position فقط یه
+            مرحله اضافیه و همون دکمه update باید پوزیشن رو هم اعمال کنه و همچنین discard هم
+            روش کار کنه.»
 
-              IN the nudge row, bottom-aligned with the two inputs, per the mock —
-              not on a line of its own below them. It commits what those boxes hold,
-              so it belongs beside them; on its own row it read as a section-level
-              action and left an empty band across the panel. */}
-          <AsyncButton
-            variant="accent"
-            aria-label="Apply position"
-            disabled={locked}
-            run={() =>
-              window.cg.stack
-                .setPosition({
-                  itemId: item.itemId,
-                  position: { anchor, offset: { x: offset(dx), y: offset(dy) } },
-                })
-                .then((r) => ({
-                  accepted: r.ok,
-                  ...(r.reason !== undefined ? { errorCode: r.reason } : {}),
-                }))
-            }
-            // #334 — a refusal surfaces as the command TOAST, not pinned inline beside the
-            // control where its wrapped text bloated this narrow panel. `setPosition` does
-            // NOT self-report (unlike `applyDraft`), so this is the report, not a suppressor.
-            // The MESSAGE is unchanged: the button already mapped `r.reason` through
-            // `errorCodeMessage`, and the toast carries that same mapping — only its
-            // placement moves.
-            onError={reportCommandError}
-          >
-            Apply position
-          </AsyncButton>
-          {/* …and the same CHIP the commit bar shows for staged field edits, so the
-              two kinds of unapplied change read as one idea. Beside the button that
-              clears it, which is where an operator looks once they have noticed. */}
-          {dirty && !locked && <DraftChip label="unapplied position" />}
+            The row has ONE commit now: UPDATE sends the text, the plates, the per-look
+            composition and the placement, and DISCARD drops all four. `applyDraft` carries
+            the position on `stack.setPosition` exactly as this button did — the wire did not
+            move, the control did.
+
+            ⚠ The section keeps its own DIRTY DOT (on the heading above). It is not
+            redundant with the commit bar's chip: the chip says this ROW has something
+            staged, the dot says WHICH SECTION it is in, and on a panel that scrolls the
+            second question is the one the operator is actually asking.
+          */}
         </div>
       </div>
       {/* BELOW the row, not inside it: it is a note about why the controls above are

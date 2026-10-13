@@ -39,13 +39,58 @@ function resolveChannel(): string | undefined {
 
 const channel = resolveChannel();
 
+/**
+ * How many Playwright workers this suite may run — P-034.
+ *
+ * CI stays at 1 (unchanged, and it wins outright). Locally the number comes from
+ * `CG_E2E_WORKERS`, which `tools/gate-hook/src/bounded-turbo-cli.mjs` computes so that
+ * `turboTaskConcurrency × workersPerSuite` fits the box; the arithmetic and its
+ * invariant live there, with unit tests, and this file only reads the answer.
+ *
+ * Unset means an ISOLATED run — `pnpm --filter @cg/designer test:e2e`, or a hand-typed
+ * `playwright test` — which is not contended and keeps Playwright's own default. That
+ * is the same reasoning as the vitest half: the hazard is the PRODUCT of two fan-outs,
+ * so capping a single-suite run would cost time and buy nothing.
+ */
+function resolveWorkers(): number | undefined {
+  if (process.env.CI) return 1;
+  const bounded = Number(process.env.CG_E2E_WORKERS);
+  return Number.isInteger(bounded) && bounded >= 1 ? bounded : undefined;
+}
+
+/**
+ * 🔴 `P-038` — the CI budget for THIS suite. The reasoning, the measurements and the
+ * shared-cap arithmetic live once, in `apps/runtime/playwright.config.ts`; this is the
+ * other half of the SAME sum and is meaningless read alone.
+ *
+ * 8.0 min here + 10.0 min there = 18 min, against ~21.4 min of usable room inside the job's
+ * `timeout-minutes: 24` (raised from 20 on 2026-09-24, `MULTI-CHANNEL-01`; the arithmetic is
+ * in the runtime config). This suite measures 5.7–6.8 min green (runs 35896106572 and
+ * 35921029508, the second on a runner ~19 % slower) and must also cover its own `webServer`
+ * boot, so 8.0 min is ~15 % headroom over the slowest measured run. **Raise this and you must
+ * lower the runtime budget by the same amount.**
+ *
+ * ⚠ **LOWERED FROM 8.5 ON 2026-09-24** for the same reason as the last time: the Runtime suite
+ * outgrew its 7.5 (`C-016`'s spec on a slow runner) and the SUM is fixed.
+ *
+ * ⚠ **LOWERED FROM 11 ON 2026-09-15, and nothing about this suite prompted it** — the
+ * Runtime suite outgrew its 5 and the SUM is fixed, so the room had to come from the half
+ * that was not using it. This suite has never spent more than 6.6 of its 11. If it grows
+ * past ~7 min, raise it here and lower the other, or raise the job cap in `pr.yml` and
+ * redo the arithmetic in one place: the runtime config, which owns it.
+ */
+const CI_GLOBAL_TIMEOUT_MS = 8 * 60_000;
+
 export default defineConfig({
+  globalTimeout: process.env.CI ? CI_GLOBAL_TIMEOUT_MS : undefined,
+  // P-036 — refuse to run against a stale build. See tools/gate-hook/src/e2e-staleness.mjs.
+  globalSetup: './tests/e2e-global-setup.mjs',
   testDir: './tests/e2e',
   testMatch: '**/*.spec.ts',
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: resolveWorkers(),
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
   timeout: 30_000,
   expect: { timeout: 7_000 },

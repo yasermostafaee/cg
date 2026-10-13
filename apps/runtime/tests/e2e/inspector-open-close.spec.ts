@@ -29,13 +29,13 @@ test('WIDE — the Inspector is CLOSED until a row is selected, and its close bu
   // the owner asked for CLOSED, and the width goes back to the workspace.
   await expect(app.inspector).toHaveCount(0);
 
-  await app.selectLayerRow(70);
+  await app.selectLayerRow(80);
   await expect(app.inspector).toBeVisible();
 
   // CLOSE deselects, so the panel goes and the row lets go together.
   await app.inspector.getByRole('button', { name: 'Close INSPECTOR' }).click();
   await expect(app.inspector).toHaveCount(0);
-  await expect(app.layerRow(70)).toHaveAttribute('aria-pressed', 'false');
+  await expect(app.layerRow(80)).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('WIDE — the resize divider exists only while the Inspector does', async ({ app }) => {
@@ -44,7 +44,7 @@ test('WIDE — the resize divider exists only while the Inspector does', async (
 
   // A handle for a column that is not there would be a control that does nothing.
   await expect(divider).toHaveCount(0);
-  await app.selectLayerRow(70);
+  await app.selectLayerRow(80);
   await expect(divider).toBeVisible();
   await app.inspector.getByRole('button', { name: 'Close INSPECTOR' }).click();
   await expect(divider).toHaveCount(0);
@@ -54,29 +54,29 @@ test('NARROW — dismissing the overlay DESELECTS the row (the reported bug)', a
   await app.page.setViewportSize(NARROW);
   await expect(app.inspector).toHaveCount(0);
 
-  await app.selectLayerRow(70);
+  await app.selectLayerRow(80);
   await expect(app.inspector).toBeVisible();
-  await expect(app.layerRow(70)).toHaveAttribute('aria-pressed', 'true');
+  await expect(app.layerRow(80)).toHaveAttribute('aria-pressed', 'true');
 
   // Dismiss by the scrim — the operator "clicks the list", which is what they reported.
   // THE ASSERTION THAT MATTERS: the row must not still read selected afterwards.
   await app.page.locator('[data-inspector-scrim]').click({ position: { x: 5, y: 5 } });
   await expect(app.inspector).toHaveCount(0);
-  await expect(app.layerRow(70)).toHaveAttribute('aria-pressed', 'false');
+  await expect(app.layerRow(80)).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('WIDE — a second click on the SAME row closes the Inspector (toggle select and openness agree)', async ({
   app,
 }) => {
   await app.page.setViewportSize(WIDE);
-  await app.selectLayerRow(70);
+  await app.selectLayerRow(80);
   await expect(app.inspector).toBeVisible();
 
   // Toggle-select and openness are the same fact, so this cannot half-work: the row
   // deselects, and because openness is DERIVED, the panel goes with it.
-  await app.selectLayerRow(70);
+  await app.selectLayerRow(80);
   await expect(app.inspector).toHaveCount(0);
-  await expect(app.layerRow(70)).toHaveAttribute('aria-pressed', 'false');
+  await expect(app.layerRow(80)).toHaveAttribute('aria-pressed', 'false');
 });
 
 /*
@@ -96,7 +96,7 @@ test('NARROW — the overlay is FULL HEIGHT, and fullscreen is offered and takes
   app,
 }) => {
   await app.page.setViewportSize(NARROW);
-  await app.selectLayerRow(70);
+  await app.selectLayerRow(80);
 
   const before = await app.inspector.boundingBox();
   expect(before).not.toBeNull();
@@ -119,7 +119,7 @@ test('NARROW — closing from FULLSCREEN does not leave the shell focused on a p
   app,
 }) => {
   await app.page.setViewportSize(NARROW);
-  await app.selectLayerRow(70);
+  await app.selectLayerRow(80);
   await app.inspector.getByRole('button', { name: 'Show INSPECTOR fullscreen' }).click();
   await expect(app.inspector).toBeVisible();
 
@@ -129,7 +129,7 @@ test('NARROW — closing from FULLSCREEN does not leave the shell focused on a p
   await app.inspector.getByRole('button', { name: 'Close INSPECTOR' }).click();
   await expect(app.inspector).toHaveCount(0);
   // The Layers list is back and usable, which is the observable proof the focus cleared.
-  await expect(app.layerRow(70)).toBeVisible();
-  await app.selectLayerRow(70);
+  await expect(app.layerRow(80)).toBeVisible();
+  await app.selectLayerRow(80);
   await expect(app.inspector).toBeVisible();
 });

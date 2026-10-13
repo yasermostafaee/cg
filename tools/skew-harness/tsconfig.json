@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "types": ["node"]
+  },
+  "include": ["src/**/*"],
+  // Same BUILD constraint the bridge records: rootDir is ./src, so tests/ cannot be
+  // part of `tsc -b`. `pnpm typecheck` runs tsconfig.typecheck.json, which DOES
+  // include tests/ — and turbo's `typecheck` inputs already hash `tests/**`.
+  "exclude": ["dist", "tests/**/*"]
+}

@@ -1,24 +1,22 @@
+import { RetainedAirStateSchema, retainedFromStackItem } from '@cg/shared-schema';
 import type { RetainedStackItem, StackItemState } from '@cg/shared-schema';
 import type { Workspace } from '@cg/storage';
 
 const PATH = 'stack/retained.json';
 
 /**
- * B-092 — the browser-local retention of the operator's STACK INTENT, so the
- * stack survives a restart of the bridge process.
+ * B-092 — this console's DISPLAY copy of the stack: the rows it shows while CG Bridge cannot be
+ * reached, and across a page reload with the bridge down (`WebSocketRuntime`'s offline projection).
  *
- * The stack otherwise lives ONLY in the bridge's in-memory Reconciler: kill the
- * bridge and every row the operator built is gone, because the restarted
- * process boots empty and the SPA re-pulls that empty snapshot. This store is
- * the SPA's own copy of what the stack IS, mirrored from every published
- * snapshot and re-delivered to the bridge on every (re)connect
- * (`WebSocketRuntime.#resync`).
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`): it used to be what made the stack survive a bridge restart —
+ * re-delivered on every (re)connect. With one bridge serving several consoles a re-delivered copy
+ * was a claim on the truth that a stale console could win, so the bridge keeps and restores its
+ * stack itself now (its `bridge-stack.json`, the same record — {@link retainedFromStackItem}).
+ * This store is mirrored from every published snapshot and NEVER sent.
  *
- * It is deliberately the sibling of B-085's `LibraryStore` — same file-backed
- * `Workspace` (OPFS in the browser, in-memory in tests), same "the SPA owns it,
- * the bridge is a delivery target" model, same "reads never throw" doctrine.
- * The difference is what it holds: INTENT, not reconciled state. Nothing here
- * decides what is on air — the bridge does that against real OSC occupancy.
+ * It is the sibling of B-085's `LibraryStore` — same file-backed `Workspace` (OPFS in the browser,
+ * in-memory in tests), same "reads never throw" doctrine. It holds INTENT, not reconciled state.
+ * Nothing here decides what is on air.
  *
  * Order matters (the stack is an ordered list), so this persists a single
  * ordered array rather than a file per item.
@@ -46,7 +44,14 @@ export class StackRetentionStore {
           (i) =>
             typeof i.itemId === 'string' &&
             typeof i.templateId === 'string' &&
-            typeof i.played === 'boolean',
+            // B-107/B-109 — a record with no usable STATE is dropped rather than
+            // given a default. The whole point of this change is that a row's state
+            // is never guessed: picking a comfortable value for a record that does
+            // not carry one is the exact defect, one layer down. A record written by
+            // a build that predates the state field is such a record, and under the
+            // compatibility-floor policy (P-031) it is not owed a conversion — the
+            // cost is one stack rebuild, once, on a product that has not shipped.
+            RetainedAirStateSchema.safeParse(i.state).success,
         );
       }
     } catch {
@@ -54,59 +59,18 @@ export class StackRetentionStore {
     }
   }
 
-  /** The retention set, in stack order — what `#resync` re-delivers. */
+  /** The display copy, in stack order — what the offline view shows. */
   items(): readonly RetainedStackItem[] {
     return this.#items;
   }
 
   /**
-   * Mirror a published stack snapshot into the retention set (replace-all, so a
-   * removal is a removal and the order is the snapshot's).
-   *
-   * The caller is responsible for NOT mirroring a snapshot that may be the
-   * empty one a freshly-booted bridge reports before its restore lands —
-   * otherwise the bug would erase its own fix. See `WebSocketRuntime.#resync`.
+   * Mirror a published stack snapshot into the display copy (replace-all, so a removal is a
+   * removal and the order is the snapshot's). (`DESKTOP-APPS-01-D` j's kept strays went with the
+   * re-delivery: the bridge persists its strays itself — `CENTRAL-BRIDGE-01`.)
    */
   async mirror(snapshot: readonly StackItemState[]): Promise<void> {
-    this.#items = snapshot.map(toRetained);
+    this.#items = snapshot.map(retainedFromStackItem);
     await this.#ws.writeJson(PATH, this.#items);
   }
-}
-
-/**
- * Reduce reconciled state back to INTENT: what the operator asked for, plus the
- * one bit the restore cannot re-derive — whether the item had been taken to air.
- */
-function toRetained(item: StackItemState): RetainedStackItem {
-  return {
-    itemId: item.itemId,
-    templateId: item.templateId,
-    fields: item.fields,
-    played: isPlayed(item.status),
-    ...(item.slot !== undefined && { slot: item.slot }),
-    ...(item.position !== undefined && { position: item.position }),
-  };
-}
-
-/**
- * Play evidence from the last published status.
- *
- * The ambiguous states resolve to TRUE on purpose. `exiting` (an out in flight
- * when the bridge died — the CLEAR may never have landed), `unconfirmed` (B-044:
- * a command whose ack never came) and `unverified` (B-086: the CasparCG link was
- * down, so the claim could not be checked) all describe an item that may well
- * still be rendering. Over-claiming is self-correcting — the bridge's occupancy
- * check demotes it to `loaded` the moment the layer proves silent — whereas
- * under-claiming would let a restore treat a LIVE layer as empty, which is the
- * error direction this codebase never takes.
- */
-function isPlayed(status: StackItemState['status']): boolean {
-  return (
-    status === 'playing' ||
-    status === 'on-air' ||
-    status === 'updating' ||
-    status === 'exiting' ||
-    status === 'unconfirmed' ||
-    status === 'unverified'
-  );
 }

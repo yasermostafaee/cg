@@ -32,6 +32,8 @@ test('a video imports, its stored WebM decodes (CSP media-src), and drag places 
   page,
 }) => {
   await app.newProject('VideoImport');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
 
   // ---- import through the real modal ----
   await page.getByRole('button', { name: 'Project assets' }).click();
@@ -121,6 +123,8 @@ test('back-to-back conversions of a known-good file BOTH succeed (fresh worker p
   // source hash, not filename), so this drives "Convert again" to still force a
   // second real encode — pinning both the dedupe detection AND the fresh worker.
   await app.newProject('VideoTwice');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const buffer = readFileSync(FIXTURE);
 
@@ -155,11 +159,13 @@ test('back-to-back conversions of a known-good file BOTH succeed (fresh worker p
   await expect(page.getByText('clip-1', { exact: false }).first()).toBeVisible();
 });
 
-test('an imported video RENDERS in the canvas frame at a NON-BLANK mid-clip poster (D-128 Phase 3)', async ({
+test('an imported video RENDERS in the canvas frame AT THE PLAYHEAD — at rest on frame 0, and at the scrubbed frame (D-135 §5; supersedes the D-128 poster rest)', async ({
   app,
   page,
 }) => {
   await app.newProject('VideoRender');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
@@ -183,32 +189,54 @@ test('an imported video RENDERS in the canvas frame at a NON-BLANK mid-clip post
   const videoLoc = frame.locator('video[data-cg-asset-id]');
   await expect(videoLoc).toBeAttached({ timeout: 15_000 });
 
-  // The host seeks it OFF frame 0 to the mid-clip poster (decision (a)): once the
-  // blob src is wired + decoded, currentTime advances to ~midpoint of the clip.
-  const render = await videoLoc.evaluate(async (v: HTMLVideoElement) => {
+  // D-135 §5 (§9.5 (a)) — the PLAYHEAD owns the canvas frame. The poster routine still
+  // runs (load path + seek-fragile recovery) but paints only a PRE-TICK transient: the
+  // settled rest state with the playhead on frame 0 is clip time 0, and the chained
+  // re-tick guarantees the tick's seek lands LAST (one paint order, deterministic).
+  const rest = await videoLoc.evaluate(async (v: HTMLVideoElement) => {
     const deadline = Date.now() + 12_000;
     while (Date.now() < deadline) {
       const src = v.getAttribute('src') || '';
-      if (src.indexOf('blob:') === 0 && v.readyState >= 1 && v.currentTime > 0) {
+      // Settled = loaded AND back on the playhead's frame (the poster transient may
+      // read > 0 mid-flight; the tick must win).
+      if (src.indexOf('blob:') === 0 && v.readyState >= 1 && v.currentTime === 0 && !v.seeking) {
         return { ok: true, currentTime: v.currentTime, posterMs: Number(v.dataset.cgPosterMs) };
       }
       await new Promise((r) => setTimeout(r, 100));
     }
     return { ok: false, rs: v.readyState, t: v.currentTime, src: v.getAttribute('src') };
   });
-  expect(render, JSON.stringify(render)).toMatchObject({ ok: true });
-  if (render.ok) {
-    // poster time is the clip midpoint (~0.8s of the 1.6s fixture), NOT frame 0
-    expect(render.currentTime).toBeGreaterThan(0.4);
-    expect(render.posterMs).toBeGreaterThan(400);
+  expect(rest, JSON.stringify(rest)).toMatchObject({ ok: true });
+  if (rest.ok) {
+    // The poster dataset is still stamped (the transient's target) — it just no longer
+    // owns the resting frame.
+    expect(rest.posterMs).toBeGreaterThan(400);
   }
+
+  // SCRUB — the frame follows the playhead: frame 50 at 50 fps maps to clip time 1.0 s.
+  // Read back what the element SHOWS (currentTime after the seek settles), not just
+  // that a call was made.
+  await app.scrubToFrame(50);
+  const scrubbed = await videoLoc.evaluate(async (v: HTMLVideoElement) => {
+    const deadline = Date.now() + 12_000;
+    while (Date.now() < deadline) {
+      if (v.readyState >= 1 && !v.seeking && Math.abs(v.currentTime - 1.0) < 0.25) {
+        return { ok: true, currentTime: v.currentTime };
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return { ok: false, rs: v.readyState, t: v.currentTime };
+  });
+  expect(scrubbed, JSON.stringify(scrubbed)).toMatchObject({ ok: true });
 });
 
-test('a video element is NOT remounted across transform changes — it stays visible on its poster (D-128 Bug 1)', async ({
+test('a video element is NOT remounted across transform changes — it stays visible at the playhead’s frame (D-128 Bug 1; rest re-owned by D-135 §5)', async ({
   app,
   page,
 }) => {
   await app.newProject('VideoDrag');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
@@ -230,17 +258,19 @@ test('a video element is NOT remounted across transform changes — it stays vis
   const videoLoc = frame.locator('video[data-cg-asset-id]');
   await expect(videoLoc).toBeAttached({ timeout: 15_000 });
 
-  // Wait for the poster to seek off 0, then MARK the live node so we can prove it
+  // D-135 §5 — the playhead owns the canvas frame now, so park it OFF frame 0 first
+  // (frame 50 at 50 fps ⇒ clip time 1.0 s), then MARK the live node so we can prove it
   // is the SAME element (not a remounted one) after transforms.
+  await app.scrubToFrame(50);
   const before = await videoLoc.evaluate(async (v: HTMLVideoElement & { __cgMark?: string }) => {
     const deadline = Date.now() + 12_000;
-    while (Date.now() < deadline && !(v.readyState >= 1 && v.currentTime > 0)) {
+    while (Date.now() < deadline && !(v.readyState >= 1 && !v.seeking && v.currentTime > 0)) {
       await new Promise((r) => setTimeout(r, 100));
     }
     v.__cgMark = 'keep-me';
     return { t: v.currentTime, rs: v.readyState };
   });
-  expect(before.t).toBeGreaterThan(0); // showing a real (non-blank) poster frame
+  expect(before.t).toBeGreaterThan(0); // showing a real (non-blank) frame — the playhead's
 
   // Several transform changes → several full scene-replaces (the drag simulacrum).
   // BEFORE the fix each of these tore down + reloaded the <video> (blank for a beat).
@@ -263,6 +293,8 @@ test('a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-pr
   page,
 }) => {
   await app.newProject('VideoFringe');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
@@ -293,6 +325,17 @@ test('a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-pr
   // composites to a black-edged halo. getImageData returns STRAIGHT rgba, so a
   // correct un-premultiply reads the right region back at ~gold, matching the
   // opaque LEFT half — proving the semi-transparent pixels are NOT darkened.
+  //
+  // 🔴 `P-057` / `FOLLOWUPS-01` §2.3 — THE READ WAITS FOR A PRESENTED FRAME. It used to draw once
+  // `readyState >= 2` on `loadeddata`, and on CI that read twice received `R = 0` at the OPAQUE
+  // half (run 36338340420, attempt 1, both tries) — a canvas with NOTHING drawn on it. Measured on
+  // the dev host: 184 of 184 reads at that trigger were correct, and the one way to receive `0` was
+  // a read with no frame to paint (`readyState 1` → `[0,0,0,0]`, 9 of 10). So `readyState` says a
+  // frame is DECODED, not that the painter holds it. `requestVideoFrameCallback` fires when a frame
+  // has been PRESENTED, and a draw inside the callback is of that frame; it fires only for an element
+  // that is rendered, so the video is attached, on screen, for the read. `new VideoFrame(video)` was
+  // measured and rejected as the signal: it constructs at `readyState 1`, when there is nothing to
+  // paint. Every assertion below carries the whole read, so a failure records what and when.
   const px = await page.evaluate(async () => {
     const assets = await window.cg.assets.list();
     const vid = assets.find((a) => a.kind === 'video');
@@ -300,47 +343,75 @@ test('a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-pr
     const url = await window.cg.assets.url(vid.assetId);
     if (url === null) return { ok: false as const, why: 'url() returned null' };
     return await new Promise<
-      { ok: true; left: number[]; right: number[]; w: number } | { ok: false; why: string }
+      | {
+          ok: true;
+          left: number[];
+          right: number[];
+          w: number;
+          presentedFrames: number;
+          readyState: number;
+          atMs: number;
+        }
+      | { ok: false; why: string }
     >((resolve) => {
       const v = document.createElement('video');
       v.muted = true;
       v.preload = 'auto';
-      const deadline = Date.now() + 12_000;
-      v.onerror = () => resolve({ ok: false, why: `decode error: ${v.error?.message ?? '?'}` });
-      const sample = (): void => {
+      v.style.cssText =
+        'position:fixed;left:0;bottom:0;width:64px;height:64px;z-index:2147483647;pointer-events:none';
+      document.body.appendChild(v);
+      const t0 = performance.now();
+      const done = (r: Parameters<typeof resolve>[0]): void => {
+        clearTimeout(timer);
+        v.remove();
+        resolve(r);
+      };
+      const timer = setTimeout(() => {
+        done({
+          ok: false,
+          why: `no frame was presented in 12 s (readyState ${String(v.readyState)})`,
+        });
+      }, 12_000);
+      v.onerror = () => done({ ok: false, why: `decode error: ${v.error?.message ?? '?'}` });
+      v.requestVideoFrameCallback((_now, meta) => {
         const c = document.createElement('canvas');
         c.width = v.videoWidth;
         c.height = v.videoHeight;
         const ctx = c.getContext('2d');
-        if (ctx === null) return resolve({ ok: false, why: 'no 2d context' });
+        if (ctx === null) return done({ ok: false, why: 'no 2d context' });
         ctx.clearRect(0, 0, c.width, c.height);
         ctx.drawImage(v, 0, 0);
         const at = (fx: number): number[] => [
           ...ctx.getImageData(Math.round(v.videoWidth * fx), Math.round(v.videoHeight / 2), 1, 1)
             .data,
         ];
-        resolve({ ok: true, left: at(0.25), right: at(0.78), w: v.videoWidth });
-      };
-      const tryDraw = (): void => {
-        if (v.readyState >= 2 && v.videoWidth > 0) sample();
-        else if (Date.now() < deadline) setTimeout(tryDraw, 100);
-        else resolve({ ok: false, why: `never decoded rs=${String(v.readyState)}` });
-      };
-      v.onloadeddata = tryDraw;
+        done({
+          ok: true,
+          left: at(0.25),
+          right: at(0.78),
+          w: v.videoWidth,
+          presentedFrames: meta.presentedFrames,
+          readyState: v.readyState,
+          atMs: Math.round(performance.now() - t0),
+        });
+      });
       v.src = url;
     });
   });
-  expect(px, JSON.stringify(px)).toMatchObject({ ok: true });
+  const read = JSON.stringify(px);
+  expect(px, read).toMatchObject({ ok: true });
   if (px.ok) {
+    // The precondition, asserted: the pixels below are of a frame the painter was handed.
+    expect(px.presentedFrames, read).toBeGreaterThanOrEqual(1);
     // opaque LEFT half is gold (control)
-    expect(px.left[0]).toBeGreaterThan(200); // R
-    expect(px.left[1]).toBeGreaterThan(160); // G
+    expect(px.left[0], read).toBeGreaterThan(200); // R
+    expect(px.left[1], read).toBeGreaterThan(160); // G
     // half-alpha RIGHT half is RESTORED to ~gold — NOT the darkened premult (~126)
-    expect(px.right[0]).toBeGreaterThan(200); // R (would be <150 with the fringe bug)
-    expect(px.right[1]).toBeGreaterThan(160); // G
+    expect(px.right[0], read).toBeGreaterThan(200); // R (would be <150 with the fringe bug)
+    expect(px.right[1], read).toBeGreaterThan(160); // G
     // and it is genuinely semi-transparent (partial alpha carried through)
-    expect(px.right[3]).toBeGreaterThan(60);
-    expect(px.right[3]).toBeLessThan(210);
+    expect(px.right[3], read).toBeGreaterThan(60);
+    expect(px.right[3], read).toBeLessThan(210);
   }
 });
 
@@ -349,6 +420,8 @@ test('MOTION keeps transparency: source-transparent pixels stay transparent acro
   page,
 }) => {
   await app.newProject('VideoMotionAlpha');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
@@ -450,6 +523,8 @@ test('STALE-RESULT COHERENCE: ticking a correction after a completed conversion 
   // the PREVIOUS run's bytes. Changing a setting must clear the verdict, block
   // placing, and offer the re-convert path in place.
   await app.newProject('VideoSupersede');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: 'Add asset' }).dispatchEvent('pointerdown');
@@ -485,6 +560,8 @@ test('re-importing the same source is deduped: "Use existing" places an element 
   page,
 }) => {
   await app.newProject('VideoDedupe');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
   await page.getByRole('button', { name: 'Project assets' }).click();
   const buffer = readFileSync(FIXTURE);
 

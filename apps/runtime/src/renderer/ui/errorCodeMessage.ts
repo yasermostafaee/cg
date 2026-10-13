@@ -10,10 +10,29 @@
  * Unknown codes are surfaced verbatim rather than swallowed: an unrecognised
  * reason the operator can quote to an engineer beats a generic dead end.
  */
+import { REMOVE_ON_AIR_CODE, TAKE_ON_AIR_CODE } from '@cg/shared-ipc';
+import { REMOVE_ON_AIR_REASON, takeOnAirReason } from '../features/layers/layerRowActions.js';
+import { amcpRefusalWords } from './amcpRefusal.js';
+
 const MESSAGES: Readonly<Record<string, string>> = {
   'unknown-item': 'That item is no longer on the stack.',
   'unknown-template': 'That template is not registered with the bridge — re-import it.',
   'amcp-send-failed': 'The command never reached CasparCG — check the server link.',
+  /*
+    B-141 — THE THIRD FACT, kept apart from the two above it.
+
+    `amcp-send-failed` says the command never left; an AMCP error code says
+    CasparCG refused it. A TIMEOUT is neither: it left, and nothing came back. The
+    bridge used to flatten it into "never reached CasparCG", which sends the
+    operator to check a link that is demonstrably up — the `mute-failed` mistake
+    of naming the wrong mechanism.
+  */
+  'amcp-timeout':
+    'CasparCG did not answer the command in time — it may or may not have executed. Check the layer on the output before reissuing it.',
+  // B-141 — the load lost its race with a Remove. Named because a bare failure here
+  // reads as an AMCP problem and sends the operator to the playout machine for
+  // something that happened in the bridge.
+  'item-removed': 'The row was removed while it was loading, so the load was abandoned.',
   /*
     §8 — THE ONE CODE THAT MUST SAY "UNKNOWN", AND MUST BE SEEN RARELY.
 
@@ -56,8 +75,28 @@ const MESSAGES: Readonly<Record<string, string>> = {
   // rehearse no longer needs the layer, so taking the row off PVW costs nothing.
   'mute-failed':
     'CasparCG refused to mute the layer, so PVW was not started. PVW is only claimed once the graphic genuinely cannot reach air.',
+  // C-015 phase 6 (6.5b) — the LOAD's mute, which is a different consequence from
+  // the PVW one above and therefore a different sentence: the mute is not a step
+  // around the load, it is the condition under which loading is safe (a bare
+  // `CG ADD` puts the template's audio on air on 2.5.0 — R-029).
+  'add-mute-failed':
+    'CasparCG refused to mute the layer, so the graphic was NOT loaded — loading it would have put its audio on air. Try again; if it keeps failing, check the channel on the playout server.',
   rehearsing:
     'That row is on PVW. Take it off PVW first — loading would put an unmuted graphic on the layer.',
+  /*
+    🔴 `R-017` — the REMOVE refusal, and the one sentence BOTH remove verbs answer with.
+
+    It is `REMOVE_ON_AIR_REASON` from `layerRowActions.ts` verbatim, and that is the point
+    rather than a coincidence: `tasks.md` 1.10 requires the tooltip that pre-empts the press
+    and the toast that answers the bridge to be ONE string, because two sentences that match
+    today drift on the day one of them is edited. The row's own control cannot be pressed
+    while this applies, so this wording is reached by the paths that do not go through it —
+    the context menu on a stale render, the template picker's orphan remedy, a race.
+  */
+  [REMOVE_ON_AIR_CODE]: REMOVE_ON_AIR_REASON,
+  // `FIELD-FIXES-01-A` Decision 2 — the row's own verb says it in the row's name
+  // (`takeOnAirReason`); this is the same sentence for a surface that has no row to name.
+  [TAKE_ON_AIR_CODE]: takeOnAirReason('That row'),
   // The BANK-SCOPED clear's two structural refusals. Both are guard verdicts rather
   // than transient failures, so neither suggests retrying: the answer will not change
   // until the CONFIG does.
@@ -65,15 +104,138 @@ const MESSAGES: Readonly<Record<string, string>> = {
     'That layer is not part of the declared operator bank — this clear is scoped to the bank and can address nothing else.',
   reserved:
     'That layer is inside the reserved playout range — the company’s playout system owns it, and it can never be cleared from this console.',
+  /*
+    C-015 phase 6 — THE FOUR WAYS A LIVE PLATE REFUSES A TAKE.
+
+    🔴 THESE ARE WHAT THE OPERATOR READS — not fallbacks. They used to be: the bridge sends
+    its own sentence with each of them (`StackTakeChannel.message`) and `asyncResultMessage`
+    PREFERRED that, so these sat unused behind text written for a developer.
+    `CONSOLE-LOOK-06` DELTA R reversed the order. The bridge's sentence still names the plate,
+    the source and the numbers that disagree, and it still travels — as the refusal banner's
+    detail line and into the audit log, where an id belongs.
+
+    Four codes rather than one, because the four remedies are in four different
+    places: assign a source, correct a format, declare a band, free a layer.
+  */
+  /*
+    §12.6 / §14.5 — THE TWO MULTI-BOX REFUSALS, which had no sentence at all and so reached
+    the operator as `Not accepted (multibox-already-on-air).` — a quotable code, which is the
+    B-070 floor, but not an explanation.
+
+    🔴 AND THIS IS THE PAIR THE OWNER PHOTOGRAPHED. The bridge's own sentence names the
+    incumbent by TEMPLATE UUID and ITEM UUID; `asyncResultMessage` preferred it, so a
+    perfectly good operator sentence sat here unread while a developer's did the talking.
+    DELTA R reversed that order. The ids are not lost — they ride the banner's detail line and
+    the audit log.
+  */
+  'multibox-already-on-air':
+    'Another multi-box graphic is already on air on this channel, and only one may be. Take that row off air first — this is a crosstalk guard, not a layer shortage.',
+  'looks-none-authored':
+    'This template has a multi-frame group but no looks authored in it, so every box would go to air empty. It has to be opened in the Designer and given at least one look.',
+  'live-source-unassigned':
+    'This template has a live plate with no source assigned, so it would go to air empty. Assign it in CG Control → Sources, then take again.',
+  /*
+    `PLAYOUT-SOURCES-01` §1.C — refused BEFORE any AMCP because of what became of the bound entry.
+    The row's own line names the plate and the source (`takeRefusalLine`); this is the sentence for
+    a surface that has only the code.
+  */
+  'source-unavailable':
+    'The Playout no longer offers a source this row is bound to — nothing was sent. Bind another source, or take again once the Playout lists it.',
+  'source-unusable':
+    'A source this row is bound to cannot be played on this station — nothing was sent. Bind another source.',
+  /*
+    `ROUTE-PLATES-01` — contract v1.3. Rule 1: a Playout input only on a channel it may be shown
+    on. Rule 5: a Playout route only from a confirmed input list. Rule 4: its start window. The
+    row's own line names the plate (`takeRefusalLine`); these are for a surface with only the code.
+  */
+  'source-not-showable':
+    'A source this row is bound to cannot be shown on this channel — nothing was sent. Bind another source.',
+  // `PLAYOUT-FEATURES-01` B (`B-298`) — an input that is this channel's own output would loop.
+  'source-own-output':
+    'A source this row is bound to is this channel’s own output and would loop — nothing was sent. Bind another source.',
+  // `PLAYOUT-FEATURES-01` D (`R-077`) — the Playout's own message is on the row; this is for a surface with only the code.
+  'cg-unlicensed':
+    'The Playout’s license does not allow CG Control on this channel — nothing was sent.',
+  'route-epoch-waiting': 'Waiting for the Playout’s input list — nothing was sent.',
+  'route-epoch-stale': 'The Playout’s input list changed — nothing was sent. Take again.',
+  'route-window-missed': 'The Playout input did not start in time — nothing was shown. Take again.',
+  // `ROUTE-PLATES-01` §1.E — the send seam's guard. Each refuses before anything is sent.
+  'amcp-guard-channel':
+    'That command targets a channel this station does not own — nothing was sent.',
+  'amcp-guard-layer':
+    'That command targets a layer outside this console’s band — nothing was sent.',
+  'amcp-guard-forbidden': 'That command could disturb the Playout’s channel — nothing was sent.',
+  'amcp-guard-global': 'That command addresses the whole server — nothing was sent.',
+  'amcp-guard-route-layer': 'A Playout input with no layer cannot be played — nothing was sent.',
+  'live-source-aspect-mismatch':
+    'A live plate is designed for a different picture shape than the source assigned to it — cropping it would cut part of the picture the author never saw. Re-assign the plate, or correct the source’s format.',
+  'live-source-no-layer-range':
+    'No Live Source layer band is declared on this installation, so there is nowhere to put the live picture. Declare the band in CG Control’s source settings.',
+  'live-source-no-layer':
+    'The Live Source layer band has no room left for this template’s plates. Clear a graphic that is holding live layers, or widen the band in CG Control’s source settings.',
 };
+
+/**
+ * 🔴 `CONSOLE-LOOK-06` DELTA R — **THE CODES WHOSE BRIDGE SENTENCE IS WRITTEN FOR A DEVELOPER.**
+ *
+ * `asyncResultMessage` normally prefers the bridge's own message, and that is usually RIGHT:
+ * it names the plate (`guest-3`), the source, or the two formats that disagree, and those are
+ * the operator's own words. Preferring our generic sentence everywhere would throw away the
+ * only part of most refusals an operator can act on.
+ *
+ * These are the exceptions, and they are listed one by one rather than guessed at, because
+ * the difference cannot be seen from the text without string-matching prose — which is a
+ * contract nobody wrote down and breaks the first time the prose is edited (§6).
+ *
+ * What makes a code belong here: its bridge sentence identifies things by UUID. The one the
+ * owner photographed is the whole reason this set exists —
+ *
+ *     exactly one multi-box template may be on air per channel:
+ *     "e506e319-6e68-4603-a5f4-290b21616250" (3 boxes, item
+ *     "item-0d9a8b6c-427c-4001-ad89-8e4eb2849dd2") is already on air on channel 1
+ *
+ * — a template UUID and an item UUID, when the row is called Bed 1 three inches away. Golden
+ * rule 11. The ids are not lost: they ride the refusal banner's detail line and the audit log
+ * records them with the entry (`AuditEntrySchema` carries `itemId`, `templateId`, `errorCode`
+ * and the AMCP line).
+ *
+ * ⚠ ADDING A CODE HERE IS A CLAIM that our sentence says everything the bridge's does. Check
+ * that before adding one — for most codes it is false.
+ */
+/*
+ * 🔴 DO NOT GENERALISE THIS LIST — ADDENDUM B §B6, and the reason is a measured one.
+ *
+ * The first cut of DELTA R inverted the preference for EVERY code, and `asyncButton.test.ts`
+ * caught what that costs: for `live-source-unassigned` the bridge's own sentence names the
+ * PLATE — `Plate 3 has no live source assigned` (`B-308`: its position, never its id) — the one
+ * thing on that message they can act on. Our generic sentence cannot say
+ * it, and no lookup in the renderer can recover it from the code alone.
+ *
+ * **The wire's sentence sometimes carries the only operator-actionable word.** So this stays a
+ * per-code LIST of the messages that identify things by UUID, and every other code keeps the
+ * bridge's text.
+ */
+const PREFER_OURS: ReadonlySet<string> = new Set([
+  'multibox-already-on-air',
+  'looks-none-authored',
+]);
+
+/** Does the console's own sentence win over the bridge's for this code? */
+export function prefersOwnMessage(errorCode: string | undefined): boolean {
+  return errorCode !== undefined && PREFER_OURS.has(errorCode);
+}
 
 /** A human message for a refusal, or `null` when there is no code to explain. */
 export function errorCodeMessage(errorCode: string | undefined): string | null {
   if (errorCode === undefined || errorCode === '') return null;
   const known = MESSAGES[errorCode];
   if (known !== undefined) return known;
-  // `amcp-403` et al — CasparCG refused the command outright.
-  const amcp = /^amcp-(\d+)$/.exec(errorCode);
-  if (amcp !== null) return `CasparCG refused the command (AMCP ${String(amcp[1])}).`;
+  /*
+    🔴 `FIELD-FIXES-01` A — a server reply (`amcp-403` et al) in the operator's words, from the ONE
+    mapping (`amcpRefusal.ts`). The code and the command go to the log; "AMCP 403" never reaches
+    this sentence. With no command to tailor it by, each code says its generic line.
+  */
+  const amcp = amcpRefusalWords(errorCode);
+  if (amcp !== null) return amcp.sentence;
   return `Not accepted (${errorCode}).`;
 }

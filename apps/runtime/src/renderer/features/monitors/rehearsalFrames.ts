@@ -1,5 +1,14 @@
-import { defaultLayerAlias, type FixedLayerBank, type Rehearsal } from '@cg/shared-ipc';
+import type { CSSProperties } from 'react';
+import {
+  defaultLayerAlias,
+  type ChannelRaster,
+  type FixedLayerBank,
+  type Rehearsal,
+  type TemplateLiveSources,
+} from '@cg/shared-ipc';
 import type { FieldValues, Position } from '@cg/shared-schema';
+import type { PlateSourceLookup } from './livePlateGeometry.js';
+import type { TimingToSend } from '../inspector/timingToSend.js';
 
 /**
  * R-022 — the SUBJECTS of a rehearsal render: one per rehearsing row, resolved
@@ -16,6 +25,97 @@ export interface RehearsalSubject {
   position: Position | undefined;
   /** Applied fields with any staged edits layered on. */
   fields: FieldValues;
+  /**
+   * R-049 — the template's Live Source carrier, when this browser's registry
+   * holds one. `undefined` covers BOTH "this template declares none" and "the
+   * registry has not answered yet", and the two are treated identically here on
+   * purpose: with no declaration there is no rect to draw over, so there is
+   * nothing an overlay could honestly say. The three-way distinction that DOES
+   * matter — declared / none / unknown — is `liveSourceCarrierState`'s, and it is
+   * consumed where a take can be refused, not on a preview surface.
+   */
+  liveSources: TemplateLiveSources | undefined;
+  /**
+   * 🔴 **SESSION BQ — WHAT THE OVERLAY NEEDS TO RESOLVE A SOURCE NAME, not the names
+   * themselves. The change of shape IS the fix.**
+   *
+   * This was `plateSourceNames: ReadonlyMap<string, string | null>` — a map keyed by PLATE
+   * ID with no look dimension in it, so the same plate in two looks could only ever yield
+   * one name and a per-look binding was **unrepresentable**. `activeLookId` was already on
+   * this same interface, driving the rects; the names never saw it. The owner met that as a
+   * rehearsing row whose placeholder read "studio 1" after he had bound that look to
+   * studio 3 — PVW naming a source air would not have shown.
+   *
+   * ⚠ `B-151` was this exact shape one field over (the overlay never learned looks existed,
+   * that time for RECTS), which is why the fix follows BL's rather than patching the call
+   * site: the RESOLVER moved to where both processes can call it, and the overlay resolves
+   * with the look it already holds.
+   *
+   * The id→name join still belongs to the PANEL (which can see the sources store), so the
+   * stage stays presentational — that part was always right.
+   */
+  plateSources: PlateSourceLookup;
+  /**
+   * 🔴 `B-151` — WHICH LOOK THIS ROW IS SHOWING, as the BRIDGE published it
+   * (`StackItemState.activeLookId`), and `undefined` for a row nobody has switched.
+   *
+   * It is on the subject because BOTH halves of the preview need it and they must not
+   * answer it separately: the placeholder overlay resolves its rects from it, and the
+   * rehearsal frame tells the page the same id through the `__cg` payload key the plant
+   * uses. PVW used to have no idea a look existed, so it drew the union of every look's
+   * plates while the page inside it sat on the authored default.
+   *
+   * ⚠ Deliberately NOT a preview-local look state. Switching the previewed look goes
+   * through `stack.set-active-look` like every other switch — which on a rehearsing (off-air)
+   * row records the look and sends NOTHING to CasparCG — so one published fact drives the
+   * overlay, the page, the row's picker and the look the next take enters.
+   */
+  activeLookId: string | undefined;
+  /**
+   * 🔴 `PASSES-CYCLE-ONLY-26` Part B (`R-065`, owner 2026-09-16) — **THE OPERATOR'S PASS COUNT
+   * AND GAP, so PVW plays what a take would play.**
+   *
+   * PVW ran the template's AUTHORED defaults: the payload was `withCgControl(fields, {look})`
+   * and nothing else, so the page never received `__cg.timing` and a row set to `Count 1` was
+   * rehearsed at whatever the author wrote. Pressing `Update` changed nothing there either.
+   *
+   * This is `B-151`'s shape one member later — PVW once got no LOOK for the same reason, a
+   * delivery door the work that added the member never knocked on.
+   *
+   * It is the EFFECTIVE value (`effectiveTimingFor`): the staged draft layered on the stored
+   * override, which is the same "exactly what Apply would send" rule the fields already follow.
+   * `undefined` means ABSTAIN — the page runs its authored default, which is what a row with no
+   * override genuinely has.
+   */
+  timing: TimingToSend | undefined;
+}
+
+/**
+ * R-049 — THE ONE EXPRESSION OF THE FIT TRANSFORM, used by every layer that must
+ * land on the same pixels: each rehearsal frame's `<iframe>` and the live-plate
+ * overlay drawn over the whole stack.
+ *
+ * It exists because the alternative is a second scale factor derived beside the
+ * first, which is precisely how an overlay drifts off the page beneath it — and
+ * the drift is invisible on a 16:9 raster, where the geometry inside each page
+ * collapses to identity, so it would ship looking correct.
+ *
+ * Two scales stay apart, and this is only the second of them:
+ *   - the AIR scale lives INSIDE each page (reference frame → raster), real placement;
+ *   - the FIT scale is THIS (raster → panel), preview only.
+ * A box sized to the raster and then scaled by a CSS transform cannot perturb what
+ * the document inside measures, which is what keeps them apart.
+ */
+export function frameBox(raster: ChannelRaster, fit: number): CSSProperties {
+  return {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: `${String(raster.width)}px`,
+    height: `${String(raster.height)}px`,
+    transformOrigin: 'center center',
+    transform: `translate(-50%, -50%) scale(${String(fit)})`,
+  };
 }
 
 /**
@@ -58,6 +158,34 @@ export function frameZIndex(index: number): number {
   return index + 1;
 }
 
+/**
+ * R-049 — the band the live-plate overlay occupies: ABOVE every frame in the
+ * composite, whatever its size.
+ *
+ * Derived from the frame count rather than fixed, because the frames' own band is
+ * open-ended — there is deliberately NO CAP on rehearsing rows, so a constant
+ * picked today is a constant the fourth frame overtakes. A placeholder that ends
+ * up UNDER a graphic is worse than none: it would show for one row and vanish for
+ * another with nothing to say why.
+ *
+ * It is drawn OVER the frames rather than behind them even though the real live
+ * layer composites BEHIND the template on air. That is deliberate: the overlay is
+ * a MARKER, not a simulation of the composite, and a placeholder peeking through a
+ * transparent hole is exactly the "looks like the real picture" reading R-049
+ * forbids.
+ */
+export function overlayZIndex(frameCount: number): number {
+  return frameZIndex(frameCount) + 1;
+}
+
+/*
+ * ⚠ `caveatsZIndex` USED TO BE HERE and is deleted, not orphaned (owner, 2026-09-12: the info
+ * icon and the on-canvas description are not wanted). It had exactly one caller, and an
+ * exported helper with none is the written-but-unreachable shape this repo has filed four
+ * times — the next reader finds it, infers a surface, and writes against one that is not there.
+ * `overlayZIndex` above it is still live: the live-plate markers remain.
+ */
+
 /** The row's display name: its configured alias, else the bank's default. */
 export function rowNameFor(
   bank: FixedLayerBank | null,
@@ -65,6 +193,10 @@ export function rowNameFor(
   alias: string | undefined,
 ): string {
   if (alias !== undefined) return alias;
+  // With NO bank declared there is no position to ask for, so this is the raw CasparCG
+  // layer number and not a row name — the one place the `Layer ${n}` shape is not a
+  // restatement of `defaultLayerAlias` (P-039). Pinned by rehearsalFrames.test.ts.
+  // eslint-disable-next-line cg/bank-shape -- no bank: the number IS the layer, not a bank position
   if (bank === null) return `Layer ${String(layer)}`;
   return defaultLayerAlias(bank, layer);
 }

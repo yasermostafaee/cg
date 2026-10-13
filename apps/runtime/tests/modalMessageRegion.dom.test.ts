@@ -1,17 +1,23 @@
 // @vitest-environment jsdom
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { StrictMode, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FixedLayerBank, FixedSlotState } from '@cg/shared-ipc';
+import type { FixedSlotState } from '@cg/shared-ipc';
 import { Modal, ModalAction } from '../src/renderer/ui/Modal.js';
-import { FixedBankConfigModal } from '../src/renderer/features/fixedLayers/FixedBankConfigModal.js';
-import { SourcesModal } from '../src/renderer/features/sources/SourcesModal.js';
-import { DelimitersModal } from '../src/renderer/features/inspector/DelimitersModal.js';
-import { ServerSettingsPanel } from '../src/renderer/features/connections/ServerSettingsPanel.js';
 import { __resetSourcesForTest } from '../src/renderer/features/sources/sourceStore.js';
 import { __resetDelimitersForTest } from '../src/renderer/features/inspector/delimiterStore.js';
 import { clearPortals, openDialog } from './support/dialog.js';
+import {
+  clickSetupButton,
+  renderStationSetup,
+  stationSetupStub,
+  unmountStationSetup,
+  selectSetupTab,
+  tabOf,
+} from './support/stationSetup.js';
 
 /**
  * ONE MESSAGE REGION FOR EVERY MODAL — asserted as a CENSUS, not per dialog.
@@ -21,22 +27,24 @@ import { clearPortals, openDialog } from './support/dialog.js';
  * That file proves the PRIMITIVE pins its message outside the scroll container.
  * It proved nothing about whether the dialogs use it, and three of them did not:
  * `Live sources` and `Server connection` adopted the region and handed it a node
- * carrying their own `color: colors.error` (2.13:1 on the dialog surface — the
+ * carrying their own `color: colors.alarmFill` (2.08:1 on the dialog surface — the
  * owner's report), and `Text file delimiters` skipped the region entirely and
  * rendered `<p role="alert">` as the last child of its scrolling body, which is
  * the exact defect the region was built to end.
  *
- * A primitive four dialogs use while a fifth hand-rolls reads as consistent
- * while not being consistent. So this walks EVERY dialog that can say something,
- * including the ones that already looked right — a modal that happens to look
- * right while bypassing the region is the next one to drift.
+ * ── `STATION-SETUP-02` — FOUR DIALOGS BECAME FOUR SECTIONS OF ONE ─────────────
+ *
+ * Those four dialogs are now sections of Station setup, and the claim this census makes is
+ * sharper for it: a refusal raised by ANY section must reach the ONE pinned region, with the
+ * section named, so the operator never hunts for the section that raised it. The four
+ * rendered specs below drive one section each and assert the same three properties.
  *
  * ── WHAT IS ASSERTED, AND WHAT IS DELIBERATELY NOT ──────────────────────────
  *
  * The MECHANISM: the message is a `[data-notice]` inside `[data-modal-message]`,
  * that region is not inside `[data-modal-body]`, and the dialog's own body
  * contains no announcement of its own. NEVER a colour — a test that pinned
- * `#FCD34D` would go red the next time the palette moves and would say nothing
+ * `#f3cd88` would go red the next time the palette moves and would say nothing
  * about whether the shared rule is being followed. The contrast ratios that
  * justify the palette are recorded in `ui/Notice.tsx`, where the values are.
  */
@@ -54,6 +62,7 @@ afterEach(async () => {
   root = null;
   container?.remove();
   container = null;
+  await unmountStationSetup();
   clearPortals();
   __resetSourcesForTest();
   __resetDelimitersForTest();
@@ -73,22 +82,6 @@ async function render(element: ReturnType<typeof createElement>): Promise<HTMLEl
   const dialog = openDialog();
   if (dialog === null) throw new Error('the dialog did not open');
   return dialog;
-}
-
-async function settle(): Promise<void> {
-  await act(async () => {
-    for (let i = 0; i < 8; i++) await Promise.resolve();
-  });
-}
-
-async function clickButton(dialog: HTMLElement, label: string): Promise<void> {
-  const button = [...dialog.querySelectorAll('button')].find((b) => b.textContent === label);
-  if (button === undefined) throw new Error(`no “${label}” button in the dialog`);
-  await act(async () => {
-    button.click();
-    await Promise.resolve();
-  });
-  await settle();
 }
 
 /**
@@ -121,130 +114,136 @@ function expectMessageThroughTheRegion(dialog: HTMLElement, role: 'refusal' | 'n
   expect(body?.querySelectorAll('[data-notice]').length ?? 0).toBe(0);
 }
 
-describe('the census — every Runtime dialog that can speak, speaks through the region', () => {
-  /** `Candidate layers — configuration`: the reference implementation. */
-  it('Candidate layers routes a bridge refusal through the region', async () => {
-    const bank: FixedLayerBank = { channel: 1, start: 70, count: 30, visible: [], aliases: {} };
+/** The TOP dialog — the sub-dialog when one is open, the settings dialog otherwise. */
+function lastDialog(): HTMLElement {
+  const all = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')];
+  const last = all[all.length - 1];
+  if (last === undefined) throw new Error('no dialog is open');
+  return last;
+}
+
+describe('the census — every section of Station setup that can speak, speaks through the region', () => {
+  /** `Candidate layers`: the reference implementation, now a section. */
+  /*
+    ⭐ `STATION-CHROME-01` §2 — **THE SECTION PREFIX IS GONE, AND THAT IS THE POINT.**
+
+    `STATION-SETUP-02` prefixed every message with its section's name ("Live sources: …")
+    because ONE region carried the messages of SEVEN sections at once, and without the name
+    you could not tell which one had spoken. Tabs remove the cause: only the ACTIVE section's
+    messages reach the region, so the sentence is already under that section's heading and
+    beside that section's own footer. Repeating the name there is the redundant labelling
+    golden rule 11 warns about.
+
+    So these cases now assert the STRONGER property the prefix was standing in for: the
+    message reaches the pinned region, AND it is not visible from any other tab.
+  */
+  it('Layers routes a bridge refusal through the region, and only its own tab shows it', async () => {
     const slots: FixedSlotState[] = Array.from({ length: 30 }, (_, i) => ({
       channel: 1,
       layer: 70 + i,
       observed: { kind: 'empty' as const },
       binding: null,
     }));
-    const stub = {
-      link: { status: () => 'live', onStatusChanged: () => () => undefined },
-      stack: { snapshot: () => Promise.resolve([]), onStateChanged: () => () => undefined },
-      fixedLayers: {
-        setConfig: () =>
-          Promise.resolve({
-            ok: false,
-            reason: 'untick-occupied',
-            message: 'Layer 95 has a template on it.',
-          }),
+    stationSetupStub({
+      bank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 30, aliases: {} },
+      slots,
+      fixedSetConfigResult: {
+        ok: false,
+        reason: 'untick-occupied',
+        message: 'Layer 95 has a template on it.',
+        layer: 95,
       },
-    };
-    (window as unknown as { cg: typeof stub }).cg = stub;
-
-    const dialog = await render(
-      createElement(FixedBankConfigModal, { bank, slots, onClose: () => undefined }),
-    );
-    await settle();
-    await clickButton(dialog, 'Apply');
+    });
+    const dialog = await renderStationSetup({ section: 'candidate-layers' });
+    await clickSetupButton(dialog, 'Apply layers');
 
     expectMessageThroughTheRegion(dialog, 'refusal');
-    // BOTH lines survive the move into the primitive: the RULE and the bridge's
-    // own sentence, which names the layer. The detail line was the one rendered in
-    // a muted grey inside the amber box; it is a `Notice` line now, and the test
-    // asserts it is still SAID rather than what colour it is said in.
+    /*
+      `DELTA-MULTI-CHANNEL-01-A` A5 — ONE line survives the move into the primitive: ours,
+      naming the layer from the refusal's data. The bridge's own sentence is the record's, and
+      no longer rides beneath it.
+    */
+    const sentence = 'Refused — layer 95 is not empty, so it stays shown.';
     const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
-    expect(text).toContain('remove its template first');
-    expect(text).toContain('Layer 95 has a template on it.');
+    expect(text).toContain(sentence);
+    expect(text).not.toContain('Layer 95 has a template on it.');
+    // …and it does NOT follow the operator to another section's work.
+    await selectSetupTab(dialog, 'delimiters');
+    expect(dialog.querySelector('[data-modal-message]')?.textContent ?? '').not.toContain(sentence);
+    // …but the RAIL still says Layers is blocked, from wherever he is standing.
+    expect(
+      tabOf(dialog, 'candidate-layers').querySelector('[data-tab-badge="warn"]'),
+    ).not.toBeNull();
   });
 
-  /** `Live sources`: adopted the region, kept its own 2.13:1 red. */
-  it('Live sources routes its refusal through the region', async () => {
-    const stub = {
-      sources: {
-        config: () => Promise.resolve({ sources: [] }),
-        onConfigChanged: () => () => undefined,
-        setConfig: () => Promise.resolve({ ok: true }),
-        assignments: () => Promise.resolve({ assignments: [] }),
-        onAssignmentsChanged: () => () => undefined,
-        setAssignments: () => Promise.resolve({ ok: true }),
-      },
-      templates: { list: () => Promise.resolve([]) },
-    };
-    (window as unknown as { cg: typeof stub }).cg = stub;
+  /*
+    `Live sources` and `Text file delimiters`: both ADD through the same small second dialog
+    since `STATION-CHROME-01` §6, so the census follows them there.
 
-    const dialog = await render(createElement(SourcesModal, { onClose: () => undefined }));
-    // Add with an empty name: the form's own refusal, no bridge round-trip needed.
-    await clickButton(dialog, 'Add');
+    ⭐ AND THE RULE THE CENSUS ENFORCES IS UNCHANGED, one layer in: a refusal is rendered
+    through a pinned message REGION and never appended to a body. What changed is WHICH
+    region — the sub-dialog's own, because that is where the field the refusal is about is.
+    Putting it in the parent's would be §2's defect at a smaller scale: a sentence about a
+    form the operator can no longer see.
+  */
+  /*
+    `PLAYOUT-SOURCES-01` §1.F — the Add dialog went with the catalogue editor; what Live sources can
+    still say is a refused BAND, and it says it through Station setup's own region.
+  */
+  it('Live sources routes its refusal through the region — a band with no numbers', async () => {
+    stationSetupStub();
+    const dialog = await renderStationSetup({ section: 'sources' });
+    // Apply with no band typed and none in force: the section's own refusal, no bridge round-trip.
+    await clickSetupButton(dialog, 'Apply band');
 
     expectMessageThroughTheRegion(dialog, 'refusal');
-    expect(dialog.querySelector('[data-modal-message]')?.textContent ?? '').toContain(
-      'Give the source a name',
-    );
+    const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
+    expect(text).toContain('The band is two layer numbers');
   });
 
   /** `Text file delimiters`: the full drift — wrong place AND wrong colour. */
   it('Text file delimiters routes its refusal through the region, not the body', async () => {
-    const stub = {
-      delimiters: {
-        list: () => Promise.resolve({ delimiters: [] }),
-        onChanged: () => () => undefined,
-        set: () => Promise.resolve({ ok: true }),
-      },
-    };
-    (window as unknown as { cg: typeof stub }).cg = stub;
+    stationSetupStub();
+    const dialog = await renderStationSetup({ section: 'delimiters' });
+    await clickSetupButton(dialog, 'Add delimiter');
+    const sub = lastDialog();
+    // Confirm with an empty name: the form's own refusal.
+    await clickSetupButton(sub, 'Add delimiter');
 
-    const dialog = await render(createElement(DelimitersModal, { onClose: () => undefined }));
-    // Add with no name: the form's own refusal.
-    await clickButton(dialog, 'Add');
-
-    expectMessageThroughTheRegion(dialog, 'refusal');
-    expect(dialog.querySelector('[data-modal-message]')?.textContent ?? '').toContain(
-      'Give the delimiter a name',
-    );
+    expectMessageThroughTheRegion(sub, 'refusal');
+    const text = sub.querySelector('[data-modal-message]')?.textContent ?? '';
+    expect(text).toContain('Give the delimiter a name');
   });
 
   /**
-   * `Server connection`: FOUR private treatments for one thing. The on-air block
-   * and the success line are asserted separately below, because they are the two
-   * ROLES this dialog needs and collapsing them would hide exactly the distinction
-   * the roles exist to keep.
+   * 🔴 `SETTINGS-POLISH-04` §4 — **`Servers`: THE ON-AIR BLOCK IS NOT ROUTED THROUGH THE REGION
+   * ANY MORE, AND THAT IS WHAT THIS TEST NOW ASSERTS.**
+   *
+   * This file's subject is that a section's message reaches the operator through ONE element,
+   * never a private band beside it. The on-air block does not falsify that: it stopped being a
+   * MESSAGE. It is in force before anything is pressed and no act produces it, so it is a
+   * standing `.notice` in the pane's flow (`SetupNotice.tsx`), while the region keeps the job
+   * `AUDIT-CLOSE-01` delta A gave it — why the last ACTION did not happen.
+   *
+   * ⚠ So the claim is inverted rather than deleted, and the inversion is the load-bearing part:
+   * the sentence must be in the notice, and the region must be ABSENT. A test that merely
+   * stopped looking would pass against a build that rendered it in BOTH.
    */
-  it('Server connection routes its on-air block through the region as a refusal', async () => {
-    const stub = {
-      connections: {
-        config: () =>
-          Promise.resolve({
-            servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
-            strategy: 'mirror-sync',
-            autoFailoverEnabled: true,
-          }),
-        onConfigChanged: () => () => undefined,
-        setConfig: () => Promise.resolve({ ok: true }),
-      },
-      stack: {
-        snapshot: () =>
-          Promise.resolve([
-            { itemId: 'i1', templateId: 't1', fields: {}, status: 'on-air', pending: false },
-          ]),
-        onStateChanged: () => () => undefined,
-      },
-      link: { status: () => 'live', onStatusChanged: () => () => undefined },
-    };
-    (window as unknown as { cg: typeof stub }).cg = stub;
+  it('Servers states its on-air block as a standing notice, and raises no message at all', async () => {
+    stationSetupStub({
+      items: [{ itemId: 'i1', templateId: 't1', fields: {}, status: 'on-air', pending: false }],
+    });
+    const dialog = await renderStationSetup({ section: 'servers' });
 
-    const dialog = await render(
-      createElement(ServerSettingsPanel, { open: true, onClose: () => undefined }),
-    );
-    await settle();
+    const notice = dialog.querySelector('[data-setup-notice]');
+    expect(notice).not.toBeNull();
+    const text = notice?.textContent ?? '';
+    expect(text).toContain('Server changes are paused while on air');
+    expect(text).toContain('Every other section stays editable');
 
-    expectMessageThroughTheRegion(dialog, 'refusal');
-    expect(dialog.querySelector('[data-modal-message]')?.textContent ?? '').toContain(
-      'Apply is blocked',
-    );
+    // The region is not merely quiet — it is not rendered, so there is nowhere for a second
+    // copy of this sentence to sit.
+    expect(dialog.querySelector('[data-modal-message]')).toBeNull();
   });
 
   /**
@@ -258,12 +257,187 @@ describe('the census — every Runtime dialog that can speak, speaks through the
       createElement(Modal, {
         title: 'Read only',
         onClose: () => undefined,
-        footer: createElement(ModalAction, { actionRole: 'cancel' }, 'Close'),
+        footer: createElement(ModalAction, { actionRole: 'cancel', children: 'Close' }),
         children: 'body',
       }),
     );
     expect(dialog.querySelector('[data-modal-message]')).toBeNull();
     expect(dialog.querySelector('[data-notice]')).toBeNull();
+  });
+});
+
+/**
+ * 🔴 **THE CENSUS IS DERIVED — a new dialog enrols itself.**
+ *
+ * The rendered specs above name ONE dialog BY IMPORT, and that is the weakness a census
+ * is supposed to close: the dialog that breaks the rule is, by definition, the one nobody
+ * added to the list. So the enumeration comes from the TREE — every module under
+ * `features/**` that imports the `Modal` primitive — and the invariants below are asserted
+ * against every one of them, including modules written after this file.
+ *
+ * ── WHY THESE THREE, AND WHY THEY ARE STATIC ────────────────────────────────
+ *
+ * A derived census cannot render each dialog: every one needs its own bridge stubs, and a
+ * harness that guessed them would assert against a component crashing on `undefined` rather
+ * than against the rule. What it CAN do is read the source for the three ways a dialog
+ * bypasses the primitive while still importing it — each of which actually happened before
+ * the primitive existed, and each of which is invisible to a rendered spec that does not
+ * exercise the offending state.
+ *
+ * The rendered specs above stay: they are the DEPTH (does the message actually route through
+ * the region under a real refusal), and this is the BREADTH. Neither replaces the other.
+ */
+describe('the census is DERIVED from the tree, not from a list somebody maintains', () => {
+  /*
+    ⚠ Resolved from the WORKSPACE ROOT, not from `import.meta.url`. Under vitest's jsdom
+    transform `import.meta.url` is not a `file:` URL, so `fileURLToPath` throws and the whole
+    SUITE fails to collect — which is the loud failure, and the reason the guard below exists
+    for the quiet one: a walk that silently returned nothing would make every invariant here
+    pass vacuously.
+  */
+  const featuresDir = join(process.cwd(), 'src', 'renderer', 'features');
+
+  function walk(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) return walk(full);
+      return e.isFile() && (e.name.endsWith('.tsx') || e.name.endsWith('.ts')) ? [full] : [];
+    });
+  }
+
+  /** Every feature module that builds a dialog on the primitive, discovered not listed. */
+  const modalImporters = walk(featuresDir)
+    .map((path) => ({ path, source: readFileSync(path, 'utf8') }))
+    .filter(({ source }) => /from '.*ui\/Modal\.js'/.test(source));
+
+  const relative = (path: string): string => path.slice(featuresDir.length + 1).replace(/\\/g, '/');
+
+  it('finds the dialogs the tree actually holds — the derivation works', () => {
+    // A guard on the instrument itself. If the walk broke — a moved directory, a changed
+    // import path — it would return an empty set and every invariant below would pass
+    // vacuously, which is the failure mode a derived census is most exposed to.
+    const names = modalImporters.map((m) => relative(m.path)).sort();
+    /*
+      `STATION-SETUP-02` — four Modal-importing modules became ONE (`StationSetupDialog`),
+      so the set SHRANK by three; the guard names what must still be in it rather than a
+      count that would have gone stale. Every entry here is a dialog that exists today, and
+      Station setup is enrolled by the same rule as the rest: it imports the primitive.
+    */
+    for (const known of [
+      'stationSetup/StationSetupDialog.tsx',
+      'audit/AuditPanel.tsx',
+      'layers/LiveSourceSwapDialog.tsx',
+      'layers/LivePlateAudioDialog.tsx',
+      'fixedLayers/useTemplatePicker.tsx',
+    ]) {
+      expect(names, `${known} fell out of the derived set`).toContain(known);
+    }
+    // …and the three dialogs that were FOLDED into Station setup are gone, not duplicated.
+    for (const gone of [
+      'connections/ServerSettingsPanel.tsx',
+      'sources/SourcesModal.tsx',
+      'inspector/DelimitersModal.tsx',
+      'fixedLayers/FixedBankConfigModal.tsx',
+    ]) {
+      expect(names, `${gone} still builds a second dialog`).not.toContain(gone);
+    }
+  });
+
+  /**
+   * The scrim SHAPE — `position: 'fixed'` AND a full-bleed `inset: 0` DECLARATION.
+   *
+   * ⚠ Both halves, and the `inset` matched as a declaration (leading whitespace, trailing
+   * comma) rather than anywhere in the text. The first spelling of this check tested only
+   * `/inset:\s*0/` against the whole file and flagged `monitors/RehearsalStage.tsx`, whose
+   * only match is inside a COMMENT reading _"Centred and sized to the SCALED FRAME by the
+   * caller — not `inset: 0`"_ — a module arguing for the opposite of what it was accused of.
+   * A census that cries wolf gets an exception list added to silence it, and the exception
+   * list is where a real offender then hides.
+   */
+  const hasScrim = (source: string): boolean =>
+    /position: 'fixed'/.test(source) && /^\s*inset: 0,/m.test(source);
+
+  it('no dialog hand-rolls a second SCRIM', () => {
+    for (const { path, source } of modalImporters) {
+      expect(hasScrim(source), `${relative(path)} declares its own scrim`).toBe(false);
+    }
+  });
+
+  it('no dialog declares its own dialog ROLE — the chrome comes from the primitive', () => {
+    for (const { path, source } of modalImporters) {
+      expect(/role="dialog"/.test(source), `${relative(path)} sets role="dialog"`).toBe(false);
+      expect(/aria-modal/.test(source), `${relative(path)} sets aria-modal`).toBe(false);
+    }
+  });
+
+  it('every dialog with an action row resolves its treatments from the ROLE table', () => {
+    // The `runtime-modal-contract` rule: a dialog says what KIND of action a button is and
+    // the role decides the treatment. A footer built from bare `Button`s is a dialog picking
+    // colours again, which is how `SERVER CONNECTION`'s ordinary save came to wear the solid
+    // amber that means "this will interrupt something".
+    for (const { path, source } of modalImporters) {
+      if (!source.includes('footer={')) continue;
+      expect(
+        /\bModalAction\b|\bmodalActionVariant\b/.test(source),
+        `${relative(path)} builds an action row without the role table`,
+      ).toBe(true);
+    }
+  });
+
+  /**
+   * ⚠ **WHAT THIS CENSUS STILL CANNOT SEE.** Recorded here rather than in a handoff, because
+   * a blind spot nobody can point at is one the next session rediscovers.
+   *
+   *  1. **A dialog that hand-rolls its own scrim INSTEAD of importing `Modal`.** The
+   *     enrolment key is the import, so a surface that never imports the primitive is not in
+   *     the set at all. `LockOverlay` does exactly that, legitimately and by a documented
+   *     decision. A cheap check EXISTS and is asserted below — the scrim shape is
+   *     distinctive — so this one is closed rather than merely named.
+   *  2. **Anything about SIZE.** `prose` vs `wide` turns on whether the operator compares
+   *     values down a column, which is a claim about CONTENT MEANING. No static rule and no
+   *     jsdom rendering can decide it; it is a judgement, and it lives in the spec and in
+   *     review. Station setup is `wide` by that judgement (two per-row tables), stated in
+   *     its own header. Do not add a heuristic here.
+   *  3. **Whether a dialog's message routes through the region in a state no spec
+   *     exercises.** The rendered specs above cover the refusal each section is known to
+   *     produce; a NEW message added to a section and rendered into the body is invisible
+   *     to both halves of this file until someone writes the spec that triggers it. The
+   *     mitigation is structural: `ModalProps.message` takes DATA, not a `ReactNode`, and a
+   *     section can only reach the region through `report`.
+   */
+  it('CLOSES blind spot 1: no feature module outside the set hand-rolls a full-window scrim', () => {
+    const HAND_ROLLED_BY_DESIGN = new Set([
+      // `Modal.tsx`'s own note: a lock screen with a way out is not a lock, so it must not
+      // inherit the primitive's ✕ / Escape / backdrop. It DOES share the focus trap
+      // (`B-229`), which is the half that was wrongly withheld with them.
+      'lock/LockOverlay.tsx',
+      /*
+        🔴 `R-082` — **THE TWO GATES NO LONGER HAND-ROLL ONE, so they are no longer listed.** The
+        sign-in gate (`auth/SignInOverlay.tsx`, `R-066`) and first-run (`firstRun/FirstRunScreen.tsx`,
+        the sign-in gate in its first-run form) keep their reason — a `Modal` has three ways out and
+        a gate with a way out is not a gate — but since the one sign-in look they share ONE ground,
+        `ui/SignInCard`'s `.cg-signin-ground`, declared once in `controls.css`. A feature module that
+        declares a scrim of its own again is an offender here, which is the stricter census.
+      */
+    ]);
+
+    const offenders = walk(featuresDir)
+      .filter((path) => hasScrim(readFileSync(path, 'utf8')))
+      .map(relative)
+      .filter((name) => !HAND_ROLLED_BY_DESIGN.has(name));
+
+    // The instrument is live: the ONE module on the exception list really does match, so an
+    // empty `offenders` means "nothing else does" rather than "the pattern matches nothing".
+    expect(
+      walk(featuresDir)
+        .filter((p) => hasScrim(readFileSync(p, 'utf8')))
+        .map(relative),
+      'the scrim pattern matches nothing at all — the check is dead',
+    ).toContain('lock/LockOverlay.tsx');
+
+    expect(offenders, 'a feature hand-rolls a full-window overlay outside the primitive').toEqual(
+      [],
+    );
   });
 });
 
@@ -277,7 +451,7 @@ describe('the ROLE decides the treatment, exactly as it does for the action butt
           { role: 'refusal' as const, text: 'why it did not happen', detail: 'the specifics' },
           { role: 'notice' as const, text: 'what happened when it worked' },
         ],
-        footer: createElement(ModalAction, { actionRole: 'cancel' }, 'Close'),
+        footer: createElement(ModalAction, { actionRole: 'cancel', children: 'Close' }),
       }),
     );
 
@@ -298,7 +472,7 @@ describe('the ROLE decides the treatment, exactly as it does for the action butt
         title: 'One',
         onClose: () => undefined,
         message: { role: 'refusal' as const, text: 'a' },
-        footer: createElement(ModalAction, { actionRole: 'cancel' }, 'Close'),
+        footer: createElement(ModalAction, { actionRole: 'cancel', children: 'Close' }),
       }),
     );
     const firstStyle = first.querySelector<HTMLElement>('[data-notice="refusal"]')?.style.cssText;
@@ -314,7 +488,7 @@ describe('the ROLE decides the treatment, exactly as it does for the action butt
         title: 'Two',
         onClose: () => undefined,
         message: { role: 'refusal' as const, text: 'b — a different sentence entirely' },
-        footer: createElement(ModalAction, { actionRole: 'cancel' }, 'Close'),
+        footer: createElement(ModalAction, { actionRole: 'cancel', children: 'Close' }),
       }),
     );
     expect(second.querySelector<HTMLElement>('[data-notice="refusal"]')?.style.cssText).toBe(
@@ -343,7 +517,7 @@ describe('the ROLE decides the treatment, exactly as it does for the action butt
           text: 'این ردیف اشغال است — ابتدا تمپلیت آن را حذف کنید.',
           detail: 'لایه ۹۵ یک تمپلیت روی خود دارد.',
         },
-        footer: createElement(ModalAction, { actionRole: 'cancel' }, 'بستن'),
+        footer: createElement(ModalAction, { actionRole: 'cancel', children: 'بستن' }),
       }),
     );
     const lines = [...(dialog.querySelector('[data-notice="refusal"]')?.children ?? [])];

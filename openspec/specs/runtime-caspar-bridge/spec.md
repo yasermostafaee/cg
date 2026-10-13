@@ -231,10 +231,10 @@ bridge being absent, and never mid-session.
 A connection chosen as live SHALL NOT be silently replaced by the mock. A
 mid-session loss of the bridge SHALL surface as a visible disconnected state with
 rejected commands, never as on-air or mock activity. On reconnect the renderer
-SHALL FIRST re-deliver every retained template (`{ template, html }` over
-`templates.import`) and THEN re-pull the full snapshot (stack / health / lock),
-so a load issued after the reconnect resolves against a populated bridge
-registry.
+SHALL read the bridge's standing state (its restore report, its strays) and
+re-pull the full snapshot (stack / health / lock), and SHALL deliver NOTHING of
+its own — no template, no stack (`CENTRAL-BRIDGE-01`, `B-294`: the bridge keeps
+both, and restores its stack itself at start).
 
 #### Scenario: Bridge drops mid-session
 
@@ -242,7 +242,7 @@ registry.
   `WebSocketRuntime` enters a visible DISCONNECTED/reconnecting state and
   take / update / out are rejected with a clear error (NOT shown as on-air, NOT
   routed to a mock)
-- **AND** on reconnect the renderer first re-delivers each retained template,
+- **AND** on reconnect the renderer reads the bridge's restore report and strays,
   then re-pulls a full snapshot (stack / health / lock) to resync
 
 #### Scenario: Command issued while disconnected
@@ -251,11 +251,11 @@ registry.
   (disconnected/reconnecting) **THEN** the command is rejected with a visible
   error and is never shown optimistically as on-air
 
-#### Scenario: A re-delivery failure does not abort the resync
+#### Scenario: A reconnect delivers nothing
 
-- **WHEN** one template's re-delivery fails on reconnect **THEN** the failure
-  surfaces as a visible error **AND** the remaining re-deliveries and the
-  snapshot re-pull still run
+- **WHEN** the link reconnects to a console holding templates and a stack in its
+  display copies **THEN** it sends no `templates.import` and no stack restore —
+  control: the resync ran to its snapshot re-pull
 
 ### Requirement: The bridge binds loopback by default
 
@@ -460,70 +460,95 @@ nonetheless stays self-contained (no broken external font references).
 
 ### Requirement: The bridge retains delivered template HTML keyed by id
 
-The bridge's in-memory template registry SHALL store the delivered HTML keyed by
-`templateId` alongside the `TemplateInfo` it already holds. Re-importing the same
-id SHALL replace the stored HTML (and info). The registry SHALL expose the stored
-HTML by id so a later phase can serve it over HTTP (`GET /template/<id>`) and
-resolve the `CG ADD` URL to it. The registry holds the HTML only — it does **not**
-serve it in this phase. The store is in-memory (empty on bridge restart); the
-browser retains each delivered payload for the life of the page and re-delivers
-it on reconnect (see "The browser re-delivers retained templates on reconnect"),
-so a bridge restart no longer requires a manual re-import while the page stays
-open. A restart of BOTH the bridge and the page still requires a manual
-re-import — persisting the `.vcg` bytes via `@cg/storage` is the documented
-follow-up.
+The bridge's template registry SHALL store each delivered template VERSION — its `TemplateInfo` and its
+HTML — once, keyed by its content, and SHALL keep, per CasparCG channel, the list of templates that
+channel offers, each at the version that channel imported (`CHANNEL-TEMPLATES-01`). An import SHALL list
+the template on the channel it names; re-importing the same id on a channel SHALL move that channel's
+list to the new version and leave every other channel's list as it was; importing content already
+stored SHALL reuse the stored version. A request that names no channel SHALL act on every declared
+channel.
 
-#### Scenario: Import retains the HTML by template id
+The registry SHALL record, for each row, the version its page was last served from (a HOLD), and SHALL
+keep a version stored while any channel lists it, any row holds it, or a `CG ADD` of it is in flight; a
+version none of these keeps SHALL be removed with its file. The registry SHALL expose each version's
+HTML so the HTTP server can serve it and the `CG ADD` URL can resolve to it.
 
-- **WHEN** a `templates.import` for id `X` arrives over the WebSocket **THEN** the
-  bridge stores the HTML so the registry returns exactly that HTML for id `X`, and
-  `templateGet` / `templateList` still surface its `TemplateInfo`
+The registry SHALL persist its versions (one file each, in the templates directory) and its lists and
+holds (one index file beside them), so a bridge restart neither empties a channel's list nor forgets a
+page on air. On the first load of a library written before the per-channel lists, every declared channel
+SHALL list every stored template once; a second load SHALL copy nothing, and with no channel declared the
+library SHALL be kept, uncollected, until one is.
 
-#### Scenario: Re-import replaces the stored HTML
+#### Scenario: Import retains the HTML on the channel it names
 
-- **WHEN** a second `templates.import` for the same id `X` arrives with different
-  HTML **THEN** the registry returns the new HTML for id `X` (the prior HTML is
-  replaced, not duplicated)
+- **WHEN** a `templates.import` for id `X` naming channel 2 arrives over the WebSocket **THEN** the bridge
+  stores the HTML so channel 2's list returns exactly that HTML for id `X`, and channel 1's list does not
+  list `X`
+
+#### Scenario: Re-import on one channel moves that channel only
+
+- **WHEN** a second `templates.import` for id `X` naming channel 2 arrives with different HTML **THEN**
+  channel 2 lists the new version, channel 1 keeps the version it listed, and one file is stored per
+  version
 
 #### Scenario: Unknown id has no stored HTML
 
-- **WHEN** the registry is queried for the HTML of an id that was never imported
-  **THEN** it returns nothing (null), with no error
+- **WHEN** the registry is queried for the HTML of an id that no channel lists **THEN** it returns nothing
+  (null), with no error
+
+#### Scenario: A held version outlives every list
+
+- **WHEN** a row's page was served from a version and every channel's list then moves off it **THEN** the
+  version stays stored and served until the row takes another version or leaves the stack, and across a
+  bridge restart
 
 ### Requirement: The bridge serves retained template HTML over HTTP
 
-The bridge SHALL run a small HTTP server (separate from the control WebSocket)
-that serves each retained template at a stable URL `/template/<templateId>`,
-returning the stored HTML as `200 text/html; charset=utf-8`, and `404` for an id
-that is not registered. The HTML is served from the in-memory `TemplateRegistry`
-(the Phase-2 retention seam, `templateHtml(id)`). Re-importing an id SHALL serve
-the replacement HTML on the next fetch; removing/clearing a template SHALL stop
-serving it. The server holds template HTML only — it exposes no control surface.
+The bridge SHALL run a small HTTP server (separate from the control WebSocket) that serves each stored
+template version at `/template/<key>`, returning the stored HTML as `200 text/html; charset=utf-8` with
+`Cache-Control: no-store`, and `404` (also `no-store`) for a key no stored version has. A version stored
+from `CENTRAL-BRIDGE-01` on SHALL be served at `<templateId>~<versionId>` — its content's id — for as long
+as it is stored; a version stored before keeps the key it was given, and no later version SHALL ever be
+given that key (`B-293`: CasparCG's CEF keeps pages on disk, so a URL that changed its page could air the
+cached old one — the Playout team's rule 12). A take's `CG ADD` SHALL use the key of the version the row's
+own channel lists. Removing a version SHALL stop serving its key. The server holds template HTML only — it
+exposes no control surface, and its route set is unchanged.
 
-The served HTML SHALL be self-contained: the runtime, scene, images, AND the
-bundled app fonts (Vazirmatn / Exo 2) are inlined (base64), so CasparCG fetches
-nothing else — Persian text renders with the correct face and intact shaping.
+The served HTML SHALL be self-contained: the runtime, scene, images, AND the bundled app fonts
+(Vazirmatn / Exo 2) are inlined (base64), so CasparCG fetches nothing else — Persian text renders with the
+correct face and intact shaping.
 
-#### Scenario: A known template serves its stored HTML
+#### Scenario: A known template serves its stored HTML, never stored by the client
 
-- **WHEN** a registered template's URL `/template/<id>` is fetched **THEN** the
-  server returns `200 text/html; charset=utf-8` with exactly the stored HTML
+- **WHEN** a listed template's URL `/template/<templateId>~<versionId>` is fetched **THEN** the server
+  returns `200 text/html; charset=utf-8` with exactly the stored HTML and `Cache-Control: no-store`
 
-#### Scenario: An unknown template id is 404
+#### Scenario: An unknown key is 404
 
-- **WHEN** `/template/<id>` is fetched for an id that was never imported **THEN**
-  the server returns `404`
+- **WHEN** `/template/<key>` is fetched for a key no stored version has **THEN** the server returns `404`
+  with `Cache-Control: no-store`
 
-#### Scenario: Re-import replaces the served HTML
+#### Scenario: A re-import is served at a new path
 
-- **WHEN** a template id is re-imported with different HTML **THEN** the next fetch
-  of its URL returns the new HTML (the prior HTML is no longer served)
+- **WHEN** a template id is re-imported with new content and no row holds its previous version **THEN**
+  the new version is served at its own `<templateId>~<versionId>` path and the next take names it, and the
+  previous path answers `404` — never the new page
+
+#### Scenario: A held version keeps its path beside the new one
+
+- **WHEN** a template is re-imported while a row still holds the previous version **THEN** the previous
+  version is served at its own path byte for byte, and the new version at `<templateId>~<versionId>`
+
+#### Scenario: A version stored before keeps its path, and no later version takes it
+
+- **GIVEN** a version stored before `CENTRAL-BRIDGE-01`, served at the bare template id
+- **WHEN** a new version replaces it and it is collected **THEN** the new version is served at its own
+  qualified path, and the bare path answers `404`
 
 #### Scenario: The served page is self-contained including fonts
 
-- **WHEN** the served HTML is inspected **THEN** it contains the bundled Persian
-  `@font-face` faces inlined as base64 `data:` URIs and references no external
-  `/fonts/…`, `https:` or `<link>` resource
+- **WHEN** the served HTML is inspected **THEN** it contains the bundled Persian `@font-face` faces inlined
+  as base64 `data:` URIs and references no external `/fonts/…`, `https:` or `<link>` resource
 
 ### Requirement: The bridge's template HTTP server is reachable by CasparCG
 
@@ -534,6 +559,25 @@ URL SHALL use `127.0.0.1` (no LAN exposure). WHEN CasparCG is remote the server
 SHALL bind a routable interface **only by explicit opt-in** and the `CG ADD` URL
 host SHALL be the bridge's address as CasparCG sees it (configured, or a guessed
 LAN IPv4), logged loudly.
+
+The advertised host and port SHALL resolve through **three layers, in this
+order: explicit command-line flag > persisted connection config > built-in
+derivation.** A `--template-serve-host` / `--template-serve-port` flag SHALL
+therefore override a stored value for the whole life of that process, so a boot
+script or automation that passes the flag cannot be silently overridden by a
+value an operator saved from a panel.
+
+A stored serve host that is ABSENT and one that is an EMPTY STRING SHALL both
+resolve to the derivation and SHALL behave identically. Neither SHALL ever be
+advertised as an address. The same SHALL hold for the port, where the derived
+value is the ephemeral bind (`0`).
+
+The bridge SHALL report, alongside the serve address in force, (a) which of
+those fields a command-line flag is currently forcing and to what value, and
+(b) the addresses of this machine's non-internal IPv4 interfaces as CANDIDATES.
+Candidates SHALL be presented as candidates and never as a verdict: the bridge
+cannot know which interface the plant can reach, and asserting one is the
+failure the derivation already has.
 
 #### Scenario: Local CasparCG stays loopback
 
@@ -547,6 +591,40 @@ LAN IPv4), logged loudly.
   routable interface by explicit configuration and the `CG ADD` URL uses the
   bridge's CasparCG-reachable address (configured or guessed), while the control
   WebSocket stays loopback
+
+#### Scenario: A stored serve host survives a bridge restart
+
+- **WHEN** a serve host is saved into the connection config and the bridge is
+  restarted with no `--template-serve-host` flag **THEN** the stored value is the
+  advertised host **AND** it is the host in the `CG ADD` template URL
+
+#### Scenario: A command-line flag overrides the stored serve host
+
+- **WHEN** the bridge is started with `--template-serve-host` while a DIFFERENT
+  serve host is stored in the connection config **THEN** the flag's value is
+  advertised and used in the `CG ADD` URL, the stored value is not **AND** the
+  bridge reports that the flag is forcing that field, naming the flag and the
+  value in effect
+
+#### Scenario: An empty stored serve host derives, exactly as an absent one does
+
+- **WHEN** the stored serve host is an empty string **THEN** the advertised host
+  is the derived one **AND** it is byte-identical to what an ABSENT stored value
+  produces for the same connection config; no empty host is ever advertised
+
+#### Scenario: A pinned serve port appears in the served URL, an empty one is ephemeral
+
+- **WHEN** a serve port is stored **THEN** the template server binds that port and
+  the `CG ADD` URL carries it
+- **WHEN** the stored serve port is absent or empty **THEN** the bind is ephemeral
+  and the `CG ADD` URL carries the actually-bound port
+
+#### Scenario: The bridge offers this machine's interfaces as candidates
+
+- **WHEN** the serve configuration is read **THEN** the response carries this
+  machine's non-internal IPv4 addresses as candidates **AND** the surface
+  presenting them states that they are candidates rather than a determination of
+  which one the plant can reach
 
 ### Requirement: Template resolution is validated, not blind-acked
 
@@ -802,10 +880,10 @@ If no ack arrives within a bounded time (5 s), the bridge SHALL expire the
 intent to an explicit **`unconfirmed`** status (with an `errorCode`), surfaced
 to the operator UI — never a silent revert to the prior status, never a fake
 success, never an indefinite `playing`/`updating`/`exiting`. **A take SHALL arm the same
-bounded timer** — without it an unsettled take rests on its optimistic `playing`/`on-air`
-claim forever, with nothing to bound it. A late OK ack after expiry
-SHALL settle the item honestly. Any subsequent operator intent SHALL overwrite
-an `unconfirmed` state.
+bounded timer.** An expired TAKE is UNRESOLVED, not failed: it SHALL keep its play evidence, SHALL
+read `unconfirmed` whatever OSC reports about its layer, and SHALL be settled by its own late ack —
+on air if it landed, its prior evidence given back if it failed. A late OK ack after expiry SHALL
+settle the item honestly. Any subsequent operator intent SHALL overwrite an `unconfirmed` state.
 
 #### Scenario: An update settles when CasparCG acks it
 
@@ -826,11 +904,12 @@ an `unconfirmed` state.
   `unconfirmed` (or `error`, for a detected send failure) state visible in the
   UI — the badge never sticks on "UPDATING"
 
-#### Scenario: A take whose ack never arrives expires, and gives back its claim
+#### Scenario: A take whose reply is overdue reads unconfirmed until the reply resolves it
 
 - **WHEN** the bridge sends a `CG PLAY` and no ack arrives within the bound **THEN** the
-  item lands in the explicit `unconfirmed` state and the take's unproven play evidence is
-  retracted — the badge never rests on an unbounded optimistic `playing`/`on-air`
+  item reads `unconfirmed` — never `loaded` off its page's own producer — and keeps its play
+  evidence; **AND WHEN** the reply then arrives OK **THEN** the item reads on air; **AND WHEN** it
+  arrives as a failure **THEN** the take's play evidence is given back
 
 #### Scenario: A subsequent intent clears unconfirmed
 
@@ -843,7 +922,7 @@ an `unconfirmed` state.
 The connection config SHALL support declaring a single server: `servers.B` is
 optional (`{ A: required, B?: optional }`), and `ConnectionHealth.backup` is
 correspondingly optional. The bridge's default connection SHALL be
-single-server (A on `127.0.0.1:5250/6250`); the CLI SHALL construct a backup
+single-server (A on `127.0.0.1:5250`, OSC on `6251`); the CLI SHALL construct a backup
 only from explicit `--backup-host` / `--backup-amcp-port` / `--backup-osc-port`
 flags. Declared intent — not runtime detection — distinguishes "no backup"
 (quiet) from "backup down" (alarmed via health).
@@ -877,19 +956,6 @@ full-history cold-backup rebuild is explicitly the province of a persistent
   configuration, including a healthy two-server pair) **THEN** the journal
   holds at most the cap and heap growth over a sustained soak stays under the
   leak budget
-
-#### Scenario: Bounded journal still serves the legitimate replay
-
-- **WHEN** a LIVE backup briefly lags and diverges past the budget within the
-  divergence window **THEN** the corrective resend replays every ok entry the
-  backup missed (retention ≥ 10× the divergence window guarantees they are
-  retained)
-
-#### Scenario: Operator UI shows the single-server state
-
-- **WHEN** the runtime UI receives health with no backup **THEN** the status
-  bar renders an explicit "no backup" indication (not a phantom backup card)
-  and the manual failover control is disabled
 
 ### Requirement: Server connection is reconfigurable at runtime, gated on air
 
@@ -1009,9 +1075,11 @@ whose (channel, layer) is not owned by the bridge (not a reserved slot).
 Occupancy SHALL be sourced from a passive tap on the already-parsed OSC
 producer stream — upstream of the interest filter, adding no events to the
 OSC pipeline and no AMCP traffic — so the interest set, rate limiter, and
-change tracker (the B-044 firehose protections) remain untouched. (Verified
-on CasparCG 2.5.0: AMCP `INFO` carries no per-layer data on the 2.3+
-lineage; OSC is the only per-layer occupancy signal.)
+change tracker (the B-044 firehose protections) remain untouched. (CORRECTED
+by `RELEASE-091-01`: AMCP `INFO <channel>` on 2.5.0 DOES carry per-layer
+stage data — `<stage><layer><layer_N>` — measured on the plant's core; the
+sweep still reads OSC, and `INFO` is read only as the one-layer question a
+silent layer of ours raises.)
 
 The sweep SHALL run on a bounded periodic cadence, query only the current
 primary (following it across failover and reconfiguration), and skip while
@@ -1026,23 +1094,28 @@ The orphan set SHALL be pullable (`layers.orphans`) and pushed on change
 
 A `layers.clear` request SHALL send an urgent `CLEAR <channel>-<layer>` ONLY
 for a layer whose foreground producer the current primary's occupancy tap has
-OBSERVED FRESH as `html` — the one producer kind this system ever places, so
-the one kind that can plausibly be this system's own orphaned graphic
-(R-015). It SHALL refuse, sending nothing:
+OBSERVED FRESH, and ONLY when that producer is `html` or the layer lies inside
+the three bands (50–99, `inAnyLayerBand`). Inside them any producer may be this
+system's own or one another station left there — plates are `ffmpeg`, `route`,
+`ndi` or `decklink`, never `html` — so the owner narrowed R-015 there
+(`RELEASE-091-01` DELTA B, B3, `B-292`). A request below 50 is refused as a
+request, before any gate (`FOLLOWUPS-01` B). It SHALL refuse, sending nothing:
 
-- `reason: 'owned'` — any layer the bridge owns (clearing owned layers is
-  Out/Remove's job), refused before any occupancy check;
-- `reason: 'foreign'` — any layer whose fresh observation reports a
-  non-`html` producer kind (a video or other foreign producer is PROVABLY not
-  ours), any unrecognised kind ("not html" fails safe — video kinds are never
-  enumerated), and any layer with NO fresh observation at all (silence is
+- `reason: 'owned'` — any layer a stack item holds (clearing owned layers is
+  Out/Remove's job), refused before any occupancy check; a declared playout
+  layer is refused `reserved`, and a plate this bridge's ledger holds
+  `live-source`, as their own requirements say;
+- `reason: 'foreign'` — any layer above the bands whose fresh observation
+  reports a non-`html` producer kind, any unrecognised kind there ("not html"
+  fails safe), and any layer with NO fresh observation at all (silence is
   evidence of nothing and cannot license a CLEAR — including the B-094
   AMCP-alive/OSC-dead install and entries aged past the staleness bound).
 
 The bridge SHALL never touch slots or interest it does not own; a CLEAR
-executed on the current primary counts as layer adoption. The warning
-resolves only on the next sweep's observed empty — never optimistically, and
-the bridge SHALL NEVER clear a layer without an explicit operator request.
+executed on the current primary counts as layer adoption. It SHALL never send
+a channel-wide `CLEAR`. The warning resolves only on the next sweep's observed
+empty — never optimistically, and the bridge SHALL NEVER clear a layer without
+an explicit operator request.
 
 #### Scenario: A foreign producer surfaces within the sweep cadence
 
@@ -1067,15 +1140,21 @@ the bridge SHALL NEVER clear a layer without an explicit operator request.
 - **WHEN** `layers.clear` names a layer the bridge owns **THEN** the request
   is refused with `reason: 'owned'` and nothing is sent
 
-#### Scenario: A video layer can never be cleared
+#### Scenario: A layer left in our band can be cleared
 
-- **WHEN** `layers.clear` names a layer whose fresh observation reports a
-  non-`html` producer (e.g. `ffmpeg` — a video played by another system,
-  regardless of layer number) **THEN** the request is refused with
-  `reason: 'foreign'` and NO `CLEAR` reaches the wire
-- **WHEN** `layers.clear` names a layer with an unrecognised producer kind
-  **THEN** it is refused with `reason: 'foreign'` exactly as a video layer —
-  "not html" fails safe, never an enumeration of video kinds
+- **WHEN** `layers.clear` names layer 70 carrying an `ffmpeg` producer that no
+  ledger record holds **THEN** the bridge sends `CLEAR <ch>-70` and the
+  warning resolves on observed empty
+- **WHEN** it names a plate layer this bridge's ledger holds **THEN** it is
+  refused `live-source` and nothing is sent (the control)
+
+#### Scenario: Outside the bands a video can never be cleared
+
+- **WHEN** `layers.clear` names layer 120 whose fresh observation reports a
+  non-`html` producer **THEN** the request is refused with `reason: 'foreign'`
+  and NO `CLEAR` reaches the wire
+- **WHEN** it names a layer below 50 **THEN** it is refused as a request and
+  nothing is sent
 - **WHEN** `layers.clear` names a layer the occupancy tap has NO fresh
   observation for (never observed, aged out, or the tap is blind) **THEN**
   it is refused with `reason: 'foreign'` and nothing is sent
@@ -1367,88 +1446,71 @@ in a state where a later intent is refused because an earlier command failed.
   as divergent — divergence detection is for intents left SILENTLY unconfirmed,
   and an errored command is a known, terminal failure
 
-### Requirement: The browser re-delivers retained templates on reconnect
-
-`WebSocketRuntime` SHALL retain, in memory for the life of the page, the exact
-`{ template, html }` payload of every successful `templates.import`, keyed by
-`templateId` — a re-import replaces the retained payload. On every reconnect it
-SHALL re-deliver each retained payload exactly once over `templates.import`,
-BEFORE re-pulling the stack/health/lock snapshot. Retention SHALL be cleared on
-dispose. Scope: reconnect-without-reload — a page reload loses retention (the
-bridge-side registry covers the reload-with-live-bridge case; a restart of both
-requires a manual re-import until `.vcg` persistence via `@cg/storage` lands).
-
-#### Scenario: Retain on import, replace on re-import
-
-- **WHEN** `templates.import` succeeds for id `X` **THEN** the runtime retains
-  exactly the delivered `{ template, html }` **AND** a later import of `X`
-  replaces the retained payload (never duplicates)
-
-#### Scenario: Reconnect re-delivers exactly the retained set
-
-- **WHEN** the WebSocket reconnects after a mid-session drop **THEN** each
-  retained template is re-imported exactly once, before the snapshot re-pull,
-  so the bridge registry again serves every template the operator had imported
-
-#### Scenario: A post-restart load needs no manual re-import
-
-- **WHEN** the bridge process restarts while the page stays open **AND** the
-  operator loads a previously-imported template after the link relinks **THEN**
-  the load succeeds and `CG ADD` references a URL the bridge serves — no manual
-  re-import
-
-#### Scenario: Retention dies with the page
-
-- **WHEN** the page reloads **THEN** retention is empty (no re-delivery occurs);
-  with the bridge still up the library re-populates from the bridge's registry
-  and loads keep working
-
 ### Requirement: The browser retains stack intent and restores it on reconnect
 
-Stack items MUST survive a restart of the bridge process. The stack SHALL NOT live only in the
-bridge's memory: the browser SHALL retain the operator's stack INTENT — for each item its id,
-template id, current field values, play evidence (whether it had been taken to air), the slot it
-occupied, and any position override, in stack order — in a **persistent, browser-local** store
-(the same file-backed ownership model [[B-085]] gave the template library), so the intent survives
-both the bridge's death and a page reload.
+Stack items MUST survive a restart of the bridge process, and the stack SHALL NOT live only in the
+bridge's memory. ⚠ **Amended 2026-09-30 by `CENTRAL-BRIDGE-01` (`B-294`, change `central-bridge`):
+the BRIDGE keeps the stack — its own persisted file, restored at its start — and the browser SHALL
+NOT re-deliver a stack, a restore or a template on any connect.** With one bridge per Playout serving
+several consoles, a re-delivery (local-wins) let an older browser copy overwrite newer state. The
+browser MAY keep a DISPLAY copy (the next requirement), and SHALL never send it. What follows, the
+retained record's STATE rules, now governs the bridge's own file: for each item its id, template
+id, current field values, **the STATE the row was actually in**, any error code that state carries,
+the slot it occupied, and any position override, in stack order.
 
-On EVERY (re)connect the browser SHALL reconcile the bridge to that retained intent **before** it
-re-pulls the stack snapshot, and it SHALL re-deliver the retained templates first so each restored
-item resolves against a populated template registry. Because the restore precedes the re-pull, the
-snapshot the SPA adopts is the RESTORED stack — never the empty one a freshly booted bridge would
-otherwise report. A restore that fails SHALL leave the retained intent intact for the next connect
-and SHALL NOT be allowed to blank the retained stack.
+The retained STATE SHALL be a closed set that answers exactly one question — may this row's producer
+be re-seated? — and SHALL distinguish at minimum:
 
-Conflict policy is local-wins, with one exception: an item the connected bridge ALREADY holds SHALL
-NOT be clobbered by the retained copy (a page reload against a healthy bridge changes nothing). An
-item whose template is not registered, or for which no layer can be obtained, SHALL be skipped
-rather than failing the whole restore.
+- an item that was ON AIR when last observed, or may still be (the bridge died under it);
+- an item whose producer was RESIDENT but not on air;
+- an item whose layer is KNOWN EMPTY because the operator deliberately CLEARed it (or a reconcile
+  proved the layer empty);
+- an item whose last operation FAILED.
 
-The restored rows SHALL appear as soon as the intent is delivered, without waiting for CasparCG:
-restoring an item SHALL seed the bridge's stack state and publish it immediately, and SHALL send
-NOTHING to CasparCG at that moment.
+A deliberate CLEAR and a bridge death SHALL be distinguishable in the retained record. Play evidence
+SHALL be DERIVED from the retained state rather than stored beside it, so the two cannot disagree.
+The mapping from a reconciled status to a retained state SHALL exist in exactly ONE place, shared by
+every consumer; a second copy SHALL NOT be derived locally.
+
+The bridge SHALL restore its own file at start, before its control socket accepts a console, so no
+console ever sees the bridge without its stack. An item whose template is not registered, or for
+which no layer can be obtained, SHALL be skipped rather than failing the whole restore, and an
+unusable file SHALL be said and the bridge started empty, the file kept.
+
+The restored rows SHALL appear at once, without waiting for CasparCG: restoring an item SHALL seed the
+bridge's stack state and SHALL send NOTHING to CasparCG at that moment. A restored item SHALL be
+seeded at the state it was retained in — a failed row comes back FAILED, a cleared row comes back
+cleared — and a restore SHALL NEVER seed a state better than the one that was retained.
 
 #### Scenario: The stack survives a bridge restart
 
 - **WHEN** the bridge process is killed and restarted while the operator has items on the stack
-- **THEN** the items are still on the stack after the SPA reconnects — the list is NOT emptied
+- **THEN** the items are on the stack of the restarted bridge, from its own file — the list is NOT
+  emptied, and no console had to deliver anything
 
-#### Scenario: The retained intent is delivered before the snapshot is re-pulled
+#### Scenario: A console re-delivers nothing
 
-- **WHEN** the SPA reconnects to a freshly booted, empty bridge
-- **THEN** it re-delivers the retained templates and then the retained stack intent, and the stack
-  snapshot it subsequently adopts contains the restored items rather than an empty list
+- **WHEN** a console connects to a bridge — freshly booted or long running — holding a display copy
+  of an older stack
+- **THEN** it sends no stack restore and no template re-delivery, and the bridge's stack is unchanged
 
-#### Scenario: A live bridge's own stack is never clobbered
+#### Scenario: An unusable file is said, and nothing is deleted
 
-- **WHEN** the SPA connects (e.g. after a page reload) to a bridge that still holds those items
-- **THEN** the bridge keeps its own item state and the retained copy is skipped
+- **WHEN** the bridge starts and its stack file is not a stack
+- **THEN** it says so and starts with an empty stack, and the file is left as it was
 
-#### Scenario: A failed restore does not destroy the retention
+#### Scenario: A deliberate CLEAR and a bridge death are distinguishable in the retention
 
-- **WHEN** the restore of a retained item is rejected by the bridge
-- **THEN** the retained stack intent is preserved for the next connect, and the SPA does not adopt
-  an empty stack in its place
+- **WHEN** one item is CLEARed by the operator and another is left on air, and the bridge then dies
+- **THEN** the two retained records differ in their retained state — the cleared one records that
+  its layer is deliberately empty, the other that it was on air
+- **AND** neither record is reduced to the same value as the other
+
+#### Scenario: A failed row is restored as failed, not as ready
+
+- **WHEN** an item whose retained state records a FAILED operation is restored into a fresh bridge
+- **THEN** the bridge seeds it at its failed state, carrying its error code
+- **AND** it is not seeded as loaded, playable, or on air
 
 ### Requirement: The stack is visible while the bridge is unreachable
 
@@ -1463,11 +1525,21 @@ library is served locally. This is **display only** — it SHALL send no command
 restore-vs-reset decision. The occupancy-aware restore remains the bridge's, on reconnect, and once
 the link is usable the authoritative snapshot SHALL replace the locally-served view.
 
-Rows served from local intent while the bridge is down MUST be honest about what cannot be verified.
-A row whose retained intent records that it had been taken to air SHALL render in the muted
-UNVERIFIABLE state ("was on air, cannot confirm now") and SHALL NOT render a confident on-air claim
-— with no bridge the SPA has no conduit to CasparCG at all. A row that had not been taken SHALL
-render as a non-air-claiming resting state. No such row SHALL be shown as pending.
+Rows served from local intent while the bridge is down MUST be honest about what cannot be verified,
+**and losing the link SHALL NEVER IMPROVE a row's status.** A row whose retained state records that
+it had been taken to air SHALL render in the muted UNVERIFIABLE state ("was on air, cannot confirm
+now") and SHALL NOT render a confident on-air claim — with no bridge the SPA has no conduit to
+CasparCG at all. A row that had not been taken SHALL render as a non-air-claiming resting state. No
+such row SHALL be shown as pending.
+
+Distinct retained states SHALL stay distinct in that view. A row whose last operation FAILED SHALL
+be published as failed, carrying its error code, and SHALL NOT be published as loaded or ready. A
+row whose layer is known empty SHALL be published as such, and SHALL NOT be published as loaded. The
+projection SHALL NOT collapse a failed row, a known-empty row and a genuinely loaded row onto the
+same published status.
+
+The projection SHALL round-trip: re-mirroring a locally-served snapshot back into the retention
+SHALL yield the same retained states, so displaying the stack offline can never corrupt it.
 
 The locally-served view SHALL also count as the current stack for the offline
 refuse-while-referenced check, so a template used by visible retained rows cannot be removed while
@@ -1483,6 +1555,17 @@ disconnected.
 - **WHEN** a retained row that had been taken to air is displayed with the bridge down
 - **THEN** it renders as UNVERIFIABLE ("was on air"), never as a confident on-air claim, and never
   as pending
+
+#### Scenario: An errored row does not become READY when the bridge dies
+
+- **WHEN** a row whose reconciled status is a failure is displayed after the bridge process dies
+- **THEN** it is published as failed, with the error code it carried
+- **AND** it is NOT published as loaded, and the row does not read READY
+
+#### Scenario: A cleared row does not become READY when the bridge dies
+
+- **WHEN** a row the operator CLEARed is displayed after the bridge process dies
+- **THEN** it is published as its known-empty resting status, not as loaded
 
 #### Scenario: The offline view commands nothing
 
@@ -1508,27 +1591,41 @@ layer before its first `CG ADD` on the layer ("adoption"): on a bridge-ONLY rest
 died while CasparCG kept rendering — that CLEAR would land on the LIVE layer and take the graphic
 OFF AIR before re-adding it as merely loaded. A restore SHALL therefore be **occupancy-aware**.
 
+**A restore SHALL re-seat a producer ONLY for an item whose retained state says a producer belongs
+on its layer.** An item retained as deliberately CLEARed, or as FAILED, SHALL NOT have a producer
+re-seated onto its layer under any occupancy verdict — its row is restored, and its layer is left
+exactly as it is. Occupancy SHALL NOT be consulted for such an item at all: silence on a layer the
+operator emptied is the EXPECTED reading, not evidence that a producer was lost.
+
 Because the occupancy tap only populates once the fresh session reaches `healthy` and OSC is
-flowing, the adopt-vs-re-ADD decision for a restored item SHALL be taken at the moment occupancy is
-knowable — at the session's transition INTO `healthy` (the same drained-occupancy point the
+flowing, the adopt-vs-re-ADD decision for a restorable item SHALL be taken at the moment occupancy
+is knowable — at the session's transition INTO `healthy` (the same drained-occupancy point the
 CasparCG-link-loss reconcile of [[B-086]] samples), or immediately when the intent is restored onto
 an already-healthy session whose tap is already warm. Until that decision is taken the restored item
 SHALL simply sit on the stack with nothing sent for it.
 
-For each restored item, consulting the observed occupancy of its layer (silence means unoccupied —
+For each RESTORABLE item, consulting the observed occupancy of its layer (silence means unoccupied —
 real CasparCG goes silent for a cleared layer rather than reporting `empty`):
 
 - **Occupied layer** → the bridge SHALL ADOPT THE LAYER WITHOUT CLEARING IT: it marks the layer
   adopted so no later adoption can clear it, and sends NOTHING. The resumed OSC re-derives the
   item's real air state on its own — a still-playing graphic reads ON AIR again and is never
   interrupted.
-- **Silent layer** → the producer is gone, so the bridge SHALL re-ADD the item as `loaded` with the
-  ordinary `CG ADD` (carrying its retained fields and position) and SHALL NOT precede it with an
-  adopt-CLEAR.
+- **Silent layer** → the producer is gone. ⚠ **Amended 2026-09-30 by `CENTRAL-BRIDGE-01` (`C-047`,
+  change `central-bridge`): the bridge SHALL send NOTHING for it** (it used to re-ADD it as `loaded`)
+  — the owner's standing decision for our layers is detect and say. An item restored ON AIR SHALL
+  leave ON AIR and be named by the restart notice (PUT BACK ON AIR is the operator's); an item
+  restored `loaded` SHALL stay `loaded`, not resident, so its next take re-ADDs it.
 
-No restore path SHALL emit a layer CLEAR, and no restore path SHALL emit a channel-level CLEAR. The
-adopt-CLEAR of the ORDINARY load path is unchanged — only the restore path adopts without clearing,
-and only for a layer OBSERVED occupied.
+No restore path SHALL emit a layer CLEAR, a `CG ADD`, or a channel-level CLEAR. The adopt-CLEAR of the
+ORDINARY load path is unchanged — only the restore path adopts without clearing, and only for a layer
+OBSERVED occupied.
+
+**A restore SHALL report what it did NOT restore, per item and with a reason**, and the caller SHALL
+NOT be able to discard that report by accident: a bare count is not sufficient, because the operator
+needs to know WHICH rows are gone and WHY. The reason SHALL distinguish the benign case — an item
+the live bridge already holds, which loses no row — from the cases where a row the operator was
+looking at has genuinely disappeared.
 
 #### Scenario: A bridge-only restart keeps the graphic on air, with no flash
 
@@ -1536,13 +1633,29 @@ and only for a layer OBSERVED occupied.
 - **WHEN** the retained item is restored and its layer is observed occupied
 - **THEN** NO CLEAR is issued for that layer and the item reads ON AIR again from resumed OSC
 
-#### Scenario: A bridge + CasparCG restart returns the items as loaded
+#### Scenario: A bridge + CasparCG restart takes the items off air, with the notice, sending nothing
 
 - **GIVEN** an item was ON AIR and BOTH the bridge and CasparCG are restarted, so the layers are
   empty
 - **WHEN** the retained item is restored and its layer is observed silent
-- **THEN** the item is re-ADDed onto the empty layer and rests at `loaded` — not a resurrected
-  ON AIR claim
+- **THEN** nothing is sent for it (amended 2026-09-30, `CENTRAL-BRIDGE-01`): it leaves ON AIR and the
+  restart notice names it — not a resurrected ON AIR claim, and not a re-ADD
+
+#### Scenario: A deliberately cleared graphic is NOT put back on its layer
+
+- **GIVEN** the operator took a graphic off air with CLEAR, keeping its row on the stack, and the
+  bridge process is then restarted
+- **WHEN** the retained item is restored and its layer is silent
+- **THEN** NO `CG ADD` is issued for that layer — the silence is not read as a lost producer
+- **AND** the row comes back on the stack in its known-empty state, off air, until the operator
+  re-takes it
+
+#### Scenario: A failed row is not repaired by a restart
+
+- **GIVEN** an item whose last operation failed
+- **WHEN** the bridge is restarted and the item is restored
+- **THEN** no producer is re-seated for it and no command is sent for it
+- **AND** it is published as failed rather than as loaded
 
 #### Scenario: Observed occupancy suppresses the adopt-CLEAR
 
@@ -1554,6 +1667,19 @@ and only for a layer OBSERVED occupied.
 - **WHEN** retained intent is restored while no declared CasparCG server is reachable
 - **THEN** the items appear on the stack and no AMCP command is sent for them, and the on-air verbs
   stay refused (R-006)
+
+#### Scenario: Rows the restore could not re-seat are surfaced, with the reason
+
+- **WHEN** a restore skips items that were on the operator's stack and are now gone — their
+  template is no longer registered, or no layer could be obtained
+- **THEN** the operator is told, in a surface on the layers list, how many rows did not come back
+  and why
+
+#### Scenario: The benign skip raises no alarm
+
+- **WHEN** a restore skips ONLY items the live bridge already holds — a page reload against a
+  healthy bridge, which loses no row
+- **THEN** nothing is surfaced to the operator
 
 ### Requirement: ON AIR is honest across a CasparCG link-loss
 
@@ -1691,8 +1817,9 @@ transient — and, joined with stale OSC, a persistent — false ON AIR. A comma
 CasparCG SHALL leave the item's status exactly as it was.
 
 The refusal SHALL NOT be a deferral. A command issued while no server is reachable SHALL NOT be
-queued for later delivery: the operator's intent would be stranded (the reconnect path re-delivers
-retained template HTML only — never stack intents), which recreates the same false belief one step
+queued for later delivery: the operator's intent would be stranded (nothing re-sends it: since
+`CENTRAL-BRIDGE-01` a console delivers nothing on reconnect, and the bridge restores only its
+own stack, sending nothing by itself), which recreates the same false belief one step
 later. Refuse, and say so.
 
 This mirrors the existing on-air block (a counted, reasoned `{ ok, reason }` refusal that the UI
@@ -1862,7 +1989,8 @@ has never been heard from, SHALL take the conservative branch rather than the em
 When the occupancy tap has never been heard from, the bridge SHALL refuse to decide a restored
 item's fate rather than guess it in either direction. Restoring retained stack intent decides per
 item whether the item's layer still holds its producer; with no occupancy evidence that question
-has no answer.
+has no answer. (`CENTRAL-BRIDGE-01`: at the first connection after start the evidence is the core's
+own `INFO`; this requirement governs a restore decided without it — a core that answers neither.)
 
 In that state the bridge SHALL send NOTHING for the affected items — no clear, and in particular
 no re-add, because a re-add carries no play-on-load and would replace a playing producer with a
@@ -1898,8 +2026,8 @@ otherwise discoverable.
 
 - **GIVEN** a restore refused to decide because the tap had heard nothing
 - **WHEN** OSC begins arriving
-- **THEN** the pending items are decided normally — adopted if their layer is occupied, re-added
-  if it is genuinely silent
+- **THEN** the pending items are decided normally — adopted if their layer is occupied; if it is
+  genuinely silent, nothing is sent and an item restored ON AIR leaves ON AIR with the restart notice
 
 #### Scenario: Reconnect reconciliation does not reset on unheard silence
 
@@ -1907,11 +2035,12 @@ otherwise discoverable.
 - **WHEN** the occupancy tap has never received OSC
 - **THEN** the item is not reset to idle on the strength of that silence
 
-#### Scenario: Deciding normally is unchanged when the tap is heard
+#### Scenario: Deciding normally when the tap is heard
 
 - **WHEN** the tap is receiving OSC
-- **THEN** an occupied layer is adopted with nothing sent, and a silent layer is re-added as
-  loaded, exactly as before
+- **THEN** an occupied layer is adopted with nothing sent, and a silent layer has nothing sent either:
+  an item restored ON AIR leaves ON AIR with the restart notice, an item restored `loaded` stays
+  `loaded`
 
 ### Requirement: AMCP liveness is measured on AMCP, never inferred from OSC silence
 
@@ -1998,3 +2127,2096 @@ no close at all — which a close handler structurally cannot see.
 - **WHEN** the AMCP peer closes the connection, whether the session is `healthy` or `degraded`
   **THEN** the session disconnects at once on the close itself, without waiting for a probe
   window
+
+### Requirement: The lock covers the engager's channels
+
+The bridge SHALL scope an engaged lock to the channels the engaging principal holds on this station, captured at the moment of engage and carried on `lock.state` as `channels`, and SHALL refuse with the lock sentence only an intent that touches a covered channel the requesting principal holds. With auth OFF, or an engager holding `'*'`, `channels` SHALL be absent and the lock SHALL refuse every operator intent exactly as before. A principal holding none of the covered channels SHALL NOT be refused by the lock; the station fence and the permission gate decide their intents. An intent that resolves to no channel SHALL be refused for a principal the lock reaches. PANIC SHALL be judged by the channels its ledger holds seats on, and SHALL remain unscoped in what it silences. The bridge SHALL hold one lock at a time, and SHALL refuse an engage that would cover no channel. Release SHALL be unchanged.
+
+#### Scenario: Another operator's channel stays operable
+
+- **GIVEN** the channel-1 operator has engaged the lock on a station declaring channel 1
+- **WHEN** the channel-2 operator sends PANIC, and CLEAR on channel 2
+- **THEN** neither is refused for the lock; PANIC reaches the wire; and CLEAR on channel 2 is refused by the station fence — channel 2 is not this station's — and reaches nothing
+
+#### Scenario: B-229 stands inside the scope
+
+- **GIVEN** the channel-1 operator has engaged the lock
+- **WHEN** a second principal holding channel 1 sends CLEAR or PANIC on channel 1
+- **THEN** each is refused with the lock sentence
+
+#### Scenario: A principal without the channel meets the permission gate, not the lock
+
+- **GIVEN** the channel-1 operator has engaged the lock
+- **WHEN** the channel-2 operator sends CLEAR on channel 1, or CLEAR ALL over a channel-1 stack
+- **THEN** each is refused by permission, naming channel 1, and not with the lock sentence
+
+#### Scenario: The every-channel lock is unchanged
+
+- **WHEN** the lock is engaged with auth OFF, or by a principal holding `'*'`
+- **THEN** `lock.state` carries no `channels` and every operator intent from every socket is refused
+
+#### Scenario: One lock at a time, and none that covers nothing
+
+- **WHEN** a principal the lock does not reach engages, or a principal holding no channel here engages
+- **THEN** the engage answers `ok: false`, and a `lock-engage` row records the refusal
+
+### Requirement: A locked console does not change hands by token
+
+The bridge SHALL refuse, with the lock sentence, an `auth` frame presenting a principal whose `sub` differs from the socket's current principal while the lock reaches that current principal. A frame presenting the same `sub` SHALL pass, and so SHALL a first sign-in on a socket with no principal.
+
+#### Scenario: A swap is refused, the refresh is not
+
+- **GIVEN** the lock reaches a console signed in as one operator
+- **WHEN** that socket presents another principal's token
+- **THEN** it is refused with the lock sentence and the principal is unchanged
+- **AND WHEN** it presents a refreshed token for the same `sub` **THEN** it is accepted
+
+#### Scenario: A reloaded console can still sign in
+
+- **WHEN** a new socket with no principal signs in while the lock is engaged
+- **THEN** the sign-in is accepted
+
+### Requirement: Every template mutation is recorded, and a lock refuses an overwrite
+
+The bridge SHALL write an audit row for every change to its template catalogue: `import` for an operator's import and `template-remove` for every removal outcome. A `templates.import` marked `redelivery` SHALL be refused before the lock, auth and permission gates with its own sentence, SHALL change nothing, and SHALL write no row (`CENTRAL-BRIDGE-01`, `B-294`: a console re-delivers nothing; `template-redeliver` has no writer and stays in the audit schema only so older logs parse). While the lock reaches the requesting console, an import SHALL be refused with the lock sentence and SHALL leave the held copy unchanged.
+
+#### Scenario: A re-delivery changes nothing and writes no row
+
+- **WHEN** a frame marked `redelivery` would register a missing template, and another would replace a held one
+- **THEN** both are refused with the re-delivery sentence, the catalogue is unchanged, and no row is written
+- **AND** the operator's import and removal around them each write their row
+
+#### Scenario: A locked console cannot overwrite a template
+
+- **GIVEN** the lock is engaged
+- **WHEN** an operator's import would replace a held template's HTML
+- **THEN** it is refused with the lock sentence and the held HTML is unchanged
+- **AND** a frame marked `redelivery` is refused with its own sentence, not the lock's
+
+### Requirement: Reconnect machinery is refused but not recorded as a press
+
+The bridge SHALL route no `stack.restore` (`CENTRAL-BRIDGE-01`: it restores its own stack at start), and SHALL refuse a `templates.import` marked `redelivery` before the lock, auth and permission gates with its own sentence, writing no `refused` audit row for either. A refused press SHALL still write its `refused` row.
+
+#### Scenario: A viewer's retired reconnect frames leave no refused row
+
+- **WHEN** a signed-in viewer's console sends `stack.restore` and a re-delivery, then presses TAKE
+- **THEN** the first finds no route, the second is refused with the re-delivery sentence, the TAKE is refused for the role, and the only `refused` row is the TAKE's
+
+### Requirement: The audit tells a console's act from the machine's with authentication off
+
+The bridge SHALL record `console` as the actor of an audited action that arrived on a control socket with no verified principal, and `unattributed` for an audited action that no request caused. It SHALL NOT read an actor name from the request frame.
+
+#### Scenario: A press and the machine's own act read differently
+
+- **GIVEN** a bridge with authentication off
+- **WHEN** a console engages the lock, carrying any name in the frame's `actor`, and the bridge itself releases it outside any request
+- **THEN** the engage row's actor is `console`, the release row's is `unattributed`, and the carried name appears in no row
+
+### Requirement: The bridge resets the mixer of a layer it has just emptied
+
+The bridge SHALL send `MIXER <ch>-<layer> CLEAR` after its own `CLEAR` of a layer when, and only when, the `CLEAR` landed on the current primary and the layer is inside the declared bank. It SHALL NOT send it after a `CLEAR` that did not land, on a layer outside the declared bank, or on a declared playout layer.
+
+#### Scenario: A producer that does not come through our take is audible after our clear
+
+- **GIVEN** a row of ours on air whose layer carries a mute the bridge has no record of, then cleared
+  by the bridge (`CENTRAL-BRIDGE-01`: the restore's muted re-ADD that used to leave one is gone)
+- **WHEN** another client plays a producer on that layer
+- **THEN** reading `MIXER <ch>-<layer> VOLUME` answers `1`
+
+#### Scenario: The reset follows our clear, inside our band only
+
+- **WHEN** the bridge clears a row on a declared bank layer
+- **THEN** `MIXER <ch>-<layer> CLEAR` follows the `CLEAR` on the wire
+- **AND WHEN** it clears an orphan outside the declared bank, or a `CLEAR` is refused **THEN** no mixer reset is sent
+
+### Requirement: INFO is read by channel, and never as a source of layer volume
+
+The bridge SHALL address `INFO` by channel only, SHALL NOT read a layer's volume from `INFO`'s `<volume>` nodes, and its `INFO` parsers SHALL tolerate nodes they do not know under `<mixer><audio>`. A band of layer volumes SHALL be read with one burst of `MIXER <ch>-<layer> VOLUME` queries and one read, matched by order. A reading built on `INFO` SHALL be described as establishing that a layer has no producer, never that it is clean.
+
+#### Scenario: The fork's additive audio nodes change no reading
+
+- **WHEN** an `INFO <channel>` reply carries `<limiter>` and `<lufs>` under `<mixer><audio>`
+- **THEN** the channel's mode and running consumers read exactly as without them
+
+#### Scenario: A band is read in one burst
+
+- **WHEN** fifty layers' volumes are read
+- **THEN** fifty queries are written at once, fifty replies are matched to their layers in order, and a refusal is that layer's error without shifting the others
+
+### Requirement: The station fence refuses a channel this station does not declare
+
+The bridge SHALL refuse, before anything reaches CasparCG, every request that names a channel the station does not declare, with the one sentence that names the channel and says nothing was sent. The declaration SHALL be `#declaredChannels()` — every declared bank's channel (`MULTI-CHANNEL-01`), or channel 1 with no bank — and nothing else: a principal's grant and a catalogue row SHALL NOT make a channel one this station writes to. The fence SHALL apply with auth OFF as well as ON. It SHALL sit after the authentication gate and before the permission gate. It SHALL read only a channel the request names at its top level — a bulk verb or the per-channel PANIC naming one is fenced like any other — and a channel resolved from an `itemId`, a bare bulk verb's union and the every-channel PANIC SHALL NOT be read by it. `stack.restore` SHALL keep skipping a foreign retained row per item as `not-declared` rather than refusing the whole request. The routes whose channel declares or configures rather than addresses — `fixedLayers.set-config` and `channelSettings.set` — SHALL be exempt by name, and every other route naming a channel SHALL be fenced by default; `fixedLayers.set-banks` names its channels inside its list, where the fence does not read.
+
+#### Scenario: An undeclared channel reaches nothing, with auth OFF
+
+- **GIVEN** a bank declaring channel 2, auth OFF, and another system's html graphic on layer 20 and on reserved layer 60 of channels 1 and 2
+- **WHEN** `layers.clear`, `playoutLayers.clear`, `fixedLayers.clear-layer` or `fixedLayers.load` (followed by a take) names channel 1
+- **THEN** it is refused with the station sentence naming channel 1, and nothing addressing channel 1 reaches CasparCG
+
+#### Scenario: A grant for the channel does not open it
+
+- **GIVEN** the same station with auth ON, and a principal granted channels 1 and 2 of this host
+- **WHEN** the same four doors name channel 1
+- **THEN** each is refused with the station sentence, and nothing addressing channel 1 reaches CasparCG
+
+#### Scenario: The declared channel is the positive control
+
+- **WHEN** the same four doors name channel 2 on the same bridge
+- **THEN** none is refused by the fence, and each one's command lands on channel 2
+
+#### Scenario: After sign-in, before permission
+
+- **WHEN** a socket that has not signed in names channel 1
+- **THEN** it is told to sign in, and learns nothing about the station's channels
+- **WHEN** a principal granted channel 2 only names channel 1
+- **THEN** it is refused with the station sentence, not the grant sentence
+
+#### Scenario: A request naming no channel is not read by the fence
+
+- **WHEN** an item-scoped verb, a bare bulk verb, the every-channel PANIC, or a restore carrying a foreign slot is judged
+- **THEN** the station fence does not refuse it
+
+#### Scenario: Every route naming a channel is classified
+
+- **WHEN** the route table's request schemas are walked for a key named `channel`
+- **THEN** exactly fourteen routes carry one, eleven at the top level; exactly `fixedLayers.set-config` and `channelSettings.set` are exempt; and every other top-level channel route — the four housekeeping verbs and the per-channel PANIC among them — is refused an undeclared channel and passes the declared one
+
+### Requirement: The console's reads that feed a CLEAR name only declared channels
+
+The orphan sweep SHALL take its candidates only from channels this station declares, and the playout-layer state SHALL report its rows on each declared channel. A layer on a channel this station does not operate SHALL NOT be offered to the operator as clearable.
+
+#### Scenario: Another channel's graphic is not an orphan
+
+- **GIVEN** a bank declaring channel 2 and another system's html graphic on layer 20 of channels 1 and 2
+- **WHEN** the orphan list is read
+- **THEN** it lists `2-20` and nothing on channel 1
+
+#### Scenario: The playout tab reports the declared channel
+
+- **GIVEN** a bank declaring channel 2, reserved layer 60, and an html graphic on `1-60` and `2-60`
+- **WHEN** the playout-layer state is read
+- **THEN** its one row is channel 2, layer 60, reading the producer
+
+### Requirement: A dynamic load places on the declared channel
+
+The allocator SHALL place a dynamic row on the station's declared channel, never on a constant. On a station that declares more than one channel, a load that names no channel SHALL be refused (`no-layer`) with nothing sent: picking one declared channel would put a graphic on a channel the operator may not be looking at. A row's own load names its coordinate and is unaffected.
+
+#### Scenario: A declared policy on a channel-2 station
+
+- **GIVEN** a bank declaring channel 2 and a deployment-declared dynamic policy
+- **WHEN** a template is loaded dynamically and taken
+- **THEN** its producer is seated on channel 2, and nothing addresses channel 1
+
+#### Scenario: Two declared channels refuse a load that names none
+
+- **GIVEN** banks on channels 1 and 2 and the same policy
+- **WHEN** a template is loaded dynamically
+- **THEN** the load is refused as `no-layer` and nothing is written to either channel
+
+### Requirement: One predicate answers whether this station operates a channel
+
+The bridge SHALL answer "does this station operate channel N" in one place, `#isDeclaredChannel`, and the request gate, the restore fence, the orphan sweep, the playout-layer state and the channel-settings store SHALL all ask it at the time they decide. None SHALL hold a copy of the declared list taken earlier.
+
+#### Scenario: A bank-less runtime restores what every other door accepts
+
+- **GIVEN** a runtime with no declared bank
+- **WHEN** a retained row on channel 2 is restored
+- **THEN** it is skipped as `not-declared`, as the gate would refuse channel 2, because channel 1 is the declared default
+
+### Requirement: The channel-discovery call names channels and decides nothing
+
+The bridge SHALL answer `channels.list` with every channel any source names — the Playout's catalogue (D4) first, then the declared banks, then channel settings — and SHALL give each channel three facts kept apart: `named` (the catalogue row that joined it, or `null`), `declared` (this station operates it, by the station fence's own predicate) and, with auth ON, `permitted` (the asking principal's grant, by `grantsChannel` and its host rule). A catalogue row SHALL join a channel only when its `casparHost` is one of this bridge's configured servers. The bridge SHALL read D4 at most once every 5 seconds (`UI-POLISH-01` G; it was 30), with `If-None-Match`, using the signed-in principal's token only while that token is neither expired nor revoked, and SHALL NOT read it at all with auth OFF, with no usable bearer, or after the principal signed out. On any failure the catalogue SHALL be ABSENT — no alarm, no verdict, and never a gate on a verb. No channel the answer lists SHALL become one the bridge writes to by being listed; no channel index SHALL be derived or probed beyond what a source names. A joined row's optional `output` and `playlist` (`UI-POLISH-01` G) SHALL ride with its name, as labels that decide nothing. The bridge SHALL push each signed-in console its own answer when the catalogue, the banks, channel settings, the server list or its sign-in change it.
+
+#### Scenario: Our channel named, the Playout's programme channel listed and not ours
+
+- **GIVEN** a bank on channel 2, a catalogue naming channel 1 (the Playout's programme) and channel 2 on this station's host, and a principal granted both
+- **WHEN** the console reads `channels.list`
+- **THEN** channel 1 is named, permitted and NOT declared, from the catalogue alone; and channel 2 is named, permitted and declared, from the catalogue, the bank and channel settings — in that order
+
+#### Scenario: Another station's row joins nothing
+
+- **WHEN** the catalogue's only row names channel 2 on a host this bridge does not drive
+- **THEN** channel 2 is listed unnamed, from the bank and settings; and when the row names this station's host, it is named
+
+#### Scenario: Auth OFF reads no catalogue
+
+- **WHEN** the bridge runs with auth OFF
+- **THEN** it builds no catalogue reader, and the answer is the bank and settings with no names and no `permitted`
+
+#### Scenario: At most every 5 seconds, with ETag
+
+- **GIVEN** the sign-in's read reached the Playout
+- **WHEN** a read is asked for inside 5 seconds, and again after them
+- **THEN** the first is not made; the second is, carries `If-None-Match`, is answered `304`, and the names are still held
+
+#### Scenario: An unreachable Playout is ABSENT and gates nothing
+
+- **GIVEN** the catalogue was read
+- **WHEN** the Playout stops answering and the next read fails
+- **THEN** no catalogue is held, the channels are listed unnamed, and the console's verbs answer exactly as before
+
+#### Scenario: A revoked or expired bearer is never presented
+
+- **GIVEN** the sign-in's read carried the operator's token
+- **WHEN** that token is revoked, or passes its expiry, and a read falls due
+- **THEN** no request reaches the Playout and the catalogue is ABSENT; and after sign-out no request is made at all
+
+#### Scenario: The console hears a rename
+
+- **WHEN** the catalogue renames the station's channel and the next read lands
+- **THEN** the console receives `channels.changed` carrying the new name
+
+#### Scenario: Nothing past the lists is probed
+
+- **GIVEN** a server running channels 1–4, a bank on 2 and a catalogue naming 1 and 2
+- **WHEN** the bridge has connected, read the catalogue and run
+- **THEN** channels 1, 3 and 4 receive nothing, while channel 2 is probed
+
+#### Scenario: Two banks are two declared channels
+
+- **GIVEN** banks on channels 1 and 2
+- **WHEN** the console reads `channels.list`
+- **THEN** channels 1 and 2 are both listed `declared`, each from its own bank
+
+### Requirement: The bridge serves the console on its own loopback origin
+
+The bridge SHALL serve the Runtime's built console, when given `--console-dir`, on a listener of
+its own bound to `127.0.0.1` (port 5174 by default): the directory's files, `index.html` for any
+path that names no file extension, a 404 for a missing asset, nothing outside the directory,
+`GET /__cg/health` answering `{ app: "cg-caspar-bridge", pid, execPath }`, and `GET /pgm/<channel>`
+relaying that channel's programme return to loopback peers only (`C-016`). It SHALL never serve
+the console on the template origin, and SHALL refuse a console port equal to the control or
+template port. The listener SHALL start only after the control socket listens.
+
+#### Scenario: The console and its fallback are served
+
+- **WHEN** `/` or a client-side route is requested **THEN** `index.html` is answered, uncached
+- **WHEN** a fingerprinted asset is requested **THEN** it is answered with its own type, immutable
+- **WHEN** a missing asset or a path outside the directory is requested **THEN** the answer is 404
+
+#### Scenario: The health route names the process
+
+- **WHEN** `GET /__cg/health` is requested **THEN** the answer carries the app identity, the pid
+  and the executable running the bridge
+
+#### Scenario: The programme return route answers only a channel path
+
+- **WHEN** `/pgm/1` is requested from loopback **THEN** the answer is a `multipart/x-mixed-replace`
+  stream; **WHEN** `/pgm/0`, `/pgm/01`, `/pgm/abc` or `/pgm/1/audio.wav` is requested **THEN** the
+  answer is 404 and nothing is attached
+
+### Requirement: An installed station's files live under its own state home
+
+The CLI SHALL resolve every default persisted path under `<state-home>/.cg-runtime/` when given
+`--state-home`, with the same file names as under the user's home, and SHALL write nothing under
+the user's home in that case.
+
+#### Scenario: The bundled sidecar writes where it is told
+
+- **WHEN** the bundled bridge starts with `--state-home` and a write goes through
+  `fixedLayers.set-config` **THEN** the file lands under the state home **AND** nothing is written
+  under the user's home
+
+### Requirement: The bridge stops when its parent's pipe closes
+
+The CLI SHALL stop cleanly, releasing its ports, when started with `--exit-on-stdin-close` and its
+standard input reaches end-of-file.
+
+#### Scenario: The parent goes away
+
+- **WHEN** the parent closes the bridge's standard input **THEN** the bridge exits with code 0 and
+  its console port stops answering
+
+### Requirement: A Playout may be configured by its address alone
+
+The bridge SHALL derive every Playout endpoint — the JWKS included — from `playout.address` through
+the contract's fixed paths when an address is configured, and SHALL NOT require `playout.issuer` in
+that case. An explicit issuer with no address SHALL resolve exactly as before.
+
+#### Scenario: Only an address
+
+- **WHEN** the playout config holds only `address` **THEN** the JWKS, token, refresh, channels and
+  revocation URLs all derive from it **AND** the bridge starts with no issuer
+
+#### Scenario: The issuer-configured station is unchanged
+
+- **WHEN** an explicit issuer and JWKS URL are configured with no address **THEN** the resolved
+  settings are those it always had
+
+### Requirement: The issuer is learned from the first station-admin sign-in
+
+The bridge SHALL, while an address-configured station has no issuer, adopt the `iss` of the first
+token that verifies against the address's JWKS, carries the audience and holds `station-admin`;
+persist it as `playout.issuer`; and from then on compare it byte for byte and never re-adopt. Before
+adoption it SHALL refuse every other token with the not-set-up sentence and persist nothing.
+
+#### Scenario: An operator before adoption
+
+- **WHEN** an operator's token is presented before any adoption **THEN** it is refused as "not set
+  up yet" **AND** nothing is persisted
+
+#### Scenario: The first station-admin adopts
+
+- **WHEN** a station-admin's token is presented **THEN** it is accepted **AND** its `iss` is persisted
+  as `playout.issuer` **AND** the same operator token is then accepted
+
+#### Scenario: A different issuer after adoption
+
+- **WHEN** a token with another `iss` is presented after adoption **THEN** it is refused as not for
+  this station **AND** the adopted issuer is unchanged
+
+#### Scenario: A new address clears the adoption
+
+- **WHEN** the Playout address is written again **THEN** the adopted issuer is gone **AND** the next
+  station-admin sign-in adopts again
+
+### Requirement: A loopback casparHost is the Playout's own machine
+
+The one D4 reader SHALL rewrite a row's `casparHost` that is loopback (`127.0.0.0/8`, `localhost`,
+`::1`) to the host of the configured Playout address, and SHALL pass any other host through byte for
+byte. `CENTRAL-BRIDGE-01` (D13): the rule is per READER — a reader built for a backup Playout's address
+SHALL read that Playout's loopback rows as the BACKUP's host, never as the local core's nor as the
+primary's (the Playout team's rules 9–10: each engine names its own core `127.0.0.1`).
+
+Amended 2026-09-30 (`B-297`, found by §5's separate-server test): a token's `cg_channels` grant carries
+the same `casparHost` (the contract's join key), so the token verifier SHALL read a grant whose host is
+loopback as the host of the configured Playout address, by the same rule and nothing else; a grant
+naming another machine SHALL pass byte for byte, and `"*"` SHALL be left as it is. With a loopback
+Playout address — CG Bridge on the Playout's own machine — no grant and no row is rewritten.
+
+#### Scenario: One value everywhere
+
+- **WHEN** the catalogue names a channel on `127.0.0.1` **THEN** `channels.catalogue` and
+  `channels.list`'s join both see the Playout's host **AND** a row on another host is unchanged
+
+#### Scenario: A backup Playout's row
+
+- **WHEN** a reader built for the backup Playout's address reads a row naming `127.0.0.1` **THEN** the
+  row's host is the backup's — control: the primary's reader reads the same row as the primary's host
+
+#### Scenario: A separate server honours a loopback grant
+
+- **WHEN** CG Bridge on a separate server drives the Playout's CasparCG by the Playout's network
+  address, and an operator's token grants channel 1 on `127.0.0.1` **THEN** the operator's load and
+  take on channel 1 go out and CasparCG fetches the page from CG Bridge's address **AND** a grant naming
+  another machine still holds nothing here — control: read as the grant spells it, the same token holds
+  nothing on the network address
+
+### Requirement: An installed station advertises its first-run phase and declares no channel until one is chosen
+
+The bridge SHALL, when started with `--first-run`, advertise `setup: target` on
+`bridge.capabilities` while no Playout is configured and `setup: channel` while no channel is
+declared, and SHALL start with no fixed bank rather than the built-in default when no bank file
+exists. Until that bank is written it SHALL declare NO channel (`DESKTOP-APPS-01-D` j): the
+station fence, the restore door and the permitted channels all answer none. Without `--first-run`
+it SHALL behave as before.
+
+#### Scenario: The phases
+
+- **WHEN** an installed station has no Playout **THEN** it advertises `target` **AND WHEN** it has a
+  Playout and no bank **THEN** it advertises `channel` **AND WHEN** a bank is declared **THEN** it
+  advertises nothing
+
+#### Scenario: A remembered item is not adopted before the channel is declared
+
+- **WHEN** a first-run bridge with no bank starts on a stack file holding an on-air item on
+  channel 1 (`CENTRAL-BRIDGE-01`: the bridge restores its own stack; a console re-delivers nothing)
+  **THEN** the restore skips it as `not-declared`, records it as a stray, and sends nothing to
+  channel 1
+
+### Requirement: The bridge answers the Playout's channels unjoined for a station-admin
+
+The bridge SHALL answer `channels.catalogue` to a `station-admin` with the one D4 reader's rows —
+host and all, not joined to the configured servers — filtered by `grantsChannel` against each row's
+own host, or `rows: null` when the catalogue is absent.
+
+#### Scenario: The grant filters the rows
+
+- **WHEN** a station-admin granted one channel asks **THEN** only that channel is answered
+
+### Requirement: The bridge runs the connection check
+
+The bridge SHALL answer `setup.check` with one line per link — VPN or proxy, route, AMCP `VERSION`,
+the Playout's keys, CORS for the console's origin, the station's ports, topology — each pass, fail,
+warn, wait or skip with a sentence, and for a missing CORS entry the one line to give the Playout's
+administrator. It SHALL always return its lines (`DESKTOP-APPS-01-C` C2): the lines SHALL run in
+parallel, every probe SHALL connect within 3 s and every line SHALL finish within 5 s, and a line
+that does not SHALL come back as its own line in the check's words ("No answer from `<host>` on port
+`<port>`"), never as a timeout of the whole check. The typed address SHALL be normalised as the
+console normalises it (C3), and the Playout host SHALL be resolved once to an IPv4 address that
+every probe uses (C6); a host with no IPv4 address SHALL be one line. The AMCP line SHALL be, for a
+refused or dropped connection: `wait`, "waiting for sign-in", before any `station-admin` has signed
+in; `wait`, "waiting for the Playout to let this machine in", for 30 s after one; and after that a
+failure naming this machine's IPv4 address as waiting for approval in the Playout, at
+تنظیمات ← اتصال به CG Control, and that NAT, a proxy or a VPN is why it is not listed there (C7).
+A check that asks for it (`awaitLetIn`, sent only by the console's one automatic re-run after a `station-admin`'s sign-in) SHALL hold its AMCP line within those 30 s (`DELTA-MULTI-CHANNEL-01-A` A2): the bridge SHALL ask CasparCG again itself, about once a second, until it answers or the 30 s end, and SHALL then answer with the line it has — a pass, or the approval — while every other line runs as in any check; the console SHALL wait for such a check the 30 s and a check's own wait on top. A check that does not ask, and any check outside those 30 s, SHALL probe AMCP once. No line SHALL name a script. A verdict about sign-in SHALL need a Playout that can sign someone in,
+which is what the API line reads (`CHECK-RERUN-01`): while the API line fails — no answer, or no
+signing keys — the CORS line SHALL be `skip`, "Sign-in from this console: not checked — `<reason>`",
+and the AMCP line SHALL NOT wait for a sign-in but SHALL be its own result, a refusal or no answer
+said plainly as a failure. That rule SHALL be applied in one place, after every line has settled,
+and SHALL read the API line's reading, never the words of a line.
+
+#### Scenario: Each failure shape has its own sentence
+
+- **WHEN** the Playout's port refuses, the Playout drops the connection, the CORS origin is wrong, or
+  the key set is empty **THEN** each prints its own sentence
+
+#### Scenario: A black-hole Playout
+
+- **WHEN** every probe points at an address that never answers **THEN** all seven lines come back
+  within the bound, the API line saying what did not answer, the CORS line not checked, and the
+  AMCP line a failure
+- **WHEN** every probe points at the fakes **THEN** every network line passes
+
+#### Scenario: AMCP before the sign-in, while the Playout decides, and after
+
+- **WHEN** no station-admin has signed in, the API answers, and AMCP is refused **THEN** the line is
+  `wait`, "waiting for sign-in", never a failure
+- **WHEN** a station-admin signed in less than 30 s ago and AMCP is refused **THEN** the line still
+  waits, for the Playout
+- **WHEN** it is still refused after that **THEN** the line names this machine's IPv4 address as
+  waiting for approval in the Playout's app, and carries no command
+- **WHEN** the administrator approves this machine **THEN** the line passes
+
+#### Scenario: One fault is said once
+
+- **WHEN** the Playout's API does not answer **THEN** the no-answer is said once, on the API line,
+  **AND** the CORS line is `skip`, "Sign-in from this console: not checked — the Playout does not
+  answer."
+- **WHEN** the Playout answers and publishes no signing keys **THEN** the CORS line is `skip` and
+  names the missing keys as the reason
+- **WHEN** the API answers with a key and the CORS origin is wrong **THEN** the CORS line is
+  checked and fails on its own, with the one line to add
+
+#### Scenario: AMCP does not wait for a sign-in that cannot happen
+
+- **WHEN** no station-admin has signed in, the API does not answer, and AMCP is refused or silent
+  **THEN** the AMCP line is a failure saying so plainly, never "waiting for sign-in"
+- **WHEN** the API does not answer and AMCP answers `VERSION` **THEN** the AMCP line passes
+
+#### Scenario: A host with no IPv4 address
+
+- **WHEN** the Playout's host has no IPv4 address **THEN** the route line says so and the AMCP, key
+  set and CORS lines are not produced
+
+#### Scenario: A held AMCP line
+
+- **WHEN** a check asks to hold its AMCP line within 30 s of a station-admin's sign-in and the Playout lets this machine in a moment later **THEN** the AMCP line passes, the bridge having asked CasparCG again itself, **AND** the same check not asking only waits
+- **WHEN** the Playout never lets this machine in **THEN** the held line answers when the 30 s end, naming the approval
+- **WHEN** no station-admin has signed in, or the 30 s have passed **THEN** a check asking to hold probes AMCP once
+
+### Requirement: AMCP waits for a station-admin on a station that authenticates
+
+A bridge that authenticates against a Playout SHALL treat an AMCP failure before any `station-admin`
+has signed in to it as WAITING: its health SHALL carry `amcpAwaitsSignIn` for as long as AMCP has
+not been up since it started, and its one reconnect loop SHALL keep retrying with its usual backoff.
+On a `station-admin`'s sign-in (the token's first acceptance) it SHALL read D9 at once with that
+admin's own token, server-side (`DESKTOP-APPS-01-C` C4) — D4 and D8 introduce nothing — keeping the
+60 s D9 cycle, and SHALL then retry AMCP at most every 500 ms for 30 s. It SHALL add no second
+reconnect loop, and a link that has been up once SHALL alarm as before. Before the issuer is
+adopted, a refused sign-in's token SHALL reach no D4, D8 or D9 request (C5).
+
+#### Scenario: A Playout 2.8.54 lets this machine in on the station-admin's D9 read
+
+- **WHEN** an operator signs in **THEN** the bridge still waits and AMCP is still refused
+- **WHEN** a station-admin signs in **THEN** a D9 read carrying that admin's token is made at once
+  **AND** on a fresh Playout this machine is let in and AMCP comes up
+- **WHEN** a station-admin's D4 or D8 read is made with the same token **THEN** it introduces nothing
+- **WHEN** an operator's sign-in is refused before adoption **THEN** its token reaches no D4, D8 or
+  D9 **AND** a station-admin's sign-in after it does send D9
+- **WHEN** the bridge does not authenticate **THEN** its health never says it waits for a sign-in
+
+### Requirement: Every bridge request to the Playout goes out server-side
+
+Every request the bridge SHALL make to the Playout — the key set, D4 and D9 — SHALL go out
+through one function with no `Origin` header and through no proxy, whatever proxy variables the
+machine's environment sets, so the Playout sees this machine's own address. The Playout's host
+SHALL be resolved once to an IPv4 address, and those requests and the AMCP session to that host
+SHALL both use it (`DESKTOP-APPS-01-C` C6).
+
+#### Scenario: The Playout's view of the bridge
+
+- **WHEN** the bridge reads the key set, D4 and D9 **THEN** no request carries an `Origin` **AND**
+  each read of D4 and D9 carries its bearer **AND** every request arrives from this machine's
+  address
+- **WHEN** the environment names a proxy that Node's own `fetch` would use **THEN** the bridge's
+  reads still reach the Playout directly
+- **WHEN** the Playout is named by a host that resolves to IPv6 and IPv4 **THEN** its reads and the
+  AMCP connection come from the same IPv4 address **AND** an IPv4 literal passes through unchanged
+
+### Requirement: An item of ours on a channel the station does not declare is a stray
+
+The bridge SHALL keep an item of ours that is, or may be, on air on a channel this station does not
+declare out of the stack as a STRAY: recorded from a restore of a retained on-air item on an
+undeclared channel, and from a stack item left on another channel by a bank installed or changed
+under it. A stray SHALL never be seated, updated or re-ADDed; a pending restore SHALL never seat on
+an undeclared channel; a stray whose layer a hearing tap reads empty, or holding a producer that is
+not an html page, SHALL be dropped. `station.strays` SHALL list the strays and
+`station.take-off-air` (station-admin) SHALL send exactly `CG <ch>-<layer> STOP 0` then
+`CLEAR <ch>-<layer>` for a recorded stray's exact coordinate on a layer at or above 50, and nothing
+else, audited as `out`.
+
+#### Scenario: Taking the logo off channel 1 from a channel-2 station
+
+- **WHEN** a stray is recorded on `1-99` and a station-admin takes it off air **THEN** the wire
+  carries exactly `CG 1-99 STOP 0` and `CLEAR 1-99` on channel 1 **AND** the stray is gone
+
+#### Scenario: A coordinate that is not a stray is refused
+
+- **WHEN** take-off-air names `1-5` (the Playout's own video) **THEN** it is refused and nothing is
+  sent
+
+#### Scenario: A bank installed under a restored channel-1 item never re-ADDs it
+
+- **WHEN** a restored channel-1 item is pending, `1-99` is silent, and the connection and a
+  channel-2 bank are written **THEN** no command other than a read addresses channel 1
+
+#### Scenario: A stale entry is dropped
+
+- **WHEN** a restored stray's layer reads empty on a hearing tap **THEN** it is not listed and
+  nothing is sent
+
+### Requirement: The bank's channel may be replaced while nothing of ours holds air on it
+
+`validateFixedBankChange` SHALL allow a live bank change to replace the CHANNEL when nothing of ours
+on the current channel is on air, unsettled, unverified or holding a resident producer, and SHALL
+otherwise refuse with `channel-change-refused` and the one sentence "Something of ours is still on
+air on channel N — take it off air first." Absent the predicate it SHALL refuse (fail closed). Items
+left on the old channel SHALL leave the stack with no wire command.
+
+#### Scenario: An idle station changes channel
+
+- **WHEN** a station with nothing on air on channel 1 declares channel 2 **THEN** the change is
+  accepted and the declared channel is 2
+
+#### Scenario: Refused while our logo is on air
+
+- **WHEN** our logo is on air on `1-99` and channel 2 is declared **THEN** it is refused with the
+  sentence and nothing is sent **AND WHEN** the logo is cleared **THEN** the same change is accepted
+
+### Requirement: The bridge reports a channel's occupancy before it is declared
+
+`setup.channel-occupancy` (station-admin) SHALL answer, from the primary's occupancy tap waited for
+up to 3 s, `occupied` with each layer and producer kind on the named channel, `empty`, or `unknown`
+when the tap does not hear.
+
+#### Scenario: The programme channel reads occupied
+
+- **WHEN** another system plays video on `1-5` **THEN** channel 1 reads `occupied` with layer 5
+  (`ffmpeg`) **AND** an empty channel 2 reads `empty`
+
+### Requirement: The permitted channels follow the declared bank
+
+The bridge SHALL push `auth.state-changed` to a signed-in socket whenever the declared banks change — through `fixedLayers.set-config` or `fixedLayers.set-banks` — as it does when the server list changes, because the permitted channels are composed from both.
+
+#### Scenario: First-run on channel 2 is operable at once
+
+- **WHEN** a station-admin holding channels 1 and 2 signs in on a bank-less bridge and then declares
+  channel 2 **THEN** the socket is pushed `permittedChannels: [2]` **AND** an operator granted
+  channel 1 only is pushed `[]`
+
+#### Scenario: First-run with two channels
+
+- **WHEN** a station-admin holding channels 1 and 2 signs in on a bank-less bridge and declares both through `set-banks` **THEN** the socket is pushed `permittedChannels: [1, 2]` **AND** an operator granted channel 1 only is pushed `[1]`
+
+### Requirement: An output absence INFO cannot prove is unknown, never missing
+
+The output check SHALL report a declared consumer kind absent from `INFO <channel>` as UNKNOWN when
+the running list contains a kind stock CasparCG 2.5.0 does not ship, and SHALL raise no alarm for
+it; a list of no consumers, or of stock kinds only, SHALL be judged as before.
+
+#### Scenario: The Playout's fork
+
+- **WHEN** `INFO 1` lists `pgm` and `ndi` and `INFO CONFIG` declares `pgm`, `decklink`, `ffmpeg` and
+  `ndi` **THEN** `decklink` and `ffmpeg` are unknown and the verdict is `unknown`
+
+#### Scenario: A truly consumer-less channel still alarms
+
+- **WHEN** the same channel's `INFO` lists no consumer **THEN** every declared kind is missing and
+  the verdict is `missing`
+
+### Requirement: The bridge reads a channel's programme return as a well-behaved client of the Playout's `pgm` feed
+
+The bridge SHALL read programme channel _n_'s return from the Playout's host on port
+`9250 + n − 1`, computed by ONE function (`pgmPort`) that is the only place the number is written,
+and SHALL NEVER address `9350 + n − 1`, which is that channel's PREVIEW. The host SHALL be the
+Playout's host as the bridge's other Playout-bound traffic reaches it: the configured Playout
+host's one pinned IPv4 (`DESKTOP-APPS-01-C` C6), or — with no Playout configured — server A's
+configured host through the same address the AMCP session dials.
+
+Because the feed's server runs inside the playout core and is not hardened, the bridge SHALL
+behave exactly as a well-behaved reader does: on each connection it SHALL write exactly
+`GET / HTTP/1.1\r\nHost: <host>\r\n\r\n` and SHALL write nothing after it; it SHALL split parts by
+their `Content-Length`, never by scanning for the boundary; it SHALL bound what it buffers; and
+it SHALL NEVER change, or ask anyone to change, the Playout's PGM settings. A channel ≥ 21, whose
+port lies outside the Playout's firewall rule for these feeds (9250–9269), SHALL NOT be dialled;
+its state SHALL be `unavailable` and the bridge log SHALL name the port and the rule.
+
+#### Scenario: The request is exact, and nothing follows it
+
+- **WHEN** the relay connects to a fake feed that records every byte it receives
+- **THEN** the fake received exactly `GET / HTTP/1.1\r\nHost: <host>\r\n\r\n`, and nothing more
+  arrives after it however long the connection stays up — and the fake did receive that request
+  (the positive control)
+
+#### Scenario: Parts are framed by Content-Length
+
+- **WHEN** the fake sends a JPEG whose bytes contain `--apasaipgm` in the middle of its data,
+  between ordinary frames
+- **THEN** that JPEG arrives whole and byte-identical, as do the ordinary frames either side of it
+
+#### Scenario: The preview port is never addressed
+
+- **WHEN** `pgmPort(n)` is computed for every channel from 1 to 20
+- **THEN** none lies in 9350–9369, and `pgmPort(2)` is `9251`
+
+#### Scenario: A channel outside the firewall rule is not dialled
+
+- **WHEN** a console watches channel 21
+- **THEN** no connection is attempted, its state is `unavailable`, and the bridge log names port
+  9270 and the 9250–9269 rule
+
+### Requirement: The bridge pulls the programme return only while it is watched, with one upstream per channel
+
+The bridge SHALL hold a channel's upstream connection only while at least one console is attached
+to that channel's relay, SHALL close it within 2 s of the last console detaching, and SHALL hold
+at most ONE upstream connection per channel however many consoles watch it.
+
+#### Scenario: Nothing is pulled while nothing is watched
+
+- **WHEN** the bridge runs and no console is attached to any channel's relay
+- **THEN** the fake feed sees no connection; and when a console then attaches it does see one
+  (the positive control), and when that console detaches the connection is closed within 2 s
+
+#### Scenario: Two consoles on one channel share one upstream
+
+- **WHEN** two consoles watch the same channel
+- **THEN** the fake sees exactly one connection, and both consoles receive its frames; and two
+  consoles on two different channels give two connections (the positive control)
+
+### Requirement: The bridge reports the return's state and reconnects with increasing backoff
+
+The bridge SHALL publish each watched channel's state — `connecting`, `live`, `stalled` or
+`unavailable` — on `pgmReturn.status-changed` and answer it on `pgmReturn.status`. A connection
+that delivers no frame within 2 s SHALL be `stalled`; a connection with no frame for 8 s SHALL be
+closed; and after any close or failure the bridge SHALL reconnect after an increasing delay, never
+in a tight loop, resetting the delay only after a connection has delivered frames for a while.
+
+#### Scenario: A stall is reported and clears when frames resume
+
+- **WHEN** the fake stops sending frames on a live connection
+- **THEN** the channel's state becomes `stalled`; and when frames resume it becomes `live` again
+
+#### Scenario: A closed feed is reconnected with a growing backoff
+
+- **WHEN** the fake closes every connection as soon as it is made
+- **THEN** the bridge reconnects each time, and each gap between attempts is longer than the one
+  before it until the cap
+
+### Requirement: The bridge relays the programme return same-origin, loopback only, bytes untouched
+
+The console server SHALL answer `GET /pgm/<n>` as `multipart/x-mixed-replace`, relaying each JPEG
+the upstream delivered byte for byte in its own part, SHALL refuse any client whose socket address
+is not loopback, and SHALL add no route to the template origin.
+
+#### Scenario: A non-loopback client is refused
+
+- **WHEN** a client whose address is not loopback requests `/pgm/1`
+- **THEN** it is answered `403` and nothing is attached; and a loopback client is served the
+  stream (the positive control)
+
+### Requirement: The station declares one bank per channel
+
+The bridge SHALL hold one fixed-layer bank per declared channel — a list keyed by channel, at most one bank per channel, each with the standard bands (beds 50–59, plates 60–79, templates 80–99) — and `#declaredChannels()` SHALL answer every bank's channel, so that the station fence, the restore fence, the orphan sweep, the playout rows, the lock scope, the permitted channels, the mode and output reads and the channel-settings store read the plural through the one predicate they already ask. `fixedLayers.banks` SHALL answer the whole list, `fixedLayers.set-banks` (station-admin, at least one bank) SHALL replace it and `fixedLayers.banks-changed` SHALL publish it; `fixedLayers.config`, `fixedLayers.set-config` and `fixedLayers.config-changed` SHALL stay as the one-bank view of the same list — `config` answers the first channel's bank, and `set-config` makes the set that one bank. The connect-time volume sweep SHALL cover every declared bank, and the post-`CLEAR` `MIXER CLEAR` SHALL follow a CLEAR inside any declared bank.
+
+#### Scenario: Two declared banks
+
+- **WHEN** the bridge boots with banks on channels 1 and 2 **THEN** both channels are declared, each row is published from its own channel's bank with that bank's names, `fixedLayers.config` answers channel 1's bank, and channel 3 is not declared
+
+#### Scenario: The sweep covers every bank
+
+- **WHEN** the bridge connects **THEN** every declared row on both channels is sent `MIXER <ch>-<layer> VOLUME 1` **AND** an undeclared channel is sent none
+
+#### Scenario: The fence and discovery read the plural
+
+- **WHEN** a request names channel 3 **THEN** it is refused with the station sentence **AND** the same request on channel 1 or 2 passes the fence
+- **WHEN** `channels.list` is read **THEN** channels 1 and 2 are both `declared`
+
+#### Scenario: A take and a clear on one channel touch nothing on the other
+
+- **WHEN** a graphic is taken on channel 1 **THEN** `CG 1-99 PLAY 0` reaches the wire and nothing is written to channel 2 **AND** the same take on channel 2 writes there and nothing to channel 1
+- **WHEN** channel 2's on-air row is cleared **THEN** `CLEAR 2-99` is followed by `MIXER 2-99 CLEAR`, nothing is written to channel 1, and channel 1's graphic stays on air
+
+### Requirement: The bank file keeps a one-channel station byte-identical
+
+The bridge SHALL write a set of ONE bank as the v1 bank object, byte for byte, and a set of two or more as `{ "banks": [ … ] }` in channel order. It SHALL read both shapes — a v1 object as a one-entry list — and SHALL fail the boot on anything else, a duplicate channel or an empty list included, as it fails today on any unreadable bank file. An empty set SHALL never be written.
+
+#### Scenario: One bank is the v1 file
+
+- **WHEN** a one-channel station's set is written **THEN** the file is the v1 bank object, byte for byte **AND** a v1 file reads back as a one-entry list
+
+#### Scenario: Two banks round-trip
+
+- **WHEN** two banks are written **THEN** the file is `{ "banks": [ … ] }` in channel order and reads back as the same two banks **AND** a v1 reader refuses that file
+
+#### Scenario: A malformed set is a hard failure
+
+- **WHEN** the file names the same channel twice, or an empty list **THEN** the boot fails
+
+### Requirement: The channel set changes only where nothing of ours holds air
+
+`fixedLayers.set-banks` SHALL be validated per channel by `validateFixedBanksChange`: an edited channel SHALL keep every single-bank rule, an added channel SHALL be validated as a fresh install, and a removed channel SHALL be refused while anything of ours on it is on air, unsettled, unverified or holding a resident producer, with `B-269`'s sentence "Something of ours is still on air on channel N — take it off air first."; absent that predicate a removal SHALL be refused (fail closed). Air on a channel that stays SHALL NOT refuse the removal of another. Items left on a removed channel SHALL leave the stack with no wire command, and a channel removed while clean SHALL leave no stray. `fixedLayers.set-config` on a station declaring several channels SHALL make the set that one bank under the same rule. The permission gate and the lock SHALL judge `set-banks` by the channels it adds, edits or removes; a bank sent back unchanged is not an act on its channel.
+
+#### Scenario: Adding a channel
+
+- **WHEN** `set-banks` adds channel 2 to a channel-1 station **THEN** it is accepted, the file is written as `{ banks }`, and a restart boots both channels
+
+#### Scenario: Removing a channel that holds our air
+
+- **WHEN** our graphic is on air on channel 1 and the set drops channel 1 **THEN** the change is refused with the sentence and nothing is sent **AND WHEN** the graphic is cleared **THEN** the same change is accepted
+
+#### Scenario: A clean removal leaves no stray
+
+- **WHEN** an idle channel is removed from the set **THEN** no stray is recorded and nothing is written to that channel
+
+#### Scenario: Air elsewhere does not block a removal
+
+- **WHEN** channel 1 holds our air and the set drops idle channel 2 **THEN** the change is accepted
+
+### Requirement: The housekeeping bulk verbs take an optional channel
+
+`stack.remove-all`, `stack.clear-all`, `stack.stop-all` and `stack.snapshot` SHALL accept an optional `{ channel }`. A bare call SHALL keep its meaning, and its wire output, byte for byte. With a channel, the verb SHALL act on that channel's items alone and SHALL write nothing to any other channel; `remove-all`'s on-air refusal SHALL be decided over that channel alone; the station fence SHALL refuse a channel the station does not declare, with nothing sent; and the permission check SHALL apply to that channel alone, all-or-nothing.
+
+#### Scenario: CLEAR ALL on one channel
+
+- **GIVEN** a graphic on air on each of channels 1 and 2
+- **WHEN** CLEAR ALL names channel 2 **THEN** `CLEAR 2-99` is sent, nothing is written to channel 1, and channel 1's graphic stays on air **AND WHEN** it names channel 1 **THEN** channel 1 is cleared and nothing is written to channel 2
+- **WHEN** CLEAR ALL is sent bare **THEN** both channels are cleared, as before
+
+#### Scenario: STOP ALL and REMOVE ALL on one channel
+
+- **WHEN** STOP ALL names channel 1 **THEN** `CG 1-99 STOP 0` is sent, nothing is written to channel 2, and channel 2's graphic stays on air **AND** the control on channel 2 stops channel 2
+- **WHEN** channel 2 is idle, channel 1 is on air, and REMOVE ALL names channel 2 **THEN** channel 2's item leaves the stack and nothing is written to channel 1 **AND WHEN** it names channel 1 **THEN** it is refused, all-or-nothing, and channel 1 stays on air
+
+#### Scenario: The snapshot of one channel
+
+- **WHEN** the snapshot names channel 2 **THEN** it lists channel 2's items alone **AND** a bare snapshot lists both
+
+#### Scenario: The gates judge the named channel
+
+- **WHEN** CLEAR ALL names channel 3, which the station does not declare **THEN** it is refused with the station sentence and nothing is sent **AND** channel 2 passes and clears
+- **WHEN** a principal holding channel 2 only sends CLEAR ALL on channel 2 **THEN** it passes **AND** on channel 1, or bare over a stack holding a channel-1 row, it is refused with the channel sentence
+
+### Requirement: PANIC for one channel is its own verb
+
+`stack.silence-channel-live-plates` SHALL take a required `{ channel }` and SHALL set to zero every live plate the bridge's ledger holds a seat for on that channel — the ledger, never a status (`B-122`) — sending only `MIXER <ch>-<layer> VOLUME 0`, and nothing to any other channel. It SHALL be `operator` class and channel-scoped: the station fence, the permission gate and a lock covering that channel SHALL judge it as they judge any other intent naming a channel. `stack.silence-all-live-plates` SHALL stay exactly as it is — `z.void()`, unscoped, `operator` class, judged by no channel check — silencing every seat on every channel (A16); it is the every-channel control.
+
+#### Scenario: One channel silenced, the other untouched
+
+- **GIVEN** a plate-bearing bed on air on each channel, both plates raised
+- **WHEN** PANIC names channel 1 **THEN** channel 1's two plates are at zero, channel 2's are still raised, nothing is written to channel 2, and every line sent is a `VOLUME 0` **AND** channel 2's own PANIC then silences channel 2
+
+#### Scenario: The every-channel silence still reaches both
+
+- **WHEN** `stack.silence-all-live-plates` is sent **THEN** all four plates on both channels are at zero
+
+#### Scenario: The gates judge the named channel
+
+- **WHEN** PANIC names an undeclared channel **THEN** it is refused with the station sentence and nothing is silenced **AND** the declared channel silences
+- **WHEN** a principal holding channel 2 only sends PANIC on channel 1 **THEN** it is refused with the channel sentence **AND** on channel 2 it passes **AND** the every-channel PANIC is not channel-checked
+
+#### Scenario: A lock covering one of two channels
+
+- **GIVEN** two declared channels, and a lock engaged by a principal holding channel 1 only
+- **WHEN** a principal holding both channels sends PANIC, CLEAR ALL, STOP ALL or REMOVE ALL naming channel 1 **THEN** each is refused with the lock sentence **AND** each of them naming channel 2 passes
+
+### Requirement: The demo station has a station-admin who can apply it
+
+The development Playout (`scripts/dev-playout.ts`) SHALL offer `cg-admin-ch2` — the cumulative `station-admin`, `operator` and `viewer` roles, granted `127.0.0.1` channel 2 — and SHALL print it first in its sign-in list as the one user who can apply Station setup on the demo station. `cg-admin` SHALL keep its channel-1 grant unchanged.
+
+#### Scenario: The demo's own station-admin
+
+- **WHEN** `cg-admin-ch2` signs in and sends `fixedLayers.set-config` on channel 2 **THEN** it is accepted **AND** `cg-admin` sending the same is refused with the channel sentence
+
+### Requirement: A refused hide names its layer as data
+
+The bank doors — `fixedLayers.set-config` and `fixedLayers.set-banks` — SHALL carry, on an
+`untick-occupied` or `untick-unknown` refusal, the layer the refusal is about as `layer`, beside
+the reason and the bridge's own `message` (`DELTA-MULTI-CHANNEL-01-A` A5), so a console names the
+layer in its own sentence and never reads it out of the message.
+
+#### Scenario: The layer rides the refusal
+
+- **WHEN** hiding layer 74 is refused because what is on it cannot be verified **THEN** the refusal
+  carries `reason: untick-unknown` and `layer: 74`
+- **WHEN** hiding bed layer 6 is refused because a producer is on it **THEN** the refusal carries
+  `reason: untick-occupied` and `layer: 6`
+
+### Requirement: A fresh take SHALL air everything or nothing
+
+A take SHALL stop at the first plate whose `PLAY` is refused, SHALL NOT try the plates after it, and
+SHALL NOT send the graphic's `CG PLAY`. It SHALL then take back exactly what it put there, through the
+one clean-up rule: the plates it seated, and the graphic it added with `CG ADD`, removed from its
+layer the way `out()` removes it. When the graphic's own `CG PLAY` is refused after its plates were
+seated, the take SHALL be undone the same way. A take whose plates are all accepted SHALL send the
+same AMCP, in the same order, as before this requirement. A refused preset — a seat only a look not on
+screen uses — SHALL NOT refuse the take.
+
+#### Scenario: The first plate is refused on a fresh take
+
+- **WHEN** a fresh take of a two-plate row reaches `PLAY 2-60 DECKLINK DEVICE 1` and the server
+  answers `403 PLAY FAILED`
+- **THEN** no `CG PLAY` is sent, `PLAY 2-61` is never sent, no `CLEAR 2-60` is sent (the server left
+  that layer as it was), `CLEAR 2-59` removes the graphic the take added, and nothing of the take is
+  left on 2-59 or 2-60
+
+#### Scenario: A later plate is refused after an earlier one was seated
+
+- **WHEN** plate 1's `PLAY` landed and plate 2's `PLAY` is refused
+- **THEN** plate 1's layer is cleared with its mixer, because this take seated it; plate 2's layer is
+  not cleared; the graphic the take added is removed; and no `CG PLAY` is sent
+
+#### Scenario: The graphic's own CG PLAY is refused after its plates were seated
+
+- **WHEN** every plate landed and the graphic's `CG PLAY` is refused
+- **THEN** every plate this take seated comes down and the graphic it added comes off its layer
+
+#### Scenario: A take whose plates are all accepted is unchanged
+
+- **WHEN** every plate's `PLAY` and every line after it is accepted
+- **THEN** the take sends the thirteen lines recorded before this requirement, in the same order
+
+### Requirement: After a refusal the bridge SHALL clear only a layer the refused operation put a producer on
+
+The bridge SHALL decide every clean-up that follows a refused operation by one rule — a take's
+rollback, a dropped preset, the teardown of a live or switch reconcile's failed plate, and the graphic
+a refused take added: a layer SHALL be cleared only if the operation put a producer on it (its `PLAY`
+was acknowledged, or no usable reply came), and SHALL NEVER be cleared if a producer of ours was on it
+before the operation began. A `PLAY` answered with a 4xx code SHALL be read as having put nothing on
+the layer.
+
+#### Scenario: An R-048 swap whose PLAY is refused leaves the working picture
+
+- **WHEN** an on-air plate is pointed at another source and the replacing `PLAY` is refused
+- **THEN** no `CLEAR` and no `MIXER … CLEAR` is sent for that layer, the old producer stays on air,
+  and the ledger still names it
+
+#### Scenario: A refusal on a layer the same operation seated is cleared
+
+- **WHEN** a swap seats its new producer on a fresh layer and the line after that `PLAY` is refused
+- **THEN** that layer is cleared with its mixer, and no layer the operation did not seat is touched
+
+### Requirement: A refused take SHALL be carried on its row
+
+When a take is refused, the bridge SHALL record on the row, and publish with it, the refusal's code,
+the refused command with its payload elided, and — when a plate was refused — that plate and the
+catalog entry it resolved to (its id and its name). While the refusal stands the row SHALL publish the
+`error` status unless its reconciled status claims or may claim air. The refusal SHALL be withdrawn by
+the row's next take that lands, by clearing the row, and by removing it. The take's answer SHALL
+carry `refusalOnRow` exactly when it recorded such a refusal, and never for a refusal made before
+anything was sent.
+
+#### Scenario: The row names the plate that was refused
+
+- **WHEN** Bed 59's take is refused on plate `l1`, assigned to `studio1`
+- **THEN** the row publishes `status: error` and `takeRefusal` with `code: amcp-403`,
+  `command: PLAY 2-60 DECKLINK DEVICE 1`, `plateId: l1`, `sourceId`, and `sourceName: studio1`
+- **AND** the take answers `refusalOnRow: true`; a take refused before the wire (`already-on-air`)
+  does not
+
+#### Scenario: The next take that lands withdraws it
+
+- **WHEN** the same row is taken again and every command is accepted
+- **THEN** the row publishes no `takeRefusal`
+
+### Requirement: The bridge SHALL refuse a take of a row that is on air or whose previous take is unresolved
+
+The bridge SHALL refuse a take, sending nothing to CasparCG, while the row is on air or unsettled
+(`isOnAirStatus`: on air, playing, updating, exiting, `unconfirmed`, or a command still pending) or
+while the ledger holds its live seats — the one predicate `#ownsLiveSeats` — and SHALL answer the
+code `already-on-air`. The refusal SHALL be the same for every console. A changed look, changed fields
+and a dead input SHALL keep their own doors (the look picker, UPDATE, the `R-048` swap).
+
+#### Scenario: A second console gets the same refusal
+
+- **WHEN** a row is on air and a second console, and then the first, send `stack.take` for it
+- **THEN** both are answered `accepted: false`, `already-on-air`, no AMCP line is written, and the
+  graphic on air is unchanged
+
+#### Scenario: After the row is taken out, a take works
+
+- **WHEN** the same row is taken out and then taken again
+- **THEN** the take is accepted and its `CG PLAY` is sent
+
+#### Scenario: A take while the previous take is unresolved is refused
+
+- **WHEN** a take's reply is later than the bound and the row reads `unconfirmed`
+- **THEN** another take of that row is refused with nothing sent
+
+### Requirement: The bridge SHALL log every AMCP command with its reply line and its time
+
+The bridge SHALL write every AMCP command it sends, the reply's header line exactly as CasparCG sent
+it (or why none came), the server, the round trip and the time, one line per exchange, to a
+size-capped file that rotates to one previous file. Launched with a state home, the file SHALL be
+`<state-home>/logs/amcp.log`, beside the installed app's `bridge.log`. No token SHALL be written: the
+take token in a `CG ADD`/`CG UPDATE` payload SHALL be redacted. A file that cannot be written SHALL
+never stop or delay playout.
+
+#### Scenario: The installed app's sidecar writes the log
+
+- **WHEN** the bundled sidecar is started as the desktop shell starts it, with `--state-home`
+- **THEN** `<state-home>/logs/amcp.log` receives each command and its reply line
+- **AND** the sidecar's stderr carries no exchange line
+
+#### Scenario: A take is logged without its token
+
+- **WHEN** a row is taken
+- **THEN** its `CG ADD` and `CG PLAY` lines are written with their replies
+- **AND** the take token in the `CG ADD` payload reads `<redacted>`
+
+### Requirement: The bridge reads the Playout's channel states at most every 5 seconds and publishes them beside the names
+
+The bridge SHALL read the Playout's D4 channel list no more often than every 5 seconds — one named
+constant, with `If-None-Match` — and SHALL publish each row's optional `output` (`on-air` | `off` |
+`unknown`) and optional `playlist` (the Playout's word) with its name. Both SHALL be parsed
+leniently: an `output` it does not know, or a field of the wrong type, SHALL be dropped — read by the
+console as unknown — and SHALL never void the row or its name; a `playlist` word it does not know
+SHALL be published verbatim. A failed read SHALL publish no state at all (the catalogue is absent),
+never a stale one. The bridge SHALL never infer either fact from CasparCG's layers. Asking for the
+channel list — first-run's channel step or `Change channel…` opening — SHALL read D4 first through
+the same floor, so no read is ever closer than 5 seconds to the last.
+
+#### Scenario: The floor holds
+
+- **WHEN** the catalogue is polled for a minute
+- **THEN** no two reads are closer than 5 seconds, and a 304 keeps what the bridge holds
+
+#### Scenario: State rides with the name
+
+- **WHEN** the Playout reports channel 1 `on-air` / `playing` and channel 2 `off` / `stopped`
+- **THEN** the published channel list carries those values beside each channel's name
+
+#### Scenario: A value the bridge does not know never voids a row
+
+- **WHEN** a row's `output` is a value outside the three, or of the wrong type
+- **THEN** that field is absent from the published row and the row's name is still published
+- **AND** a `playlist` word outside the ten is published as it came
+
+#### Scenario: Opening the channel list reads, through the floor
+
+- **WHEN** `Change channel…` opens five seconds or more after the last read
+- **THEN** D4 is read once and the list shows what it answered
+- **AND** opening it again inside five seconds reads nothing (the control)
+
+### Requirement: The bridge never clears a whole channel's mixer and never batches with BEGIN
+
+The bridge SHALL NOT send a channel-wide `MIXER <ch> CLEAR` on any path: every `MIXER … CLEAR` it sends
+SHALL name a layer (`MIXER <ch>-<layer> CLEAR`), because a channel-wide clear resets every layer's transform to
+full opacity and volume — revealing and un-muting every seated, hidden plate — and wipes the Playout's own layer
+gain. The bridge SHALL NOT use AMCP `BEGIN … COMMIT` batching, which is not frame-aligned on this core; its
+`MIXER … DEFER` lines and their `MIXER <ch> COMMIT` SHALL go out outside any such batch.
+
+#### Scenario: No channel-wide mixer clear exists
+
+- **WHEN** the bridge's source is scanned for the text of every `MIXER … CLEAR` line it can build
+- **THEN** the only one is the layer-scoped `MIXER <ch>-<layer> CLEAR`
+- **AND** that builder still produces `MIXER 1-80 CLEAR` for a bank row (the control)
+
+#### Scenario: No BEGIN batch exists
+
+- **WHEN** the bridge's source is scanned for an AMCP `BEGIN` or `DISCARD` literal
+- **THEN** none is found, while the same scan finds the `MIXER <ch> COMMIT` it builds (the control)
+
+### Requirement: A look switch airs all of its new look or none of it
+
+A look switch SHALL seat every plate its new look needs, and every fresh preset, BEFORE the page is told
+anything, so that a refused plate refuses the switch with the page untouched and nothing on air changed. Each
+such plate SHALL be seated through the seat step (hidden, committed, then `PLAY`), in one named place that later
+work (`ROUTE-PLATES-01`'s `LOADBG` → `PLAY`) extends. On a refused required plate the bridge SHALL undo only what
+the switch seated, through `mayClearAfterRefusal` — a plate whose `PLAY` landed is cleared, one whose `PLAY` was
+refused seated nothing and is not — and SHALL send no page `UPDATE` and no further `MIXER COMMIT`; the row SHALL
+keep its old look and carry the refusal as its `takeRefusal`, `FIELD-FIXES-01`'s one line naming the plate's
+source, and the reply SHALL say `refusalOnRow`. On success the switch SHALL run as before, with each pre-seated
+plate revealed in the switch's one `MIXER <ch> COMMIT`, and SHALL withdraw the row's line. A plate whose layer
+already carries a producer of ours (an in-place replace) SHALL keep the in-switch path. A switch that seated a
+plate SHALL let it run hidden for three holds before telling the page, so its producer has its own picture by the
+reveal; and a row taken off air while the pre-seat or its preroll was in flight SHALL NOT reach the apply — the
+pre-seat is undone and the switch answers `not-live`.
+
+#### Scenario: Refused 1 → 2
+
+- **GIVEN** a row on air on look 1, whose look-2 plate is not seated
+- **WHEN** the operator switches to look 2 and CasparCG refuses that plate's `PLAY`
+- **THEN** the wire carries only the plate's hide, one `MIXER <ch> COMMIT` and the refused `PLAY` — no page
+  `UPDATE` and no further `MIXER COMMIT` — plate 1 receives nothing, the refused plate's layer is not cleared, and
+  the row stays on look 1 with the line naming the plate's source
+
+#### Scenario: Refused 1 → 3, plate 2 lands and plate 3 is refused
+
+- **WHEN** a switch's pre-seat lands plate 2 and CasparCG refuses plate 3
+- **THEN** plate 2 is cleared and only plate 2, and nothing else moves
+
+#### Scenario: Every plate accepted (the control)
+
+- **WHEN** every plate the new look needs is accepted
+- **THEN** every pre-seat `PLAY` is answered before the page `UPDATE`, the new plates are revealed in the one
+  commit after it, the row is on the new look, and a line a refused switch left is withdrawn
+
+#### Scenario: Held plates
+
+- **WHEN** every plate the new look shows is already seated and held
+- **THEN** the switch sends no `PLAY` and no `OPACITY`, and its first line is the page tell
+
+#### Scenario: The preroll
+
+- **GIVEN** the production hold
+- **WHEN** a switch seats a plate
+- **THEN** at least three holds pass between that plate's answered `PLAY` and the page tell
+
+#### Scenario: The row leaves the air mid-pre-seat
+
+- **WHEN** a row is taken out while its switch's pre-seat is in flight
+- **THEN** the page is never told, nothing is revealed, the pre-seated plate is cleared, no ledger is left for the
+  row, and the switch answers `not-live`
+
+### Requirement: Every plate is seated hidden and revealed in its action's one commit
+
+The bridge SHALL seat every plate hidden when its layer carries no producer of ours — on a take, a switch, a
+swap or a restore: stage `MIXER <L> OPACITY 0`, `VOLUME 0` and the plate's fit as `DEFER`, send one
+`MIXER <ch> COMMIT` and wait for it, and only then send the `PLAY`; a hide that did not land SHALL send no
+`PLAY`. The reveal SHALL ride the action's one commit: `OPACITY 1` and the plate's volume as today's code
+computes it — a parked seat muted, every other plate at its recorded intent, and never a fixed value. A take
+refused at a plate SHALL stage no reveal. A `PLAY` onto a layer that already carries a producer of ours (an
+in-place replace) SHALL NOT be hidden first, because hiding it would take a working picture off air before the
+replace is known to land.
+
+#### Scenario: Hidden before PLAY
+
+- **WHEN** a take, a switch, or a swap onto a fresh layer seats a plate
+- **THEN** that layer's `OPACITY 0` and `VOLUME 0` are committed before its `PLAY`, and its `OPACITY 1` follows
+  it
+- **AND** the page layer's own take order is unchanged (the control)
+
+#### Scenario: An in-place replace is not hidden
+
+- **WHEN** a swap or a restore replaces the producer on a layer that carries one of ours
+- **THEN** no `OPACITY 0` precedes its `PLAY`, and a refused one leaves the working picture on air
+
+#### Scenario: The reveal restores the desired volume
+
+- **WHEN** a plate whose intent is 0 and a plate raised to 1 are seated
+- **THEN** the first is revealed at 0 and the second at 1
+
+### Requirement: After an AMCP reconnect the first DEFER set carries our full plate mixer state
+
+The bridge SHALL re-send its full plate mixer state after every AMCP reconnect: once the primary's session
+reaches `healthy` on a new connection, and after committing any orphaned batch, each row's plate layers in CG's
+bands (layer 50 and up) — `FILL`, `CLIP`, the volume as today's code computes it and the opacity as today's code
+computes it (`OPACITY 1` for a plate on screen, `OPACITY 0` for a held Playout route or a held clip), all
+`DEFER` — followed by that row's one `MIXER <ch> COMMIT`, under the row's seat lock. It SHALL send nothing for a
+layer below 50, and an ordinary switch SHALL send only its own deltas. A reconnect is mixer state only: no clip is
+re-played, paused or resumed by it. A reconnect of the backup alone is not re-sent: that needs a per-session send
+the runtime does not have.
+
+#### Scenario: The first commit after a reconnect
+
+- **WHEN** the AMCP connection drops and is restored with two plates seated
+- **THEN** the first commit after the new handshake is preceded by each plate's `FILL`, `CLIP`, `VOLUME` and
+  `OPACITY`, and nothing is left staged
+- **AND** an ordinary switch before it sent no `OPACITY` at all (the control)
+
+#### Scenario: A held clip stays hidden
+
+- **WHEN** the connection drops and is restored while a clip is held and paused
+- **THEN** its layer is re-sent `OPACITY 0` and muted, it is neither re-played nor resumed, and the plate on
+  screen is re-sent `OPACITY 1` (the control)
+
+#### Scenario: Nothing below layer 50
+
+- **GIVEN** a plate band that straddles the floor, with plates on layers 49 and 50
+- **WHEN** the connection is restored
+- **THEN** layer 50 is re-sent and layer 49 receives nothing
+
+#### Scenario: The backup's journal replay keeps the order
+
+- **WHEN** a switch runs under `journal-replay` and the bridge fails over
+- **THEN** the backup receives the switch's hide, commit, `PLAY`, page `UPDATE`, reveal and commit in exactly the
+  primary's order
+
+### Requirement: A plate layer's mixer is reset only after its CLEAR landed
+
+The bridge SHALL send `MIXER <ch>-<L> CLEAR` on a plate layer only after that layer's `CLEAR` was acknowledged on
+the primary, at every site that tears a plate down (the refusal clean-up, the end-of-apply sweep and
+`teardownLiveLayers`), because a `MIXER CLEAR` on a layer that still holds a plate reveals and un-mutes it at
+full frame.
+
+#### Scenario: A refused CLEAR
+
+- **WHEN** a row is taken out and CasparCG refuses one plate layer's `CLEAR`
+- **THEN** that layer receives no `MIXER CLEAR`, while the plate whose `CLEAR` landed does (the control)
+
+### Requirement: A take refused for having no plate band SHALL be carried on its row
+
+A take the bridge refuses because no Live Source layer band is in force SHALL be recorded on its row as a take
+refusal carrying the code `live-source-no-layer-range` and no plate — the band is the station's, not a box's — and
+SHALL be answered as a refusal the row carries, exactly as a take refused for a plate is. Nothing SHALL be sent to
+the server. A take of that row that lands SHALL withdraw it.
+
+⚠ Amended 2026-09-28 (`plate-band`, `PLATE-BAND-01`): "no band in force" — none declared, and no default. A
+station linked to the Playout with none declared is given 60–79 unless its own config claims a layer there, and
+then no refusal happens at all.
+
+#### Scenario: The no-band refusal is on the row
+
+- **WHEN** a template with plates is taken on a station with no plate band in force (none declared, and not linked
+  to the Playout or claiming a layer in 60–79) **THEN** the take is refused with `live-source-no-layer-range`, the
+  row carries the refusal with that code, the reply says the row carries it, and no AMCP line was sent for the take
+- **WHEN** the row is later taken and the take lands **THEN** the refusal is withdrawn
+
+### Requirement: A Source defaults write SHALL be judged by the channel grant on the channels it changes
+
+A `sources.set-assignments` SHALL be refused, before anything is applied, when the signed-in principal's grant
+(`cg_channels`) does not hold a channel whose Source defaults it changes — with the permission gate's existing
+channel sentence for that channel. `"*"` SHALL hold every channel. A channel is changed when the defaults it reads
+through the one reader differ between the set in force and the set sent; a channel whose defaults are sent back as
+they were SHALL NOT be judged, because a console sends the whole set on every save. The role check SHALL come first,
+as for every route, and with auth off nothing SHALL be refused by it. A channel-scoped lock SHALL judge the same
+channels, as it judges a bank change's.
+
+#### Scenario: A station-admin holding channel 2 only
+
+- **WHEN** a station-admin granted channel 2 alone saves Source defaults that change channel 1's **THEN** the save
+  is refused with `This sign-in does not cover channel 1, …`, and no channel's defaults change
+- **WHEN** the same principal saves defaults that change channel 2's alone **THEN** they change, and channel 1's
+  stay as they were (the control)
+
+#### Scenario: A principal holding every channel
+
+- **WHEN** a station-admin whose grant is `"*"` changes channel 1's defaults and then channel 2's **THEN** both are
+  accepted
+
+#### Scenario: The role still comes first, and auth off refuses nothing
+
+- **WHEN** an operator-role principal saves Source defaults **THEN** it is refused for its role, as before
+- **WHEN** the bridge runs with auth off **THEN** a save that changes channel 1's defaults is accepted
+
+#### Scenario: A lock covering channel 1
+
+- **WHEN** a lock covers channel 1 and a principal holding channels 1 and 2 saves defaults that change channel 1's
+  **THEN** the lock refuses it
+- **WHEN** the same principal's save changes channel 2's alone **THEN** it passes the lock and is applied
+
+#### Scenario: The console says so
+
+- **WHEN** the Source defaults dialog's save is refused by the grant **THEN** the dialog shows the gate's sentence,
+  keeps the operator's edit, and adopts nothing
+
+### Requirement: A media clip SHALL follow its own When hidden when a look hides its plate
+
+A clip whose `whenHidden` is `pause` or `continue` SHALL be held — seated, muted and hidden — when a look does not
+show its plate, and a clip whose `whenHidden` is `restart` SHALL be torn down as every clip was before. Hiding a
+held clip SHALL be `OPACITY 0` and its mute, staged with its park into the switch's one `MIXER <ch> COMMIT`; a
+`pause` clip SHALL then be sent `PAUSE` right after that commit; a `continue` clip SHALL be sent nothing more.
+Showing it again SHALL be its reveal (`OPACITY 1`) and its declared volume in the switch's one commit, with a
+`RESUME` sent just before that commit for a clip the hide paused; a clip the OPERATOR paused SHALL stay paused.
+No `CLEAR` SHALL reach a held clip, and a switch refused after a `RESUME` SHALL pause the clip again.
+
+#### Scenario: Pause — two boxes to one, and back
+
+- **WHEN** a two-box look showing a clip in box 2 is switched to a one-box look **THEN** the clip's layer gets
+  `OPACITY 0` and `VOLUME 0` in the switch's committed batch, then `PAUSE`, and no `CLEAR`
+- **AND** switching back sends `RESUME` and the clip's declared volume on the same layer, before the commit that
+  reveals it, and no `PLAY`
+- **AND** the clip's reported time stood still while it was hidden
+
+#### Scenario: Restart — the control
+
+- **WHEN** the clip's `whenHidden` is `restart` **THEN** hiding it sends `CLEAR` and `MIXER CLEAR` for its layer,
+  and switching back sends a fresh `PLAY` of the clip
+
+#### Scenario: Continue
+
+- **WHEN** the clip's `whenHidden` is `continue` **THEN** hiding it sends `OPACITY 0` and the mute only, with no
+  `PAUSE` and no `CLEAR`, and showing it sends only the reveal
+- **AND** the same switch with `pause` sends the `PAUSE` (the control)
+
+#### Scenario: An operator's pause survives a look
+
+- **WHEN** the operator paused the clip and a look hides it and shows it again **THEN** no `RESUME` is sent and it
+  stays paused
+
+### Requirement: A clip SHALL play with LOOP when its Loop is on, and SHALL freeze on its last frame when it is not
+
+A clip SHALL be played with the bare `LOOP` flag when its `loop` is on, and without it when it is off. A change of
+`loop` SHALL reach every seated clip of that media at once with `CALL <ch>-<L> LOOP 1|0`; a change of `whenHidden`
+SHALL send nothing. Nothing SHALL be sent at the end of a clip that is not looping: 2.5.0's ffmpeg producer holds
+its last frame, and the plate stays seated.
+
+#### Scenario: Loop on and off
+
+- **WHEN** a clip with Loop on is taken **THEN** its `PLAY` ends with `LOOP`
+- **AND** with Loop off its `PLAY` carries no `LOOP` (the control)
+
+#### Scenario: A Loop change on air
+
+- **WHEN** the operator turns Loop on for a clip already playing **THEN** `CALL <ch>-<L> LOOP 1` is sent to its
+  layer, and turning it off sends `CALL <ch>-<L> LOOP 0`
+- **AND** a `whenHidden` change alone sends nothing
+
+#### Scenario: The freeze at the end
+
+- **WHEN** a clip that is not looping reaches its end **THEN** nothing is sent to its layer, its producer is still
+  the clip, and its state reads ended with no time left
+- **AND** the same clip looping is never ended — past its end it has wrapped round (the control)
+
+### Requirement: The bridge SHALL offer Play, Pause and Restart for a media plate of an on-air row
+
+`stack.media-plate-transport` SHALL send `PAUSE` for `pause`, `RESUME` for `play`, and `CALL <ch>-<L> SEEK 0`
+then `RESUME` for `restart` (a clip a look hid and paused is rewound and stays paused for the look that shows it).
+It SHALL be refused with nothing sent for a plate whose seat is not a clip, a plate that is not seated, and a row
+that is not on air. It SHALL be operator-class, scoped to the row's channel, refused under the lock, and every
+outcome SHALL be audited as `media-transport` with the clip's name.
+
+#### Scenario: The three presses
+
+- **WHEN** the operator presses Pause, Play and Restart on an on-air clip **THEN** `PAUSE`, `RESUME`, and
+  `CALL <ch>-<L> SEEK 0` then `RESUME` are sent, each audited with the clip's name
+
+#### Scenario: Refused, nothing sent
+
+- **WHEN** the press is for a live-input plate, a plate not seated, or a row not on air **THEN** it is refused
+  with `not-media`, `not-seated` or `not-on-air`, and nothing reaches the wire
+- **AND** a viewer, an operator without the row's channel, and a locked console are refused by the gate
+- **AND** an operator with the channel's grant on the on-air row is accepted and the `PAUSE` is sent (the
+  control)
+
+### Requirement: The bridge SHALL publish each seated clip's remaining time from OSC only
+
+`liveLayers.media-state` SHALL list every seated clip — its row, plate, channel and layer, its remaining time,
+whether it is paused, ended and looping — and SHALL be pushed when what a console shows would change: a whole
+second, a pause, an end. The remaining time SHALL come from the server's `file/time` report on the primary, fresh
+within the OSC window, and SHALL be absent whenever there is none; it SHALL never be estimated.
+
+#### Scenario: With and without the server's report
+
+- **WHEN** the server reports the clip's time **THEN** its remaining time is published and pushed as it changes
+- **AND** with no report the clip is still listed and carries no remaining time (the control)
+
+### Requirement: A held clip SHALL keep its band layer exactly as a held live input does
+
+A held clip SHALL stay in the ledger and SHALL occupy its band layer, so a seat that needs a layer the band no
+longer has SHALL be refused with `live-source-no-layer` exactly as it is while a live input is held; a clip set to
+`restart` SHALL free its layer when a look hides it.
+
+#### Scenario: A full band
+
+- **WHEN** a two-layer band holds a hidden clip and a second row needs a layer **THEN** its take is refused with
+  `live-source-no-layer`, and the same with a held live input
+- **AND** with the clip set to `restart` the second row is taken (the control)
+
+### Requirement: The send seam SHALL let PAUSE, RESUME and CALL reach only a seated clip of ours
+
+The AMCP send seam SHALL refuse, and send nothing for, a `PAUSE`, `RESUME` or `CALL` addressed to any coordinate
+where the ledger holds no media clip of ours — a live input, a Playout route, an empty layer, or a whole channel.
+The ledger SHALL name a clip before anything is sent to pause it.
+
+#### Scenario: Only a clip is paused
+
+- **WHEN** a `PAUSE`, `RESUME` or `CALL` is addressed to a layer carrying a live input, or to a channel **THEN** it
+  is refused with nothing sent
+- **AND** the same lines to a seated clip's own layer are sent (the control)
+
+#### Scenario: A preset clip
+
+- **WHEN** a take seats a `pause` clip that only a look nobody is showing binds **THEN** it is seated hidden, and
+  paused after the take's commit
+- **AND** the look that shows it resumes it, with no second `PLAY`
+
+### Requirement: A live-input plate's hold, release and wire SHALL be byte-identical to before
+
+Every line a take, a hold and a release send for a live-input plate SHALL be exactly what they were before this
+change: no `OPACITY`, `PAUSE`, `RESUME` or `CALL` for a live input that is not a Playout route.
+
+#### Scenario: Measured against the tree before the change
+
+- **WHEN** two live inputs are taken in a two-box look, switched to one box and back **THEN** every plate-layer
+  line equals the recording made against the tree before this change
+
+### Requirement: The bridge SHALL give the console the page it serves CasparCG
+
+A read-class `templates.page` request naming a template and optionally a channel SHALL answer the HTML the
+bridge stores for the version that channel lists (with no channel, the station-wide reading's version) —
+the same bytes its template server returns for `/template/<id>~<version>` — or a refusal saying why: the
+channel's list does not hold the template (`not-listed`), or it does and the store has no file for that
+version (`no-file`). It SHALL write nothing and send nothing to CasparCG.
+
+#### Scenario: Listed
+
+- **WHEN** CH 1 lists a template **THEN** `templates.page` for it on CH 1 answers exactly the bytes its serve
+  path returns
+
+#### Scenario: Not listed, or no file
+
+- **WHEN** CH 2 does not list it **THEN** the answer is `not-listed`
+- **WHEN** CH 1 lists it but its version's file is gone **THEN** the answer is `no-file`
+
+### Requirement: A bank no operator has applied SHALL be brought to the five-row rule once
+
+An unapplied all-shown bank SHALL be brought once to the five-row rule (the highest five rows of each band
+shown, the rest hidden) as soon as the channel's occupancy is KNOWN. Such a bank is one that no operator
+has applied since first-run declared it with every row shown — every row of its template band carries an
+explicit `true` in its visibility, a shape an operator's Apply never writes. A row the channel reads
+occupied SHALL stay shown,
+and while the occupancy is unknown nothing SHALL change. The change SHALL go through the same validated
+door as any bank change (a row is hidden only while it reads empty), SHALL be abandoned for that round if
+the banks changed meanwhile, SHALL be persisted, and SHALL be announced on the bridge's log. A bank of any
+other shape SHALL never be changed by it.
+
+#### Scenario: An old bank at start
+
+- **WHEN** the bridge starts with such a bank and the channel reads empty except layer 90 **THEN** the
+  bank shows 99–95, 90 and 59–55, and the file holds it
+- **AND** the next start changes nothing
+
+#### Scenario: Unknown, or applied
+
+- **WHEN** the channel's occupancy cannot be read **THEN** the bank and its file are unchanged
+- **WHEN** the bank carries any `false` key **THEN** it is never changed by this
+
+### Requirement: A layer of ours that CasparCG reports empty SHALL leave ON AIR
+
+The bridge SHALL treat OSC silence on a layer it holds on air as a QUESTION, never as "still playing".
+CasparCG 2.5 erases a cleared layer from its stage, and its OSC for that layer simply stops
+(`stage.cpp` `clear`); it never reports it `empty`. So for a layer this bridge holds on air — an item's
+page or a plate seat — that reported a producer and has then been silent for 1 s, while its channel still
+reports frames (`/channel/N/framerate` within 500 ms), the bridge SHALL ask CasparCG ONCE per silence:
+one `INFO <channel>` read from the primary, answering every silent layer of that channel together. It is
+the `INFO <channel>-<layer>` the owner named, spelled truthfully — CasparCG 2.5 ignores the layer and
+answers the whole channel (`AMCPCommandsImpl.cpp` `info_channel_command`), which is why the bridge builds
+`INFO` only in the channel form (`BRIDGE-TRUTH-01` §3). The read SHALL go to the primary only, unjournaled,
+at the lowest priority, and SHALL never become a poll. If the answer's stage has no such layer, the bridge
+SHALL take that item or seat off air through its reconcile, publish the layer on `layers.cleared-outside`
+(pulled, and pushed on `layers.cleared-outside-changed`) for the notice `Layer <n> on CH <c> was cleared
+outside CG Control`, re-send nothing and put nothing back. It SHALL also forget that the item's producer
+is resident, so the operator's next take ADDs the page afresh — never a `CG PLAY` on the emptied layer.
+An answer that still carries the layer, or no answer, SHALL change nothing. Whole-channel OSC silence
+SHALL never trigger the read. A layer that reports a producer again leaves the published list.
+
+#### Scenario: A foreign clear of a page and one plate
+
+- **WHEN** a second AMCP client clears the page layer and one plate layer of a multi-box row on air
+  **THEN** within 2 s both read off air and the list names each layer (measured: 1.1–1.2 s)
+- **AND** the row's other plates, and another item on the channel, stay ON AIR (the control)
+- **AND** nothing is sent to put either back — no `PLAY`, `LOADBG` or `CG ADD`
+
+#### Scenario: The operator's re-take after a foreign clear
+
+- **WHEN** another client clears the page of a row that holds nothing else, the row reads off air, and
+  the operator takes it again **THEN** the bridge sends `CG <ch>-<L> ADD` before `CG PLAY` and the page
+  is back on the stage (measured on the owner's CasparCG 2.5.0: off air after 1124–1284 ms over five
+  runs, each re-take on air again)
+
+#### Scenario: A quiet channel is not a cleared layer
+
+- **WHEN** the whole channel stops reporting frames **THEN** no `INFO` is sent and nothing leaves ON AIR
+- **WHEN** the channel still reports frames and only the layer is silent **THEN** it is asked about (the
+  control)
+- **WHEN** the same silence goes on **THEN** it is not asked about again until the layer reports and falls
+  silent anew
+
+### Requirement: The AMCP mock SHALL model a cleared layer and `INFO` as CasparCG 2.5 does
+
+`@cg/amcp-mock` SHALL stop reporting a cleared layer on OSC — never `producer "empty"` — while a stopped
+layer keeps reporting `empty`, and SHALL keep the layer's mixer state across the `CLEAR`, as the core
+keeps its transforms. `INFO <channel>` and `INFO <channel>-<layer>` SHALL both answer `201 INFO OK` and
+the whole channel's XML, each live layer as `<stage><layer><layer_N>` with its `foreground` and
+`background` producers, and no `<stage>` when no layer is live.
+
+#### Scenario: Cleared and stopped
+
+- **WHEN** a layer is cleared **THEN** no OSC for it follows and `INFO` carries no `layer_N` for it
+- **WHEN** a layer is stopped **THEN** it goes on reporting `producer "empty"`
+
+### Requirement: The bridge SHALL get OSC by OSC SUBSCRIBE on its own port, never 6250
+
+The bridge SHALL send `OSC SUBSCRIBE <port>` on every AMCP connection it opens, inside the handshake (after
+`VERSION` and `INFO`, before the resync drain), where `<port>` is the UDP port that server's session bound;
+the subscription ends with its connection, so it SHALL be sent again after every reconnect. Server A's OSC
+port SHALL be the bridge's configured OSC port (default `6251`) and server B's that port plus one. The
+bridge SHALL NOT bind UDP port `6250` on any address: the connection schema, the CLI and the service
+configuration SHALL refuse it with a sentence that says it belongs to the Playout's engine. A core that
+refuses the subscribe SHALL be reported in one log line and the session SHALL go on. OSC for a channel the
+station does not serve SHALL be dropped at the transport, before any tap or consumer; while no channel is
+declared every channel is served. A question about the occupancy of a channel whose OSC is dropped (Change
+channel… asks about the new channel before declaring it) SHALL be answered by the core with `INFO <ch>`,
+never by the tap.
+
+#### Scenario: The core's default port is held by someone else
+
+- **WHEN** another process holds the core's default OSC port and the bridge starts against the mock
+- **THEN** the bridge binds its own port, sends `OSC SUBSCRIBE <that port>` after `VERSION` and `INFO`, and
+  hears the core — control: the holder of the default port still receives the core's stream
+
+#### Scenario: The subscribe is sent again after a reconnect
+
+- **WHEN** the core drops the bridge's connection and the bridge reconnects
+- **THEN** a second `OSC SUBSCRIBE` is sent on the new connection and OSC arrives again
+
+#### Scenario: Another channel's OSC is dropped
+
+- **WHEN** the core reports a producer on a channel the station does not declare
+- **THEN** no tap and no consumer sees it — control: the same report on a declared channel arrives
+
+#### Scenario: An undeclared channel's occupancy comes from the core
+
+- **WHEN** the occupancy of a channel the station does not declare is asked while another is declared
+- **THEN** the bridge sends `INFO <that channel>` and answers from the reply — control: a declared
+  channel is answered from the tap
+
+#### Scenario: 6250 is refused
+
+- **WHEN** a connection config, a CLI flag or the service configuration names OSC port `6250`
+- **THEN** it is refused with the sentence, and nothing binds `6250`
+
+### Requirement: A failed OSC bind SHALL NOT keep AMCP down
+
+A session whose OSC socket cannot be bound SHALL report it — one log line naming the address, the port and
+the error — and SHALL dial AMCP anyway, retrying the bind at each reconnect cycle; with no bound socket it
+SHALL NOT send `OSC SUBSCRIBE`.
+
+#### Scenario: The OSC port is taken
+
+- **WHEN** a session's OSC port is held by another socket
+- **THEN** the session reports it, connects AMCP and completes its handshake, and sends no subscribe
+
+### Requirement: The bridge SHALL keep its own stack, and restore it at start
+
+The bridge SHALL persist its stack — every row's retained intent (`RetainedStackItem`: its state, its
+slot, its fields and every per-row intent the operator set), and its strays — to its own file on every
+change, written atomically, and SHALL restore that file at start through the same `restore()` a
+console's re-delivery used, BEFORE its control socket listens. No console SHALL re-deliver a stack or a
+template. An unusable file SHALL be said and the bridge started with an empty stack, the file kept.
+At close the stack SHALL be written whatever is pending.
+
+#### Scenario: A restart keeps the stack with no console's help
+
+- **WHEN** a bridge with rows on air is stopped and a new bridge starts on the same file
+- **THEN** the new bridge holds the same rows, in order, before any console connects
+
+#### Scenario: A console closes; the service does not notice
+
+- **WHEN** the only console, having taken a row, closes
+- **THEN** nothing is sent to CasparCG, the layer stays on air, the file still records the row on air,
+  and a console that connects afterwards is told the row ON AIR — control: the same read, once that
+  console clears the row, says it is not
+
+#### Scenario: An unusable file
+
+- **WHEN** the stack file is not a stack
+- **THEN** the bridge says so, starts with an empty stack, and leaves the file as it was
+
+### Requirement: The first connection after start SHALL be judged from the core's own INFO, and nothing SHALL be re-sent by itself
+
+At the first connection after the bridge starts, the bridge SHALL read `INFO <ch>` for every declared
+channel on that connection, inside its handshake — before it is declared healthy, so no command can
+overtake the reading — and SHALL decide every restored row and every ledger entry from that picture: a
+layer holding our page SHALL be adopted with nothing sent; a restored row or a ledger seat whose layer
+is empty SHALL leave ON AIR with the restart notice, and NOTHING SHALL be sent for it — no `CG ADD`, no
+`PLAY`, no `CLEAR`; a row restored `loaded` over an empty layer SHALL stay `loaded`, not resident, so its
+next take re-ADDs it. A read that fails SHALL leave the decision to the OSC sample, as on every later
+connection. An occupied layer in 50–99 that no entry holds SHALL be listed on the leftover strip.
+
+#### Scenario: A layer emptied while the bridge was down
+
+- **GIVEN** a bridge stopped with two rows on air, and the core then lost one of the two pages
+- **WHEN** a bridge starts on the same stack file
+- **THEN** it reads `INFO` for the channel, the emptied row leaves ON AIR and the restart notice names
+  it, and nothing is sent for it — control: the row whose page still plays stays ON AIR, adopted
+
+#### Scenario: The start check sees what a deaf OSC tap cannot
+
+- **WHEN** the core sends the bridge no OSC but answers `INFO`, and our page still plays on a
+  restored row's layer
+- **THEN** the row is adopted ON AIR from `INFO`, and nothing is sent
+
+### Requirement: The restore's report SHALL be standing bridge state, for every console
+
+The bridge SHALL hold the report of its restore — every row it could not bring back, with its reason
+and its naming (`B-108`, `B-233`), and every row it brought back on a different row — as standing
+state: answered by `stack.restore-report` (`null` when there is nothing to say), pushed on
+`stack.restore-report-changed`, and dismissed for every console by `stack.dismiss-restore-report`,
+one half (`skipped` or `migrated`) at a time. The benign skip (a row the live bridge already holds)
+SHALL NOT enter it. A dismissal naming a `channel` SHALL remove only that channel's rows (a skip by
+its retained slot, a migration by the row it came from; a row naming no channel goes with any
+dismissal), and a dismissal that removes nothing SHALL answer `ok: false`. A console SHALL read the
+report on every connect, so a console that connects after the bridge's start still sees it.
+
+#### Scenario: Two consoles see one report, and one dismissal clears it for both
+
+- **GIVEN** the bridge started with a row whose template it no longer holds
+- **WHEN** two consoles connect **THEN** both read the row in the report, with its reason
+- **AND WHEN** one dismisses it **THEN** the other is pushed an empty report, and a second dismissal
+  answers `ok: false`
+
+#### Scenario: A dismissal for one channel leaves another channel's rows
+
+- **WHEN** the report holds a row on channel 1 and one on channel 2, and a dismissal names channel 1
+  **THEN** only channel 2's row remains
+
+### Requirement: CG Bridge SHALL never run with authentication off
+
+A bridge started as CG Bridge (`requireAuth`, which the service configuration sets) SHALL refuse to
+start when no Playout is configured, with a sentence naming what is missing and where it is set, and
+SHALL leave nothing listening. Every console connection then signs in: a socket with no valid token —
+never signed in, expired or revoked — SHALL be answered only on the open doors (`bridge.capabilities`,
+`auth.*`, and until CG Control signs in to the Playout itself, the narrowed `setup.check`) and SHALL be
+pushed nothing (the amendment to `playout-auth-signin`'s expiry requirement, 2026-09-30).
+
+#### Scenario: No Playout, no start
+
+- **WHEN** CG Bridge starts with no Playout configured **THEN** the start fails with the sentence and
+  nothing listens — control: with a Playout it starts, and refuses an unsigned socket's read
+
+#### Scenario: An expired token is refused like none
+
+- **WHEN** a socket's token expires or is revoked **THEN** its reads are refused as its intents are, and
+  it is pushed nothing — control: a console whose token is still valid is answered and pushed as before
+
+### Requirement: A console on another release line than CG Bridge SHALL send nothing
+
+`bridge.capabilities` SHALL carry the bridge's release version (`bridgeVersion`, the number
+`tools/release` stamps), answered to any socket. At every connect a console SHALL compare it with its
+own by release line — major.minor equal, the patch free — and a bridge that names none SHALL be read as
+another release. On another release line the console SHALL show ONE line naming both versions, that
+nothing is sent and the remedy, and SHALL refuse every request but `bridge.capabilities` and `auth.*`
+before a frame is written. Every other request SHALL wait for that answer before it is decided, so a press
+in the first round trip is judged like any other; an answer that never comes leaves nothing known and
+refuses nothing. The channel list (`B-153`) SHALL stay as it is, beside it: it answers whether this bridge
+routes what the page calls, and reports without refusing.
+
+#### Scenario: Another release line sends nothing
+
+- **WHEN** a console `0.10.0` connects to a bridge `0.9.1` **THEN** it shows the one line and a take is
+  refused before any frame is written — control: the capabilities question went out and was answered
+
+#### Scenario: A press before the answer waits for it
+
+- **WHEN** a take is pressed after a console `0.10.0` connects to a bridge `0.9.1` and before the
+  capabilities answer lands **THEN** it waits for the answer and is refused with no frame written —
+  control: the same slow answer from a `0.10.0` bridge, and the take goes out after it
+
+#### Scenario: A patch difference is the same release
+
+- **WHEN** a console `0.10.0` connects to a bridge `0.10.3` **THEN** nothing is shown and a take goes out
+
+#### Scenario: A bridge that names no release
+
+- **WHEN** a bridge answers without `bridgeVersion` **THEN** the console reads it as a release older than
+  `0.10` and sends nothing
+
+### Requirement: CG Bridge SHALL keep its own Playout session, and never the password
+
+When its session file is configured, CG Bridge SHALL sign in to the Playout itself (D1) as the account a
+station admin names — once, from any console, through a `station-admin` route the lock refuses — SHALL keep
+the refresh token in that file, written durably (a temp file, `fsync`, rename) BEFORE anything the answer
+carries is used, and SHALL NOT store the password anywhere: not in the file, a log, the audit or the
+console. At start it SHALL refresh (D2) with the saved token, and while it has no session every console
+SHALL show `CG Bridge needs a station admin to sign in`, with the sign-in offered to a station admin only.
+Its access token SHALL be the bearer of every Playout read the bridge makes (D4, D9, D10, D11) — a
+signed-in console's being the fallback only while it has none — and SHALL keep the revocation list polled
+with no console signed in. Every request the bridge sends the Playout SHALL carry no `Origin` and no
+`X-Apasai-Mirrored`. The sign-in SHALL be recorded as `bridge-sign-in`, naming the admin, with no
+credential.
+
+_Amended 2026-09-30 (`CENTRAL-BRIDGE-01-A`; Playout `2.9.2` §2 and §8, where a spent refresh token that
+comes back more than 10 s after its use revokes its whole family and puts every access token of that user
+on D9):_ the bridge SHALL refresh one at a time, and SHALL write a mark naming the token as in flight to the
+file BEFORE the token is sent — a refresh whose mark cannot be written SHALL NOT be sent — and SHALL write
+the successor with the mark cleared before it is used. A mark found at start, an answer that never arrives
+(a timeout, a dropped connection) and a `401` SHALL each be a lost session, and that token SHALL NOT be sent
+again; a request that never reached the Playout SHALL keep the token and ask again. A refusal the contract
+names — `403` (`cg_not_licensed`, `no_cg_access`, a disabled account), `423`, `429` — comes before the
+token is used, so it SHALL keep the token unmarked, SHALL show the Playout's own message on every console
+as `CG Bridge: <message>`, and SHALL ask again about every 60 s: never a lost session.
+
+#### Scenario: An admin signs the bridge in once
+
+- **WHEN** the bridge starts with no saved session **THEN** every console shows the line; an operator's
+  sign-in of the bridge is refused for its role; a station admin's succeeds, every console is told, the
+  record names the admin and holds no password, and the bridge's own Playout reads carry its own bearer,
+  still after every console has gone
+
+#### Scenario: A crash between receiving a rotated token and using it
+
+- **WHEN** the bridge refreshes, saves the rotated token and stops before using it **THEN** the restarted
+  bridge refreshes with the saved token and is signed in — control: the spent token is presented exactly
+  once and never again; and a crash before the save leaves the in-flight mark, so the restarted bridge
+  sends nothing and says it needs an admin (amended 2026-09-30: it no longer sends the spent token to be
+  refused — `2.9.2` would read that as theft)
+
+#### Scenario: No Origin and no X-Apasai-Mirrored
+
+- **WHEN** the bridge signs in, polls D9 and reads D4 **THEN** no request the Playout received carries
+  either header — control: the same log holds the bridge's D1 and a request carrying a bearer
+
+#### Scenario: A crash between sending a refresh and saving its answer
+
+- **WHEN** the bridge sends D2 and stops before saving the answer, and restarts more than 10 s later
+  **THEN** it sends no refresh with that token, says it needs a station admin, and the Playout counts no
+  reuse — control: a clean refresh keeps working across three restarts, rotating the token each time
+
+#### Scenario: An answer that never arrives
+
+- **WHEN** the D2 reaches the Playout and its answer is lost **THEN** the token is not sent again — not by a
+  retry and not after a restart — and a request that never reached the Playout is asked again and works
+
+#### Scenario: A refusal before use keeps the token
+
+- **WHEN** the Playout answers the refresh `403 cg_not_licensed` with a message **THEN** every console shows
+  `CG Bridge: <message>`, the saved token is kept unmarked, and once the licence is back the same token
+  refreshes
+
+### Requirement: A console SHALL never send one refresh token twice
+
+A console SHALL refresh its Playout session one refresh at a time per stored session — across the tabs of
+one browser too, under a Web Lock where the page has one and otherwise under a mark written into the
+stored session and read back once it has settled — and SHALL send only the stored session's latest token,
+adopting one another tab has already rotated. It SHALL send a refresh token only after the Playout has
+answered a request that carries no token, and SHALL store the token as in flight before sending it. An
+answer that never arrives, a `401`, and a mark nobody can still be waiting on SHALL drop the refresh token
+— the access token keeps working to `exp` — and it SHALL NOT be sent again. A refresh the Playout never
+received SHALL be asked again with backoff. A refusal the contract names before use SHALL keep the token,
+SHALL put the Playout's reason on the signed-in state, and SHALL be asked again about every 60 s.
+
+#### Scenario: An answer lost on its way back
+
+- **WHEN** a console's refresh reaches the Playout and the answer is lost **THEN** the token is never sent
+  again — not 15 s later, not five minutes later — and the console stays signed in — control: a Playout
+  that does not answer at all is asked again, and the token, which never left, then works
+
+#### Scenario: Two tabs, one stored session
+
+- **WHEN** two tabs mark the same token at once **THEN** exactly one of them sends it, and a tab whose token
+  another has rotated adopts the stored one without sending
+
+#### Scenario: A refusal before use
+
+- **WHEN** the Playout answers a console's refresh `403 cg_not_licensed` **THEN** the token is kept, the
+  state carries the Playout's message, and a minute later the same token is asked again and works
+
+### Requirement: A sign-in refused as cg_not_licensed SHALL show the Playout's own message
+
+Every sign-in surface SHALL show the Playout's own `message` when it refuses a sign-in with
+`403 cg_not_licensed` — the gate, first-run and CG Bridge's own sign-in — as it is, in one line and in its
+own bidi isolate (the console's own sentence only when the Playout sent none), and SHALL mark no field and
+keep what was typed.
+
+#### Scenario: The licence refusal
+
+- **WHEN** D1 answers `403 cg_not_licensed` with a Persian message **THEN** the gate's line is exactly that
+  message, isolated, no field is marked, and the username and password are still in their fields —
+  control: a wrong password marks the field and clears it
+
+### Requirement: cg_channels SHALL be read in every shape a Playout sends
+
+Every reader of `cg_channels` — the bridge's token verifier, and whatever reads D8 — SHALL take `"*"`, an
+explicit list (which from Playout `2.9.2` even an admin's token carries on a Playout whose CG licence caps
+the channels) and a lone grant object (what D8 answered before `2.9.2`), reading the lone object as a list
+of one. A role SHALL never stand in for the claim.
+
+#### Scenario: An admin with an explicit list
+
+- **WHEN** a station admin's token carries channel 1 alone **THEN** the admin holds channel 1 and not
+  channel 2
+
+#### Scenario: The three shapes
+
+- **WHEN** the claim is `"*"`, a list, or a lone grant — in a token, or as D8 answers before and after
+  `2.9.2` **THEN** each reads as `"*"` or a list — control: anything else is still refused
+
+### Requirement: A take on a channel the Playout reports unlicensed SHALL be refused before anything is sent
+
+The bridge SHALL refuse a take — the operator's own and `PUT BACK ON AIR`'s — on a channel whose joined D4
+row reports `playlist: unlicensed`, before any command is sent and before anything mutates, answering
+`CH <n> is unlicensed in the Playout: it clears this channel every minute — nothing was sent.` and
+recording it as a failed take with the code `unlicensed`. A clear and a removal SHALL pass. The verdict
+SHALL come from the one predicate the console's unlicensed line uses, over the same join. With no
+catalogue read, nothing SHALL be refused on this ground.
+
+#### Scenario: Unlicensed refused, licensed takes
+
+- **WHEN** channel 2 is unlicensed in the Playout and rows are loaded on channels 1 and 2 **THEN** a take of
+  channel 2's row is refused with the sentence and nothing reaches channel 2 — control: channel 1's row
+  takes and `CG 1-80 PLAY` reaches the core; and a removal of channel 2's row passes
+
+### Requirement: Every console on one CG Bridge SHALL see a press made on another within a second
+
+CG Bridge SHALL hold the one state every console acts on — there is no per-console copy to disagree —
+and SHALL push each change of what is on a channel to every console told that channel, so a take or a
+clear pressed on one console is shown on every other within one second. A clear of a multi-box row SHALL
+leave none of its boxes on the plate band, and SHALL leave every other row on the channel as it was.
+
+#### Scenario: Two consoles, one bridge
+
+- **WHEN** console A takes a multi-box page and console B, signed in as another operator of the same
+  channel, clears it **THEN** B shows it ON AIR within a second of the take, A shows it cleared within a
+  second of the clear, and the core holds nothing on layers 60–79 — control: another row on the same
+  channel stays ON AIR on both consoles and on the core
+
+### Requirement: A console SHALL be told only the channels its sign-in holds
+
+CG Bridge SHALL tell each socket only the state of the channels its principal's grant holds, judged by
+the predicate the request gate asks (`grantsChannel` over the configured hosts). Every push and every
+read of what is ON a channel — the stack, the per-slot state, the live-layer ledger and its media clock,
+the playout layers, orphans, layers cleared outside, owned occupancy, the restart notice (its rows and its
+seats), the restore report, strays, rehearse, the programme return and the audit rows — SHALL be narrowed
+to the entries on held channels, and an entry naming no channel SHALL be told to every console.
+Configuration and the station's own health — the banks, channel settings, the template library, the
+source catalogue and assignments, delimiters, the server list and its health, the lock and the pending
+update — SHALL be told whole, because a console needs all of it to draw and scope its own channel. One
+table SHALL classify every route and every publish channel; a test SHALL fail on an unclassified or a
+stale entry; and an unclassified one SHALL tell a scoped socket nothing. A dismissal of the restart notice
+or of the restore report SHALL reach only what its console was told. A channel shown READ ONLY because
+the sign-in does not hold it SHALL say so in place of its rows. With authentication off, and for a `*`
+grant, nothing SHALL be narrowed.
+
+#### Scenario: Each console is told its own channels
+
+- **WHEN** a graphic is on air on channel 1 and on channel 2, and consoles signed in for channel 1, for
+  channel 2 and for both read the stack and the per-slot state and are pushed their changes **THEN** the
+  channel-1 console is told only channel 1's and the channel-2 console only channel 2's — control: the
+  console holding both is told both, and every console reads both banks
+
+#### Scenario: A dismissal reaches only the dismisser's rows
+
+- **WHEN** the core restarts under rows on channels 1 and 2 and the channel-1 console dismisses the
+  restart notice **THEN** channel 2's row stays in the notice for the channel-2 console, and nothing goes
+  back on air on either channel
+
+#### Scenario: A channel the sign-in does not hold
+
+- **WHEN** a console shows the bank's channel READ ONLY because its sign-in does not hold it **THEN** the
+  Layers view says `This channel is not in your sign-in.` and draws no rows — control: a sign-in holding
+  the channel sees its rows
+
+### Requirement: An audit row SHALL name the console machine beside the user
+
+Every audited action a console caused SHALL record, beside the actor, the console machine it came from
+(`consoleAddress`): the peer address of that console's own socket, with an IPv4-mapped IPv6 address
+reduced to its IPv4 form. It SHALL be read from the acting socket's session and never from the request,
+so a console cannot name another machine; an action no console caused, and every row written before,
+SHALL carry none; and a peer address longer than a row may carry SHALL be recorded as none rather than
+shortened. The Log SHALL keep the user in the sentence and show the machine on the actor's hover (golden
+rule 11: a technical fact rides the `title`).
+
+#### Scenario: A take names the console machine
+
+- **WHEN** a signed-in console at `192.0.2.50` takes a row **THEN** the row's actor is the user and its
+  `consoleAddress` is `192.0.2.50` — control: an action the bridge takes by itself carries none
+
+#### Scenario: The Log shows the machine on hover
+
+- **WHEN** the Log shows a row with a console machine **THEN** the actor cell reads the user and its title
+  reads `From 192.0.2.50` — control: a row without one has no title
+
+### Requirement: CG Bridge's picture and logs SHALL open only with a ticket its console's socket was given
+
+`/pgm/<n>` and `/logs.zip` on the control port SHALL answer only a request carrying a ticket that a
+console's verified socket was given for exactly that resource — the programme of channel `n`
+(`pgmReturn.ticket`, a read the station fence and the permission gate judge for that channel) or CG
+Bridge's logs (`bridge.logs-ticket`, `station-admin`). A ticket SHALL be random, SHALL expire after 30 s,
+and a logs ticket SHALL open once. Anything else SHALL be `403` and relay nothing. The programme return
+SHALL have that ONE door: no other listener of the bridge SHALL serve it.
+
+#### Scenario: A held channel's ticket opens its picture
+
+- **WHEN** a console whose sign-in holds channel 1 asks a ticket for channel 1 **THEN** `/pgm/1?ticket=…`
+  relays the programme byte for byte — control: no ticket, a guessed one, or channel 1's on channel 2 is
+  `403` and attaches nothing
+
+#### Scenario: The logs, once, for an admin
+
+- **WHEN** a station admin's ticket opens `/logs.zip` **THEN** the logs arrive as one zip **AND** the same
+  ticket is `403` the second time — control: an operator is given no ticket
+
+#### Scenario: One door
+
+- **WHEN** a built console is served beside the bridge (`--console-dir`) **THEN** `/pgm/1` there is `404`,
+  never the page
+
+### Requirement: The connection check SHALL judge the sign-in this console will make
+
+The connection check's CORS line SHALL be judged for the sign-in the asking console makes: a console that
+signs in directly from its own process (CG Control, with no `Origin` — the Playout team's rule 8) SHALL
+say so in its request, and the bridge SHALL answer its CORS line as passed, as a fact, without probing the
+Playout's CORS list; a browser console's own origin SHALL be judged against that list as before.
+
+#### Scenario: CG Control's check
+
+- **WHEN** CG Control checks a Playout whose CORS list does not carry `http://tauri.localhost` **THEN** the
+  CORS line passes and the Playout is asked nothing of its CORS list — control: the same Playout, for a
+  browser console's origin, is asked and refuses
+
+### Requirement: A box showing the Playout's playlist output SHALL always be at volume 0, and no command SHALL reach the playlist's layer
+
+A plate whose source is a D10 playlist row SHALL be seated by the route pattern (hidden at `VOLUME 0`,
+`LOADBG`, at least 40 ms, `PLAY`, reveal) on exactly `route://N-L`, L read from D10. Every volume the bridge
+sends for it — the seat, the reveal, a reconnect's re-send, a hold and an unhold — SHALL be 0, and a raise
+(ON, a fader, SOLO) SHALL be refused with `Programme sound is already on air`. The send guard SHALL refuse
+every targeted command (`PLAY`, `LOAD`, `LOADBG`, `STOP`, `CLEAR`, `PAUSE`, `RESUME`, `CALL`, `MIXER`, `CG`) to
+a layer outside 50–99 that the station's own configuration does not declare, and SHALL refuse any targeted
+command to a playlist's layer L even then; a Playout route line with `NEXT`, `BACKGROUND` or `BUFFER` SHALL be
+refused. The reveal SHALL come no sooner than two frames of the channel's rate (and never under 80 ms) after
+the last route `PLAY`'s reply, so it takes effect at least one full frame after the `PLAY` did.
+
+#### Scenario: The playlist box's wire
+
+- **WHEN** a plate bound to CH 1's playlist output (layer 7 in D10) is taken on CH 1 **THEN** the wire carries
+  `LOADBG 1-<plate> "route://1-7"` and `PLAY 1-<plate>`, with `VOLUME 0` committed before them
+- **AND** no line on the wire targets `1-7`
+- **AND** after an AMCP reconnect the plate's `VOLUME` re-sent is 0
+
+#### Scenario: A raise is refused
+
+- **WHEN** a console asks ON or a fader of 0.8 for the playlist plate **THEN** the bridge refuses it with
+  `Programme sound is already on air`, and no `VOLUME` above 0 is sent
+- **AND** a camera route plate on the same page is raised (the control)
+
+#### Scenario: The guard
+
+- **WHEN** a line `MIXER 1-7 VOLUME 1`, `PLAY 1-7 …` or `STOP 1-7` reaches the send seam **THEN** it is refused
+  and nothing is sent
+- **AND** a route line carrying `NEXT`, `BACKGROUND` or `BUFFER` is refused
+- **AND** a line to our own layer 60 is sent (the control)
+
+#### Scenario: The reveal's timing
+
+- **WHEN** a route plate is revealed on a 25 fps channel **THEN** the reveal's `COMMIT` is sent at least 80 ms
+  after the last route `PLAY`'s reply, and at a 24 fps rate at least 2 × 41.7 ms after it
+
+### Requirement: The bridge SHALL read the CG license and SHALL refuse a take where CG is not licensed, never clearing anything for it
+
+The bridge SHALL read `GET /api/cg/license` with its own session beside D9, at most once per 60 s and after
+its own sign-in, SHALL keep the last value when the Playout cannot be reached, and SHALL treat `404` as "not
+served" (no refusal). D4's `cgLicensed` SHALL be parsed per channel. Both SHALL be pushed to every console. A
+take on a channel where `licensed` is `false`, or where that channel's `cgLicensed` is `false`, SHALL be
+refused before anything is sent, with the Playout's `message` (or, when it gives none, `CG Control is not
+licensed on CH n in the Playout — nothing was sent.`). A `CLEAR` or `STOP` of our own layers SHALL still be
+sent, and nothing on air SHALL be cleared by the bridge because of a license state. When a layer of ours is
+found cleared while D4 says the channel's `playlist` is `unlicensed`, its notice SHALL name the cause.
+
+#### Scenario: CG not licensed on a channel
+
+- **WHEN** the license reads `licensed: false` **THEN** a take on CH 2 is refused with the Playout's message
+  and nothing is sent
+- **AND** a `CLEAR` of our own layer on CH 2 is sent, and nothing on air is cleared by us
+
+#### Scenario: A cap of one channel
+
+- **WHEN** D4 reads `cgLicensed: true` on CH 1 and `false` on CH 2 **THEN** a take on CH 1 goes on air and a take
+  on CH 2 is refused
+
+#### Scenario: The Playout unreachable
+
+- **WHEN** the Playout stops answering after the license read `licensed: false` **THEN** takes stay refused
+- **AND** a licensed channel takes (the control)
+
+#### Scenario: Cleared by the Playout's license
+
+- **WHEN** our layer is cleared from outside while D4 says `playlist: "unlicensed"` for its channel **THEN**
+  the notice names `Cleared by the Playout: its license`
+
+### Requirement: CG Bridge SHALL relay the programme's sound and the Playout's meters, and SHALL never put a token in a URL
+
+CG Bridge SHALL serve `/pgm/<n>/sound` on its control port behind a short-lived ticket issued for that
+channel's SOUND (a picture ticket SHALL NOT open it, nor a sound ticket the picture), readable cross-origin, as
+`application/octet-stream` and with no `.wav` in its path (a download manager's browser hook captures a `.wav`
+URL of type `audio/wav` and answers the page an empty `204`). It SHALL read the core's `GET /audio.wav` on
+`9250 + n − 1` by the well-behaved-client rule (one request, then nothing; one upstream per channel shared by
+every listener; closed 1.5 s after the last listener; a silent stream closed and redialled; an increasing
+backoff), and every listener SHALL receive the core's 44-byte WAV header once and then whole 4-byte frames, a
+slow listener skipping chunks rather than queueing them. CG Bridge SHALL read `GET /api/cg/meters` ONCE, with
+its own session (a console's token only until it has one, reopening the stream when its own arrives), by a
+streaming request with the bearer in `Authorization` (never `EventSource`, never the token in the URL),
+reconnecting when the stream closes or falls silent, and only while at least one console is connected. Each
+`audio` and `loudness` event SHALL be joined to this station's channel by the D10 reader's join and relayed
+over the control socket only to consoles whose sign-in holds that channel.
+
+#### Scenario: One Playout stream for three consoles
+
+- **WHEN** a console granted CH 1, a console granted CH 2 and a console granted both are connected **THEN** the
+  Playout sees one meters stream, the first two receive only their own channel's events, and the third both
+- **AND** every meters request carries the bearer in `Authorization` and no query at all
+- **AND WHEN** the stream closes **THEN** CG Bridge reads it again; **AND WHEN** the core is down **THEN** the
+  relayed levels are the floor
+- **AND WHEN** the last console leaves **THEN** the stream is released
+
+#### Scenario: The sound relay
+
+- **WHEN** two consoles listen to CH 1's sound **THEN** the core sees one `GET /audio.wav`, and each listener's
+  stream begins with the 44-byte header followed by whole frames, even when the core's writes split a frame
+- **AND** a sound ticket opens `/pgm/1/sound` only, and a picture ticket does not open it
+
+### Requirement: The bridge reads what casparcg.config declares and what the channel runs, and publishes a missing-output verdict
+
+The bridge SHALL read, over the AMCP axis, the consumers `casparcg.config` DECLARES for each
+declared channel (`INFO CONFIG`) and the consumers actually RUNNING on that channel (the
+`<output>` block of `INFO <channel>`), and SHALL publish per channel, in the server's health
+snapshot, the declared set, the running set and every declared consumer KIND with fewer running
+instances than declared. The declaration SHALL be read once per connection; the running set
+SHALL be read from the reply the video-mode read already sends, re-read on a slow interval while
+the server is reachable, and re-read after a reconnect. The verdict SHALL be published when its
+content changes and SHALL be written to stderr on the transition into `missing` and once when it
+clears.
+
+A declaration that answers but cannot be read as a configuration SHALL be recorded as unreadable
+and SHALL NOT be asked again on that connection; an unreadable declaration is a gap in the check,
+never an alarm. A channel reply carrying no `<output>` element SHALL be treated as "could not
+check", never as an empty channel.
+
+The verdict SHALL be KEPT across a disconnect. The one predicate `outputVerdictOf` in
+`@cg/shared-ipc` SHALL decide, from the kept verdict and the server's reachability, whether the
+server is `ok`, `missing`, `unverifiable` (unreachable after a `missing` verdict) or `unknown`; no
+surface SHALL re-derive that decision.
+
+#### Scenario: The plant's fixture raises the verdict, named by device
+
+- **WHEN** `INFO CONFIG` declares `<decklink><device>23487013</device>`, `<screen/>` and
+  `<system-audio/>` for channel 1 and `INFO 1`'s `<output>` carries only `system-audio` and
+  `screen`
+- **THEN** the health snapshot's check for channel 1 lists the three declared consumers, the two
+  running ones, and `missing: [{ kind: 'decklink', declared: 1, running: 0, devices: ['23487013'] }]`,
+  the verdict is `missing`, and the declaration was read exactly once for the connection
+
+#### Scenario: The verdict clears without a reconnect when the consumer is seen running
+
+- **WHEN** a later re-read of `INFO 1` reports a `decklink` consumer at any port
+- **THEN** the check's `missing` is empty and the verdict is `ok`
+
+#### Scenario: A reconnect re-reads both halves
+
+- **WHEN** the AMCP connection drops and the session comes back healthy
+- **THEN** the declaration is read again and the verdict is recomputed from the new readings,
+  so a CasparCG restarted after a config fix clears the alarm on the next tick
+
+#### Scenario: An unreadable declaration is a gap, asked once
+
+- **WHEN** `INFO CONFIG` answers with a document that has no `<channels>` block
+- **THEN** the check records `declared: null`, `missing` is empty, the verdict is `unknown`, and
+  no further `INFO CONFIG` is sent on that connection
+
+#### Scenario: The server dies after a missing verdict — kept, and unverifiable
+
+- **WHEN** the verdict is `missing` and the server becomes unreachable
+- **THEN** the health snapshot still carries the check, and `outputVerdictOf` answers
+  `unverifiable` with the last observation, never `unknown` and never `ok`
+
+### Requirement: A missing consumer is reported and never created
+
+The bridge SHALL NOT send any consumer `ADD` on account of a missing consumer, whatever flag it
+was started with, and the output check SHALL carry no creation record. A consumer `ADD` on a
+programme channel is one of the Playout's C5 commands this station never sends (`FOLLOWUPS-01` A,
+the owner's decision of 2026-09-28, superseding the bounded, off-by-default re-creation this
+change first shipped behind `--create-missing-consumers`).
+
+The retired `--create-missing-consumers` flag, bare or with a value, SHALL NOT stop the bridge
+booting; the bridge SHALL say once on stderr that the flag is retired and ignored.
+
+#### Scenario: No ADD, however long the output stays missing — even to a server that would accept
+
+- **WHEN** a declared DeckLink is missing and the server would answer an `ADD` with `202`
+- **THEN** no `ADD` is ever sent, the verdict stays `missing`, and the check has no `creation` key
+
+#### Scenario: The retired flag still boots, and says so
+
+- **WHEN** `bin/caspar-bridge.mjs` starts with `--create-missing-consumers` or
+  `--create-missing-consumers=<value>`
+- **THEN** it prints that `--create-missing-consumers is retired and ignored` and reaches its
+  listening line; started without the flag, it says nothing about it
+
+### Requirement: The serve address is configured in the app, and a masked field says so
+
+The operator SHALL be able to set the template serve host and port from the
+Runtime's server settings panel, beside the server hosts it is a fact about, and
+Apply SHALL persist them and put them in force on the RUNNING bridge through
+`connections.set-config`. No bridge restart SHALL be required, and the app SHALL
+NOT offer to start, stop or restart the bridge.
+
+WHEN a command-line flag is forcing a field, the panel SHALL show the value
+actually in effect, SHALL name the flag responsible, and SHALL mark the stored
+value as _not in force_. The control SHALL REMAIN EDITABLE and SHALL NOT be
+greyed out or disabled: the stored value is what takes over at the next boot
+without the flag, so it must stay editable, and grey reads as "you cannot change
+this", which is false.
+
+WHEN an Apply succeeds but leaves configured CasparCG servers unable to fetch the
+address, the dialog SHALL NAME those servers, SHALL state that they will show
+live sources with NO TEMPLATE, and SHALL state that `CG ADD` will still report
+success. That message is about the CONFIGURATION and SHALL NOT be worded as
+evidence that any template page loaded — nothing on this path measures a fetch.
+
+#### Scenario: The serve host is set and applied without restarting the bridge
+
+- **WHEN** the operator types a serve host in the panel and presses Apply with
+  nothing on air **THEN** the config is persisted, the running bridge re-derives
+  template serving with that host, and the panel reports the result **AND** no
+  restart is requested or required
+
+#### Scenario: A masked field shows the flag's value and keeps the stored one editable
+
+- **WHEN** the panel opens while `--template-serve-host` is in force **THEN** the
+  field shows the value actually in effect, names `--template-serve-host` as the
+  reason, shows the stored value struck through and labelled _not in force_
+  **AND** the input remains editable and is not disabled
+
+#### Scenario: Apply names the servers that cannot fetch the address
+
+- **WHEN** Apply succeeds with a loopback serve address while a REMOTE CasparCG
+  server is configured **THEN** the dialog names that server, says it will show
+  live sources with no template, and says `CG ADD` will still report success
+
+#### Scenario: The candidate list does not claim to know the answer
+
+- **WHEN** the panel offers detected addresses **THEN** they are labelled as
+  candidates, and choosing one is an operator decision the surface does not make
+  on their behalf
+
+### Requirement: A refused command is recorded beside its code
+
+When an operator action is refused by CasparCG, the audit entry the bridge records SHALL carry,
+beside the refusal code, the AMCP line that was refused — its verb, its target and its first
+quoted argument intact, later quoted arguments elided, capped at 200 characters. An action
+refused by the bridge before any line reached the wire SHALL record no command. An accepted
+action SHALL record no command.
+
+#### Scenario: A take whose CG ADD is refused names the ADD
+
+- **WHEN** a take's pre-roll `CG 1-72 ADD 0 "tpl" 0 "…"` is answered `404` **THEN** the audit
+  entry reads `outcome: failed`, `errorCode: amcp-404` and `command` beginning
+  `CG 1-72 ADD 0 "tpl" 0 `
+
+#### Scenario: A refusal before the wire carries no command
+
+- **WHEN** a take is refused `unknown-item` **THEN** the audit entry carries no `command`
+
+#### Scenario: The payload is elided, the URL is kept
+
+- **WHEN** the refused line is `CG 1-99 ADD 0 "http://host:port/template/id?cw=1920&ch=1080" 0
+"{…}"` **THEN** the recorded command keeps the URL and replaces the data argument with `"…"`
+
+### Requirement: The boot line names the template count
+
+At boot the bridge SHALL report how many templates its registry hydrated from the persist
+directory, how many persisted files it skipped as unusable, and the directory, on the CLI's boot
+line beside the bank, the sources and the ledger. The bridge handle SHALL expose the same
+reading.
+
+#### Scenario: Two records and one unusable file
+
+- **WHEN** the templates directory holds two valid records and one file that is not a record
+  **THEN** the handle reports `loaded: 2, skipped: 1` with the directory, and the boot line says so
+
+#### Scenario: A first boot
+
+- **WHEN** the templates directory does not exist yet **THEN** the handle reports
+  `loaded: 0, skipped: 0` and the boot line says nothing can go to air until a `.vcg` is imported

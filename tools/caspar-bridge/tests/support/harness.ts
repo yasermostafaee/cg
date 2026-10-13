@@ -1,4 +1,5 @@
 import { afterEach } from 'vitest';
+import type { LayerPolicy } from '@cg/caspar-client';
 
 /**
  * B-073 — shared release + budget helpers for the socket/timer integration suites.
@@ -20,12 +21,70 @@ import { afterEach } from 'vitest';
  *    asserting "the handshake completes within 5 s" — so the budget must be generous
  *    enough that only a genuinely broken health path fails. It still fails loudly:
  *    a server that never goes healthy just fails `HEALTH_MS` later.
+ *
+ * 3. **An ambient one-shot inside a "nothing reaches the wire" window.** R-030's
+ *    channel-mode read (`INFO <channel>`, priority `low`) rides the first sweep tick
+ *    after the session goes live — a TIMER, decoupled from anything the test body
+ *    does. On a quiet box a whole test body completes inside one sweep interval, so
+ *    the one-shot lands outside every assertion window and the suite is green for
+ *    months; under full-gate CPU load the body stretches, the tick lands between a
+ *    `before` baseline and its `slice(before) → []` assertion, and an ambient
+ *    `INFO 1` reads as take traffic (observed twice, in live-seating's refusal
+ *    cases, gate runs only). A negative observation is valid only from a
+ *    PROVEN-QUIESCENT wire, so a boot whose tests baseline the wire calls
+ *    `awaitChannelModeRead` first: it WAITS for the one-shot to complete instead of
+ *    filtering it out of the assertion — the assertions stay exact, and if R-030's
+ *    read ever stops happening, boot fails loudly rather than letting the silence
+ *    pass vacuously.
  */
 
 /**
  * Budget for `whenServerHealthy()` in tests. Deliberately far above the ~150 ms a
  * healthy handshake really takes: it is a liveness bound, NOT a performance assert.
  */
+/**
+ * 🔴 **THE SUITE'S OWN DYNAMIC ALLOCATION RANGES (`LAYER-BANDS-16`, 2026-09-14).**
+ *
+ * `DEFAULT_LAYER_POLICY` is EMPTY since the owner retired type-keyed dynamic allocation: the
+ * layer map cuts 50-99 into three ROLE bands and leaves 1-49 to the playout server, so the
+ * product ships no ranges of its own. Every test here that reaches `CasparRuntime.load()` —
+ * the plain dynamic verb — therefore has to DECLARE the deployment policy it is testing
+ * against, and does, at each `new CasparRuntime(...)`.
+ *
+ * ⚠ **DO NOT "SIMPLIFY" THIS BY PUTTING A DEFAULT BACK.** That is the explicit condition the
+ * decision was taken under. A default policy is what let ~360 tests pass without ever saying
+ * which layers they expected, and it is what made "we allocate on layer 10" a fact nobody
+ * had written down.
+ *
+ * ── WHY THESE ARE STILL THE OLD DECADES ─────────────────────────────────────
+ *
+ * Because this is a DEPLOYMENT'S declared policy, not the product's map, and hundreds of
+ * wire assertions below name the resulting coordinates (`CG 1-10 ADD`, …). Moving them would
+ * have re-written the expected AMCP of half the suite to prove nothing: what these tests
+ * exercise is the allocator's arithmetic and the fences around it, neither of which depends
+ * on which decades a station declared. The product's own floor is asserted where it belongs,
+ * against `DEFAULT_LAYER_POLICY`, by `assertPolicyAboveFloor`.
+ */
+export const TEST_LAYER_POLICY: LayerPolicy = {
+  'logo-bug': [40, 49],
+  'lower-third': [10, 19],
+  ticker: [20, 29],
+  'breaking-news': [30, 39],
+  /*
+    ⚠ **NO `fullscreen: [50, 59]`, and its absence is load-bearing.** That decade is the
+    graphics-BED band now; `validateFixedBank` refuses a bank whose rows overlap any dynamic
+    range, and every fixture in this suite declares bed rows at 50+ — so a policy carrying it
+    made the bridge refuse to BOOT with `overlaps-policy`, in tests whose subject was
+    something else entirely. It is the same arithmetic that retired the shipped policy.
+
+    ⚠ **`custom` STAYS, and do not "tidy" it away.** `CasparRuntime.#allocate` falls back to
+    `custom` for any `templateType` the policy does not name, so removing it does not narrow
+    the fixture — it breaks every dynamic load in the suite at once (measured: 11 failures
+    became 178).
+  */
+  custom: [60, 69],
+};
+
 export const HEALTH_MS = 15_000;
 
 /**
@@ -38,6 +97,50 @@ export const HEALTH_MS = 15_000;
  * still fails, via the test timeout.
  */
 export const BOUNDED_STOP_MS = 5_000;
+
+/**
+ * Wait until R-030's one-shot channel-mode read has COMPLETED — flake family 3's
+ * quiescence control.
+ *
+ * The wait is on the read's own latch, not on the wire: `observed` gains its entry
+ * in the same block that sets `#modeReadFrom` (the guard that stops re-sends), so
+ * when this returns, every mode-read `INFO` this connection will ever send is
+ * already in the trace and a baseline taken now excludes all of it. The other two
+ * ambient emitters are structurally silent in these harnesses: R-022's volume
+ * re-assert fires once with zero declared rows, and the `VERSION` liveness probe
+ * needs OSC silence while the mock streams OSC continuously.
+ */
+export async function awaitChannelModeRead(runtime: {
+  channelSettingsState(): { observed: readonly unknown[] };
+  health(): { primary: { outputs?: readonly unknown[] | undefined } };
+}): Promise<void> {
+  const deadline = Date.now() + HEALTH_MS;
+  while (runtime.channelSettingsState().observed.length === 0) {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        "R-030's one-shot channel-mode read never completed — the quiescent-wire " +
+          'baseline cannot be established (did the sweep or the INFO reply break?)',
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  /*
+    `C-029` — the SAME first tick also sends one `INFO CONFIG` (the declared-consumer half of
+    the program-output check; the running half rides the mode read's own reply). Its latch
+    is the `outputs` entry in health, set when both halves have landed — so this waits for
+    it too, and a baseline taken afterwards excludes every ambient INFO this connection
+    sends until the 60 s re-check, which no test body reaches.
+  */
+  while (runtime.health().primary.outputs === undefined) {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        "C-029's one-shot output check never completed — the quiescent-wire baseline " +
+          'cannot be established (did INFO CONFIG stop answering, or the check stop latching?)',
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
 
 type Release = () => Promise<void> | void;
 

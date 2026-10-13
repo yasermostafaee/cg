@@ -9,6 +9,7 @@ import {
   mismatchedChannels,
   parseVideoModeFromInfo,
   rasterVerdict,
+  videoModeFramePeriodMs,
   videoModeRaster,
   type ChannelSettingsState,
 } from '../src/channels/channelSettings.js';
@@ -98,6 +99,51 @@ describe('videoModeRaster — the token → raster map', () => {
     expect(videoModeRaster('   ')).toBeNull();
   });
 
+  it('B-174 — videoModeFramePeriodMs: an interlaced mode ticks at HALF its named rate', () => {
+    // The mode token names the FIELD rate; stage.cpp pulls both fields in one tick
+    // ("it lets us tick at 25hz and avoids amcp changes starting on the second field"),
+    // so 1080i5000 is a 40 ms channel frame while 1080p5000 is 20 ms. The unit the
+    // look-switch mixer hold is denominated in — halve it wrongly and the hold is either
+    // half the measured skew or double it.
+    expect(videoModeFramePeriodMs('1080i5000')).toBe(40);
+    expect(videoModeFramePeriodMs('1080p5000')).toBe(20);
+    expect(videoModeFramePeriodMs('1080p2500')).toBe(40);
+    expect(videoModeFramePeriodMs('720p5994')).toBeCloseTo(1000 / 59.94, 6);
+    expect(videoModeFramePeriodMs('1080i5994')).toBeCloseTo(2000 / 59.94, 6);
+    expect(videoModeFramePeriodMs('1080p2398')).toBeCloseTo(1000 / 23.98, 6);
+    expect(videoModeFramePeriodMs('dci2160p2400')).toBeCloseTo(1000 / 24, 6);
+    expect(videoModeFramePeriodMs(' 1080I5000 ')).toBe(40);
+  });
+
+  it('B-174 — videoModeFramePeriodMs: null for a rate-less or unknown token, never a guess', () => {
+    // PAL/NTSC carry no rate digits; a guessed period would silently misplace the hold on
+    // exactly the installs whose mode string this build has not met.
+    expect(videoModeFramePeriodMs('PAL')).toBeNull();
+    expect(videoModeFramePeriodMs('ntsc')).toBeNull();
+    expect(videoModeFramePeriodMs('1080')).toBeNull();
+    expect(videoModeFramePeriodMs('')).toBeNull();
+    expect(videoModeFramePeriodMs('holographic')).toBeNull();
+  });
+
+  it('B-174 — a rate suffix outside the ×100 convention is UNREAD, not a slow mode', () => {
+    /*
+      🔴 The width of the rate suffix IS the convention check. `casparcg.config` may define a
+      CUSTOM video mode whose id is any string, `INFO`'s `<format>` echoes it verbatim, and the
+      human spelling of one is `1080p50`. Divided by 100 that reads as 0.5 Hz — a 2000 ms
+      "channel frame", which `#lookMixerHoldMsFor` would have slept inside the seat lock with
+      the page already flipped: two seconds of holes over the previous look's fills, on air.
+      A token this build cannot read must reach the 40 ms fallback, never a plausible number.
+    */
+    expect(videoModeFramePeriodMs('1080p50')).toBeNull();
+    expect(videoModeFramePeriodMs('1080i50')).toBeNull();
+    expect(videoModeFramePeriodMs('720p60')).toBeNull();
+    expect(videoModeFramePeriodMs('1080p250')).toBeNull();
+    // Five digits stay READ — that is the ≥100 Hz future the width deliberately keeps room
+    // for, and it is the only reason the bound is not an exact four.
+    expect(videoModeFramePeriodMs('1080p10000')).toBe(10);
+    expect(videoModeFramePeriodMs('1080i12000')).toBeCloseTo(2000 / 120, 6);
+  });
+
   it('parses the video-mode leaf out of an INFO body, and only that leaf', () => {
     const xml = [
       '<channel>',
@@ -112,6 +158,47 @@ describe('videoModeRaster — the token → raster map', () => {
     // Tolerates a shape it did not expect rather than throwing — the bridge needs
     // one leaf out of a document that differs across CasparCG versions.
     expect(parseVideoModeFromInfo('<VIDEO-MODE> 720p5000 </VIDEO-MODE>')).toBe('720p5000');
+  });
+
+  /**
+   * 🔴 `B-189` — **the REAL reply, verbatim, and the reason this fixture exists at all.**
+   *
+   * The payload below is the exact byte sequence CasparCG 2.5.0 `69e8ad5` returned for
+   * `INFO 1` on 2026-08-31 (127.0.0.1:5250, the owner's local install; captured with a raw
+   * socket by `SKEW-HOLD-01`, status line `201 INFO OK\r\n` stripped, terminal `\r\n`
+   * stripped — the string here is the ONE payload chunk between them, bare `\n` interior
+   * included). It carries `<format>`, never `<video-mode>`: the old parser found nothing in
+   * it, and no test could notice because every fixture was written from the parser's own
+   * expectation. A mock that agrees with the code only proves the code agrees with itself —
+   * THIS string is the one input whose provenance is the server, so a parser that drifts
+   * from the real dialect reddens here first.
+   */
+  it('B-189 — parses the reply the REAL 2.5.0 actually sends (captured verbatim)', () => {
+    const realReply =
+      '<?xml version="1.0" encoding="utf-8"?>\n<channel>\n   <format>1080p5000</format>\n' +
+      '   <framerate>50</framerate>\n   <framerate>1</framerate>\n   <mixer>\n      <audio>\n' +
+      '         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n' +
+      '         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n' +
+      '         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n' +
+      '         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n' +
+      '         <volume>0</volume>\n         <volume>0</volume>\n         <volume>0</volume>\n' +
+      '         <volume>0</volume>\n      </audio>\n   </mixer>\n   <output>\n      <port>\n' +
+      '         <port_500>\n            <consumer>system-audio</consumer>\n         </port_500>\n' +
+      '         <port_600>\n            <consumer>screen</consumer>\n            <screen>\n' +
+      '               <always_on_top>false</always_on_top>\n               <index>0</index>\n' +
+      '               <key_only>false</key_only>\n               <name>Screen consumer</name>\n' +
+      '            </screen>\n         </port_600>\n      </port>\n   </output>\n</channel>\n';
+    expect(parseVideoModeFromInfo(realReply)).toBe('1080p5000');
+    // And the raster derivation composes on the real token, end to end.
+    expect(videoModeRaster(parseVideoModeFromInfo(realReply) ?? '')).toEqual({
+      width: 1920,
+      height: 1080,
+    });
+    // `<format>` wins when both spellings appear — it is the measured dialect; the legacy
+    // tag is a fallback, never an override.
+    expect(
+      parseVideoModeFromInfo('<format>1080i5000</format><video-mode>720p5000</video-mode>'),
+    ).toBe('1080i5000');
   });
 });
 

@@ -122,8 +122,10 @@ async function importAndPlaceLottie(
  * timeline is stretched so the out-point sits far past the derived settle (no clamp).
  */
 async function authorLottieFurnitureWithOverlay(app: DesignerApp): Promise<void> {
-  await importAndPlaceLottie(app, 'longintro.json', LONG_INTRO);
+  // The stretch now happens BEFORE the drop: D-151's add-time duration guard fires when
+  // content outsizes the host, and this 4 s clip in the 1 s default would raise it.
   await app.setSceneDuration(500);
+  await importAndPlaceLottie(app, 'longintro.json', LONG_INTRO);
   await app.addTicker({ x: 140, y: 210 });
   await app.addOutPoint();
   await app.setPlayoutTiming('auto-out');
@@ -157,6 +159,9 @@ test.describe('D-125 Phase 3a — the entrance settle derives from the Lottie in
     app,
   }) => {
     await app.newProject('LottieTiming');
+    // D-151 — the guard would interrupt a 4 s clip dropped into the 1 s default host; the
+    // timing panel's numbers depend on the frame RATE, not the duration.
+    await app.setSceneDuration(500);
     await importAndPlaceLottie(app, 'longintro.json', LONG_INTRO);
 
     // The placed Lottie is selected. #348 restructured the panel around COMP-SPACE

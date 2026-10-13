@@ -23,6 +23,13 @@ type LoopMode = 'off' | 'loop' | 'bounce';
  *   off    → play to frameOut, then stop
  *   loop   → wrap to frameIn at frameOut
  *   bounce → reverse direction at every boundary
+ *
+ * D-133 §3.4 — this loop is the PREVIEW's and is labelled "Preview loop": it wraps the
+ * EDITOR playhead over the ruler and is stored nowhere, so it never reaches air. The
+ * other two loops in this app are the `loop-cycle` playout MODE (repeats the whole
+ * in → hold → out) and the Playout panel's HOLD LOOP (replays
+ * `[content start → out point]` during a content-driven hold). All three can be true of
+ * one composition simultaneously, so none of them is called plain "loop".
  */
 export function TransportBar({ scene }: Props): JSX.Element {
   const currentFrame = useDesignerSelector((s) => s.currentFrame);
@@ -228,8 +235,13 @@ export function TransportBar({ scene }: Props): JSX.Element {
           {...hoverProps('loop')}
           onClick={() => toggleLoop('loop')}
           aria-pressed={loopMode === 'loop'}
-          aria-label="Loop"
-          title="Loop — wrap to start at the end"
+          // D-133 §3.4 — NOT plain "Loop": three different loops can be true of one
+          // composition at once (this EDITOR-only playhead wrap, the `loop-cycle` playout
+          // mode, and the Playout panel's hold loop `[content start → out point]`), and the
+          // spec requires them to be distinguishable on the surface. This one is the
+          // preview's, and it never leaves the editor.
+          aria-label="Preview loop"
+          title="Preview loop — wrap the editor playhead to the start at the end (preview only; not the composition's playout)"
         >
           <Icon icon={Repeat} size={17} className={s.icon} />
         </Button>

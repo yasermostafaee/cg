@@ -52,18 +52,26 @@ import { definePublishChannel } from '../publish.js';
  *
  * NOT AN AIR CHECK. What rehearse catches is wrong values, broken layouts and
  * bad motion. Browser rendering versus CasparCG's CEF 71 is faithful, NOT
- * pixel-identical (the B-066 class), and a Live Source region renders as NOTHING
- * — an empty, fully transparent hole.
+ * pixel-identical (the B-066 class).
  *
- * That last clause said the opposite until 2026-08-08 ("after C-015 a Live Source
- * region renders as a labelled placeholder rather than video"), describing a
- * render path that was never built. Rehearse renders the RETAINED EXPORTED PAGE
- * VERBATIM and D-137 requires that page to paint zero pixels there, so the
- * placeholder had nowhere to come from. DECIDED 2026-08-08, owner —
- * `openspec/changes/live-source-multibox/` design.md §12.2: v1 shows the empty
- * region and builds no second render path. What fills the hole on air is a
- * CasparCG layer the bridge composites behind the template; a browser preview
- * cannot show it, and pretending otherwise would be the misleading option.
+ * ⚠ A LIVE SOURCE REGION — BOTH HALVES, because each half alone has been written
+ * here and been wrong. The RENDERED PAGE paints NOTHING there: rehearse renders
+ * the RETAINED EXPORTED PAGE VERBATIM and D-137 requires zero pixels where a Live
+ * Source is. The RUNTIME then draws a LABELLED PLACEHOLDER over it (R-049,
+ * `LivePlateOverlay`) naming the plate and the source bound to it — a marker, not
+ * the feed, and deliberately unmistakable for one.
+ *
+ * The history, kept because it has now been misstated in both directions. Until
+ * 2026-08-08 this read "after C-015 a Live Source region renders as a labelled
+ * placeholder rather than video", describing a render path that was never built —
+ * the page paints nothing, so a placeholder had nowhere to come from. It was
+ * corrected to "an empty transparent hole", true then and HALF true now.
+ * DECIDED 2026-08-08, owner — `openspec/changes/live-source-multibox/` design.md
+ * §12.2: the page shows the empty region and NO second render path is built, and
+ * R-049 did not reopen that; it added an overlay beside it. What fills the hole
+ * ON AIR is a CasparCG layer the bridge composites behind the template; a browser
+ * preview cannot show it, and pretending otherwise would be the misleading option
+ * — which is exactly why the marker declares itself a placeholder.
  *
  * The confidence monitor is C-016, which is a different thing. Those caveats are
  * stated IN the panel, not only here — R-022's own acceptance requires it, and it

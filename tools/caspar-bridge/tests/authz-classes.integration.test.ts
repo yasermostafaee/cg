@@ -1,0 +1,336 @@
+import { describe, expect, it } from 'vitest';
+import {
+  PERMISSION_CLASSES,
+  grantsChannel,
+  holdsPermissionClass,
+  type PermissionClass,
+} from '@cg/shared-ipc';
+import { buildRoutes } from '../src/index.js';
+import { CasparRuntime } from '../src/caspar-runtime.js';
+import { TEST_LAYER_POLICY } from './support/harness.js';
+
+/**
+ * 🔴 `C-038` — **THE PERMISSION CENSUS. It walks EVERY route rather than sampling.**
+ *
+ * "Every route has a permission class" and "no route is more permissive than the station
+ * allows" are claims about EACH channel, and no sample can make one. This file is the
+ * third census over the same table — `lock-refuses-intents` (`B-229`) and `auth-gate`
+ * (`C-037`) are its siblings, and all three exist for the identical reason: a new route
+ * added without answering their question would otherwise ship silently.
+ *
+ * ⚠ **THE CLASS LIST IS PINNED, NOT SAMPLED.** `R-028` (6.5)'s lesson one axis over: the
+ * danger is never that one rung is implemented wrongly — it is that nothing enumerated the
+ * set, and a narrowing written against two of three is a correct-looking test that silently
+ * forbids the missing class.
+ */
+
+/**
+ * The real route table. `buildRoutes` only wires handlers onto the backing runtime — it
+ * binds nothing — so an unstarted runtime is enough and this spec opens no sockets.
+ */
+function routes(): ReturnType<typeof buildRoutes> {
+  const runtime = new CasparRuntime(
+    {
+      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
+      strategy: 'mirror-sync',
+      autoFailoverEnabled: false,
+    },
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
+  return buildRoutes(runtime);
+}
+
+describe('C-038 — every route carries a permission class', () => {
+  it('the three classes are exactly these, in this order', () => {
+    expect(PERMISSION_CLASSES).toEqual(['read', 'operator', 'station-admin']);
+  });
+
+  it('holdsPermissionClass applies the hierarchy, and fails closed off the end of it', () => {
+    // `read` is the bottom rung: ANY signed-in principal, a viewer included (ADR rule 2).
+    expect(holdsPermissionClass([], 'read')).toBe(true);
+    expect(holdsPermissionClass(['viewer'], 'read')).toBe(true);
+
+    expect(holdsPermissionClass(['viewer'], 'operator')).toBe(false);
+    expect(holdsPermissionClass(['operator'], 'operator')).toBe(true);
+    expect(holdsPermissionClass(['operator'], 'station-admin')).toBe(false);
+    expect(holdsPermissionClass(['station-admin'], 'station-admin')).toBe(true);
+
+    /*
+      🔴 The defensive half, and it is not theoretical tidiness: the contract says `roles`
+      arrives CUMULATIVE, so a bare `['station-admin']` should never appear — but under a
+      membership test it would be refused every `operator` route while holding strictly MORE
+      authority than an operator, which is a refusal nobody could explain.
+    */
+    expect(holdsPermissionClass(['station-admin'], 'operator')).toBe(true);
+
+    // Everything unrecognised grants nothing above the bottom rung.
+    expect(holdsPermissionClass(['administrator', 'ADMIN', 'Operator'], 'operator')).toBe(false);
+  });
+});
+
+describe('C-038 — grantsChannel, the ONE channel predicate', () => {
+  const OURS = ['127.0.0.1', '10.0.0.5'];
+
+  it("'*' authorises every channel; [] authorises none", () => {
+    expect(grantsChannel('*', OURS, 1)).toBe(true);
+    expect(grantsChannel('*', OURS, 99)).toBe(true);
+    expect(grantsChannel([], OURS, 1)).toBe(false);
+  });
+
+  it('a grant must match BOTH the channel and one of this station’s hosts', () => {
+    const grants = [{ host: '127.0.0.1', channel: 1 }];
+    expect(grantsChannel(grants, OURS, 1)).toBe(true);
+    expect(grantsChannel(grants, OURS, 2)).toBe(false);
+  });
+
+  /**
+   * 🔴 **THE PROPERTY THE HOST RULE EXISTS FOR.** A grant naming ANOTHER station's host does
+   * not authorise this station's channel 1 — the channel number matching is not enough.
+   */
+  it("another station's host does not authorise this station's channel", () => {
+    expect(grantsChannel([{ host: '192.0.2.10', channel: 1 }], OURS, 1)).toBe(false);
+  });
+
+  /**
+   * ⚠ **B's host is accepted as well as A's — a TOLERANCE, recorded deliberately.** A and B
+   * are MIRRORS of one channel set rather than a partition, so requiring A's spelling would
+   * refuse every operator on a redundant station. The Playout issues A's host today, so
+   * nothing changes in practice.
+   */
+  it("B's host authorises too, because A and B mirror one channel set", () => {
+    expect(grantsChannel([{ host: '10.0.0.5', channel: 1 }], OURS, 1)).toBe(true);
+  });
+
+  /**
+   * ⭐ And the verdict does NOT move with which server is primary — it is the SET that is
+   * consulted. Reordering the hosts is the cheapest expression of a failover this predicate
+   * must be blind to (golden rule 8).
+   */
+  it('the verdict is independent of host ORDER, so a failover cannot move it', () => {
+    const grant = [{ host: '10.0.0.5', channel: 1 }];
+    expect(grantsChannel(grant, OURS, 1)).toBe(grantsChannel(grant, [...OURS].reverse(), 1));
+  });
+});
+
+describe('C-038 — the census: every route, classified', () => {
+  it('every route carries one of the three classes, and the table is the real one', () => {
+    const table = routes();
+    expect(table.size, 'the census is looking at the real table').toBeGreaterThan(50);
+
+    const bad = [...table.entries()].filter(
+      ([, r]) => !PERMISSION_CLASSES.includes(r.perm as PermissionClass),
+    );
+    expect(
+      bad.map(([name]) => name),
+      'a route carries no permission class',
+    ).toEqual([]);
+  });
+
+  /**
+   * 🔴 **THE SIX `station-admin` ROUTES, PINNED BY NAME.**
+   *
+   * Written as an exact list rather than a count, for `R-028` (6.5)'s reason: a count passes
+   * while the SET drifts, and the set is what an operator's access actually turns on. A
+   * seventh route quietly joining this class is a privilege change that should have to be
+   * argued for — so it reddens here, and the argument happens in review.
+   */
+  it('exactly fourteen routes are station-admin: the configuration verbs, the unjoined catalogue, the two channel-scope doors, the bridge’s own sign-in on each engine, the backup channel entries, and its logs', () => {
+    const admin = [...routes().entries()]
+      .filter(([, r]) => r.perm === 'station-admin')
+      .map(([name]) => name)
+      .sort();
+
+    expect(admin).toEqual([
+      /*
+        `RELEASE-0113-01` (`R-089`) — which of the backup engine's channels mirrors each of this station's,
+        for a backup engine that publishes no mirror: a station's configuration, on the rung of the
+        backup's own sign-in. An entry is used only once the backup engine's D4 confirms it.
+      */
+      'backupChannels.set-entries',
+      /*
+        `CENTRAL-BRIDGE-01` §1 A — CG Bridge's logs, downloaded (they live on the Playout machine
+        now): what an engineer reads, and what a support call is sent. A station admin's.
+      */
+      'bridge.logs-ticket',
+      /*
+        `RELEASE-0112-01` (`R-085`) — the same door as `bridgeSession.sign-in`, on the BACKUP engine: a
+        station admin gives CG Bridge the backup engine's own account password, once. It sets the bearer
+        every backup read uses — a station's configuration, argued for on the same rung as the primary's.
+      */
+      'bridgeSession.backup.sign-in',
+      /*
+        `CENTRAL-BRIDGE-01` (D7, rule 8) — a station admin gives CG Bridge the station account's
+        password, once. It sets the bearer every Playout read of the bridge's uses, which is a
+        station's configuration, not an operator's press.
+      */
+      'bridgeSession.sign-in',
+      'channelSettings.set',
+      /*
+        `DESKTOP-APPS-01` §2E — the Playout's channels UNJOINED, host and all. A read, on the
+        station-admin rung because only setting a station up needs channels it does not yet drive.
+      */
+      'channels.catalogue',
+      'connections.set-config',
+      'delimiters.set',
+      /*
+        `MULTI-CHANNEL-01` — the station's banks, set as one list: add, remove, replace and edit
+        channels. A declaration door like `set-config` beside it, on the same rung for the same
+        reason; its permission footprint is the channels it changes (`bankChangeFootprint`).
+      */
+      'fixedLayers.set-banks',
+      'fixedLayers.set-config',
+      /*
+        `DESKTOP-APPS-01-D` d — what is on air on a channel before it is declared. A read, on the
+        station-admin rung for the catalogue's reason: only choosing a channel needs to ask.
+      */
+      'setup.channel-occupancy',
+      // `PLATE-BAND-01` — its channel footprint is the channels whose defaults it changes.
+      'sources.set-assignments',
+      'sources.set-config',
+      /*
+        `DESKTOP-APPS-01-D` j — STOP then CLEAR on a recorded stray's exact layer, a channel this
+        station does not declare. A write to somebody else's channel, argued for: it is narrower
+        than the fence it bypasses, and only a station-admin sees the strays at all.
+      */
+      'station.take-off-air',
+    ]);
+  });
+
+  /**
+   * 🔴 **EVERY `read`-CLASS ROUTE, PINNED BY NAME — the list a VIEWER may reach.**
+   *
+   * This is the assertion a privilege escalation would trip. A route moved into `read` by a
+   * future author who classified it by VERB rather than by PRINCIPAL reddens here, which is
+   * the one place that mistake is cheap to catch.
+   */
+  it('the read class is exactly the reads, plus auth.sign-out', () => {
+    const read = [...routes().entries()]
+      .filter(([, r]) => r.perm === 'read')
+      .map(([name]) => name)
+      .sort();
+
+    expect(read).toEqual([
+      'air.emptied',
+      'app.info',
+      'audit.health',
+      // `CONSOLE-POLISH-01` (`R-083`) — the Log a page at a time: a read, scoped by the grant.
+      'audit.page',
+      'audit.recent',
+      /*
+        `DELTA-MULTI-CHANNEL-01-B` B3 — the Playout's answer to a failed sign-in, for the LOG. It
+        writes one line of the bridge's own log and nothing of the station's; it is sent only
+        before a sign-in, through the `auth.*` door, so any rung (and no rung) may send it.
+      */
+      'auth.sign-in-failure',
+      /*
+        ⚠ **`auth.sign-out` IS HERE AND IT WRITES.** `read` names the bottom rung of the
+        principal hierarchy, not a promise about the verb — ADR 0010 rule 2 is a statement
+        about WHO ("any signed-in principal, a viewer included"). A viewer must be able to
+        sign out; what they write is their own session, never the station.
+      */
+      'auth.sign-out',
+      'auth.state',
+      /*
+        `RELEASE-0113-01` (`R-089`) — where each channel's lines go on the backup engine, as every console
+        says it (the status bar's count, each channel's line). A read: it names mappings and decides nothing.
+      */
+      'backupChannels.state',
+      'bridge.capabilities',
+      /*
+        `RELEASE-0112-01` (`R-085`) — each engine's CG Bridge session, as every console says it (the
+        status bar's chips). A read, like `bridgeSession.state` below it: it names states and decides
+        nothing.
+      */
+      'bridgeSession.engines',
+      // `CENTRAL-BRIDGE-01` (D7) — whether CG Bridge holds its own Playout session. Every console says it.
+      'bridgeSession.state',
+      'channelSettings.get',
+      // `R-062` gap 2 — the channel-discovery call. A read: it NAMES channels and decides nothing.
+      'channels.list',
+      'connections.config',
+      'connections.health',
+      'connections.template-serve',
+      'delimiters.list',
+      // `MULTI-CHANNEL-01` — every declared bank. A read, like `fixedLayers.config` beside it.
+      'fixedLayers.banks',
+      'fixedLayers.config',
+      'fixedLayers.state',
+      // `RELEASE-091-01` (DELTA B, B1) — a layer of ours cleared outside CG Control.
+      'layers.cleared-outside',
+      'layers.orphans',
+      'layers.owned-occupancy',
+      // `PLAYOUT-FEATURES-01` D — the CG license, as last read. Every console reads it.
+      'license.state',
+      // `MEDIA-PLATES-01` — each seated clip's remaining time, pause and end. A viewer may watch air.
+      'liveLayers.media-state',
+      'liveLayers.state',
+      'lock.state',
+      // `C-016` — whether the programme return is live. A viewer may watch air.
+      'pgmReturn.status',
+      /*
+        `CENTRAL-BRIDGE-01` (D9) — the ticket for the programme return's picture: a viewer may watch
+        air too, but only a channel the sign-in holds (the handler) and this station declares (the fence).
+      */
+      'pgmReturn.ticket',
+      'playoutLayers.state',
+      'rehearse.state',
+      /*
+        `DESKTOP-APPS-01` §2F — the connection check and the route address. Probes that change
+        nothing: any signed-in principal may see why the station cannot reach its plant.
+      */
+      'setup.check',
+      'setup.route-address',
+      'sources.assignments',
+      'sources.config',
+      /*
+        `PLAYOUT-SOURCES-01` §4 — the picker's two reads. `media-search` answers a VIEWER (D11 is
+        readable by every CG role, and the picker is a read); `refresh` asks for a D10 read no sooner
+        than 5 s after the last, and changes nothing a read would not.
+      */
+      'sources.media-search',
+      'sources.refresh',
+      // `CENTRAL-BRIDGE-01` (`B-294`) — the restore's standing report, read by every console.
+      'stack.restore-report',
+      'stack.snapshot',
+      // `DESKTOP-APPS-01-D` j — the strays, read by every console (Station setup shows them).
+      'station.strays',
+      'templates.get',
+      'templates.list',
+      // `RELEASE-091-01` §1 — PVW's page from the bridge's store.
+      'templates.page',
+      'update.state',
+    ]);
+  });
+
+  /**
+   * 🔴 **THE LOCK AND THE PERMISSION CLASS ARE DIFFERENT QUESTIONS.**
+   *
+   * `lock.release` is the sharpest case and it is asserted rather than described: it is
+   * EXEMPT from the lock (it is the way out) and it still requires `operator`, because a
+   * viewer must not unlock a console an operator deliberately locked. A future author who
+   * "harmonises" the two axes breaks this.
+   */
+  it('lock.engage and lock.release are both operator, whatever their lock policy is', () => {
+    const table = routes();
+    const engage = table.get('lock.engage');
+    const release = table.get('lock.release');
+    if (engage === undefined || release === undefined) throw new Error('the lock is not routed');
+
+    expect(engage.perm).toBe('operator');
+    expect(release.perm).toBe('operator');
+    // …and the two axes genuinely disagree on this route, which is the point.
+    expect(release.lock).toBe('unlock');
+  });
+
+  /**
+   * 🔴🔴 `silenceAllLivePlates` **STAYS UNSCOPED** — owner answer A16 and CLAUDE.md's cadence
+   * floor. It takes the `operator` class like any other intent, and NO channel check.
+   */
+  it('stack.silence-all-live-plates is operator and resolves to NO channels', () => {
+    const table = routes();
+    const route = table.get('stack.silence-all-live-plates');
+    if (route === undefined) throw new Error('the panic button is not routed');
+    expect(route.perm).toBe('operator');
+  });
+});

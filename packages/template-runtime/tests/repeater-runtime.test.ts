@@ -110,7 +110,7 @@ function rowComp(opts?: { playout?: Playout; extra?: Element[]; outPoint?: numbe
     frameRange: { in: 0, out: 40 },
     lifecycle: { outPoint: opts?.outPoint ?? 10 },
     ...(opts?.playout !== undefined ? { playout: opts.playout } : {}),
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'rl',
@@ -187,7 +187,7 @@ function repeaterScene(opts?: {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 40 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     ...(opts?.playout !== undefined ? { playout: opts.playout } : {}),
     layers: [
       {

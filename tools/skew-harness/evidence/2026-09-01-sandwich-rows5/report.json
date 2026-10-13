@@ -1,0 +1,434 @@
+{
+  "mode": "1080i5000",
+  "channelFramePeriodMs": 40,
+  "reportedFramerate": 50,
+  "fieldsPerChannelFrame": 2,
+  "probePlacement": [],
+  "scene": {
+    "looks": 2,
+    "background": "flat",
+    "fixture": "ghab-seated",
+    "from": "look-ghab-full",
+    "to": "look-ghab-boxes",
+    "transitionMask": true
+  },
+  "runs": [
+    {
+      "index": 0,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-09-01-sandwich-rows5\\skew-00.mkv",
+      "frames": 58,
+      "expectedFrames": 108,
+      "windowMs": 2154,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"from\\\":\\\"look-ghab-full\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-30 CLIP 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-31 FILL 0.5125 0.278704 0.477083 0.476852",
+        "MIXER 1-31 CLIP 0.5125 0.278704 0.477083 0.476852",
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "VERSION"
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the channel did not sustain cadence: 58 frames recorded against 108 expected over 2154 ms",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": []
+    },
+    {
+      "index": 1,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-09-01-sandwich-rows5\\skew-01.mkv",
+      "frames": 48,
+      "expectedFrames": 84,
+      "windowMs": 1674,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"from\\\":\\\"look-ghab-full\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-30 CLIP 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-31 FILL 0.5125 0.278704 0.477083 0.476852",
+        "MIXER 1-31 CLIP 0.5125 0.278704 0.477083 0.476852",
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "VERSION"
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the channel did not sustain cadence: 48 frames recorded against 84 expected over 1674 ms",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": []
+    },
+    {
+      "index": 2,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-09-01-sandwich-rows5\\skew-02.mkv",
+      "frames": 54,
+      "expectedFrames": 81,
+      "windowMs": 1629,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"from\\\":\\\"look-ghab-full\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-30 CLIP 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-31 FILL 0.5125 0.278704 0.477083 0.476852",
+        "MIXER 1-31 CLIP 0.5125 0.278704 0.477083 0.476852",
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "VERSION"
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the channel did not sustain cadence: 54 frames recorded against 81 expected over 1629 ms",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": []
+    },
+    {
+      "index": 3,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-09-01-sandwich-rows5\\skew-03.mkv",
+      "frames": 52,
+      "expectedFrames": 83,
+      "windowMs": 1665,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"from\\\":\\\"look-ghab-full\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-30 CLIP 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-31 FILL 0.5125 0.278704 0.477083 0.476852",
+        "MIXER 1-31 CLIP 0.5125 0.278704 0.477083 0.476852",
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\""
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the channel did not sustain cadence: 52 frames recorded against 83 expected over 1665 ms",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": []
+    },
+    {
+      "index": 4,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-09-01-sandwich-rows5\\skew-04.mkv",
+      "frames": 52,
+      "expectedFrames": 82,
+      "windowMs": 1646,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"from\\\":\\\"look-ghab-full\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-30 CLIP 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-31 FILL 0.5125 0.278704 0.477083 0.476852",
+        "MIXER 1-31 CLIP 0.5125 0.278704 0.477083 0.476852",
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "VERSION"
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the channel did not sustain cadence: 52 frames recorded against 82 expected over 1646 ms",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": []
+    },
+    {
+      "index": 5,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-09-01-sandwich-rows5\\skew-05.mkv",
+      "frames": 54,
+      "expectedFrames": 83,
+      "windowMs": 1665,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"from\\\":\\\"look-ghab-full\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-30 CLIP 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-31 FILL 0.5125 0.278704 0.477083 0.476852",
+        "MIXER 1-31 CLIP 0.5125 0.278704 0.477083 0.476852",
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "VERSION"
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the channel did not sustain cadence: 54 frames recorded against 83 expected over 1665 ms",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": []
+    },
+    {
+      "index": 6,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-09-01-sandwich-rows5\\skew-06.mkv",
+      "frames": 54,
+      "expectedFrames": 82,
+      "windowMs": 1645,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"from\\\":\\\"look-ghab-full\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-30 CLIP 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-31 FILL 0.5125 0.278704 0.477083 0.476852",
+        "MIXER 1-31 CLIP 0.5125 0.278704 0.477083 0.476852",
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\""
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the channel did not sustain cadence: 54 frames recorded against 82 expected over 1645 ms",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": []
+    },
+    {
+      "index": 7,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-09-01-sandwich-rows5\\skew-07.mkv",
+      "frames": 54,
+      "expectedFrames": 81,
+      "windowMs": 1621,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"from\\\":\\\"look-ghab-full\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-30 CLIP 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-31 FILL 0.5125 0.278704 0.477083 0.476852",
+        "MIXER 1-31 CLIP 0.5125 0.278704 0.477083 0.476852",
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "VERSION"
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the channel did not sustain cadence: 54 frames recorded against 81 expected over 1621 ms",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": []
+    },
+    {
+      "index": 8,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-09-01-sandwich-rows5\\skew-08.mkv",
+      "frames": 56,
+      "expectedFrames": 81,
+      "windowMs": 1626,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"from\\\":\\\"look-ghab-full\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-30 CLIP 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-31 FILL 0.5125 0.278704 0.477083 0.476852",
+        "MIXER 1-31 CLIP 0.5125 0.278704 0.477083 0.476852",
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "VERSION"
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the channel did not sustain cadence: 56 frames recorded against 81 expected over 1626 ms",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": []
+    },
+    {
+      "index": 9,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-09-01-sandwich-rows5\\skew-09.mkv",
+      "frames": 52,
+      "expectedFrames": 81,
+      "windowMs": 1627,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"from\\\":\\\"look-ghab-full\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-30 CLIP 0.011979 0.278704 0.477083 0.476852",
+        "MIXER 1-31 FILL 0.5125 0.278704 0.477083 0.476852",
+        "MIXER 1-31 CLIP 0.5125 0.278704 0.477083 0.476852",
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-ghab-boxes\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "VERSION"
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the channel did not sustain cadence: 52 frames recorded against 81 expected over 1627 ms",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": []
+    }
+  ],
+  "kChannelFrames": {
+    "n": 0,
+    "min": null,
+    "median": null,
+    "max": null,
+    "values": []
+  },
+  "kMilliseconds": {
+    "n": 0,
+    "min": null,
+    "median": null,
+    "max": null,
+    "values": []
+  },
+  "pictureArrivalFields": {
+    "n": 0,
+    "min": null,
+    "median": null,
+    "max": null,
+    "values": []
+  },
+  "clearGapFields": {
+    "n": 0,
+    "min": null,
+    "median": null,
+    "max": null,
+    "values": []
+  },
+  "artefactsByDirection": []
+}

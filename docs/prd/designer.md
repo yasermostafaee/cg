@@ -3149,7 +3149,7 @@ The 5 templates (owner-refreshed 2026-07-12; supersedes the original list):
 
 **Notes:** Export/packaging change — the Designer `.vcg` writer (`apps/designer/src/platform/Exporter.ts`, which already validates `font-no-path` and collects `fontDeps`) supplies the font bytes to the existing `@cg/vcg-format` `pack()` `fonts` seam; the loader/runtime side resolves the packaged `fonts/` paths (mirror how packaged image assets resolve, and how the single-file HTML inlines fonts). Mind package size (prefer woff2) and the licensed-font edge. Spec: `## ADDED`/`## MODIFIED` on the export capability (`.vcg` bundles fonts). Tests: an exporter test (a non-system-font template yields a `.vcg` containing the font bytes + CSS reference); a measurement test/fixture asserting crawl width/duration is font-correct without the system font; the warning-suppression case.
 
-## [x] D-122 — snap dragging to integer scene pixels while the pixel grid is active ⟨priority: medium⟩ — merged (#264, `19eee69`), archived (`openspec/changes/archive/2026-07-08-add-pixel-snap-drag`): full pixel snap on drag + first-nudge-to-integer at grid zoom (direction-aware), Alt bypass, Snapping-preference master switch; Inspector values free and below-threshold unchanged. Owner-verified on the affected machine. Resize-handle snapping deferred (follow-up, noted in the change's `design.md`)
+## [x] D-122 — snap dragging to integer scene pixels while the pixel grid is active ⟨priority: medium⟩ — merged (#264, `19eee69`), archived (`openspec/changes/archive/2026-07-08-add-pixel-snap-drag`): full pixel snap on drag + first-nudge-to-integer at grid zoom (direction-aware), Alt bypass, Snapping-preference master switch; Inspector values free and below-threshold unchanged. Owner-verified on the affected machine. Resize-handle snapping deferred (follow-up, noted in the change's `design.md`). ⭐ **Its 800 % THRESHOLD is superseded by [[B-180]] (2026-08-26)** — a drag/resize now QUANTISES ITS POINTER to a whole scene pixel at EVERY zoom, and resize snapping ships there too; the `Alt` bypass and free Inspector values are unchanged (see the supersession block below). ⚠ That wording is deliberately weaker than the "commits whole scene pixels" this line first carried — corrected 2026-08-27, exceptions enumerated in [[B-180]]
 
 **What:** At pixel-grid zoom (zoom ≥ the 800% grid threshold), make drag placement land on INTEGER scene coordinates, and make the first arrow-nudge of a fractional coordinate land on the next integer in the nudge direction. Surfaced by the owner during B-042 verification (2026-07-07): dragging writes continuous FRACTIONAL scene X/Y, so at pixel-grid zoom a drag can park an element between two pixels — the selection border honestly shows it sitting between two grid lines. This is a separate product gap from B-042 (which is only about grid↔content ALIGNMENT at integer coords), so it is filed on its own.
 
@@ -3157,13 +3157,40 @@ The 5 templates (owner-refreshed 2026-07-12; supersedes the original list):
 
 **Decision (owner, 2026-07-07 — decided, not pending): full snap at pixel-grid zoom.** At zoom ≥ the grid threshold: (i) dragging lands on integer scene coords; (ii) the FIRST nudge of a fractional coordinate moves it to the next integer in the nudge direction (x=0.68 → right → 1, left → 0), after which nudges step by whole pixels — accelerated nudge variants follow the same rule; (iii) holding **Alt** during a drag or nudge BYPASSES the snap (free sub-pixel placement / relative nudge). Values typed in the Inspector stay free either way. Below the grid threshold, today's behavior is unchanged.
 
+### ⭐ SUPERSEDED IN PART by [[B-180]] (2026-08-26) — the THRESHOLD, not the rule
+
+**What changed:** the sentence above — _"Below the grid threshold, today's behavior is unchanged"_ —
+and the last acceptance bullet no longer describe shipped behaviour. A drag or resize now commits
+whole scene pixels at **every** zoom — more precisely, the gesture QUANTISES ITS POINTER there, which
+is not the same promise; the exceptions are enumerated in [[B-180]] (corrected 2026-08-27) — and
+resize-handle snapping (deferred by this item) ships with it. Everything else this item decided is intact and re-asserted by [[B-180]]'s own tests: **`Alt` is
+still the momentary bypass** — now the only way to place sub-pixel by drag — and **values typed in
+the Inspector are still stored exactly as typed, at any zoom.**
+
+**Why the scope was wrong, in one line:** this item gated on the pixel GRID because the grid is what
+the author is aiming at, which is sound reasoning about intent and silent about arithmetic. Below the
+threshold a drag committed `startPos + clientDelta / scale` — a division by an arbitrary zoom — so
+every ordinary drag wrote a coordinate with a fractional tail the Inspector then rounded away. That
+is [[B-180]]'s first named generator, and it blocked the Export over geometry the author could
+neither see nor correct.
+
+⚠ **The nudge is untouched.** [[B-180]] deliberately did NOT widen `pixelSnapActive`, because that
+predicate also gates the arrow-nudge's first-snap and sits in an `else if` chain where it supersedes
+smart-guide snapping entirely — widening it would have deleted guide snapping from the Designer with
+every test still green. The new gate (`quantiseDragCommit`) runs AFTER the guides have had their say
+and quantises only the axes a guide did not claim.
+
+⚠ **This entry is amended in place; the archived change directory
+(`openspec/changes/archive/2026-07-08-add-pixel-snap-drag`) is a dated record of what shipped on
+2026-07-08 and is deliberately NOT rewritten.**
+
 **Acceptance:**
 
 - WHEN the zoom is ≥ the pixel-grid threshold and an element is dragged THEN its committed position is integer scene X/Y (the drag lands ON grid lines), unless Alt is held
 - WHEN an element sits at a fractional coordinate (e.g. x=0.68) at grid zoom and an arrow nudge fires THEN the coordinate moves to the NEXT integer in the nudge direction (right → 1, left → 0), and subsequent nudges step by whole pixels; accelerated nudge variants obey the same first-snap rule
 - WHEN Alt is held during a drag or nudge at grid zoom THEN the snap is bypassed (free sub-pixel drag / relative ±1 nudge preserving the fraction)
 - WHEN a value is typed in the Inspector THEN it is stored as typed (fractional allowed), at any zoom
-- WHEN the zoom is below the grid threshold THEN drag and nudge behave exactly as today (no new snapping)
+- ~~WHEN the zoom is below the grid threshold THEN drag and nudge behave exactly as today (no new snapping)~~ — **superseded by [[B-180]]:** below the threshold the NUDGE still behaves exactly as this bullet says, but a DRAG or RESIZE now quantises its pointer to a whole scene pixel there too
 
 **Notes:** Queued, NOT scheduled — implementation is a later change, not part of B-042 (do not fold into `fix-pixel-grid-content-alignment`). Touch points when picked up: the drag-commit path and the arrow-nudge handler in the canvas feature (`CanvasOverlay`/group-move + the D-073 nudge), gated on `pixelGridVisible(zoom)`; Alt-bypass must not collide with existing Alt gestures; multi-select drags snap the anchor and preserve relative offsets (B-027 clamp still applies). Spec: extend the canvas-viewport (or a pointer-editing) capability with a snapping requirement mirroring the decision above.
 
@@ -3198,7 +3225,29 @@ The 5 templates (owner-refreshed 2026-07-12; supersedes the original list):
 
 **Notes:** Cross-references: B-058 (menu chrome), B-059 (visual bounds), B-060 (right-click draw-cancel), B-061 (rotated overlay), B-062 (size==visualBBox model + resize bake), B-063 (curved add affordance) — all same branch; supersedes the D-109/B-037-era "PathEditor mounts whenever a path is selected" behavior (spec text replaced per the spec-discipline rule). OWNER ADDITION (Issue D, 2026-07-10): right-clicking a SEGMENT (not an anchor) in edit mode opens the shared context menu with **Add point** (corner) and **Add curve point** (smooth, tangent-aligned mirrored handles sized chord/6), inserting at the nearest point on the real curve under the cursor via the same insert route; anchor right-click keeps Delete point; pen-draft right-click keeps the B-060 cancel. Spec: `## MODIFIED` on `designer-path-element`. Tests: unit `edit-mode-state.test.ts` (state transitions) + `anchor-context-menu.test.ts` (segment Add menu, corner + smooth); E2E `pen-edit-mode.spec.ts` (box-only vs dblclick, Esc/empty exits) + `pen-curve-edit.spec.ts` (Ctrl-gated insertion, plain click inert) + the pen specs updated to the `enterPathEdit` fixture flow.
 
-## [x] D-125 — import After Effects → bodymovin (Lottie) animations as a lifecycle-aware element ⟨priority: medium⟩ — DONE: shipped in phases (#335 + canvas fixes #337/#338/#339, #341, #345, #348, #352, #354, #357, #358; reconciled #364) and archived `openspec/changes/archive/2026-07-19-lottie-lifecycle-element/`. The CasparCG 2.3.x CEF hardware smoke — the pre-archive gate — was OWNER-VERIFIED on real hardware (2026-07-19). Remainders carried forward: image field overrides deferred (reason in the archived change), and [B-096](bugs-designer.md) (the Inspector's clip-total frame count ignores a nonzero `ip`)
+> ⚠ **TOUCHED 2026-08-13 by `openspec/changes/timeline-drives-loop-and-media/` (D-135's session),
+> without reopening this item.** Two things changed for a MARKER-LESS clip, both recorded in that
+> change's `design.md` §4.5 / §4.6:
+>
+> 1. **The Inspector now offers "Add phase markers"** on a clip that has none, seeding
+>    `introEnd` at the clip MIDPOINT (through the shared `lottieClipMidpoint`, the same helper the
+>    canvas poster uses) and `outroStart` at `op` — deliberately degenerate, because nothing can
+>    detect where a clip animates off. Until now the panel only EXPLAINED the absence. `VideoSections`
+>    had shipped the same affordance with the same seeds since D-128; the Lottie section was the odd
+>    one out.
+> 2. **The runtime's marker-less `introEnd = op` fallback is UNCHANGED, deliberately**, under a rule
+>    worth carrying: that fallback is a clip's MISSING DATA and nothing may infer intent from it. It
+>    is the third time the project has met it — `lottieTiming` refuses to derive a settle from it,
+>    D-125 Phase 1 refuses it for the poster frame — and the first two went the same way.
+>
+> 🔴 **And the "Which content closes the graphic?" checkbox was INERT for a Lottie/video row.** D-128
+> extended the READ side without the WRITE side, so the box clicked and wrote nothing. Fixed in the
+> same change: `drivesHold` now has one writer covering all five flag-carrying kinds, with the
+> container recursion the shallow `updateElement` lacks.
+
+## [x] D-125 — import After Effects → bodymovin (Lottie) animations as a lifecycle-aware element ⟨priority: medium⟩ — DONE:
+
+shipped in phases (#335 + canvas fixes #337/#338/#339, #341, #345, #348, #352, #354, #357, #358; reconciled #364) and archived `openspec/changes/archive/2026-07-19-lottie-lifecycle-element/`. The CasparCG 2.3.x CEF hardware smoke — the pre-archive gate — was OWNER-VERIFIED on real hardware (2026-07-19). Remainders carried forward: image field overrides deferred (reason in the archived change), and [B-096](bugs-designer.md) (the Inspector's clip-total frame count ignores a nonzero `ip`)
 
 **What:** Import a bodymovin/Lottie export (`.json`, ideally `.lottie`) as an OPAQUE, self-playing `lottie` element rendered by a bundled Lottie player. The Designer positions / scales / rotates / times it and places it on the timeline, but never edits it point-by-point and converts NO keyframes into native ones. The element carries a **phase mapping** — an intro-end and an outro-start frame in the ANIMATION's own frame space, plus an optional idle segment between them — read from the bodymovin `markers` array when the export has them, otherwise marked by hand in the Inspector. Those phases are then mapped onto the composition's shipped lifecycle (`outPoint` + optional `contentStart`, `LifecycleSchema`): on play the intro runs once and the element HOLDS (freeze, or loop the idle segment); it does NOT drive the content-driven hold by default; on `stop()`/`out()` it plays its OUTRO and the composition settles to CLEARED; `pause()`/`resume()` freeze/continue it in lockstep with the rest of the scene. The intended composition is the real use case: an AE-authored animated background / lower-third ("furniture") holds on air while a NATIVE ticker or sequence placed ON TOP carries the dynamic content and drives the content-driven hold — the existing D-107/D-112 model, unchanged.
 **Why:** Broadcast furniture is authored in After Effects, and re-creating it natively is neither realistic nor desirable — we want to play it, not port it. The pieces are already half-present and inert: `LottieElementSchema` (`assetId`/`speed`/`loopMode`/`segment`/`fieldOverrides`), the `lottie` manifest asset kind, the `lottie-override` binding target, and `@cg/lottie-bridge` (a real `lottie-web` wrapper + a real import allowlist) all EXIST but nothing is wired — `scene-builder` renders a placeholder div, `lottie-override` is a no-op pinned by a test, and the Designer can neither import a Lottie asset nor create the element. The gap that actually matters is not "play a Lottie": it is LIFECYCLE. An opaque, self-playing animation only earns its place if it plugs into IN/HOLD/OUT — so a native ticker can hold the graphic on air over it, and the outro still fires on stop.
@@ -3445,6 +3494,23 @@ fields produces ۰–۹ / ٠–٩ and ٫, which the fields reject.
 **Notes:** one shared normalization helper at the numeric-input primitive level, not per-field
 patches; respect the design-system input primitives (`apps/designer/src/renderer/ui/`).
 
+⭐ **SPLIT 2026-09-27 by `openspec/changes/archive/2026-09-27-template-value-digits/` (`PERSIAN-DIGITS-01`).** The
+owner's rule for TEMPLATE VALUES supersedes this item's "DISPLAYS Latin digits" for them: a number
+field's default ("Value"), the preview form's number field, a repeater's number columns and a list
+item's dwell now keep the author's digits AS TYPED and read them through `@cg/text-shaping`'s one
+reader (measured before: each was a native `type="number"` box, and `۱۲` stored `0`). That half is
+DONE there. **This item stays queued for the Designer's CHROME numbers** — position, size,
+rotation, keyframe values, the timeline's fields — which still drop Persian digits, and for which
+the owner has not asked for as-typed display (`PERSIAN-DIGITS-01` §1 E: chrome numbers stay as
+they are). Build it on the same reader, not a second digit map.
+
+⭐ **AMENDED 2026-09-27 by `openspec/changes/archive/2026-09-29-text-digits/` (`TEXT-DIGITS-01`, archived 2026-09-29) — template
+values only.** What is edited now looks like what goes on air: a field's Value box, the preview form,
+list and sequence items, the ticker separator and the canvas's double-click edit write each digit in
+the element's or field's Digits choice as it is typed, the caret kept; "as typed" is now Keyboard,
+which follows the keyboard language. This item's "a text field stores them verbatim" holds only for
+Keyboard with a paste or an unknown language. The chrome numbers above are still unchanged.
+
 ## [ ] D-131 — sequence transitions: easing + inter-item delay ⟨priority: medium⟩
 
 **What:** Add transition easing (at least linear / ease-in / ease-out / ease-in-out) and a
@@ -3481,13 +3547,59 @@ error-prone.
 
 **Notes:** additive schema field, default absent.
 
-## [ ] D-133 — loop range visualization ON the timeline (Cinegy-style) ⟨priority: medium⟩
+## [~] D-133 — loop range visualization ON the timeline, and an UNCONDITIONALLY authorable loop range (Cinegy-style) ⟨priority: high — client-required⟩ — **BUILT 2026-08-14** in `openspec/changes/timeline-drives-loop-and-media/` (with [[D-135]] as ONE change; all four owner decisions ANSWERED 2026-08-12, `tasks.md` §1–§3 now all `[x]`)
+
+> **✅ BUILT (2026-08-14) — all three sections.** Authoring (the `hasContent` half of the "Pin
+> content start" gate removed, so a shapes-only scene with an out-point can author the range),
+> playback (`PlayoutController.startHoldLoop` renders a content-driven hold as a repeating
+> `[contentStart → outPoint]`, with the seam invariant asserted on the MECHANISM), and timeline
+> rendering (full-height indicator lines + the range band, present by default from the EFFECTIVE
+> content start). The three loops are named apart — **Preview loop** / **Loop cycle** / **Hold
+> loop** — recorded as a decision in `design.md` §3.4. Stays `[~]` pending the owner's archive
+> confirmation; nothing else in the change is outstanding.
+
+> **Owner decisions (`design.md` §9), answered 2026-08-12 — the two that bind this item:**
+> **§9.1 — the loop range under a `timed` hold is INERT**, exactly as this item's acceptance says,
+> **and the surface must state that it is inert and what would make it active** (an inert control
+> with no explanation is what raised the question). **§9.2 — only the `hasContent` half of the gate
+> is removed; `lifecycle !== undefined` stays.** The shipped "Add out point" button IS the path to
+> an out-point, and authoring a loop range never creates one as a side effect — creating one moves
+> the composition out of `static`, which changes what it does on air at stop time.
+>
+> ⚠ **A motivation that was proposed for this item and is FALSE — recorded so it is not
+> re-derived.** An operator report ("a Lottie's visible duration equals `holdMs`") was read as
+> motivating task §1, on the reasoning that pinning `contentStart` earlier would start the clip
+> before the out-point and lengthen its screen time. **`lifecycle.contentStart` has no effect
+> whatsoever on a Lottie**, verified three ways in the tree (`startOwnContent` starts tickers /
+> clocks / sequences only; the content-start visibility gate collects those same three kinds only;
+> and the play path starts every Lottie at PLAY, with a comment saying exactly that). Task §1 is
+> worth building on its own merits — it is NOT worth building for this reason, and the real cause of
+> that report is recorded in `design.md` §4.5.
+>
+> ⚠ **Consequence:** because the loop range is offered only where an out-point exists, what
+> discharges this item's "the conditional affordance is at most a shortcut, never the only path" is
+> `tasks.md` §3 — the loop range being **present by default** for a composition that loops or holds.
+> §3 is part of this item's acceptance, not decoration.
+>
+> 🔴 **A recorded fact under this item was FALSE and is withdrawn:** the design claimed removing the
+> gate would also fix a discrepancy, because `hasContentElement` supposedly counted "no Lottie, no
+> video". It counts opted-in media exactly as the canonical predicate does. The genuine divergence
+> is `drivesHold` on ticker/sequence/countdown clock and D-112 `holdOverrides`, and this change
+> removes it at "Pin content start" ONLY — the Hold-source select and the `ContentHoldChecklist`
+> keep it, deliberately (`design.md` §8 risk 5). No item number is minted for that residual here.
 
 **What:** Show a composition's loop/hold range directly on the timeline — start/end markers
 present by default when the composition repeats/holds — with the playhead wrapping at the loop
-end.
+end. **And make the loop range authorable UNCONDITIONALLY**: the main scene offers a loop option
+ALWAYS, with no content-driven element required to bring the affordance into existence.
 **Why:** today the loop/hold behavior is only observable in the preview; Cinegy shows a loop range
-directly on the timeline, which is friendlier.
+directly on the timeline, which is friendlier. **And the authoring path is gated today**: an out
+point exists only via the "Add out point" button, and the loop range only becomes definable once a
+content-driven element (ticker / sequence / clock in countdown mode) is present — that is when the
+"Pin content start" button appears at all (`PlayoutSection.tsx:779`, gated on
+`lifecycle !== undefined && hasContent`, where `hasContent` is `hasContentElement(scene)`,
+`scene.ts:45`). In the Cinegy model the main page can carry a loop range from the start; an
+operator should not have to add a ticker to discover that loops exist.
 **Acceptance** (from the owner's description — map to our lifecycle model in design):
 
 - WHEN a composition repeats/holds (e.g. content-driven with a repeating driver) THEN the timeline
@@ -3496,10 +3608,31 @@ directly on the timeline, which is friendlier.
 - WHEN the repeat is finite (e.g. 2) THEN it wraps that many times and then proceeds to the true
   end; WHEN infinite THEN it wraps indefinitely
 - WHEN markers render THEN the start/end indicator lines extend the FULL timeline height
+- WHEN the MAIN scene contains NO content-driven element THEN the loop option is STILL offered —
+  the loop range is authorable with nothing but shapes on the scene, and the conditional
+  "Pin content start" affordance is at most a shortcut to it, never the only path to it
+- 🔴 WHEN the hold is content-driven and a driver is ticked (e.g. a ticker set to repeat 3×) and
+  playback reaches the loop end THEN the playhead wraps to the loop start **and the driver's
+  content DOES NOT RESET** — the ticker text keeps flowing ACROSS the seam, unbroken
+- WHEN that driver has completed its N repeats THEN playback passes the loop end WITHOUT wrapping
+  and the out phase of the other elements runs
+- WHEN the hold is NOT content-driven THEN an authored loop range has NO playback effect —
+  authoring it is allowed, it is simply INERT
 
 **Notes:** the mapping of "loop" onto our shipped lifecycle (`outPoint` + optional `contentStart`,
 content-driven repeat) is the core design decision — record it in the change's design.md when
 implemented, do not invent a new lifecycle mode casually. **RECON-FIRST.**
+
+**The seam semantics are the core of this item**, not a detail of it: "wrap the playhead, continue
+the content" is a different machine from "wrap the playhead, restart the content", and every
+existing loop affordance in the codebase should be read against that distinction before any of it
+is reused. A design that restarts the driver at the seam does not satisfy this item even if the
+playhead behaviour matches.
+
+**No backward compatibility is owed to today's conditional-authoring UI.** Nothing has been
+delivered to the client, so the compatibility floor has not been set (see [[P-031]]'s policy in
+[platform.md](platform.md)) — the gated affordance may be replaced outright rather than kept
+beside the unconditional one.
 
 ## [ ] D-134 — clock: custom UTC offset ⟨priority: low⟩
 
@@ -3517,25 +3650,123 @@ the clock renders that offset's time.
 **Notes:** additive field alongside `timezone` (`ClockElementSchema`); countdown/countup ignore it
 like they ignore `timezone`.
 
-## [ ] D-135 — scrubbing the timeline drives Lottie AND video frames on the canvas ⟨priority: medium⟩
+## [x] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-133]] as ONE change; §5 answers play-and-re-anchor vs position-by-`currentTime`; **all FIVE §9 decisions ANSWERED** — §9.1–§9.4 on 2026-08-12, §9.5 on 2026-08-13: (a), position everywhere — **BOTH halves are BUILT**; [[D-133]]'s §1–§3 are now built too, so the item stays `[~]` only pending the owner's archive confirmation) · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-timeline-drives-loop-and-media/`, `RELEASE-0110-01` §0.3)
 
-**What:** While scrubbing, each Lottie element on the canvas shows the exact frame under the
-playhead (through its phase mapping where set); post-D-128, the same for video elements.
+> **Owner decisions (`design.md` §9), answered 2026-08-12 — the two that bind this item:**
+> **§9.4 — EVERY Lottie and EVERY video follows the playhead, regardless of `drivesHold`.** The
+> flags are orthogonal: `drivesHold` answers "does this gate the HOLD", not "does the canvas show
+> this element's frame" — and the spec now says so out loud, because media's inverse default
+> (`=== true`, an opt-in) is load-bearing elsewhere. **§9.3 — backward play and bounce position the
+> element exactly as forward play does; no direction special case.**
+>
+> 🔴 **§9.3's PREMISE was false, and the reason outlives the number.** MEASURED 2026-08-12 (Chrome
+> 151, one 1920×1080 VP8+alpha element, 1 s GOP, 200 ticks at 25 fps): backward **10.6** distinct
+> frames/s against forward **10.2** — backward is 4 % FASTER, i.e. equal within noise. Under
+> position-by-`currentTime` every tick is a random seek decoding from the nearest preceding
+> keyframe, so **direction does not enter the computation at all**. "Backward is the worst case for
+> inter-frame codecs" is true of PLAYBACK and false of POSITIONING. Two further corrections came
+> with it: this project's converter emits a **fixed 1-second GOP** (`-g 25 -keyint_min 25`), so the
+> design's "~5 s keyframe interval" premise was stale by 5×; and **`fastSeek()` does not exist on
+> this engine**, so that recommendation is deleted rather than hedged.
+>
+> ✅ **The LOTTIE half is BUILT and CI-verified.** `tick(frame)` positions every Lottie at the
+> playhead; scrub and PLAY are the same call by construction; **every frame maps, including the
+> composition's in-point.** Linux `e2e` for the WHOLE item (both halves) is DISCHARGED for
+> `710f0ab0` — <https://github.com/yasermostafaee/cg/actions/runs/31683317925> (`success`, and
+> the `E2E (Playwright)` job RAN); this supersedes the runs for `d43a9adb`, `f9a35507`,
+> `0d2d0c3b`, `f492939d` and `6e620f70`, each of which verified a tree that has since been
+> replaced.
+> The in-point clause
+> took three attempts and is worth reading in `design.md` §4.3: an interim revision rested the
+> in-point on D-125's poster frame (to keep a build-on clip from opening blank on the design
+> surface), and the result — observed on the real canvas — was that the in-point became the ONE
+> frame that did not show the clip, while every other frame animated correctly. The poster is now a
+> pre-tick transient; the operator reaches the settled look by moving the playhead.
+>
+> 🔴 **A second canvas defect, fixed 2026-08-13 (`design.md` §4.4):** a Lottie with **no outro
+> marker** vanished from the out-point onward. `outroStart` falls back to `op`, so every frame at or
+> past the out-point asked for the OUT phase of a clip that has none and clamped to `op` — the frame
+> a furniture clip has animated OFF to. A degenerate outro now takes the INTRO mapping and holds its
+> settled frame, which is what the runtime does on air.
+>
+> ⚠ **AND A FINDING THAT IS BIGGER THAN THAT BUG — `design.md` §4.5, no item minted, yours to
+> weigh.** A **marker-less** Lottie goes blank at the end of its own playthrough on EVERY surface,
+> not just the canvas: `introEnd` also falls back to `op`, so the freeze-hold frame IS the clip's
+> blank last frame. Measured on the real runtime (out-point 60, `holdMs` **5000**, clip length 2000
+> ms): the clip paints from PLAY, reaches `op` at 2000 ms, and stays blank for the remaining 3 s.
+> **`holdMs` bounds nothing here** — the clip's own length does. The operator has no reachable
+> control: `StyleSection` offers editable phase inputs only when `phases.source === 'manual'`, and a
+> clip with no phases at all gets the hint _"No phase markers — plays once then freezes"_ and no
+> control. §4.5 records two directions; offering MANUAL phases for a marker-less clip is the
+> recommended one, because the other changes what goes on air for every existing clip.
+>
+> ✅ **§9.5 ANSWERED (2026-08-13): (a) — position everywhere; the forward-1× HYBRID is
+> REJECTED.** ONE mechanism for all four transport modes — no hand-off at mode boundaries, no
+> second path on a surface that reparents nodes (B-137's shape, the risk the question itself
+> named); the ~10 fps cost was already the stated §5.2–§5.3 contract; follow mode parks a
+> backdrop video at `H` for most judging time; the hybrid stays recoverable (the driver
+> machinery ships). Both candidates are kept in `design.md` §9.5 as the record of why.
+>
+> ✅ **The VIDEO half is BUILT (2026-08-13, session U).** `tick(frame)` positions every
+> `<video>` by `currentTime`, PAUSED, through `VideoDriver.positionAt` — resolving the clip
+> time through `expectedClipMs`, the SAME function the driver's clock reconciles against on
+> air (the singularity is spy-asserted). A tick that finds a seek in flight SKIPS (nearest
+> decodable frame — the specified contract); the node resolves through `live()` on every
+> access; a follow-source clip's derived window composes for free; and the CONSISTENCY DEBT
+> is paid — the canvas `<video>` no longer rests on its mid-clip poster: the poster routine
+> stays as the load path + seek-fragile recovery, painting only a pre-tick transient, and
+> the canvas at rest shows the playhead's frame exactly as the Lottie does.
+> ⚠ **One §5.3 claim remains UNMEASURED: two or more simultaneous video elements.** The
+> ~10 distinct fps figure was measured on ONE 1080p VP8+alpha element (1 s GOP, Chrome 151,
+> 25 fps); the multi-element clause in `design.md` §5.3 is qualitative — treat the number as
+> a floor for one element, not a promise for two.
+
+**What:** The canvas follows the playhead for both frame-mapped element kinds, under BOTH ways the
+playhead moves. **(a) Scrub:** while scrubbing, each Lottie element on the canvas shows the exact
+frame under the playhead (through its phase mapping where set), and the same for video elements.
+**(b) Play:** pressing PLAY on the timeline renders video and Lottie MOTION on the canvas, live —
+through the same frame↔time mapping the scrub half uses.
 **Why:** the canvas currently shows lifecycle-driven playback only in preview; Cinegy shows the
-animation while scrubbing. Both Lottie and (post-D-128) video have a deterministic frame↔time
-mapping, so the canvas can render the exact frame under the playhead.
+animation both while scrubbing and while playing. Both Lottie and video have a deterministic
+frame↔time mapping, so the canvas can render the exact frame under the playhead. **Today's Play
+animates only keyframed properties** — video and Lottie motion is visible only in the preview,
+so the canvas silently misrepresents the composition during the one operation the operator uses
+to judge it. Cinegy parity is the client's stated expectation.
 **Acceptance:**
 
 - WHEN the operator scrubs THEN each Lottie element on canvas shows the frame corresponding to the
   playhead (through its phase mapping where set)
-- WHEN a video element exists (after D-128 lands) THEN the same holds for it
+- WHEN a video element exists THEN the same holds for it
+- WHEN the operator presses PLAY on the timeline THEN each Lottie element on the canvas renders its
+  MOTION live, advancing with the playhead through the same frame↔time mapping as the scrub case
+- WHEN the operator presses PLAY on the timeline THEN each video element on the canvas renders its
+  motion live, by the same mapping
 - WHEN the playhead is outside the element's timeline span THEN the canvas shows the element's
-  resting state consistently with today's rules
+  resting state consistently with today's rules — under scrub and under play alike
+- WHEN a ticker, sequence or clock is on the scene THEN it is UNAFFECTED by either half of this
+  item: it stays time-driven and does not follow the playhead
 
 **Notes:** ticker/sequence/clock remain DELIBERATELY time-driven ("scrubbing never moves it" — the
 schema's own comment, verified on `SequenceElementSchema` and the clock element); this item must
-not change that. Sequencing: the Lottie half is implementable now; the video half depends on D-128
-Phase 3+.
+not change that, and the carve-out now covers PLAY as well as scrub. **Sequencing: the D-128
+dependency is DISCHARGED** — this note previously read "the video half depends on D-128 Phase 3+";
+D-128 is `[x]` (archived 2026-07-27, `openspec/changes/archive/2026-07-27-video-import-element/`),
+with Phase 3 (canvas render + Inspector) and Phase 4 (`@cg/template-runtime`'s `VideoDriver` +
+lifecycle) both landed. Nothing in this item is blocked on it any more; both halves are
+implementable now.
+
+**Retitled rather than split into a sibling.** The PLAY requirement is the same machinery, the same
+frame↔time mapping and the same carve-out as the scrub requirement — filing it separately would
+create two items with one implementation, the near-duplicate the item-number registry exists to
+prevent (see the deliberate `B-111` non-mint in
+[b-number-registry.md](b-number-registry.md)). The number is unchanged; only the title and scope
+grew, so nothing that cites `D-135` breaks.
+
+**Related, NOT a dependency:** [[B-136]] and [[B-137]] ([bugs-designer.md](bugs-designer.md)) are
+the two video preview/PVW defects on this same subsystem — video invisible in PVW, and video stuck
+paused in the preview after a scene rebuild. This item drives video on the CANVAS, which is a third
+surface again; their diagnosis is worth reading before designing this, because it maps who ticks a
+`<video>` and when.
 
 ## [ ] D-136 — alpha-matte view toggle for video elements ⟨priority: low-medium⟩
 
@@ -3721,7 +3952,7 @@ is the NEED, not the UI. **Naming:** the live element is user-facing "Live Sourc
 schema type stays `video-placeholder`. **RECON-FIRST for the type-conversion semantics; needs its
 own design.md.**
 
-## [ ] D-141 — Azan countdown: time-of-day target + color zones (composition-deep) ⟨priority: high⟩
+## [ ] D-141 — Azan countdown: time-of-day target + color zones (composition-deep) ⟨priority: high⟩ — change dir authored, NOT yet implemented: `openspec/changes/add-azan-countdown/` (42/63 tasks). Stays `[ ]` — per `docs/prd/README.md`, `[~]` means "change implemented, not yet archived", which this is not; the pointer is recorded so the change dir is reachable from the item
 
 **What:** Extend the clock element so a countdown can target a wall-clock time of day
 and drive named color zones that restyle the composition — including elements inside
@@ -4040,7 +4271,7 @@ one:** one dialog, legible, whose message is only unreachable when the body actu
 ⭐ **Derive the roles; do NOT copy the Runtime's two blind.** Recorded because it is the part most
 likely to be got wrong by a session that reads only the diff: the Runtime's `refusal` and `notice`
 were an **EXTRACTION of treatments that already existed in that app**, not an invention —
-`refusal` **IS** `FixedBankConfigModal`'s amber box (`#FCD34D`, 11.21:1), **moved rather than
+`refusal` **IS** `FixedBankConfigModal`'s amber box (`--r-caution-text`, 10.39:1), **moved rather than
 redesigned**, and the three red spellings were **deleted** rather than replaced because in `theme.ts`
 red means error or destructive intent and a refusal is neither. **The Designer's roles must be
 derived the same way: audit its dialogs first, then extract.** Adopting `refusal`/`notice` because
@@ -4079,7 +4310,7 @@ work is commit **`e1e2d03`**: `apps/runtime/src/renderer/ui/Modal.tsx` (the regi
 `apps/runtime/tests/e2e/modal-message-in-viewport.spec.ts` (the tests), and
 `openspec/changes/runtime-modal-message-region/` for the spec delta.
 
-## [~] D-149 — image `fit` gains **fit width** / **fit height**, and `none` is relabelled **original** ⟨priority: medium — reaches air⟩ — in progress: `openspec/changes/designer-image-fit-axis/`
+## [x] D-149 — image `fit` gains **fit width** / **fit height**, and `none` is relabelled **original** ⟨priority: medium — reaches air⟩ — shipped and archived: `openspec/changes/archive/2026-08-11-designer-image-fit-axis/` (living spec `designer-image-element`). All 13 tasks ticked; the Linux `gate:e2e` debt this render-path change owed is DISCHARGED by a COMPLETED, GREEN `e2e` job on `ubuntu-latest` for commit `bd88ede`, which carries the change: <https://github.com/yasermostafaee/cg/actions/runs/31414808016> (run `conclusion: success`; `E2E (Playwright)` job conclusion `success` — it RAN, it was not skipped)
 
 **What:** two changes to the image element's `fit` control, both agreed with the owner.
 
@@ -4142,3 +4373,1275 @@ through an early guard, so the legacy body is reached **unchanged** for every pr
 
 **⚠ Reaches air** — the image element renders into the export and onto the programme channel. The
 byte-identity test is what makes the change safe to merge.
+
+---
+
+## [x] D-150 — a project is a self-contained PACKAGE that carries its assets ⟨priority: high⟩ — archived: `openspec/changes/archive/2026-08-11-designer-project-package/` (closes [[B-104]])
+
+**What:** A project's durable form stops being a bare `.cg.json` holding a scene and a list of
+`assetId` strings, and becomes a self-contained package (`.cgproj`) that carries the asset bytes
+inside it — the same shape the `.vcg` export already uses. The author points at ONE artifact and
+everything travels with it.
+
+**Why:** [[B-104]] is a DATA-LOSS bug, and it is not a leak in a pipe — it is the SHAPE of the
+document. The file the author saves, backs up, emails, and reopens does not contain the images or
+fonts it needs; it contains references and a hope that somewhere else still resolves. Two
+independent mechanisms make that hope fail, and both were pinned during this change rather than
+assumed:
+
+1. 🔴 **The handle-based entry points never activated the opened project.** `openDisk` /
+   `openRecent` returned a scene without calling `ProjectStore.#setActive`, and `activeChanged` is
+   what re-points the `AssetStore` at the project (`createDesignerBridge` relays it into
+   `assets.setActiveProject`). So opening a project from a real file left the asset store scoped
+   to whatever came before — `null` at boot. **The scene rendered and the assets panel was empty,
+   deterministically, with no permission or storage-root subtlety involved at all.** This is the
+   mechanism B-104's own notes listed as candidate (a), and it is the one the 2026-08-02 field
+   report was seeing.
+2. **The storage root could be silently substituted.** `initWorkspace()` preferred a remembered
+   on-disk folder, and `restoreRememberedDirectory` calls `requestPermission()` — which **Chromium
+   refuses outside a user gesture**, and boot has none. A full browser restart therefore always
+   lands in the bare `catch {}` or the `null` return, and both fell through to a DIFFERENT root
+   without a word. `projects/<scene.id>/assets/...` then resolved somewhere the bytes were not.
+   Candidate (b), confirmed.
+
+Neither is fixable by repairing a link, because the deeper fact is the one the field report
+exposes: **a `.cg.json` handed to another machine can never have assets — it never carried any.**
+
+**Acceptance:**
+
+- WHEN a project with imported assets is saved THEN the written artifact is a single package
+  containing the authoring scene AND the bytes of every asset it holds.
+- WHEN that package is opened against a workspace whose root is a DIFFERENT store, holding none of
+  the project's bytes, THEN every asset lists and its bytes resolve. (The restart case, proven by a
+  test that constructs a second empty workspace — not an in-memory round trip.)
+- WHEN a project is saved and reopened THEN the authoring scene round-trips EXACTLY, editor-only
+  state included — while an export of the same scene still strips it (B-129 stands).
+- WHEN a pre-package `.cg.json` is opened THEN it opens, and converts, by **parse-time
+  normalization** on the single document-reading entry point. ⚠ NOT via `migrations.migrate()` —
+  see [[P-031]]: that registry has zero production call sites, so a migration registered there is a
+  conversion that never runs and old projects would break quietly.
+- WHEN a pre-package project is opened and then saved THEN the ORIGINAL file is unchanged byte for
+  byte, the adopted asset bytes are still in place, and the package is written to a separate file
+  the author chose.
+- WHEN the workspace root is not the one the author configured, or will not survive the tab closing,
+  THEN the Designer says so where the author will see it, names the reason, and offers Reconnect
+  where a click can repair it. WHEN the expected root is available THEN nothing is shown.
+- WHEN the storage MECHANISM degrades (no File System Access, no sandboxed store) THEN the DOCUMENT
+  does not: every save tier writes the same self-contained package.
+
+**Notes:** The design fork — single file rewritten whole vs. an incremental working layer — is
+decided IN the proposal on measured cost: a whole-package rewrite is **45 ms at 8.5 MB**, because
+`writeZip` STOREs (never deflates) the extensions that carry essentially all of a project's bytes.
+An incremental layer would have bought ~45 ms and cost a second source of truth, which is the exact
+class of defect B-104 is. Packaging reuses `@cg/vcg-format`'s `writeZip`/`readZip`/`sha256Hex`;
+`.cgproj` is a different DOCUMENT from `.vcg` (which strips `editorBackdrop`, embeds the runtime,
+and carries a signable broadcast manifest) — reasoning in the proposal.
+
+## [~] D-151 — adding content LONGER than its host warns, and offers to extend the host duration ⟨priority: high — client-required⟩ — in progress: `openspec/changes/add-time-duration-guard/`
+
+**What:** At the moment content is **ADDED TO A SCENE OR COMPOSITION**, compare the added content's
+intrinsic duration against the host's duration. If the content is longer, warn that the host is too
+short and offer to EXTEND the host duration to fit. If the operator declines, **the element is NOT
+added.** Applies to video, to Lottie, and to a composition inserted into another composition alike.
+**Why:** the operator's own case: a 3 s scene, a 15 s video. Today the video is added silently and
+is simply truncated by the host — the authoring surface gives no signal at the one moment the
+mismatch is both knowable and trivially fixable, and the operator discovers it later in the preview
+or, worse, on air. Cinegy asks at add time; so should we.
+**Acceptance:**
+
+- WHEN content whose intrinsic duration EXCEEDS the host's duration is added to a scene or
+  composition THEN the Designer warns that the host is too short and offers to extend the host
+  duration to fit the content
+- WHEN the operator ACCEPTS THEN the host's duration is extended to fit and the element is added
+- WHEN the operator DECLINES THEN the element is **NOT added** — the scene is left exactly as it was
+- WHEN the added content is a VIDEO, a LOTTIE, or a COMPOSITION inserted into another composition
+  THEN the same check and the same dialog apply
+- WHEN the added content FITS within the host's duration THEN nothing is shown and the element is
+  added as it is today
+- WHEN an asset is IMPORTED into the library THEN NO check fires — this is an add-to-scene rule, not
+  an import rule
+
+**Notes:** 🔴 **The trigger is ADD-TO-SCENE, explicitly NOT asset-import time.** Import puts an
+asset in the library, where it has no host and no duration to be measured against; the same asset
+may later be added to a 3 s scene and a 30 s one. A check placed at import would fire at the wrong
+moment, against nothing, and would have to fire again anyway. Composition-into-composition insert is
+the same event by a different route and must go through the same path.
+
+**✅ ANSWERED (owner, 2026-08-12, recorded with `media-phases-follow-composition`): Candidate A,
+SHARPENED by the follow-composition phase source.** The third choice is **"Add as backdrop — follow
+the composition"** (since `B-319`, 2026-10-07: labelled `Add as backdrop`, the long form its `title`),
+and taking it adds the element with `phases.source: 'composition'` — the
+element's window through the clip is thereafter DERIVED from the host's lifecycle
+(intro settled at the content start, still through the hold, build-off riding the OUT segment).
+
+Both candidates, kept as the record of why:
+
+- **Candidate A — a THIRD choice.** The dialog offers "Add anyway — it will loop / hold", which adds
+  the element without extending the host. This keeps the deliberate pattern one click away, at the
+  cost of a third button that is also the easiest way to dismiss the warning without thinking.
+- **Candidate B — decline-means-not-added is FIRM.** Two choices only. The looping-background author
+  extends the host, or sets up the loop first and accepts that add-time asks a question they answer
+  by extending and then trimming back.
+
+Why the recorded concern about A is now answered: the third button **no longer dismisses
+anything — it CONFIGURES the exact deliberate pattern this question was written around.** And the
+premise that made the question hard — "at add time the loop intent is unknowable" — no longer
+holds once the intent is declarable in one click. Two consequences for the implementation:
+
+- A **follow-source element never triggers this warning on any later re-check** — absorbing the
+  length mismatch is what follow means.
+- The dialog itself is a **later session**; `media-phases-follow-composition` (schema, derivation,
+  runtime, Inspector) is what makes the decision implementable, not the dialog.
+- **Scoping (recorded with `add-time-duration-guard`, the implementing change): the settled
+  answer covers MEDIA.** A composition-into-composition insert has no `phases` and cannot follow,
+  so ITS dialog keeps the item's firm two-choice form (Extend / Cancel — decline-means-not-added).
+
+**Related:** [[D-133]]'s loop semantics are the other half of the looping-background case — that
+item is where "a loop range is authorable unconditionally" lives, and it is what makes the open
+question above answerable at all.
+
+## [ ] D-152 — multi-box LOOKS: authoring the looks, the declared sources and the background ⟨priority: high⟩
+
+**What:** the Designer half of the multi-box look switch — how an author builds a template that
+holds several **LOOKS**, declares its **SOURCES once**, and what the exporter emits for them.
+
+⚠ **This is HALF the feature. The operator half is [[R-057]]** — the look picker, the reconcile and
+the refusal. The split follows [[D-137]] / [[C-015]]: one capability, two items, cross-referenced
+both ways. **Design, evidence and task list for both halves live in ONE change:**
+`openspec/changes/multibox-layout-switch/`.
+
+### The adopted architecture — LOOKS (owner, 2026-08-19; `design.md` §14)
+
+> **A LOOK is a full sub-scene — its plates, titles and decor freely placed by ordinary dragging —
+> authored as a managed nested composition instance. Exactly one look is active; the switch is a
+> cut in v1. SOURCES are declared ONCE on the multi-frame group — `{routeKey, expectedAspect,
+dynamic}` — and a look's plates REFERENCE a declared source.**
+
+⚠ **This supersedes A′** (nested-box-per-plate with per-arrangement instance geometry, adopted
+2026-08-18, `design.md` §12.9) — §14.5 records the reversal, and §14.1 records why it is not churn:
+the grounds on which per-look sub-scenes were refused dissolved (cut-is-enough; the
+arrangement-scoped overlap rebuild; sources-declared-once answering the N-producers ground), and the
+owner hit two Designer defects in one day (`D-153`, `D-154` — and `B-149` reached air) that exist
+ONLY because A′ splits box geometry into two levels. Under LOOKS there is one level: an element's
+geometry is its transform in its look's sub-scene, and **the Transform panel is simply correct.**
+What SURVIVES A′ intact is its identity core, moved to the SOURCE level: `(templateId,
+plateId=routeKey)` never changes across looks, so **assignment survives the switch structurally.**
+
+The candidate history stands un-edited in `design.md` §12.9, and two of its refusals bind LOOKS too:
+
+- **The fixed computed 1/2/3-box family stays WITHDRAWN** (owner): a layout is a **designed SCENE,
+  not a set of rectangles** — under LOOKS more than ever, since each look carries its own design.
+- **Binding several ordinary templates to one layer stays REFUSED on the premise**: a video layer
+  carries exactly ONE html page (`CG ADD` at a different cg-layer REPLACES the page). Looks are
+  states of ONE page, which is why the model works at all.
+
+### What has to be authored
+
+1. **The multi-frame group** — created from a toolbar icon; its inspector manages the look list
+   (any count, no upfront declaration) and the **declared source list**. Each look is a real nested
+   composition instance; **no new container type** (`container` is discarded by the runtime).
+2. **The declared sources** — `{routeKey, expectedAspect, dynamic}`, ONCE for the whole group. A
+   plate references a declared source; `expectedAspect`/`dynamic` live on the declaration so two
+   looks cannot disagree about them. 🔴 This is a correctness condition, not a convenience — it is
+   what makes the same source in two looks ONE seat instead of N producers on one route.
+3. **Per-look titles and decor** — ordinary elements inside each look, sized and placed per look by
+   the author. A′'s sixteen-placements problem does not arise: there is nothing to keep in sync,
+   because each look IS its own design. [[B-147]]'s measured-after-shaping fit rule remains a real
+   Designer item but **no longer blocks this feature's v1** — the author sizes each look's text.
+4. **Hiding an element during a transition (D4)** — **PARKED** (`design.md` §14.4): cut-only v1 has
+   no transition window, so `hideDuringTransition` is explicitly parked in the schema with the
+   reason, not left silently dead. An animated mode un-parks it.
+5. **The background — ONE SHARED background outside the looks** is the default and is enough
+   (owner, 2026-08-18; §12.9.2 unchanged). Per-look decor inside each look is free by construction.
+   ⚠ Recorded so the cost is not rediscovered: crossfading two full-frame backdrops measured −10 %
+   of the CEF frame budget; the shared background removes it.
+6. **Which source sits in which frame is AUTHORED per look** — a look's plates name their sources.
+   The v1 declared-order rule (2026-08-18) is superseded with the counts that carried it.
+7. **The preflights** — exactly one look active at author time, and ONE refusal family: a plate
+   referencing an UNDECLARED source (naming it and the declared list); the same source referenced
+   TWICE within ONE look (across looks it is the identity mechanism); `live-source-overlap` WITHIN
+   a look (each look is its own composition document, so the per-document loop gives this
+   structurally) plus a visible-set pass for root-level plates vs the active look; a SECOND
+   multi-frame group per template (refused in v1); a plate inside a `sequence`/`repeater` (existing
+   refusal, unchanged).
+
+### What the exporter emits
+
+**`sources[]` deduped by routeKey, plus per-look `{routeKey → rect}` maps, the default look and each
+look's entered-with (cut in v1)** — onto the declaration block on `TemplateInfo`, derived once at
+import (the shipped `hasNext` precedent). **No `.vcg` format change.** A source ABSENT from a look
+has NO entry for that look — never a zero-area rect (the bridge refuses zero-area rects outright);
+the EMPTY look is valid and carries an empty map — background alone.
+
+🔴 **The declared-but-does-not-punch asymmetry becomes a MECHANISM under LOOKS:** declaration comes
+from the group's source list — visibility-independent by construction — while the punch follows
+resolved visibility through the instance's ancestry. The coincidence A′ had to warn about
+(`collectLiveSources` having no visibility filter) is now the designed behaviour with a designed
+home.
+
+**Acceptance:**
+
+- WHEN an author creates a multi-frame group and authors a 6-box look and a solo look THEN each look
+  is a full sub-scene edited by ordinary dragging, and the Transform panel reads and writes the
+  element's real geometry — no cells, no second geometry editor
+- WHEN a plate references a declared source THEN the same source referenced in two looks is ONE
+  declaration and ONE seat; WHEN it references an UNDECLARED source THEN export is refused naming
+  the source and the declared list
+- WHEN the same source is referenced twice within ONE look THEN export is refused — and the refusal
+  says that across looks it would be the identity mechanism
+- WHEN two plates' holes overlap WITHIN one look THEN the export-blocking overlap error fires; WHEN
+  they overlap only ACROSS looks THEN it does not
+- WHEN a template is exported THEN the declaration carries deduped sources and one `{routeKey →
+rect}` map per look, a source absent from a look has no entry, and the `.vcg` format is unchanged
+- WHEN a look authors no plates THEN it is valid and exports an empty map — background alone
+- WHEN no per-look background is authored THEN one shared background outside the looks serves every
+  look
+
+- **Cross-refs:** [[D-153]] / [[D-154]] (the A′ usability and control defects this model retires —
+  superseded, not wrong; their fixes are deleted with A′ in phase 2), [[R-057]] (the OPERATOR half —
+  the picker, the reconcile, the refusal; read both), [[B-147]] (the text fit — real, no longer
+  blocking v1), [[D-137]] (the Live Source element these plates are), [[C-015]] (the installation
+  mapping and seating), [[D-060]] (`fitMode`, and the one fit mode that IS implemented), [[D-083]]
+  (composition items — the tree's one-of-N primitive, and why it could NOT be the carrier).
+
+## [ ] D-153 — the arrangement surface authors CELLS the author cannot see, bound to BOXES it does not name, under a CONVENTION it never states ⟨priority: high — the feature shipped and could not be used⟩
+
+**What:** three faces of ONE defect in the arrangement authoring surface that [[D-152]] delivered.
+Filed as one item because they are one failure — **the model is right and the surface does not teach
+it** — and splitting them would invite fixing the easy face and calling the defect closed.
+
+⚠ **This is [[D-152]]'s USABILITY gap, not a second feature.** No capability is missing. Everything
+below is already possible; none of it is discoverable.
+
+**The evidence, and it is the strongest kind — the owner using it.** He opened the Designer after
+stage C2 landed, authored four arrangements with eight cell coordinates, and then asked:
+
+> _"Now what do I do — do I have to add a live source with those coordinates to each layer myself?"_
+> _"Where on the canvas should the live plate go? What size? Where do I set the background?"_
+
+**Every one of those has a definite answer in the code.** Answering them required reading
+`packages/vcg-format/src/live-sources.ts` and `packages/shared-schema/src/arrangements.ts`. An
+author who has to read the exporter to learn where to put a rectangle has been handed a data
+format, not a tool.
+
+### The three faces
+
+1. 🔴 **The cells are INVISIBLE.** They exist only as four number fields per cell in the right
+   panel. The argument that won A′ over the computed-grid candidate (§12.9) was that _cell placement
+   is a DESIGN decision, not a computed grid_ — and a surface whose only input is typing four
+   numbers per cell **is** a computed grid, entered by hand. Nothing on the canvas shows where a cell
+   is, so the author cannot see the layout they are authoring.
+
+2. **The cell ↔ box binding is UNSTATED.** `arrangementViewOf` fills cell `i` with box instance `i`
+   in document order, and nothing says so. A cell does not name the box it holds; a box with no cell
+   in the active arrangement simply VANISHES from the canvas with no explanation, which reads as a
+   bug rather than as §12.4's HELD state.
+
+3. **The CONVENTION is never stated.** The exporter stores
+   `boxRelativeRect = (plate.rect − boxInstance.rect) ÷ boxInstance.size` as **fractions 0..1**
+   (`live-sources.ts:103`, verified 2026-08-19), so **only the PROPORTION of the plate inside its
+   box survives** — absolute pixels inside the box do not. Three consequences the author must know
+   and cannot learn:
+   - **author the box instance at the size of a typical cell**, so what they see is what airs;
+   - ⚠ **the stretch caveat** — one box used across counts of different aspect changes its CROP, not
+     its layout, and because the plate is a hole filled by crop-to-fill the result is a **different
+     crop rather than an obvious break** (tracked by `multibox-layout-switch` `tasks.md` 6.4 / 9.2,
+     neither landed);
+   - **the background is an ORDINARY ELEMENT** in the main composition, not a field on an
+     arrangement — one shared background is the default and is enough (§12.9.2). ⚠ And the
+     checkerboard the author sees is the **editor backdrop**, not a broadcast background; nothing on
+     screen distinguishes them.
+
+### What must NOT be done in fixing it
+
+- ⚠ **No new box-creation affordance.** Session AV established from the code that the shipped flow
+  already reaches it: create a composition holding the plate and its title, then right-click it in
+  the Compositions panel → **"Add to composition"** (guarded by `canNestCompositionInActive` and
+  [[D-151]]'s duration guard). **The gap is DISCOVERABILITY, not capability**, and a second path to
+  one operation is the divergence this repo keeps paying for.
+- ⚠ **No per-cell assignment.** Declared order is the v1 rule (§12.9.1 Q2): a cell is deliberately
+  NOT a separately addressable identity beside the plate. Face 2 is a **readout of the existing
+  order**, never a new binding.
+
+**Acceptance:**
+
+- WHEN an arrangement is active THEN its cells are drawn on the canvas as labelled rectangles in
+  authored order, so the author sees the layout rather than inferring it from numbers
+- WHEN a cell is drawn THEN it names the box instance it holds, or says plainly that it holds none
+- WHEN a box has no cell in the active arrangement THEN the surface says it is HIDDEN, rather than
+  the box silently vanishing
+- WHEN a composition has arrangements but no box instances THEN the surface says what a box is and
+  points at the SHIPPED way to make one
+- WHEN an author needs the size convention THEN the surface states that only the plate's proportion
+  inside its box is stored, and warns that reusing one box across counts of different aspect changes
+  its crop
+- WHEN an author looks for the background THEN the surface says it is an ordinary element of the
+  main composition, and distinguishes it from the editor backdrop
+
+- **Cross-refs:** [[D-154]] (the CONTROL defect beneath this one — a box's gizmo edited a value
+  that is global across arrangements and inert at air, and was drawn where the element was not;
+  D-153 makes the model explicable, D-154 makes it editable), [[B-148]] (found the same session
+  and deliberately kept SEPARATE: that one is a
+  missing REFUSAL — instancing one box composition twice exports two declarations with the same
+  `elementId` and `sourceId` — while this one is a missing EXPLANATION; a fix for either leaves the
+  other standing), [[D-152]] (this is its usability gap, not a second feature — read it first),
+  [[R-057]] (the operator half, whose surface faces the same "what is on air" question),
+  `openspec/changes/multibox-layout-switch/specs/designer-multibox-arrangements/spec.md` (the
+  contract this surface is meant to make usable).
+
+## [ ] D-154 — a box has TWO geometry editors: the discoverable one is global AND inert, and the gizmo is drawn where the element is not ⟨priority: high — the owner could not author, and nothing on screen said why⟩
+
+**What:** with an arrangement active, a box's geometry lives in the arrangement's **CELL**. The
+control an author naturally reaches for — the canvas gizmo, and the Transform panel behind it — went
+on reading and writing the element's own `transform`, which is **one value shared by every
+arrangement** and **reaches air through no route at all**.
+
+**The owner's words, and he was right — this is not user error:**
+
+> _"Adjusting one box in one layer affects the other layers too. It is very confusing, and it is not
+> clear how the correct setting is supposed to be done."_
+
+### The two editors
+
+|                               | Where                                            | Scope                                  | Reaches air? |
+| ----------------------------- | ------------------------------------------------ | -------------------------------------- | ------------ |
+| the element's own `transform` | the **Transform panel** and the **canvas gizmo** | ONE value, shared by every arrangement | 🔴 **NO**    |
+| the arrangement's **cell**    | the `CELLS` number fields                        | per arrangement                        | ✅ yes       |
+
+`arrangementViewOf` sets `geometry[id] = {...cell}` and `applyArrangementToNodes` writes it onto the
+node, so **the cell fully overrides the authored transform** for any box that has one.
+
+### 🔴 And the authored transform is INERT — measured, not argued
+
+The instance's authored X/Y/W/H **cancels out of the exported hole entirely**:
+
+```
+plate.scene   = instance.pos + plate.local × preScale,  preScale = instance.size / comp.resolution
+boxRelative.x = (plate.scene.x − instance.x) / instance.width = plate.local.x / comp.width
+boxRelative.w =  plate.scene.width / instance.width          = plate.local.w / comp.width
+```
+
+⇒ **`boxRelativeRect` depends only on the plate's rect inside the box COMPOSITION's own
+resolution.** Pinned by `packages/vcg-format/tests/box-instance-transform-cancels.test.ts`, whose
+discriminating case is a **non-unit `preScale`** — with an instance the same size as its composition
+the cancellation is invisible, so the test instances one 960×540 composition at 960×540, at an
+offset, at 480×270, and at a non-uniform 1440×270, and requires identical output. A control asserts
+the SCENE rect does still track the instance, so the four equalities are reporting a real
+cancellation rather than a derivation that ignores the instance.
+
+⇒ The authored instance transform survives **only** as the **"As authored"** preview — the
+composition with no arrangement applied.
+
+### And it was visible on screen
+
+In the owner's 3-box screenshot the rendered `cell 1` picture sat top-left while the **selection
+rectangle and its handles sat somewhere else** (`925.79 × 348.63`). **The gizmo was drawn at the
+authored rect; the element rendered at the cell rect.** Dragging did not move what he could see —
+which alone makes the surface untrustworthy, whatever else is true.
+
+### The shape of the fix
+
+**ONE value, several surfaces.** A single resolver answers "does the active arrangement own this
+element's rect?", and every reader and writer goes through it:
+
+- **WRITE** — intercepted in `commitAnimatable`, the one chokepoint every geometry edit passes
+  through (gizmo drag, gizmo resize, group move, Transform panel fields). Intercepting once is what
+  makes "the gizmo and the `CELLS` fields are two views of one value" true by construction rather
+  than by four call sites remembering to agree.
+- **READ** — the gizmo, the hit-test and the Transform panel resolve the same way, so the selection
+  rectangle is drawn where the element is and a click selects it there.
+- **Transform panel: option (a)** — it shows and edits the CELL. Option (b) (keep the authored
+  numbers, mark them overridden) was refused: it leaves two number sets on screen claiming to be the
+  same thing, which is the shape this repo keeps paying for.
+- ⚠ **Non-box elements are untouched.** Only a root-level composition instance that an arrangement
+  positions changes; the background image and everything else keep ordinary Transform behaviour.
+- ⚠ **A box with NO cell in the active arrangement is HIDDEN**, and its geometry edits are refused
+  rather than falling back to the authored transform — that fall-back is this defect again, in the
+  one case where it is hardest to notice.
+
+**Acceptance:**
+
+- WHEN an arrangement is active and a box is selected THEN the selection rectangle coincides with the
+  rendered element
+- WHEN that box is dragged or resized THEN the ACTIVE arrangement's cell changes and every other
+  arrangement is untouched
+- WHEN the `CELLS` fields are edited THEN the gizmo follows, and vice versa — one value, two surfaces
+- WHEN a box has no cell in the active arrangement THEN its geometry edits are refused, never written
+  to the authored transform
+- WHEN a NON-box element is selected THEN Transform behaves exactly as it always did
+- WHEN no arrangement is active THEN everything behaves exactly as it always did, and the surface says
+  what "As authored" is
+
+- **Cross-refs:** [[B-149]] (found in the same session — the arrangement mask punched every hole
+  at the cell's POSITION and the AUTHORED SIZE. ⚠ Distinct from this item and more serious:
+  B-149 REACHED AIR, opening the live layer where no box exists, while this one is a control
+  defect that never left the Designer), [[D-153]] (the legibility item — **this is the CONTROL
+  defect beneath it**: D-153
+  makes the model explicable, D-154 makes it editable; neither fixes the other), [[D-152]] /
+  [[R-057]] (the arrangement feature), [[B-148]] (the other defect found in the same area — a missing
+  refusal, not a control fault).
+
+## [~] D-155 — a Live Source with a declared aspect KEEPS it during the resize, instead of being deformed and then repaired ⟨priority: medium⟩ — IMPLEMENTED 2026-08-25 (`openspec/changes/aspect-lock-live-source/`). Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/32834755257 (contains `4c4880c0`; `e2e` job `success`, step RAN). Scenario-level E2E still owed — see task 6.3
+
+<!--
+  🔴 STATUS CORRECTION, 2026-08-24 — this item was briefly marked `[~]` and it was WRONG.
+
+  `README.md` defines `[~]` as "in progress / in review (**change implemented**, not yet archived)".
+  It was set after only the OpenSpec ARTIFACTS were authored, with no product code at all. The
+  heading prose said "NOT implemented" while the checkbox said the opposite — and the checkbox is
+  what a scan reads, what the processing contract keys off, and what the owner checked. He found
+  the mismatch by grepping the code, which is not a thing a status flag should make necessary.
+
+  ⚠ There is no `[~]`-shaped state for "the change is authored, the code is not". `[ ]` is correct
+  for that: the item is QUEUED, and the authored change is progress recorded in the heading text
+  rather than in the checkbox. Do not reach for `[~]` again until code exists.
+-->
+
+**What:** When a `video-placeholder` has an `expectedAspect`, dragging any resize handle preserves
+that aspect LIVE, for the whole gesture. The author stops being able to deform the plate by accident
+and stops being sent to a button afterwards to undo it.
+
+**Why:** The author's words:
+
+> _"In the Designer, when I add a Live source and its aspect is 16:9, the resize must PRESERVE that
+> aspect while I drag — not let me deform it and then make me press a button to fit it back."_
+
+Today [[D-147]] gives the plate a declared aspect and a **Fit plate to aspect** button, and nothing
+between the two: the drag is free, so every resize of a 16:9 plate is a deformation followed by a
+repair the author has to remember. The declaration already exists and is already authoritative —
+the gesture is simply not reading it.
+
+⚠ **What the lock is FOR, stated because the obvious guess is wrong.** It stops background GAPS —
+an author-shaped hole that does not match the feed's shape. It is **not** a crop-prevention feature:
+what a mismatched aspect COSTS at runtime is a separate question and is moving (cropping today,
+letterboxing on the template background under the planned fit-mode work). **Nothing in this item
+depends on that, and no comment written for it may claim the lock prevents cropping.**
+
+### Scope — and it is narrow, which must be ASSERTED and not merely intended
+
+Applies to a `video-placeholder` whose `expectedAspect` is SET, and to nothing else. Every other
+element kind, and every plate with `— not specified —`, resizes byte-identically to today. So does
+any plate whose lock is OFF.
+
+### 🔴 The constrained quantity is the EFFECTIVE aspect, and it has ONE definition
+
+`(w · scaleX) / (h · scaleY)` — `effectiveAspect` in
+[`aspect-presets.ts`](../../apps/designer/src/renderer/features/inspector/aspect-presets.ts), which
+already exists and is already what [[D-147]]'s FIT and `matchesAspect` solve against. `scale` is
+never written by a resize, so the solve is for `size` alone, exactly as `fitToAspect` does it.
+
+⚠ **Golden rule 6, and it is the likeliest thing to be got wrong here.** The obvious implementation
+writes `w / h` into `geometry.ts` because that file has no aspect vocabulary and importing one feels
+like a layering violation. **It is not: a second spelling of "the aspect of this box" that ignores
+non-uniform `scale` would call a plate 16:9 that renders at some other shape entirely** — the exact
+arithmetic D-147 exists to take off the author, re-introduced one layer down. If the shape the
+gesture needs is not exported from `aspect-presets.ts` yet, EXPORT IT FROM THERE.
+
+### Where the constraint goes, and where it must NOT go
+
+`computeRectResize`
+([`geometry.ts:177`](../../apps/designer/src/renderer/features/canvas/geometry.ts)) derives `wNew`
+and `hNew` INDEPENDENTLY from `RESIZE_CFG[handle].freeW/freeH` (`:202-203`) and only then turns them
+into `ratioW`/`ratioH` (`:204-205`). Everything after that — the fixed-corner solve at `:210-218` —
+is already correct under rotation and non-uniform element scale and is what keeps the fixed corner
+still.
+
+🔴 **So the constraint belongs BETWEEN those two steps: reshape `wNew`/`hNew`, then let the existing
+code take the ratios.** If the implementer finds themselves editing the position solve, they have
+gone the wrong way and the fixed corner will drift.
+
+**Acceptance:**
+
+- WHEN an EDGE handle is dragged on a locked plate THEN the free axis follows the pointer and the
+  other is DERIVED from it, and the effective aspect stays within `ASPECT_TOLERANCE`
+- WHEN a CORNER handle is dragged THEN the pointer is PROJECTED onto the constrained diagonal — the
+  line through the FIXED corner whose slope is the locked ratio — and the rect is built from that
+  projection
+- WHEN a corner drag's pointer path CROSSES that diagonal THEN the emitted rect has NO discontinuity
+- WHEN the driving axis hits `MIN_SIZE` THEN the derived axis is recomputed from the CLAMPED value,
+  so the aspect survives the clamp
+- WHEN a locked plate is rotated and/or non-uniformly scaled THEN the fixed corner stays exactly
+  where it is, as it does today
+- WHEN the plate has no `expectedAspect`, or is not a Live Source, or the lock is OFF THEN the
+  resize is byte-identical to today
+
+#### 🔴 The corner rule is PROJECTION, not "whichever extent is larger"
+
+⚠ **CORRECTED AT IMPLEMENTATION, 2026-08-25 — this section claimed a fact that is FALSE.** It read:
+_"it flips which axis drives the moment the pointer crosses the diagonal, and the box JUMPS
+mid-drag."_ **Measured, it does not.** At the crossover `w / ratio === h` makes both branches of the
+dominant-axis rule return the same pair, so it is CONTINUOUS there; across a sweep the largest step
+between consecutive outputs was 1.76 px for the projection and 5.33 px for dominant-axis. Neither
+is a jump, and a continuity test passes for both.
+
+**The decision stands, the reason changes.** The two differ in FEEL: dominant-axis returns the
+smallest box containing the pointer's larger extent (at extents `(1600, 200)` with a 16:9 lock,
+`1600 × 900`), the projection the nearest point on the diagonal (`1301 × 732`). **State the
+CORRECTED reason in a comment** — a justification the next reader can disprove is an invitation to
+undo the decision — and **pin the choice by VALUE in a test**, off the diagonal, not by a continuity
+property both rules satisfy.
+
+#### 🔴 Do NOT port `fitToAspect`'s bottom-edge FLIP into the drag
+
+`fitToAspect` swaps which dimension it preserves when solving for `h` would push the plate past the
+bottom of the frame. **That is right for a ONE-SHOT button, where the author sees a single result,
+and wrong for a LIVE gesture:** swapping which axis is preserved part-way through a drag changes the
+solution the box is tracking, so the box relocates under a pointer that did not change direction. A
+plate dragged out of frame stays an ordinary preflight error. (This reason was corrected with the
+one above — it previously appealed to the same non-existent jump.)
+
+⚠ **Say this in a comment next to the drag path.** The flip is RIGHT THERE in the function being
+reused, and the next reader will assume it was forgotten rather than declined.
+
+### The escape hatch — a TOGGLE, and NO keyboard override
+
+**A lock toggle beside the aspect select in `StyleSection`'s `AspectRow`, ON by default whenever
+`expectedAspect` is set.**
+
+🔴 **NO momentary keyboard unlock, because both plausible keys are taken.** Established by reading
+the gesture layer, not assumed:
+
+| key     | already means, in the canvas                                                                                                                                                                 |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Shift` | override SNAPPING — `Gizmo.tsx:427` (resize) and `:505` (rotate)                                                                                                                             |
+| `Alt`   | override SNAPPING — `CanvasOverlay.tsx:1011` (single-element move, `D-122`) and `:1113` (group move); also breaks a handle pair in `PathEditor.tsx:232`, and modifies nudge in `App.tsx:482` |
+
+Both are the same job — bypass snapping — spelled with a different key in the move gesture than in
+the resize gesture. **Overloading either with aspect-constrain would put two meanings on one key in
+one canvas**, and inventing a third chord for a feature with a visible toggle is worse than having
+no keyboard path at all. ⚠ **Do not invent one.** (That `Shift` and `Alt` mean the same thing in
+different gestures is its own smell; it is NOT this item's to fix and must not be folded in.)
+
+### The toggle is a SESSION preference, not authored state
+
+**Decided: session preference.** It is a fact about how the AUTHOR works, not about the template.
+Putting it in the scene means a `.vcg` that resizes differently for two people opening the same
+file, and a diff on a file nobody meaningfully edited — and it would have to be schema'd, migrated
+and exported for a value the runtime can never read. The aspect itself is already authored
+(`expectedAspect`); the lock is only how the editor treats it.
+
+⚠ It is a preference **per author, not per plate** — a single toggle whose state persists across
+selections, like `snappingEnabled`. A per-plate session flag would be invisible state the author
+cannot see the extent of.
+
+🔴 **CORRECTED by [[B-218]], 2026-09-04 — the paragraph above shipped and was WRONG in practice.**
+The owner's report: in a two-box look, setting one box to FREE changed it for every box, and in
+the other looks too. The shared flag was the invisible state — an author freeing one box could not
+see that every other box changed with it — and the toggle beside the SELECTED plate, showing that
+plate's own state, is the visible extent. The lock is now held **per plate** (and the `CELLS`
+fields per arrangement, with a toggle of their own), still session-only; the two reasons for not
+persisting it stand, and whether to persist it anyway is an open decision recorded under
+[[B-218]].
+
+### The FIT button survives with a CHANGED JOB
+
+**Fit plate to aspect** stops being the normal path and becomes a **REPAIR**: for a plate authored
+before this item, or one deformed with the lock off. The label and tooltip should say so, and the
+existing `already` state (`matchesAspect`,
+[`StyleSection.tsx:831`](../../apps/designer/src/renderer/features/inspector/StyleSection.tsx))
+should read as SATISFIED — "this plate already matches" — rather than as an action that happens to
+be disabled. Today's tooltip already says the right sentence for that case; what changes is that it
+becomes the ordinary state rather than the exception.
+
+### The CELLS fields must honour it too — but NOT with the plate's aspect
+
+**Decided: the `CELLS` number fields in `ArrangementsSection` DO get a lock, and the quantity they
+lock is NOT `expectedAspect`.** Two geometry editors that disagree about one rule is the defect
+class this area already has one of ([[D-154]]), so leaving the cells free would re-open it — but the
+naive fix is wrong, and here is why, established from the code:
+
+- An arrangement's cells hold **composition instances**, not plates: `boxInstanceIds` filters
+  `e.type === 'composition'` (`arrangements.ts:233`). `expectedAspect` lives on a
+  `video-placeholder` (`packages/shared-schema/src/elements.ts:1151`). **A cell therefore has no
+  `expectedAspect` of its own.**
+- A plate inside a box is nonetheless deformed by a mis-shaped cell, because `preScale` is
+  computed **per axis** — `x = size.w / resolution.width`, `y = size.h / resolution.height`
+  (`packages/shared-schema/src/scene-flatten.ts:319-322`). A cell whose aspect differs from the
+  composition's own resolution applies a non-uniform pre-scale to everything inside it.
+- **So the quantity a cell must preserve is the COMPOSITION'S RESOLUTION ASPECT.** Preserve that and
+  every plate inside renders at its authored shape, whatever that is and however many plates there
+  are. Lock a cell to one plate's `expectedAspect` instead and you get the right answer only for the
+  special case of a box holding exactly one plate that fills its composition — and silently the
+  wrong one for every other box.
+
+**Acceptance:**
+
+- WHEN a cell's `width` is committed on a locked arrangement THEN its `height` follows so the cell
+  keeps the composition's resolution aspect, and vice versa
+- WHEN the box's composition has no usable resolution THEN the cell fields behave exactly as today
+
+### Tests — RED first, and the chain rebuilt before each reading
+
+- an edge drag on a 16:9 plate: the effective aspect stays within `ASPECT_TOLERANCE` **across the
+  whole drag, sampled at every emitted rect** — not only at the final one
+- a corner drag whose pointer path CROSSES the diagonal emits NO discontinuity (**this is the test
+  that proves the projection rule; a dominant-axis implementation passes every other test here**)
+- the fixed corner stays put under rotation AND non-uniform scale
+- `MIN_SIZE` clamping keeps the aspect
+- a plate with no `expectedAspect`, and a non-Live-Source element, resize byte-identically to today
+- the lock OFF resizes byte-identically to today
+
+⚠ The last two are the ones that will be written as "it probably still works". `computeRectResize`
+is shared by every element kind and by `D-110`'s keyframed-path morph rect — **assert the
+byte-identity, do not intend it.**
+
+### OpenSpec: this needs ITS OWN change, and the reason is the capability spread
+
+It touches **three capabilities across two in-flight changes and one living spec**, and no existing
+change owns even two of them:
+
+| what                             | capability                       | owned by                                         |
+| -------------------------------- | -------------------------------- | ------------------------------------------------ |
+| the resize gesture               | `designer-canvas-view`           | a LIVING spec                                    |
+| the lock toggle + the FIT button | `designer-live-source`           | the in-flight `live-source-multibox` ([[D-147]]) |
+| the `CELLS` fields               | `designer-multibox-arrangements` | the in-flight `multibox-layout-switch`           |
+
+Folding a canvas-gesture rule into either in-flight change would make that change's archive wait on
+a feature it does not own, and `live-source-multibox` in particular is large and on-air-critical.
+So: a new change with `## MODIFIED Requirements` against `designer-canvas-view` and additions to the
+two in-flight capabilities. ⚠ **Do not create it silently and do not create it before the owner
+schedules the item** — this line records the decision, not permission to act on it.
+
+**Notes:** [`aspect-presets.ts`](../../apps/designer/src/renderer/features/inspector/aspect-presets.ts)
+(`effectiveAspect`, `matchesAspect`, `fitToAspect`, `ASPECT_TOLERANCE`) ·
+[`geometry.ts:177`](../../apps/designer/src/renderer/features/canvas/geometry.ts)
+(`computeRectResize`) · [`Gizmo.tsx:443`](../../apps/designer/src/renderer/features/canvas/Gizmo.tsx)
+(the single call) ·
+[`StyleSection.tsx:770-884`](../../apps/designer/src/renderer/features/inspector/StyleSection.tsx)
+(`AspectRow`) · `ArrangementsSection.tsx:250-260` (the `CELLS` fields).
+
+- **Cross-refs:** [[D-147]] (the aspect declaration and the FIT button this re-purposes),
+  [[B-175]] (the resize gesture read the AUTHORED transform while the gizmo was DRAWN at the
+  arrangement cell — **found while scoping this item, and it lands on the same drag path**. FIXED
+  2026-08-24, ahead of this item and deliberately: without it the lock would have constrained the
+  authored rect while the author watched the cell, so it would have been wrong on exactly the
+  multi-box templates it exists for), [[D-154]] (the two-geometry-editors defect whose shape the
+  `CELLS` half exists to not repeat), [[D-122]] (the `Alt` free-placement bypass that rules out a
+  keyboard override), [[D-156]] (the Shift/Alt inconsistency noticed while establishing that —
+  deliberately NOT folded in here), [[B-149]] (the other place where a plate's rendered shape and
+  its authored shape came apart).
+
+### 🔴 The one correction this item's brief needed, recorded so it is not re-derived
+
+The brief assumed the `CELLS` fields would lock to a plate's `expectedAspect`. **They cannot.** An
+arrangement's cells hold COMPOSITION INSTANCES (`boxInstanceIds` filters `e.type === 'composition'`)
+while `expectedAspect` lives on a `video-placeholder`, so a cell has no `expectedAspect` at all. The
+plate is still deformed by a mis-shaped cell, because `preScale` is per-axis — so **the quantity a
+cell preserves is the COMPOSITION'S RESOLUTION ASPECT**. That is written up as a requirement in the
+change's `designer-multibox-arrangements` delta rather than only here.
+
+## [ ] D-156 — `Shift` and `Alt` are two spellings of ONE job — bypass snapping — and which one works depends on which gesture you are in ⟨priority: low⟩
+
+**What:** Make ONE key mean "bypass snapping" across every canvas gesture.
+
+**Why:** Noticed while establishing that neither key was free for [[D-155]]'s aspect lock. The
+canvas has one concept — _"ignore the snap targets for this drag"_ — spelled two ways, and the
+spelling depends on which handle the author happened to grab:
+
+| gesture               | key     | where                                                  |
+| --------------------- | ------- | ------------------------------------------------------ |
+| resize                | `Shift` | `Gizmo.tsx:427`                                        |
+| rotate                | `Shift` | `Gizmo.tsx:505`                                        |
+| move (single element) | `Alt`   | `CanvasOverlay.tsx:1011` ([[D-122]], "free placement") |
+| move (group)          | `Alt`   | `CanvasOverlay.tsx:1113`                               |
+| arrow-key nudge       | `Alt`   | `App.tsx:482`                                          |
+
+An author who learns "hold Alt to place freely" while dragging a box discovers it does nothing
+while resizing one, and nothing on screen says why.
+
+⚠ **This is a LOW-priority tidy, and it is filed rather than fixed for a reason.** It is muscle
+memory for whoever has been using the app, so changing it is a retraining cost, not a bug fix — and
+[[D-122]]'s `Alt` in particular is a documented decision with its own item behind it. **It also
+must not be folded into [[D-155]]**, whose whole point at this seam is that it adds NO keyboard
+binding.
+
+**Acceptance:**
+
+- WHEN the author holds the chosen key during ANY canvas gesture — resize, rotate, single move,
+  group move, nudge — THEN snapping is bypassed for that gesture
+- WHEN the other key is held THEN it does whatever else it does, and does NOT bypass snapping
+- WHEN the decision is made THEN the losing spelling is removed rather than kept as an alias — two
+  keys for one job is the thing this item exists to end
+
+**Notes:** The choice between the two is the owner's; `Alt` has the wider reach today (three
+gestures to `Shift`'s two) and a named item behind it, while `Shift` is the more conventional
+modifier for this in other editors. `PathEditor.tsx:232` also uses `altKey`, for BREAKING A HANDLE
+PAIR — a different job on a different surface, and out of scope.
+
+- **Cross-refs:** [[D-122]] (the item that introduced `Alt` free placement), [[D-155]] (where this
+  was noticed, and which deliberately adds no binding), [[D-041]] (the group move).
+
+---
+
+## [x] D-157 — a blocked Export goes GREY and names nothing: the offending box is not marked, the only string that names the Issues panel is unreachable, and the tooltip is on a disabled button that cannot show one ⟨priority: high⟩ · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-designer-export-block-visible/`, `RELEASE-0110-01` §0.3) (with `fix-overlap-float-residue`)
+
+**What:** the owner reports —
+
+> _"In the Designer, if two Live Source boxes overlap by even 1 px, or a box leaves the canvas, the
+> Export button goes dead and I cannot tell why."_
+
+Make the refusal **visible on the thing that is wrong**. Every element that is the subject of an
+error-severity preflight issue is marked on the canvas, and the blocked Export button answers with the
+real reason instead of going inert.
+
+🔴 **The RULE does not change.** `live-source-overlap` was deliberately promoted from `warning` to
+`error` on 2026-08-03 (`live-source-multibox` design.md §9, C8) and only `severity: 'error'` blocks an
+export; `live-source-off-frame` exists because `dropFullyOffFrameForExport` used to DELETE such an
+element silently. Neither is softened, and no "export anyway" escape is added. **The complaint is
+about the surface, not the policy.**
+
+### Why — the reason already exists in the data and dies on the way to the eye
+
+Almost nothing here needed computing. All of it was already true before this item:
+
+- **Every issue already carries the offender's id.** `liveSourceIssues`
+  (`apps/designer/src/renderer/state/live-source-preflight.ts:175`) pushes
+  `{ severity, code, message, elementId }`, and `label()` (`:170`) already puts the element's **name,
+  else its id**, into the message text. 14 of the 15 push sites set `elementId`; the one exception,
+  `look-second-group` (`:414`), is a template-level refusal with no element to point at.
+- **An overlap already files TWO issues, one per participant** — `[a, b]` and `[b, a]` at `:336-349`
+  (document scope) and `:387-400` (per-arrangement scope), each with its own `elementId`. So a
+  highlight driven off `elementId` marks **both** offenders for free.
+- **The messages are already good** and are not rewritten: _"Live Source "X" overlaps "Y". Each is
+  composited on its own CasparCG layer, so overlapping holes put two live sources over the same pixels
+  and which one shows is a z-order accident."_
+- **The issue list is already LIVE** — `useIssues` (`apps/designer/src/renderer/hooks/useIssues.ts:11`)
+  re-runs the preflight on every scene change, debounced 200 ms. A canvas mark driven off it clears the
+  instant the author fixes the geometry, with no new plumbing.
+
+### 🔴 What was measured about the SURFACE — the task-0 finding
+
+- **`IssuesPanel` has exactly ONE mount in the repo**: `StatusBar.tsx:117`, rendered `embedded` inside
+  a `Modal` gated on local `issuesOpen` state. It is never visible by default.
+- **The only control that can open it is the status-bar pill** (`StatusBar.tsx:57-73`), which is itself
+  conditionally rendered — it exists only while `issues.length > 0`. The door appears and disappears
+  with the problem rather than being a stable place an author learns to look. It sits in the bottom-left
+  wearing the **same `s.pill` class** as the inert fps / duration / resolution chips beside it,
+  differing only by an inline colour.
+- **`IssuesPanel`'s own non-embedded branch (`IssuesPanel.tsx:71-82`, the bordered "ISSUES" section) is
+  DEAD CODE** — no caller passes anything but `embedded`. ⚠ `live-source.spec.ts:57` still carries a
+  comment asserting that a sidebar Issues panel exists; it does not.
+- **Click distance: 1 click to READ the message, 2 to reach the box — and never both at once.**
+  Clicking an issue row selects the element **and closes the modal** (`IssuesPanel.tsx:92-97` +
+  `StatusBar.tsx:117`'s `onPick`), so the author can never see the explanation and the offending box on
+  screen together.
+- **`!hasComp` is ORed into the same boolean** (`CompositionActionBar.tsx:41`), so with no composition
+  active the Export button is grey with **no issues at all** — hence no pill, hence no explanation
+  reachable by any number of clicks.
+
+### 🔴 And the two strings that were supposed to explain it cannot appear
+
+1. **The `window.alert` is unreachable.** `CompositionActionBar.tsx:59` and `:69` say
+   `Export blocked: N validation error(s) in Issues panel.` — the only text in the app that names the
+   Issues panel. But `errorCount > 0` is what sets `disabled` on the same buttons in the same render
+   (`:41`, `:101`, `:116`), so `onClick` can never fire while the alert's condition holds. **It reads
+   as coverage and is dead.**
+2. **The tooltip cannot render either.** `title="Resolve validation errors first"` (`:104`, `:120`)
+   sits on a **natively disabled** `<button>` — browsers suppress `title` tooltips on disabled form
+   controls, and the app's own `InputTooltip` resolves off `pointerover`, which disabled controls do
+   not dispatch. Even if it did show, it names no count, no element and no destination.
+
+⇒ **This is the pattern this repo has already named three times, verbatim: [[B-141]], [[B-143]] and
+[[B-144]] — _"the system knows something and does not say it"._** [[B-146]] states the cost:
+_"A control that silently does nothing is the worst of the three outcomes."_ No new label is minted.
+
+### The decision on the Export button — option (b), and the reason is measurable
+
+The two candidates were (a) keep it disabled and enrich the tooltip, or (b) stop disabling it and
+answer the click with the real refusal.
+
+🔴 **(a) is not implementable on this control.** Its entire delivery mechanism is a `title` on a
+disabled button, which — as measured above — the browser suppresses and the app's own tooltip cannot
+see. Enriching a string that never renders would reproduce exactly the defect this item exists to
+remove, one layer up.
+
+**DECIDED: (b).** The error-blocked buttons stay visibly refused (`aria-disabled="true"`, so assistive
+technology still hears "unavailable") but remain clickable, and the click:
+
+- **opens the Issues panel** — the one-click route from the button the author actually pressed to the
+  full message, and
+- **selects the offending elements**, so the canvas marks are the thing under the cursor.
+
+⚠ The refusal is delivered by opening the panel rather than by a toast, deliberately: `showNotice` is a
+5-second transient and [[B-173]] already records that designed refusal sentences need longer than that.
+A short notice names the count and the first offender; the panel holds the full text for as long as the
+author wants it.
+
+⚠ **`!hasComp` keeps a genuinely `disabled` button** — there is no composition to export and no issue
+to explain, so there is nothing for a click to say.
+
+**Acceptance** — each bullet is written to become one OpenSpec `#### Scenario`:
+
+- WHEN an element is the subject of an ERROR-severity preflight issue THEN it is marked on the canvas
+  with the design system's `danger` treatment, whether or not it is selected
+- WHEN two Live Sources overlap THEN **BOTH** participants are marked, not just one
+- WHEN the author fixes the geometry THEN the marks clear without any further action
+- WHEN a box is marked THEN the mark carries a NON-CHROMATIC signal too — an icon badge and an
+  accessible description naming the problem — so colour is not the only channel
+- WHEN the Export is blocked by validation errors THEN the button is NOT inert: clicking it opens the
+  Issues panel and selects the offenders, and the refusal names the count and the first offender
+- WHEN the Export is blocked THEN no unreachable string remains in the component
+- WHEN there is no composition open THEN Export is genuinely disabled and says so, since there is
+  nothing to explain
+- WHEN a composition has no error-severity issues THEN nothing is marked and Export is live
+
+### Notes
+
+- **Priority `high`** because the author cannot proceed and nothing on screen says why — the same
+  standard [[D-154]] was rated at (_"the owner could not author, and nothing on screen said why"_).
+- **The mark is a DESIGNER-SIDE overlay, not a change to the rendered plate.** The plate's visible box
+  on the canvas is painted inside the preview iframe by `@cg/template-runtime`; a mark added there
+  could not be asserted in the same test as the rule, because the two live in different workspaces with
+  different DOM environments. As a designer overlay in the `canvas-surface` frame box, rule and surface
+  are one test — which is what this item's tests do.
+- **The colour is the existing `danger` token** (`renderer/theme.ts:34`, `#F87171`), whose own comment
+  says _"red is reserved for real errors"_. Nothing on the canvas used it before: the canvas's other
+  chromatic signals are the sky selection outline, the snap guides and the marker colours. ⚠ The
+  status-bar pill uses an inline `#fda4af` rose, which `theme.ts:8` says is _"sacred to the Runtime"_ —
+  an existing inconsistency, not touched here.
+- ⚠ **A second, separate defect was found while reading the geometry and is filed as [[B-180]]** — the
+  overlap rule is violable INVISIBLY. Do not fold it in.
+- **Cross-refs:** [[B-141]] / [[B-143]] / [[B-144]] / [[B-146]] (the named pattern); [[B-173]] (the
+  toast's life, which is why the refusal is not a toast); [[D-154]] (canvas chrome drawn where the
+  element is not); [[B-180]] (the invisible-overlap defect); [[D-137]] (the Live Source element and the
+  overlap rule).
+- The number was verified free by the heading sweep immediately before this heading was written:
+  highest `D-` heading was **`D-156`**; `D-001` … `D-156` contiguous with no gaps; a whole-tree
+  `git grep` for `D-157` returned only [b-number-registry.md](b-number-registry.md)'s own "next free"
+  pointers, never a heading; `D-158` returned nothing at all.
+
+### ⚠ Why this is still `[~]` and not `[x]` — audited 2026-08-29, tick deliberately NOT flipped
+
+Asked directly whether this item is finished. It is finished as WORK and is not finished as
+BOOKKEEPING, and in this repo those are two different marks:
+
+| checked                                                   | result                                                                                                                                                              |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `openspec/changes/designer-export-block-visible/tasks.md` | **19 ticked, 0 unticked**                                                                                                                                           |
+| the Linux `e2e`                                           | **DISCHARGED** — run [32957665797](https://github.com/yasermostafaee/cg/actions/runs/32957665797) on `340e98c7`, `E2E (Playwright)` **RAN** and concluded `success` |
+| `92d0fd9c` (the discharge record) on `origin/dev`         | yes — verified ancestor                                                                                                                                             |
+| the change directory                                      | **still in `openspec/changes/`**, not `openspec/changes/archive/`                                                                                                   |
+
+⇒ **`[x]` means ARCHIVED here** (workflow step 7), and archiving is the one step CLAUDE.md says
+must wait for the owner's confirmation. Nothing else remains: the moment that confirmation comes,
+`pnpm openspec archive designer-export-block-visible -y` folds the spec in and this flips to `[x]`
+in the same docs-only commit.
+
+⚠ Recorded rather than silently left, because a `[~]` with every task ticked and its e2e discharged
+looks indistinguishable from a `[~]` that is genuinely unfinished — and the next reader would spend
+the same audit working out which one it is.
+
+---
+
+## [x] D-158 — parts of the background (the neon frame's corners, the `LIVE STREAM` title bar) should appear OVER the live box instead of being covered by it ⟨priority: medium⟩ — ANSWERED WITHOUT A FLAG, 2026-09-04 (`DESIGNER-FIX-0902` §3): over-the-picture artwork is its own template on a bank row, not an element inside a look. No change dir — documentation only, no code
+
+**What:** the request as made — some artwork of a plate-bearing template should draw ON TOP of
+the live picture rather than sit beneath it.
+
+**Why:** a neon frame whose corners overlap the picture, a title bar across the top of a live box —
+ordinary broadcast furniture.
+
+### The August design is obsolete, and the reason is recorded so it is not rebuilt
+
+The design agreed in August was a per-element _"draws over the picture"_ flag whose whole
+mechanism was subtracting those elements from a **punched hole** in the page above the plates.
+**That hole no longer exists.** The single-clock reorder (`a7976e14`, 2026-09-01,
+`openspec/changes/single-clock-look-switch/`) retired the mask and moved the plate-bearing page
+BELOW its plates. Verified against the tree on 2026-09-04: no exported `liveSourceMask`,
+`MaskHole`, `LiveSourceMask`, `sceneMaskHoles`, `intersectPunches` or `PlateFits` symbol remains
+anywhere under `packages/`, `tools/` or `apps/`; `live-source-punch.ts` and its test, plus
+`live-source-mask.test.ts`, `transition-mask.test.ts`, `overlap-residue.test.ts`,
+`arrangement-hole-size.test.ts` and `unit-b-prime-mutators.test.ts`, were deleted in that commit.
+What survives are tombstone comments naming the removal (`scene.ts:769`, `scene-flatten.ts:346`,
+`:458`, `runtime.ts:536`, `arrangement-view.ts:27`, `vcg-format/live-sources.ts:155`) and the skew
+harness's own scene notes (`tools/skew-harness/src/scene.ts:27`, `:48`, `:68`, `:169`, `:203`),
+which still describe `sceneMaskHoles` in the present tense — stale prose in a measuring instrument,
+not a mechanism. There is no hole to subtract an element from.
+
+### The runtime's answer, verified against the client's packages
+
+[[B-195]] (`bugs-runtime.md`, 2026-09-01) audited the client's twelve packages with the product's
+own flattening: **exactly one** (`3ghab.vcg`) has live plates, and **the other eleven ARE the
+over-the-picture furniture, already authored as separate templates** — `ارم-روی-انتن`,
+`زیرنویس-روی-انتن`, `نوار-خبر-روی-انتن`, `توالی-خبر-روی-انتن`, `میانبرنامه-روی-انتن`,
+`zirnevis-white` (`.vcg` and `.cgproj`), `logo1`, `parcham`, `pen`, `text`. The count of elements
+whose geometry is tied to a plate's rect was **zero**. Re-checked 2026-09-04 against the folder
+the audit read (`…\Desktop\temp\cg templates exports`): the same twelve files are there, dated as
+the audit recorded. Under the reorder the bank rows (`70–99`) already sit ABOVE the live band, so a
+furniture package on its own row draws over the pictures with no flag and no mask — that is the
+`runtime-live-source-routing` delta's _"A furniture package still draws over the pictures"_
+scenario in `single-clock-look-switch`.
+
+**So no flag is built.** The answer is recorded where a template author and an operator will find
+it: `docs/designer-guide/README.md` §"Live boxes, and artwork that must appear over the picture"
+and `docs/operator-guide/README.md` §"Artwork over the live picture is its own row".
+
+### ⚠ The one shape that would bring the old design back — a KNOWN FUTURE REQUEST, not work
+
+A super positioned **under a particular guest box** — geometry tied to a plate's rect, which must
+move on the same frame the fills move (`B-195`'s CLASS 1). Nothing like that is built, and its
+severity would not be the old one: on an overlay row a late element is a graphic arriving one
+frame late, **not a black hole**. The owner confirmed on 2026-09-01 that supers over a guest are
+coming; when a per-box super is asked for, it is a new item, and this note is where it starts.
+
+### Designer surfaces that still describe the retired mechanism — REPORTED, not redesigned
+
+None suggests a "draws over" flag exists or is coming; all still describe the hole the page no
+longer punches, and one implies the template cannot draw over the picture at all:
+
+| where                                                  | the string                                                                                                                                        |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ArrangementsSection.tsx:104` (mode label)             | `Fade — the mask dissolves (cheapest)`                                                                                                            |
+| `ArrangementsSection.tsx:242` (move hint)              | _"anything else drifts the picture off its hole while it travels"_                                                                                |
+| `ArrangementsSection.tsx:380` (callout)                | _"a plate in one declares no hole and punches none"_                                                                                              |
+| `ArrangementsSection.tsx:423`, `:431` (how boxes work) | _"the hole is that fraction of whatever cell the box lands in"_, _"the plate is a hole filled edge-to-edge"_                                      |
+| `StyleSection.tsx:715-721` (Live Source hint)          | _"the hole paints nothing on air, and the picture is composited on a layer behind it … the frame … sits entirely outside the hole"_               |
+| `StyleSection.tsx:794-795` (Frame row hint)            | _"The frame is painted by the TEMPLATE, outside the hole — it never covers the live picture"_ — true in effect under the reorder, wrong mechanism |
+
+A follow-up item may re-word them against the reorder; this one does not (the brief: report, do
+not redesign). ⭐ **Re-worded 2026-09-05 under [[B-220]]** (`DESIGNER-FIX-0905` §1), which also
+found that five of the six sit in a section `InspectorPanel` never mounts, and five more Designer
+strings — the preflight refusals — that this table did not list.
+
+- **Cross-refs:** [[B-195]] (the audit), `single-clock-look-switch` (the reorder), [[B-194]] (the
+  affordability number the audit corrected), `C-015` (the layer bands).
+- **Number:** highest `D-` HEADING was `D-157`; `git grep -n "D-158"` returned only `D-157`'s own
+  sweep note (_"`D-158` returned nothing at all"_), never a heading. ⚠ The registry's last dated `D-`
+  sentence (2026-08-24) still reads _"Next free: `D-157`"_ — it was written before `D-157` was
+  filed and never advanced, so HEADINGS and the pointer DISAGREE by one; the headings win and
+  `D-158` is taken here. Recorded in the registry's 2026-09-04 entry.
+
+## [~] D-159 — the Inspector explains in prose what it could express in state ⟨priority: high — the owner's words: "long and small and unreadable"⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905`; `openspec/changes/inspector-state-over-prose/`); Linux `gate:e2e` DISCHARGED for `c305f9ad` — <https://github.com/yasermostafaee/cg/actions/runs/33921378832> (`E2E (Playwright)` RAN, 621 s, `success`)
+
+**What:** the Inspector's explanatory paragraphs become STATE where they can — a control the mode
+ignores is withheld (present, disabled, its reason as its own tooltip), a degenerate value reads as
+degenerate, a fact is a field, and no paragraph restates a placeholder. What is genuinely worth
+reading once moves behind an `i` into the shared modal at reading size; a state and its remedy stay
+inline, short, beside their control, at one legible default; a refusal stays inline and louder.
+
+**Why:** the owner photographed seven blocks — Playout, Video, Live Source / fit, Frame, Sequence,
+Looks and the home cards — and named the symptom _"long and small and unreadable"_. The root cause
+is not length: the UI explains in prose what it could express in state. _"Hold loop (frames 38 → 38) has no playback effect here: a manual hold waits for the operator…"_ is a control that should
+read `inert`; _"Opacity and filters are withheld…"_ is a paragraph standing in for two controls
+that were simply absent; the sequence paragraph repeated, word for word, the placeholder of the
+field directly above it.
+
+**Acceptance:** the `#### Scenario`s of the change's six spec deltas (`designer-inspector`,
+`designer-live-source`, `designer-playout-lifecycle`, `designer-video-element`, `designer-shell`,
+`designer-multibox-arrangements`).
+
+### §3 — the sweep, and how the prediction came out
+
+The prompt predicted **35–60** explanatory prose blocks. Counting rule: a rendered paragraph,
+caption or callout of one or more sentences that EXPLAINS (teaches, states a mechanism, a
+constraint, or a state and its remedy). Not counted: bare labels ("Which content closes the
+graphic?"), bare empty states with no explanation ("No fields."), pure numeric readouts, modal
+bodies (already reading-size) and tooltips (already on a control).
+
+| where                                         | blocks | of which changed here                                                                                                                                                    |
+| --------------------------------------------- | -----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Inspector — Live Source, Frame, Transform     |      2 | 2 (state line + `i`; controls withheld; frame colour withheld at 0)                                                                                                      |
+| Inspector — Video, Lottie, follow, clamps     |     19 | 4 (provenance → fields; follow state; phase-marks state + `i`; `drives hold` withheld)                                                                                   |
+| Inspector — Ticker, Clock, Sequence, Repeater |      6 | 5 (three time-driven → state + one `i`; sequence duplicate deleted + `i`; repeater → field)                                                                              |
+| Inspector — Dynamic / Data, Keyframe          |      6 | 0 (state + remedy, left inline)                                                                                                                                          |
+| Playout                                       |      7 | 3 (hold loop row + `i`; static caption + `i`; content-start caption shortened)                                                                                           |
+| Looks                                         |      6 | 5 (summary + two hints → `i`; two empties → one line; refusal block louder)                                                                                              |
+| Home cards                                    |      5 | 5 (badge derived from the scene + one line)                                                                                                                              |
+| Preview modal / fields panels                 |      5 | 0                                                                                                                                                                        |
+| Left-rail panels, timeline, landing empties   |      5 | 0                                                                                                                                                                        |
+| **Reachable total**                           | **61** | **24**                                                                                                                                                                   |
+| Arrangements section — **never rendered**     |     22 | 5 (the `D-158` strings, §1) — ⚠ recounted under [[D-160]] (2026-09-05): **20** paragraphs, **18** explaining; of the five, four are blocks and one is a `<select>` label |
+| **Grand total**                               | **83** |                                                                                                                                                                          |
+
+⚠ The reachable count lands at the prediction's upper edge; what carries the grand total past 60 is
+a section `InspectorPanel` does not mount (22 blocks — recounted under [[D-160]] as 20 paragraphs,
+18 of them explaining — including an eight-paragraph "How boxes and backgrounds work" collapsed by
+default). The Video / Lottie count is high because the follow
+window's seven clamp warnings are seven separate conditional blocks, each a state and its remedy —
+they stay inline by the rule. Reported as measured, not fitted.
+
+### Sentence by sentence — the seven sampled contexts
+
+| sentence                                                                             | kind             | went to                                           |
+| ------------------------------------------------------------------------------------ | ---------------- | ------------------------------------------------- |
+| Hold loop (frames 38 → 38) has no playback effect here                               | state            | the row's tag `inert` / `empty`                   |
+| a manual hold waits for the operator to stop it, so the hold source is ignored       | state + remedy   | inline, one line                                  |
+| Pick auto-out or loop-cycle to activate the loop                                     | remedy           | inline                                            |
+| (Not the transport's preview loop, and not Loop cycle, which repeats the whole …)    | teaching         | the `i` ("The three loops")                       |
+| Following nothing yet — this composition has no out-point                            | state            | inline, tagged `inert`                            |
+| so there are no lifecycle anchors to derive the window from, and the clip behaves…   | mechanism        | the `i` ("Following the composition")             |
+| Set an out-point in the Playout section to activate follow                           | remedy           | inline                                            |
+| A plate is static and axis-aligned                                                   | state            | inline                                            |
+| its rect is sent to CasparCG once, as a fixed box                                    | mechanism        | the `i` ("Live plates on air")                    |
+| so rotating or animating it — or a parent — would slide the live picture out         | constraint       | ON the rotation control (tooltip); the `i`        |
+| Opacity and filters are withheld for the same reason                                 | constraint       | ON the opacity control and the Filter header      |
+| the hole paints nothing on air, and the picture is composited on a layer behind it   | mechanism, STALE | the `i`, corrected (page below; no hole)          |
+| The frame below is the one thing this element draws, and it sits entirely outside…   | teaching, STALE  | the `i`, corrected                                |
+| The frame is painted by the TEMPLATE, outside the hole — it never covers the picture | mechanism, STALE | the `i`, corrected                                |
+| it does not move the rect CasparCG is given                                          | mechanism        | the `i`                                           |
+| A width of 0 means no frame; the colour is kept                                      | state            | the colour field, withheld at 0 with this reason  |
+| A composition item rotates a one-element clock/logo or a composed layout…            | teaching         | the Items section's `i`                           |
+| its live content (a clock) keeps ticking                                             | teaching         | the `i`                                           |
+| Give a text item a data key to make it operator-editable; without one it's static    | DUPLICATE        | deleted — the field's placeholder already says it |
+| One multi-frame group                                                                | teaching         | the Looks `i`                                     |
+| Sources are not declared here — this list is what the plates use…                    | teaching         | the `i`                                           |
+| Two looks using the same source start on the same input…                             | teaching         | the `i`                                           |
+| No sources yet. Point a plate at one…                                                | state + remedy   | inline, one line                                  |
+| In the order the plates first use them. A source disappears when…                    | mechanism        | the `i`                                           |
+| No looks yet.                                                                        | state            | inline                                            |
+| A look is a full sub-scene — … exactly one look is on air at a time (the switch is…) | teaching         | the `i`                                           |
+| Open a look to author it — … Double-clicking a look on the canvas opens it too       | teaching         | the `i`                                           |
+| N issues — export will refuse + rows                                                 | refusal          | inline, LOUDER (0.8rem heading, 0.76rem rows)     |
+| From "…webm" (480×270, conformed 30→50 fps)                                          | facts            | four labelled rows                                |
+| the five home-card descriptions                                                      | differentiator   | a derived badge + one line each                   |
+
+### Hiding vs disabling — the choice per control
+
+Recorded in the change's `design.md` §1. In one line: rotation, opacity, the Filter section, the
+frame colour at 0 and `drives hold` without an out point are **disabled with their reason**;
+keyframe diamonds stay **absent** (no place to carry a sentence — the withheld rows and the `i` say
+why the plate is static); the hold loop and the follow are **state rows** (readouts, not controls);
+`Pin content start` stays **enabled** under manual / static because the marker is a promise about
+time the entrance leg honours whatever the mode.
+
+### What is visually checkable, and what is not
+
+Checkable in the running app: every withheld control (dimmed row, `not-allowed` cursor, the
+tooltip), every `i` (the modal at 0.9rem), the hold loop's tag, the video's four provenance rows,
+the badge on each home card, the Looks panel's **Make it a look** rows. NOT checked visually by
+this session: the legibility judgement itself — the sizes are pinned in `prose.css.ts` and the
+DOM/E2E tests assert content and state, not rendered pixels; whether 0.76rem at a 46ch measure
+reads well in the owner's window is the owner's read.
+
+### Not in scope, and seen
+
+- ⚠ **Localisation:** the five starter labels are Persian with an English gloss, and every
+  description, badge and Inspector string is English — the mixed-language surface is wider than
+  the cards (every panel). Reported, nothing changed.
+- The clock's format-token legend stays inline (consulted every time a format is typed).
+- [[B-197]] (rounded corners on a plate) is named in the Live Source `i` as having no home yet;
+  nothing about it changes.
+- Nothing in `@cg/template-runtime`, the bridge or the wire.
+
+- **Cross-refs:** [[B-219]], [[B-220]], [[D-158]], [[D-137]] (the plate's withheld controls),
+  [[D-133]] (the hold loop), [[D-119]] (the starter cards).
+- **Number:** highest `D-` HEADING was `D-158`; `git grep -n "D-159"` returned only the registry's
+  own "Next free" pointer; `D-160` appears twice in `docs/handoff/` as a DOCUMENTED PHANTOM (session
+  AX's widening sweep), never a heading. The dated pointer reads `D-159` — headings and pointer
+  AGREE.
+
+## [ ] D-160 — `ArrangementsSection` is neither dead code nor pending work: it is one line of `P2.DEL`, the owner-gated A′ deletion whose gate the tree now shows as MET — and the owner's 2026-09-05 "no transitions" decision turns that task's two PARKED rows into DELETE rows ⟨priority: medium — nothing an operator can reach is wrong; what is wrong is an open `[ ]` whose scope is stale and whose gate nobody has read against the plant record⟩ — FILED 2026-09-05 (`ARRANGEMENT-DEADWOOD-01`); nothing deleted in this session, by the brief's own gate
+
+**What:** execute `openspec/changes/multibox-layout-switch/tasks.md` §1b **P2.DEL** as ONE change —
+the arrangements schema, the `.vcg` carrier, the runtime view, the four disabled Designer
+components (`ArrangementsSection`, `ArrangementElementSection`, `ArrangementPicker`,
+`ArrangementCellOverlay`), the arrangements slice, the skipped `arrangements.spec.ts` and the
+pinned tests, per `design.md` §14.4's DIES table — **with the two PARKED rows of that table
+deleted rather than re-homed**: the `fade` / `move` arms of `ArrangementTransitionSchema`
+(`packages/shared-schema/src/arrangements.ts:69-83`) and `hideDuringTransition`
+(`packages/shared-schema/src/elements.ts:149`). Until that session, `ArrangementsSection.tsx`
+stays byte-for-byte as at `cc13abca`: no partial deletion, no string edits.
+
+**Why:** `ARRANGEMENT-DEADWOOD-01` asked one question — _can `ArrangementsSection` be deleted
+whole, or does something reachable depend on it?_ — and the tree's answer is the third thing:
+nothing reachable depends on it, and it still cannot go alone. It was retired on 2026-08-19 by
+**disabling its entry points** (owner: _"DISABLED, not deleted … so a bug in the new surface cannot
+strand the owner"_, `InspectorPanel.tsx:92-94`) with an explicit `[ ]` deletion task gated on
+_"once the owner has authored a real template on the new path"_ (`tasks.md:178-186`). That gate is
+now met by the plant record: [[B-216]]'s check reads the owner's `3ghab.vcg` on layer 9 with active
+look `look-3` and three plates seated (`bugs-runtime.md:9928`). So `P2.DEL` is **due**, not
+deferred. And the owner decided on 2026-09-05 that _"switching between boxes needs no transition —
+the way it works now is correct and sufficient"_, which retires the "animated phase" the two PARKED
+rows were waiting for. Deleting the section by itself would half-execute `P2.DEL`, leave its
+stylesheet (shared with `ArrangementElementSection.tsx:73`), its store mutators, its schema arms and
+the carrier field (`packages/vcg-format/src/live-sources.ts:140`, `transition: a.transition`) in
+place, and put the checklist one item out of true. The brief's own rule applies: _do not
+half-delete_.
+
+**Acceptance:**
+
+- `P2.DEL` lands as one change and one commit family, ticked in `tasks.md` with its Linux
+  `gate:e2e` run URL; `design.md` §14.4's PARKED rows are struck with a pointer here; Stage G
+  8.2–8.9 are struck as WITHDRAWN (owner decision 1, 2026-09-05), 8.1 and 8.10 untouched.
+- `git grep -n -E "ArrangementTransition|hideDuringTransition|ArrangementView|arrangementViewOf"`
+  returns nothing under `apps/`, `packages/`, `tools/` except archived docs; the `.vcg` manifest
+  no longer carries `transition` (a format change — flag class 1, export path).
+- The session that does it names its hard stops out loud: `packages/template-runtime` (air path),
+  `packages/vcg-format` (export), `packages/shared-ipc` (the bridge contract) — flag classes 1
+  and 3 of `CLAUDE.md`'s commit-and-merge policy — and owes an authoritative Linux `e2e`.
+- Nothing visual changes for the operator: every surface `P2.DEL` deletes is already unmounted.
+
+### §1 — state, established before anything else (anchors)
+
+1. **File / export / imports / the mount proof.** `apps/designer/src/renderer/features/inspector/ArrangementsSection.tsx:48`
+   exports `ArrangementsSection`. A tree-wide `git grep -n "ArrangementsSection"` finds **no import
+   of the export anywhere**; the only import naming the file is
+   `ArrangementElementSection.tsx:6`, which pulls the STYLESHEET (`ArrangementsSection.css.js`) for
+   one class (`cls.hint`, `:73`). `InspectorPanel.tsx` imports `LooksSection`, `PlayoutSection` and
+   the rest (`:1-24`) and never this module; `SceneInspector` renders `<LooksSection>` where the
+   comment at `:92-94` records the disable. A component with zero import edges cannot mount under
+   any condition — there is no lazy import, no string-keyed component map and no route naming it.
+   **The `DESIGNER-FIX-0905` claim is PROVED, not repeated.** The three siblings are in the same
+   state: `ArrangementPicker` (`CanvasArea.tsx:933`, comment only), `ArrangementCellOverlay`
+   (`CanvasOverlay.tsx:783`, comment only), `ArrangementElementSection` (no importer at all).
+2. **The "tombstone" in `arrangement-view.ts`.** `packages/template-runtime/src/arrangement-view.ts:8-18`
+   is a block comment — _"`single-clock-look-switch` — `liveArrangementView` IS GONE, with its one
+   consumer … there is one computation left, on the bridge's side, so the read-back has nothing to
+   reconcile"_ — and `:20-36` is the doc comment of `applyArrangementToNodes`, which still names
+   `sceneMaskHoles`. Both are **comments**: not a type, not a switch arm, not a dead branch, not a
+   persisted field; nothing reads them at runtime. ⚠ **They are epitaphs for the MASK
+   (`a7976e14`), not for a transition** — `D-158` lists this file at `designer.md:5237`
+   (`arrangement-view.ts:27`) among the mask tombstones. What the file holds that RUNS is
+   `applyArrangementToNodes` (`:52`), called from `runtime.ts:480` and driven by the Designer
+   preview (`preview.ts:662`, `:1002`) — an air-path function `P2.DEL` deletes whole. Untouched
+   here on both counts.
+3. **Pending work — cited, not "nothing".** (a) `multibox-layout-switch/tasks.md:178` `- [ ] P2.DEL`,
+   the code deletion of this section and its family. (b) `tasks.md:1433` Stage G — _"the
+   transition modes (§13.5)"_ — `[ ] 8.2` … `[ ] 8.9`: the `linear` contract, the mode set, a
+   mask-luminance fade, a `clip-path` move, the background crossfade. (c) `design.md:2323-2324`,
+   two PARKED rows: the `fade` / `move` arms _"carry to looks unchanged when the animated phase
+   arrives"_; `hideDuringTransition` _"not deleted (the animated phase re-reaches it)"_ — and the
+   schema says the same at `elements.ts:140-148`, _"What un-parks it: an ANIMATED look-switch
+   mode"_. (d) Spec scenarios in the change delta
+   `multibox-layout-switch/specs/designer-multibox-arrangements/spec.md:127`, `:139` — _"entered
+   with a fade"_, _"entered with a move"_. No living spec exists under
+   `openspec/specs/designer-multibox-arrangements/` (`git ls-files openspec/specs` has no
+   `arrang*`). (e) Tests pinning the transition arms: `packages/shared-schema/tests/arrangements.test.ts`,
+   `packages/shared-schema/tests/looks.test.ts`,
+   `packages/vcg-format/tests/live-source-arrangements.test.ts`. (f) `docs/prd/runtime.md:3135` —
+   _"Transition modes: cut in v1, full stop … PARKED for the animated phase"_. (g) Work done ON
+   the unreachable panel after it was unmounted: `4c4880c0` (D-155, 2026-08-25), `645c171a`
+   (B-218, 2026-09-04 — the CELLS keep-aspect toggle, `aspect-lock-live-source/tasks.md:56` `[x]
+4.1`) and `cc13abca` (B-220, 2026-09-05). Last meaningful touch: **2026-09-04**. (h) The E2E
+   `apps/designer/tests/e2e/arrangements.spec.ts:9` skips wholesale, _"deleted with P2.DEL"_.
+4. **The count, measured.** `ArrangementsSection.tsx` at `cc13abca` (HEAD's content, and the
+   commit that made the count) holds **20** `<p>` elements: `empty` 1, `summary` 1, `hint` 4,
+   `calloutHead` 1, `calloutBody` 8, `calloutWarn` 4, the box row 1. Under `D-159`'s own rule
+   (paragraphs that EXPLAIN; bare state lines excluded) **18** count — `:376` _"N cells have no box
+   yet"_ and `:401` _"This arrangement has no boxes to place."_ are state lines. **22 is not
+   reproducible** from the file; `D-159` §3 carried it (`designer.md:5335`, `:5339`) and now points
+   here. Of `D-158`'s five strings, **four** are prose blocks (`:251-253`, `:417-421`, `:459-465`,
+   `:466-472`) and **one is a `<select>` option label** (`:112`) — so "five of the blocks" is four
+   blocks and one label. ⚠ The label no longer reads _"Fade — the mask dissolves"_: [[B-220]]
+   rewrote it to _"Fade — the boxes cross-fade; the pictures cut (cheapest)"_ in `cc13abca`.
+
+### §2 — the verdict, flat
+
+**Neither.** Nothing reachable depends on it, and it is not deletable alone. The compile graph
+makes the first half safe: `InspectorPanel` switched to LOOKS by removing the import, so the module
+has **no in-edges**, and its one out-edge that matters (the stylesheet) lands in a sibling that is
+equally unmounted. The second half is what `P2.DEL` is for: this section is one of **four**
+components retired as a set; it alone calls seven store mutators
+(`apps/designer/src/renderer/state/slices/arrangements.ts` — `addArrangement`, `removeArrangement`,
+`renameArrangement`, `setArrangementDefault`, `setArrangementCell`, `setActiveArrangement`,
+`setArrangementTransition`); it alone WRITES the `fade` / `move` arms, which are pinned by three
+test files and exported into the `.vcg` carrier. Looks deletable, must stay this session: the
+stylesheet (the sibling's `cls.hint`); `arrangements.spec.ts` (skipped, and it also covers the
+picker and the overlay); the slice; `ArrangementTransitionSchema` + `CUT_TRANSITION`;
+`hideDuringTransition` (`resolveVisibility`'s third input, `visibility.ts:76`, reachable); the
+runtime view (`runtime.ts:480` is live); the two comments in `arrangement-view.ts` (air path).
+
+### Two owner decisions, recorded 2026-09-05, and what each reaches
+
+1. **No transitions between boxes** — _"the way it works now is correct and sufficient."_ The
+   "animated phase" is not deferred; it will not be built. What that retires, beyond this section's
+   unreachable mode labels and hints: the PARKED rows above, Stage G 8.2–8.9, the two spec-delta
+   scenarios, the `runtime.md:3135` row, `design.md` §13.4 / §13.5, and the `linear` contract
+   (§12.2). `P2.DEL` is the change that acts on it; a note beside `P2.DEL` and Stage G points here.
+2. **Multi-language is deferred and will cover BOTH apps.** No string was translated, normalised
+   or wrapped in this session; the read-only inventory below is the only localisation work done.
+
+### Read-only string inventory for the deferred multi-language pass (owner decision 2)
+
+Counting rule: a heuristic tally of user-visible string SITES per module — JSX text runs, labelled
+attributes (`title`, `aria-label`, `placeholder`, `label`, `alt`), and sentence-shaped literals
+(three or more words) in `.ts` files, comments stripped, tests and `.css.ts` excluded. Rough by
+design; the KIND column is the finding. Nothing was changed.
+
+| where user-visible strings live                                       | file / module                                                                                                                            | rough count                                        | kind                                                                                                                                                                                                    |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Designer** — Inspector panels (Style, Playout, Looks, Dynamic Data) | `apps/designer/src/renderer/features/inspector/` (33 files; `StyleSection.tsx` ≈ 220 alone)                                              | ≈ 470 reachable + 61 in the unmounted Arrangements | prose blocks · labels · tooltips · badges · the `i` modal bodies                                                                                                                                        |
+| Designer — live-source preflight refusals                             | `apps/designer/src/renderer/state/live-source-preflight.ts`                                                                              | ≈ 34 sentences                                     | refusal / error messages (multi-line template literals with interpolated names)                                                                                                                         |
+| Designer — shell, toolbar, transport, status bar, shortcuts           | `features/shell/`, `features/status/`, `features/tools/`                                                                                 | ≈ 120                                              | labels · tooltips · one prose modal (`ShortcutsModal.tsx`, ≈ 24)                                                                                                                                        |
+| Designer — canvas, overlay, background control                        | `features/canvas/`                                                                                                                       | ≈ 85                                               | tooltips · labels · a few hints                                                                                                                                                                         |
+| Designer — fields, list editor, preview forms                         | `features/fields/`                                                                                                                       | ≈ 97                                               | labels · placeholders · tooltips                                                                                                                                                                        |
+| Designer — assets, video import, shared library                       | `features/assets/`, `features/sharedLibrary/`                                                                                            | ≈ 83                                               | labels · progress and error messages                                                                                                                                                                    |
+| Designer — compositions, timeline, add guard, issues, library         | `features/compositions/`, `features/timeline/`, `features/addGuard/`, `features/issues/`, `features/library/`                            | ≈ 84                                               | labels · tooltips · one dialog of prose                                                                                                                                                                 |
+| Designer — app shell: home cards, window-too-small overlay            | `apps/designer/src/renderer/App.tsx`                                                                                                     | ≈ 17                                               | prose · badges — the overlay (`:521-523`) is the ONLY Persian UI string in either app                                                                                                                   |
+| Designer — element defaults and preset EXAMPLES                       | `state/element-defaults.ts`, `inspector/pattern-presets.ts` (`'۱۴۰۳'`, `'مجری'`), `aspect-presets.ts`, `sequence-presets.ts`             | ≈ 15                                               | 🔴 default CONTENT and examples — data an author edits, not chrome                                                                                                                                      |
+| Designer — preview iframe, exporter                                   | `apps/designer/src/platform/preview.ts`, `Exporter.ts`                                                                                   | ≈ 25 (most literals are CSS / selectors)           | error messages surfaced to the author                                                                                                                                                                   |
+| **Runtime** — layers panel, rows, live plates, audio, look switch     | `apps/runtime/src/renderer/features/layers/` (18 files)                                                                                  | ≈ 240                                              | labels · badges · tooltips · refusal fallbacks (`lookSwitch.ts:27`)                                                                                                                                     |
+| Runtime — inspector (fields, position picker, delimiters, plates)     | `features/inspector/` (20 files)                                                                                                         | ≈ 110                                              | labels · tooltips · placeholders                                                                                                                                                                        |
+| Runtime — status bar, link indicator, banners                         | `features/status/` (8 files)                                                                                                             | ≈ 80                                               | badges · status lines · banners                                                                                                                                                                         |
+| Runtime — fixed layers, connections, sources, monitors, lock          | `features/fixedLayers/`, `features/connections/`, `features/sources/`, `features/monitors/`, `features/lock/`                            | ≈ 180                                              | labels · refusal rules · badges                                                                                                                                                                         |
+| Runtime — audit panel                                                 | `features/audit/`                                                                                                                        | ≈ 16                                               | column labels; DETAIL text is FORMATTED from ids and codes (`auditFormat.ts`), not authored                                                                                                             |
+| Runtime — the code→message seam                                       | `apps/runtime/src/renderer/ui/errorCodeMessage.ts`, `fixedLayersReasonMessage.ts`, `sourcesReasonMessage.ts`, `asyncButtonController.ts` | ≈ 41 sentences over ≈ 40 wire codes                | refusal and error messages — ONE table per code family                                                                                                                                                  |
+| Runtime — other UI primitives                                         | `apps/runtime/src/renderer/ui/` (the other 23 files)                                                                                     | ≈ 20                                               | labels · tooltips                                                                                                                                                                                       |
+| Runtime — mock runtime, seed, delimiters                              | `apps/runtime/src/platform/MockRuntime.ts`, `seed.ts`, `features/inspector/delimiterStore.ts`                                            | ≈ 10 + the delimiter list                          | mock-only refusals; delimiter LABELS (`Persian comma`) are UI, their VALUES (`،`) are data                                                                                                              |
+| **Upstream of the Runtime** — bridge-authored refusal sentences       | `tools/caspar-bridge/src/caspar-runtime.ts` (≈ 10), `delimiter-store.ts` (1)                                                             | ≈ 11 sentences                                     | refusal messages as FREE TEXT on the wire — `message: z.string()` beside `reason: z.enum` — and the Runtime prints `message` FIRST (`applyDraft.ts:165`)                                                |
+| Wire reason codes                                                     | `packages/shared-ipc/src/channels/*.ts`                                                                                                  | ≈ 40 enum codes; ≈ 14 sentences (Zod validation)   | codes, not text; the validation sentences reach nobody in normal use                                                                                                                                    |
+| Schema validation messages                                            | `packages/shared-schema/src/elements.ts` and siblings                                                                                    | ≈ 17                                               | Zod messages; reach an author only through an import / validation failure                                                                                                                               |
+| **Starter templates**                                                 | `packages/starter-templates/src/index.ts`, `irib-news.ts`, `title.ts`, `ticker.ts`, `sequence.ts`, `logo-bug.ts`                         | ≈ 37 sentences, Persian with English gloss         | 🔴 **OPERATOR-AUTHORED CONTENT** (headlines, names, roles, a wordmark) plus starter LABELS that are bilingual by construction (`میان‌برنامهٔ خبر — News Composite`). Translating these is a DATA change |
+| Template runtime                                                      | `packages/template-runtime/src/`                                                                                                         | ≈ 18 literals, ≈ 0 user-facing                     | CSS values and thrown errors — not UI                                                                                                                                                                   |
+
+**Cheap:** every wire refusal already crosses as a CODE and the Runtime owns one table per code
+family, so the operator-facing half of the Runtime's error vocabulary is already keyed and could be
+swapped in one place; the only leak is the ≈ 11 bridge-authored `message` sentences, which win over
+the table whenever present. **Expensive:** the Designer's Inspector alone is close to half of the Designer's
+UI text and about a quarter of both apps' together — inline JSX prose, `title=` tooltips and template literals with interpolated numbers and
+hand-rolled plurals (`${n}-box`, `arrangement${n === 1 ? '' : 's'}`) — and the starter pack mixes
+Persian operator content with English UI glosses inside the same literal, so a pass has to split
+content from chrome before a single key can be assigned.
+
+### §6 — the predictions, as they came out
+
+- **P1 — MISS.** §1.3 found a task, a spec, tests and a decision record. The structural reason:
+  this repo retires by DISABLING with a `[ ]` deletion task and parks what it defers with an
+  explicit un-park condition — it files what it does not build, so "no evidence at all" was never
+  the likely shape of an unmounted section.
+- **P2 — MISS, by the half that matters.** "Can be deleted" is true of the module (no in-edges) and
+  false of the act: the section is one of four in a gated set with shared styles, a shared slice, a
+  shared schema and a shared E2E. What made the compile half safe is that the panel switched to
+  LOOKS by removing the import rather than by a flag — a flag would have left an edge.
+- **P3 — HIT.** Well over a dozen string-bearing directories in each app, past three by a wide
+  margin. Structural reason:
+  strings live beside their components in feature folders; there is no resource file to pull them
+  into, in either app.
+
+- **Cross-refs:** [[B-216]] (the plant record that meets `P2.DEL`'s gate), [[B-220]] (the five
+  strings, rewritten in place), [[D-158]] (the mask tombstones, including `arrangement-view.ts`),
+  [[D-159]] (the count this corrects), `multibox-layout-switch` §1b `P2.DEL`, §14.4 (SURVIVES /
+  DIES / PARKED), Stage G 8.2–8.9, [[B-147]] (the written-but-unreachable class the parked flag
+  was filed against).
+- **Number:** highest `D-` HEADING was `D-159` (`designer.md:5296`); `git grep -n "D-160"` returned
+  the registry's pointer, `D-159`'s own sweep note, and the two `docs/handoff/` mentions already
+  recorded as a DOCUMENTED PHANTOM (session AX) — never a heading. The registry's dated pointer
+  reads `D-160` — headings and pointer AGREE.
+
+## [x] D-161 — Help → About names CG Designer's version and build ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §4 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
+
+**What.** The Designer's existing Help menu carries an `About` item that has been disabled since the
+menu bar was built (`TopToolbar.tsx`). It now opens a dialog that names the app — `CG Designer` — its
+release version and its exact build (`<sha> · <date>`), from the same build stamp the start screen's
+version line reads (`appVersion.ts`, `CLIENT-TEST-RELEASE-01`). The start screen's line stays; CG
+Control is unchanged (its version is in SETTINGS). **Why.** The owner asked for the Designer's version
+inside the app, where users look for it. **Acceptance:** WHEN Help → About is chosen THEN a dialog
+names CG Designer, `Version <release>` and the build; WHEN the release version is read through
+`tools/release` THEN the dialog shows the same; control: a planted wrong version does not match.
+
+**Built (2026-09-30, `RELEASE-091-01` §4; archived 2026-09-30).** `AboutModal.tsx` — `CG Designer`,
+`Version <release>`, `Build <sha> · <date>`, three `Tag`s in the shell's `Modal` (its close and
+Escape). Tests: `about-version.dom.test.ts` (the release read through `tools/release`; the control, a
+dialog planted with `0.0.1`, fails the same check) and `app-version.spec.ts` (the built app).
+`turbo.json`'s new `@cg/designer#test` hashes the version files the spec reads.
+
+## [~] D-162 — The installed CG Designer never loses unsaved work silently ⟨priority: high — the installed app closed at once and the work was lost⟩ — FILED 2026-10-07 by `RELEASE-0114-01-B` B1 · `openspec/changes/close-guard/`
+
+**Repro / Actual (the owner, 2026-10-07):** in the browser, closing the tab with unsaved changes warns; the
+installed CG Designer closes at once and the unsaved work is lost — the webview's `beforeunload` is not asked on
+a window close. **Expected:** any close the shell can intercept, with unsaved changes, is held and one dialog
+shows — `Unsaved changes`, the project's name, `Save` / `Don't save` / `Cancel` (focus on `Cancel`, `Esc` =
+Cancel); `Save` saves and closes, and a failed save keeps the window with its reason; with no unsaved changes the
+window closes at once. The browser's warning stays, and both read ONE dirty predicate. **Acceptance:** the
+desktop smoke (UIA): a change, a close, the dialog with the window kept, `Cancel` keeps it, `Don't save` closes;
+no change closes at once; Playwright: the leave prompt with unsaved changes and none without.

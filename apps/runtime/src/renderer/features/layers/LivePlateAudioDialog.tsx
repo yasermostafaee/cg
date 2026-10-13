@@ -1,0 +1,469 @@
+import { useEffect, useState } from 'react';
+import { Volume2 } from 'lucide-react';
+import { PLAYLIST_AUDIO_LOCKED_REASON, type TemplateInfo } from '@cg/shared-ipc';
+import type { StackItemState } from '@cg/shared-schema';
+import { Modal, ModalAction } from '../../ui/Modal.js';
+import { Button } from '../../ui/Button.js';
+import { OperatorNames } from '../../ui/OperatorNames.js';
+import type { OperatorRowName } from '../../ui/operatorNaming.js';
+import { lookOptionsOf } from './LookPicker.js';
+// The ONE vocabulary, shared with the LIVE PLATES strip and the row's summary — so the
+// dialog's SOLO and the panel's SOLO cannot address different sets, and the dialog's state
+// words cannot disagree with the strip's about whether a guest can be heard.
+import {
+  OFF_TITLE,
+  ON_TITLE,
+  SOLO_ALONE_TITLE,
+  SOLO_TITLE,
+  LOCKED_PILL,
+  pct,
+  plateAudioPill,
+  soloMap,
+  UNSEATED_PILL,
+  type PlateAudioPill,
+  type RowPlateAudio,
+} from './plateAudio.js';
+
+/**
+ * C-015 phase 6 (6.5f) — **RAISE (or mute) ONE ROW's plates: the operator surface for the
+ * explicit recorded intent the mute rule defers to.**
+ *
+ * ── WHY THIS EXISTS AT ALL ─────────────────────────────────────────────────
+ *
+ * The audio rule is that every producer the bridge creates is created MUTED, and audio is
+ * raised only by an explicit recorded intent NAMING THE LAYER. Phase 6 of C-015 enumerated
+ * the MUTE half at five sub-tasks and never enumerated the surface that records the intent —
+ * so until this existed **every Live Source plate was permanently silent**.
+ *
+ * ── WHERE IT LIVES ─────────────────────────────────────────────────────────
+ *
+ * **ON THE ROW, beside the source swap** (owner, 2026-08-14): under pressure, on air, "which
+ * source" and "how loud" are one decision made in one place. `RUNTIME-REDESIGN-01` Phase 6
+ * added the second door the reference wires — a RIGHT-CLICK (or `ContextMenu` / `Shift+F10`)
+ * on a seated plate in LIVE PLATES opens this same dialog on the plate's OWNING ROW with that
+ * plate's fader focused. Two doors, one dialog, one map.
+ *
+ * ── WHAT IT COMMITS ───────────────────────────────────────────────────────
+ *
+ * Each control commits on release, with no Apply. Every gesture goes through the MAP door
+ * (`stack.set-plate-volumes`): SOLO is a CROSS-PLATE statement — _"this plate and NONE of its
+ * siblings"_ — and a sequence of single-plate calls cannot make one. The bridge holds the row's
+ * live-seat lock for the whole map, so a look switch cannot land in the middle of a SOLO.
+ *
+ * 🔴 **`ON = 100 % · OFF = 0 %`, and OFF-then-ON RETURNS TO 100 %, NOT TO THE PREVIOUS FADER
+ * VALUE** — the footer says so in the reference's own words. Restoring the previous level
+ * needs a SECOND store of intent beside the bridge's `#plateVolumes` (the `B-100` / `P-012`
+ * class): only one of the two would survive a blip, and a plate would come back at a volume
+ * nobody chose.
+ *
+ * 🔴 **SOLO is scoped to THIS ROW's plates — including the frames the active look HIDES — and
+ * nothing outside it.** The set is every plate the template declares plus every plate the
+ * ledger has seated for this row (a seated record is the bridge's own second way of accounting
+ * for a plate), which is the union pre-seat and therefore includes the held frames.
+ *
+ * ── A12 — NO SECOND CLAIM ABOUT AIR ────────────────────────────────────────
+ *
+ * The state word under each fader is `plateAudioPill`'s — AUDIBLE, SILENT, HIDDEN BY THIS
+ * LOOK — read from the LEDGER's `held`, and a plate with no seat reads NOT SEATED. This dialog
+ * used to derive `audible = value > 0` locally and print _"audible on air"_ under a raised
+ * plate, which on a READY row was a claim about air that nothing on the channel backed (and
+ * a second copy of the one predicate, golden rule 6). The reference's `On air` badge in its
+ * context line is NOT adopted for the same reason (`design.md` §12.8).
+ *
+ * ── THE MEASURED SHAPE (`08-live-audio.html`, Chromium, 1280 × 800) ─────────
+ *
+ * A subtitle naming the row under the title; a context line (`N frames · look`, and the hint
+ * that changes apply on release); a three-column head (`Frame / source · Requested gain ·
+ * Audio controls`); one 85 px row per plate — index chip, name and `Frame N · Layer c-l`;
+ * a 28 px fader with its readout and state word; `ON · OFF · SOLO` at 58 × 36 — and a footer
+ * carrying `ON = 100% · OFF = 0%` and SOLO's scope. The reference's MUTE-less verb row is
+ * adopted: MUTE was OFF's twin, and two names for one write is the pair a reader has to
+ * disambiguate under pressure. Numbers in `theme.ts` (`AUDIO_DIALOG_PX`).
+ */
+
+export interface LivePlateAudioDialogProps {
+  item: StackItemState;
+  template: TemplateInfo;
+  /**
+   * Golden rule 11 — the row named in the OPERATOR's words (`operatorRowName`), never composed
+   * here. Its ids ride on the subtitle's `title`.
+   */
+  name: OperatorRowName;
+  /**
+   * The plates the bridge's ledger holds a seat for on this row, with the two facts audibility
+   * needs and the coordinate each seat is on. Read off the SAME rows the LIVE PLATES tab
+   * renders (`rowPlateAudioOf`), so the words here and the words there are one evaluation.
+   * Empty for a row that owns nothing — every declared plate then reads NOT SEATED.
+   */
+  seatedPlates?: readonly RowPlateAudio[] | undefined;
+  /**
+   * `PLAYOUT-FEATURES-01` C — is this plate bound to the Playout's PLAYLIST OUTPUT? Its fader, ON, OFF and
+   * SOLO are then disabled with the reason, and its state reads `Locked · 0`. Absent: no plate is.
+   */
+  audioLockedOf?: ((plateId: string) => boolean) | undefined;
+  /** The plate whose fader takes focus when the dialog opens — the one the operator pointed at. */
+  focusPlateId?: string | undefined;
+  /**
+   * Apply a MAP of this row's plate volumes, in ONE call.
+   *
+   * ⚠ A MAP and not a plate/volume pair, because SOLO is a cross-plate statement. `refused`
+   * names the plates that did not move — a partial application must be visible rather than
+   * averaged into one boolean.
+   */
+  onApplyVolumes: (
+    volumes: Record<string, number>,
+  ) => Promise<{ ok: boolean; refused: readonly string[] }>;
+  onClose: () => void;
+}
+
+/** One plate as the dialog lists it: declared or seated, with the facts the words need. */
+interface DialogPlate {
+  plateId: string;
+  /** Position in the template's declaration, 1-based; seated-only plates count on after it. */
+  index: number;
+  seated: RowPlateAudio | undefined;
+}
+
+export function LivePlateAudioDialog({
+  item,
+  template,
+  name,
+  seatedPlates = [],
+  audioLockedOf = () => false,
+  focusPlateId,
+  onApplyVolumes,
+  onClose,
+}: LivePlateAudioDialogProps): React.JSX.Element {
+  const [refusal, setRefusal] = useState<string | null>(null);
+  /**
+   * What the operator is dragging RIGHT NOW, before it is committed.
+   *
+   * Kept apart from `item.plateVolumes` deliberately: the published state is the bridge's
+   * answer, and showing a slider position the bridge has not accepted would be the
+   * optimistic-UI lie this project refuses everywhere else. On a refusal this is dropped and
+   * the published value stands.
+   *
+   * 🔴 `CONSOLE-LOOK-06` DELTA D10 — AND IT IS NOT DROPPED ON ACCEPTANCE. It is retired when
+   * the published state CATCHES UP with it (the effect beside `intents`), because dropping it
+   * the instant the promise resolves put the previous value back on screen for the frame
+   * before the snapshot arrived. While the pointer is down this is also the SINGLE OWNER of
+   * the value: `shown()` prefers it, so an echo landing mid-gesture cannot move the control
+   * the operator is holding.
+   */
+  const [dragging, setDragging] = useState<Record<string, number>>({});
+
+  const intents = item.plateVolumes ?? {};
+  /*
+    🔴 DELTA D10 — the optimistic entry retires when the PUBLISHED state agrees with it, and
+    not a moment before. That is what keeps the accepted value on screen across the gap
+    between "the bridge said yes" and "the snapshot carrying it arrived", which is the gap the
+    thumb used to fall into.
+
+    ⚠ An entry that never matches is an entry the bridge never published — it stays, and it
+    stays showing what was ACCEPTED. That is the honest reading of that state, not a lie: the
+    lie would be showing a value before acceptance, which `dragging` has never done.
+  */
+  useEffect(() => {
+    setDragging((d) => {
+      const next: Record<string, number> = {};
+      let changed = false;
+      for (const [plateId, v] of Object.entries(d)) {
+        if (intents[plateId] === v) changed = true;
+        else next[plateId] = v;
+      }
+      return changed ? next : d;
+    });
+  }, [item.plateVolumes]);
+  // `?? `, never `||`: a recorded intent of 0 is a REAL authored value ("muted by the
+  // operator") and must not fall through to the default that happens to equal it.
+  const shown = (plateId: string): number => dragging[plateId] ?? intents[plateId] ?? 0;
+
+  /**
+   * THE ROW'S PLATES: every plate the template DECLARES, then every plate the ledger has
+   * SEATED for this row that the declaration does not name.
+   *
+   * Declared first, because this dialog can be opened on a row that is not on air, where
+   * there is no ledger to read and arming the plates ahead of the take is the whole point.
+   * Seated second, because a ledger record is the bridge's own second way of accounting for a
+   * plate (a stranded or adopted seat has no declaration to match) and SOLO must reach it.
+   * Deduplicated by plate id: a fill+key pair puts one `sourceId` on two ledger records.
+   */
+  const seatedById = new Map(seatedPlates.map((p) => [p.plateId, p]));
+  const declared = template.liveSources?.sources.map((p) => p.sourceId) ?? [];
+  const ids = [...new Set([...declared, ...seatedById.keys()])];
+  const plates: DialogPlate[] = ids.map((plateId, i) => ({
+    plateId,
+    index: i + 1,
+    seated: seatedById.get(plateId),
+  }));
+  const plateIds = plates.map((p) => p.plateId);
+
+  /**
+   * Apply a map and reconcile the optimistic state.
+   *
+   * ⚠ The optimistic value is dropped for EVERY plate the map named, not just the one a
+   * pointer was on: SOLO writes N plates and any of them could have been mid-drag.
+   */
+  const commit = (volumes: Record<string, number>): void => {
+    setRefusal(null);
+    void onApplyVolumes(volumes).then((res) => {
+      /*
+        🔴 `CONSOLE-LOOK-06` DELTA D10 — **THE FRAME WHERE THE THUMB JUMPED BACK.**
+
+        This used to drop the optimistic value for every named plate HERE, on the promise's
+        resolution, whether the bridge accepted or refused. On a refusal that is right and it
+        is what the `dragging` doc comment describes. On ACCEPTANCE it was the defect the
+        owner saw: the moment the entry is deleted, `shown()` falls through to
+        `item.plateVolumes` — the PUBLISHED state — and the published state does not carry
+        the new value yet, because its snapshot has not arrived. So the thumb painted the
+        PREVIOUS value for a frame and then returned when the echo landed.
+
+        ⭐ The rule, and it is the transferable half: **an accepted value is not an optimistic
+        value.** Dropping it before the echo does not make the surface more honest, it makes
+        it briefly WRONG — it shows a number the operator has already changed and the bridge
+        has already taken. So the optimistic entry is kept until the published state actually
+        agrees with it (the effect beside `intents`), and dropped immediately on a refusal, which
+        is the case it was written for.
+      */
+      if (!res.ok) {
+        setDragging((d) => {
+          const next = { ...d };
+          for (const plateId of Object.keys(volumes)) delete next[plateId];
+          return next;
+        });
+        setRefusal(
+          res.refused.length > 0
+            ? `The change was refused for ${res.refused.join(', ')} — those plates are unchanged.`
+            : 'The volume change was refused.',
+        );
+      }
+    });
+  };
+
+  // The look whose name the context line carries — the ROW's recorded look, else the
+  // template's default, through the one helper the picker reads.
+  const looks = lookOptionsOf(template.liveSources);
+  const activeLook =
+    looks?.find((l) => l.id === item.activeLookId) ??
+    looks?.find((l) => l.id === template.liveSources?.defaultLookId) ??
+    null;
+  // Focus lands on the plate the operator pointed at, else the first fader.
+  const focusId = plateIds.includes(focusPlateId ?? '') ? focusPlateId : plateIds[0];
+
+  return (
+    <Modal
+      title="Live plate audio"
+      /*
+        🔴 `PLATES-AUDIO-11` §5 — **THE ROW'S NAME MOVED INTO THE HEAD BAND, and it moved
+        BECAUSE the frame is now fixed.** It was the first line of the body, so with a scrolling
+        body a row with more frames than fit would scroll away the one thing that says WHICH ROW
+        the faders belong to — a regression the fixed frame would have introduced. The head band
+        does not scroll, and this is where the reference puts it too (`#audio-subtitle` lives
+        inside `.modal-head`, measured).
+
+        Golden rule 11 — the operator's words, ids on hover; `R-028` — the real layer number
+        stays visible IN the sentence rather than only on the hover.
+      */
+      subtitle={
+        <span data-audio-subtitle="" title={name.title}>
+          <OperatorNames name={name} />
+          {name.layer !== null && <span> · {name.layer}</span>}
+        </span>
+      }
+      /* `REPAIR-03` B, audit row 62 — the reference draws a 42 px volume emblem in this head. */
+      emblem={Volume2}
+      onClose={onClose}
+      size="wide"
+      /*
+        🔴 `PLATES-AUDIO-11` §5 — A FIXED FRAME, THE CONTENT SCROLLS. The list of FRAMES is
+        what changes under the operator here: a row switched to a one-frame look redraws
+        this dialog with one row where there were three, and the footer he is aiming at
+        used to move with it. `MODAL-CHROME-10` §4's discipline, through the door it left
+        for a dialog whose SIZE is shared with one that must not be framed (the live-source
+        swap). One height expression, `--r-modal-h-frame`, clamped for a short viewport.
+      */
+      frame="fixed"
+      {...(refusal !== null && { message: { role: 'refusal' as const, text: refusal } })}
+      footer={
+        <>
+          {/*
+            🔴 `PLATES-AUDIO-11` §4 — **THE REFERENCE'S FOOTER, VERBATIM AND NOTHING ELSE.**
+
+            Measured on `08-live-audio.html` in Chromium at 1280 × 800, `.foot-info` renders
+            exactly these two lines. Ours carried two extra clauses, and §4 did not delete them:
+            *"not a return to the previous fader level"* is on the ON button (`ON_TITLE`) and
+            *"there is no un-solo — raise the others again on their own faders"* is on the SOLO
+            button (`SOLO_TITLE`), each beside the write it qualifies rather than in a block of
+            standing text under three rows of controls.
+          */}
+          <span className="cg-audio-foot-info" data-audio-foot-info="">
+            ON = 100% · OFF = 0%
+            <br />
+            SOLO silences all other frames of this row, including hidden frames.
+          </span>
+          <ModalAction actionRole="cancel" onClick={onClose}>
+            Close
+          </ModalAction>
+        </>
+      }
+    >
+      <div className="cg-audio-context" data-audio-context="">
+        <span>
+          {String(plates.length)} {plates.length === 1 ? 'frame' : 'frames'}
+          {activeLook !== null && (
+            <>
+              {' · '}
+              <bdi>{activeLook.label}</bdi>
+            </>
+          )}
+        </span>
+        <span className="cg-audio-hint">Changes apply on release</span>
+      </div>
+      {/*
+        🔴 `PLATES-AUDIO-11` §4 — **THE EXPLANATORY PARAGRAPH IS GONE, AND ITS SAFETY FACT IS
+        NOT.** The reference draws no body copy here, and standing prose above a mixer is read
+        once and then never again. But one clause in it was a WARNING rather than an
+        explanation — *a plate carries its guest's LIVE MICROPHONE, which is why every plate
+        starts silent* — and deleting a live-microphone warning as a side effect of a copy edit
+        is not a copy edit. It leads the LIVE PLATES tab's ⓘ note now (`SCOPE_NOTE`,
+        `LiveSourcesPanel.tsx`), and the SILENT pill's own tooltip has carried it all along
+        (`plateAudio.ts`), so it is one hover away on both surfaces.
+
+        ⚠ What is genuinely gone is the rest: that the setting is per-plate and per-row, that it
+        survives a swap and a restart, and that it can be set before the take. Those are
+        DESCRIBED BY THE SURFACE — one fader per frame under the row's own name, a `Not seated`
+        frame whose fader still moves — which is why they were the half that could go.
+      */}
+      <div className="cg-audio-head" aria-hidden="true">
+        <span>Frame / source</span>
+        <span>Requested gain</span>
+        <span>Audio controls</span>
+      </div>
+      {plates.map((plate) => {
+        // `PLAYOUT-FEATURES-01` C — the playlist output's box: every control disabled, the state locked.
+        const locked = audioLockedOf(plate.plateId);
+        const lockedTitle = locked ? { title: PLAYLIST_AUDIO_LOCKED_REASON } : {};
+        const value = locked ? 0 : shown(plate.plateId);
+        const pill: PlateAudioPill = locked
+          ? LOCKED_PILL
+          : plate.seated === undefined
+            ? UNSEATED_PILL
+            : // The PUBLISHED intent, not the drag value: the word says what the bridge holds.
+              plateAudioPill(intents[plate.plateId], plate.seated.held);
+        const inputId = `vol-${item.itemId}-${plate.plateId}`;
+        // `R-028` — the real coordinate stays visible in the sentence. Said as the coordinate
+        // (`on 1-10`), never a hand-built `Layer N`, which is a ROW's name (`cg/bank-shape`).
+        const seatLine =
+          plate.seated?.coordinate !== undefined ? `on ${plate.seated.coordinate}` : 'not seated';
+        return (
+          <div
+            key={plate.plateId}
+            className={`cg-audio-row${plate.plateId === focusId ? ' cg-audio-row--focused' : ''}`}
+            data-audio-plate={plate.plateId}
+            data-plate-audio-state={pill.label}
+          >
+            <div className="cg-audio-source">
+              <span className="cg-audio-index" aria-hidden="true">
+                {String(plate.index)}
+              </span>
+              <div>
+                <label htmlFor={inputId} className="cg-audio-name">
+                  <bdi>{plate.plateId}</bdi>
+                </label>
+                <small className="cg-audio-seat">
+                  Frame {String(plate.index)} · {seatLine}
+                </small>
+              </div>
+            </div>
+            <div className="cg-audio-slider">
+              <input
+                id={inputId}
+                className="cg-field"
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={Math.round(value * 100)}
+                disabled={locked}
+                {...lockedTitle}
+                aria-label={`Volume for ${plate.plateId}`}
+                aria-valuetext={pct(value)}
+                {...(plate.plateId === focusId ? { 'data-modal-autofocus': '' } : {})}
+                onChange={(e) => {
+                  const next = Number(e.target.value) / 100;
+                  setDragging((d) => ({ ...d, [plate.plateId]: next }));
+                }}
+                // Committed on RELEASE, not on every drag frame: one AMCP command per
+                // decision rather than one per pixel.
+                onPointerUp={() => {
+                  commit({ [plate.plateId]: shown(plate.plateId) });
+                }}
+                onKeyUp={() => {
+                  commit({ [plate.plateId]: shown(plate.plateId) });
+                }}
+              />
+              <output className="cg-audio-readout" htmlFor={inputId}>
+                {pct(value)}
+              </output>
+              <small className="cg-audio-state" style={{ color: pill.tone }} title={pill.detail}>
+                {pill.label}
+              </small>
+            </div>
+            <span className="cg-audio-verbs">
+              {/*
+                ON and OFF as two named buttons rather than one toggle: a toggle has to be READ
+                before it can be pressed, and under pressure that read is a guess. OFF always
+                means silence whatever the plate was doing, which is the urgent direction.
+              */}
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  commit({ [plate.plateId]: 1 });
+                }}
+                disabled={locked}
+                title={locked ? PLAYLIST_AUDIO_LOCKED_REASON : ON_TITLE}
+                aria-label={`Full volume for ${plate.plateId} (100%, not the previous level)`}
+              >
+                ON
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  commit({ [plate.plateId]: 0 });
+                }}
+                disabled={locked}
+                title={locked ? PLAYLIST_AUDIO_LOCKED_REASON : OFF_TITLE}
+                aria-label={`Silence ${plate.plateId}`}
+              >
+                OFF
+              </Button>
+              <Button
+                variant="caution"
+                disabled={locked || plateIds.length < 2}
+                onClick={() => {
+                  commit(soloMap(plateIds, plate.plateId));
+                }}
+                /*
+                  🔴 `PLATES-AUDIO-11` §4(b) — THE SHARED SENTENCE, not this dialog's own shorter
+                  spelling of it. That copy said "There is no un-solo." and stopped; the strip's
+                  said what to do about it. Two spellings of one promise is how a surface comes
+                  to promise less than its twin — `plateAudio.ts` now owns both.
+                */
+                title={
+                  locked
+                    ? PLAYLIST_AUDIO_LOCKED_REASON
+                    : plateIds.length < 2
+                      ? SOLO_ALONE_TITLE
+                      : SOLO_TITLE
+                }
+                aria-label={`Solo ${plate.plateId} — silences the other ${String(plateIds.length - 1)} plate(s) on this row, with no restore`}
+              >
+                SOLO
+              </Button>
+            </span>
+          </div>
+        );
+      })}
+    </Modal>
+  );
+}

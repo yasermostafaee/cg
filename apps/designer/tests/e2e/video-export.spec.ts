@@ -22,6 +22,8 @@ test('a placed video rides BOTH exports: base64-inline in the single-file HTML, 
   page,
 }) => {
   await app.newProject('VideoExport');
+  // D-151 — the add-time duration guard fires when content outsizes the host; size the host to FIT this spec’s clip so its own subject stays under test.
+  await app.setSceneDuration(250);
 
   // ---- import + place through the real modal (the proven fast path) ----
   await page.getByRole('button', { name: 'Project assets' }).click();

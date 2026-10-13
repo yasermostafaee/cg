@@ -48,6 +48,11 @@ const SITES: readonly { file: string; mode: 'author' | 'output'; why: string }[]
     mode: 'output',
     why: 'a fixture package is a real on-air artifact',
   },
+  {
+    file: 'tools/skew-harness/src/template.ts',
+    mode: 'output',
+    why: 'B-174 measurement page — it must paint exactly what air paints, or k is a different quantity',
+  },
 ];
 
 const read = (rel: string): string => fs.readFileSync(path.join(repoRoot, rel), 'utf8');

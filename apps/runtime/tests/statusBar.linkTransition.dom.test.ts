@@ -4,8 +4,27 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ConnectionHealth, LockState } from '@cg/shared-ipc';
-import type { BridgeLinkStatus } from '../src/shared/runtime-bridge.js';
+import type { AuthSessionState, BridgeLinkStatus } from '../src/shared/runtime-bridge.js';
 import { StatusBar } from '../src/renderer/features/status/StatusBar.js';
+import { colors, cssVars } from '../src/renderer/theme.js';
+
+/**
+ * A theme token as the DOM will report it back — `#E5E7EB` comes out of an inline
+ * `style.color` as `rgb(229, 231, 235)`, so the token has to go through the same
+ * normalisation before it can be compared.
+ *
+ * ⚠ THE COMPARISONS BELOW USED TO SPELL THOSE `rgb(…)` TRIPLES BY HAND, and
+ * `RUNTIME-REDESIGN-01` Phase 2 is what showed the cost: the palette moved, both
+ * literals went stale, and three assertions failed while every property they exist
+ * to protect was intact. The property is "the confident treatment, positively
+ * matched" (see the note above `confidentIn`) — not a particular hex — and reading
+ * the token keeps the match positive without pinning the artefact (`PROMPT.md` §11).
+ */
+function asRendered(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = token;
+  return probe.style.color;
+}
 
 /**
  * B-080 — the StatusBar must leave "Loading…" when the bridge comes up, WITHOUT a refresh.
@@ -36,6 +55,17 @@ interface Bridge {
   link: {
     status: () => BridgeLinkStatus;
     onStatusChanged: (h: (next: BridgeLinkStatus) => void) => () => void;
+    resyncing: () => boolean;
+    onResyncingChanged: (h: (v: boolean) => void) => () => void;
+  };
+  /*
+    `R-066` — the bar now reads the sign-in state too. Declared on this file's OWN `Bridge`
+    shape, which is what caught the omission: the stub literal is typed, so a member the
+    status bar needs cannot be forgotten silently here the way it can in the untyped stubs.
+  */
+  auth: {
+    state: () => AuthSessionState;
+    onStateChanged: (h: (next: AuthSessionState) => void) => () => void;
   };
 }
 
@@ -100,6 +130,21 @@ function stubBridge(initial: BridgeLinkStatus): Harness {
       },
       failover: () => Promise.resolve({ ok: false, newPrimary: 'A' as const }),
     },
+    /*
+      `R-066` — the status bar now carries the sign-in state, so a stub that claims to be a
+      bridge has to answer for it. `off` is what this stub means: these specs are about the
+      LINK and the servers, and a console that does not authenticate is the state in which
+      every assertion below was written.
+
+      ⚠ Added rather than defended against in `useAuthSession`. A hook that read an absent
+      `auth` member as "off" would also read a PRODUCTION bridge missing it as "off" — and
+      `B-153`'s doctrine is that a bridge which cannot answer is the LOUDEST match, never a
+      quiet default.
+    */
+    auth: {
+      state: () => ({ kind: 'off' as const }),
+      onStateChanged: () => () => undefined,
+    },
     lock: {
       state: () => (status === 'disconnected' ? refused() : Promise.resolve({ engaged: false })),
       onStateChanged: () => () => undefined,
@@ -110,6 +155,8 @@ function stubBridge(initial: BridgeLinkStatus): Harness {
         linkSubs.add(h);
         return () => linkSubs.delete(h);
       },
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
     },
   };
   (window as unknown as { cg: Bridge }).cg = bridge;
@@ -182,7 +229,7 @@ function primaryPill(el: HTMLElement): string {
  * unchanged and is what these assertions protect.
  *
  * WHAT CHANGED IS THE MECHANISM, NOT THE ASSERTION. Confident health used to be
- * the emerald `#10B981`. The status bar may no longer borrow the on-air green or
+ * the `--r-success` emerald. The status bar may no longer borrow the on-air green or
  * the ready sky at any weight — a glance at green in the footer reads as
  * "something is on air", and those two hues already mean something on the layer
  * table (owner's call; see `StatusBar`'s style block). Health is now the primary
@@ -191,7 +238,7 @@ function primaryPill(el: HTMLElement): string {
  * than a weaker "not muted" check: the original would have gone green-blind, and
  * so would a loosened rewrite.
  */
-const OK_INK = 'rgb(229, 231, 235)';
+const OK_INK = asRendered(colors.text);
 
 function confidentIn(scope: HTMLElement | undefined): string[] {
   if (scope === undefined) return [];
@@ -306,7 +353,7 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
  * Asserted on the DOT specifically rather than on the pill's text, because the
  * text was right the whole time.
  */
-const LED_GREEN = 'rgb(16, 185, 129)';
+const LED_GREEN = asRendered(cssVars['--r-success']);
 
 const PRIMARY_OFFLINE: ConnectionHealth = {
   ...HEALTHY,
@@ -369,8 +416,19 @@ describe('the BACKUP LED agrees with its own label too', () => {
     backup: { label: 'B', state: 'disconnected', amcpAxisOk: false, oscFreshAt: HEARD_AT },
   };
 
-  /** `colors.error` — `styles.failedHard`, the tone a down server wears. */
-  const FAULT_RED = 'rgb(153, 27, 27)';
+  /**
+   * PHASE 2A — the down-server fault is TWO reds now, and the pill paints both.
+   *
+   * The ●/○ LED is a GRAPHIC and keeps the owner's `rgb(255 28 28)` (`errorMark`,
+   * judged at the 3.0 floor); the word `OFFLINE` is TEXT and takes `errorText`, which
+   * clears 4.5 on this bar where the mark red does not. They are two weights of one
+   * fault, not two claims — the assertion below checks BOTH halves for that reason,
+   * because a split whose word half is unasserted is a split that can silently
+   * collapse back onto the mark. The background red (`colors.alarmFill`, 2.08:1 as text)
+   * is for the banners and appears in neither.
+   */
+  const FAULT_MARK = asRendered(colors.errorMark);
+  const FAULT_WORD = asRendered(colors.errorText);
 
   function hollowDot(scope: HTMLElement | undefined): HTMLElement | undefined {
     return [...(scope?.querySelectorAll<HTMLElement>('span') ?? [])].find(
@@ -387,9 +445,17 @@ describe('the BACKUP LED agrees with its own label too', () => {
     const scope = pill(el, 'BACKUP');
     expect(scope?.textContent ?? '').toContain('OFFLINE');
     expect(greenDots(scope), 'a green LED beside an OFFLINE backup').toBe(0);
-    expect(hollowDot(scope)?.style.color, 'the backup LED must read as the fault').toBe(FAULT_RED);
+    expect(hollowDot(scope)?.style.color, 'the backup LED must read as the fault').toBe(FAULT_MARK);
     // The shape is still the backup's, so the pair stays tellable apart.
     expect(hollowDot(scope)).toBeDefined();
+    // PHASE 2A — and the WORD beside it carries the fault in the legible weight.
+    // Asserted positively: without this, the split could collapse back to one red
+    // and only the half that is checked would notice.
+    const word = [...(scope?.querySelectorAll<HTMLElement>('span') ?? [])].find(
+      (x) => x.textContent?.trim() === 'OFFLINE',
+    );
+    expect(word?.style.color, 'the OFFLINE word takes the legible error ink').toBe(FAULT_WORD);
+    expect(FAULT_WORD, 'the mark and the word must be two values').not.toBe(FAULT_MARK);
   });
 
   it('a HEALTHY backup lights green, and keeps its hollow shape', async () => {

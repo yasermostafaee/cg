@@ -6,6 +6,7 @@ import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
+import { guardedAddCompositionInstance } from '../addGuard/duration-guard.js';
 import * as s from './CompositionsPanel.css.js';
 
 /** MIME-ish key used when dragging a composition onto the canvas. */
@@ -151,7 +152,10 @@ export function CompositionsPanel(): JSX.Element {
               const mid = menu.id;
               setMenu(null);
               if (canNest(mid)) {
-                designerStore.addCompositionInstance(mid);
+                // D-151 — through the add-time duration guard (door C1): a longer child raises
+                // the TWO-choice dialog before anything is inserted; the cycle guard still runs
+                // inside the store action at commit time.
+                guardedAddCompositionInstance(mid);
               } else {
                 const name = comps.find((c) => c.id === mid)?.name ?? 'This composition';
                 designerStore.showNotice(

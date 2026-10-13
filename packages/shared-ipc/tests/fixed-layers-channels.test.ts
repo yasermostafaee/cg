@@ -8,6 +8,7 @@ import {
   FixedSlotStateSchema,
   ReservedLayersSchema,
   defaultFixedLayerBank,
+  fixedBankEnd,
   isLayerVisible,
   reservedLayerNumbers,
 } from '../src/index.js';
@@ -85,55 +86,62 @@ describe('FixedSlotState (S1)', () => {
 
 describe('R-028 — visibility ticks + the canonical isLayerVisible predicate', () => {
   it('absent record and absent key both mean VISIBLE; only an explicit false hides', () => {
-    const bare = FixedLayerBankSchema.parse({ channel: 1, start: 70, count: 4 });
-    expect(isLayerVisible(bare, 70)).toBe(true);
+    const bare = FixedLayerBankSchema.parse({
+      channel: 1,
+      low: { start: 50, count: 10 },
+      start: 80,
+      count: 4,
+    });
+    expect(isLayerVisible(bare, 80)).toBe(true);
     const ticked = FixedLayerBankSchema.parse({
       channel: 1,
-      start: 70,
+      low: { start: 50, count: 10 },
+      start: 80,
       count: 4,
-      visibility: { '71': false, '72': true },
+      visibility: { '81': false, '82': true },
     });
-    expect(isLayerVisible(ticked, 70)).toBe(true); // absent key
-    expect(isLayerVisible(ticked, 71)).toBe(false); // explicit false
-    expect(isLayerVisible(ticked, 72)).toBe(true); // explicit true
+    expect(isLayerVisible(ticked, 80)).toBe(true); // absent key
+    expect(isLayerVisible(ticked, 81)).toBe(false); // explicit false
+    expect(isLayerVisible(ticked, 82)).toBe(true); // explicit true
   });
 
   it('visibility keys must be numeric strings', () => {
     expect(
       FixedLayerBankSchema.safeParse({
         channel: 1,
-        start: 70,
+        low: { start: 50, count: 10 },
+        start: 80,
         count: 4,
-        visibility: { 'layer-71': false },
+        visibility: { 'layer-81': false },
       }).success,
     ).toBe(false);
   });
 });
 
 describe('the built-in default bank — what a station with no config comes up with', () => {
-  it('is channel 1, layers 70–99, thirty rows, with the top five ticked', () => {
+  it('is channel 1, the whole 80-99 template band, with the top five ticked', () => {
     const bank = defaultFixedLayerBank();
 
     expect(bank.channel).toBe(1);
-    expect(bank.start).toBe(70);
-    expect(bank.count).toBe(30);
-    expect(bank.start + bank.count - 1).toBe(99);
+    expect(bank.start).toBe(80);
+    expect(bank.count).toBe(20);
+    expect(fixedBankEnd(bank)).toBe(99);
 
     // The five DISPLAYED rows are the bank's highest layers, counting down.
     const visible = [];
-    for (let layer = bank.start; layer <= bank.start + bank.count - 1; layer++) {
+    for (let layer = bank.start; layer <= fixedBankEnd(bank); layer++) {
       if (isLayerVisible(bank, layer)) visible.push(layer);
     }
     expect(visible).toEqual([95, 96, 97, 98, 99]);
   });
 
-  it('declares every row explicitly — the other twenty-five are present, not absent', () => {
+  it('declares every row explicitly — the other fifteen are present, not absent', () => {
     const bank = defaultFixedLayerBank();
     const keys = Object.keys(bank.visibility ?? {});
-    expect(keys).toHaveLength(30);
-    // Declared-but-hidden is not the same as not declared: all thirty stay
+    expect(keys).toHaveLength(20);
+    // Declared-but-hidden is not the same as not declared: all twenty stay
     // fenced from automatic allocation, and the operator can tick one live.
-    expect(bank.visibility?.['70']).toBe(false);
+    expect(bank.visibility?.['80']).toBe(false);
     expect(bank.visibility?.['94']).toBe(false);
     expect(bank.visibility?.['95']).toBe(true);
   });
@@ -143,7 +151,7 @@ describe('the built-in default bank — what a station with no config comes up w
     first.count = 4;
     (first.visibility ?? {})['99'] = false;
     const second = defaultFixedLayerBank();
-    expect(second.count).toBe(30);
+    expect(second.count).toBe(20);
     expect(isLayerVisible(second, 99)).toBe(true);
   });
 
@@ -155,6 +163,19 @@ describe('the built-in default bank — what a station with no config comes up w
     const partial = FixedLayerBankSchema.parse({ channel: 1 });
     expect(partial.start).toBe(DEFAULT_FIXED_BANK_START);
     expect(partial.count).toBe(DEFAULT_FIXED_BANK_COUNT);
+    /*
+      🔴 `B-202` — AND THE BED HALF, WHICH THIS TEST'S OWN NAME ALREADY PROMISED.
+      It checked `start`/`count` on the operator half only, so when `low` arrived with a
+      `.default()` that omitted `visibility`, the two answers to "the default bank" diverged
+      underneath the one test named for keeping them equal: nine visible bed rows from the
+      schema, two from `defaultFixedLayerBank()`. Agreement is asserted on what an operator
+      SEES, not on the record's shape — an absent tick and an explicit `true` are the same
+      picture, and it is the picture the divergence was in.
+    */
+    const built = defaultFixedLayerBank();
+    for (let layer = 1; layer <= 9; layer++) {
+      expect(isLayerVisible(partial, layer)).toBe(isLayerVisible(built, layer));
+    }
   });
 });
 

@@ -103,7 +103,7 @@ function contentLessScene(playout: Playout, outPoint: number | null = 25): Scene
     activeRange: { in: 0, out: 50 },
     ...(outPoint !== null ? { lifecycle: { outPoint } } : {}),
     playout,
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'l',

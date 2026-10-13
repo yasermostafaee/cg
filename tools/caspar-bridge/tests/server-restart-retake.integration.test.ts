@@ -5,8 +5,10 @@ import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { TAKE_ON_AIR_CODE, type ConnectionConfig, type TemplateInfo } from '@cg/shared-ipc';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { SAME_NUMBERS_ON_B } from './support/backup-map.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * B-054 — `#loaded` (producer-existence bookkeeping) must not survive an AMCP
@@ -101,17 +103,19 @@ async function recvLines(m: MockHandle, file: string): Promise<string[]> {
   // sleep under CI contention read TRUNCATED traces, which both misses lines
   // and misaligns the offset-based slicing below.
   await m.traceFlush();
-  return fs
-    .readFileSync(file, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(file);
 }
 
 async function bootRuntime(config: ConnectionConfig): Promise<CasparRuntime> {
-  const r = new CasparRuntime(config);
+  const r = new CasparRuntime(
+    config,
+    {},
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      // `B-316` — the mocks share numbers by construction; said, never defaulted.
+      backupChannels: SAME_NUMBERS_ON_B,
+    },
+  );
   runtime = r;
   r.start();
   await r.startServing();
@@ -180,7 +184,7 @@ it('B-054 repro: a take after a CasparCG restart re-ADDs and renders — never a
   expect(lines.some((l) => l.startsWith('CLEAR'))).toBe(false);
 }, 20_000);
 
-it('transient blip: the reconnect itself sends nothing beyond the handshake, air is undisturbed, and the next take re-ADDs onto the live layer', async () => {
+it('transient blip: the reconnect itself sends nothing beyond the handshake, air is undisturbed, and the next take re-ADDs onto the layer', async () => {
   const trace = newTracePath('blip');
   const oscPort = await freeUdpPort();
   mock = await createMock({
@@ -205,15 +209,33 @@ it('transient blip: the reconnect itself sends nothing beyond the handshake, air
 
   // The invalidation is bookkeeping-only: between reconnect and the next
   // operator action the bridge sent nothing but the session handshake, and
-  // what was on air is still on air.
+  // what was on air is still on air. `CENTRAL-BRIDGE-01` — the handshake ends with the
+  // `OSC SUBSCRIBE` of the session's own port, re-sent because the subscription died with the
+  // connection; it touches no layer.
   const sinceBlip = (await recvLines(mock, trace)).slice(preBlipCount);
-  expect(sinceBlip.every((l) => l.startsWith('VERSION') || l.startsWith('INFO'))).toBe(true);
+  expect(
+    sinceBlip.every(
+      (l) =>
+        l.startsWith('VERSION') || l.startsWith('INFO') || l === `OSC SUBSCRIBE ${String(oscPort)}`,
+    ),
+  ).toBe(true);
+  expect(sinceBlip).toContain(`OSC SUBSCRIBE ${String(oscPort)}`);
   expect(mock.layerState(SLOT)?.producer).toBe('html');
   expect(mock.layerState(SLOT)?.onAir).toBe(true);
 
-  // The next take conservatively re-ADDs (stage-replacing the item's OWN
-  // producer — the designed harmless extra ADD), then plays. No CLEAR:
-  // adoption memory survives the blip too.
+  // `FIELD-FIXES-01-A` Decision 2 — the row is still ON AIR, so a take of it is refused with
+  // nothing sent: this test used to re-take the live row here, which the console never offered.
+  const beforeRefused = (await recvLines(mock, trace)).length;
+  expect(await r.take('item1')).toMatchObject({
+    accepted: false,
+    errorCode: TAKE_ON_AIR_CODE,
+  });
+  expect((await recvLines(mock, trace)).slice(beforeRefused)).toEqual([]);
+  // The operator's STOP leaves the producer RESIDENT (C-012); the next take then conservatively
+  // re-ADDs (stage-replacing the item's OWN producer — the designed harmless extra ADD, and the
+  // blip's invalidation this test exists for), then plays. No CLEAR: adoption memory survives
+  // the blip too.
+  expect((await r.stopItem('item1')).accepted).toBe(true);
   expect((await r.take('item1')).accepted).toBe(true);
   const afterTake = (await recvLines(mock, trace)).slice(preBlipCount);
   const add = afterTake.findIndex((l) => l.startsWith('CG 1-10 ADD'));
@@ -255,6 +277,12 @@ it('wholesale rule: a BACKUP-only restart heals through the next take — the pa
   // through the fan-out — recreating the backup's lost producer, benignly
   // stage-replacing the primary's — instead of a bare PLAY that would leave
   // the backup empty until a failover exposed it.
+  //
+  // `FIELD-FIXES-01-A` Decision 2 — that next take follows the row leaving air: a take of a row
+  // the primary still has ON AIR is refused, as the console's PLAY always was. STOP (which keeps
+  // the producer resident) and then the take is the heal, and it re-ADDs through the fan-out.
+  expect(await r.take('item1')).toMatchObject({ accepted: false, errorCode: TAKE_ON_AIR_CODE });
+  expect((await r.stopItem('item1')).accepted).toBe(true);
   expect((await r.take('item1')).accepted).toBe(true);
   expect(mockB.layerState(SLOT)?.producer).toBe('html');
   expect(mockB.layerState(SLOT)?.onAir).toBe(true);

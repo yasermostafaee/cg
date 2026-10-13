@@ -1,10 +1,19 @@
 import '@cg/ui/theme.css';
+// P-001 — the UI's Persian face, self-hosted (the same faces template delivery inlines via
+// `fonts.css?inline`). No font request leaves the machine; a LAN-only station renders Vazirmatn.
+import './fonts.css';
+// `B-263` — the chrome's Persian face; chrome-only, so never inlined into an export.
+import './chromeFonts.css';
 import './ui/controls.css';
 import { StrictMode, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { createRuntimeBridge } from '../platform/createRuntimeBridge.js';
-import { reportCommandError } from './features/status/commandFeedback.js';
+import { saveStationAddress } from '../platform/stationAddress.js';
+import { stationBridgeAnswers } from '../platform/checkAt.js';
+import { PlayoutAddressGate } from './features/firstRun/PlayoutAddressGate.js';
+import { startKeyboardLanguage } from './keyboardLanguage.js';
+import { applyThemeVars } from './theme.js';
 
 /**
  * Browser entry point. The Electron preload used to inject `window.cg`
@@ -34,6 +43,14 @@ import { reportCommandError } from './features/status/commandFeedback.js';
  * while the hold keeps the door shut until 5 s, so a READY label would be on screen for
  * most of the splash at exactly the moment the operator still cannot use the app.
  */
+/*
+ * STATION-CHROME-01 §1 — the `--r-*` tokens, written from their ONE home
+ * (`theme.ts` `cssVars`) into the document before anything of the app renders.
+ * `controls.css` declares none of them itself, so this is not optional chrome:
+ * it is where the stylesheet's values come from. See `applyThemeVars`.
+ */
+applyThemeVars(document.documentElement);
+
 const rootEl = document.getElementById('root');
 if (!rootEl) {
   throw new Error('Missing #root element in index.html');
@@ -64,10 +81,29 @@ function BootComplete({ children }: { children: ReactNode }): JSX.Element {
 }
 
 async function boot(): Promise<void> {
-  window.__CG_SPLASH__?.phase('PROBING BRIDGE');
-  // Reconnect-reconciliation — a failed template re-delivery during the
-  // post-reconnect resync surfaces on the operator's command-error toast.
-  window.cg = await createRuntimeBridge({ onResyncError: reportCommandError });
+  // `CENTRAL-BRIDGE-01` — the console connects to CG Bridge; it starts none.
+  window.__CG_SPLASH__?.phase('CONNECTING');
+  const bridge = await createRuntimeBridge();
+  if (bridge === null) {
+    /*
+      `CENTRAL-BRIDGE-01` (D8) — CG Control with no Playout address yet: there is no CG Bridge to
+      connect to, so the one question is asked, and nothing else renders until it is answered.
+      The station record's writer is handed in HERE, the composition root: the gate itself imports
+      nothing of the platform (golden rule 1).
+    */
+    root.render(
+      <StrictMode>
+        <BootComplete>
+          <PlayoutAddressGate save={saveStationAddress} answers={stationBridgeAnswers} />
+        </BootComplete>
+      </StrictMode>,
+    );
+    return;
+  }
+  window.cg = bridge;
+  // TEXT-DIGITS-01 — the one keyboard-language detector, with the shell's report when there is one.
+  const keyboard = window.cg.keyboard;
+  startKeyboardLanguage(document, keyboard.reportsLanguage() ? () => keyboard.language() : null);
   window.__CG_SPLASH__?.phase('STARTING INTERFACE');
   root.render(
     <StrictMode>

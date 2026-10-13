@@ -2,6 +2,12 @@ import { z } from 'zod';
 import { IdSchema, ISODateSchema } from '../primitives.js';
 import { FieldValuesSchema } from '../fields.js';
 import { PositionSchema } from '../scene.js';
+import {
+  LivePlateVolumesSchema,
+  LiveSourceFrozenAssignmentSchema,
+  LiveSourceLookOverrideSchema,
+  LiveSourceOverrideSchema,
+} from '../live-source.js';
 
 /** A CasparCG (channel, layer) coordinate plus which server it lives on. */
 export const LayerSlotSchema = z.object({
@@ -34,6 +40,73 @@ export const StackItemStatusSchema = z.enum([
 ]);
 export type StackItemStatus = z.infer<typeof StackItemStatusSchema>;
 
+/**
+ * 🔴 `TIMING-BUILD-21` — the OPERATOR's per-row timing override. Both keys are absent when the
+ * row is inheriting, which is a THIRD STATE and not a missing value: absent means "whatever the
+ * template authored", and the console shows it as `Default (∞)` / `Default (2 s)` rather than as
+ * a bare number, so the operator can tell an inherited value from one they set.
+ *
+ * 🔴 **`repeat` HERE IS A DIFFERENT QUANTITY FROM `PlayoutObjectSchema.repeat`, and the floor is
+ * where that shows.** The authored one is a TOTAL and floors at 1 — a designer asking for zero
+ * passes is asking for a graphic that never shows. This one, while the row is ON AIR, is PASSES
+ * REMAINING FROM NOW, and `0` is a legal instruction meaning "let the pass on screen finish,
+ * then go out". Flooring it at 1 would silently rewrite that instruction into "one more pass" —
+ * a clamp the operator cannot see, which is the class this tree has already found twice. Off air
+ * the same field is the count for the next take.
+ */
+export const StackItemTimingOverrideSchema = z.object({
+  /** Passes: a count (`0` legal — see above) or forever. Absent ⇒ inheriting the template's. */
+  repeat: z.union([z.number().int().min(0), z.literal('infinite')]).optional(),
+  /** The gap BETWEEN passes, ms. `0` is legal and means no gap. Absent ⇒ inheriting. */
+  delayMs: z.number().min(0).optional(),
+});
+export type StackItemTimingOverride = z.infer<typeof StackItemTimingOverrideSchema>;
+
+/**
+ * 🔴 `FIELD-FIXES-01` B — **WHY THIS ROW'S LAST TAKE WAS REFUSED, IN THE TERMS ITS ONE LINE NEEDS.**
+ *
+ * The row that failed carries its own reason, so every console shows the same line on that row and
+ * in its Inspector — and no console needs a banner to say it. It stands until the row is next
+ * taken successfully, or cleared, or removed.
+ *
+ * 🔴 `LOOK-SWITCH-01` / `B-273` — **AND A LOOK SWITCH REFUSED FOR A PLATE WRITES THE SAME RECORD.**
+ * The owner's decision (2026-09-27): a switch whose new look needs a plate CasparCG refuses leaves
+ * the old look untouched and the row says which source failed, in `FIELD-FIXES-01`'s line. One
+ * record, one line, one withdrawal rule — plus: a switch that LANDS withdraws it. The name stays
+ * `takeRefusal` because it is a published field; what it carries is the row's last refused
+ * air action, and its line names the source, never the verb.
+ *
+ * Facts only; the WORDS are the console's (golden rule 11): the row's name is composed there, and
+ * the sentence for the server's refusal comes from the one mapping that reads {@link code} and
+ * {@link command} (`amcpRefusal.ts`). The raw reply stays in the bridge's AMCP log.
+ */
+export const TakeRefusalSchema = z.object({
+  /** The refusal's code: `amcp-403` for a server refusal, or the bridge's own code. */
+  code: z.string().min(1),
+  /** The refused AMCP command, payload elided (`summarizeWireLine`) — what the mapping reads. */
+  command: z.string().max(256).optional(),
+  /**
+   * The PLATE the take stopped on, when a plate was refused. ABSENT when the refusal was the
+   * graphic's own command. Only the plate that was refused is ever named here: plates the take
+   * never reached were not tried, and are never said to have failed.
+   */
+  plateId: z.string().min(1).optional(),
+  /** The catalog entry that plate resolved to at the take — its stable id and its NAME. */
+  sourceId: z.string().min(1).optional(),
+  sourceName: z.string().min(1).optional(),
+  /**
+   * `PLAYOUT-SOURCES-01` — where that entry came from (`input`: the Playout's D10 list; `media`: its
+   * D11 library), so a `source-unavailable` line can say which list it left.
+   */
+  sourceOrigin: z.enum(['input', 'media']).optional(),
+  /**
+   * `PLAYOUT-FEATURES-01` D — a refusal whose words are the PLAYOUT's own (`cg-unlicensed`: its license
+   * message, Persian, one line). Shown as it is; every other refusal's words stay the console's.
+   */
+  message: z.string().min(1).max(300).optional(),
+});
+export type TakeRefusal = z.infer<typeof TakeRefusalSchema>;
+
 /** Reconciled view of one item on the operator's stack. */
 export const StackItemStateSchema = z.object({
   itemId: IdSchema,
@@ -52,8 +125,369 @@ export const StackItemStateSchema = z.object({
    * template's manifest default, exactly as before the field existed.
    */
   position: PositionSchema.optional(),
+  /**
+   * R-048 / C-015 phase 6 (6.9) — the operator’s PER-ITEM live-source override,
+   * published for the same reason `position` is: the row has to be able to show
+   * that this plate is not on its configured source. See
+   * {@link LiveSourceOverrideSchema} for the three-level layering and for why it
+   * never writes back. ABSENT means every plate is on its template assignment.
+   */
+  sourceOverride: LiveSourceOverrideSchema.optional(),
+  /**
+   * Session BM — the ROW's PER-LOOK input composition, on the OPEN axis beside
+   * {@link sourceOverride} and for the identical reason.
+   *
+   * 🔴 SEPARATE FROM IT, NOT A REPLACEMENT. The emergency patch applies to EVERY look (a
+   * dead input is dead in all of them) and outranks this map; this one is the deliberate
+   * composition the operator builds before air. Losing it across a blip would silently put
+   * every look back on the template assignment while the console still showed the row as
+   * normal — the B-107 / B-109 class, which is why it is retained rather than assumed.
+   */
+  lookSourceOverride: LiveSourceLookOverrideSchema.optional(),
+  /**
+   * 🔴 **Session BP — THE TEMPLATE ASSIGNMENT THIS ROW FROZE AT TAKE (level 2, held
+   * still).** See {@link LiveSourceFrozenAssignmentSchema} for the rule and the three
+   * exemptions.
+   *
+   * Published for a reason the other two do not have: without it the Inspector's LIVE
+   * PLATES section would go on showing the LIVE template default for a row that is on air
+   * resolving a different one — a surface that is confidently wrong, which is the worst
+   * class of defect this product has. The section names the frozen value on any plate where
+   * the two disagree, and it can only do that if it can read it.
+   *
+   * ABSENT means NOT FROZEN (off air, or taken by a build predating the field). An EMPTY
+   * record is a real freeze to nothing — see the schema's ABSENT-vs-EMPTY note.
+   */
+  frozenAssignment: LiveSourceFrozenAssignmentSchema.optional(),
+  /**
+   * C-015 phase 6 (6.5f) — how loud each plate is INTENDED to be on this row,
+   * published so the console can show it and so the browser's retention can carry
+   * it (`StackRetentionStore`).
+   *
+   * Published for a sharper reason than `position` is: audio is the one property
+   * of a graphic an operator CANNOT see. A row whose plate is live-and-audible
+   * looks identical to one whose plate is silent, so if the console cannot read
+   * this back it cannot tell them apart — and neither can the operator.
+   *
+   * ABSENT means no plate has been raised, which is every row's starting state:
+   * every producer the bridge creates is created muted. See
+   * {@link LivePlateVolumesSchema} for why an explicit `0` is NOT the same as a
+   * missing key.
+   */
+  plateVolumes: LivePlateVolumesSchema.optional(),
+  /**
+   * `multibox-layout-switch` §14 (LOOKS) Stage E — **which LOOK this row is showing**,
+   * published for the same reason `position` and `sourceOverride` are: the operator
+   * surface has to be able to SAY what is on air, not guess it.
+   *
+   * 🔴 **It is the RESOLVED look, not the raw operator choice.** The bridge answers it
+   * through the one resolver every other consumer uses (`activeLookId()` →
+   * `#activeLookOf`: the operator’s pick, else the authored default, else the first
+   * look), so the picker on the row and the look the bridge would actually enter cannot
+   * disagree. A row that has never been switched still publishes its authored default —
+   * which is exactly what a fresh take enters, so the picker is right before anyone has
+   * touched it.
+   *
+   * ABSENT means the template authors no looks at all. That is the positive statement
+   * "there is nothing to pick", and it is what keeps the picker off a row that has no
+   * looks rather than requiring the renderer to re-derive the same question.
+   */
+  activeLookId: z.string().min(1).optional(),
+  /**
+   * 🔴 **`B-228` — THIS ROW IS EXEMPT FROM THE REMOVE-ON-AIR REFUSAL, AS A PUBLISHED FACT.**
+   *
+   * `R-017` made {@link isOnAirStatus} the one predicate both sides of the seam read, and that
+   * was only half the answer. The bridge's `#removeRefusal` is the predicate **plus two
+   * exemptions**, and a surface that reads the predicate alone gets a DIFFERENT answer:
+   *
+   * - a **restore-blocked** row — its layer is held by a producer provably not ours, so the
+   *   air claim is one the bridge already knows to be false and REMOVE destroys nothing of
+   *   ours (`R-021` stage 4 d1);
+   * - an item on **no declared operator row** — no row means no STOP and no CLEAR to press, so
+   *   refusing leaves `B-212`'s incident with no remedy at all.
+   *
+   * The ROW's REMOVE carried the first (off `binding.restoreBlocked`) and REMOVE ALL carried
+   * neither, so the bulk button sat disabled for a press the bridge would have accepted —
+   * `B-228`, and the exact UI↔wire disagreement `#removeRefusal`'s own header forbids.
+   *
+   * ⭐ **PUBLISHED RATHER THAN RE-DERIVED, and that is the whole point of the fix.** Handing
+   * the renderer the two INPUTS and letting it recompute the rule would rebuild, one level up,
+   * the mirrored-copies problem `R-017` had just spent a commit deleting — and the second
+   * exemption is not even derivable there: `#declaredLayerClass` is bridge knowledge. So the
+   * bridge answers its own question once and says so, and every surface READS it.
+   *
+   * ⚠ **ABSENT MEANS NOT EXEMPT**, which is the fail-safe direction: a publisher that forgets
+   * this field leaves REMOVE refused on a live row rather than enabling it. Never invert that.
+   *
+   * ⚠ **DELIBERATELY NOT IN {@link RetainedStackItemSchema}.** Retention is an explicit
+   * whitelist, and this is a fact about what the BRIDGE can do right now — a retained copy
+   * would come back describing a plant the browser has not spoken to since. That is the
+   * `B-107`/`B-109` class arriving from the other side, and the schema boundary is what stops
+   * it: leave this field out of retention.
+   */
+  removeExempt: z.boolean().optional(),
+  /**
+   * 🔴 `TIMING-BUILD-21` — the row's LIVE timing override, the published half of the pair whose
+   * retained half is {@link RetainedStackItemSchema.timingOverride}.
+   *
+   * It is on BOTH schemas deliberately, and they are not redundant: this one is what the
+   * console reads to render the row's current passes/delay, and the retained one is what
+   * survives a restart. A field on only one of the two is the failure this feature exists to
+   * avoid — present on the wire and gone after a blip, or retained and invisible.
+   *
+   * ⚠ ABSENT MEANS INHERITING the template's authored values, not "zero" and not "one".
+   */
+  timingOverride: StackItemTimingOverrideSchema.optional(),
+  /**
+   * `FIELD-FIXES-01` B — why this row's last take was refused (see {@link TakeRefusalSchema}).
+   * ABSENT on every row whose last take landed, or that has been cleared since.
+   *
+   * ⚠ DELIBERATELY NOT IN {@link RetainedStackItemSchema}, for `removeExempt`'s reason: it is a
+   * statement about the plant as the bridge last heard it.
+   */
+  takeRefusal: TakeRefusalSchema.optional(),
+  /**
+   * 🔴 `ROUTE-PLATES-01` / contract v1.3 C4 — **THE BACKUP CARRIES THIS ROW WITHOUT ITS LIVE BOXES.**
+   * A Playout route plate is never mirrored to the backup server, so while a backup is declared and
+   * this row's seats include one, the backup shows the graphic with those boxes empty. The row and
+   * its Inspector say so in one line, in the channel's own view: `Backup: live boxes not mirrored.`
+   *
+   * ABSENT means nothing of this row is withheld from the backup. ⚠ NOT in
+   * {@link RetainedStackItemSchema}, for `removeExempt`'s reason: it describes the plant now.
+   */
+  backupUnmirrored: z.boolean().optional(),
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **THE CLIPS SERVER B WAS SENT NOTHING FOR**, one per plate: the
+   * backup's own Playout lists no copy of the clip (found by fingerprint), gave none, is older than `2.9.1`,
+   * or has not been read. The primary airs them; the row says, per plate, `Backup has no copy of <name>;
+   * this box stays empty on the backup`. `name` is the clip's name in the operator's words.
+   *
+   * ABSENT means the backup got every clip of this row. ⚠ NOT retained, for `backupUnmirrored`'s reason.
+   */
+  backupNoCopy: z
+    .array(
+      z.object({
+        plateId: z.string().min(1),
+        name: z.string().min(1),
+        reason: z.enum(['no-fingerprint', 'no-copy', 'backup-old', 'backup-unread']),
+      }),
+    )
+    .optional(),
 });
 export type StackItemState = z.infer<typeof StackItemStateSchema>;
+
+/**
+ * B-107 / B-109 — the STATE a retained row was actually in, and the one question
+ * it exists to answer: **may a restore re-seat a producer onto this row's layer?**
+ *
+ * Retention used to carry a single `played: boolean`, which collapsed `idle`,
+ * `loaded`, `error` and `disconnected` into one value. That is the shared root of
+ * three bugs: an errored row came back READY (B-107, the DISPLAY face), and a
+ * graphic the operator deliberately CLEARed was re-ADDed onto its layer by a
+ * `CG ADD` nobody asked for (B-109, the WIRE face), because a cleared row and a
+ * pre-rolled row retained as the identical record.
+ *
+ * ⭐ **ONE field, not two — the state IS the reason it left air.** The tempting
+ * design is a state plus a separate "why". That second field would be a SECOND
+ * DERIVATION of the same fact, which is exactly what golden rule 6 forbids. The
+ * distinction is already carried here, because the values are named for it: a
+ * deliberate CLEAR is the only operator action that takes an acknowledged row to
+ * `cleared`, while a bridge dying UNDER a live row leaves it at `on-air` — as far
+ * as anyone knows it never left air at all.
+ *
+ * Play evidence is DERIVED from this ({@link isRetainedOnAir}) and never stored
+ * beside it, so the two can never disagree.
+ */
+export const RetainedAirStateSchema = z.enum([
+  /**
+   * On air when last observed — or possibly so. RESTORABLE: the occupancy check
+   * decides adopt-vs-re-ADD.
+   *
+   * The ambiguous statuses resolve HERE on purpose (see {@link retainedStateFor}).
+   * Over-claiming is self-correcting — the bridge's occupancy check demotes it to
+   * `loaded` the moment the layer proves silent — whereas under-claiming would let
+   * a restore treat a LIVE layer as empty, which is the error direction this
+   * codebase never takes.
+   */
+  'on-air',
+  /**
+   * A producer was resident on the layer but the item was not on air. RESTORABLE:
+   * a re-ADD is precisely what this row is asking for if its producer is gone.
+   */
+  'loaded',
+  /**
+   * The layer is KNOWN EMPTY. **NOT restorable — this is B-109.**
+   *
+   * Two origins, and they make the same claim, which is why they share a value:
+   * the operator CLEARed the row (an `out` is not a `remove` — the row stays, the
+   * slot stays reserved), or a reconnect reconcile proved the layer empty. Both are
+   * POSITIVE knowledge that nothing should be on that layer, which is the exact
+   * opposite of `loaded`. Named for the operator's case because that is the one a
+   * human reads on a row and the one a restart must not undo.
+   */
+  'cleared',
+  /**
+   * The last operation FAILED — the row never got what it asked for. **NOT
+   * restorable, and never promoted — this is B-107.**
+   *
+   * Any error code reaches here: `no-layer`, `no-layer-foreign-occupied`,
+   * `unknown-template`, `amcp-error`. A lost link may never IMPROVE a status, so a
+   * bridge death must leave this exactly where it is.
+   */
+  'error',
+]);
+export type RetainedAirState = z.infer<typeof RetainedAirStateSchema>;
+
+/**
+ * THE canonical reconciled-status → retained-state map. **The only one.**
+ *
+ * It lives in the schema package rather than in the browser store because more than
+ * one party reduces published state to intent (the SPA's `StackRetentionStore`, and
+ * the bridge's own integration tests standing in for it), and a second local copy is
+ * how a name comes to lie about what it tests — golden rule 6, and the defect
+ * `B-107`'s own notes call out as "two status-derivation sites that can drift".
+ *
+ * The `switch` is EXHAUSTIVE with no `default`, deliberately: adding a
+ * `StackItemStatus` then fails to compile here until someone decides what a restore
+ * is allowed to do with it. A `default` would silently pick a comfortable answer for
+ * a status nobody considered, which is the whole class of bug this change closes.
+ */
+export function retainedStateFor(status: StackItemStatus): RetainedAirState {
+  switch (status) {
+    /*
+     * AIR, OR POSSIBLY AIR — see `RetainedAirStateSchema`'s note on over-claiming.
+     * Three of these are ambiguous rather than confident, and each resolves here on
+     * purpose:
+     *
+     *   `exiting`     — an out was in flight when the bridge died, so the CLEAR may
+     *                   never have landed. Deliberately NOT `cleared`: we do not know
+     *                   the layer is empty, and guessing that it is would be the
+     *                   under-claim that HIDES a live graphic.
+     *   `unconfirmed` — B-044: a command whose ack never came. Unknown, so possibly live.
+     *   `unverified`  — B-086: the link was down, so the claim could not be checked.
+     *                   Still an air claim; the wire simply cannot back it right now.
+     */
+    case 'playing':
+    case 'on-air':
+    case 'updating':
+    case 'exiting':
+    case 'unconfirmed':
+    case 'unverified':
+      return 'on-air';
+    case 'loaded':
+      return 'loaded';
+    // The layer is known empty: an operator CLEAR, or a reconcile that proved it.
+    case 'idle':
+      return 'cleared';
+    case 'error':
+      return 'error';
+    /*
+     * `disconnected` has NO producer in the reconciler — nothing ever publishes it
+     * (verified, not assumed). It is mapped rather than thrown on because the schema
+     * admits it, and `loaded` is the answer that preserves the previous behaviour
+     * exactly: it is not an air claim, and it is the resting status the bridge leaves
+     * an item at when no server is reachable (B-082). If a producer for it is ever
+     * added, this is the line to revisit.
+     */
+    case 'disconnected':
+      return 'loaded';
+  }
+}
+
+/**
+ * Play evidence, DERIVED. The single reader of "was this item taken to air?" — so
+ * `played` exists as a computation and never as a stored field that can drift from
+ * the state beside it.
+ */
+export function isRetainedOnAir(state: RetainedAirState): boolean {
+  return state === 'on-air';
+}
+
+/**
+ * True iff a restore may put a producer back on this row's layer.
+ *
+ * 🔴 **THE B-109 PREDICATE, and its name is its contract.** A `cleared` row's layer
+ * is empty BECAUSE THE OPERATOR EMPTIED IT; a restore that reads that silence as "a
+ * producer was lost, re-ADD it" resurrects a graphic nobody asked for. An `error`
+ * row never had a producer to lose. Neither may be re-seated, under any occupancy
+ * verdict — for those two states occupancy is not even consulted.
+ */
+export function isRestorable(state: RetainedAirState): boolean {
+  return state === 'on-air' || state === 'loaded';
+}
+
+/**
+ * 🔴 **THE on-air-or-unsettled predicate for a stack item. THE ONE DEFINITION, both
+ * sides of the bridge seam.**
+ *
+ * `updating` / `exiting` ride an on-air producer; `unconfirmed` (B-044) and `pending`
+ * mean the on-air result is UNKNOWN. **Unknown must count as on air in every gate
+ * built on this, because each one's failure mode is acting on a live graphic.**
+ *
+ * ── WHY IT LIVES HERE, AND WHY THERE MUST NEVER BE A SECOND SPELLING ────────
+ *
+ * It was module-private in `caspar-runtime.ts` while the renderer kept a
+ * hand-written mirror (`isOnAirOrUnsettled`) whose own doc called itself "the mirror
+ * of the bridge's `isOnAirStatus`" — plus six further verbatim re-derivations in
+ * `setPosition`, `PositionPicker` and `MockRuntime`. **Eight copies of one rule, agreeing
+ * only by luck**, which is the exact drift CLAUDE.md golden rule 6 forbids and which
+ * `retainedStateFor` two functions above is sited here to avoid for its own question.
+ * `operator-surface` §5 answer (B) collapsed all eight into this.
+ *
+ * ⚠ **A DELEGATING WRAPPER IS STILL A SECOND NAME.** Do not add
+ * `isOnAirOrUnsettled(item)`, `anyOnAir(items)` or a scalar `(status, pending)` overload
+ * as a convenience — each becomes the name a later reader gates on, and then there are
+ * two again. Callers spell `isOnAirStatus(item)`; a list spells
+ * `items.some(isOnAirStatus)`.
+ *
+ * ── WHAT IT DELIBERATELY EXCLUDES, AND WHY THAT IS NOT AN OVERSIGHT ─────────
+ *
+ * `unverified`, `error` and `disconnected` are OUT. All three mean "we cannot confirm",
+ * and a gate built on them refuses on the value that is least trustworthy — which is
+ * `B-122`'s finding, not its exception. The measured cost of including `unverified` is
+ * recorded in `B-226`: the row's CLEAR is gated on CasparCG REACHABILITY while REMOVE is
+ * not, so with the bridge up and CasparCG unreachable a row reads `unverified`, CLEAR is
+ * disabled, and REMOVE is the only control left. Refusing there leaves no operator action
+ * at all.
+ *
+ * ⚠ **NOT `isOnAir`** (`apps/runtime/.../stack/onAir.ts`), which is status-only, never
+ * reads `pending`, and carries B-122's standing prohibition on gating a clear path. The
+ * two answer different questions and are not interchangeable.
+ */
+export function isOnAirStatus(item: Pick<StackItemState, 'status' | 'pending'>): boolean {
+  return (
+    item.pending ||
+    item.status === 'playing' ||
+    item.status === 'on-air' ||
+    item.status === 'updating' ||
+    item.status === 'exiting' ||
+    item.status === 'unconfirmed'
+  );
+}
+
+/**
+ * 🔴 **`B-216` / `FIELD-FIXES-01-A` — DOES THIS ROW OWN LIVE LAYERS RIGHT NOW? THE ONE
+ * DEFINITION, both sides of the bridge seam** — the bridge's `#ownsLiveSeats`, the mock's take
+ * and the console's PLAY all ask it here.
+ *
+ * Two halves, and golden rule 10 names both:
+ *
+ * - **on air or unsettled** — {@link isOnAirStatus}, reused rather than re-derived;
+ * - **the ledger holds seats for it** — `holdsSeats`: the plates the bridge SEATED and has not
+ *   released. `B-145`'s boot adoption restores those while the row's status is not, and they are
+ *   on the channel whatever any status claims.
+ *
+ * It is not a wrapper for `isOnAirStatus`: it asks a different question, and the ledger half is
+ * the one each of its callers would otherwise forget. The caller reads its own copy of the ledger
+ * (the bridge its `#liveLayers`, the console the published live-layers snapshot) and says only
+ * whether it holds a seat for this row.
+ */
+export function ownsLiveSeats(
+  item: Pick<StackItemState, 'status' | 'pending'> | null | undefined,
+  holdsSeats: boolean,
+): boolean {
+  return (item !== null && item !== undefined && isOnAirStatus(item)) || holdsSeats;
+}
 
 /**
  * B-092 — one stack item's INTENT as retained by the browser, so the stack
@@ -61,29 +495,180 @@ export type StackItemState = z.infer<typeof StackItemStateSchema>;
  * the bridge's in-memory Reconciler and dies with it).
  *
  * This is intent, NOT reconciled state: it carries what the operator asked for
- * (template + fields + placement) plus the single bit the restore needs to
- * reconstruct the record — whether the item had been TAKEN to air. The
- * restored item's actual status is decided by the bridge against real OSC
- * occupancy, never by this record: an occupied layer restores ON AIR, a silent
- * one comes back `loaded`.
+ * (template + fields + placement) plus the STATE that justified it. The restored
+ * item's actual air state is still decided by the bridge against real OSC
+ * occupancy — but only for a row whose state licenses a producer at all
+ * ({@link isRestorable}).
+ *
+ * ⭐ **TWO AXES, and they do not interact. Read this before adding a field.**
+ *
+ *   - **CLOSED — `state`.** Four values answering one question: may this row's
+ *     producer be re-seated? Adding a fifth is a MODEL change and needs the same
+ *     care B-107/B-109 did.
+ *   - **OPEN — the operator's per-item OVERRIDES** (`slot`, `position`, Live
+ *     Source phase 6's per-plate source override (6.9d) and its per-plate audio
+ *     intent (6.5f) — both landed). Each is an
+ *     independent optional field that `restore()` re-applies BEFORE it decides
+ *     anything, so a re-issued producer carries it. Adding one is additive: no
+ *     existing field changes meaning and the restore decision is not consulted.
+ *
+ * A new override goes on the OPEN axis. A new answer to "may this be re-seated"
+ * goes on the CLOSED one. Anything that seems to need both is a sign the model,
+ * not the field, is wrong.
  *
  * `slot` is the layer the item occupied. It must be restored EXACTLY (not
  * re-allocated) — it is the layer the surviving producer is actually on, so it
- * is what the occupancy check has to consult.
+ * is what the occupancy check has to consult. It survives a CLEAR too: an `out`
+ * is not a `remove`, so a `cleared` row keeps its reserved slot.
  */
 export const RetainedStackItemSchema = z.object({
   itemId: IdSchema,
   templateId: IdSchema,
   fields: FieldValuesSchema,
   /**
-   * Play evidence: the item had been taken to air when last observed. Derived
-   * from the last published status; ambiguous statuses (`unconfirmed`,
-   * `exiting`, `unverified`) resolve to TRUE deliberately — the occupancy check
-   * demotes an over-claim to `loaded` on a silent layer, whereas an
-   * under-claim would hide a genuinely live graphic.
+   * The state the row was actually in — see {@link RetainedAirStateSchema}. This
+   * REPLACED a `played: boolean` that could not tell a failed row from a cleared
+   * one from a pre-rolled one (B-107 / B-109).
    */
-  played: z.boolean(),
+  state: RetainedAirStateSchema,
+  /**
+   * The machine-readable cause carried by an `error` state, so a restored or
+   * offline-displayed failure can still say WHY. Absent for every other state.
+   */
+  errorCode: z.string().optional(),
   slot: LayerSlotSchema.optional(),
   position: PositionSchema.optional(),
+  /**
+   * R-048 / C-015 phase 6 (6.9d) — the per-plate source override, on the OPEN
+   * axis beside `position` exactly as the note above prescribes.
+   *
+   * 🔴 **RETENTION MUST CARRY IT, or a momentary bridge blip silently reverts the
+   * plate to the DEAD source the operator patched around.** That is the
+   * `B-107`/`B-109` class — retention dropping state it did not model — which is
+   * why it is a requirement with a test rather than an assumption. Nothing about
+   * the CLOSED `state` axis changes and no consumer branches differently.
+   */
+  sourceOverride: LiveSourceOverrideSchema.optional(),
+  /**
+   * Session BM — the ROW's PER-LOOK input composition, on the OPEN axis beside
+   * {@link sourceOverride} and for the identical reason.
+   *
+   * 🔴 SEPARATE FROM IT, NOT A REPLACEMENT. The emergency patch applies to EVERY look (a
+   * dead input is dead in all of them) and outranks this map; this one is the deliberate
+   * composition the operator builds before air. Losing it across a blip would silently put
+   * every look back on the template assignment while the console still showed the row as
+   * normal — the B-107 / B-109 class, which is why it is retained rather than assumed.
+   */
+  lookSourceOverride: LiveSourceLookOverrideSchema.optional(),
+  /**
+   * 🔴 **Session BP — the FROZEN template assignment, on the OPEN axis beside
+   * {@link sourceOverride} and for a sharper version of the same reason.**
+   *
+   * The bridge's freeze is PROCESS memory. Without this field a momentary blip THAWS every
+   * on-air row: the restore re-resolves level 2 from the live store, and whatever
+   * configuration was edited during the show lands on air at the first reconcile after the
+   * reconnect — which is precisely the `B-155` mechanism this feature exists to close,
+   * arriving through the one door nobody was watching. `B-107` / `B-109` again.
+   *
+   * ⚠ ABSENT here means the row was not frozen, which for a restored ON-AIR row is the
+   * pre-BP behaviour rather than an error: it resolves live, as it always did. That is a
+   * graceful degradation for retention written by an older build, not a second rule.
+   */
+  frozenAssignment: LiveSourceFrozenAssignmentSchema.optional(),
+  /**
+   * C-015 phase 6 (6.5f) — the per-plate audio intent, on the OPEN axis beside
+   * `sourceOverride` and for the identical reason.
+   *
+   * 🔴 **THE RAISE HALF OF THE AUDIO RULE IS NOTHING BUT MEMORY.** The mute half
+   * needs none — silence is what every producer is created with — but "this plate
+   * was deliberately raised" exists only where somebody wrote it down. The
+   * bridge's own ledger is PROCESS memory and dies with the bridge, so without
+   * this a blip re-mutes a raised plate: the picture comes back, the guest does
+   * not, and every console shows the row as normal. `B-107` / `B-109`, applied to
+   * the one property of a graphic nobody can see.
+   */
+  plateVolumes: LivePlateVolumesSchema.optional(),
+  /**
+   * `multibox-layout-switch` §14 (LOOKS) Stage E — the LOOK the operator put this row on,
+   * on the OPEN axis beside `sourceOverride` and for the identical reason.
+   *
+   * 🔴 **WITHOUT THIS, THE PICKER LIES AFTER A BRIDGE BLIP.** The bridge's `#activeLooks`
+   * is process memory and dies with it. A restore then resolves the row to its AUTHORED
+   * DEFAULT, and both outcomes are wrong in a way somebody sees:
+   *
+   * - the producer survived and was ADOPTED — the page is still showing the look the
+   *   operator chose, while the row now publishes the default, so the picker asserts a
+   *   look that is not on air. Before Stage E nothing displayed the look and the
+   *   divergence was invisible; the picker is what turns it into a false readout.
+   * - the producer was gone — the next take enters the default, and the operator’s choice
+   *   is silently undone on air.
+   *
+   * That is the `B-107` / `B-109` class stated on `sourceOverride` above: retention
+   * dropping state it did not model. (`CENTRAL-BRIDGE-01`: this record is the bridge's own
+   * stack file now, so the bridge persists the choice itself — `#activeLooks` is rebuilt from
+   * it at start.)
+   */
+  activeLookId: z.string().min(1).optional(),
+  /**
+   * 🔴 `TIMING-BUILD-21` §2(a) — the ROW's per-session timing override, on the OPEN axis
+   * beside {@link sourceOverride} and for the identical reason.
+   *
+   * **WITHOUT THIS THE FIELDS WORK UNTIL THE FIRST RESTART AND THEN VANISH — the worst
+   * failure shape there is.** This schema is a strict `z.object` AND it is the record of the
+   * bridge's stack file (`bridge-stack.json`, `CENTRAL-BRIDGE-01`; it was the `stack.restore`
+   * wire payload), so an UNDECLARED key is stripped silently: no error, no warning, no log.
+   * The operator sets two more passes, sees it take, the bridge blips, and the row comes back
+   * looping forever with the console showing it as normal. `B-107` / `B-109` exactly.
+   */
+  timingOverride: StackItemTimingOverrideSchema.optional(),
 });
 export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;
+
+/**
+ * Reduce a published row back to INTENT: what the operator asked for, plus the STATE that
+ * justified it — the record the bridge's stack file keeps and a console's display copy keeps.
+ *
+ * 🔴 `CENTRAL-BRIDGE-01` — **ONE copy, here, because there are two readers.** The bridge
+ * persists its stack with this and the console mirrors its display copy with it; a second,
+ * hand-kept field list is how one side comes to drop a field the other keeps.
+ *
+ * ⭐ **B-107 / B-109 — a row used to be reduced to `played: boolean`, and that was the bug.**
+ * One bit cannot tell a FAILED row from a deliberately CLEARed row from a genuinely pre-rolled
+ * one. The status → state map is {@link retainedStateFor} (golden rule 6: one site).
+ *
+ * Every OPEN-AXIS field travels, because each one lost silently reverts something on air (the
+ * console's `stack-retention` test derives the list from the schemas rather than listing it):
+ *
+ * - `position` and the source overrides — a dropped one shows the wrong PICTURE; a dropped
+ *   `sourceOverride` reverts a plate to the DEAD source the operator patched around, on air;
+ * - `lookSourceOverride` — the per-look composition, whose loss is invisible until somebody
+ *   SWITCHES, when the look reverts to the template assignment;
+ * - `frozenAssignment` — dropped, it THAWS every on-air row, and every assignment edited during
+ *   the show lands on air at the first reconcile (`B-155`);
+ * - `plateVolumes` — a dropped one shows the RIGHT picture in silence, with every console
+ *   reporting the row as normal;
+ * - `timingOverride` — the operator asks for two more passes and out; dropped, the row comes
+ *   back on its authored `infinite` and loops;
+ * - `activeLookId` — dropped, the picker asserts a look that is not on air.
+ */
+export function retainedFromStackItem(item: StackItemState): RetainedStackItem {
+  const state = retainedStateFor(item.status);
+  return {
+    itemId: item.itemId,
+    templateId: item.templateId,
+    fields: item.fields,
+    state,
+    // Only an `error` state carries a code, and only its own: an `errorCode` set for a different
+    // purpose (B-093's `osc-unverifiable` rides an `unverified` row) must not travel as if it
+    // were a failure this row suffered.
+    ...(state === 'error' && item.errorCode !== undefined && { errorCode: item.errorCode }),
+    ...(item.slot !== undefined && { slot: item.slot }),
+    ...(item.position !== undefined && { position: item.position }),
+    ...(item.sourceOverride !== undefined && { sourceOverride: item.sourceOverride }),
+    ...(item.lookSourceOverride !== undefined && { lookSourceOverride: item.lookSourceOverride }),
+    ...(item.frozenAssignment !== undefined && { frozenAssignment: item.frozenAssignment }),
+    ...(item.plateVolumes !== undefined && { plateVolumes: item.plateVolumes }),
+    ...(item.timingOverride !== undefined && { timingOverride: item.timingOverride }),
+    ...(item.activeLookId !== undefined && { activeLookId: item.activeLookId }),
+  };
+}

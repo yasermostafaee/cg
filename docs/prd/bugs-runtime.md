@@ -2212,7 +2212,7 @@ closed; nothing here needs booking again.**
 layer), [[B-094]] (the honest indicator for the same state), [[C-014]] (designs for the blind
 install this breaks), [[B-093]].
 
-## [ ] B-107 — an errored stack row flips to READY when the BRIDGE PROCESS dies: the browser's retained-intent projection reduces every non-played status (including `error`) to `loaded`, so a load that never got a layer presents as playable ⟨priority: high⟩
+## [~] B-107 — an errored stack row flips to READY when the BRIDGE PROCESS dies: the browser's retained-intent projection reduces every non-played status (including `error`) to `loaded`, so a load that never got a layer presents as playable ⟨priority: high⟩ — FIXED and on `dev`: `openspec/changes/runtime-retention-state/` (the DISPLAY face of the shared root)
 
 **What:** While the SPA↔bridge WebSocket is up, a load that fails allocation shows on the stack
 as a red **ERROR / "no layer"** row — correct, and one such row accumulates per further failed
@@ -2318,8 +2318,26 @@ retained-intent projection, not a pool-exhaustion symptom.
 - **Reproduction is MANUAL** (owner, real Runtime + real bridge, 2026-07-25): load past the dynamic
   pool size so further loads error with "no layer", then kill the bridge process — the ERROR rows
   flip to READY. No automated reproduction exists.
+- ⭐ **FIXED 2026-08-11** in `openspec/changes/runtime-retention-state/`, together with [[B-109]] and
+  [[B-108]] — one root, three faces. `RetainedStackItem.played: boolean` is REPLACED by
+  `state: 'on-air' | 'loaded' | 'cleared' | 'error'` plus an `errorCode`, mapped by ONE canonical
+  `retainedStateFor()` in `@cg/shared-schema` (the item's own note about "two status-derivation
+  sites that can drift" is why it lives there and not in the store). `#retainedProjection` now maps
+  `error` → `error` with its code and `cleared` → `idle`, so nothing collapses onto `loaded`.
+  Reproduction is no longer manual: `apps/runtime/tests/e2e/retention-honesty.spec.ts` kills a real
+  bridge process under a real browser.
+- ⚠ **ONE PART OF THIS ITEM WAS DELIBERATELY NOT DONE, and it is a decision rather than an
+  oversight.** The acceptance says an errored or cleared row must never resolve to "`loaded`/READY".
+  The STATUS half is fixed exactly as written. The WORD is not: `idle` and `loaded` both render as
+  **READY** by a LATER owner decision (`runtime-unified-layer-rows` — "an operator does not perceive
+  the difference and showing two states for one perception is false precision"), with the real
+  difference kept in `readyDetail`'s tooltip. That decision post-dates this item and was made on its
+  own grounds, so re-opening it belongs to whoever revisits the row language, not to a bug fix.
+  **The dangerous case named in this item's title — `error` → READY — IS fixed**: an errored row
+  renders ERROR with its code. What remains is the milder `idle` → READY, on a row whose tooltip
+  says the layer is empty.
 
-## [ ] B-108 — a bridge restart silently DROPS stack rows it cannot re-seat: `restore()` skips them and returns a `skipped` count no UI surface consumes ⟨priority: medium⟩
+## [~] B-108 — a bridge restart silently DROPS stack rows it cannot re-seat: `restore()` skips them and returns a `skipped` count no UI surface consumes ⟨priority: medium⟩ — FIXED and on `dev`: `openspec/changes/runtime-retention-state/` (the HONESTY face; `restore()` now returns per-item reasons and `#resync` consumes them)
 
 **What:** on bridge restart the browser re-delivers its retained stack intent
 (`StackRestoreChannel`) and the bridge's `restore()` re-seats what it can. Any item it CANNOT
@@ -2373,7 +2391,7 @@ this.#invoke(StackRestoreChannel, …)` and drops the `{ restored, skipped }` re
   it — only the layer-holding rows come back; the rest are gone with no message. No automated
   reproduction exists.
 
-## [ ] B-109 — a bridge restart RE-ADDs a deliberately CLEARed graphic onto its layer: retention stores `played:false` for both `idle` and `loaded`, so `restore()` cannot tell "cleared, leave empty" from "loaded, re-seat" and re-loads the producer UNASKED ⟨priority: high⟩
+## [~] B-109 — a bridge restart RE-ADDs a deliberately CLEARed graphic onto its layer: retention stores `played:false` for both `idle` and `loaded`, so `restore()` cannot tell "cleared, leave empty" from "loaded, re-seat" and re-loads the producer UNASKED ⟨priority: high⟩ — FIXED and on `dev`: `openspec/changes/runtime-retention-state/` (the WIRE face of the shared root)
 
 **What:** an operator CLEARs a graphic (the stack's `out` verb) to take it off air but keeps the
 row to re-take later — an `out` is NOT a `remove`, so the row stays on the stack, reconciled
@@ -2448,7 +2466,7 @@ violation. It protects a surviving producer but resurrects a cleared one.
   (leaving the idle row on the stack), then kill and restart the bridge — the producer is re-ADDed
   onto its layer and the row returns READY.
 
-## [ ] B-113 — a field's chosen source FILE is lost on every page refresh, and the delimiter list hides four of its five options behind a text input the operator must first clear ⟨priority: high⟩
+## [~] B-113 — a field's chosen source FILE is lost on every page refresh, and the delimiter list hides four of its five options behind a text input the operator must first clear ⟨priority: high⟩ — FIXED and on `dev`: `openspec/changes/runtime-from-file-persistence/` (20/21 tasks). Both halves are implemented — the attachment now writes through to IndexedDB on every mutation and is restored on load (`fromFileStore.ts`), and the delimiter list no longer hides behind the input. **The ONLY thing between this and `[x]` is task 6.2, an OWNER BROWSER CHECK** on a Chromium that does NOT auto-grant the File System Access permission: the needs-gesture path is covered by unit test against a FAKE handle, but the real prompt's wording and timing on this station's browser has never been seen, and a fake handle cannot prove it
 
 **What:** two defects in R-018's "from file" affordance, both reported by the owner from live
 use, both in the same control:
@@ -2584,7 +2602,7 @@ runs it before writing code.
 **Env:** Runtime + bridge, owner's plant. Source: `DEBT.md:119`, `DEBT.md:248` (the full
 write-up), `DEBT.md:409`.
 
-## [ ] B-116 — every bridge boot warns that a template is corrupt and tells the operator to re-import it, because `delimiters.json` is stored inside the templates directory ⟨priority: medium⟩
+## [~] B-116 — every bridge boot warns that a template is corrupt and tells the operator to re-import it, because `delimiters.json` is stored inside the templates directory ⟨priority: medium⟩ — FIXED 2026-09-06 by `STATION-SETUP-02` §5 (`openspec/changes/station-setup/`): the registry admits only its OWN records (`isRegistryRecordName`, a rule from the writer's shape), nothing moves on disk; Linux `gate:e2e` DISCHARGED for `30a0cf17` — <https://github.com/yasermostafaee/cg/actions/runs/34045753015> (`E2E (Playwright)` RAN 624 s, `success`)
 
 **What:** `DelimiterStore` persists to `delimiters.json` **inside** `--templates-dir`
 (`~/.cg-runtime/bridge-templates/`), and `TemplateRegistry`'s loader reads every `*.json` in that
@@ -2609,6 +2627,33 @@ scroll past the one boot line that will one day be real.
 filename in the registry loader, or move the delimiter file up to `~/.cg-runtime/` alongside the
 other bridge config. **The second is a migration** (an existing `delimiters.json` has to be moved
 or it is silently abandoned), so it is not the one-liner it looks like. Source: `DEBT.md:230`.
+
+⚠ **SCOPE WIDENED 2026-09-06 by `MODALS-AND-SETTINGS-01` §3 — there is a SECOND file in the same
+trap, and it is latent rather than visible.** `ChannelSettingsStore` is constructed with
+`options.templatesDir` too (`caspar-runtime.ts:1455`) and writes `channel-settings.json`
+(`channel-settings-store.ts:34`) — so the R-030 channel raster lands beside the templates exactly as
+the delimiters do. It has not been SEEN yet only because the file is written on the first raster
+change and the bridge host has never had one: listing `~/.cg-runtime/bridge-templates/` on
+2026-09-06 shows four template records and `delimiters.json`, and no `channel-settings.json`. **The
+first operator to set a raster turns one false boot warning into two**, so a fix that skips one
+filename by name rather than fixing the placement rule would be wrong on the day it landed.
+`source-catalog-store.ts:42`–`51` already writes the rule down correctly and names this item while
+doing so; the two stores above predate it and never got it.
+
+**CLOSED 2026-09-06 by `STATION-SETUP-02` §5 — by a RULE, not a filename, and without a move.**
+The channel raster's first UI (Station setup ▸ Channel raster) is the control that would have
+created `channel-settings.json` on this host for the first time, so this was fixed as a
+precondition. Of the two candidate fixes above, MOVING the files is a data migration (an existing
+`delimiters.json` has to be moved or is silently abandoned) and was not authorised; the registry
+side was chosen, as a rule derived from the writer: `#fileFor` names every record
+`<slug>-<12 hex of sha256(id)>.json`, and `loadPersisted` now admits a file iff
+`isRegistryRecordName` matches that shape (`template-registry.ts`). A sibling store's file is
+neither loaded nor warned about; a corrupt record named as the registry names them still warns
+with the same message. Red-first (`tests/template-registry-siblings.test.ts`): both files written
+by the REAL `DelimiterStore` and `ChannelSettingsStore` into one directory showed `skipped: 2`
+before the fix and `{ loaded: 0, skipped: 0 }` with no warning after; the registry's own record
+beside them still loads. The placement rule `source-catalog-store.ts` states stands for NEW
+stores — the two existing files stay where they are. All three acceptance bullets hold.
 
 ## [x] B-117 — a reachability gate disabled the ENTIRE console in TEST MODE, because it asked "is a real CasparCG healthy?" instead of "will this command be executed?" ⟨priority: medium⟩ — **CLOSED 2026-08-03 WITHOUT ANY WORK BEING DONE: the defect was already gone when this item was filed, and the item says so in its own text. See the closing note at the foot of this entry.**
 
@@ -2826,7 +2871,7 @@ already committed the slot in their head. This is a take-time failure on an on-a
 
 Source: `DEBT.md:1092` (the residual, inside the CLEARed-row sweep entry at `DEBT.md:1064`).
 
-## [~] B-121 — `CG ADD` site 2, the reconnect reconciliation, is not rehearse-guarded, so a bridge blip re-ADDs an UNMUTED producer under a rehearsing row ⟨priority: high — reaches air⟩ — in progress: `openspec/changes/live-source-multibox/` (task 6.5c, and 6.5d pins all four sites)
+## [x] B-121 — `CG ADD` site 2, the reconnect reconciliation, is not rehearse-guarded, so a bridge blip re-ADDs an UNMUTED producer under a rehearsing row ⟨priority: high — reaches air⟩ — FIXED 2026-08-14, `openspec/changes/live-source-multibox/` (tasks 6.5c / 6.5d)
 
 **What:** a sweep of every `CG ADD` call site in `caspar-runtime.ts` found four, and asked of each
 whether the rehearse guard covers it:
@@ -2862,11 +2907,30 @@ rejected. Task **6.5d** additionally pins **all four** sites with one test, so s
 and safe" stops being a claim in a table and becomes an assertion — a table that is not pinned is
 re-derived by the next sweep.
 
+**FIXED 2026-08-14 — at the chokepoint, not at the site.** The mute lives in `#sendAdd`, which is the
+single emit point every one of the four callers goes through, so site 2 is closed together with the
+other three rather than by a guard of its own. `live-add-mute.integration.test.ts` drives each site
+through its REAL entry point — site 2 through `restore()`, the way a reconnect reaches it — and
+asserts the `MIXER … VOLUME 0` index precedes the `CG ADD` index in the AMCP trace. Verified by
+MUTATION: with the mute removed, five of the six tests go red.
+
+⚠ **THE TABLE ABOVE IS STALE IN ONE ROW, and it is left standing with this correction rather than
+quietly edited.** Site 1 is listed as rehearse-guarded; it is not. The guard was removed when LOAD
+became LIST-ONLY (`loadFixed` emits no AMCP at all) — the stronger form, and the code says so. What
+the row misses is that `#loadOnto` has a SECOND caller, the dynamic `load()`, which is not list-only
+and never had a guard at all. The mute covers it now. The same stale row appears in [[R-042]] and in
+the design; all three are corrected there too.
+
 **Notes:** related to [[R-022]] (the rehearse feature) and to the deferred `mute-before-ADD`
 upgrade, which would change the ordering constraint here — on 2.5.0 the volume must land BEFORE
 the `CG ADD`, never after. Source: `DEBT.md:1104`.
 
-## [ ] B-122 — `CLEAR ALL` is always ENABLED but is not always EFFECTIVE: it filters on the very statuses that may be wrong, and reports success having sent nothing ⟨priority: high — reaches air⟩
+## [~] B-122 — `CLEAR ALL` is always ENABLED but is not always EFFECTIVE: it filters on the very statuses that may be wrong, and reports success having sent nothing ⟨priority: high — reaches air⟩
+
+> ⚠ **`layers.clear` gained a FOURTH refusal reason on 2026-08-12 — `live-source`** (C-015 phase 5,
+> a bridge-owned Live Source layer; it is neither `foreign` nor `owned`). Whatever fixes this item
+> must honour it: the canonical list is `LAYER_CLEAR_REASONS` in
+> `packages/shared-ipc/src/channels/layers.ts` — match on that, never on inline string literals.
 
 **What:** the owner's decision was that CLEAR and CLEAR ALL are always enabled, because refusing
 the remedy when the state model is confused strands a graphic on air. The UI does that. The two
@@ -2893,10 +2957,54 @@ worked, and the graphic is still on air. Found by the adversarial self-review th
 - The per-row CLEAR is unchanged.
 
 **Notes:** the predicate change is on-air bridge behaviour, which is why it was left out of the UI
-review that found it. It also needs a decision the fix cannot dodge: **should CLEAR ALL hard-cut
-rows the model believes are merely `loaded`** (not yet on air)? Related: [[R-012]] is the
-Clear-All feature this defect sits inside. Source: `DEBT.md:1539`, restated at `DEBT.md:2558`
-inside the `dev-clear-bank-scoped` DONE entry (`DEBT.md:2456`).
+review that found it. Related: [[R-012]] is the Clear-All feature this defect sits inside. Source:
+`DEBT.md:1539`, restated at `DEBT.md:2558` inside the `dev-clear-bank-scoped` DONE entry
+(`DEBT.md:2456`).
+
+⭐ **THE OPEN DECISION IS ANSWERED (owner, 2026-08-12): YES.** The question was whether CLEAR ALL
+should hard-cut rows the model believes are merely `loaded` and not yet on air. **It does** — a
+clear is sent for every item with a bound slot, whatever the status claims, `loaded` included.
+
+**The rationale, recorded so it is not re-litigated: filtering on status IS the defect.** An
+emergency control must not depend on the bookkeeping whose failure is the emergency. **Losing a
+cued row is the accepted cost** — it loses its pre-rolled producer and re-ADDs on its next play,
+which is cheap; the alternative cost is a graphic stranded on air with the console reporting
+success, which is not.
+
+**Landed 2026-08-12** in `4cbe3331` (`fix(caspar-bridge,runtime,shared-ipc): B-122/B-125`).
+
+**Linux `gate:e2e` OWED and DISCHARGED** — `LayersPanel.tsx` changed (the confirm dialog, the
+button’s aria-label and title, the result toasts), so the debt was owed on the UI rule, not on an
+edited spec. Discharged by a COMPLETED, GREEN `e2e` job that actually RAN for that exact commit:
+<https://github.com/yasermostafaee/cg/actions/runs/31573550952>.
+
+What changed:
+
+- `caspar-runtime.clearAll()` — the status filter is gone. The only remaining question is the
+  STRUCTURAL one (does the item hold a slot), which is also the broadcast-safety property that
+  keeps this per-LAYER.
+- `stack.clear-all` now answers `{ ok, cleared, attempted, refused }`. `cleared` counts what
+  CasparCG **accepted**, `attempted` what was **sent**, and `ok` is true only when something was
+  owed and all of it landed — so no shape of no-op can return a success. `LayersPanel` reports all
+  three outcomes (complete / partial / nothing sent) instead of discarding the result, which is
+  how a bulk verb that sent nothing used to look like it had worked.
+- ⚠ **A Live Source layer still refuses**, with C-015 phase 5's distinct `live-source` reason, via
+  the same `#isLiveLayer` the other three ownership doors read. Pinned by a boundary test: the
+  ledgered row survives and its identical unledgered neighbour is cleared.
+- `isOnAir` survives as **STOP ALL's** predicate only, with the prohibition written on it. STOP is
+  the one bulk verb where the status is the right question — `CG STOP` asks for an authored outro,
+  which a never-played row does not have — and `clearAll`/`stopAll` now differ deliberately.
+
+**Two findings from the fix, worth keeping:**
+
+1. **On a HEARING plant this defect is nearly invisible**, because the occupancy tap keeps the
+   status honest and the filter rarely excludes anything wrongly. It bites on the **OSC-less
+   install** ([[B-094]] / [[B-101]]), where nothing corrects the belief. That is why the
+   regression test is built on a deliberately deaf tap — a hearing one cannot construct the bug.
+2. The old UI dialog **documented the defect in its own body text** ("this may send no commands at
+   all … use CLEAR on its own row"), i.e. a bulk emergency control whose confirm dialog told the
+   operator to use a different control. Worth reading as a signal: when wording has to apologise
+   for a verb, the verb is what needs changing.
 
 ## [ ] B-123 — the failover banner overlays the monitor strip instead of pushing it down ⟨priority: low⟩
 
@@ -2923,7 +3031,12 @@ something narrower than its name is how that decision gets made on a wrong numbe
 
 **Env:** Runtime shell, pre-existing. Source: `DEBT.md:1722`.
 
-## [ ] B-125 — a bound-row race lets the unbound branch CLEAR a just-loaded producer, and the item's state machine still reads `loaded` while the layer is empty ⟨priority: high — reaches air⟩
+## [~] B-125 — a bound-row race lets the unbound branch CLEAR a just-loaded producer, and the item's state machine still reads `loaded` while the layer is empty ⟨priority: high — reaches air⟩
+
+> ⚠ **`layers.clear` gained a FOURTH refusal reason on 2026-08-12 — `live-source`** (C-015 phase 5,
+> a bridge-owned Live Source layer; it is neither `foreign` nor `owned`). Whatever fixes this item
+> must honour it: the canonical list is `LAYER_CLEAR_REASONS` in
+> `packages/shared-ipc/src/channels/layers.ts` — match on that, never on inline string literals.
 
 **What:** the row routes on `item === null` **at click time**. If an item is loaded onto the row in
 the instant between render and click, the unbound branch sends a layer `CLEAR` that destroys the
@@ -2947,6 +3060,43 @@ clear when the layer is owned. That reintroduces dependence on the very bookkeep
 hatch exists to bypass. The proper fix is to reconcile **after** a successful clear, which is
 on-air bookkeeping and wants its own diff. Source: `DEBT.md:2207`, with the full finding at
 `DEBT.md:2535` inside the `dev-clear-bank-scoped` DONE entry (`DEBT.md:2456`).
+
+**Landed 2026-08-12** in `4cbe3331` (same commit as [[B-122]], and covered by the same
+discharged Linux e2e run recorded there) — `clearBankLayer` calls a new
+`#reconcileClearedSlot(slot)` **after** the CLEAR is acked, never before it, and never on a
+refusal. The rejected fix was not reproposed: the clear stays unconditional and the bookkeeping
+catches up behind it.
+
+⭐ **THE DAMAGE HAS TWO HALVES, AND ONLY ONE OF THEM IS A STATUS STRING.** This was the finding
+that shaped the test, and it is the part the item as filed understated:
+
+1. **`#loaded` — the bridge's own producer record — is the durable half.** It is what `take()`'s
+   B-039 pre-roll reads to decide whether to re-`CG ADD`. Left stale, the next take sends a bare
+   `CG PLAY` onto an **empty layer**: accepted on the wire, and **nothing on air**. This never
+   self-heals, on any install, and it is what the regression test asserts — on the COMMANDS, not
+   on a rendered string.
+2. **The published status is the fragile half.** On a plant with a working OSC tap it self-heals
+   within one TTL (the tap observes `empty`, `freshTruth` derives `idle`), so a test written
+   against the status alone would have **passed before the fix** and been a test of the tap. On an
+   OSC-less install ([[B-094]] / [[B-101]]) the correction never arrives and the row lies until
+   the operator hits REMOVE — the item's wording exactly.
+
+**Two related gaps, deliberately NOT fixed here — recorded rather than actioned:**
+
+- **`clearBankLayer` is a FOURTH clear door that C-015 phase 5 did not fence.** Phase 5 wired
+  `live-source` into three doors (the R-009 sweep, the C-014 quarantine, `clearLayer`); this one
+  checks only `reserved` + bank membership. Whether it should refuse a Live Source layer is a real
+  question with two defensible answers: **(a) add the refusal** — a guest's face is never the
+  operator's to cut from a bank row, and the ledger is bridge-owned config-like state, not a
+  status; **(b) leave it** — this door's stated doctrine is that it consults nothing that can be
+  wrong, and the ledger can be wrong. Not decided here because nothing seats a live producer until
+  C-015 phase 6.1, so the case is not yet reachable. It must be decided **before** phase 6.1
+  lands.
+- **Live Source layers survive CLEAR ALL entirely.** Under phase 6 an item will own a template
+  layer AND live plate layers; CLEAR ALL clears the first and refuses the second, so a guest feed
+  could be left running with no template over it. That is phase 6's problem to answer (probably by
+  tearing the item's live layers down with it), and it is named here so it is not discovered on
+  air.
 
 ## [ ] B-126 — the adopt-`CLEAR` succeeded and the `CG ADD` after it failed, leaving the layer empty: the CLEAR/ADD pair is not atomic in the other direction ⟨priority: high — reaches air⟩
 
@@ -3051,3 +3201,10507 @@ character" into this item without measuring it.**
 `library-inspector-dispatch` subject (controls dispatch on click) is likely covered incidentally by
 the picker specs, but that was **not** verified and is not claimed here. Source:
 `dev-list-vs-layer` v3 §5, recovered 2026-08-03; the census row is `DEBT.md:936`.
+
+## [ ] B-135 — the Runtime's storage root is SILENTLY substituted: `initRuntimeWorkspace()` swallows an OPFS failure and hands back in-memory storage, so the template library and the retained stack are lost for the session with nothing said ⟨priority: high⟩
+
+**What:** `apps/runtime/src/platform/library/workspace.ts` resolves the Runtime's one
+persistence root like this:
+
+```ts
+try {
+  return isOpfsSupported() ? await openOpfsWorkspace('runtime') : new MemoryWorkspace();
+} catch {
+  // OPFS can throw in insecure contexts / private modes — never let storage init
+  // blank the app; fall back to in-memory (this-session-only) storage.
+  return new MemoryWorkspace();
+}
+```
+
+Both legs — the `isOpfsSupported()` false branch and the bare `catch` — resolve to a
+`MemoryWorkspace`, and **nothing anywhere tells the operator.** That workspace is the root for
+BOTH browser-local stores the Runtime owns: [[B-085]]'s `LibraryStore` (the operator's imported
+templates) and [[B-092]]'s `StackRetentionStore` (the intent that makes the stack survive a
+bridge restart). Both are constructed from it in `createRuntimeBridge.ts` and both hydrate
+from it at boot.
+
+So on any install where OPFS is unavailable or throws — an insecure context (plain `http://`
+to a station box, which is exactly how a playout machine on a house LAN gets served), a private
+window, a locked-down profile — the Runtime runs a full session that LOOKS normal: templates
+import, rows load, the stack builds. Every one of those writes goes to memory. The first
+reload, and the operator's library and stack are gone with no error, no banner, and no reason
+given.
+
+**Why:** this is [[B-104]]'s defect, on the Runtime surface, and [[D-150]] already removed it
+on the Designer's. The Designer's `initWorkspace()` now returns
+`WorkspaceInit { workspace, root: { kind, label, reason, detail? } }` — a degraded root is
+REPORTED rather than swallowed, because "the app silently wrote a session's work somewhere it
+will not be tomorrow" is a data-loss class no amount of resilience justifies. The Runtime kept
+the old shape. The asymmetry is the bug: the two apps disagree about whether losing your
+persistence root is worth mentioning, and the Runtime is the one where the loss lands during a
+broadcast.
+
+It is worse here than in the Designer in one specific way, and that is why this is filed
+`high` rather than `medium`: an author notices a missing image. An operator does not notice a
+retention store that is quietly volatile — they notice it at the moment the bridge restarts
+mid-programme and the stack does not come back, which is the exact failure [[B-092]] exists to
+prevent. A silent memory fallback turns a working safety net into one that is only pretending.
+
+**Acceptance:**
+
+- WHEN `initRuntimeWorkspace()` cannot open the durable root — OPFS unsupported, or
+  `openOpfsWorkspace` throws — THEN the substitution is REPORTED, not swallowed: the caller
+  receives the root's kind and the reason it degraded, in the same shape the Designer's
+  `initWorkspace()` returns
+- WHEN the Runtime is running on a degraded (session-only) root THEN the operator is told, in a
+  surface they cannot miss, that the template library and the stack will NOT survive a reload —
+  the loss is announced BEFORE it happens, never discovered after
+- WHEN the durable root opens normally THEN nothing is surfaced and no degradation is reported
+- WHEN the reason is one the operator can act on (an insecure context) THEN the message names
+  the fix, rather than reporting only that storage is unavailable
+
+**Notes:**
+
+- **Filed, deliberately NOT fixed**, from the retention-state session (2026-08-11). It is the
+  same class as the work that session did — a store that quietly loses the state it exists to
+  hold — but a different surface and a different fix, and folding it in would have crowded out
+  the on-air cluster.
+- **Cross-refs:** [[B-104]] (the Designer-side data loss this mirrors), [[D-150]] (which fixed
+  it there, and whose `WorkspaceInit` shape is the precedent to reuse — do NOT invent a second
+  one), [[B-085]] (the library store on this root), [[B-092]] (the retention store on it).
+- The E2E path is unaffected and must stay so: `isE2E()` returns a `MemoryWorkspace`
+  DELIBERATELY, for run isolation. That leg is not a degradation and must not be reported as
+  one — only the two failure legs are.
+- **Not verified against a real degraded install.** This is filed from a code read of
+  `initRuntimeWorkspace()` and its two call sites in `createRuntimeBridge.ts`; the insecure-context
+  leg in particular has not been reproduced on a station box.
+
+## [~] B-139 — the row's DRAFT chip and the Inspector disagree about a staged plate, in OPPOSITE directions, and the row's UPDATE verb is disabled off the same wrong boolean ⟨priority: medium⟩ — implemented: `openspec/changes/fix-plate-dirty-baseline/`
+
+**What:** `isItemDirty` takes `appliedPlates` as an OPTIONAL third argument. The Inspector passes
+it; **the stack row does not** — so for the row every staged plate is compared against a fabricated
+`''` baseline instead of the assignment actually in force. Re-picking the value that is already
+saved reads as dirty, and picking _not assigned_ reads as clean. Both surfaces are reporting on the
+SAME staged edit and disagreeing about whether it is dirty.
+
+**Repro:** a plate has source **A** assigned and saved. Then, in any order:
+
+1. set the plate to **B**
+2. set it back to **A** (the saved value)
+3. set it to **not assigned**
+
+**Expected:** (1) draft on the row and in the Inspector · (2) draft in NEITHER · (3) draft in BOTH.
+
+**Actual:**
+
+| action                | Inspector    | row / layer     | correct?      |
+| --------------------- | ------------ | --------------- | ------------- |
+| set to **B**          | draft        | draft           | ✅ both right |
+| set back to **A**     | **no draft** | **draft** ❌    | row is wrong  |
+| set to _not assigned_ | draft        | **no draft** ❌ | row is wrong  |
+
+Order-independent, because the comparison depends only on the staged value and never on history.
+
+**Env:** Runtime SPA, any build carrying the LIVE PLATES section. Read from the code at `3d25585`;
+the reproduction is the owner's, on the running app.
+
+**Why:** the arithmetic is one line, and the contract it breaks is written directly above it.
+
+- `isItemDirty` compares each staged plate as
+  `if (value !== (appliedPlates?.get(plateId) ?? '')) return true;`
+  (`apps/runtime/src/renderer/features/inspector/draftStore.ts:270-274`). With `appliedPlates`
+  omitted the right-hand side is always `''`, which is why a staged `'A'` against an applied `'A'`
+  reads dirty and a staged `''` against an applied `'A'` reads clean. Both observed rows fall out
+  of that single expression.
+- **The Inspector passes the map; the row does not.** `Inspector.tsx:400-404` calls it as
+  `isItemDirty(itemId, item.fields, appliedPlateSources(item.templateId, info?.liveSources?.sources ?? []))`.
+  `LayersPanel.tsx:760` calls it as `isItemDirty(item.itemId, item.fields)`.
+- 🔴 **The docstring states a contract the code does not implement**, and it names the very call
+  site that suffers: _"`appliedPlates` is optional because most callers hold no assignment map (the
+  stack row's dirty dot, for one) … **Omitting it means 'I am not asking about plates'** — never
+  'this item has none'"_ (`draftStore.ts:248-257`). Omitting it does not skip plates; it compares
+  them against a value nobody supplied. This is `CLAUDE.md` golden rule 6 one level out — the
+  contract is asserted in prose and not tested by the implementation.
+- 🔴 **It BREAKS A LIVING SPEC, not merely an internal consistency.**
+  `openspec/specs/runtime-ui/spec.md:87-90`, _"Scenario: Dirty state is visible"_: **WHEN** an item
+  has staged-but-unapplied edits (R-003) **THEN** a dirty-dot on the field and a `● draft` chip on
+  **the row + Inspector** are shown in the dirty hue. The requirement names BOTH surfaces, so a row
+  that disagrees with the Inspector is a shipped requirement violated, and the regression test has a
+  spec scenario to map onto.
+- 🔴 **It is not only cosmetic.** The row's **UPDATE verb is disabled on `!deps.dirty`**
+  (`apps/runtime/src/renderer/features/layers/layerRowActions.ts:713`), fed by the same boolean. So
+  setting a plate to _not assigned_ both hides the chip and **disables the row's UPDATE** on a row
+  that genuinely has an unapplied edit — the exact failure the Inspector's own comment warns about
+  one level in: _"an Update the operator cannot press … would be the panel disagreeing with its own
+  controls about whether there is an unapplied edit."_
+  ⚠ **Scope it precisely:** the same expression gates on air-state FIRST —
+  `empty || !onAir || !deps.dirty || blocked || needsCaspar` (`:713`), with
+  `const onAir = item !== null && isOnAir(item);` (`:363`). So the disabled-UPDATE consequence
+  applies only to a row that is **already on air** — which makes it narrower than "any row" and
+  **worse where it lands**, because that is precisely where an unapplied edit matters.
+- **The canonical join already exists.** `appliedPlateSources(templateId, sources)`
+  (`features/inspector/livePlates.ts`) is already the one join, read by the Inspector's LIVE PLATES
+  section, by `isItemDirty`'s Inspector call, and by `PreviewPanel`. The row needs to call the same
+  thing, not a new one.
+
+**Two misdiagnoses ruled out, recorded so the next reader does not chase them:**
+
+- **NOT "one rule derived twice."** There is ONE predicate and it does compare values correctly.
+  The defect is an optional parameter whose absence silently means "everything is unassigned". The
+  fix is to supply the argument (or to make omission genuinely skip plates), not to delete a second
+  implementation.
+- **NOT the assignment-vs-override confusion** (the template-scoped assignment vs [[R-048]]'s
+  per-row override). Both surfaces read the same staged plate draft; the reproduction rules it out.
+
+**Acceptance:**
+
+- WHEN a plate is set to a different source THEN the row and the Inspector BOTH show a draft
+- WHEN a plate is set back to its saved source THEN NEITHER shows a draft
+- WHEN a plate is set to _not assigned_ and the saved value was a source THEN BOTH show a draft
+- WHEN those three actions are performed in any order THEN the outcome is the same, because the
+  answer is a value comparison and not a function of history
+- WHEN a plate has a real unapplied edit THEN the row's UPDATE verb is ENABLED, including when the
+  staged value is _not assigned_
+- WHEN any surface reports plate draft/dirty state THEN it resolves through the one predicate given
+  its applied-plate map, and no caller can get a plate answer without supplying one
+
+**Notes:**
+
+- **Every draft/dirty reader found**, so the fix cannot miss one:
+
+  | reader                                       | how it asks                                              | correct today? |
+  | -------------------------------------------- | -------------------------------------------------------- | -------------- |
+  | Inspector commit bar — Apply disabled + chip | `Inspector.tsx:401,588,593` — `isItemDirty` WITH the map | ✅             |
+  | Inspector LIVE PLATES — per-plate marker     | `LivePlatesSection.tsx:115,143` — `isPlateDirty`         | ✅             |
+  | Inspector per-field dot                      | `Inspector.tsx:666` — `isFieldDirty` (fields only)       | ✅ n/a         |
+  | **stack row — `DraftChip`**                  | `LayersPanel.tsx:760` → `LayerRow.tsx:708`               | 🔴 no map      |
+  | **row verb block — UPDATE enabled state**    | `layerRowActions.ts:713`, same boolean                   | 🔴 no map      |
+  | `PositionPicker`'s own dot                   | `PositionPicker.tsx:128,137` — local value compare       | ✅ separate    |
+  | `PreviewPanel`                               | reads `appliedPlateSources`, deliberately NOT drafts     | ✅ n/a         |
+
+- **`isPlateDirty` (`draftStore.ts:187-191`) is the correct shape** and is the natural surviving
+  home for the per-plate answer — it is already a value comparison that treats _not assigned_
+  (`''`) as a value.
+- **Owner question:** the two fixes differ in what the row's chip MEANS.
+  **(a)** pass `appliedPlates` at the row call site — the chip then covers fields AND plates, which
+  is what an operator most likely reads it as; the row must obtain the assignment map, which the
+  canonical join already provides. **(b)** make omission genuinely skip plates, honouring the
+  existing docstring — the row's chip then means "fields only", and plates need their own row-level
+  tell or the operator has none. ⟨Owner to choose; the item does not pick.⟩
+- 🔴 **Whichever is chosen, REMOVE THE LANDMINE rather than fixing the one line — and this file
+  already carries the pattern.** `StackPruneInput` (`draftStore.ts:360-372`) makes the unsafe call
+  shape unrepresentable, for exactly this reason: _"That is the difference between fixing this line
+  and removing the landmine — a plain `(ids, ready)` pair would let the next caller pass `true` by
+  habit."_ An optional `appliedPlates` is the same landmine: the next caller omits it by habit.
+  The equivalent here is a parameter that forces the caller to SAY which answer it wants — plates
+  included with their map, or plates explicitly skipped — so that no caller can get a plate answer
+  without supplying a baseline. Filing the one-line argument fix alone leaves the trap armed.
+- **Regression test:** pin all three transitions in the table above — including the two that are
+  wrong today — plus the order-independence and the UPDATE-enabled case. `livePlateDraft.test.ts`
+  already covers the THREE-argument call (`:122-126`); what is missing is the TWO-argument call with
+  staged plates, which is the defect. A test that only exercises the three-argument form passes
+  today and would have passed before this bug existed.
+- **Cross-refs:** [[R-048]] (the per-row source override, a different axis), [[R-053]] (the
+  aspect-crop consent, which will add a fourth per-plate row indicator and must read the same
+  predicate rather than adding a third spelling).
+
+## [~] B-140 — a shell-divider drag that ends by anything other than a mouseup never ends: the divider stays blue and the resize cursor and dead text selection persist application-wide; the Designer's splitter is the same bug, worse ⟨priority: medium⟩ — implemented: `openspec/changes/shared-drag-gesture/` (new `@cg/gesture` package, both apps migrated)
+
+> 🔴 **CORRECTION, 2026-08-17 — the original cause recorded below is DISPROVEN, and the title above
+> has been re-anchored on the one that reproduces.**
+>
+> This item was filed as "the pointer crosses the PVW iframe, so the parent never gets the
+> `mouseup`". **Measured against the pre-fix code, with a positive control asserting the release
+> point hit-tests to an `IFRAME` and with a rebuild between runs, that drag ENDED CORRECTLY.** The
+> lead: the rehearsal frame carries no `sandbox` attribute, so it is same-origin, and Chromium's
+> implicit mouse capture already keeps `mousemove` / `mouseup` with the document where the
+> `mousedown` happened.
+>
+> **What reproduces is an ending that is not a `mouseup` at all** — the window losing focus
+> (alt-tab, a dialog, the OS taking the pointer). The old divider listened for `mouseup` and nothing
+> else, so such a drag never ended. That is the same reported symptom, through the door that is
+> actually open, and the E2E now pins it red-then-green.
+>
+> ⚠ **The Designer half is unchanged in substance and re-anchored in cause**: its listeners really
+> are added inside `onPointerDown` and removed only in its own `onUp`, so a missed `onUp` strands
+> them permanently and the panel then follows the mouse with no button held. But the reachable path
+> to that missed `onUp` is blur / `pointercancel`, not the canvas iframe.
+>
+> The iframe text is left below rather than deleted so the correction is legible against what it
+> corrects — but **it is wrong, and nothing should be built on it.**
+
+**What:** `ShellDivider` listens for `mousemove` / `mouseup` on the PARENT window, and the PVW
+preview is a same-origin `<iframe>`. While the pointer is over that frame the events are dispatched
+in the IFRAME's document, so resizing stops — **and the `mouseup` lands inside the iframe too, so
+the parent's `onUp` never runs.** The drag appears released while the component still believes it is
+dragging.
+
+**Repro:**
+
+1. Grab the horizontal divider between the top and bottom panels and start dragging.
+2. Move the pointer over the PVW canvas.
+3. Release the mouse there.
+
+**Expected:** the drag keeps resizing across the PVW frame, and releasing anywhere ends it
+completely.
+**Actual:** resizing stops as soon as the pointer is over PVW; the divider **stays blue**; and the
+drag never ends.
+**Env:** Runtime SPA, any build. Read from the code at `3d25585`; the report is the owner's, on the
+running app.
+
+**Why — the visible blue line is the symptom of stuck GLOBAL state, not a cosmetic glitch.**
+
+`onUp` is the ONLY place that undoes the gesture's side effects
+(`apps/runtime/src/renderer/ui/ShellDivider.tsx:73-78`):
+
+```
+drag.current = null; setDragging(false);
+document.body.style.cursor = ''; document.body.style.userSelect = '';
+```
+
+🔴 **All FOUR survive a missed `onUp`**, not some: the drag ref stays non-null, `is-dragging` keeps
+the divider blue, and `document.body` keeps **`cursor: row-resize`** and **`user-select: none`** —
+so the whole application wears the resize cursor and **text selection is dead app-wide** until some
+later drag happens to end cleanly. Both body properties are written on `mousedown`
+(`ShellDivider.tsx:118-119`), with a comment explaining why the cursor is held on the body at all.
+
+**Why per-iframe listener registration is not the answer — the frames are plural and dynamic.**
+PVW is not one iframe. `features/monitors/rehearsalFrames.ts` stacks **one frame per rehearsal
+subject** — `stackedByLayer(subjects)` (`:96`), `frameZIndex(index)` (`:112`),
+`overlayZIndex(frameCount)` (`:132`) — created and destroyed as subjects change. Registering on each
+iframe's document works (they are same-origin) but needs one registration per frame, for a set that
+changes at runtime: _extend the list, forget the mutator_. And `setPointerCapture` alone fixes
+crossing any element in the SAME document but is **not dependable across a browsing-context
+boundary**, so it is insufficient on its own rather than the fix.
+
+**🔴 The SAME rule exists twice, and the second spelling fails WORSE.**
+
+`apps/designer/src/renderer/features/shell/Splitter.tsx` is a second, independent derivation of one
+gesture. It is ahead in one way and behind in another:
+
+|                      | Runtime `ShellDivider`                                      | Designer `Splitter`                                                            |
+| -------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| events               | `mousedown` + window `mousemove`/`mouseup` — **mouse only** | `pointerdown` + window `pointermove`/`pointerup` — mouse/touch/pen             |
+| pointer capture      | none                                                        | none — **same crossing defect**                                                |
+| `pointercancel`      | n/a                                                         | **not handled**                                                                |
+| listener lifetime    | `useEffect`, torn down on unmount                           | **added inside `onPointerDown` (`:51-52`), removed only in `onUp` (`:45-46`)** |
+| leaks on a missed up | drag ref, `is-dragging`, body `cursor`, body `user-select`  | `dragging`, body `user-select`, **and the listeners themselves**               |
+| hit area vs visual   | 6px, the same                                               | `HIT = 10`, `LINE = 2` / `LINE_ACTIVE = 4` — **separated**                     |
+
+🔴 **The Designer's failure is the more severe of the two.** Because its listeners are attached
+per-gesture and removed only in `onUp`, a missed `onUp` leaves them attached **permanently**: every
+later pointer move over the parent document keeps calling `onResize`, so **the panel follows the
+mouse with no button held**. The Runtime's bug is a stuck highlight and a stuck cursor; the
+Designer's is a panel that never stops moving. And the Designer has iframes to lose the release into
+— the canvas preview (`features/canvas/CanvasArea.tsx:937`) and `PreviewModal.tsx:405`.
+
+⚠ **Filed as ONE item deliberately.** One root cause with two spellings must not get two fixes —
+that is the failure this item exists to close. A cross-reference is filed in `bugs-designer.md`.
+
+**Acceptance:**
+
+- WHEN a divider drag passes over the PVW preview THEN it keeps resizing, and keeps resizing after
+  the pointer comes back out
+- WHEN the pointer is released anywhere — over a panel, over the PVW frame, or outside the window —
+  THEN the drag ends once and completely
+- WHEN any drag ends by any route THEN `document.body` carries no leftover cursor and no leftover
+  `user-select`, and no divider carries `is-dragging`
+- WHEN `Escape` is pressed during a drag THEN the drag ends, and the panel keeps the size it had at
+  that moment ⟨or reverts — state which and why⟩
+- WHEN the vertical (Inspector) divider is dragged THEN all of the above holds for it too
+- WHEN the divider is dragged with a mouse, with touch, or with a pen THEN it works, through ONE
+  code path
+- WHEN a `pointercancel` arrives mid-drag THEN the drag ends completely, with no leftover global
+  state
+- WHEN a second finger is placed during a drag THEN the divider does not move
+- WHEN the handle is grabbed by finger THEN it can be hit without catching the panels on either
+  side, and its VISIBLE width is unchanged
+- WHEN any drag path runs THEN it writes neither `cursor` nor `user-select` onto `document.body`
+- WHEN the Designer's splitter is dragged across the canvas preview THEN it behaves identically, or
+  the item explicitly names it as separate work
+
+**Notes:**
+
+- **Both fixes are in scope — owner decision, and they are complementary, not alternatives:**
+  - **A full-window DRAG SHIELD fixes CROSSING** — an overlay above every panel and iframe for the
+    duration of the gesture, carrying the resize cursor. Pointer capture does not dependably cross a
+    browsing-context boundary, so this half cannot be replaced by capture. (`pointer-events: none`
+    on the frames while dragging is the alternative shape of the same idea.)
+  - **POINTER EVENTS fix WHO CAN DRAG** — mouse, touch and pen through one path. This half cannot be
+    replaced by the shield. `pointerdown` / `pointermove` / `pointerup` / `pointercancel`, with
+    `setPointerCapture` / `releasePointerCapture` on the divider and `touch-action: none` on the
+    handle so the browser cannot steal the gesture for scroll or zoom.
+- 🔴 **The fix must DELETE the mechanism that gets stuck, not add a fifth place that clears it.**
+  With capture plus the shield there is no longer any reason to write `cursor` or `user-select` onto
+  `document.body` at all — the shield carries the cursor for the duration and disappears with the
+  gesture. The outcome should be **one less piece of global state**, not more cleanup paths. That is
+  what closes the app-wide stuck state at the root.
+- 🔴 **ONE lifecycle with an EXHAUSTIVE terminator set**, all calling the SAME teardown — not a copy
+  per path, which is how this class returns: `pointerup`, `pointercancel`, `lostpointercapture`,
+  window `blur`, `Escape`, and the pointer leaving the window. ⚠ With Pointer Events,
+  `pointercancel` and `lostpointercapture` stop being defensive extras and become **events that
+  actually fire** — the OS takes a touch gesture away when it becomes a scroll, a call arrives, or a
+  palm is rejected.
+- **The visual state and the drag state must not be separately terminable** — `is-dragging` and the
+  drag ref end together, by construction, because they end in the same place.
+- **Only the captured `pointerId` drives the drag.** A second pointer must be ignored, never read as
+  a move. Multi-touch is a new bug class the mouse model could not have, and this is where it enters.
+- **A 6px handle is not a touch target.** The HIT area grows via a padded transparent region; the
+  VISIBLE width stays 6px — otherwise the divider that was already mistaken for a scrollbar gets
+  thicker to fix a different problem. ⚠ The Designer's splitter is the precedent and already does
+  this: `HIT = 10` around a `LINE = 2` (`Splitter.tsx:13-16`).
+- **The keyboard path is unaffected and must stay as it is** — `role="separator"` +
+  `aria-valuenow` + arrow keys with a Shift coarse step (`ShellDivider.tsx:126-152`) already works.
+- **One divider component serves both axes**, so the Runtime fix lands once: `ShellDivider` is used
+  for the Inspector (vertical) and the monitor strip (horizontal).
+- **Tests:**
+  - A test that reads **what the browser shows, not what the component thinks** — assert the
+    computed `body` cursor and `user-select`, and the divider's class, after a drag that crosses the
+    PVW frame. Never internal state.
+  - **E2E:** a Playwright drag whose path crosses the PVW iframe, verified RED before the fix, plus
+    a **touch** drag doing the same. Implementing this owes a **completed green Linux `e2e`** cited
+    by run URL (a UI/render change) — not owed by this filing session.
+- 🔴 **Owner question — if both apps must be fixed, does the gesture live in ONE place?** `CLAUDE.md`
+  says components are app-local and `@cg/ui` is **tokens-only**, so a shared styled splitter is
+  forbidden. But a **headless drag-gesture hook** is neither a token nor a component, and the rule
+  was not written with one in mind. Candidates:
+  1. **Allow headless hooks in `@cg/ui`** — smallest change, one implementation, no styling crosses
+     the boundary. Cost: it widens a rule that has been valuable precisely because it is absolute,
+     and the next thing to ask for an exception will cite this one.
+  2. **A new small package** (e.g. `@cg/gesture`) — keeps `@cg/ui`'s rule intact and states the new
+     concept honestly. Cost: a package for one hook, and another workspace in the gate.
+  3. **Two implementations kept honest by ONE shared test suite** — respects app-locality exactly as
+     written. Cost: the duplication survives; only its behaviour is pinned, and the two can still
+     drift in everything the suite does not assert.
+
+  **I would pick (2)**, because the thing being shared is behaviour with no styling and no tokens,
+  which is a real third category rather than an exception to either rule — and because a package
+  boundary makes the sharing visible where an `@cg/ui` hook would quietly erode "tokens-only".
+  ⟨Owner to choose; the item does not decide.⟩
+
+- **Cross-refs:** the Designer half of this one root cause is cross-referenced from
+  `bugs-designer.md`; it is deliberately NOT a second item.
+
+## [~] B-141 — the audit log records almost ONE action, and its empty state claims otherwise ⟨priority: high⟩ — COMPLETE, awaiting archive: `openspec/changes/audit-writer-forensic-lite/` — writer wired, all append sites wired structurally (9 entry points, 8 actions), the panel's empty states distinguished. ⚠ `actor` is still the constant `'operator'` — an OWNER QUESTION, see the change's tasks.md 5e
+
+**What:** the Audit log modal is empty after a whole session of imports, takes and commands. It is
+not a display bug: the bridge's audit is an **in-memory array with exactly ONE append site**, and
+the `@cg/audit` package that was built to make it a real forensic record **is not imported by
+anything**. The empty state then asserts a fact it cannot know.
+
+**Repro:**
+
+1. Start the bridge and the Runtime; import several templates; load, take and update rows.
+2. Open the status bar's `LOG` button (Audit log).
+
+**Expected:** a row per auditable action — who did what, to which template, and whether the server
+accepted it.
+**Actual:** the list is empty and says _"No audit entries yet."_ The only action that can ever
+appear is a `reconnect`. Restarting the bridge erases even that.
+**Env:** Runtime SPA + bridge, any build. Read from the code at `be2e390`.
+
+**Why — five facts, each verified:**
+
+1. **The store is an in-memory stub.** `#audit: AuditEntry[] = []`
+   (`tools/caspar-bridge/src/caspar-runtime.ts:699`), under a section header that says so out loud:
+   _"lock / templates / audit / settings / update (in-memory stubs)"_ (`:4551`). **A forensic record
+   a process restart erases is not one.**
+2. 🔴 **Exactly ONE append site exists in the entire bridge** — `caspar-runtime.ts:4458`, inside the
+   connection-apply path, writing `action: 'reconnect'`. That is the whole of what the log can ever
+   contain. The READ path is fine (`auditRecent`, `:4680`, routed from `bridge.ts:800`) — there is
+   simply nothing in it.
+3. **`@cg/audit` is dead code.** It ships an `AuditWriter` with `lastError` (`writer.ts:40`, `:92`)
+   and a `readRecentEntries` tail reader (`reader.ts:35`), and its docstring describes the
+   capability the product is supposed to have. SEARCH: `git grep -rn "@cg/audit" -- apps packages
+tools` → the ONLY hit outside the package itself is
+   `packages/eslint-config/src/rules/forbidden.ts:57`, which lists it in `MAIN_ONLY_PACKAGES` — a
+   rule forbidding browser code from importing it. **Nothing imports it.** A package that reads as
+   shipped, describing behaviour that exists nowhere, is a warning that outlives its truth.
+4. 🔴 **The panel's action list and the schema's action set DISAGREE, and the panel is the wrong
+   one.** `AuditEntrySchema.action` enumerates **fifteen** (`packages/shared-schema/src/runtime/audit.ts:11-28`):
+   `load take update out remove failover reconnect import export stop next lock-engage lock-release
+update-deferred update-installed`. `ACTION_OPTIONS` in
+   `apps/runtime/src/renderer/features/audit/AuditPanel.tsx:12-25` is a hand-kept literal of eleven
+   plus `all`, **missing `stop`, `next`, `update-deferred` and `update-installed`**. So four real
+   actions could never be isolated by the filter even once they are written. One rule, two
+   spellings, and nothing catching the disagreement.
+5. 🔴 **The empty state asserts a fact it cannot know.** _"No audit entries yet."_
+   (`AuditPanel.tsx:169`) cannot distinguish _nothing happened_ from _nothing is recorded_ from
+   _this build has no writer_. It is **this project's own recurring error written into the
+   product**: a negative observation is not a result until a positive control proves the instrument
+   is live. The operator reading it concludes the session was quiet.
+
+**Acceptance:**
+
+- WHEN an auditable action occurs THEN a row is appended to a record ON DISK, and it is still there
+  after the bridge restarts
+- WHEN the Audit log is opened THEN it shows the recent tail of that record, newest first
+- WHEN the panel offers its action filter THEN the options are DERIVED from the one schema action
+  set, so a new action cannot be filterable in one place and invisible in the other
+- WHEN no writer is configured THEN the panel says THAT, and does not say "no entries yet"
+- WHEN the writer is configured but failing THEN the panel surfaces the failure (its `lastError` /
+  error count), and does not say "no entries yet"
+- WHEN the record is readable and genuinely empty THEN — and only then — the panel says "No audit
+  entries yet."
+- WHEN an audit write fails THEN the take, the update and every other on-air operation still
+  proceed; the writer keeps trying and reports, and nothing goes off air
+
+**Notes:**
+
+- **Owner decision, recorded as DECIDED: FORENSIC-LITE.** Wire `@cg/audit` so the record is on disk
+  and survives a restart. **File rotation, the UNC fallback and any retention policy are
+  DEFERRED** — and the writer's docstring must be corrected where it still promises them, or it
+  stays a warning that outlives its truth.
+- **Rejected, with its reason:** keep it in-memory and delete the package. The station then loses
+  the ability to answer _"who put what on air, and did the server accept it"_ the next day, which is
+  the only reason an audit log exists.
+- 🔴 **A failed audit write must NEVER take the station off air**, and the contrast with the config
+  stores is deliberate: there an unusable file IS a hard boot failure, because the file is a
+  precondition for correct playout. An audit write is not a precondition for anything — it is a
+  record OF what happened, so its failure must degrade to "reported and retried", never to a refused
+  take.
+- **Where the file lives follows the existing store precedent** — a CLI flag with a default under
+  `~/.cg-runtime/`, exactly as `tools/caspar-bridge/src/source-assignments-store.ts` documents
+  `--source-assignments-path` → `~/.cg-runtime/bridge-source-assignments.json`. ⚠ **Not in
+  `templatesDir`**: `TemplateRegistry` reads every `*.json` there as a template ([[B-116]]).
+- ⚠ **Wire only actions that are real operations today.** An action in the enum with no operation
+  behind it must not be invented to fill the list; name any that cannot be wired and why.
+  **Resolved:** wired — `load` `take` `update` `out` `stop` `next` `remove` `import`, plus the
+  pre-existing `reconnect` `failover` `lock-engage` `lock-release`. **Not wired, and why:**
+  `export` happens in the Designer, and `update-deferred` / `update-installed` have no install
+  path in this process. ⚠ `import` was the fifteenth action and the change's own bookkeeping had
+  lost it — it appeared in neither list, so it read as accounted for while being accounted for
+  nowhere.
+- ✅ **RESOLVED 2026-08-18 — `actor` is now a per-console OPERATOR NAME**, implemented in
+  `openspec/changes/audit-actor-console-name/`. Was: every entry carried `actor: 'operator'`, a
+  constant, because the control WebSocket is unauthenticated loopback — the record answered _what_
+  honestly and answered _who_ with one word, which on a shared gallery is the half a dispute turns
+  on. The single `OPERATOR_ACTOR` seam did its job: exactly one place had to learn the answer.
+  **Owner decision:** the name is set per console in the Runtime and sent with each control
+  request. **Rejected:** a PIN-backed sign-in (the lock's PIN is a SAFETY mechanism, not an
+  identity one, and a login in front of an emergency console is wrong) and a per-connection client
+  id (identifies a browser; nobody disputes which browser).
+  🔴 **The name is SELF-DECLARED and UNVERIFIED** — "which console, as labelled", never "which
+  person, proven" — and that caveat is on the operator-facing surface, not only in the design, for
+  the reason [[B-143]] records.
+  ⭐ **SUPERSEDED 2026-09-23 — the field and its caveat are RETIRED** (`OPERATOR-NAME-SWEEP-01`,
+  [[R-066]] bullet 5). This paragraph stands as the record of what shipped on 2026-08-18 and why;
+  what changed is the premise. [[C-037]] made identity provable and [[C-038]] gated on it, so the
+  recorded actor is a verified principal and a surface calling it a typed label would be false.
+  The `OPERATOR_ACTOR` seam this bug created is what made that swap a one-site change — exactly
+  the property it was built for. Under auth OFF the console sends no actor and the bridge records
+  `unattributed`. An unconfigured console records `unattributed`, a word for a state,
+  never the old `operator`, which could not be told apart from a console somebody chose to name
+  that. ⚠ The control lives in the Audit panel because the Runtime has no settings shell;
+  [[R-054]] records that it must move.
+- **Cross-refs:** [[B-142]] (the panel's raw `<select>`, which this item must not touch),
+  [[B-143]] (the same class — the system knows something and does not say it).
+
+## [ ] B-142 — four Runtime dialogs render raw `<select>`s that sit OUTSIDE `Modal`'s focus trap ⟨priority: medium⟩
+
+**What:** `Modal`'s focus trap enumerates focusable children with a selector that **omits `select`,
+`textarea` and `a[href]`** (`apps/runtime/src/renderer/ui/Modal.tsx:48`), and four dialogs render raw
+`<select>`s. A control inside a modal that the trap does not know about lets keyboard focus escape
+to the page behind the scrim.
+
+**Repro:**
+
+1. Open Live sources (status bar → `SOURCES`).
+2. Tab forward from the last trapped control.
+
+**Expected:** focus wraps within the dialog — the trap wraps at both ends specifically so focus can
+never reach an on-air control behind the scrim (`Modal.tsx:316-330`).
+**Actual:** the `<select>`s are not in the trap's set, so the wrap is computed over the wrong
+boundary.
+**Env:** Runtime SPA, any build. Read from the code at `be2e390`.
+
+**Why:** this is a keyboard-reachability defect on a broadcast console, where an operator may be
+driving from a keyboard in a gallery — not a style nit. The four sites:
+
+| dialog                | file:line                                          |
+| --------------------- | -------------------------------------------------- |
+| Live sources          | `features/sources/SourcesModal.tsx:389` and `:411` |
+| Server connection     | `features/connections/ServerSettingsPanel.tsx:368` |
+| Audit log             | `features/audit/AuditPanel.tsx:136`                |
+| Live source for a row | `features/layers/LiveSourceSwapDialog.tsx:130`     |
+
+🔴 **And nothing prevents the next one.** Unlike the Designer, `apps/runtime` has **no
+raw-`<button>`/`<select>` lint ban and no shared `Select` primitive**, so the rule `CLAUDE.md`
+states for the Designer's renderer is simply not enforced here. Every new dialog is free to add a
+fifth.
+
+**Acceptance:**
+
+- WHEN a dialog containing a `<select>` is open and the operator tabs to the end THEN focus wraps
+  inside the dialog and never reaches a control behind the scrim
+- WHEN a control type is focusable THEN the trap's selector includes it, so the trap's set and the
+  browser's agree
+- WHEN a new dialog adds a native form control THEN the enforcement catches it ⟨subject to the owner
+  question below⟩
+
+**Notes:**
+
+- **The fix belongs with [[R-054]]'s shell work**, which already requires bringing these dialogs onto
+  shared primitives and introducing a shared `Select`. Cross-referenced rather than duplicated: this
+  item exists so the KEYBOARD defect is filed as a defect and does not ride invisibly on a restyle.
+- ⚠ Two fixes are possible and they are not the same: widening `Modal.tsx:48`'s `FOCUSABLE` selector
+  (immediate, fixes today's four), and replacing the raw controls with a shared `Select` (structural,
+  prevents the fifth). The first is a one-line correctness fix and should not wait on the second.
+- 🔴 **Owner question:** should `apps/runtime` gain the Designer's lint ban and a shared `Select`?
+  **Cost:** a new primitive plus a migration of at least four call sites, and an eslint rule that
+  will fail existing code until they are all moved. **Benefit:** the rule stops being true of one app
+  and false of the other, which is currently a difference nobody can see from either side. Posed,
+  not resolved.
+- **Cross-refs:** [[R-054]] (the shell work this fix belongs to), [[R-052]] (the message-region
+  contract, the other half of `Modal`'s shared behaviour).
+
+## [ ] B-143 — `resolvePlateAspect`'s `assumed` flag has no readers: the honesty half was never built ⟨priority: medium⟩
+
+**What:** when neither the source nor the author states an aspect, `resolvePlateAspect` deliberately
+does NOT refuse — it fits without cropping and returns `assumed: true`
+(`tools/caspar-bridge/src/live-plate-fit.ts:169`). Its docstring says exactly what that flag is for:
+_"what lets a row or a log say 'fitted unverified' instead of claiming a verified fit — the honesty
+half of a decision that deliberately does not refuse."_ **That half was never built.** The flag is
+set and read by nothing.
+
+**Repro:**
+
+1. Define a live source whose format is `AUTO` (or which states no aspect), and assign it to a plate
+   whose element carries no `expectedAspect`.
+2. Take the row.
+
+**Expected:** the graphic goes to air — that is the deliberate, correct decision — **and the row or
+the log says the fit is unverified.**
+**Actual:** the graphic goes to air and nothing anywhere says the fit was assumed.
+**Env:** Runtime + bridge, any build. Read from the code at `be2e390`.
+
+**Why:** the non-refusal is right and well argued — refusing would outlaw `AUTO`, which is _"a
+request to the hardware, not a statement about the picture"_, and would give a black box where a
+guest should be. But the argument for not refusing **rests on the operator being told**, and the
+telling does not exist. SEARCH: `git grep -rn "assumed" -- tools/caspar-bridge/src packages apps` →
+the flag is set in `live-plate-fit.ts`, carried on `PlateAspectOutcome`, and asserted in
+`tools/caspar-bridge/tests/live-plate-fit.test.ts` — **no UI, no IPC channel, no log line**. So a
+plate is on air with an unverified fit and nobody is told.
+
+**Acceptance:**
+
+- WHEN a plate is seated with `assumed: true` THEN the row says the fit is unverified, persistently
+  while it is on air — not as a toast
+- WHEN a plate is seated with a verified aspect THEN nothing extra is shown, so the marker means
+  something
+- WHEN an operator asks why a picture looks wrong THEN the unverified fit is discoverable from the
+  surface rather than only from the bridge's internals
+
+**Notes:**
+
+- **Same class as [[B-141]]:** the system knows something and does not say it. Both are the honesty
+  half of a decision that was otherwise made correctly.
+- **Distinct from [[R-053]], and the distinction is the whole point.** R-053 is the **mismatch**
+  case — two facts contradict, and the take is refused. This is the **nothing-stated** case (the
+  D-147 decision) — no facts contradict, nothing is refused, and the cost is a silent assumption.
+  Fixing one does not fix the other, and they should share a surface rather than invent two.
+- ⚠ **Whatever surface this uses, [[R-053]] will need the same one** for its "cropped by operator
+  consent" indicator, and [[B-139]] governs the row's existing per-plate indicators. Three per-plate
+  facts want a row-level home; the first of the three to be implemented should build it deliberately
+  rather than adding a private badge.
+- **Cross-refs:** [[R-053]], [[B-141]], [[B-139]].
+
+## [ ] B-144 — a failed CLEAR leaves a graphic ON AIR while its row vanishes from every browser: `remove()` cannot report its own failure to the UI ⟨priority: high — the operator loses the handle to something that is on air⟩
+
+**What:** `CasparRuntime.remove()` answers `{ accepted: true }` **unconditionally**
+(`tools/caspar-bridge/src/caspar-runtime.ts`, `#removeImpl`). The row is dropped from the stack
+before the wire is touched, and the `CG CLEAR` that follows is best-effort. When that CLEAR fails,
+the response still says `accepted`, so **every browser removes the row while the graphic is still
+on air.**
+
+**Repro:**
+
+1. Load and take an item so a graphic is on air.
+2. Make the primary's AMCP unreachable (pull the link, or kill the server) so the urgent `CLEAR`
+   cannot land.
+3. Press REMOVE on the row.
+
+**Expected:** the graphic is off air; or, if it could not be, the row stays visible carrying its
+true state and the operator is told the CLEAR failed.
+**Actual:** the row disappears from every connected browser and the graphic stays on air. The UI
+shows a state that is not true, and the only handle to the thing on air is gone.
+**Env:** Runtime + bridge, any build. Read from the code at `50fe15be`.
+
+**Why this outranks a cosmetic defect:** the operator's remaining options are the orphan sweep
+(which only surfaces once the primary is observable again) or a hand-typed AMCP command. In the
+meantime a graphic nobody can see a row for is on air, which is the state a broadcast console exists
+to prevent.
+
+🔴 **The failure IS recorded — and a log entry is not an operator surface.** Session D routed the
+wire failure to the audit wrapper via `AuditDetail.wireFailure`, so the NDJSON row for that `remove`
+now carries the real `errorCode` instead of `ok`. That fixed the FORENSIC half: the next day, the
+question "did that CLEAR land" has an answer. It does not fix this one. **Nobody is watching the
+audit log at the moment a graphic fails to leave air** — the Audit panel is a modal opened for
+review, and the row it would explain has already vanished from the surface the operator IS watching.
+Recording a fact and surfacing it are different jobs, and this item is only the second.
+
+**⚠ THE CENTRAL COST — changing the response shape touches the SPA CONTRACT**, and that is
+precisely why session D did not do it. `remove` is consumed by `StackRemoveChannel`, the
+`RuntimeBridge` surface, `MockRuntime`, the mock↔bridge parity guard and every renderer call site.
+`{ accepted: true }` is also **right for the caller** in one real sense: the row IS off the stack
+and the layer IS deallocated whatever the wire did, so a naive `accepted: false` would be a
+different lie — it would suggest the removal did not happen.
+
+**The options, posed rather than chosen:**
+
+| shape                                                                                         | what it costs                                                                                                                                                                                                                                                          | what it leaves unsolved                                                                                                                                                                                        |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A — a response that can express failure** (e.g. `{ accepted: true, clearFailed?: string }`) | one schema change, rippling to the channel, the bridge surface, the mock, the parity guard and every call site. Additive and optional, so old readers keep working — but every reader that should react has to be found and changed, and the ones missed fail silently | nothing on RECONNECT: a browser that was not the one pressing REMOVE never sees the response at all                                                                                                            |
+| **B — a separate error channel / publish**                                                    | no change to `remove`'s response; reaches EVERY connected browser, which A does not                                                                                                                                                                                    | a second way for one action to report itself, which is the two-spellings shape this repo keeps paying for. Ordering against the stack publish must be defined or the row can vanish before the warning arrives |
+| **C — a reconciliation pass that re-derives the row from the server**                         | no contract change at all, and it fixes the whole CLASS rather than this verb — any divergence between believed and actual state is caught                                                                                                                             | the largest by far, and it only helps once the primary is observable again, which is exactly when it is NOT during this failure. Slowest to tell the operator                                                  |
+
+⚠ **B and C are not exclusive, and the honest reading is that C is the real cure while B is what
+makes the failure visible today.** Whichever is chosen, `wireFailure`'s single sanctioned use must
+stay single: it exists so the AUDIT can contradict a response, and it must not quietly become the
+general mechanism for the UI to do so.
+
+**Acceptance:**
+
+- WHEN a `remove`'s CLEAR fails THEN the row remains visible, carrying its true state — still on air
+  — rather than disappearing
+- WHEN a `remove`'s CLEAR fails THEN the operator is TOLD, on the surface they are already looking
+  at, persistently while the condition lasts; an audit row does not satisfy this
+- WHEN a `remove`'s CLEAR succeeds THEN behaviour is exactly as today — the row goes, nothing extra
+  is shown, so the warning means something
+- WHEN a second browser did not issue the `remove` THEN it sees the same truth as the one that did
+- WHEN the layer is later observed clear (by the orphan sweep or a reconnect resync) THEN the
+  warning resolves on its own rather than needing a dismissal
+
+**Notes:**
+
+- **The deallocation is correct and must not be reverted.** `#removeImpl` frees the slot and
+  resolves the owned-occupancy warning BEFORE the CLEAR deliberately (B-056): the layer is unowned
+  from that point, and whatever survives on the primary is the R-009 sweep's to surface as an
+  ordinary clearable orphan. This item is about telling the operator NOW, not about changing who
+  owns the layer.
+- **Same class as [[B-141]] and [[B-143]]:** the system knows something and does not say it. Here
+  the system now RECORDS it too, which makes the gap sharper rather than smaller.
+- **Cross-refs:** [[B-141]] (the audit wrapper that made the failure visible in the log),
+  [[B-143]] (the honesty half never built), [[B-139]] / [[R-053]] (the row-level home three
+  per-plate facts already want — a per-row warning surface should be built once, not four times).
+
+## [x] B-145 — the bridge's live-layer ledger does not survive a restart: seated producers are stranded on air, unreachable by any code path — **DONE: persistence (sessions AS + AT) and the DISPLAY half of acceptance 1 (session BG, 2026-08-20)** ⟨priority: high — a live face on air with no handle to it⟩
+
+**What:** `#liveLayers` is a `Map` in the bridge process (`tools/caspar-bridge/src/caspar-runtime.ts`,
+`readonly #liveLayers: LiveLayerLedger = new Map()`). It is the only record of which band layers
+carry which item's plates. Release happens on `stopItem` / `out` / `remove` **and on no other path**
+— not on disconnect, not on bridge restart. So a restart loses the ledger while the CasparCG
+producers keep running: the layers stay lit and **nothing in the product can name them, clear them
+or re-adopt them.**
+
+**Repro:**
+
+1. Take a row whose template declares Live Source plates, so band layers are seated.
+2. Restart the bridge (or let it crash and come back).
+3. Look at the layer list, and try to clear or repoint those plates.
+
+**Expected:** the seated layers still appear and are controllable — the console can see what is on
+air and act on it.
+**Actual:** the ledger is empty. The producers are still on air. `layers.clear` refuses them as
+`foreign` at best; nothing re-associates them with the row they belong to.
+**Env:** Runtime + bridge, any build. Read from the code at `056ffdd5`.
+
+**Why it is filed now, and separately.** It is **pre-existing** and is not caused by the multi-box
+arrangement switch, so folding it into that change would misattribute it. But the switch **seats and
+releases plates continuously** rather than once per take, so it multiplies the ledger's write rate —
+and under it a stranded producer is a live guest on air that no code path can reach.
+🔴 **It must land BEFORE the arrangement switch ships** (`openspec/changes/multibox-layout-switch/`
+`tasks.md` 1.11 / 4.7, `design.md` §12.7 — the owner's decision, 2026-08-18).
+
+**The two mechanisms are NOT equivalent, and that is the design question:**
+
+| shape                                                 | what it buys                                                                    | what it leaves                                                                                                                                                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A — PERSIST the ledger**                            | cheap, and exact for the case where only we changed anything                    | records what we BELIEVE. A producer can also vanish from the server's side (a channel reset, a hand-issued `CLEAR`) and the persisted ledger is none the wiser — it then asserts a layer that is not there |
+| **B — RECONCILE against the server's `INFO` at boot** | reads what the server ACTUALLY has, so it is self-correcting in both directions | must re-derive the plate↔layer↔item mapping from what `INFO` exposes, which may not be enough on its own                                                                                                   |
+
+**Recommendation, not a decision: B, with A only if `INFO` proves insufficient** to re-derive the
+mapping. A second consumer wants the same truth — `multibox-layout-switch` `design.md` §12.6's
+refusal predicate has to know what is on air after a restore — and two mechanisms answering "what is
+seated" is the two-spellings shape this repo keeps paying for.
+
+### RESOLVED 2026-08-18 — `INFO` was measured, and the answer is **A + B**
+
+**`INFO` is NOT sufficient on its own, and what it lacks is exactly the part the server was never
+told.** Measured on the plant (`2.5.0 69e8ad5`) with controls in both directions — an empty channel
+returns no `<stage>` at all; two seated producers are both listed; **clearing one removes it from the
+reply**:
+
+| `INFO <channel>` exposes                                                                       | `INFO` does NOT expose                                                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| every occupied layer number (`<layer_10>`)                                                     | the **`itemId`** — CasparCG has no concept of our stack items                                                                                                                                                                                            |
+| the producer KIND (`route`, `color`, `html`, …)                                                | the symbolic **`sourceId`** (`guest-1`). Only the RESOLVED producer is on the wire, and reverse-mapping it through the catalog is not injective — two plates may resolve to one producer, and the mapping can have been edited while the bridge was down |
+| that producer's own parameters (`<route><channel>1</channel><layer>11</layer></route>`)        | the fill/key **`role`**                                                                                                                                                                                                                                  |
+| `<paused>`, and the foreground/background split                                                |                                                                                                                                                                                                                                                          |
+| …and `MIXER … FILL` / `CLIP` / `VOLUME` read back exactly, so the geometry half IS recoverable |                                                                                                                                                                                                                                                          |
+
+**The named fallback: PERSIST (A) plus a boot RECONCILE against the server (B).** The file knows the
+NAMES, the server knows the TRUTH, and **the reconciliation of the two IS the ledger** — one
+authority, with the file an input to it rather than a second answer consulted later.
+
+**The three-valued rule, and why `unknown` adopts.** `occupied` → adopt; `empty` → **drop** (the
+self-correcting direction acceptance 3 asks for); `unknown` → **adopt and mark unverified**, because
+absence of knowledge is not knowledge of absence (R-015, and the B-101 lesson about reading silence
+on one channel as death on another). Dropping an unverifiable record would strand exactly the
+producer this item exists to stop stranding — the same failure, reached from the other side.
+
+**A stale claim was found and corrected on the way.** `packages/caspar-client/src/osc/occupancy-tap.ts`
+asserted that _"`INFO <channel>` returns no per-layer data on the 2.3+ lineage"_, citing a live
+capture on this exact build. It is false there, and it is the kind of false that costs: it says AMCP
+cannot answer a question AMCP answers, and this item's boot adoption is precisely the one-shot
+occupancy reading that would have gone without. The tap's own justification (passive, costs no
+commands) is unaffected and is now what the comment says.
+
+### ✅ CLOSED 2026-08-20 (session BG) — the DISPLAY half landed, and acceptance 1 is met in full
+
+Acceptance 1 reads _"those layers **appear in the layer list** and are controllable"_. The control
+half had held since persistence landed; the display half did not exist, and that is what closed.
+
+**The surface.** A third tab — **`LIVE PLATES`** (it shipped as `LIVE SOURCES`; renamed by the
+owner 2026-09-12, since a plate is a seated layer and `Live sources` is Station setup's
+installation-wide catalogue), beside `LAYERS` and `STATION LAYERS`
+(`apps/runtime/src/renderer/features/layers/LiveSourcesPanel.tsx`) — listing every seated layer with
+its coordinate, its symbolic plate, the producer actually sent, and **the row that owns it**.
+
+**Why a third tab and not a widened `playoutLayersState()`**, which is the obvious-looking fix and is
+wrong: the Live Source band's exclusion from `#reservedLayers` is LOAD-BEARING, not an oversight.
+`reservedLayers` is a fence AWAY from a foreign owner, so a band inside it becomes unplaceable
+(`allocate()` skips reserved layers), unreservable (`reserve()` refuses them) and unclearable
+(`clearLayer` refuses them as `reserved`) — the bridge would fence off the very layers it is about to
+composite a guest onto. The bridge already enumerates THREE declared ownership classes in one place
+(`#declaredLayerClass`); the console had a surface for two of them. This is the third.
+
+**The wire.** `packages/shared-ipc/src/channels/liveLayers.ts` — `liveLayers.state` plus
+`liveLayers.state-changed`, pushed from the `liveLayersChanged` emitter this item already fires from
+the ledger's ONE write path, so a seat, a release, a hold and the boot adoption reach a browser by
+the same call that persists them. One projection (`projectLiveLayers`) serves both the pull and the
+push, so the two cannot disagree about a row's shape or the list's order.
+
+**`liveLayers()` has a production caller now**, which is the point rather than a detail:
+`LiveSourcesPanel` → `useLiveLayers` → `liveLayers.state` → `bridge.ts` → `liveLayersState()` →
+`liveLayers()`. Its doc comment used to say _"for tests and for phase 6's re-emission"_ and that was
+true for long enough to be the defect — the written-but-unreachable class filed here four times.
+
+**ADOPTED vs STRANDED**, which is what task 2.8's "done when" actually asked for:
+
+- a layer whose owning item the stack still carries is shown, named with its template, and offers
+  `OPEN ROW` — but **no destructive control**. Its verbs are its row's, and `layers.clear` refuses a
+  live-source coordinate BY NAME after explicitly weighing and rejecting an exemption; a clear here
+  would re-open that door from a second surface.
+- a layer whose owner is GONE reads **Stranded**, raises the tab's dot, is the only row on the
+  surface that wears a colour (amber = ATTENTION; green stays the layer table's ON AIR mark), and
+  offers `RELEASE` — which calls the EXISTING `stack.remove`. Its `teardownLiveLayers` is documented
+  as unconditional on `slot` precisely for this case: _"an item whose slot was already released can
+  still own live layers, and those are precisely the ones nothing else would ever reach."_ The door
+  already worked; what was missing was a surface that knew the `itemId` to hand it. **No new
+  coordinate-addressed clear was added.**
+
+With the link down every row reads `Unknown` and offers nothing: the ledger and the stack are then
+both frozen snapshots ([[B-087]]), and a stranded verdict computed from two stale facts would present
+a guess as an alarm.
+
+**Tests:** `tools/caspar-bridge/tests/live-layers-wire.test.ts` (17, including an end-to-end boot that
+adopts a persisted ledger and serves it over the WebSocket, and the acceptance-3 drop) and
+`apps/runtime/tests/liveSourcesPanel.dom.test.ts` (18). E2E:
+`apps/runtime/tests/e2e/live-source-layers.spec.ts`. Six mutations were checked and each reddens the
+tests that name it.
+
+🔴 **One defect was found in this very work by its own review, and it is worth recording because it
+is this repo’s most-repeated class.** The first cut decided STRANDED from the stack items alone,
+ignoring `stackReady`. The ledger and the stack are two INDEPENDENT snapshots that land separately,
+so at mount and on every reconnect the ledger can arrive first — and every seated layer would have
+read _"Stranded"_ with a RELEASE button, inviting the operator to cut a guest owned by a row that had
+simply not been delivered yet. `useBridgeSnapshot` already names three victims of the same mistake
+(the b2 density bug, PVW’s white page, `pruneDrafts` deleting every staged edit on remount) and
+states the rule this violated: _"any consumer that ACTS on the absence of an item must read this form
+and do nothing while `ready` is false."_ Fixed at the cause — blindness is now a first-class state
+with ONE precedence helper, and reverting it reddens three tests.
+
+🔴 **Four MORE were found by a second review pass, and they are one pattern, not four bugs.** Every
+one is a fact the console did not have, presented as a fact it did — which is the same class as
+the defect this item is about:
+
+1. **The reconnect window** — reading `stackReady` was not enough, because that flag _"latches on
+   the FIRST arrival and never clears"_. After any reconnect it stays true while the stack is
+   empty, and a restarted bridge serves its FULL adopted ledger first. Every layer would have read
+   STRANDED with RELEASE armed, in exactly this item’s own scenario. An EMPTY stack is now its own
+   blind state: it cannot tell "not delivered yet" from "nothing here".
+2. **The empty list** asserted "no live sources seated" with no readiness or link input, so a
+   console with a dead bridge denied, definitely, that any guest was composited ([[B-094]]).
+3. **RELEASE was item-scoped while its wording was coordinate-scoped** — `teardownLiveLayers`
+   loops over every record the item owns, so releasing `1-10` also cut `1-11` with no warning. The
+   verdict is also re-read after the confirm, so one that expired while the operator was reading
+   cannot authorise a teardown.
+4. **No `unverified` arm.** The channel argued its shape from "the ledger is resolved at boot
+   against the server’s `INFO`" — false in the shipped bridge, which adopts with occupancy
+   hard-coded to `unknown`. Nothing is ever dropped and every adopted record is unconfirmed, so
+   the omission was the one distinction that is ALWAYS true after a restart, and the surface
+   stated a file claim in the present tense. The wire now carries it and the row reads _"Adopted —
+   not confirmed"_. Same demotion rule as [[B-086]]’s `unverified` stack status.
+
+**[[R-057]] Stage E (the operator surface) is UNBLOCKED** — 2.8 was its last blocker.
+
+### 🔴 RE-OPENED 2026-08-19 (session AU) — it was ticked with half of acceptance 1 unmet
+
+**What is DONE:** the ledger is persisted, adopted at boot against the server, and persistence is ON
+by default (sessions AS and AT). An adopted layer IS controllable — the row's existing verbs reach
+it, because the browser re-delivers the stack intent on connect ([[B-092]]), the ledger is keyed by
+`itemId`, and every teardown/repoint door reads it by that key.
+
+**What REMAINS — and it is the first half of acceptance 1, not a nicety.** Acceptance 1 reads _"those
+layers **appear in the layer list** and are controllable"_. They do not appear. Nothing displays the
+seated layers AS layers: `CasparRuntime.liveLayers()` has no production caller, no `@cg/shared-ipc`
+channel carries the ledger, and the only panel that lists station layers enumerates `#reservedLayers`
+only — a band the Live Source layers are deliberately kept OUT of.
+
+🔴 **Tracked as task 2.8 in `openspec/changes/multibox-layout-switch/tasks.md`, and NOT split into a
+second number.** The blocking relation to [[R-057]] is already recorded here, and splitting one
+acceptance list across two items is exactly the churn `docs/prd/b-number-registry.md` exists to
+avoid. This item was `[~]`, not `[x]`, until 2.8 landed — see the CLOSED section below.
+
+⏱ **WHEN it must land: before STAGE E**, the operator surface (`tasks.md` section 6). Not before
+that, and the reason is specific rather than a preference — Stage E is where the band's state becomes
+something the operator is EXPECTED to read, so an invisible seated layer stops being a diagnostic gap
+and becomes a lie on the surface they act from. Stages C and D touch neither the list nor the band's
+visibility, so they are not blocked on it.
+
+### 🔴 COMPLETED 2026-08-19 (session AT) — the default was OFF, and the display half is still owed
+
+Two things the first cut left open, both now settled rather than assumed:
+
+1. **Persistence now defaults ON.** It shipped behind a `liveLayersPath` option that nothing
+   defaulted, so a station that never configured it still lost its ledger — and every test passed
+   either way, so nothing would have caught the default drifting back. `resolveLiveLayersPath`
+   (`tools/caspar-bridge/src/live-layers-store.ts`) makes saying nothing resolve to
+   `~/.cg-runtime/bridge-live-layers.json`, the same convention as every sibling store, and OFF is
+   reachable only by typing `--no-live-layers`. The resolution is applied by
+   `bin/caspar-bridge.mjs`, not by `createBridge`, per this repo's own ruling that
+   _"`createBridge({})` is not a station"_ (`tools/caspar-bridge/tests/default-bank-boot.integration.test.ts:164`)
+   — defaulting it inside `createBridge` would have every unit test read, and any test seating a
+   live layer WRITE, the developer's real station ledger. `live-layers-default.test.ts` spawns the
+   real CLI so the WIRING is covered too; flipping the default to off reddens four of its tests.
+
+2. 🔴 **Acceptance 1's DISPLAY half is NOT met — an adopted layer is controllable but invisible.**
+   The control half holds with no further work: the browser re-delivers the stack intent on connect
+   ([[B-092]]) so the row and its `itemId` survive, the ledger is keyed by `itemId`, and
+   `teardownLiveLayers` (`tools/caspar-bridge/src/caspar-runtime.ts:3802`) plus the swap paths at
+   `:3461`/`:3639` all read it by that key. But **nothing displays the seated layers as layers**:
+   `CasparRuntime.liveLayers()` (`caspar-runtime.ts:3849`) has no production caller, no
+   `@cg/shared-ipc` channel carries the ledger, and the one panel that lists station layers
+   enumerates `#reservedLayers` only (`caspar-runtime.ts:4064`) — a band the Live Source layers are
+   deliberately kept OUT of. Written up as task 2.8 in
+   `openspec/changes/multibox-layout-switch/tasks.md`; it needs a channel and a panel decision, so
+   it is not a patch to this item.
+
+**What landed:** `tools/caspar-bridge/src/live-layers-store.ts` (atomic write; it fails **soft** where
+its `reserved-layers-store` sibling fails hard — an empty ledger is the pre-B-145 status quo, so
+refusing to boot over a malformed bookkeeping file would take the console off air to avoid a
+degradation it lived with for months), `reconcileLiveLayers()` in `live-layers.ts`,
+`CasparRuntime.adoptLiveLayers()` plus a `liveLayersChanged` emitter fired from the ONE write path,
+and the `bridge.ts` wiring behind a new `liveLayersPath` option. Ten tests in
+`tools/caspar-bridge/tests/live-layers-restart.test.ts`, one per acceptance line plus the store's
+failure modes; the drop rule is mutation-tested (breaking it reddens three).
+
+**Acceptance:**
+
+- WHEN the bridge restarts while live plates are seated THEN those layers appear in the layer list
+  and are controllable, rather than being invisible to every code path
+- WHEN the ledger is rebuilt at boot THEN it is rebuilt from ONE authority, and a plate that the
+  server no longer carries is not asserted as seated
+- WHEN a producer disappeared from the server's side while the bridge was down THEN the rebuilt
+  ledger reflects the server, not a stale belief
+
+- **Cross-refs:** [[B-144]] (the same shape one layer up — a graphic on air whose row the operator
+  can no longer reach), [[R-057]] / [[D-152]] (the arrangement switch this must land before),
+  [[C-015]] (the Live Source seating and the band).
+
+## [ ] B-146 — the Inspector's source assignment silently reaches nothing on air, and its picker is blind to an active override ⟨priority: high — the operator believes they repointed a live box⟩
+
+**What:** two halves of one confusion — the Inspector confidently shows, and appears to change, a
+source that is not what is on air.
+
+1. **The edit reaches nothing.** The Inspector writes the **template-scoped** assignment.
+   `setSourceAssignments` (`tools/caspar-bridge/src/caspar-runtime.ts:5219-5229`) validates, assigns,
+   emits and returns — it **is not `async`**, so it is structurally incapable of sending an AMCP
+   command. The spec says so too (`openspec/specs/runtime-live-source-routing/spec.md`: _"an
+   assignment is read at the TAKE and never re-composites the graphic already on the channel"_), and
+   so does the code (`apps/runtime/src/renderer/features/inspector/applyDraft.ts:36-38`). **Nothing
+   tells the operator.**
+2. **The picker is override-blind.** `appliedPlateSources`
+   (`apps/runtime/src/renderer/features/inspector/livePlates.ts:19-29`) resolves via the TEMPLATE
+   assignment, and `effectivePlateSource` (`.../draftStore.ts:177-184`) returns
+   `staged ?? applied ?? ''`. Neither consults `item.sourceOverride`.
+   `SEARCH:` `git grep -rn "sourceOverride" -- apps/runtime/src/renderer` → **exactly one hit**,
+   `features/layers/LiveSourceSwapDialog.tsx:80`. An active override is invisible everywhere except
+   the dialog that set it.
+
+**Repro:** take a row carrying a template with Live Source plates. Open the Inspector, change a
+plate's source, apply. Nothing on air changes and nothing says so. Separately, swap a source via the
+row's SOURCE verb, then open the Inspector: it shows the OLD source as current.
+
+**Expected:** the surface says the edit takes effect at the next take and names the live path; and
+the picker shows what is actually on air.
+**Actual:** silence, and a confident wrong reading.
+**Env:** Runtime, any build. Read from the code at `056ffdd5`.
+
+🔴 **The defect is a MISSING REFUSAL/SURFACE, not a missing mutator.** R-048's row SOURCE swap is
+shipped and already does the live thing — `swapLiveSource` re-issues as a producer replace through
+the same resolver a take uses and re-derives the fit. And the assignment is shared by **every row
+carrying that template** (`resolvePlateAssignments` filters `a.templateId === input.templateId`,
+`live-plate-assignment.ts:95`, with no item id anywhere), so silently re-issuing would repoint every
+other row on air with nobody told. **A control that silently does nothing is the worst of the three
+outcomes, and it is what ships today.**
+
+**THE DECISION IS TAKEN** (owner, 2026-08-18, `multibox-layout-switch` `design.md` §12.5): **SURFACE
+ONLY.** The edit saves; the surface says _"takes effect at the next take"_ and **names the live path
+— the row's SOURCE swap**. Refusing or confirming is friction without capability, since neither can
+re-issue: after any dialog is dismissed the outcome is identical in all three candidates.
+
+⚠ **The two halves ship together, or the repair is a half-repair** — telling the operator "this takes
+effect at the next take" while still showing them the wrong current source would replace one
+confusion with another.
+
+**Acceptance:**
+
+- WHEN the operator edits a plate's source in the Inspector while any row carrying that template is
+  on air THEN the surface states that it takes effect at the next take, and names the row's SOURCE
+  swap as the live path
+- WHEN a row carries an active `sourceOverride` THEN the Inspector shows the source that is actually
+  on air, not the template assignment it overrides
+- WHEN the assignment is shared by more than one row THEN that is visible at the point of edit,
+  rather than discovered by its effect on another row
+
+- **Cross-refs:** [[B-145]] (the ledger this surface will read once it survives a restart),
+  [[R-057]] (the operator half of the arrangement switch — same surface, same row),
+  [[C-015]] / [[D-137]] (Live Source routing and the plate model), [[B-143]] (the other
+  never-built honesty half in this area).
+
+<!--
+  CROSS-REFERENCE, deliberately NOT a second item.
+
+  The text-fit defect — three schema spellings of "make the text fit" and NO runtime
+  implementation, plus a Designer control (`autoSqueeze`) that writes a field nothing
+  reads — is filed ONCE, as [[B-147]] in `bugs-designer.md`. It belongs there because the
+  schema field, the control that writes it and the renderer that ignores it are all
+  Designer-side.
+
+  It is noted here because a RUNTIME reader meets it from the other direction: [[R-057]]'s
+  arrangement switch needs a per-box title to fit a wide 1-box cell AND a narrow 4-box
+  cell, and the first long Persian guest name overflows the narrow one ON AIR. So the
+  operator-side symptom is a broadcast defect while the cause and the fix are both in the
+  Designer.
+
+  One root cause with two spellings must not get two fixes — the same discipline the
+  B-140 / Splitter cross-reference in `bugs-designer.md` records, in the other direction.
+-->
+
+## [x] B-150 — a look that is not on screen keeps decoding, crawling and rotating: nothing stops the content inside a hidden look ⟨priority: medium — a frame budget spent on pictures nobody can see; the AUDIO half of the original report is NOT reachable, see below⟩ — FIXED 2026-08-21 (session BI)
+
+**What.** `applyLook` shows exactly one look's composition instance and hides the rest with
+`display: none`. Hiding a node does not stop what is inside it, and nothing else did: a hidden
+look's `<video>` went on decoding, its Lottie went on computing a frame per tick and pushing
+`goToAndStop`, its crawl went on crawling and its sequence went on advancing past items nobody
+saw. Under LOOKS this is not an exotic case — every look a template authors is built and running,
+and only one of them is visible — while `design.md` §9.6f measured the frame budget as the tight
+resource (−4 % for interpolating holes, −10 % for a backdrop crossfade). A four-look template
+therefore paid for four pictures to put one on air.
+
+🔴 **The AUDIO half of the original report is NOT reachable, and this correction matters more
+than the fix.** `tasks.md` 9.3 raised this as _"a hidden look's `<video>` keeps PLAYING ITS
+AUDIO… the audio half is the severe part"_, and briefly made it a candidate for the owner's
+unexplained on-air "2×" report. It cannot happen, on two independent grounds, both verified by
+sweep rather than assumed:
+
+1. **Every imported video has its audio track STRIPPED at conversion** — `-an`, decision (h), in
+   `apps/designer/src/renderer/features/assets/video-convert-args.ts`.
+2. **Every `<video>` the scene builder creates is muted** (`scene-builder.ts`, `el.muted = true`)
+   and **nothing in the tree ever unmutes one**: `git grep "\.muted"` over `packages`, `apps` and
+   `tools` returns writes of `true` and nothing else, and there is no `.volume =` write at all.
+
+So the severity of this bug is a FRAME BUDGET one, not a sound-on-air one. 9.3's audio claim is
+superseded by this entry. The unexplained "2×" remains unexplained and this was never its cause.
+
+**Why it was worth fixing anyway.** The decode half is real and measurable on the plant, and it
+scales with the number of looks an author writes — the one axis this feature exists to let them
+increase.
+
+**Fixed by** `packages/template-runtime/src/look-media.ts` — one seam (`LookMediaPark`), which
+learns which look instances are hidden from the same `visibility` map the mask punch is computed
+from, and per member SILENCES it (unconditionally) and PAUSES it (the policy half). Membership is
+asked of the DOM (`Element.contains`), because `display: none` is a fact about the DOM and a
+parallel table could disagree with what is on screen. Revive uses each driver's own `resume()`,
+which for `VideoDriver` re-anchors its clock to the media's actual position without seeking — so a
+switch back is seamless rather than a jump to the top of the clip.
+
+**Two things are deliberately NOT parked, and both are load-bearing:**
+
+- **Content that gates a HOLD.** A paused driver never completes, and a content-driven hold waits
+  for completion — so parking a hold-gating driver inside a hidden look would keep the graphic on
+  air forever, which is far worse than a decoding video. The rule reads the same `drivesHold` the
+  hold arrays are built from. ⚠ Its bound: `D-112` lets a parent instance re-filter a child's hold
+  participation, so a member registered parkable can still be pulled into a parent's aggregation.
+  🔴 **And the practical consequence, because the rule above flatters itself:** video and Lottie
+  have an OPT-IN `drivesHold`, so they are parked by DEFAULT and the media half of this bug is
+  fully covered. Ticker and sequence have the INVERSE default (absent ⇒ they gate the hold), so an
+  ORDINARY CRAWL IN A HIDDEN LOOK IS STILL CRAWLING — only one the author explicitly excluded from
+  the hold is frozen. Closing that means making hold membership follow visibility at RUNTIME, which
+  changes when a graphic comes off air; it is deliberately not folded in here.
+- **Clocks, at all.** `ClockDriver.resume()` accrues the paused interval into `pausedAccumMs`,
+  which `activeElapsedMs()` subtracts — a parked duration countdown would come back claiming the
+  hidden interval as time it still has, and (a countdown being an opt-OUT hold driver) would
+  extend the graphic's life by the time it spent hidden. A clock tracks time that passes whether
+  or not anyone is looking.
+
+**Acceptance**
+
+- WHEN a look is not on screen THEN its `<video>` is paused and silent, and its crawl and sequence
+  are frozen
+- WHEN the operator switches back to a look THEN its clip continues from where it was rather than
+  restarting
+- WHEN a run's `play()`, a hold entry or a loop-cycle boundary restarts every driver THEN the park
+  still holds — those paths know nothing about looks
+- WHEN content inside a hidden look gates the hold THEN it is silenced but left running, so the
+  graphic still comes off air
+- WHEN a clock sits inside a hidden look THEN it keeps tracking the real time
+
+**What the tests do NOT cover.** happy-dom has no decoder, so the decode LOAD — the thing that
+makes this worth fixing — is unmeasurable in the suite and is not measured. The tests assert the
+API facts the claim rests on (`paused`, `muted`, `currentTime` not rewound); the step from "the
+element is paused" to "the decoder stopped spending frames" is the browser's contract. A real
+number belongs on the plant's CEF beside §9.6f's own.
+
+- **Cross-refs:** [[R-057]] (the arrangement/look switch this arises in — the operator half),
+  [[B-149]] (the other on-air defect the same feature introduced, and the same lesson: the thing
+  that hides a box must also govern what is behind it), [[D-128]] (the video lifecycle and its
+  pause/resume contract), [[D-125]] (the Lottie driver, the same duck-typed seam). Supersedes the
+  audio half of `multibox-layout-switch` `tasks.md` 9.3 and closes its decode half; the operator
+  toggle over the pause policy is recorded as that change's task 7.10.
+
+## [x] B-151 — PVW drew EVERY look's plates at once while air drew one: the preview overlay never learned that looks exist ⟨priority: high — the operator's last chance to catch a mistake was manufacturing one⟩ — FIXED 2026-08-21 (session BL)
+
+**What the owner saw.** A template with a 1-box look (`l-1`) and a 2-box look (`l-1`, `l-2`), a row
+in REHEARSE: **PVW drew both looks' plates simultaneously, overlapping.** On air, only the active
+look rendered — correctly. So the preview and the output disagreed about what was on screen.
+
+🔴 **The reading it was reported under was HALF WRONG, and the correction matters.** The relayed
+diagnosis was "the page renders in three places and the look state reaches only two — PVW's page was
+never wired". The second half is true and is fixed here. But it is **not what the owner saw**: the
+page inside the PVW frame enters the AUTHORED DEFAULT look at build, synchronously, and hides the
+other looks' instances — so the page was showing ONE look all along. **The overlapping boxes were the
+placeholder OVERLAY**, Runtime-side chrome drawn on top of the frame, which had nothing to do with
+the page's look state.
+
+**The overlay's two errors, compounding** (`livePlateGeometry.ts`, `platePlacements`):
+
+1. **MEMBERSHIP** — it mapped `live.sources`, which under LOOKS is the source-keyed UNION of every
+   look's members. So every plate of every look got a box.
+2. **GEOMETRY** — a declaration's `rect` is that plate's rect **in the default look only**, so even
+   the plates that did belong were placed by the wrong look after a switch.
+
+**Fixed by giving the resolution ONE owner.** `activeLookOf` + `lookPlateRects` now live on the
+CARRIER in `@cg/shared-ipc`, beside `TemplateLiveSources`. The bridge's `#activeLookOf` /
+`#desiredPlateRects` delegate to them and the overlay calls the same functions, so the boxes PVW
+draws and the producers CasparCG seats resolve from one rule. PVW could not have called a private
+method on a process it does not run in — which is exactly how it came to have its own idea of the
+layout.
+
+**And the page half, which WAS missing.** `RehearsalFrame` now carries the look on the reserved
+`__cg` key of its `play`/`update` payloads — the same transport `CG ADD`/`CG UPDATE` use — so the
+page in the preview follows a switch instead of sitting on the authored default forever.
+
+**Switching looks in PVW** (owner, same day): _"you must also be able to switch between looks in
+PVW."_ A look control was built on the PVW panel and then **REMOVED on the owner's correction**:
+_"the same LOOK buttons on the row already worked for PVW too."_ He is right — the row's picker
+drives `stack.set-active-look`, whose published `activeLookId` is what both halves of the preview
+read. Two controls for one operation is this repo's two-spellings defect; the seam survived the
+control's removal untouched.
+
+🔴 **One control, two targets, and the row's state decides which.** A REHEARSING row is off air by
+the R-022 interlock (rehearse is refused for an on-air row; a take is refused for a rehearsing one),
+so `setActiveLook` records the look and **sends no AMCP** — asserted on the wire, not reasoned
+about. An on-air row gets the cut. The picker names its own target (`PVW LOOK` vs `LOOK`, plus the
+accessible name and `data-look-target`), because a control whose effect depends on state is only
+safe if the operator can read that state at the point of action.
+
+**What a take then does: what you rehearsed is what you take.** The recorded look is what
+`#activeLookOf` resolves at the take and what rides the `CG ADD` payload unconditionally. No new
+mechanism — it is what the shipped take path already does with a recorded look.
+
+**Acceptance**
+
+- WHEN a row is on a look THEN PVW draws exactly that look's plates, at that look's rects
+- WHEN the operator switches look THEN PVW's overlay AND the page inside the frame both follow
+- WHEN a look hides a plate THEN that plate has NO placement in PVW — not a zero-area one
+- WHEN a rehearsing row's look is switched THEN nothing reaches CasparCG
+- WHEN a template predates LOOKS THEN nothing about it changes
+
+- **Cross-refs:** [[R-049]] (the placeholder overlay), [[R-048]] (the emergency patch this
+  overlay must also honour), [[R-022]] (rehearse and its interlock), [[B-146]] (the same class — a
+  surface showing something air does not), and 🔴 **[[B-157]] — THIS EXACT SHAPE, ONE FIELD OVER.**
+  This item taught the overlay that looks exist for its **RECTS**; its NAMES were never taught, and
+  the same operator met the same class of wrongness on the same surface a week later. The warning
+  that closed this session's handoff — _"one surface learning a state and its neighbour not is a
+  recurring shape in this feature, not a one-off"_ — was right, and `B-157` is the proof.
+
+## [x] B-152 — a wire identifier reached a broadcast surface: `unknown channel: stack.set-active-look` in a red toast, mid-show ⟨priority: high — the operator can do nothing with it, and it names an internal id⟩ — FIXED 2026-08-21 (session BL)
+
+**What.** Pressing a LOOK button during a live show produced a toast reading exactly
+`unknown channel: stack.set-active-look`. That string is the BRIDGE's frame router
+(`bridge.ts`: `unknown channel: ${frame.channel}`). A developer string must never appear on a
+broadcast surface.
+
+🔴 **One instance is a bug; this was a PATTERN, and that is the finding.** The sweep: **fourteen**
+places in `apps/runtime/src/renderer` pass a caught `err.message` straight to a toast, and exactly
+**two** translated these shapes — `sourcesTransportMessage` and `delimiterStore`'s
+`describeCommitFailure`, each carrying its own copy of the regex. So the rule existed twice, was
+applied twice, and every other channel leaked. Worse, the two copies **disagreed**: the delimiter one
+tested only `unknown channel`, so a bridge that knew the channel and disagreed about its payload
+answered `invalid request for delimiters.set` and that fell through to the operator verbatim.
+
+**Fixed at the transport, not at the toast.** `shared/bridgeSkew.ts` owns the shape test and the
+sentence; `WebSocketRuntime.#onMessage` — the ONE line where every bridge error response becomes an
+`Error` — throws a `BridgeSkewError` whose message is already operator-legible. Every call site,
+including ones not yet written, is covered without knowing the file exists. Asking each surface to
+translate is the thing that just failed. The two existing translators now delegate, so the rule has
+one spelling.
+
+⚠ **A REFUSAL keeps the bridge's own sentence.** The bridge's refusals carry specifics this side
+cannot know (which template is already on air, how many boxes it has); swallowing those would trade
+one unhelpful message for another. Only the three TRANSPORT shapes are re-worded.
+
+**And a second defect the fix uncovered.** `#invoke`'s `resolve` called `channel.response.parse`
+inside the socket's `message` listener with no guard, so a malformed response **crashed the message
+pump as an uncaught exception** instead of rejecting its caller — the caller then hung to its
+timeout while the error surfaced with no connection to the command. Older than this session and true
+of every channel; `B-153`'s handshake, being the first request on every connect, is what made it
+reachable on every boot. It now rejects with the `invalid response for <channel>` shape, which this
+same vocabulary words.
+
+- **Cross-refs:** [[B-153]] (the connect-time guard — same incident, the other half), [[B-146]].
+
+## [x] B-153 — nothing guarded Runtime/bridge VERSION SKEW: the mismatch was discovered by pressing a button on air ⟨priority: high — it cost a live debugging session⟩ — FIXED 2026-08-21 (session BL)
+
+**What.** `caspar-bridge` is a separate long-lived process. A browser reload updates the SPA and NOT
+the bridge, so a page routinely talks to a bridge older than itself. Nothing checked. The way an
+operator found out was a LOOK button answering `unknown channel: stack.set-active-look` in the middle
+of a show.
+
+**A CAPABILITY HANDSHAKE, not a version compare — and the choice is the substance.** A version gate
+answers the wrong question: two builds can differ in ways that have nothing to do with the channels
+this page calls, so it either refuses working stations on any bump or needs a hand-maintained
+compatibility range — a number somebody must remember to bump, which is the class of guard that is
+already stale when it matters. The new `bridge.capabilities` channel reports the routes the bridge
+**actually wired** (read from its own route map, so a deleted route disappears by construction), and
+the SPA compares against `runtimeRequestChannelNames`, derived from what `@cg/shared-ipc` actually
+exports. Neither side maintains a list by hand and it cannot false-positive on a bump that changed
+nothing this page uses.
+
+⚠ **The bootstrap case is the answer, not a hole.** A bridge too old to route the handshake replies
+`unknown channel: bridge.capabilities` — which `B-152` has already classified — so it is read as the
+strongest possible evidence of skew. There is no "too old to check" state that slips past.
+
+🔴 **It REPORTS at connect; it does not REFUSE.** This is a deliberate reading of "fail at connect,
+visibly": a bridge missing one new channel still plays out through the twenty it routes, and
+refusing every command would convert a partial skew into a total outage — a worse failure than the
+one being fixed, on the same surface. So a persistent amber `role="alert"` banner names the count and
+the remedy at connect, the station keeps working, and the missing commands refuse themselves legibly.
+
+⚠ **The route-coverage test now calls the SAME derivation.** It carried its own copy; a build-time
+guard passing while the run-time one used a narrower rule would put a skew banner on every matched
+pair and train operators to ignore it. A real-bridge test asserts that a matched pair reports no
+skew, which is what would catch that rot.
+
+🔴 **A COVERAGE GAP IN THIS GUARD, FILED 2026-08-21 (session BP). It does NOT reopen the design
+decision — read the second paragraph before proposing a version compare.**
+
+The handshake compares **the ROUTES the bridge wired**. So it catches the skew that MOTIVATED it —
+a Runtime calling a route the bridge does not serve — and it cannot see the skew where **the route
+set is identical and the PAYLOAD SHAPE is not**. A Runtime bundle that is stale but calls the same
+routes produces **no banner at all**, while its own zod parse silently strips a field the bridge is
+sending. The operator sees a value that will not stick, with every surface reporting normal.
+
+That is not hypothetical: it is the one axis session BO could not rule out behind the `§3c` report
+(`tasks.md` 7.19 — _"UPDATE sends the values back to template default"_, not reproduced on either
+backend, and indistinguishable from this at the console). **The guard cannot see the skew that
+would cause the report it was built after.**
+
+⚠ **The version compare stays rejected.** BL ruled it out for reasons that still hold, and this is a
+statement about what the route comparison COVERS, not an argument for replacing it. The cheap
+candidate is additive: **a BUILD STAMP reported alongside the route set**, compared only for
+equality and surfaced as information rather than as a refusal — the bridge already answers a
+handshake, so the field costs one string. Not built here; recorded so the next reader is choosing
+rather than rediscovering.
+
+- **Cross-refs:** [[B-152]] (the same incident's other half), [[B-074]] (the build-time route
+  coverage this is the run-time counterpart to), [[B-155]] (whose sibling report `§3c` is the shape
+  this gap would explain).
+
+## [x] B-154 — a HELD live plate kept rendering: five feeds from the look you LEFT, tiled inside the look you switched TO ⟨priority: high — the wrong guests on air, from a switch that reported success⟩ — FIXED 2026-08-21 (session BM)
+
+**What.** A 6-box debate is on air. The operator switches to the SOLO look. §12.4 holds the five
+plates solo does not show — seated, muted, not punching — and the switch reports `ok`. **The five
+held feeds appear inside the solo box**, each in the cell it occupied a moment ago, on top of the
+picture the operator actually wanted.
+
+**Why, and it is one sentence.** The hold muted the plate and stopped there. Its producer kept the
+`MIXER FILL`/`CLIP` it was given for the look it left, so it went on rendering into that cell — and
+a page's punched hole is transparent to the **whole band**, not to one layer. CasparCG composites
+the band bottom-up; the solo hole is the full raster; every held cell lies inside it.
+
+🔴 **THE PREMISE THAT WAS WRONG IS A SENTENCE, AND IT IS WHY THREE TEST SUITES MISSED THIS.**
+`live-plate-release.ts`'s header read _"the plate stops being VISIBLE because the page stops punching
+its hole; that is a different mutation on a different machine, and this module is deliberately about
+the seat alone."_ That is **true about the plate's own cell and false about the frame**. Because the
+sentence was believed, the phase-3 tests asserted the three axes it implies — a held plate keeps its
+LAYER, keeps its PRODUCER, loses its VOLUME — and **nobody ever asked what it RENDERS**. One
+regression test even pinned the defect in place, asserting that no `MIXER … FILL` is emitted for a
+held plate on the way back.
+
+⚠ **The predicate that would have caught it already existed and was never called.** `@cg/amcp-mock`
+exposes `layerRenderedRect(slot)` — the intersection of `FILL` and `CLIP`, or `null` when the layer
+renders nothing — and its own doc says why it exists: _"a test asserting only on `layerState().fill`
+cannot catch it."_ Every look test asserted on `clip`. The regression test now asks the mock's
+predicate instead of re-deriving one, which is golden rule 6 applied to a test.
+
+**Fixed by giving the HOLD a geometry.** A held seat's fill is PARKED — moved off the raster, its
+size kept — and the record stores what was sent, so the return trip's ordinary delta finds the
+geometry moved and re-emits the real fit. Recording the real fit while sending the parked one would
+have made coming back a silent no-op and left the box empty for good.
+
+🔴 **THE FILL IS THE HALF THAT MOVES, AND THAT IS THE DESIGN, NOT A COIN TOSS.** `mixerFit` emits
+`FILL` then `CLIP` on one connection and either can be refused. An off-raster fill renders nothing on
+`FILL` alone, so a refused `CLIP` after an acked `FILL` still renders nothing — **the partial send is
+safe by construction.** The mirror spelling (leave the fill, move the clip away) fails twice: a
+refused `CLIP` leaves the defect exactly as it was, and no in-raster rectangle is disjoint from a
+FULL-FRAME fill at all, so a plate held after a solo look would have nowhere to put the mask.
+
+⚠ **What is measured and what is not.** That a fill box moved out from under its clip window renders
+nothing at all IS measured (`design.md` §3's last row, on 2.5.0 and re-confirmed on the plant's
+2.3.2). That `MIXER FILL` accepts an origin outside `0..1` — an ordinary transform, and the basis of
+every animate-in — is **not separately measured on this plant**, and is filed for the hardware
+session rather than assumed silently.
+
+**Acceptance**
+
+- WHEN a look switch holds a plate THEN that layer renders NOTHING, not its previous cell
+- WHEN the look being entered punches a hole over a held plate's old cell THEN nothing of the held
+  feed appears in it
+- WHEN the look switches BACK THEN the plate's real geometry is re-emitted and it is on screen again
+- WHEN a held plate is held across a second switch THEN the park is not re-sent
+- WHEN a `MIXER` of the park is refused THEN the record does not claim it and the next reconcile
+  re-sends
+
+- **Cross-refs:** [[B-126]] (a replace is never a CLEAR-then-ADD — the sibling rule about what a
+  seat change may emit), [[B-145]] (the ledger records what was SENT, which is what makes the return
+  trip work), [[B-151]] (the other half of "a surface disagreed with air", from the preview side).
+
+## [ ] B-155 — a source change LURKS until the next LOOK press, which then applies it mid-switch and flashes the PREVIOUS GUEST on air ⟨priority: high — the wrong face, on air, from a button that was supposed to be a cut⟩ — OPEN. The CAUSE was removed 2026-08-21 (session BP: the row freezes its assignment at take); the PLANT MEASUREMENT is still owed and nothing here is verified on air
+
+**What the owner saw, on air.**
+
+> _"If I change the sources and press UPDATE, nothing happens — but pressing the LOOK buttons performs
+> a take again. If I'm on 2-box, change `l-1`'s source and press look-1, then when we go to solo **it
+> shows the OLD source for a moment and then switches to the new one.**"_
+
+### 2026-08-24 — QUALITATIVE CONFIRMATION FROM THE TWO-SERVER PLANT RUN: the flash is VISIBLE TO THE NAKED EYE
+
+On the owner's first real two-server plant run, the switch flash was **visible to the naked eye**.
+
+🔴 **This changes exactly one thing and it is worth being precise about which.** It confirms that the
+PHENOMENON IS REAL ON AIR — which was not previously established, since every assertion behind this
+item runs against `@cg/amcp-mock` and the sections below say at length why a green suite is not
+evidence. **It does NOT discharge the plant measurement, and it does not let anyone tick this box.**
+What is still owed is unchanged and is the whole remaining deliverable: `6.9a`, `§3b`, and **the
+frame count at 25 fps, reproduced twice, with the channel read EMPTY before and after.**
+
+⚠ **A naked-eye sighting is not a frame count, and the difference is the entire point of this item.**
+_"Visible"_ says the window is at least one frame; it does not say whether it is one frame or six,
+and it cannot say whether session BP's cause-removal shortened it. Recording the sighting here is so
+that the next session knows the phenomenon survives — not so that it can skip the measurement.
+
+⚠ **And note what was ALSO visible in the same run: the PAGE/MIXER SKEW, filed as [[B-174]].** That
+is a DIFFERENT artefact in the SAME window and the two must not be conflated when the recording is
+finally made. They are separable in the trace: this item's flash requires a `PLAY` inside the
+switch; B-174's skew is the gap between `MIXER FILL` and the following `CG UPDATE` in a switch with
+no `PLAY` at all. **One plant session with one recording can settle both, and should.**
+
+🔴 **TWO COMPLAINTS, ONE DEFECT, AND THAT IS THE FINDING.** They read as separate bugs — a dead
+button and a video glitch — and they are the same mechanism seen from each end.
+
+**The mechanism, established from the code and pinned on the wire**
+(`live-look-reconcile.integration.test.ts`, _"an assignment change LURKS…"_):
+
+1. `setSourceAssignments` writes the map and emits. **It does not reconcile.** So an assignment
+   change reaches nothing at the moment it is made — the operator's _"nothing happens"_ is the
+   product working as built.
+2. It then lands at the **next reconcile from ANY cause**, and a look press is one. That is the
+   second apply path: **the LOOK button performs an apply nobody designed it to do.** Two live paths
+   to one operation is the defect this project keeps paying for — `patch-BL-01` removed exactly this
+   shape from the PVW panel one session earlier.
+3. And because the change lands **during** the switch, the seat's producer changes **inside** it: a
+   `PLAY` (a replace, `B-126`) on a layer whose hole the page is moving on top of. **That is the
+   flash.** An ordinary (B′) switch is pure `MIXER FILL` and cannot flash — the flash REQUIRES a
+   producer change in the same action, and the lurking assignment is what puts one there.
+
+⚠ **`STAGED` was never the leak, and the distinction matters.** A staged Inspector edit lives in the
+renderer's draft store and has never been sent; the bridge cannot apply what it was not told. What
+lurks is an **APPLIED** assignment. Both are asserted, because _"the look button applied my edit"_ is
+true of one and false of the other.
+
+**What session BM-2 did: narrowed ONE path, and verified NOTHING on the plant.** The Inspector's
+per-look binding is applied by `UPDATE` in one atomic call that reconciles immediately, so THAT change
+lands where the operator pressed it and the switch that follows has no producer to replace. Asserted
+as that property, not as an absence.
+
+🔴 **THIS IS NOT A FIX, AND A GREEN SUITE IS NOT EVIDENCE THAT IT IS.** Every assertion behind it runs
+against `@cg/amcp-mock`, and the mock is precisely the thing that models the behaviour in question:
+
+- **`PLAY` on an occupied layer as an in-place replace** — which `caspar-runtime.ts`'s own
+  `swapLiveSource` doc already marks **UNVERIFIED on the production 2.5.0 (task 6.9a)** (corrected
+  2026-08-22 — this said "the plant's 2.3.2", which is retired and must never be probed): _"the mock
+  models `PLAY` on an occupied layer as a replace, so the tests prove this code is self-consistent
+  and prove NOTHING about the server."_ The flash IS the replace's timing, so the mock cannot see it
+  by construction.
+- **Whether `FILL` and `CLIP` land on the SAME FRAME** — an open question (`design.md` §3b:
+  `MIXER … DEFER` + a channel-scoped `COMMIT`, forbidden here until the COMMIT-scope question is
+  answered). A hole that opens a frame before its mask is another way to reveal the wrong picture.
+
+**So the probes this waits on are named: `6.9a` and `§3b`.** Until both are answered on the plant,
+neither the narrowing above nor any candidate below may be reported as having removed the flash.
+
+⭐ **THE OTHER HALF IS NOW DONE — THE CAUSE IS REMOVED (2026-08-21, session BP) — AND THIS ITEM
+STAYS OPEN, DELIBERATELY.** Read both halves of that sentence before ticking anything.
+
+**What changed.** A row now **FREEZES its template assignment (level 2) at TAKE**: it captures the
+`{plate → catalog entry}` in force and every later resolution on that row — a look switch, an
+`R-048` swap, an UPDATE, a reconcile after a bridge restart — reads that snapshot. `setActiveLook`
+therefore cannot apply a lurking assignment, because there is no longer anything for it to pick up:
+the wire assertion in `live-look-reconcile.integration.test.ts` is **inverted** and now demands the
+switch issue no `PLAY` at all. It thaws at a landed `out`/`stop`, dies at `remove`, and a re-take
+re-captures — which is how an operator adopts an edited default.
+
+⚠ **Two narrower fixes were considered and rejected, and the reasons are worth keeping.** Disabling
+the Inspector's editor on an on-air row narrows WHO can reach the mechanism and leaves it intact:
+the assignment is template-wide and installation-wide, so another row on the same template — or
+**another station's Runtime against the same bridge** — can write it while this row is live.
+Reconciling inside `setSourceAssignments` removes the lurk by applying a template-wide edit to every
+row on air, which is the same accident arriving on time.
+
+🔴 **WHY THIS ITEM IS STILL OPEN.** What is closed is the CAUSE, asserted on the AMCP wire. What was
+never in question on the wire, and is still owed, is the **plant measurement**: `6.9a`, `§3b`, and
+the frame count at 25 fps reproduced twice with the channel read EMPTY before and after. The
+paragraphs above say a green suite is not evidence that the flash is gone; that remains true of THIS
+change too, and it is exactly the mistake ticking this box would make. **Nobody may report the plant
+as fixed until it has been watched.**
+
+🔴 **WHAT IS STILL OPEN — the general gap (patch A6).** Any action that changes a seat's producer
+while its hole moves reaches the same window: a re-point landing in the same action as a switch, or a
+look whose preset was never seated. The repair removes the path the owner walked, **not the gap**.
+
+### 🔴 THE RULE FOR THE GENERAL FIX, decided so the next session does not re-litigate it
+
+**The new look's hole must NEVER show the previous source. If the incoming producer is not ready,
+BLACK is acceptable and the previous guest is not.** An ugly frame is a blemish; the wrong face under
+a caption is a broadcast error.
+
+⚠ **This does NOT contradict `B-126`, and the difference is the situation, not the principle.**
+`B-126` forbids a `CLEAR` before a `PLAY` on the EMERGENCY REPAIR of a dead feed, where the choice is
+between a merely-dead picture and black, and black is worse. Here the choice is between the WRONG
+GUEST and black. Same reasoning, opposite answer, because the alternative to black is different.
+
+### The candidates, priced — and the measurement that decides
+
+| Candidate                                 | Cost                          | Why not yet                                                                                                                                                                                            |
+| ----------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ⭐ `LOADBG` then `PLAY`                   | one extra command per re-seat | AMCP's own answer to exactly this; **`LOADBG` is not in this bridge's vocabulary and is unmeasured for LIVE producers on the production 2.5.0** (its HTML pre-warm IS measured there, design.md §9.6c) |
+| Hold at `MIXER OPACITY 0` until confirmed | needs a readiness signal      | `OPACITY` unmeasured here, and "confirmed" has no source yet                                                                                                                                           |
+| Targeted `INFO` before punching           | a round-trip per switch       | turns a cut into a round-trip; likely worse than the flash                                                                                                                                             |
+| Bounded frame deferral                    | none on the wire              | a guess dressed as a fix, and it must never expire into "show the old one"                                                                                                                             |
+
+🔴 **What is OWED and cannot be done from a dev machine: the frame count.** Patch A1 asks for a
+reading at 25 fps, reproduced twice, with the channel read EMPTY before and after. **This session had
+no plant access, so the number is not in this entry.** The MECHANISM needed no hardware and is
+established; the CHOICE between the candidates needs the measurement, because it decides whether the
+gap is one frame or twelve.
+
+### ⭐ MEASURED LOCALLY 2026-08-31 (`SKEW-COUNT-01`) — the window recorded on the owner's machine, with the PLAY inside it; the PLANT measurement above stays owed
+
+Ran on the owner's dev machine against the real 2.5.0 `69e8ad5` at `1080i5000`, with
+[[B-174]]'s harness (`tools/skew-harness`, `--with-play-switch`) — the channel recorded to a
+file, the switch driven through `setActiveLook`, the verbs read off a wire tap. **This is a
+LOCAL reading of the window's shape and does not discharge the plant measurement above** — no
+DeckLink, no genlock, and the flash the owner saw was on plant hardware.
+
+🔴 **How a `PLAY` gets into a switch TODAY, post-freeze — the general gap has a concrete
+door, and it is LEVEL 1.** Session BP froze the ASSIGNMENT (level 2) at take, but the CATALOG
+is deliberately not frozen (_"if the installation re-points that entry, the row follows"_) —
+and `setSourceCatalog` validates, applies and emits **without reconciling**. So a catalog
+re-point LURKS exactly the way the assignment used to, and the next look press applies it
+mid-switch: measured on the wire as `PLAY` → `MIXER VOLUME 0` → `MIXER FILL`/`CLIP` ×4 →
+`CG UPDATE`, all inside one `setActiveLook`. This is the mechanism at the top of this item,
+alive one precedence level down; it is within patch A6's already-recorded scope ("a re-point
+landing in the same action as a switch"), so it takes no new number.
+
+**The window, in recorded fields (20 ms each), four runs, all four carrying the `PLAY`:**
+
+| event                                | field offset, relative to the fills |
+| ------------------------------------ | ----------------------------------- |
+| `MIXER FILL` lands (geometry moves)  | 0                                   |
+| page repunches (holes move)          | +1 … +3 (the [[B-174]] skew)        |
+| the replacing producer's FIRST frame | **+4, every run (80 ms)**           |
+
+So locally the wrong-content exposure is bounded by the REPLACE, not by the skew: the `PLAY`
+is issued first on the wire but its first frame lands last, ~2 fields after the holes — the
+old source sits inside the moving window for ~4 fields (~80 ms) end to end. A media producer
+opens faster than a DeckLink input initialises (see [[B-177]]), so **treat 80 ms as a floor,
+not an estimate, for the plant**.
+
+**Acceptance**
+
+- WHEN a source is changed and applied THEN it reaches the wire at that moment, not at the next
+  unrelated action
+- WHEN a look is pressed THEN it moves geometry, and applies nothing
+- WHEN a seat's producer must change while its hole moves THEN the hole never reveals the previous
+  producer — black is the permitted worst case
+- WHEN a bounded wait expires THEN it does not resolve to showing the old source
+
+- **Cross-refs:** [[B-126]] (a replace is never a CLEAR-then-ADD — the rule this one bounds rather
+  than breaks), [[B-154]] (the other half of "a seat shows something it should not"), [[R-048]] (the
+  emergency whose trade-off is the inverse of this one).
+
+## [x] B-156 — the Inspector's LOOK INPUTS badge said `ON AIR NOW` for a row the layer table called `READY` ⟨priority: medium — a surface claiming air for a graphic that is not on it⟩ — FIXED 2026-08-21 (session BO)
+
+**What the owner saw**, with a screenshot: in LOOK INPUTS, `look-2` badged **`ON AIR NOW`** while
+the same row's state in the layer table read **`READY`**. The row was loaded and selected; **nothing
+was on air.**
+
+**Why.** The badge was gated on `activeLookOf(carrier, item.activeLookId)`, which answers _which
+look this ROW is set to_ — and says nothing whatever about whether the row is PLAYING. So it was
+true the moment a row was loaded, and the words claimed air.
+
+🔴 **THE FILE'S OWN COMMENT ALREADY DREW THE DISTINCTION THE LABEL THEN IGNORED**, which is what
+makes this worth a number rather than a tidy-up. On the badge's colour:
+
+> _"NOT GREEN. Green is the layer table's ON AIR mark and means **"this row is playing"**; this says
+> **"of this row's looks, THIS is the one composited"**."_
+
+The COLOUR was chosen carefully to keep the two meanings apart — and then the TEXT asserted the
+very meaning the comment says the badge does not have. **Golden rule 6, on a label:** the words
+state a condition, so something must test THAT condition, and it must reuse the ONE canonical
+predicate rather than re-derive it locally. Nothing tested it at all.
+
+**Fixed as three states, both predicates IMPORTED:**
+
+| row state     | badge                            |
+| ------------- | -------------------------------- |
+| on air        | `ON AIR NOW` — true before, kept |
+| rehearsing    | `SHOWING IN PVW`                 |
+| loaded / idle | `SELECTED — A TAKE SHOWS THIS`   |
+
+- `isOnAir` is the layer table's own predicate (the LIVE PLATES section above already called it).
+- `isRehearsing` is `@cg/shared-ipc`'s — the one `LayersPanel` reads for the row picker's
+  `PVW LOOK` / `LOOK` label. It arrives as a **PROP** rather than a second subscription: the caller
+  already derives it for the row, so the Inspector's badge and the row's picker answer to ONE
+  derivation instead of two that agree until they do not. (Subscribing inside the section was
+  tried first and rejected — it coupled a presentational component to the bridge and broke every
+  test that renders it without one, which is its own argument.)
+
+⚠ **THE REHEARSING CASE IS THE `B-151` SHAPE AGAIN, and that is the finding worth carrying.**
+Session BL shipped the PVW-vs-air distinction on the row's own picker one session earlier; **this
+section never learned it.** One surface acquiring a state while its neighbour does not is now a
+recurring shape in this feature rather than an incident — `B-151` was PVW's overlay not knowing
+looks existed while air did.
+
+⚠ REHEARSING is checked before ON AIR. The order is safe rather than lucky: `R-022`'s interlock
+makes the pair unreachable (a rehearse is refused for an on-air row, a take for a rehearsing one),
+and that interlock is asserted on the WIRE in `live-look-reconcile.integration.test.ts` rather than
+assumed here.
+
+**Acceptance**
+
+- WHEN a row is loaded but not playing THEN the badge does not contain "ON AIR"
+- WHEN a row is on air THEN it says so
+- WHEN a row is rehearsing THEN it names PVW, not air
+- WHEN the on-air question is asked THEN it is asked of the same predicate the layer table uses
+
+- **Cross-refs:** [[B-151]] (the same shape one layer out — a surface that had not learned a state
+  its neighbour had), [[R-022]] (the interlock the three-state order rests on), [[R-048]].
+
+## [x] B-157 — PVW named the WRONG SOURCE: the overlay learned about looks for its RECTS and never for its NAMES ⟨priority: high — the preview, whose whole job is naming the source, named one air would not show⟩ — FIXED 2026-08-22 (session BQ)
+
+**What the owner saw**, with a screenshot. A row is **ON PVW** (rehearsing), PVW LOOK = `look-1`.
+In LOOK INPUTS he sets `look-1` → plate `11` → **studio 3** and presses UPDATE. **The PVW
+placeholder still reads "studio 1"** — the template's default for that plate. The binding is
+applied everywhere else; the preview names the old source.
+
+🔴 **This strikes at [[R-049]]'s stated reason for existing.** Its own text: _"⭐ It does what the
+PAGE never could: show the ASSIGNED SOURCE'S NAME… The Runtime knows the join."_ **The join it drew
+was the wrong one** — which is worse than drawing none, because an operator checks PVW precisely to
+avoid putting the wrong face up.
+
+## The cause was visible in a type signature
+
+`livePlateGeometry.ts`:
+
+```ts
+export function platePlacements(
+  …,
+  sourceNameOf: (plateId: string) => string | null,   // ← keyed by PLATE ALONE
+  activeLookId: string | undefined,                   // ← passed, and used only for the RECTS
+)
+```
+
+**A map keyed by plate id with no look in it makes a per-look binding UNREPRESENTABLE** — the same
+plate in two looks can only ever yield one name. The active look was sitting in the very same
+argument list, driving the geometry and ignored by the naming. The caller
+(`PreviewPanel.tsx`) built that map from `appliedPlateSources`, which is **level 2 only**, so
+level 3 (the per-look composition) and level 4 (`R-048`'s emergency patch) were both invisible to
+the preview.
+
+🔴 **THIS IS [[B-151]] AGAIN, ONE FIELD OVER**, and that is the finding rather than the bug. `B-151`
+was _"PVW's overlay never learned that looks exist"_ — about RECTS. Session BL's handoff closed by
+warning that _"one surface learning a state and its neighbour not is a recurring shape in this
+feature, not a one-off."_ It was right, and this is the second instance on the same component.
+
+## Fixed by moving the resolver, the way `B-151` was fixed — not by patching the call site
+
+The four-level precedence lived bridge-side only (`live-look-bindings.ts`), which is exactly why
+the renderer could not perform it. `lookPlateRects` already carries the argument in its own doc:
+_"PVW could not have called a private method on a process it does not run in — which is precisely
+how it came to have its own idea of the layout."_
+
+So `effectiveOverridesForLook` **moved to `@cg/shared-ipc`**, beside `activeLookOf` /
+`lookPlateRects`, joined by `assignmentInForce` (level 2, honouring session BP's frozen snapshot)
+and `resolvePlateSourcesForLook` (the whole answer for one look). **The bridge delegates to them**
+— `resolveLookBindings` no longer composes the levels itself.
+
+And the SHAPE changed so a caller cannot drop the look again: `platePlacements` takes the
+resolution INPUTS (`PlateSourceLookup`) and calls the shared resolver **with the look it already
+holds**. A plate-keyed callback would have fixed the symptom and left the next caller free to pass
+a look-blind map.
+
+**The rule, which settles every case in one sentence:** _the PVW overlay names exactly what a TAKE
+of THIS row, in THIS look, would put on air._
+
+**Acceptance**
+
+- WHEN a per-look binding is applied for the look PVW is showing THEN the placeholder names the
+  BOUND source, not the template default
+- WHEN the same plate is bound differently in two looks THEN switching the PVW look changes the
+  NAME as well as the rect
+- WHEN an `R-048` emergency patch is in force THEN the placeholder names the patched source in
+  EVERY look
+- WHEN no per-look binding exists THEN the template default is named, as before
+- WHEN the bridge and the overlay are asked the same question THEN they answer from the SAME
+  function, asserted at that function rather than once per surface
+
+⚠ **Session BP's frozen level 2 is honoured too**, though a rehearsing row is off air by `R-022`'s
+interlock so nothing is frozen for it today. It is threaded and tested anyway: a preview resolving
+the LIVE assignment while air resolved the FROZEN one would be a second answer to the same
+question, and the rule above has to stay true if that interlock ever changes.
+
+⚠ **A gap found on the way, filed rather than fixed here:** `apps/runtime/tsconfig.json` includes
+`src/**/*` only, so **the runtime's `typecheck` never sees `tests/`** — a fixture kept a field this
+change REMOVED and omitted the one it ADDED, and nothing caught it (vitest transpiles without
+checking). Turning it on is its own piece of work: **113 pre-existing errors, measured**.
+
+> ✅ **CLOSED 2026-08-22 (session BR).** The count was re-measured independently rather than
+> trusted, and matched at **113**. The typecheck now includes `tests/`, and the sweep found
+> **four tests that were not asserting what they looked like** — a shape test that never made
+> its claim about a row with live plates, a harness that could not render a rehearsing row at
+> all, a panel spec three APIs out of date, and a mock-parity guard blind to two whole groups.
+> **No product defect: every one was a hole in a guard.** See
+> `docs/handoff/2026-08-22-session-br.md` §2.
+
+- **Cross-refs:** [[B-151]] (the same shape one field over — RECTS, where this is NAMES; read them
+  as a pair), [[R-049]] (the overlay whose purpose this defeats), [[R-048]] (level 4, which the
+  overlay now honours), [[B-146]] (the class: a surface showing what air does not).
+
+## [ ] B-158 — a look switch is not visually ATOMIC: the pictures move first and the page's chrome follows, so the OLD look's outlines are briefly drawn around the NEW look's picture ⟨priority: medium — cosmetic, but it is on air and it is every switch⟩ — OPEN. Mechanism established from the code; the FRAME COUNT is a plant reading nothing in this repo can take
+
+**Observed 2026-08-22, by the owner, on air.** Switching between looks, the two halves of one
+switch land at different times: **the pictures move first, the background and the strokes around
+the boxes follow.** Going from a 2-box look to a solo look he sees the big solo picture **while
+the 2-box outlines are still drawn**. Brief, but visible. In his words:
+
+> _"if it happened at the same time it would be better."_
+
+🔴 **CLASS: COSMETIC-ON-AIR. This is NOT a wrong-source defect, and it does not reopen
+[[B-155]].** `B-155`'s decided rule — _the new look's hole must NEVER show the previous source; if
+the incoming producer is not ready, BLACK is acceptable and the previous guest is not_ — is
+**untouched by this item and is not in question here**. What is briefly wrong here is the
+**chrome**: the background and the box strokes belonging to the look being LEFT, drawn for a few
+frames around plates that have already moved to the look being ENTERED. Nobody's face is in the
+wrong hole. An item about decoration must never be read as reopening an item about sources, so
+this paragraph is placed before the mechanism rather than after it.
+
+### The mechanism, established from the code
+
+> ⭐ **2026-08-31 (`SKEW-HOLD-01`) — the DOCTRINE THIS SECTION DOCUMENTS IS GONE for the look
+> switch, and this item's "option (b)" direction is what replaced it.** `B-174`'s fix reordered
+> `setActiveLook` to page-first + a one-channel-frame mixer hold, so the answer to the 🔴 question
+> below ("does anything tell the page BEFORE the fills move? NO") is now **YES — the switch
+> does, by design**, and the fills follow one held frame later. The line anchors in this table are
+> the 2026-08-24 tree's. The CHROME question this item is actually about — whether a leaving
+> look's decoration is briefly drawn around moved plates — should be RE-JUDGED against the new
+> order: the page now paints FIRST, so the chrome and the holes move together and the fills catch
+> up, which is the opposite lag and likely smaller than what the owner saw. Re-observe before
+> spending on this item.
+
+The ordering was exactly the _"fills first, page last, only on success"_ doctrine, deliberate at
+every step:
+
+| half                          | where                                                                                                                                     |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| the switch entry              | `tools/caspar-bridge/src/caspar-runtime.ts:4596` — `setActiveLook`, whole on-air branch under `#withLiveSeatLock` (`B-155` §B)            |
+| **1. the MIXER commands**     | `caspar-runtime.ts:4702` — `reconcileLivePlates(itemId, { mode: 'live', lookId })`, which issues the per-plate `MIXER FILL`/`CLIP`        |
+| **2. the PAGE update**        | `caspar-runtime.ts:4744` — `#tellPageLook(...)` → `caspar-runtime.ts:4561` — `#send(this.#builder.updateLook(slot, lookId), …, 'urgent')` |
+| the command itself            | `tools/caspar-bridge/src/command-builder.ts:87` — `updateLook`, the reserved `__cg` key on a `CG UPDATE`                                  |
+| **3. where the page redraws** | `packages/template-runtime/src/runtime.ts:2399` `setActiveLook` → `:557` `enterLook` → `:534` `applyLook` → `:476` `repunch`              |
+
+**The page CUTS; it does not animate.** `runtime.ts:517-519` states it as a design decision:
+
+> _"Exactly ONE look's instance is visible; a switch is a VISIBILITY FLIP plus a re-punch, and
+> deliberately nothing else — no geometry override machinery, because under LOOKS the geometry is
+> authored inside each look's own sub-scene."_
+
+So the chrome the owner is describing — background, box strokes, frame decoration — is authored
+**inside each look's own sub-scene instance** and changes when `applyLook` (`runtime.ts:534`)
+rewrites the `visibility` map and `repunch` (`runtime.ts:476`) re-applies it. There is no
+transition, no fade and no easing anywhere on that path: the chrome is correct on the frame the
+page paints, and wrong on every frame before it.
+
+🔴 **Does anything today tell the page the target look BEFORE the fills move? NO — verified.**
+`updateLook` has exactly **one** production caller, `#tellPageLook` at `caspar-runtime.ts:4562`,
+and it is reached only after `reconciled.ok` at `:4702`. `setActiveLook` deliberately records
+nothing up front (the long `tasks.md` 7.9 note at `caspar-runtime.ts:4613-4643`), and
+`caspar-runtime.ts:5714` says in terms: **_"Do not add an `updateLook` here."_** The page learns
+the target look strictly after the fills have moved, by design.
+
+### ⚠ The existing note bounds the TRANSPORT, not the RENDER — read this before concluding the gap is sub-frame
+
+`caspar-runtime.ts:4723-4731` argues the window is small, and its numbers are real:
+
+> _"`CG UPDATE` → `window.update` was measured at 2.2–8.3 ms (median ≈5 ms, §9.2) — under a
+> quarter of a 20 ms frame at 50i — and both commands go out back-to-back on ONE connection in the
+> urgent lane, so nothing queues between them."_
+
+**That measurement ends where this defect begins.** It is command-out → JS-handler-entry. It does
+NOT include what happens after `window.update` returns control to the page:
+`applyLook` → `repunch` → `applyArrangementToNodes` → **`liveArrangementView`, which reads the
+page's layout BACK out of the DOM** (`runtime.ts:480-483`, a forced synchronous layout by
+construction — the comment calls the read-back load-bearing) → `repunchLiveSourceHoles` → the
+browser's own layout and paint → the CEF texture → the server's composite of that texture.
+
+Meanwhile the `MIXER FILL` half needs none of that: it is server-side compositing and lands on the
+server's next frame.
+
+**So the two halves are not racing over the transport — they are racing a transport against a
+browser render, and only the transport has ever been measured.** Anyone reading the `:4723` note
+alone would reasonably conclude the gap is a quarter of a frame and that the owner cannot be
+seeing this. That conclusion does not follow, and this paragraph exists so the next reader does not
+draw it.
+
+### 🔴 THE UNKNOWN: `k`, how many frames the page trails the mixer
+
+**`k` is not known, and it cannot be obtained in this repo.** `@cg/amcp-mock` has no notion of
+producer acquisition, no CEF, and no frames at all — it models a `MIXER` change as an instantaneous
+state write and cannot see a rendered pixel. **No test anywhere in this repository can measure
+`k`**: not a unit test, not an integration test, not a Playwright E2E, because every one of them
+observes either the wire or a browser, never the server's composited output. The suites can prove
+the ORDER (and do — `live-look-reconcile.integration.test.ts:1813` asserted `fills first, page
+last` at the wire; since `B-174` the same pin asserts the inverted order). Order is not the
+question here; **the question is how many frames sit between the two, and that is a PLANT
+READING** — one that `SKEW-COUNT-01` then took with `tools/skew-harness`, which is how `B-174`
+came to be fixed at all. See the dated note at the top of this section.
+
+Everything about the remedy depends on `k`. At `k = 1` this is arguably not worth changing; at
+`k = 5` at 25 fps it is a fifth of a second of visibly wrong decoration on every switch. **Measure
+before choosing** — the walk step below rides the same plant visit as `B-155`'s.
+
+### Repro
+
+1. A template with at least a 2-box look and a solo look, on air on an off-air-safe channel.
+2. Take the row into the 2-box look.
+3. Press the solo look in the look picker.
+4. Watch the boundary between the two looks in slow motion.
+
+**Expected:** the plates' geometry and the page's chrome (background, box strokes) change on the
+SAME frame — the switch is one visual event.
+
+**Actual:** the plates move first; the previous look's chrome is still drawn for `k` frames
+afterwards. Going 2-box → solo, the solo picture appears while the 2-box outlines are still around
+it.
+
+**Env:** production CasparCG **2.5.0** (`69e8ad5`); bridge on `dev` at or after 2026-08-22. Not
+reproducible against `@cg/amcp-mock` — see the unknown above.
+
+**Regression-test note:** 🔴 **a regression test for the visible symptom cannot exist here**, for
+the reason given above. What CAN be tested, and already is, is the ORDER
+(`live-look-reconcile.integration.test.ts:1813`). If an option below is implemented, its testable
+surface is the WIRE — that a `MIXER FILL` carries the chosen duration and tween, and that the page
+payload carries the matching duration — never the pixels. Any test claiming to prove the frames
+match is claiming something the mock cannot know.
+
+### The options — RECORDED, NOT CHOSEN
+
+Each states what happens to **_"page last, ONLY ON SUCCESS"_** — the guarantee
+(`caspar-runtime.ts:4719-4726`) that a page never shows a look whose holes did not move.
+
+**(a) Synchronized short tween.** Give the `MIXER FILL` a duration and tell the page to animate its
+own chrome over the SAME duration, so both move together instead of cutting `k` frames apart.
+The facts are already measured in `design.md` §9.2/§9.6f:
+
+- `MIXER <ch>-<layer> FILL x y sx sy <frames> <tween>` is **accepted on 2.5.0**, 20 Penner easings.
+- **`ease`, `ease-in-out` and `cubic-bezier` are rejected `403`.** The CasparCG and CSS vocabularies
+  share no name, and **`linear` is the only exactly-matchable pair (0.0 px** vs CSS `linear`;
+  `ease-in-out` diverges 232.8 px, `ease` 580.6 px).
+- **Interpolating three plate holes costs ≈ 4 % of the frame budget** (§9.6f). ⚠ For contrast and
+  as a warning about scope: **crossfading two full-frame backdrops cost −10 % with a 120 ms worst
+  gap — the background transition is the expensive half**, so "animate the chrome" must be scoped
+  to the strokes and boxes, not turned into a backdrop crossfade.
+- **Cost: the switch stops being a cut.** That is an editorial change to what the switch IS, and
+  the owner has to want it. It also makes the two sides' clocks a real contract — `design.md:276`
+  already warns about _"two independent timelines, no shared origin, no shared clock"_.
+- **_"Page last, only on success"_: KEPT, unchanged.** The order does not move; both commands
+  simply carry a duration. The page is still told after the fills, still only on success, and a
+  refused reconcile still leaves the old look intact.
+
+**(b) Page pre-arm, then reveal.** The page renders the target look's chrome hidden and reveals it
+on the switch, so the render cost is paid before the switch rather than inside it.
+
+- Keeps the cut, which is its main attraction.
+- **Cost:** an extra round trip before every switch, and a NEW FAILURE MODE — a page that has been
+  pre-armed but not revealed, or revealed for a switch that then failed.
+- 🔴 **_"Page last, only on success"_: AT RISK, and this is the option's central question.** The
+  arm message reaches the page BEFORE the fills move, which is precisely what the current design
+  forbids. It survives only if the ARM is provably invisible — rendering hidden chrome must change
+  no pixel — and the REVEAL stays after the reconcile and only on success. **If the arm can be seen
+  at all, this option forfeits the guarantee** and must be marked as such rather than argued around.
+  Note also that pre-arming re-introduces the state `tasks.md` 7.9 removed: a page holding a look
+  it has not entered.
+
+**(c) Suppress the chrome during the transition.** Hide background and strokes for the `k` frames,
+so nothing wrong is drawn — only nothing at all.
+
+- **Cheapest and ugliest, and it should be recorded as ugly.** It replaces briefly-wrong decoration
+  with a brief hole in the design, which on a full-frame background may read as a flash. It also
+  still needs `k`, to know how long to suppress — so it does not escape the measurement.
+- **_"Page last, only on success"_: KEPT** if the suppression is driven by the same page update
+  that switches the look, i.e. the page suppresses on entry and restores when it has painted.
+  **FORFEITED** if the suppression is sent as a separate earlier command, which makes it (b) with
+  worse aesthetics.
+
+**(d) Accept it,** with the reason written down. Defensible if `k` measures at 1–2 frames: the
+current design buys **_"a refused switch leaves the old look intact"_** with this window, the cut
+is otherwise ~0.20 frames (§9.3/§9.4), and no option above is free. **_"Page last, only on
+success"_: KEPT trivially.** If this is chosen, the reason belongs in this item so the next person
+to see it on air does not re-file it.
+
+### ⚠ §3b (`MIXER … DEFER` + `COMMIT`) is NOT the cure — stated so the next reader does not assume it is
+
+`design.md` §3b's `MIXER … DEFER` + a channel-scoped `COMMIT` is still open and still **banned**
+(`design.md:560` — `COMMIT` is CHANNEL-scoped, so on this shared plant it could apply another
+controller's deferred changes; recorded as _"a refusal to measure, not an absence of data"_).
+
+**Even fully available it would not fix this.** It makes several **MIXER** changes land on ONE
+frame — it is about the plates agreeing with EACH OTHER. **It does nothing whatsoever about the
+PAGE**, which is not a MIXER client at all. The residual it addresses is already measured as
+invisible: `design.md:556` — _"`DEFER`/`COMMIT` being unusable costs nothing visible"_, worst case
+one frame of partially-applied geometry at ≈20 % probability.
+
+**Would it help option (a)?** Marginally and only there: if a tween is adopted, `DEFER`/`COMMIT`
+would make all N plates START their tween on the same frame instead of within the 0.20-frame span.
+That is a second-order tidy-up of an already-invisible span, not a reason to lift the ban.
+
+- **Cross-refs:** [[B-155]] (the switch flash — the WRONG-SOURCE item; this one is cosmetic and
+  does not touch its rule), `openspec/changes/multibox-layout-switch/tasks.md` 7.14/7.15 (where
+  this is cross-referenced), `design.md` §9.2/§9.3/§9.6f (the measured tween and cut numbers),
+  `design.md` §3b (the DEFER/COMMIT ban), [[B-154]] (the other "a switch reported success and the
+  picture disagreed" item, fixed).
+
+## [ ] B-159 — a media file missing on the BACKUP costs that server the whole look, and NOTHING tells anyone: the backup's divergence is emitted into a void ⟨priority: high — a backup that silently differs from the main is not a backup⟩ — OPEN. Mechanism established from the code, and §1's shape did NOT survive contact with it — read "What the code actually does" before designing anything
+
+**Observed 2026-08-22, by the owner.** With a backup server configured, a media item exists on
+server **A** and not on server **B**. Switching to the look that uses it: **A switches, B does
+not** — B stays on the PREVIOUS look. The two servers then differ in **LAYOUT**, not merely in one
+box's content.
+
+### 🔴 2026-08-24 — THE SYMPTOM ABOVE FAILED TO REPRODUCE ON THE PLANT. RE-SCOPE THIS BEFORE IMPLEMENTING ANYTHING.
+
+On the owner's first real TWO-SERVER plant run (2026-08-24, after [[B-162]] landed), **B's template
+switches with the look.** The reported symptom — _"A switches, B does not"_ — did not happen.
+
+⚠ **Read what that does and does not mean, because both halves matter:**
+
+- **What it suggests.** [[B-162]] (the backup was never served the template at all, because template
+  hosting was derived from the PRIMARY alone) very likely accounts for **all** of the 2026-08-22
+  sighting. A backup with no page cannot switch a look, and that is indistinguishable at the SDI
+  seam from the per-input-failure-becomes-per-look-failure mechanism this item was written around.
+- **What it does NOT mean.** This item is **NOT disproven and is NOT closed.** The specific
+  condition — a media file present on A and absent on B — was **not re-created** in the 2026-08-24
+  run, so the mechanism §"What the code actually does" describes has been neither confirmed nor
+  ruled out. **Nobody may close this on the strength of a non-reproduction of an untested
+  condition.**
+- 🔴 **What the next session owes, before writing any code:** re-run the ORIGINAL condition — a
+  media input that resolves on A and fails on B — on the post-B-162 tree, and report what each
+  server does. If the layouts still diverge, this item stands as written. If they do not, its §1
+  shape needs rewriting around whatever remains, and THE RULE below (which is a decided rule about
+  what the product should do, not a claim about what it does) survives either way.
+
+**Status note:** the ⟨priority: high⟩ and the OPEN state are deliberately unchanged — the rule this
+item records is still the rule, and re-scoping is a design act, not a triage one.
+
+### 🔴 THE RULE, recorded as DECIDED — not as a proposal
+
+**A per-INPUT failure must never become a per-LOOK failure, and must never become a per-SERVER
+divergence.** The switch happens on **every** server, the box COUNT and geometry are identical
+everywhere, and **only the hole whose input failed is BLACK.**
+
+Three things follow, and the third is the one that gets forgotten:
+
+1. **Black, not the previous content.** Inherited unchanged from [[B-155]]: _the new look's hole
+   must NEVER show the previous source; if the incoming producer is not ready, BLACK is acceptable
+   and the previous guest is not._ This item does not touch that rule; it extends its reach to the
+   backup.
+2. **Divergence is the WORST of the three outcomes** — worse than a black box, worse than a refused
+   switch. A backup whose layout differs from the main **is not a backup**. The failure stays
+   invisible until someone cuts to it, which is the moment they least want to discover it, and a
+   confidently-wrong surface is this product's worst defect class.
+3. ⚠ **This does NOT overturn _"only on success"_, and here is how the two coexist.**
+   That rule is about **ordering within one server**: a page must never END on a look whose holes
+   did not move. (Its _"page last"_ half was reversed on 2026-08-31 by [[B-174]] — the page is now
+   told FIRST and the mixer held one channel frame, and a refused switch is answered by re-telling
+   the previous look. The guarantee survives the reversal; only the route to it changed.) This item
+   is about **which servers the decision applies to**. They meet cleanly because they answer
+   different questions:
+   - _"Did the LAYOUT apply?"_ decides whether the page is told — **and it must be decided the
+     same way on every server**, so a switch is refused everywhere or applied everywhere.
+   - _"Did this one INPUT arrive?"_ must NOT feed that decision at all. A missing producer in one
+     hole does not mean the holes failed to move; it means one hole is empty.
+
+   So _"only on success"_ keeps its meaning, with **success redefined as structural**: the fills
+   moved. That is exactly the STRUCTURAL-vs-CONTENT split below, and it is why the two rules do not
+   collide — today the code does not make that distinction anywhere, which is the defect.
+
+### 🔴 WHAT THE CODE ACTUALLY DOES — §1's shape did not survive, and this is the headline
+
+Answering the six mechanism questions with anchors. **Default strategy is `mirror-sync`**
+(`tools/caspar-bridge/src/bridge.ts:342`).
+
+**1. Which layer refuses? NONE OF THEM — nothing refuses.** In `mirror-sync`
+(`packages/caspar-client/src/redundancy/redundancy-adapter.ts:244`) both sessions are enqueued
+under one `Promise.allSettled`. A missing media file makes B's `PLAY` answer a non-`2xx`, and
+**`enqueue` RESOLVES on a non-`2xx`** — it rejects only on timeout / abort / disconnect
+(`packages/caspar-client/src/queue/command-queue.ts:138-139`). So `bRes.status === 'fulfilled'`
+with `code = 404`, the **first** branch is taken (`redundancy-adapter.ts:254`), and it:
+
+- journals the send as `'ok'` **with the PRIMARY's code** (`:255`),
+- calls `reportDivergence(seq, primaryCode, backupCode)` (`:257`),
+- and **returns `{ ...pRes.value, winner: this.primary }`** (`:260`) — the primary's result.
+
+**2. What the failure actually is:** a `PLAY` returning a non-`2xx` from B. Not a preflight (there
+is none — see [[B-160]]), not a timeout (a timeout would REJECT and take a different branch).
+
+**3. What the ledger records for B: NOTHING, because the ledger has no server dimension at all.**
+`registerLiveLayers` / `live-layers-store.ts` carry no server label — the store is **server-blind**
+by construction. It records what the BRIDGE believes is seated, which is the primary's truth
+written once and assumed true of both. **B is not marked degraded anywhere**, because there is no
+per-server place to mark.
+
+**4. What the operator sees today: nothing about this.** `#send`
+(`tools/caspar-bridge/src/caspar-runtime.ts`, the `#adapter.send` wrapper) computes
+`const ok = result.response.kind !== 'err'` — and `result` is the adapter's return, i.e. **the
+PRIMARY's response**. **The backup's `404` is therefore structurally invisible to the bridge**:
+`ok` is `true`, `applyAck` records success, the reconcile continues, and the operator gets a
+successful switch. The connection-health surface reports whether B is REACHABLE; it has no notion
+of whether B is CORRECT.
+
+**5. Does `journal-replay` retry forever, and what does it cost?** The relevant loop is not
+`journal-replay` but the **corrective resend**
+(`redundancy-adapter.ts` `triggerCorrectiveResend`), fired from `reportDivergence` once the
+divergence budget trips (3 in 30 s). It replays **every `'ok'` journal entry** to B, `await`ed
+one at a time, each failure swallowed by a bare `catch {}`.
+
+⚠ **CORRECTED 2026-08-24 (session MIRROR-SILENT-01) — the self-refilling loop this paragraph
+described does NOT exist, and it was asserted here as established fact.** The original read: _"the
+replayed `PLAY` 404s again, which is a fresh divergence, which refills the budget, which fires
+another full replay."_ It does not. The resend calls `queue.enqueue` **directly**
+(`redundancy-adapter.ts:427`), bypassing `send()`, and `reportDivergence` is reached ONLY from
+`sendMirrorSync` (`:257`, `:267`) and `sendMirrorAsync` (`:294`, `:298`). A replayed `PLAY` that
+404s therefore RESOLVES (`enqueue` resolves on a non-`2xx`), is compared against nothing, emits no
+`mirror-divergence`, and never touches `divergenceTimestamps`. **The replay cannot re-arm itself.**
+
+What is true, and is all that is true: **retry cannot create a missing file**, so the resend can
+never repair this cause; and every fresh burst of REAL traffic that diverges re-fires a full
+ok-journal replay to B, re-`PLAY`ing producers that were already correct there. The journal is
+bounded (500 entries / 5 min, the B-044 fix recorded above in this file) and so is each burst — the
+re-firing is driven by new sends, not by the replay. **The churn is real; the runaway is not.**
+
+**6. 🔴 DOES ANYTHING DETECT THAT THE TWO SERVERS ARE IN DIFFERENT STATES TODAY?**
+**Detected — yes, at the adapter. Surfaced — NO, to nobody.** `reportDivergence`
+(`redundancy-adapter.ts`) emits `mirror-divergence`, and every 3rd in 30 s emits
+`split-brain-persistent`. **Nothing on the PRODUCTION path subscribes.** `CasparRuntime` wires
+exactly two adapter events — `#adapter.on('health', …)`
+(`tools/caspar-bridge/src/caspar-runtime.ts:1332`) and `#adapter.on('failover-complete', …)`
+(`:1333`). There is no third, and neither app subscribes either, because the browser only ever sees
+what the bridge publishes. (Instrument checked: the same sweep for the sibling concept `failover`
+finds it wired through `intent.ts`, `audit.ts`, `tally.ts` and `caspar-runtime.ts:7104`, so the
+grep is live and the absence is real.)
+
+⚠ **CORRECTED 2026-08-24 (session MIRROR-SILENT-01).** This paragraph used to claim that a repo-wide
+sweep found NO listener in the `tools` or `apps` trees, every other hit being a doc, a living spec,
+an archived change or a test. **That is false.** `tools/soak-runner/src/harness.ts` holds three real
+subscriptions (`:241`, `:244`, `:247`) that count these events into the soak report (`B-046`) — it
+is under `tools`, it is `src`, and it is not a test. The FINDING survives, because a soak harness
+driving mock servers is a measurement instrument rather than an operator surface and is not running
+when the plant is on air; the EVIDENCE as recorded did not. The silence is filed as [[B-165]], which
+owns it for every cause rather than for this one.
+
+⚠ **So §1's shape is NOT what this path produces, and the difference matters for the fix.** Under
+`mirror-sync` B receives **every** `MIXER FILL`/`CLIP` and the `CG UPDATE` — they are separate
+commands and they do not fail just because a `PLAY` did. **B's page should switch.** What the code
+predicts is a **per-PLATE** failure on B, not a per-look one: the layer whose `PLAY` 404'd gets no
+new producer.
+
+🔴 **And the predicted per-plate outcome is WORSE than the reported one, which is why this item is
+`high`.** If that `PLAY` was aimed at an **occupied** layer, the PREVIOUS producer is still seated
+— so the backup shows **the previous guest in the new look's hole**, which is precisely the outcome
+[[B-155]]'s rule exists to forbid, on the server nobody is looking at, reported to nobody. Whether
+a 404'd `PLAY` leaves the old producer or clears the layer is a **CasparCG behaviour this repo
+cannot answer** (see the mock note below).
+
+**Two readings of the discrepancy, both recorded, neither chosen:** either the owner saw one box on
+B still showing old content and read it as "B did not switch" — the layouts differing in one hole
+rather than wholly — or there is a second path not exercised here. **This must be settled before
+anything is implemented**, and settling it needs a second real server; see the shape below.
+
+### 🔴 THE DISTINCTION THE WHOLE IMPLEMENTATION TURNS ON
+
+| failure kind   | meaning                                         | required behaviour                                                          |
+| -------------- | ----------------------------------------------- | --------------------------------------------------------------------------- |
+| **STRUCTURAL** | the LAYOUT itself cannot be applied             | **REFUSE** — keep the previous look, on **every** server, page not told     |
+| **CONTENT**    | one INPUT failed; the layout is fine without it | **APPLY** the layout **everywhere**, **BLACK** that hole, and **REPORT** it |
+
+**Where the distinction would have to be made: it does not exist today, at either of the two
+places it could live.**
+
+- At the adapter (`redundancy-adapter.ts:254-261`), which today collapses a two-server outcome to
+  the primary's response before the bridge sees it. Any per-server decision needs the backup's code
+  to survive that collapse — the return would have to carry both outcomes, not one.
+- At the reconcile (`caspar-runtime.ts:4702` `reconcileLivePlates`, whose result gates
+  `#tellPageLook` at `:4744`), which today asks one question — _"did the send come back ok?"_ —
+  and would have to ask two: _"did the LAYOUT apply?"_ (gates the page, must agree across servers)
+  and _"did this INPUT arrive?"_ (blacks one hole, never gates the page).
+
+`#send`'s `ok = result.response.kind !== 'err'` is the exact line where a per-input failure and a
+per-layout failure become the same boolean. **Golden rule 7's shape, one level up:** one boolean is
+being asked to carry two different questions about two different machines.
+
+### 🔴 THE SURFACE — an operator must see B is degraded WITHOUT cutting to it
+
+**A silent black box on the backup is the same defect wearing a different mask.** If the fix blacks
+the hole and says nothing, the failure is still invisible until the cut — it has only moved from
+"wrong layout, silent" to "right layout, wrong content, silent".
+
+What must be visible, and it is three facts, not one: **WHICH SERVER · WHICH PLATE · WHY.** "B is
+degraded" is not enough to act on; "B: plate 3 (`live-2`), media `intro.mp4` not found (404)" is.
+
+Where it lives — recorded as the shape, not as a decision:
+
+- The **Runtime's per-plate row** already names each plate and already carries per-plate state
+  (`apps/runtime/src/renderer/features/inspector/livePlates.ts` — whose own comment at `:120` is
+  about exactly this class: _"a divergence the operator needs told about"_). A per-server degraded
+  marker belongs beside the plate it concerns, because that is where the operator is already
+  looking when they think about that box.
+- The **connection-health surface** is the wrong home alone: it answers "is B reachable", and B is
+  perfectly reachable here. A green health light beside a diverged backup is worse than no light.
+- **The `mirror-divergence` / `split-brain-persistent` events already exist and already carry the
+  seq and both codes.** The missing half is entirely on the consuming side — nothing listens. That
+  is the cheapest true statement in this item: **the detector is built; the wire to the operator
+  is not.**
+
+### The state question
+
+**No — the model carries no per-plate, per-server degraded state today.** The ledger is
+server-blind (see mechanism 3), and `ConnectionHealth` is per-server but not per-plate. What would
+have to be added is a per-(server, plate) state carrying at least: the server label, the plate /
+source id, the AMCP code, and when it was last observed.
+
+🔴 **What it must NOT be: `#multiBoxCount` must never become a layer-demand or a health proxy.**
+`caspar-runtime.ts:3705` returns `template.liveSources?.sources.length` for a `declared` carrier —
+it counts **DECLARATIONS**, and its own header says so: _"…on the channel, which is its
+declaration, and a look switch must never change the answer."_ A degraded plate is still a declared
+plate. Feeding health into that count would make the declaration move when a file goes missing,
+which is the one thing it is documented never to do.
+
+### One alternative, RECORDED and NOT chosen
+
+**A station slate instead of pure black** for the failed hole — a caption, a logo, a "SOURCE
+UNAVAILABLE" card. It has a real argument: black reads as "the graphic is broken", a slate reads as
+"this one input is missing", and on a backup that someone has just cut to, the second is far more
+actionable. **The owner's default is BLACK** and this item does not change it; the slate is
+recorded so the choice stays his, later, on evidence.
+
+### An implementation SHAPE — not a design
+
+- **Which layer decides:** the RECONCILE, on a per-plate result the ADAPTER must first stop
+  discarding. The adapter's job is to report both servers' outcomes; the policy (structural vs
+  content) is the bridge's.
+- **What state is added:** per-(server, plate) degraded, as above — additive, never folded into an
+  existing count.
+- **What the surface says:** server, plate, reason — beside the plate.
+- **What the tests would assert, at the WIRE level:** that a non-`2xx` `PLAY` on B alone still
+  produces the full `MIXER FILL`/`CLIP` set and the `CG UPDATE` on **both** servers; that the
+  failed hole receives no producer and is not left holding the previous one; that the switch is
+  NOT refused; and that a STRUCTURAL failure (the fills themselves refused) IS refused on both.
+- 🔴 **What the mock cannot prove — say it plainly: the redundancy path is where `@cg/amcp-mock`'s
+  fidelity is weakest.** It can be told to answer 404 (the archived redundancy change's soak used
+  exactly that, its `diverging` backup mode), so ORDER and WIRE CONTENT are testable. What it
+  cannot answer is the question this item turns on: **what a real CasparCG 2.5.0 does to an
+  OCCUPIED layer when a `PLAY` fails** — leave the old producer, or clear it. The mock models
+  `PLAY` on an occupied layer as an instantaneous in-place replace and has no failure semantics for
+  it at all. **That needs a SECOND REAL SERVER**, deliberately missing one file, and it decides
+  whether this is a cosmetic black-box item or a `B-155`-class wrong-source item on the backup.
+
+- **Cross-refs:** [[B-155]] (the rule this inherits — black, never the previous guest),
+  [[B-160]] (the companion: find it at assign/preflight, not at the take),
+  `openspec/changes/multibox-layout-switch/tasks.md` 7.14c (the cross-reference),
+  `openspec/specs/runtime-caspar-bridge/spec.md` (the LIVING home of the split-brain requirements —
+  the only `design.md` that owns redundancy is ARCHIVED and was deliberately not edited),
+  [[C-013]] (the redundancy family), [[R-048]] (the swap family).
+
+## [ ] B-160 — nothing checks whether a media file EXISTS on each server, so a missing file is discovered at the TAKE ⟨priority: medium — prevention for [[B-159]]; the take is the worst possible moment to find out⟩ — OPEN
+
+**The companion to [[B-159]], filed with it.** A file missing on one server should be found **when
+the media is assigned, or at preflight — not at the take**, on air, with the divergence already on
+the backup.
+
+**What exists today to check a media's presence per server: NOTHING. Measured, not assumed.**
+`tools/caspar-bridge/src/command-builder.ts` emits `CG ADD`, `CG INVOKE`, `CG NEXT`, `CG PLAY`,
+`CG REMOVE`, `CG UPDATE`, `CLEAR`, `MIXER` and `PLAY`. **It emits no `CLS` and no `INFO`**, and a
+repo-wide `git grep` for a `CLS` send finds none (control: the same sweep finds 21 hits for the
+verbs that do exist, so the grep is live). There is no media catalog check per server, and no
+preflight that touches the servers at all. The first thing that ever asks a server about a file is
+the `PLAY` at the take.
+
+**Roughly what a check would cost.** `CLS` returns the server's whole media library in one reply,
+so the natural shape is **one `CLS` per server, cached**, not one probe per file: a set membership
+test after that is free. `INFO` per file would be N round trips and is the wrong shape. The cost is
+therefore one command per server per refresh, plus whatever staleness window is chosen — a
+missing-file check is only as fresh as its last `CLS`, and a file deleted after the cache was
+filled is still a take-time surprise. That residual is why this item is **prevention, not a
+replacement for `B-159`**: `B-159` must still behave correctly when the check passes and the file
+is gone anyway.
+
+**Where it would live:** beside the media assignment in the Runtime (so the operator learns at the
+moment they choose the file, which is when it is cheapest to fix) and in the existing preflight
+path that already refuses an export/take for other reasons. The bridge would own the `CLS` cache,
+because it is the only thing holding both server sessions.
+
+**Acceptance:**
+
+- WHEN a media input is assigned to a plate THEN each configured server is checked for that file
+  and the operator is told, at assign time, if any server lacks it — naming the SERVER
+- WHEN a take or a look switch is preflighted THEN a file missing on ANY configured server is
+  reported before the take, naming the server and the plate
+- WHEN only one server is declared THEN the check runs against that one server and adds no
+  backup-related surface (the declared-single-server rule the `B-044` fix established)
+- WHEN the check passes and the file is nonetheless missing at the take THEN [[B-159]]'s behaviour
+  governs — this item never becomes the reason a take-time failure is handled badly
+
+**Notes:** small item, no design work requested or done. The `CLS` cache's staleness policy is the
+only real decision in it.
+
+- **Cross-refs:** [[B-159]] (the defect this prevents), [[B-155]] (the black-not-previous rule both
+  inherit).
+
+## [x] B-161 — 🔴 UPDATE put VIDEO ON AIR with no template above it: a configuration verb was acting as a playout verb ⟨priority: HIGHEST — bare video on air from a button that was never supposed to reach the wire⟩ — FIXED 2026-08-23, RED-then-GREEN at the wire, with both neighbours proven
+
+**Observed 2026-08-22, by the owner, on the plant.** He **stopped** several plates, **swapped their
+inputs**, and pressed **UPDATE only — no play, no take.** The boxes went to AIR: **the videos
+played, with no template above them** — no background, no strokes, none of the page's chrome.
+
+There was no chrome because **no page had been taken.** `UPDATE` seated the producers; nothing had
+ever seated a template above them.
+
+### 🔴 THE RULE, decided
+
+**A configuration verb is NEVER a playout verb.** `UPDATE` puts values **IN FORCE**; only a **take**
+puts content **ON AIR**. A row that does not already own live layers must produce **no `PLAY`, no
+un-mute and no fill on any live layer** — the binding lands in STATE, and the next take seats it.
+This is the missing complement of BM's **_STAGED ≠ IN FORCE_**, and it is now `CLAUDE.md` golden
+rule 10.
+
+⚠ **Applying changed inputs to AIR on an UPDATE is the FEATURE** (BM-2 §4 step 4 — _"change solo's
+input → changes quickly"_). The defect was only that it was **not conditioned on the row being on
+air**. The gate is the whole fix; the feature is untouched.
+
+### Repro / Expected / Actual
+
+**Repro:**
+
+1. Load a row with a multi-box template. **Do not take it.** (Or take it and take it out again —
+   either way the row is not on air.)
+2. Change the row's per-look source bindings.
+3. Press **UPDATE**. Nothing else — no play, no take.
+
+**Expected:** the new bindings are in force for the next take. **Nothing reaches a live layer.**
+
+**Actual (measured at the wire, on a `loaded` row that had never been taken):**
+
+```
+PLAY 1-30 "route://2"      MIXER 1-30 VOLUME 0    MIXER 1-30 FILL 0 0 0.25 0.25    MIXER 1-30 CLIP …
+PLAY 1-33 "route://5"      MIXER 1-33 VOLUME 0    MIXER 1-33 FILL 0.25 0 0.25 0.25 MIXER 1-33 CLIP …
+PLAY 1-31 "route://3"      MIXER 1-31 VOLUME 0    MIXER 1-31 FILL 2 2 0.25 0.25    MIXER 1-31 CLIP …
+PLAY 1-32 "route://4"      MIXER 1-32 VOLUME 0    MIXER 1-32 FILL 2 2 0.25 0.25    MIXER 1-32 CLIP …
+```
+
+Four producers created, sized into the look's geometry, and written into the ledger
+(`seats: [30, 31, 32, 33]`). Pictures on air, no page.
+
+**Env:** reproduced against `@cg/amcp-mock` at the wire level — this one needs no plant, which is
+why it could be fixed the same day.
+
+🔴 **THE AUDIO HALF, asked explicitly and MEASURED rather than assumed: it did NOT un-mute.** All
+four seats carried `MIXER … VOLUME 0`, because a plate with no recorded intent is born muted
+(`intendedVolume: intent[plateId] ?? CREATED_MUTED_VOLUME`, `caspar-runtime.ts:5088`). So this
+reproduction put **silent** video on air. ⚠ **But that is a property of the fixture, not of the
+defect:** the seat is written at `record.intendedVolume`
+(`caspar-runtime.ts:5128-5131`), so **any plate the operator had deliberately raised in an earlier
+show would have been seated AUDIBLE** by the same press. Bare video was the observed harm; bare
+video with sound was one raised fader away.
+
+### The mechanism, with anchors
+
+| step                               | anchor                                                                                               |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| the verb                           | `tools/caspar-bridge/src/caspar-runtime.ts:2979` `update()` → `:3010` `#updateImpl`                  |
+| the binding half                   | `:3043` → `#applyBindingTransaction` at `:4298`, under the `B-155` seat lock                         |
+| **the call that reached the wire** | `:4313` — `reconcileLivePlates(itemId, { mode: 'live' })`, issued **unconditionally**                |
+| what it emits per seat             | `PLAY` → `MIXER VOLUME` → `MIXER FILL`+`CLIP` (`:4935` `#applyLivePlates`, contract at `:4924-4938`) |
+
+**Where the row's playout state was consulted on this path: NOWHERE.** The call site's own comment
+said _"The row **may be** ON AIR"_ — it allowed for either and reconciled regardless.
+
+🔴 **A canonical predicate DID already exist, and this path simply never asked it.**
+`isOnAirStatus` (`caspar-runtime.ts:450`) is documented as _"THE on-air predicate for a stack item —
+the ONE definition"_, and its header explicitly invokes golden rule 6: _"a fourth inline copy of
+this status list is exactly how one of them comes to disagree."_ It had five consumers —
+`:2778`, `:2946`, `:3666`, `:4676` (`setActiveLook`, which **does** ask), `:7052`. **`#applyBindingTransaction`
+was not among them.** So the finding is not a missing predicate; it is **one path that did not
+consult the predicate the rest of the file already shares**.
+
+**Is this the same shape as `B-154`?** Related but not the same, and the `B-154` fix could not have
+covered it. `B-154` was a HELD plate still rendering — a plate that should have been torn down
+inside a switch on a row that WAS on air. Its fix corrected what the switch does to plates. This one
+is a row that was never on air at all, reached by a different verb: **no amount of correctness
+inside the seating plan helps when the question "should we be seating anything?" is never asked.**
+
+### The fix
+
+**One gate, at the one path the verbs share** — not two paths made to agree, which is this
+project's recurring defect.
+
+`#applyBindingTransaction` (`caspar-runtime.ts:4298`) now applies the binding maps, and then, if the
+row owns no live seats, **publishes the state and returns** before `reconcileLivePlates` is reached.
+The new predicate is `#ownsLiveSeats(itemId)`, placed immediately above it:
+
+- **on air** — `isOnAirStatus`, **reused, never re-derived** (golden rule 6);
+- ~~**or rehearsing** — `#rehearsing.has(itemId)`, because a rehearsing row is deliberately NOT on
+  air (`enterRehearse` refuses an on-air row, so the two states are disjoint by construction) yet
+  owns its plates on **PVW**. 🔴 **A gate built on `isOnAirStatus` alone would have silently broken
+  rehearse without failing any test that existed before this item.**~~
+  🔴 **REVERSED 2026-09-04 by [[B-216]].** The second half is **the LEDGER** — `#liveLayers` holds
+  seats for the row — and never the rehearse flag. A rehearsing row owns nothing on the channel
+  (PVW is a browser render, `enterRehearse` seats nothing), and with `rehearsing` in the predicate
+  an UPDATE on a rehearsing, never-taken row went on seating four producers — this item's own
+  defect, reached through the flag this item added; `neighbour 2` asserted it as a feature and was
+  green for twelve days. The row the ledger half exists for is the one whose seats survived a
+  restart while its status did not ([[B-145]]).
+
+⚠ **The gate is at the ROW, never at the look or the visible hole.** On a live row it returns early
+for nothing and the reconcile runs exactly as before — **UNION pre-seat intact**, every look's
+inputs still seated including the looks not punched. That pre-seating is what makes a switch pure
+`MIXER FILL`; narrowing it would push a `PLAY` back inside a switch and reintroduce `B-155` case 3,
+which session BT closed on `4777b724`.
+
+### Regression tests — RED-then-GREEN at the wire, plus both neighbours
+
+All four in `tools/caspar-bridge/tests/live-look-reconcile.integration.test.ts`:
+
+| test                       | asserts                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **the defect**             | an off-air row's UPDATE puts **no `PLAY`, no `VOLUME`, no `FILL`/`CLIP`** on the wire and claims **no seats** |
+| **the state half**         | the next TAKE comes up with the off-air UPDATE's binding **in force** (`route://5` seated)                    |
+| **neighbour 1 (LIVE)**     | an on-air row **still re-points**, and the **UNION pre-seat never narrows** (asserted as a superset)          |
+| **neighbour 2 (REHEARSE)** | a rehearsing row **still seats** — the test that would have caught an `isOnAirStatus`-only gate               |
+
+**RED before the gate:** the defect test failed with the four `PLAY`s, four `VOLUME`s and eight
+`FILL`/`CLIP`s quoted above; the other three already passed. **GREEN after:** all four.
+**Whole suite: 612 passed / 78 files, no regressions.** The chain was rebuilt before both readings
+(a stale `dist` has faked red and green in this repo before).
+
+The defect test asserts all four facts in **one** object comparison rather than four `expect`s,
+deliberately: separate assertions stop at the first, which would have hidden whether the audio and
+geometry halves also fired — and the audio question could not have been answered at all.
+
+### §B.5 — can the operator get them off air? YES, and that is a real answer, not an assumption
+
+The producers were **written into the ledger** (`seats: [30,31,32,33]`, measured), so the bridge
+**owns** them and knows their coordinates. They are **not orphans** in the R-009 sense — the orphan
+sweep is for layers the bridge does not own. Therefore both ordinary escapes reach them:
+
+- **OUT on the row** — `#outImpl` is not gated on `isOnAirStatus` (it refuses only `unknown-item`
+  and `disconnected`) and its teardown clears the plates before the frame;
+- **CLEAR ALL** — the bigger hammer, ledger-driven.
+
+**No second defect, and nothing urgent is owed here.** Had the seats gone unrecorded this would have
+been a second, worse item; they did not.
+
+### What is owed on the plant
+
+**The fix needs no plant reading to be correct** — it is asserted at the wire and the mock is
+faithful for it. What the owner should do to SEE it fixed is in the item's Repro: **stop the plates,
+swap the inputs, press UPDATE, and nothing must appear on air.** Then take the row and confirm the
+new inputs are the ones that come up — that second half is the one that proves the edit was not
+merely discarded.
+
+✅ **RUN 2026-09-04 (`UPDATE-INFORCE-02` §4), both halves, twice.** Through the running bridge's own
+WebSocket on the plant, on the owner's 3-plate row: STOP → layers 10–59 read empty on `INFO 1`;
+UPDATE with `l2`/`l3` swapped → accepted in 2 ms, **nothing appeared across 39 `INFO 1` polls over
+8 s**, ledger empty, bindings recorded; TAKE → accepted in 34 ms, **plate `l2` came up on `m2.mkv`
+and `l3` on `m1.mkv`**; then the reverse, back to the template default, with the same readings. The
+full table, and the note that the running bridge carried this item's gate rather than [[B-216]]'s
+later alignment, are in [[B-216]].
+
+- ✅ **Linux `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/32633887346>
+  — head `6f6eb690` (the tip carrying the gate, its four tests and this record), `completed` +
+  `success`, with the **`E2E (Playwright)` job RUN, not skipped**. Classifier scored the diff
+  `kind=code needsE2e=true`. The local Windows run is not what discharges it.
+- **Cross-refs:** [[B-155]] (case 3 — the union pre-seat this gate must not narrow), [[B-154]] (the
+  related-but-different held-plate shape), `CLAUDE.md` golden rule 10 (the invariant),
+  `openspec/changes/multibox-layout-switch/tasks.md` 7.14d.
+
+## [x] B-162 — 🔴 the BACKUP server got no template, because template hosting was derived from the PRIMARY alone ⟨priority: high — a backup showing live sources with no graphic over them, reported as success by every surface⟩ — FIXED 2026-08-23
+
+**What:** `deriveServeOptions` decided BOTH the template HTTP server's bind interface and the host
+it advertises in the `CG ADD` URL from **one** CasparCG host, and both call sites passed
+`servers.A.host`. `servers.B.host` was read **nowhere** in that decision. One URL is handed to every
+server, so the backup had no dimension in a decision that concerns it.
+
+**The owner's reproduction (2026-08-23), two CasparCG installs — his own machine and a server at
+`192.168.21.50`:**
+
+| primary (A)  | backup (B)   | result                                                                                               |
+| ------------ | ------------ | ---------------------------------------------------------------------------------------------------- |
+| server `.50` | own machine  | both fine                                                                                            |
+| own machine  | server `.50` | own machine fine; **on the server the BOXES appear, the TEMPLATE does not** — no background, no text |
+
+**Why the table reads that way — TWO STACKED FAILURES, either one fatal:**
+
+1. **The socket was unreachable.** A loopback primary made `bindHost` `127.0.0.1`, so the template
+   HTTP server was not on the LAN at all.
+2. **The URL pointed at the wrong machine.** `serveHost` was `127.0.0.1` too, so the remote backup
+   fetched **ITSELF** — its own CasparCG box, where nothing serves `/template/<id>`.
+
+The reverse row worked for the same reason inverted: a remote PRIMARY sent the derivation down the
+routable branch, and a LAN address is reachable from the bridge's own machine as well as from the
+plant — so the loopback backup was served correctly by accident.
+
+⚠ **Why the BOXES survived and only the TEMPLATE died.** Live plates never touch this server:
+`producerArgument` (`command-builder.ts`) emits `route://`, `DECKLINK DEVICE`, `NDI NAME`, a media
+path or a stream URL — every one of them resolved by CasparCG from its OWN resources. The template
+is the only asset fetched over HTTP from the bridge, so it is the only thing an unreachable serve
+address can cost. The symptom is therefore maximally confusing: the row looks half-alive.
+
+🔴 **AND IT PRODUCED NO ERROR ANYWHERE — this is the half that matters.** `CG ADD` returns **200**:
+CasparCG accepted the command, and the PAGE's later fetch failing is not an AMCP outcome. So a
+perfectly-journaled backup reports success, health stays green, the audit log records a completed
+load, and the only evidence is a human looking at that server's output. [[B-159]]/[[B-160]] are the
+same family — the backup silently differing from the main — but **neither covers this**: they are
+about a media file missing on one server, discovered through the AMCP result. This arrives through a
+door **AMCP cannot see**, which is why nothing in that pair would have caught it.
+
+### The fix
+
+- **`deriveServeOptions(casparHosts: readonly string[], override?)`** — the argument is a LIST, and
+  the signature change is deliberate: it makes the old mistake unspellable. **If ANY configured
+  server is non-loopback the bind is routable and the advertised host is one that server can
+  reach**; only an all-loopback configuration stays on `127.0.0.1`. The rule is written at the
+  function: **one string goes to every server, so it must satisfy the STRICTEST reader — the remote
+  one.**
+- **`configuredCasparHosts(config)`** (`caspar-runtime.ts`) is the one place the set is assembled,
+  and BOTH call sites feed from it — the constructor (`:1162`) and the `setConfig` apply
+  (`:7339`). The apply path was the door nobody was watching: a bridge booted all-loopback and then
+  given a remote backup through the settings dialog reaches the broken state with no restart.
+  ⚠ OSC never had this defect because each session binds its own ingest (`deriveOscBindHost(ep.host)`,
+  one derivation PER server). The template server is a single shared socket handing out a single
+  shared URL, so it had no per-server seam — `configuredCasparHosts` is that seam.
+- **An explicitly configured serve host is now the ANSWER, not a better guess** —
+  `--template-serve-host` (and `--template-serve-port`) wire the long-existing
+  `TemplateServeOverride` to the CLI. Before this the ONLY way to change the advertised host was to
+  edit the source, which is why [[C-024]]'s uncommitted hack existed. The boot line now names the
+  host AND where it came from, per the provenance rule the fixed bank and source catalog follow.
+- **The CORRECTNESS warning** — `hostsUnableToFetchTemplates(hosts, options)`, ONE predicate used by
+  every surface. The pre-existing warning was the SECURITY direction ("this is LAN-EXPOSED, did you
+  mean that?"); its complement was silent. Now a loopback bind **or** a loopback advertised host
+  while a remote server is configured names that server at boot (stderr + the boot line) and on
+  every apply (the `connections.set-config` response carries `templateServe.unreachable`).
+- **The operator surface** — the settings dialog previously printed _"Applied. All listeners remain
+  loopback-only."_ on exactly the configuration that had just cost the backup its template. It now
+  reads the bridge's verdict FIRST and, when non-empty, replaces that reassurance with a refusal-role
+  message naming the servers, what they will show, and the flag that fixes it. **The verdict is the
+  bridge's, never re-derived in the panel** (golden rule 6).
+
+### Tests — RED first, chain rebuilt before each reading
+
+- `tests/template-http-server.test.ts` — loopback A + remote B ⇒ routable bind, advertised host
+  equal to the remote-primary answer; remote A + loopback B unchanged; all-loopback still fully
+  loopback; the empty set; and five cases pinning `hostsUnableToFetchTemplates`, including each half
+  (loopback bind with routable host, routable bind with loopback host) on its own.
+- `tests/reconfigure.integration.test.ts` — the apply path re-derives over the whole set, the
+  working combination does not regress, an all-loopback PAIR stays loopback, and the unreachable
+  verdict fires at boot AND on apply while staying silent for all-loopback.
+- `apps/runtime/tests/serverSettingsPanel.dom.test.ts` — the false reassurance is GONE, not merely
+  accompanied.
+
+⚠ **The assertions are deliberately environment-independent.** `guessLanHost()` enumerates real
+interfaces, so its VALUE differs between the owner's machine, a CI container and a network-less
+sandbox; asserting "not loopback" would be asserting a property of the test host. What is invariant
+is that **which** server is remote cannot matter, and that the bind is routable. The advertised-host
+half is pinned with an explicit override instead.
+
+**RED measured:** with the pre-fix decision restored (primary only, same signature) the unit case
+failed `expected '127.0.0.1' to be '0.0.0.0'` and the apply case failed `expected false to be true`;
+23 other tests passed. **GREEN after the revert: 25/25.**
+
+**Notes:**
+
+- **What the owner can do to see it fixed:** configure his own machine as primary and `192.168.21.50`
+  as backup, press Apply, and take a row — the template must now appear on the server. If it does
+  not, the dialog will say which server cannot reach the bridge and he sets
+  `--template-serve-host <the address that server can reach>` rather than editing source.
+- 🔴 **The warning is about the CONFIGURATION and is NOT evidence that any page loaded.** Positive
+  verification is [[B-163]], filed rather than implied.
+- **`deriveServeOptions`' signature changed** — it is exported from `@cg/caspar-bridge`'s index.
+  Every in-repo caller was updated; an out-of-repo embedder passing a bare string would now be a
+  type error, which is the intended loud failure.
+- ✅ **Linux `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/32658676558> —
+  head `7a8eda09` (the tip carrying this fix, its mock correction and [[B-164]]), `completed` +
+  `success`, with the **`E2E (Playwright)` job RUN, not skipped** (`Lint • Typecheck • Test • Build`
+  ran and passed too). Both heavy jobs are whole-tree, so that run verifies every commit in the
+  span. The local Windows `gate:e2e` was green first and is NOT what discharges it.
+- **Cross-refs:** [[B-159]]/[[B-160]] (same family — a backup silently wrong — but reached through
+  AMCP, which this is not), [[C-024]] (the advertise-host-from-configuration item this discharges
+  the CLI half of), [[B-038]] (the template HTTP server), [[B-163]] (positive verification).
+
+## [ ] B-163 — nothing positively confirms a CasparCG server actually FETCHED the template ⟨priority: medium — prevention for [[B-162]]; a configuration warning is not a measurement⟩ — OPEN
+
+**What:** the bridge should be able to say _"server B fetched `/template/<id>` at 12:04:07"_ rather
+than only _"server B is configured remote and my serve address is loopback, which looks wrong"_.
+
+**Why:** [[B-162]] added a warning about the CONFIGURATION. That warning fires on the shape it can
+see and is silent on every other way the fetch can fail — a firewall on the CasparCG box, a subnet
+with no route back, a VPN adapter chosen by `guessLanHost()`, an operator's `--template-serve-host`
+typo that happens to be a routable address belonging to something else. In all of those the bridge
+advertises a perfectly plausible URL and the server still gets nothing, with `CG ADD` returning 200.
+**A configuration check cannot become a measurement by being made stricter.**
+
+**What was considered, and why it is not being done inside [[B-162]]:**
+
+- ❌ **The bridge fetching the URL itself** proves only that the BRIDGE can reach it — the axis that
+  was never in doubt. Reading one channel's success as another's is the [[B-101]] mistake.
+- ⚠ **Attributing the incoming `GET` by source address** is genuinely implementable and is the
+  strongest candidate — the bridge's own HTTP server already SEES each fetch, so no page change is
+  needed for the positive half. Its problems are all in the negative half and in the matching:
+  CEF **caches**, so a second `CG ADD` of the same template may legitimately never re-fetch; the
+  source address is the server's address as the bridge sees it, which NAT, multiple interfaces or a
+  hostname-vs-IP config makes a heuristic match rather than an identity; and "no GET within N ms" is
+  exactly the silence-as-evidence reading that cost this project [[B-101]].
+- ⚠ **A beacon in the served page** (the page `POST`s back on load) is stronger still — it reports
+  that the page RAN, not merely that bytes were fetched — but it changes what is served, so it needs
+  a decision about templates that must stay byte-identical to what the Designer exported.
+
+**Acceptance (sketch — refine when scheduled):**
+
+- WHEN a template is loaded on a server THEN the bridge records whether that server fetched it, with
+  a timestamp, per server
+- WHEN a server has never fetched a template the bridge served it THEN that is surfaced as a
+  distinct state from "not configured" and from "configuration looks wrong" — three states, never
+  two
+- WHEN the fetch cannot be attributed to a specific server THEN it is reported as unattributed
+  rather than assigned to a guess, and silence is NEVER reported as failure without a positive
+  control that the instrument is live
+
+**Notes:**
+
+- **Number verified free** immediately before filing: the registry's duplicate audit printed exactly
+  `B-056` and `B-080`, the highest `B-` heading was `B-161`, and `git grep "B-163"` returned no hits
+  anywhere in the tree.
+- **Cross-refs:** [[B-162]] (the defect this is prevention for), [[B-101]] (probe the axis you
+  intend to judge — the rule that shapes every option above), [[B-160]] (the same
+  defect-then-prevention split, for media files).
+
+## [x] B-164 — the row's audio chip counted the wrong things TWICE: seats for a denominator and intent for a numerator ⟨priority: medium — a console stating who can be heard, wrongly, about a property the operator cannot see⟩ — FIXED 2026-08-23
+
+**What:** the layer row's `audio N/M` chip derived its own answer to "has this plate got sound"
+instead of asking the one the strips and the audio dialog ask. Both numbers were on the wrong axis.
+
+**The owner's measurement — ONE row, ONE template declaring three plates, three looks:**
+
+| look   | boxes on screen | the chip read |
+| ------ | --------------- | ------------- |
+| ghab-1 | 1               | `audio 1/2`   |
+| ghab-2 | 2               | `audio 1/3`   |
+| ghab-3 | 3               | `audio 1/3`   |
+
+He also reported it is hard to see at all.
+
+**Why — TWO DEFINITIONS OF "HAS SOUND" ON ONE SCREEN:**
+
+- The strips and the dialog read `plateAudioPill(volume, held)`, which honours §12.4's HOLD.
+- `audioSummary` counted `plateIntent > 0` across every SEATED plate id, which honours neither.
+
+Both consequences follow from that one split:
+
+1. **The DENOMINATOR counted SEATS, not what the ACTIVE LOOK SHOWS.** The bridge pre-seats the
+   UNION of every look, so a held plate is seated, invisible, and still inflated the total —
+   exactly `1 box → /2` and `2 boxes → /3`.
+2. **The NUMERATOR counted INTENT, not audibility.** A held plate armed at 100% — which the audio
+   dialog EXISTS to permit, so an operator can arm a box BEFORE switching to its look — read as
+   raised while it was silent on air. Measured in the RED run: `audio 2/2` with one plate making
+   sound. **This half is worse than the wrong denominator and the owner had not hit it yet.**
+
+⚠ **The wrong axis is seated vs SHOWN, NOT seated vs DECLARED.** `LayerRow.tsx`'s prop already
+argued why seated beats declared — a declared plate with no producer cannot be audible — and that
+argument is untouched. Both numbers are still drawn from the seated set; the fraction is narrowed
+to the shown part of it.
+
+### The fix
+
+- **`plateAudioVerdict(volume, held) → { state, audible, armed }`** in
+  `apps/runtime/src/renderer/features/layers/plateAudio.ts` — the ONE answer, and now the only
+  place the three facts are derived. `plateAudioPill` reads it (its `armed` was an inline local
+  before, reachable by nothing else, which is half of why the summary grew its own rule) and so
+  does `audioSummary`. **`audible` and `armed` are different questions and a held plate is where
+  they part**; folding them is the defect.
+- **`audioSummary(plates)`** takes `RowPlateAudio[]` — plate id, volume AND `held` — instead of a
+  `StackItemState` plus bare ids. The old shape could not express audibility at all, because
+  `held` lives on the LEDGER and not on the item.
+- **`rowPlateAudioOf(rows, itemId)`** (`liveLayerRows.ts`) builds that list off the SAME
+  `LiveLayerRowView`s the LIVE PLATES tab renders. `seatedPlatesOf` is untouched and still
+  correct for SOLO and PANIC, which address a SET. A row whose `audio` is `null` — BLIND or
+  STRANDED — is DROPPED: those are the branches that must not make a claim, and a chip counting
+  them would state a number the surface beside it has just declined to state.
+- **`plateIntent` was REMOVED**, not left unused, on this module's own `panicMap` precedent: its
+  only caller was the join `audioSummary` should never have been doing.
+- **Legibility (§3)** — the chip takes the state colour the pills already use: SKY when a shown
+  plate is asking for sound, muted grey otherwise. The CSS's earlier all-muted argument ("a second
+  coloured mark would compete with the row's STATE cell") does not survive the specific hue: the
+  STATE cell owns GREEN, the sacred ON AIR mark, and sky is not a state hue on this surface —
+  which is exactly why `plateAudio.ts` chose it for AUDIBLE. 🔴 **Still a PILL**: two flat states,
+  no track, no fill, no bar, no ramp. `VERB_COUNT` stays 6 and no column was added.
+
+**2c — the wording, decided:** `audio 1/2 · 1 armed`, and the armed count is emitted ONLY when
+non-zero. It is **outside** the fraction because folding it in would claim sound the hold is
+preventing, and dropping it would silently lose the one thing the pre-arm affordance exists to
+make visible. The word is `armed` rather than a synonym on §3's own instruction — one word means
+one thing here and in LIVE PLATES, where the pill reads `ARMED · HIDDEN BY THIS LOOK` — and the
+`·` separator mirrors that pill's own construction. The full sentence lives in the tooltip and the
+accessible name, which is where the ambiguity a two-word chip cannot avoid is resolved.
+
+**2d — the tooltip no longer says "raised".** It was _"N of this row's M live plates are raised"_ —
+an INTENT word sitting where a reader takes it as a report about air. It now reads _"Sound is asked
+for on N of the M live plates this look shows … Nothing here measures the output — this is what the
+console asked for."_ Nothing in this console can know a sample reached the output: CasparCG's
+programme channel reports ONE peak pair for the whole channel, so a per-input level does not exist
+to be read (`add-multibox-audio` design.md §6).
+
+### Tests — RED first, chain rebuilt before each reading
+
+`apps/runtime/tests/layerRow.dom.test.ts`. **RED measured** with the pre-fix rule restored behind
+the new signature: the owner's table failed `expected 'audio 1/3' to be 'audio 1/1'`; the
+held-armed case failed `expected 'audio 2/2' to be 'audio 1/1 · 1 armed'`; the tooltip and the two
+colour cases failed with it — **6 failed, 54 passed. GREEN after: 60/60.**
+
+Covered: the owner's three-look table driven end to end; a HELD plate armed at 100% not counted
+audible and reported separately; the armed clause absent at zero; an all-HELD row that still
+summarises because something is waiting; a SHOWN plate whose volume assert FAILED reading silent
+(the bridge leaves the intent ABSENT on `!ack.ok` rather than optimistically raised); explicit `0`
+and absent-key both not audible and not merged; the state class present/absent; `VERB_COUNT` still
+6; and the no-meter assertions still green.
+
+**Notes:**
+
+- **What the owner can click:** the LAYERS tab, on a row with a multi-box template taken to air.
+  Switch looks and the chip's denominator now tracks the boxes on screen. Arm a plate in a look
+  that does not show it and the chip says `· 1 armed` without moving the fraction.
+- ⚠ **A KNOWN LIMIT, stated rather than implied:** `volume` here is the INTENT recorded on the
+  stack item, so the chip is exactly as honest as the strips beside it and no more. A plate whose
+  volume was successfully asserted and then lost some other way would still read as asking for
+  sound. That is a property of the shared verdict, which is the point of the fix; a per-input
+  MEASUREMENT does not exist to be read (see [[C-026]]).
+- **Number verified free** immediately before filing: `git grep "B-164"` across `docs/`,
+  `openspec/`, `packages/`, `tools/` and `apps/` returned only this session's own code comments
+  and the registry's forward-reference "Next free" line — no heading anywhere.
+- ✅ **Linux `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/32658676558> —
+  head `7a8eda09`, `completed` + `success`, with the **`E2E (Playwright)` job RUN, not skipped**.
+  This is the run that matters most for this item: the fix CHANGED two assertions in
+  `live-source-layers.spec.ts` that had the defect written down as expected behaviour, and
+  `pnpm gate` does not run Playwright (`P-028`), so only a Linux `e2e` can show they were corrected
+  rather than merely edited.
+- **Cross-refs:** [[C-026]] (multi-box audio: the monitor/VU work that would make a MEASUREMENT
+  possible), [[B-154]]/[[B-155]] (the HELD plate's other consequences), `CLAUDE.md` golden rule 6
+  (one predicate, reused — the rule this restores).
+
+## [ ] B-165 — every divergence event the adapter emits reaches NOBODY on the production path: the only subscriber in the tree is a soak counter ⟨priority: high — a backup that is silently wrong, from ANY cause, and every surface reports success⟩ — OPEN
+
+**Filed 2026-08-24 (session MIRROR-SILENT-01), from [[B-159]]'s §6.** Established from the code
+before filing, and **§6's stated evidence did NOT survive that check** — see "What BV got wrong"
+below. The FINDING holds; the sentence recording it does not, and it is corrected in place.
+
+### The mechanism, anchored
+
+The redundancy adapter detects divergence and announces it four ways:
+
+| Event                    | Emitted at                                                        | Meaning                                             |
+| ------------------------ | ----------------------------------------------------------------- | --------------------------------------------------- |
+| `mirror-divergence`      | `packages/caspar-client/src/redundancy/redundancy-adapter.ts:384` | this one command got different codes from A and B   |
+| `split-brain-persistent` | `redundancy-adapter.ts:391` (budget: 3 in 30 s)                   | the divergence is not a blip                        |
+| `corrective-resend`      | `redundancy-adapter.ts:425`, once per replayed line               | the adapter is re-sending the whole ok-journal to B |
+| `split-brain`            | `redundancy-adapter.ts:231`                                       | the two slot views differ by N slots                |
+
+**Nothing on the production path subscribes to any of the four.** `CasparRuntime` wires exactly two
+adapter events — `#adapter.on('health', …)` (`tools/caspar-bridge/src/caspar-runtime.ts:1332`) and
+`#adapter.on('failover-complete', …)` (`:1333`). There is no third. Neither runtime app subscribes
+either: the browser only ever sees what the bridge publishes, and the bridge publishes nothing about
+divergence.
+
+The **only** subscriber anywhere outside tests is `tools/soak-runner/src/harness.ts:241`, `:244`,
+`:247` — three counters incrementing a `SoakEventCounts` record for the soak report (`B-046`). That
+harness runs against mock servers inside a synthetic soak. **It is a measurement instrument, not an
+operator surface**, and it is not running when the plant is on air.
+
+### What it produces ON AIR
+
+A media file missing on B, a template B cannot fetch, a layer occupied on B, an AMCP build that
+answers one command differently — any of these leave **B structurally different from A** while:
+
+- `#send` computes `ok` from the adapter's return, which is the **primary's** response
+  (`redundancy-adapter.ts:260` returns `{ ...pRes.value, winner: this.primary }`), so `applyAck`
+  records success and the reconcile continues;
+- the connection-health surface reports whether B is **REACHABLE**, never whether B is **CORRECT** —
+  a live, healthy, answering backup that is wrong reads exactly like a live, healthy, correct one
+  (the `degraded`-is-reachable axis of [[B-100]]/[[B-101]], one layer up);
+- the operator gets a successful switch, a green server, and no toast.
+
+**The failure is discovered by cutting to the backup** — the moment they least want to discover it.
+A confidently-wrong surface is this product's worst defect class, and here the surface is not merely
+silent: it is actively affirming.
+
+⚠ **The corrective resend is silent too, and that is the sharpest edge.** Once the budget trips, the
+adapter replays **every retained `'ok'` journal entry** to B (`redundancy-adapter.ts:423-427`,
+bounded at 500 entries / 5 min by [[B-044]]) — including `PLAY`s for producers that were already
+correct on B, which a replay restarts. So the bridge can be re-seating every producer on the backup,
+repeatedly, and **no surface anywhere says it is happening.**
+
+### Reachable INDEPENDENTLY of [[B-159]]/[[B-160]] — schedule it apart
+
+**Yes, and this is the reason it is its own number.** [[B-159]] is one _cause_ of divergence (a
+missing media file) and [[B-160]] is that cause's _prevention_. This item is the **silence**, which
+applies to every cause equally:
+
+- Shipping [[B-160]] (preflight the file per server) removes one cause and leaves this untouched for
+  the other causes — a template the backup cannot fetch ([[B-162]]'s family), a channel configured
+  differently, a layer occupied by something else, a different CasparCG build.
+- Shipping [[B-159]] (behave correctly when a file is missing at the take) is about the per-input /
+  per-look blast radius on the server that failed. It does not make the divergence visible.
+- Conversely this item shipping alone is worth having: it converts every existing silent divergence
+  into a reported one, with no change to any playout path.
+
+**It is also the cheaper half.** The events already exist and already carry the payload
+(`seq`, `primaryCode`, `backupCode`, `primary`, `backup`, `divergencesInWindow`). What is missing is
+a subscriber in `CasparRuntime` beside the two at `:1332-1333`, a publish channel, and a surface.
+
+### What BV got wrong, recorded so it is not re-derived
+
+[[B-159]] §6 claimed that a repo-wide sweep for both event names found NO listener in the `tools`
+or `apps` trees, every other hit being a doc, a living spec, an archived change or a test. **That
+is false.** `tools/soak-runner/src/harness.ts` is `tools/**`, is `src`,
+is not a test, and holds three real `.on(…)` subscriptions. The finding survives because the soak
+harness is not an operator surface; the _evidence as recorded_ does not, and §6 is corrected in
+place. Instrument check for THIS sweep: the same `git grep` over `.on(` in `tools/caspar-bridge/src`
+returns the two `#adapter.on` lines at `:1332-1333`, so the tool sees adapter subscriptions where
+they exist and the absence of a divergence one is real, not a blind spot.
+
+### Acceptance
+
+- WHEN A and B answer the same command with different codes THEN the bridge learns of it (a
+  subscriber exists beside the two at `caspar-runtime.ts:1332-1333`) and the operator is told which
+  server diverged, on which command.
+- WHEN the divergence budget trips and a corrective resend fires THEN that fact is surfaced too — a
+  full-journal replay against a live plant is an event an operator must be able to see.
+- WHEN the backup is merely UNREACHABLE THEN this surface must not double-report it: reachability
+  already has an owner, and divergence is the CORRECTNESS axis (golden rule 8 — probe the axis you
+  intend to judge).
+- ⚠ WHEN the surface reports "no divergence" THEN that must not be read as proof the two servers
+  agree. It means no command answered differently; it is not a comparison of what is on air. The
+  wording must say so, on [[B-163]]'s precedent.
+
+- **Cross-refs:** [[B-159]] (one cause of the divergence this hides; its §6 is where this was found),
+  [[B-160]] (that cause's prevention), [[B-162]]/[[B-163]] (another cause, and the
+  a-warning-is-not-a-measurement rule this item's wording inherits), [[B-044]] (the journal bound
+  that keeps each resend burst finite), [[B-046]] (the soak counters — the only existing consumer),
+  [[B-100]]/[[B-101]] (reachable ≠ correct; the axis this surface must not confuse).
+
+<!--
+  ── THE 2026-08-24 TWO-SERVER PLANT TEST (session PLANT-FINDINGS-01) ────────────────────
+
+  B-166 … B-174 below were all filed from the owner's FIRST real two-server plant run. They are
+  filed SEPARATELY on purpose: they share a session, not a cause, and rolling them together is how
+  one fix comes to claim credit for eight symptoms.
+
+  Two results from that run are SETTLED and are not re-opened by any item here:
+    · B-161's fix HOLDS on the plant — UPDATE alone put nothing on air.
+    · B-162's fix HOLDS on the plant — the backup's template now switches with the look.
+
+  🔴 EVIDENCE DISCIPLINE FOR THIS BATCH. Every item below states, in its own words, what was
+  MEASURED and what was READ FROM THE CODE. Nothing here was measured on the SDI seam: the owner's
+  report is the only air-side evidence, and where an item's mechanism is a deduction from the source
+  it says so rather than borrowing the owner's sighting as proof of the mechanism. Two premises
+  handed to the session did NOT survive contact with the code and were filed as nothing at all —
+  they are recorded in B-167's §"What this is NOT" so the next reader does not re-derive them.
+-->
+
+## [~] B-166 — 🔴 a REFUSED look switch has ALREADY MOVED live plates on the wire, and every surface says it did not happen ⟨priority: high — a mixed geometry on air, from a button that reported failure⟩ — FIXED 2026-08-25 together with [[B-167]]; ONE fix, proven by a one-line revert. Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/32829920791 (commit `a80c2a9f`; `e2e` job conclusion `success`, and the step RAN rather than skipped)
+
+<!--
+  🔴 FIXED 2026-08-25 — and read this before touching either item, because the SHAPE of the fix
+  is not the shape the brief predicted.
+
+  THE §0 VERDICT: B-166 and B-167 are TWO FACES OF ONE DEFECT. One fix closes both, and that is
+  not an argument — it is measured. Reverting a SINGLE LINE (`mode: 'switch'` back to
+  `mode: 'live'` at `setActiveLook`'s reconcile) turns BOTH items' tests red together.
+
+  ⚠ THE BRIEF'S DIAGNOSIS WAS WRONG, AND CORRECTING IT CHANGED THE FIX. It read: "the verb
+  mutates before it decides". It does not. `setActiveLook` → `reconcileLivePlates` →
+  `#planLiveSeating` is pure and refuses BEFORE anything is written or sent — the same
+  plan/decide/apply shape `take` uses, already in place on this path. What a plan cannot decide
+  is a WIRE outcome: a source that resolves fine and that CasparCG then refuses to open. The
+  owner's plant case is exactly that (a box that renders black is one whose command was
+  attempted), so "plan before apply" was never the missing piece.
+
+  THE FIX IS ALL-OR-NOTHING APPLY: a refused switch puts the geometry back. `#applyLivePlates`
+  gained a third mode, `'switch'`, which PLANS byte-identically to `'live'` (same
+  `already-live` scope, same `pinned` level 2, same UNION pre-seat — §3's constraint held and
+  asserted) and differs only in what a failure MEANS.
+
+  🔴 WHY THAT IS SAFE HERE AND NOT FOR A SWAP, which is the reason `'live'` is right to refuse
+  a rollback: a plain switch issues NO `PLAY` at all. Every punched plate is already seated by
+  the union pre-seat, so the only traffic is `MIXER FILL`/`CLIP` (plus a `MIXER VOLUME` leaving
+  HELD). Undoing that is re-emitting the PRIOR fit — no `out`, no `MIXER CLEAR`, no producer
+  destroyed, nothing taken off air. `B-126`'s never-CLEAR-before-a-repair rule is not engaged.
+  A plate this action genuinely `PLAY`ed is deliberately NOT rolled back.
+-->
+
+**What the owner saw, on the plant.**
+
+> _"With one source of a 3-box look faulty, pressing the 3-box button shows an error and the button
+> does not activate — but the boxes switch to 3-box anyway, and the faulty box renders black."_
+
+🔴 **THIS IS `B-161`'s FAMILY: A VERB THAT REFUSES AND ACTS.** `B-161` was a configuration verb
+reaching the wire; this is a playout verb that reaches the wire, fails partway, and then reports
+that it did nothing. The refusal is not a lie about the FAILURE — it is a lie about the SCOPE.
+
+### The mechanism — read from the code, not measured on air
+
+`setActiveLook` ([`caspar-runtime.ts:4704`](../../tools/caspar-bridge/src/caspar-runtime.ts)) runs
+its on-air branch as `reconcileLivePlates(mode: 'live')` → then `#tellPageLook`. The refusal path is
+where the damage is, and it has three steps:
+
+1. **`#applyLivePlates` BREAKS AT THE FIRST REFUSED PLATE** (`caspar-runtime.ts:5285`,
+   `if (failure !== undefined) break;`). Plates iterated BEFORE the faulty one have already had
+   their `MIXER FILL`/`CLIP` sent at the NEW look's geometry, and those sends LANDED. Plates AFTER
+   it are never processed at all and stay at the OLD geometry.
+2. **`'live'` mode deliberately does NOT roll back** (`reconcileLivePlates`'s own mode note:
+   _"Undoes only the plate that failed … blacking working boxes to punish a failing one is the
+   opposite of what the operator needs in that minute"_). That judgement is defensible for a SOURCE
+   SWAP, where one plate is the whole action. For a LOOK SWITCH the action is a single geometry
+   change across every plate, so "undo only the failed one" leaves a geometry that belongs to no
+   look at all.
+3. **The page is then never told** — `#tellPageLook` runs only on `reconciled.ok`, so the holes stay
+   on the OLD look, `#recordActiveLook` never fires, the picker does not move, and no `stackChanged`
+   is published.
+
+**The state on air after the refusal, stated exactly:** some fills at the NEW look's rects, some at
+the OLD look's, every hole at the OLD look, the faulty plate torn down to black
+(`out` + `MIXER CLEAR`, `caspar-runtime.ts:5362-5364`), and a picker plus a published stack that
+both say the row is still on the OLD look. **Every readout the operator has says the switch did not
+happen. Three of the four things on air moved.**
+
+**Repro:** two-server plant, a 3-box look, one of its three sources faulty (absent input / dead
+route). Row on air on a different look. Press the 3-box segment.
+**Expected:** either the switch happens completely, or nothing on the wire moves and the refusal is
+true.
+**Actual:** an error toast, an unmoved picker, and a partially-switched picture on air.
+**Env:** owner's two-server plant, 2026-08-24. Mechanism read from `caspar-runtime.ts`; NOT measured
+on the SDI seam and NOT reproduced against the AMCP mock in this session.
+
+### 🔴 What the fix must decide — and what it must NOT do
+
+- **The `'live'` no-rollback rule is not simply wrong, and must not simply be inverted.** It exists
+  because a swap must not black working plates. The question this item opens is narrower: **is a
+  LOOK SWITCH one action or N?** It is one — it is a single geometry, and a partial one is not a
+  smaller version of it. So the switch needs an outcome the swap does not: either all fills move or
+  none do.
+- ⚠ **A rollback here is a DESTRUCTIVE step on live layers, so `B-126`'s rule governs it.** Moving a
+  landed `MIXER FILL` back is not a `CLEAR` and does not destroy a producer, which is what makes
+  this tractable — the repair is re-fitting to the OLD look's rects, not tearing down. **Any
+  candidate that reaches for `out`/`MIXER CLEAR` on a working plate is the wrong candidate.**
+- ⚠ **Golden rule 7 applies to the refusal itself.** The message must be computed from what actually
+  landed, exactly as `#applyLivePlates`'s `playLanded` bookkeeping already does for the single-plate
+  case — not from the intent. A refusal that says "the look was not changed" while three fills moved
+  is the half-state the 7.9 work removed from ONE path and left in this one.
+
+**Regression test:** `tools/caspar-bridge/tests/live-look-reconcile.integration.test.ts`, asserting
+on the mock's NDJSON trace: with plate 2 of 3 refused, the wire after the refusal must contain no
+`MIXER FILL` at the new look's rects for plate 1 — or, if the chosen fix is a re-fit rollback, must
+contain plate 1's fill back at the OLD look's rect. `setHandler('MIXER', …)` is the injection hook.
+
+- **Cross-refs:** [[B-161]] (the same shape, one verb over — refuse and act), [[B-167]] (what the
+  operator hits NEXT, when they take this item's own advice and re-press), [[B-126]] (the rule any
+  rollback candidate must not break), [[B-155]] (the other defect living in this switch's window).
+
+## [~] B-167 — 🔴 the RE-PRESS the product prescribes as the repair is a guaranteed NO-OP for a mis-fit plate, and it then reports SUCCESS ⟨priority: high — the holes move, one box does not, and the switch goes green⟩ — FIXED 2026-08-25 by [[B-166]]'s fix; NOT a second change. Linux e2e DISCHARGED on the same run: https://github.com/yasermostafaee/cg/actions/runs/32829920791
+
+<!--
+  🔴 FIXED 2026-08-25, and NOT by a fix of its own — read this before writing one.
+
+  The lying ledger record this item is built on — the ATTEMPTED geometry kept for a plate whose
+  `MIXER FILL` was refused — is not an independent defect. It is the RESIDUE of a partial apply
+  that was never undone. Once a refused switch puts the geometry back and writes the previous
+  ledger back verbatim ([[B-166]]), the next press computes a real delta against the truth
+  instead of `same() === true`, so it either works or refuses again for the same reason.
+
+  A guaranteed no-op that answers `ok` stops being REPRESENTABLE rather than being defended
+  against — which is why there is no second guard anywhere for it.
+
+  ⚠ MEASURED, not argued: reverting the one line that makes a switch all-or-nothing turns THIS
+  item's test red alongside B-166's. If a future change makes them fail independently, the two
+  have come apart and this item needs its own fix again.
+-->
+
+**What the owner saw, on the plant.**
+
+> _"The holes switch but the boxes stay put, so pictures come out corrupted."_
+
+🔴 **THE PRODUCT NAMES ONE REMEDY FOR A HALF-APPLIED SWITCH, AND THAT REMEDY CANNOT WORK.**
+`setActiveLook`'s own refusal sentence ends _"Re-issue the switch."_, and `LookPicker`'s comment
+argues at length that a re-press must not be guarded because _"a re-press is not a redundant
+re-assert. It is the repair"_. For the plate whose `MIXER FILL` or `CLIP` was the thing refused, the
+re-press emits nothing at all.
+
+### The mechanism — read from the code, in three lines that have to be read together
+
+1. **A refused RE-FIT keeps the ATTEMPTED geometry in the ledger.**
+   `caspar-runtime.ts:5389-5397`: `revertToPrior` requires `failed.reseat`, and a re-fit has
+   `seatUnchanged === true`, so `reseat` is false. `tornDown` requires `!replacedInPlace`, and a
+   re-fit is on its own slot, so that is false too. Therefore `settledFailed = [failed.record]` —
+   and `record.fill` is the NEW look's rect, **for a `MIXER FILL` that was refused and never
+   landed.**
+2. **The delta guard then reads that record as truth.** `caspar-runtime.ts:5217`:
+   `if (!same(prior.fill, record.fill) || !same(prior.clip, record.clip))`. On a re-press of the
+   SAME look, `prior` is the lying record (NEW) and `record` is the freshly planned rect (NEW), so
+   `same()` is TRUE on both axes and **no `mixerFit` is pushed. The plate's `lines` array is
+   empty.**
+3. **So the reconcile succeeds** — nothing was sent, so nothing could fail — **and `#tellPageLook`
+   then runs and succeeds.** The holes move to the new look, `#recordActiveLook` fires, the picker
+   goes green, and no toast appears.
+
+**Result: the holes switch, that box stays where it was, and every surface reports success.** The
+first attempt at least had an error on it; the re-press removes the last thing that said anything
+was wrong.
+
+### 🔴 The comment at `caspar-runtime.ts:5382-5387` argues for this branch, and its reasoning is INVERTED
+
+It reads: _"The ATTEMPTED record is kept so that re-issuing the same switch computes a real delta
+and REPAIRS it — reverting to the prior geometry made the retry a no-op and left the plate black."_
+
+Both halves are backwards, and the arithmetic is one line each:
+
+| ledger keeps…                       | re-press: `prior.fill` vs `record.fill` | `same()` | `MIXER FILL` emitted? |
+| ----------------------------------- | --------------------------------------- | -------- | --------------------- |
+| the ATTEMPTED record (what it does) | NEW vs NEW                              | **true** | **no — the no-op**    |
+| the PRIOR record (what it rejected) | OLD vs NEW                              | false    | **yes — the repair**  |
+
+⚠ **This is worth stating plainly because the comment will be read as a reason not to touch the
+branch.** It is not a case of a comment drifting from its code; the comment describes the OPPOSITE
+behaviour to the one the code produces, and it is the more persuasive of the two. **Replace it, do
+not merely override it** — this repo has been bitten before by a warning that outlived its premise
+(see the `LooksBindingsSection` badge note for the same correction applied properly).
+
+**Repro:** as [[B-166]], then press the same look segment a second time.
+**Expected:** the re-press repairs the mis-fit plate, or refuses again.
+**Actual:** the holes move, the mis-fit plate does not, the picker goes green and nothing is
+reported.
+**Env:** owner's two-server plant, 2026-08-24. The three-step mechanism is READ FROM THE CODE and is
+deterministic; it was NOT measured on the wire in this session, and the measurement is what the fix
+owes.
+
+### What this is NOT — two premises that did not survive the code
+
+- ❌ **It is NOT [[B-149]]** (the mask hole taking the cell's POSITION and the AUTHORED SIZE because
+  `liveArrangementView` read back only `left`/`top`). **B-149 is `[x]` FIXED, 2026-08-19** —
+  `packages/template-runtime/src/arrangement-view.ts` now reads `width`/`height` back alongside
+  `left`/`top` and compares SIZE as well as position in the "only when it actually differs" guard.
+  The premise was checked in the file and does not hold.
+- ❌ **It is NOT simply [[B-166]]'s consequence.** B-166's refusal leaves fills at the NEW geometry
+  behind holes at the OLD look — the OPPOSITE direction to what the owner reports here. This item is
+  the direction the owner actually named, and it is reached FROM B-166 (a refused re-fit is what
+  plants the lying ledger record) without being the same defect. **Fixing B-166 does not fix this**:
+  any refused `MIXER FILL`/`CLIP` plants the same record, and the `mixerFit` pair is sent as two
+  lines on one connection (`command-builder.ts:269`), so a half-landed pair is an ordinary outcome.
+
+**Regression test:** `live-look-reconcile.integration.test.ts` — refuse `MIXER` once via
+`setHandler`, then re-issue the SAME look, and assert the trace CONTAINS a `MIXER FILL` for that
+plate. Assert the plate's rendered rect via `layerRenderedRect()`, not just `layerState().fill`:
+`FILL` and `CLIP` can be half-applied and only the intersection says what is on screen.
+
+- **Cross-refs:** [[B-166]] (the refusal that plants the record), [[B-155]] (the same switch window,
+  the other defect), [[B-149]] (the disproven premise, kept here so it is not re-derived),
+  [[B-126]] (why the failure path is this careful in the first place).
+
+## [~] B-168 — the LOOK PICKER does not SAY it commits immediately, on a surface where everything beside it waits for UPDATE ⟨priority: medium — the operator cannot tell which control has already changed air⟩ — RE-SCOPED and DECIDED 2026-08-25 (owner: option b); shipped `2b91f13f`. Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/32834755257 (`e2e` job `success`, step RAN)
+
+> 🔴🔴 **REVERSED BY THE OWNER, 2026-09-13 — option (b) IS SUPERSEDED. This record is
+> ANNOTATED, not rewritten (rule 14): a dated decision keeps its text, and a reversal must be
+> published as loudly as the original.**
+>
+> **What (b) was:** the look pick STAYS IMMEDIATE — not staged, `UPDATE` not involved, and the
+> control says so with `· NOW`. That is what shipped in `2b91f13f` and what the code does
+> today.
+>
+> **What replaces it:** the reference’s model — a look press **DECLARES an intent**, and the
+> change is applied afterwards. Nothing is built for this yet; it gets its own establish-first
+> prompt, **`LOOK-INTENT-08`**, in a fresh session, because it is behaviour on the path to air
+> and it reverses a published decision.
+>
+> ⚠ **AND THE PREMISE THAT RAISED THE REVERSAL WAS WRONG, which is worth more than the
+> reversal itself.** The `PENDING` screenshot behind it was the **REFERENCE**, not our product:
+> a tree-wide grep finds no `PENDING` anywhere operator-facing in ours, and our amber-clock
+> words are **`TAKING`** and **`UNCONFIRMED`** (`airStateVisual`). Our `pending` is computed as
+> `!isTerminalStatus(rec.intentStatus) && !isConfirmed(rec)` — **a CONFIRMATION gap, not a
+> staging gap.** So the contradiction that prompted this was never in our build.
+>
+> `R-063` stands exactly as landed — it is still true of the code today — but it is no longer
+> the end of the question. See `design.md` §30 and the handover of 2026-09-13.
+
+<!--
+  🔴 THE HEADING WAS RE-SCOPED IN PLACE ON 2026-08-25, AND THE OLD ONE IS QUOTED HERE BECAUSE
+  DELETING IT WOULD HIDE THE CORRECTION.
+
+  It read: *"the LOOK PICK is not part of UPDATE's transaction and is not staged, on a surface
+  that teaches STAGED ≠ IN FORCE"*.
+
+  That wording says something is DROPPED. Nothing is dropped — **nothing is ever held**.
+  `stack.update` has no look field, `draftStore` has no look staging, and `LookPicker.onPick`
+  calls `stack.set-active-look` immediately. An item describing a missing transaction sends the
+  next reader to build one, which is the opposite of what was decided.
+
+  ⚠ This project has corrected a false record three times now (`B-159`'s disproven claims,
+  `B-175`'s AspectRow claim, `D-155`'s jump claim). Leaving the old wording standing while the
+  decision went the other way would have been the fourth.
+-->
+
+**Owner's decision, 2026-08-25 — option (b): the look pick STAYS IMMEDIATE.** It is not staged,
+and `UPDATE` is not touched. The reasons, in the owner's order of weight:
+
+1. 🔴 **A staged look is the confidently-wrong-surface class this product fears most.** The
+   operator stages a look, forgets UPDATE, and the row SHOWS one look while the picker CLAIMS
+   another. Immediacy makes that disagreement **unrepresentable**. This argument outranks the
+   rest.
+2. **The picker on an on-air row IS a cut**, already decided at [[B-151]] — _"an on-air row gets
+   the cut"_. Staging would turn a live cut control into a two-press control at exactly the
+   moment speed matters.
+3. **The complaint's cause was a LYING REFUSAL, not immediacy.** [[B-166]] closed it: the owner
+   reached for UPDATE because the refused switch had left him no honest route, and it now
+   refuses cleanly and the re-press works. Staging would treat a symptom that no longer exists.
+4. **Two commit models on one surface is a real cost — but it already exists and is
+   documented.** `LooksBindingsSection`'s CLEAR PATCH sets the precedent with its reason written
+   down: it applies immediately "because the patch it undoes was applied immediately too …
+   making its removal wait for UPDATE would leave the two halves of one operator decision on
+   different clocks." So the answer is that the surface **SAYS SO** — not that it becomes
+   uniform.
+
+**What is therefore missing, and it is the whole of the remaining work:** the picker does not
+say it commits immediately. Everything beside it on that panel waits for UPDATE, so an operator
+has no way to know this one control has already changed air. **A sentence on the surface, not a
+behaviour change.**
+
+<!--
+  ⚠ SUPERSEDED THE SAME DAY — the owner answered (b), and the decision with its full reasoning
+  is in the item body above. This note is KEPT rather than deleted because it records what was
+  ASKED FOR and why it was refused, which is the part a later reader would otherwise re-derive
+  from the prompt and re-implement.
+
+  🔴 BLOCKED 2026-08-25 — STOPPED DELIBERATELY, and the reason is that the obvious fix would
+  make an ON-AIR control worse.
+
+  `LOOK-VERB-01` §2 asked for "UPDATE carries the look pick into force, and the row does not
+  need the look button pressed afterwards". That cannot be implemented as written, because
+  THERE IS NO STAGED LOOK PICK FOR UPDATE TO CARRY: `stack.update`'s payload has no look field,
+  `draftStore` has no look staging, and `LookPicker.onPick` → `LayerRow.switchLook` calls
+  `stack.set-active-look` IMMEDIATELY. Nothing is ever dropped, because nothing is ever held.
+
+  ⚠ WHAT THE OWNER ACTUALLY HIT IS NOW GONE. His sequence was: press look → "failed" (but the
+  boxes moved) → press UPDATE (nothing) → press the look button again, "the very press that had
+  just failed". With [[B-166]] fixed, the first press is cleanly refused, nothing moves, and
+  the message names the plate — so the re-press IS the route, and it works. He reached for
+  UPDATE because the switch had left him with no honest one.
+
+  THE DECISION THIS NEEDS, which is the owner's and not a session's:
+
+  (a) The look pick becomes STAGED like the per-look bindings, and UPDATE commits it.
+      🔴 This makes a look switch on an ON-AIR row take TWO presses. The picker is a live CUT
+      control — `B-151`'s own note says an on-air row "gets the cut" — so this trades a
+      one-press cut for a two-press one on the surface that most needs immediacy.
+
+  (b) The look pick STAYS immediate, and the surface SAYS so, so the two commit models on one
+      panel stop being indistinguishable. `LooksBindingsSection`'s CLEAR PATCH already sets
+      this precedent and states its reason: it applies immediately "because the patch it undoes
+      was applied immediately too … making its removal wait for UPDATE would leave the two
+      halves of one operator decision on different clocks."
+
+  This session recommends (b) and did NOT implement either. Implementing (a) on an on-air
+  control without the owner's call is exactly the kind of unasked-for behaviour change that
+  golden rule 10's neighbours exist to prevent.
+-->
+
+**What the owner saw, on the plant.**
+
+> _"After changing look, UPDATE does not put it in force — the operator must press the look button
+> on the row instead."_
+
+**The mechanism, and it is a DESIGN fact rather than a drop — established from the code.** The look
+pick is nowhere in UPDATE's transaction, and nothing loses it on the way:
+
+- `StackUpdateChannel`'s request schema (`packages/shared-ipc/src/channels/stack.ts:76`) is
+  `{ itemId, fields, mergeMode, lookBindings? }`. **There is no active-look field on the wire at
+  all.**
+- `applyDraft` / `sendUpdate` (`apps/runtime/src/renderer/features/inspector/applyDraft.ts`) build
+  exactly those four keys.
+- `draftStore.ts` has no look-pick staging — it stages fields, plate sources and per-look BINDINGS,
+  and nothing else.
+- The row's `LookPicker.onPick` → `LayerRow`'s `switchLook` calls `window.cg.stack.setActiveLook`
+  **immediately** (`LayerRow.tsx:348`).
+
+So the owner's observation is correct and the answer to _"not part of the transaction, or dropped
+somewhere?"_ is **the former, cleanly**.
+
+### 🔴 Why it is still a defect: ONE panel, TWO commit models, and no way to tell them apart
+
+The Inspector's Looks & Bindings section teaches the operator that a look's INPUT is staged, wears a
+`draft` chip, and lands on UPDATE. The row's LOOK segments — the control for the same feature, read
+in the same glance — are an immediate write with no staging and no chip. Nothing on either control
+says which model it follows.
+
+⚠ **The repo has already made this exact call once, in the opposite direction and with its reason
+written down.** `LooksBindingsSection`'s CLEAR PATCH button applies immediately, and its comment
+justifies that explicitly: _"the patch it undoes was applied immediately too (R-048 is an on-air
+emergency, not a draft), so making its removal wait for UPDATE would leave the two halves of one
+operator decision on different clocks."_ **That is the right shape of argument and the look pick has
+never had one.** The look pick is plausibly in the same class — a look switch on an on-air row is a
+CUT, and staging a cut would be strange — but that has never been decided out loud, and the
+operator has no way to read it off the surface.
+
+**Repro:** on-air row, change the look with the row's LOOK segment; separately, edit a look's input
+in the Inspector and press UPDATE. Note that one committed on press and the other on UPDATE, with
+nothing saying so.
+**Expected:** the surface makes its commit model legible, whichever way the decision goes.
+**Actual:** two models, no tell.
+**Env:** owner's two-server plant, 2026-08-24. Established entirely from the code; the schema, the
+draft store and the call site were each read.
+
+### The decision this item is really asking for
+
+**Do NOT default to "add the look to UPDATE's payload".** That would make a look switch on an
+on-air row wait for a second press, which is a worse cut. The likelier correct answer is the
+opposite — keep the immediate write and make the picker SAY it is immediate, the way the picker
+already says whether it targets `LOOK` or `PVW LOOK` (`B-151`'s precedent, on this very control).
+Either way the fix is a stated decision plus a word on the control, not a payload change made
+because the payload looked incomplete.
+
+- **Cross-refs:** [[B-151]] (the precedent: this control already learned to say what its press
+  changes), [[B-166]] (why an operator reaches for UPDATE here at all — a refused switch leaves them
+  hunting for another way to commit it), [[B-155]] (the item where _"press UPDATE, nothing happens"_
+  was a REAL defect — the two must not be confused).
+
+## [ ] B-169 — 🔴 an explicitly configured non-loopback `templateServeHost` does NOT widen the bind, so the bridge advertises an address it refuses to answer on ⟨priority: high — B-162's exact silent failure, reached from the surface built to prevent it⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner saw, on the plant.**
+
+> _"With a SINGLE local CasparCG and an explicit `serveHost` of `192.168.21.93`, the graphics do not
+> load while box videos do."_
+
+That is [[B-162]]'s signature exactly — live plates render, `CG ADD` returns 200, health stays
+green, and only the graphic is missing — arriving from the [[C-024]] panel that was built to end it.
+
+### 🔴 MEASURED, both halves, 2026-08-24
+
+Run against the built `tools/caspar-bridge/dist/template-http-server.js` plus a real socket on this
+machine:
+
+```
+deriveServeOptions(['127.0.0.1'], { serveHost: '192.168.21.93' })
+  = { bindHost: '127.0.0.1', port: 0, serveHost: '192.168.21.93' }
+hostsUnableToFetchTemplates(['127.0.0.1'], <those options>) = []      ← the diagnostic is SILENT
+
+bound 127.0.0.1:59353
+  fetch http://127.0.0.1:59353   -> HTTP 200
+  fetch http://172.18.0.1:59353  -> FAILED: ECONNREFUSED               ← this machine's own LAN IP
+```
+
+**The second fetch is the whole bug.** A socket bound to `127.0.0.1` refuses a connection to the
+machine's own routable address, so even the LOCAL CasparCG cannot fetch the URL the bridge tells it
+to fetch. `TemplateHttpServer.start` binds `options.bindHost` and `urlFor()` advertises
+`options.serveHost`; nothing reconciles the two.
+
+### The mechanism — the two halves are ONE decision, taken independently
+
+`deriveServeOptions` (`tools/caspar-bridge/src/template-http-server.ts:78`):
+
+```ts
+const allLocal = casparHosts.every(isLoopbackHost);
+return {
+  bindHost:  override.bindHost  ?? (allLocal ? '127.0.0.1' : '0.0.0.0'),
+  serveHost: override.serveHost ?? (allLocal ? '127.0.0.1' : guessLanHost()),
+  ...
+};
+```
+
+`allLocal` is computed once and then consulted TWICE, independently. An override supplies
+`serveHost` and leaves `bindHost` to the derivation, so an all-loopback install keeps a loopback
+BIND while advertising a LAN address. **The owner's reading of the cause was correct and is
+confirmed here.**
+
+⚠ **And `storedServeOverride` cannot rescue it** (`tools/caspar-bridge/src/serve-host-config.ts`):
+it returns `{ serveHost?, port? }` only. **There is no path — flag, panel or file — by which an
+operator can widen the bind.** `TemplateServeOverride` declares `bindHost`, and nothing populates
+it.
+
+### 🔴 Why the B-162 diagnostic cannot see this, which is the second half of the finding
+
+`hostsUnableToFetchTemplates` opens with `casparHosts.filter(h => !isLoopbackHost(h))` and returns
+`[]` when that is empty. Its question is **"is any configured server REMOTE?"** — and here none is.
+But unreachability was not caused by a remote server; it was caused by an advertised address
+**nobody** can reach, the local server included. **The predicate written to make this class of
+failure loud is structurally blind to the case where the operator configures the address by hand,**
+which is the case C-024 exists to support.
+
+**Expected:** an explicitly configured non-loopback `serveHost` FORCES a routable bind — the two
+halves are one decision and must be read once (golden rule 7's shape, at a pair of `??`s).
+**Actual:** loopback bind, LAN advertisement, `CG ADD` 200, no graphic, and the diagnostic silent.
+**Env:** owner's two-server plant, 2026-08-24, single local CasparCG + explicit `serveHost`.
+Function outputs and the TCP consequence MEASURED as above; the plant sighting is the owner's.
+
+### What the fix must cover — both directions, and the diagnostic
+
+1. A non-loopback `serveHost` from ANY layer (flag, stored config, panel) implies a routable
+   `bindHost` unless `bindHost` is itself explicitly overridden.
+2. `hostsUnableToFetchTemplates` must also answer the question it is named for when the SERVE HOST
+   is the unreachable half — "who cannot fetch the URL we advertise", not "is anyone remote". The
+   all-loopback-config case must be able to produce a warning.
+3. ⚠ **`template-http-server.ts` is in `.claude/never-stage`** while the owner's `guessLanHost()`
+   plant pin sits in it uncommitted (`P-035`). C-024 already composed ABOVE that seam in
+   `serve-host-config.ts` for exactly this reason, and half of this fix — the implication rule —
+   can live there too. The `hostsUnableToFetchTemplates` half cannot, and needs the pin resolved
+   first.
+
+**Regression test:** `tools/caspar-bridge/tests/template-http-server.test.ts` already covers
+`deriveServeOptions(['192.168.1.50'], {…})`; the missing case is
+`deriveServeOptions(['127.0.0.1'], { serveHost: '<non-loopback>' })` asserting a routable
+`bindHost`, plus a `hostsUnableToFetchTemplates` case with an all-loopback host list and a
+non-loopback serve host.
+
+- **Cross-refs:** [[B-162]] (the same silent failure, from the primary-only derivation), [[C-024]]
+  (the panel that made this reachable — and whose own doc names the `''`-as-an-address trap, which
+  is this trap's sibling), [[B-163]] (a warning is not a measurement).
+
+## [ ] B-170 — 🔴 after a manual FAILOVER the reconciler's link-down latch is NEVER cleared, so on-air rows stay demoted and PLAY never goes green while commands keep landing ⟨priority: high — the console cannot show air that genuinely exists, indefinitely⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner saw, on the plant.**
+
+> _"After a manual failover to B, looks do not render correctly and PLAY never goes green, though
+> graphics can be sent."_
+
+**The `PLAY never goes green` half has a precise mechanism and it explains the `though graphics can
+be sent` clause exactly. The `looks do not render correctly` half is NOT established — see §2.**
+
+### §1 · The latch — read from the code, and it is a four-step deduction with no branch in it
+
+1. `Reconciler.linkDown` is mutated by **`setLinkDown` and nothing else**
+   (`packages/caspar-client/src/reconciler/reconciler.ts:521`; a `git grep` for `linkDown` in that
+   file returns the declaration, that one assignment, two reads and a comment). OSC traffic does not
+   clear it.
+2. Its only production callers are the two `state-change` branches in `#wireAdapter`
+   (`caspar-runtime.ts:1299` and `:1347`), and **both are guarded by
+   `if (this.#adapter.currentPrimary !== label) return;`** — only the CURRENT primary may drive it.
+3. So when A (primary) dies, `from === 'healthy'` fires on A while A is still primary →
+   `setLinkDown(true)`. Correct, and this is [[B-086]] working.
+4. `failover()` then flips the role and **touches the reconciler not at all.**
+   `RedundancyAdapter.failover` sets `this.primary = to` and emits `failover-complete`; the bridge's
+   handler (`caspar-runtime.ts:1332-1341`) records `#lastFailover` and re-emits health. **B's
+   session state does not change** — it was already `healthy` and stays `healthy` — so **B never
+   fires a `state-change` into `healthy` again, and the one thing that could call
+   `setLinkDown(false)` can never fire.**
+
+**The latch is therefore stuck until B itself drops and recovers.** While it is stuck,
+`reconcileStatus` returns `'unverified'` for every on-air/playing row
+(`reconciler.ts:764`), so the row reads WAS ON AIR and `PLAY`'s `active` fill — which requires
+`status === 'on-air' || 'playing'` (`layerRowActions.ts`) — **can never light.**
+
+**And commands still land, which is why the operator sees the contradiction.** The refusal predicate
+is `#noServerReachable()` (`caspar-runtime.ts:2462`) — "no DECLARED server is reachable" — and B is
+live, so every verb is accepted. The owner's _"though graphics can be sent"_ is not a puzzle; it is
+the two predicates disagreeing, correctly on one side and not on the other.
+
+⚠ **Two further consequences fall out of the same gap and should be checked by whoever fixes it,
+not filed separately until they are:** `reconcileOnReconnect` and `#decidePendingRestores` are also
+reached only from that `to === 'healthy'` branch, so **neither is ever run against B's occupancy** —
+the console's belief about which layers are occupied is A's, from before the failover. The
+`session.on('healthy')` handler that clears `#loaded` (B-054) is likewise never fired for B.
+
+### §2 · The `looks do not render correctly` half is NOT ESTABLISHED, and is deliberately not given a mechanism here
+
+No code path was found that would make a look render wrongly on the new primary after a failover.
+Under the default `mirror-sync` strategy every `CG ADD`, `MIXER FILL` and `CG UPDATE` fanned out to
+BOTH servers all along, and the owner's own run confirms B's template switches with the look (the
+`B-162` fix holding). **Writing a mechanism here would be inventing one.** What the next session
+owes is a measurement, not a theory: after a manual failover, capture B's wire trace for one look
+switch and compare it against A's for the same switch before the failover.
+
+**Repro:** two declared servers, both healthy, row on air. Kill A. Press FAILOVER.
+**Expected:** the row's air state is re-verified against the new primary and PLAY reads normally.
+**Actual:** rows stay `unverified` / WAS ON AIR and PLAY never lights, while commands still reach B.
+**Env:** owner's two-server plant, 2026-08-24. §1's mechanism is READ FROM THE CODE — every hop was
+followed in source and no measurement was taken on the wire.
+
+### 🔴 What the fix must not do
+
+**Do NOT clear the latch on `failover-complete` unconditionally.** The `restore()` path's comment
+(`caspar-runtime.ts:1906-1917`) already refuses precisely that shortcut and its reasoning holds
+here: clearing the flag when the NEW primary is not verified would un-demote [[B-086]]'s
+`unverified` rows back to a confident red ON AIR that nothing backs. The correct move is to
+**re-evaluate the new primary the way a `to === 'healthy'` transition would** — its state, its
+occupancy sample, and the reconcile that follows — rather than to flip a boolean. A failover is a
+change of which server answers the question, so it must re-ASK the question.
+
+**Regression test:** a bridge-level test that drives A `healthy → disconnected`, calls `failover()`,
+and asserts `reconciler.isLinkDown === false` with the on-air row published as `on-air` rather than
+`unverified`, B having been healthy throughout and never transitioning.
+
+- **Cross-refs:** [[B-086]] (the honesty demotion this latch implements — the fix must keep it),
+  [[B-171]] (the other half of the failover story: what the console lets you press before you fail
+  over), [[B-092]] (the restore path that already reasons about this flag), [[B-100]]/[[B-101]]
+  (reachability and verifiability are different axes — this item is the verifiability one).
+
+## [ ] B-171 — 🔴 the console DISABLES every CasparCG verb while a healthy BACKUP is reachable, because the renderer re-derives reachability from the PRIMARY alone ⟨priority: high — it denies air that exists, against an archived R-006 acceptance the bridge already honours⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner saw, on the plant.**
+
+> _"PLAY is inert, and nothing says why. With A unreachable and B healthy, every PLAY is disabled
+> until FAILOVER is pressed."_
+
+The owner filed this as an operator-trust item and allowed that the behaviour might be correct.
+**It is not correct.** It contradicts an archived acceptance scenario, and the bridge on the other
+side of the wire already implements the opposite.
+
+### 🔴 R-006 decided this, in writing, and it is `[x]`
+
+> _"WHEN a mirror pair's PRIMARY is down but a BACKUP is healthy THEN the verbs still work (the
+> command reaches a real, rendering server — refusing would deny air that exists; see B-056)."_
+> — [R-006](runtime.md), archived `2026-07-18-runtime-offline-safety`
+
+### The two spellings, and which one the operator's hand touches
+
+| layer        | predicate                                                             | answer with A down, B healthy  |
+| ------------ | --------------------------------------------------------------------- | ------------------------------ |
+| **bridge**   | `#noServerReachable()` — `sessions.every(s => !isLiveState(s.state))` | reachable → **verb accepted**  |
+| **renderer** | `resolveCasparReach` — `isServerReachable(health.primary.state)`      | `'unreachable'` → **disabled** |
+
+`resolveCasparReach` (`apps/runtime/src/renderer/hooks/useCasparReachable.ts`) reads
+`health.primary.state` and nothing else. `health.primary` is ROLE-keyed — `health()` builds it from
+`this.#adapter.currentPrimary` (`caspar-runtime.ts:7529`) — so before the failover it IS A, the dead
+one. `health.backup` is published and carries B's `healthy`, and **no reachability path in the
+renderer reads it**: a `git grep` for `.backup` under `apps/runtime/src/renderer` returns only
+`StatusBar` pills and the FAILOVER button's own enablement.
+
+**This is golden rule 6 exactly.** The bridge's predicate is the canonical one and its header
+already names B-056 and spells out why the primary is the wrong question. The renderer keeps a
+second, narrower spelling of the same question, and the second one wins because it is the one
+attached to the button.
+
+### 🔴 And the command WOULD have landed — this is the part that makes it a denial rather than a courtesy
+
+Under the default `mirror-sync` strategy (`bridge.ts:378`, `seed.ts:69`), `sendMirrorSync` fans out
+to both and explicitly handles the primary-failed case
+(`packages/caspar-client/src/redundancy/redundancy-adapter.ts`):
+
+```ts
+if (bRes.status === 'fulfilled') {
+  this.journal.resolve(seq, 'err');
+  this.recordPrimaryFailure();
+  return { ...bRes.value, winner: this.primary === 'A' ? 'B' : 'A' };
+}
+```
+
+The send **succeeds on the backup and returns `winner: B`**. The console is refusing a command that
+the plumbing beneath it is built to complete.
+
+### The sentence is wrong too, and it points at the wrong remedy
+
+The disabled control's reason is `CASPAR_UNREACHABLE_REASON`:
+_"CasparCG cannot be reached — this command would not arrive. It returns as soon as the playout
+server is back."_ With B healthy and a FAILOVER button on the same screen, that sentence is
+confidently wrong on both clauses and **instructs the operator to WAIT when the remedy is one
+press away.** The owner's instinct that the fix is a sentence is right about half of it; the other
+half is the gate.
+
+⚠ **MEASURED, and it corrects the owner's report on one point.** The reason IS reachable: the
+console's delegated tooltip (`apps/runtime/src/renderer/ui/Tooltip.tsx`) listens for `pointerover`
+in the capture phase, and a real Chrome mouse-move over a `disabled` `<button>` **does** dispatch
+`pointerover` with the button as `e.target`, so `closest('[title]')` finds it. Measured with
+Playwright against system Chrome: hovering a `disabled` button carrying a `title` resolved that
+button and its text. **So "nothing says why" is not literally true — something says why after a
+450 ms dwell, and what it says is wrong.**
+
+**Repro:** two declared servers, `mirror-sync`. Take A offline, leave B healthy. Observe every
+AMCP-emitting control on every row disabled, with the sentence above.
+**Expected:** the verbs stay live (R-006), and any reason shown names the actual state.
+**Actual:** every verb disabled; the reason blames "CasparCG" and prescribes waiting.
+**Env:** owner's two-server plant, 2026-08-24. The predicate mismatch, the role-keyed `health()` and
+the `mirror-sync` backup-wins branch were all read in source; the tooltip reachability was measured
+in Chrome. Not measured on the plant wire.
+
+### 🔴 The one thing the fix must not do: add a THIRD spelling
+
+The renderer must not learn to compute `primary || backup` for itself — that is the same mistake
+one adapter wider, and it is wrong under `journal-replay` and `mirror-async`, where `send` goes to
+the primary only and genuinely would throw. **The answer to "can a command reach CasparCG right
+now?" has exactly one owner, and it is the bridge.** The fix is for the bridge to publish that
+answer (it already computes it) and for the renderer to render it — not for the renderer to derive
+it better.
+
+⚠ Note for whoever takes it: `#noServerReachable()` is itself strategy-blind, so under
+`journal-replay` it can answer "reachable" for a command that will fail on the dead primary. That is
+a real second question and belongs in the same fix's design, not in a separate item — but it must
+not become the reason to leave the renderer's copy in place.
+
+**Regression test:** `apps/runtime/tests/reachBootWindow.dom.test.ts` is the right neighbour — a
+case with `primary: disconnected` + `backup: healthy` asserting the verbs are ENABLED, plus a
+bridge-side test that a take under that health lands on the backup.
+
+- **Cross-refs:** [[R-006]] (the archived acceptance this breaks), [[B-056]] (the bug that
+  established the rule, and which the bridge's own comment cites), [[B-170]] (the other half of the
+  failover story — what happens after you press it), [[B-100]]/[[B-101]] (the same
+  one-predicate-one-owner rule, from the other direction).
+
+## [x] B-172 — the failover banner is ALARM RED for a failover that SUCCEEDED, and it is a hard-coded hex on a full-width slab ⟨priority: medium — red is this product's alarm colour and a completed manual failover is information⟩ — CLOSED 2026-09-08 by `RUNTIME-REDESIGN-01` Phase 9 (guard item 9)
+
+**Closed, 2026-09-08 — `RUNTIME-REDESIGN-01` Phase 9, `openspec/changes/runtime-redesign-programme/design.md` §16.** The slab is gone
+and so is the one-colour rule: `FailoverBanner` is now an IN-FLOW strip in the shell's banner
+region (no `position: fixed`, no hex — `B-172`'s three raw hexes and the whole `--r-alarm-*` family
+they had become were deleted, read by nothing), and its tone is the SITUATION's, by token identity:
+a MANUAL failover that succeeded is a neutral notice (`role="status"`, the reference's plain
+`.notice` pair); an AUTOMATIC failover is the caution pair (`role="alert"`); a degraded or
+disconnected PRIMARY is the alarm (`colors.error`, `role="alert"`, and no Dismiss — broken state is
+never silently hidden). The `offline-mock` suppression moved from `App.tsx` INTO the component, which
+is what let it be tested at all. Pinned by `apps/runtime/tests/failoverBanner.dom.test.ts` (nine
+cases, each tone by token identity, the suppression with its positive control), taken RED against a
+plant that made the strip unreachable. ⚠ The owner's two cited constraints stay as recorded below:
+"a strip rather than a slab" is now MET; "one banner at a time" is NOT built — the banner region
+still stacks its strips with no arbitration, and that is a decision for the owner, not a re-dress.
+
+**What the owner saw, on the plant.**
+
+> _"The failover banner is RED although the failover SUCCEEDED."_
+
+**The mechanism, from the code** (`apps/runtime/src/renderer/features/connections/FailoverBanner.tsx`):
+the banner has ONE style. `background: '#7F1D1D'`, `borderBottom: '1px solid #B91C1C'`,
+`role="alert"`, hard-coded, painted identically for all three things it renders:
+
+| situation                                | what it means                      | painted |
+| ---------------------------------------- | ---------------------------------- | ------- |
+| `lastFailover.reason === 'manual'`       | the operator did it, and it worked | red     |
+| `lastFailover.reason` is an auto reason  | the system did it — worth noticing | red     |
+| `primary.state` is degraded/disconnected | a genuine alarm                    | red     |
+
+The message function already distinguishes the first two (`'Manual failover'` vs `'Auto-failover'`);
+only the colour refuses to.
+
+### ⚠ Constraints checked before proposing anything — because the owner asked, and one of them could not be found
+
+- **`R-006` says nothing about this banner's colour.** What it constrains is the TEST MODE banner
+  ("a persistent full-width TEST MODE banner states nothing is on air") and, decisively, that no
+  surface may claim a healthy link or a broadcast-red ON AIR that is not real. **Nothing in R-006
+  requires or forbids red here.** Its spirit points the other way: red is reserved for real air
+  claims and real alarms, so spending it on a successful operator action is the dilution R-006 is
+  about.
+- **The `CommandToast` file records that `role="alert"` is deliberately NOT unique** — _"the
+  connection banner is deliberately an alert too ('nothing can reach air' IS an alert)"_. That
+  justifies `role="alert"` for the UNHEALTHY-primary case. It does not reach the completed-failover
+  case.
+- ❌ **The owner's cited constraints — one banner at a time, a strip rather than a slab — COULD NOT
+  BE VERIFIED. They are not in this repo.** The `connection-alarm-gap` note they were attributed to
+  does not exist, and a search of `docs/prd` for that wording returns nothing. They are recorded
+  here as **the owner's stated constraints, on their authority**, not as something found: the
+  banner is `position: fixed; top/left/right: 0` — a full-width slab — and it is one of several
+  top-of-window banners (`BridgeSkewBanner`, `RasterMismatchBanner`, `OrphanLayersBanner`) with no
+  arbitration between them. ⚠ **Whoever implements this must get the constraints from the owner
+  before designing, not from this paragraph.**
+
+### 🔴 And the colour must come from a TOKEN, not a hex
+
+Three raw hexes in this file (`#7F1D1D`, `#B91C1C`, `#FEF2F2`) are exactly what
+`LooksBindingsSection`'s badge note forbids in the same breath as it explains why: _"TOKENS, NEVER
+THE HEX … Taking the wrong one compiles, looks identical today, and drifts the day either is
+retuned."_ That note also settles the palette question this item raises, because it has already been
+answered once for a state badge on the owner's call: **green for on air, violet for PVW, blue
+(`colors.ready`) for the normal state** — and a completed failover is a NORMAL state with a piece of
+news attached.
+
+**Repro:** declare two servers, press FAILOVER, let it succeed.
+**Expected:** an informational strip that says the failover happened and which server is primary
+now.
+**Actual:** the alarm palette, an `alert` role, and a full-width slab.
+**Env:** owner's two-server plant, 2026-08-24. Read entirely from the component; the constraint
+search was run and its negative result is reported above rather than assumed.
+
+- **Cross-refs:** [[R-006]] (checked, and it does not constrain this — recorded so the next reader
+  does not re-check), [[B-156]] (the precedent for taking a state's own colour, on the owner's
+  call), [[B-173]] (the other operator-legibility item from the same run).
+
+## [ ] B-173 — every designed refusal sentence needs 1.5×–2.9× the toast's 4-second life, there is no dismiss control, and a second refusal DESTROYS the first unread ⟨priority: medium — owner's decision: the operator dismisses them, not a timer⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+
+**What the owner saw, on the plant.**
+
+> _"Toasts auto-dismiss while the operator is still reading them."_
+
+**Owner's decision, recorded here as the requirement: the operator dismisses them, not a timer.**
+
+**The mechanism** (`apps/runtime/src/renderer/features/status/CommandToast.tsx`): `DISMISS_MS = 4000`,
+a fixed `setTimeout` regardless of message length; **no close button, no click-to-dismiss, no hover
+pause**; and `show()` is last-write-wins — it calls `setFeedback` and `clearTimeout` on the previous
+timer, so **a second refusal replaces the first message outright.** The component's own doc says
+_"Last-write wins; auto-dismisses"_, which is accurate and is the defect.
+
+### 🔴 MEASURED — the product's own sentences against its own budget
+
+This product's error messages name the plate, both numbers and the next action, deliberately. Read
+at 200 wpm:
+
+| chars | words | ~read time | vs the 4 s budget | message                                                |
+| ----- | ----- | ---------- | ----------------- | ------------------------------------------------------ |
+| 207   | 38    | ~11.4 s    | **2.9×**          | `setActiveLook` — `CG UPDATE` refused                  |
+| 189   | 34    | ~10.2 s    | **2.5×**          | `#applyLivePlates` — the PLAY landed, the rest did not |
+| 168   | 32    | ~9.6 s     | **2.4×**          | `RESTORE_BLOCKED_REASON`                               |
+| 131   | 24    | ~7.2 s     | **1.8×**          | `CASPAR_CONNECTING_REASON`                             |
+| 113   | 21    | ~6.3 s     | **1.6×**          | `setActiveLook` — disconnected                         |
+| 109   | 20    | ~6.0 s     | **1.5×**          | `CASPAR_UNREACHABLE_REASON`                            |
+
+**Not one of them fits.** The shortest needs half again the budget; the one an operator most needs
+to read — the half-switch message that tells them the fills moved and the holes did not, and to
+re-issue — needs nearly three times it.
+
+⚠ **The last-write-wins half is the more dangerous of the two and is easy to miss.** [[B-166]]'s
+scenario produces a refusal; the operator's natural next act is to press again, which produces a
+second refusal that **erases the first before it has been read.** A timer at least expires
+predictably; this loses a message to the operator's own attempt to fix things.
+
+**Repro:** trigger any refusal on a row; start reading. Trigger a second within 4 s.
+**Expected:** the message stays until the operator dismisses it; a second message does not destroy
+an unread first.
+**Actual:** 4 s, no control, and the second replaces the first.
+**Env:** owner's two-server plant, 2026-08-24. The character/word counts and the ratios above are
+computed from the strings as they exist in the source; the 200 wpm figure is the assumption and is
+stated so it can be argued with.
+
+### What the fix owes beyond removing the timer
+
+- ⚠ **A queue or a stack, not just a longer life.** Removing the timer without addressing
+  last-write-wins turns a lost message into a stuck one that hides the next.
+- ⚠ **`reportCommandSuccess` shares this surface.** A success toast that never leaves is noise; the
+  owner's decision is about the messages an operator must act on. The split is part of the design,
+  not an implementation detail.
+
+- **Cross-refs:** [[B-166]] (the refusal whose sentence this loses, and the double-press that erases
+  it), [[B-171]] (the wording item — a sentence nobody can finish reading and a sentence that is
+  wrong are different defects over the same surface).
+
+## [~] B-174 — the PAGE/MIXER skew is VISIBLE TO THE NAKED EYE on the plant, and the bench figure that made it look impossible measured a DIFFERENT QUANTITY ⟨priority: high — the page half was never measured to a painted frame, and the parts that WERE measured already predict a 1–2 frame skew⟩ — filed 2026-08-24 from the two-server plant run; **RE-SCOPED 2026-08-29 (`SKEW-MEASURE-01`)**; **`k` MEASURED 2026-08-31 (`SKEW-COUNT-01`): 1–3 fields = 20–60 ms**; **FIXED LOCALLY 2026-08-31 (`SKEW-HOLD-01`): page-first + a one-frame mixer hold, `k` re-measured at −20/0/+20 ms — the owner's naked-eye check on the plant is still OWED, see the fix section at the end**; **EXTENDED 2026-08-31 (`SKEW-INTERSECT-01`): the residual is COVERED by an intersection mask for the transition window — BLACK measured 0 of 10 in both directions on the owner’s own geometry, against 54 % on 9 of 10 switches before it on a video-backed page**
+
+> ⚠ **This heading first read _"against a bench figure that says it is sub-frame … a measured 2.2–8.3 ms
+> is being contradicted by air"_.** That framing is a **category error and is corrected below**: the
+> 2.2–8.3 ms figure ends at `window.update`, a JS entry point, and lives in **§9.4** — a section headed
+> _"Demoted to optional"_ whose own first sentence is _"this decides nothing"_ — not in §9.2 as it was
+> cited. **Nothing contradicts anything; the quantity this item is about was never measured.** The
+> original text is kept verbatim below, because the owner's sighting and the mechanism it records are
+> both sound and only the framing was wrong.
+
+**What the owner confirmed, on the plant.** The page/mixer skew is **visible to the naked eye**.
+That is qualitative confirmation that the phenomenon is real; **the frame count is still missing,
+and that is the whole of what this item owes.**
+
+### 🔴 Why this is filed as a new number rather than recorded against an existing item
+
+The session was asked to record this against `LOOK-SYNC-01`. **No such item exists** — a `git grep`
+for `LOOK-SYNC` across the whole tree returns nothing, and neither does one for `MIRROR-PAGE`. Both
+are SESSION-PROMPT labels, not PRD items, and the phenomenon they name had no home in the backlog.
+It has one now. **Nothing was lost and nothing was invented: the owner's confirmation is recorded
+verbatim above and the mechanism below is the one already written into the source.**
+
+### The phenomenon, and the bench figure it contradicts
+
+A look switch is two mutations on two machines, issued in a fixed order by `setActiveLook`: the
+bridge moves the producers' `MIXER FILL`/`CLIP` **first**, then tells the PAGE to move its holes via
+`CG UPDATE`. Between the two commands the fills and the holes disagree, and what shows through a
+mismatched hole is black.
+
+`setActiveLook`'s own comment states the measurement that made this acceptable:
+
+> _"`CG UPDATE` → `window.update` was measured at 2.2–8.3 ms (median ≈5 ms, §9.2) — under a quarter
+> of a 20 ms frame at 50i — and both commands go out back-to-back on ONE connection in the urgent
+> lane, so nothing queues between them. The cut itself is ~0.20 frames (§9.3)."_
+
+**A ≈5 ms skew is sub-frame and must not be visible.** The owner sees it. **Either the bench figure
+does not transfer to the plant, or the visible artefact is not the skew that figure measures.**
+Both are worth knowing and one measurement separates them.
+
+⚠ **Do not "fix" the ordering before measuring.** `setActiveLook` argues fills-first deliberately —
+_"a lost `CG UPDATE` leaves the page on a coherent previous look rather than on a new look whose
+boxes would never fill"_ — and reversing it on the strength of a naked-eye sighting would trade a
+reasoned choice for a guess. **The deliverable here is a number.**
+
+**What to measure:** a look switch at 25 fps on the plant, channel read EMPTY before and after,
+reproduced twice, counting the frames in which fills and holes disagree — the same protocol
+[[B-155]] already owes for the switch flash, and it can almost certainly be captured in the same
+session with the same recording.
+
+⚠ **This is NOT [[B-155]] and the two must not be merged.** B-155's flash requires a PRODUCER CHANGE
+inside the switch (a `PLAY`), and an ordinary switch has none. This skew is present in an ordinary,
+`PLAY`-free switch — it is the gap between two commands, not a replace. They are separable by the
+trace: if the window contains a `PLAY`, it is B-155's; if it contains only `MIXER FILL` then
+`CG UPDATE`, it is this one.
+
+**Env:** owner's two-server plant, 2026-08-24 — naked-eye confirmation only. The mechanism and the
+2.2–8.3 ms figure are quoted from `tools/caspar-bridge/src/caspar-runtime.ts`; nothing was measured
+in this session.
+
+- **Cross-refs:** [[B-155]] (the other artefact in the same window, and the item whose plant
+  protocol this shares — read its "what a green suite is not evidence of" section first),
+  [[B-167]] (a THIRD way this window goes wrong, by the fills not moving at all).
+
+### 🔴 RE-SCOPED 2026-08-29 (`SKEW-MEASURE-01`) — the "contradiction" is a CATEGORY ERROR, and the bench figure never said what this item quoted it as saying
+
+**Nothing about the owner's sighting is in doubt.** What is wrong is the framing: this item was filed
+as _"a measured 2.2–8.3 ms is being contradicted by air"_. **There is nothing to contradict — nobody
+ever measured the quantity this item is about.** Four findings, each verified in the tree:
+
+1. 🔴 **The citation is to the wrong section.** The figure is in **§9.4**, not §9.2. §9.2 is
+   _"`MIXER FILL … <duration> <tween>` on 2.5.0: ACCEPTED, and which names"_ — the tween vocabulary —
+   and contains **zero** occurrences of `window.update`, `2.2` or `8.3`
+   (`openspec/changes/multibox-layout-switch/design.md`, §9.2 spans 37 lines; checked by extracting
+   the section and grepping it).
+2. 🔴 **§9.4 disclaims itself.** Its heading is _"**Demoted to optional** — `CG ADD` → first painted
+   frame"_ and its first sentence is _"Family 2 is eliminated, so **this decides nothing**. Recorded
+   because it was taken"_. The `CG UPDATE` figure is an aside inside a section that says it decides
+   nothing.
+3. 🔴 **The endpoint is a JS entry point, not a frame.** §9.4 says `CG UPDATE` → `window.update`
+   **2.2–8.3 ms (median ≈5 ms, sub-frame)**. The mixer half lands on a **channel frame**; the page
+   half must still pass style, layout, paint, CEF's off-screen render and CEF's handoff. **The two
+   are different quantities and were never comparable.**
+   ⭐ **And the same section proves the harness COULD have measured paint**: its headline reading is
+   `CG ADD` → **first painted frame**, median **70.2 ms**, using the double-`requestAnimationFrame`
+   "first committed frame" definition §9.6 describes. Paint was measured for the OTHER quantity and
+   not for this one.
+4. ⚠ **"under a quarter of a 20 ms frame at 50i" is wrong on its own terms**, and it was added by the
+   quoting comment rather than by §9.4. §9.2 establishes **25 fps** (_"Measured duration ≈ 2000 ms for
+   50 frames confirms 25 fps (frames, not fields)"_), §9.3 tabulates _"in frames @ 25 fps"_, and §9.6
+   names the channel `1080i5000`. At 1080i50 the **frame** period is **40 ms**; 20 ms is the **field**
+   period. (This error runs in the claim's favour, which is why nobody caught it.)
+
+⇒ **This item does not owe an explanation of a contradiction. It owes the measurement that was never
+taken:** `CG UPDATE` → the page's first COMMITTED FRAME, and then to air.
+
+### What was ruled OUT, in code rather than on the owner's scene
+
+- **A tween on one side only: DEAD, in code.** `CommandBuilder.mixerFit`
+  (`tools/caspar-bridge/src/command-builder.ts:316`) emits exactly
+  `MIXER <t> FILL <rect>` and `MIXER <t> CLIP <rect>` — **no duration, no tween, ever**. The page side
+  sets `mask-*` properties directly (`packages/template-runtime/src/live-source-punch.ts:26-33`) with
+  **no CSS transition declared**. So neither side eases, and §9.2's 36 px / 580–835 px curve-mismatch
+  trap — real, and worth keeping for the day either side animates — **cannot be this artefact.** This
+  is stronger than the owner's export showed: his scene has no `tween` and all looks are `cut`, which
+  rules it out _there_; the code rules it out _everywhere_.
+- **"The mask rebuild is the lag": DEAD, measured.** The holes ARE computed in the browser (nothing
+  mask-shaped is serialised — confirmed, `liveSourceMask` / `MaskHole[]` are declared in `scene.ts`
+  and built by `sceneMaskHoles`, and the owner's export contains no `mask`). But the whole recompute
+  is **sub-millisecond**. Measured on the owner's scene shape (3 looks; 1, 2 and 3 plates), jsdom,
+  medians:
+
+  | scene      | `flattenElements` | `liveArrangementView` | `sceneMaskHoles` | total       |
+  | ---------- | ----------------- | --------------------- | ---------------- | ----------- |
+  | +0 decor   | 0.014 ms          | 0.008 ms              | 0.011 ms         | **0.03 ms** |
+  | +50 decor  | 0.013 ms          | 0.059 ms              | 0.022 ms         | **0.09 ms** |
+  | +200 decor | 0.032 ms          | 0.203 ms              | 0.062 ms         | **0.30 ms** |
+  | +500 decor | 0.074 ms          | 0.561 ms              | 0.117 ms         | **0.75 ms** |
+
+  Against a 40 ms frame, **the compute is not the lag at any plausible scene size.**
+  ⚠ It _does_ recompute more than it needs — `liveArrangementView` calls `flattenElements(scene)` on
+  **every** repunch to build an `authored` map that depends only on the static scene
+  (`packages/template-runtime/src/arrangement-view.ts:41`) — so it is a real (small) waste and the
+  reason the middle column grows with scene size. **Worth tidying; not worth blaming.**
+  ⚠ **A hypothesis this session raised and KILLED before publishing it:** `repunch`'s comment says it
+  "reads the page's CURRENT layout back", which reads like a forced synchronous reflow between a DOM
+  write and a read. It is not — `liveArrangementView` reads `node.style.*` (**inline** style), never
+  `getBoundingClientRect` / `getComputedStyle`, and the runtime contains no such call on this path.
+  **No forced layout occurs.**
+
+- **"Something serialises ahead of `#tellPageLook`": the transport claim HOLDS.** Both halves send at
+  priority `'urgent'` — the reconcile's `mixerFit` lines at `caspar-runtime.ts:5626` and `:5736`, and
+  `#tellPageLook` at `:4943` — so nothing of lower priority queues between them.
+
+### 🔴 What IS left, enumerated hop by hop — and it already predicts a visible skew
+
+**MIXER path:** `MIXER FILL`/`CLIP` ACKed → applied at the next channel frame. §9.3 measured a
+3→2-box cut's five commands at **median 8.16 ms, range 6.86–17.93 ms** command-side — comfortably
+inside one 40 ms frame, so **the picture switches in ONE frame.**
+
+**PAGE path**, in order, with what is known about each:
+
+| #   | hop                                                                                           | cost                          |
+| --- | --------------------------------------------------------------------------------------------- | ----------------------------- |
+| a   | the bridge AWAITS every reconcile ACK before `#tellPageLook` is called at all                 | **6.86–17.93 ms** (§9.3)      |
+| b   | `CG UPDATE` on the wire → `window.update`                                                     | **2.2–8.3 ms** (§9.4)         |
+| c   | JS: `applyArrangementToNodes` + `liveArrangementView` + `sceneMaskHoles` + 8–10 `setProperty` | **≈0.1 ms** (measured, above) |
+| d   | style recalc + layout + paint → first COMMITTED frame                                         | see below                     |
+| e   | CEF's off-screen render tick                                                                  | 🔴 **NOT MEASURED**           |
+| f   | CEF → CasparCG frame handoff                                                                  | 🔴 **NOT MEASURED**           |
+| g   | lands at the next channel frame boundary                                                      | quantised to 40 ms            |
+
+**(a) + (b) alone is 9.1–26.2 ms** — between a quarter and two-thirds of a 40 ms frame — **spent
+before the page has been told anything.** That is the term this item's quoted figure omitted
+entirely, and it is bigger than the figure it quoted.
+
+**(d), measured locally in the repo's Chromium** (system Chrome; the bundled build is not installed
+here, the geo-block CLAUDE.md records), writing the exact `mask-*` property set the runtime writes,
+on a 1920×1080 page with 120 decor nodes, endpoint = double-`requestAnimationFrame` **first committed
+frame** — the same definition §9.6 used:
+
+| plates | JS write | write → committed frame  |
+| ------ | -------- | ------------------------ |
+| 1      | 0.00 ms  | **26.70 ms** (p95 26.90) |
+| 3      | 0.00 ms  | **26.80 ms** (p95 26.90) |
+| 6      | 0.10 ms  | **26.80 ms** (p95 28.20) |
+
+🔴 **Read this correctly: ~26.8 ms is the FRAME CADENCE, not the work.** At a 60 Hz vsync a
+write-then-double-rAF lands 1–2 intervals later (16.7–33.3 ms), and the number is **flat across 1, 3
+and 6 plates** — which is the proof that the style/layout/paint _work_ is small and that the wait is
+quantisation. **The page's hole update is therefore quantised to the page's own frame clock**, and
+that quantisation, not the compute, is the page half's dominant term.
+
+⇒ **Predicted, from measured parts only:** mixer lands on frame N; the page is told 9–26 ms into that
+frame, does ~0.1 ms of work, and then waits for its own next committed frame and CEF's handoff — so
+the holes land on **frame N+1, and N+2 whenever (a)+(b) plus the page tick crosses a second
+boundary.** At 1080i50 that is **40–80 ms**. **That is plainly visible, and it is consistent with
+everything the owner reports.** Nothing here requires the bench figure to have been wrong — only for
+it to have been about something else.
+
+### Candidate fixes, with costs — NONE implemented, the owner chooses
+
+| candidate                                                                                     | cost                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Delay the mixer** by a fixed offset so the fills land with the holes                        | Cheapest, and it is a GUESS calibrated to one plant: the page-side term is a frame quantisation plus an unmeasured CEF handoff, so the right offset is neither constant nor knowable from the bridge. Wrong offset = skew in the other direction, which looks identical and is no better.                                                                                                                                         |
+| **Page acknowledgement gating the mixer** — page confirms it has painted, then the fills move | Correct in principle and the only one that adapts. Costs a new page→bridge round trip on the switch path, ADDS its own latency to a window this item exists to shorten, and needs a defined failure mode when the ack never comes (fall back to today's order, or the switch does not happen). ⚠ Reversing the ORDER is what `setActiveLook` argues against on air-safety grounds — a gate must preserve "fills only on success". |
+| **One tweened timeline driving both**                                                         | Structurally the real answer, and the most expensive: it needs a shared origin and a shared tick, which `live-source-multibox` §6 states the two sides do not have. §9.2's curve table is the prerequisite (`linear` on both sides is the only exactly-matchable pair, 0.0 px). Turns a cut into an animation, which is a product change, not a fix.                                                                              |
+
+**Which I would pick, in two lines:** none of the three yet — **the frame count decides between them,
+and it is one recording away.** If forced today: the **page acknowledgement**, because it is the only
+candidate that does not encode a per-plant constant, and because its cost is a round trip on a path
+that is already awaiting several.
+
+### The ONE plant recording that closes this, `B-155` and the audio measurement together
+
+Same visit, same capture, channel read EMPTY before and after, `2.5.0` build asserted:
+
+1. **SDI/channel-side capture at 1080i50**, frame-stepped — this item's whole deliverable is the count
+   of frames in which fills and holes disagree, reproduced twice.
+2. **A `PLAY`-free look switch** — that separates this item from [[B-155]] by construction: `PLAY` in
+   the window ⇒ `B-155`; only `MIXER FILL` then `CG UPDATE` ⇒ this item. Capture one of each and both
+   items are answered from one recording.
+3. **The AMCP trace alongside**, timestamped on one clock (the committed harness already does this),
+   so each visible frame can be attributed to a command.
+4. ⚠ The brief also names an outstanding **audio walk** as riding this visit. **A distinct PRD anchor
+   for it was not found** by this session — whoever plans the visit should confirm it exists before
+   counting on it; `B-155`'s owed plant measurement was verified and does share this recording.
+
+**Env for the measurements above:** local, 2026-08-29. jsdom for the compute table; system Chrome
+(Playwright, `channel: 'chrome'`) for the paint table, at 60 Hz — **not CEF, and not at the channel
+rate**, which is exactly why (e) and (f) remain unmeasured.
+
+### ⭐ MEASURED 2026-08-31 (`SKEW-COUNT-01`) — `k` = 1–3 fields (20–60 ms) at `1080i5000`, median 30 ms, from TEN recorded switches on the owner's machine
+
+The frame count this item owed now exists, produced automatically by a committed harness
+(**`tools/skew-harness`** — one command, see its README) against the real local
+2.5.0 `69e8ad5`: the CHANNEL recorded to a file through a second consumer, ONE look switch
+per run driven through `setActiveLook` (never hand-typed AMCP), the two transitions found by
+pixel comparison, and every run's window classified by a transparent TCP tap on the AMCP
+socket. `report.json` per sweep is committed under `tools/skew-harness/evidence/`.
+
+**Why recording the channel to a file measures `k` exactly — verified, not assumed.** In
+`v2.5.0-stable` source, `video_channel.cpp`'s tick calls the stage once, composites EVERY
+layer's frame in `mixer_(stage_frames.frames, …)` into ONE `const_frame`, and hands that same
+frame to `output_(…)`, which fans it to ALL consumers; the DeckLink/SDI hop is strictly
+downstream of compositing. So the skew is fully formed in the composited sequence and any
+consumer replays it. Confirmed empirically here too: **two file consumers attached at once
+recorded 75/75 frames byte-identical** over a 1.5 s window.
+
+**The channel mode, and the interlace fact that sets `k`'s unit.** This machine's config is
+`1080p5000`; the harness flips it to **`1080i5000` at runtime (`SET 1 MODE` → `202 OK`),
+measures there, and restores it**. Two server facts matter and were verified in source +
+on the wire:
+
+- `INFO <ch>` reports `framerate` **50 in BOTH modes** — `video_channel` publishes
+  `framerate × field_count`, i.e. the FIELD rate. Never derive the frame period from it.
+- `stage.cpp` pulls BOTH fields inside one 25 Hz tick — _"it lets us tick at 25hz and avoids
+  amcp changes starting on the second field"_ — so a `MIXER FILL` lands **tick-aligned
+  (40 ms granularity)**, while the recorded file carries both fields at 50 fps. Measured:
+  the mixer transition always lands on one parity; **the page's repunch can land on the OFF
+  field** (odd offsets observed), because the html producer pops a fresh CEF buffer per
+  field. `k` is therefore counted in 20 ms FIELDS below, the finest unit air actually shows.
+
+**The distribution — min / median / max, never a single value:**
+
+| mode                  | `k` per run (fields = 20 ms each) | ms             | min / median / max  |
+| --------------------- | --------------------------------- | -------------- | ------------------- |
+| `1080i5000` (10 runs) | 1, 1, 1, 1, 1, 2, 3, 3, 3, 3      | 20×5, 40, 60×4 | **20 / 30 / 60 ms** |
+| `1080p5000` (6 runs)  | 1, 1, 1, 1, 2, 2 (frames = 20 ms) | 20×4, 40×2     | **20 / 20 / 40 ms** |
+
+Every run's wire window was verified `PLAY`-free — exactly `MIXER FILL`+`CLIP` per plate then
+one `CG UPDATE` (⚠ **the ORDER reversed and the COUNT changed later the same day**: `SKEW-HOLD-01`
+put the `CG UPDATE` first, and `SKEW-INTERSECT-01` made it two — a narrowing tell and a settling
+one. This paragraph describes the wire as it was WHEN THIS WAS MEASURED) — and every recording
+passed a per-run cadence guard (frames = wall-clock ÷
+period; a run that slips is DISCARDED, never rounded). **The two modes agree in WALL-CLOCK
+terms (~20–60 ms) rather than in tick counts** — the page half lags by its own frame clock
+plus the command gap, which is the §-hop prediction of the re-scope section confirmed at its
+small end: mixer on frame N, holes one-to-two frame periods later.
+
+**The probes, and what would make them wrong.** Probe A sits strictly inside the
+INTERSECTION of one plate's hole across both looks (≥60 px from every hole edge of either
+look), over a static high-contrast pattern whose mapping changes wildly with the box shape
+(`cover`, wide-banner → tall-column) — it fires when the FILLS move. Probe B sits inside the
+entering look's hole and ≥60 px clear of EVERY hole of the outgoing look, over the painted
+background — it fires when the PAGE repunches. A probe touching a hole edge would fire on
+both transitions and read `k = 0`; placement is machine-checked (`probePlacementIssues`,
+asserted in unit tests AND re-run before each sweep). The source clips are STATIC because a
+moving source changes probe A every frame and destroys first-change detection. Frame 44 of
+run 00 (`evidence/2026-08-31-i5000`) is the artefact itself, on disk: holes at the banner
+look, fills at the column look, black through the mismatch.
+
+**Caveats, stated rather than hidden.** This machine has no DeckLink and no genlock (the
+channel demonstrably slips on >2 s recording windows — the harness stays inside the verified
+regime); CEF here shares a desktop GPU with the recording encoder. The mechanism and the
+quantisation are the server's own and transfer; the exact medians on the plant may shift by
+a field, which the SAME harness pointed at the plant server would settle from the studio.
+
+### 🔴 What the measured `k` SELECTS — argued, NOT implemented; the owner chooses
+
+- ⭐ **Mixer delay, parameter = 1 channel frame.** `k` is literally its parameter, and the
+  measured `k` clusters at one frame period (median 30 ms at `1080i5000`, i.e. between one
+  field and one frame). A one-frame hold on the mixer pair centres the distribution on zero:
+  worst-case misalignment drops from 3 fields to 1, in either direction. It cannot reach
+  zero — the residual ±1-field jitter is CLOCK QUANTISATION (the page's paint clock vs the
+  channel tick), which no fixed offset removes.
+  **How a real delay would be expressed:** 🔴 a tween is NOT a delay (`MIXER FILL … <frames>
+<tween>` animates; the looks are entered with a cut), and mainline 2.5.0 has **no
+  scheduling verb at all** — verified against `v2.5.0-stable`'s `AMCPCommandsImpl.cpp`: zero
+  matches for "schedule"; `MIXER … DEFER`/`COMMIT` exists but is ATOMICITY (a
+  `deferred_transforms_` list applied on `COMMIT`), not timing. So the delay lives in the
+  BRIDGE: `setActiveLook` holds the `MIXER FILL`/`CLIP` pair one frame period on its own
+  timer while keeping the fills-only-on-success semantics. (`DEFER` the fills + `COMMIT`
+  after the page paints is a viable spelling of the ACK candidate, not of this one — §3b's
+  COMMIT-scope question still gates it.)
+- **Page-acknowledgement gating the mixer** — the measurement WEAKENS this candidate: its
+  own costing said _"at `k=1` it may cost more than it saves"_, and `k` IS ~1. The ack
+  cannot be sent before the page's committed frame (double-rAF ≈ 1–2 page frames) plus a
+  page→bridge trip that does not exist today, so the fills would land 1–2 frames AFTER the
+  holes — the same artefact, mirrored.
+- **One tweened timeline driving both** — unchanged by the number: structurally right, most
+  expensive, and turns the cut into an animation, which is a product decision rather than a
+  fix.
+
+**Nothing was implemented.** The number, the harness and this argument are the whole of
+`SKEW-COUNT-01`'s deliverable.
+
+- **Cross-refs (measurement):** [[B-155]] (same harness, `--with-play-switch` — its window
+  measured separately, 80 ms locally, plant still owed), [[B-189]] (found by this harness's
+  wire tap: the channel-mode read discards every real `INFO` reply and re-sends forever).
+
+### ⭐ FIXED LOCALLY 2026-08-31 (`SKEW-HOLD-01`) — the mixer hold, implemented; `k` re-measured at −20/0/+20 ms
+
+**The order `setActiveLook` now drives, stated exactly** (`tools/caspar-bridge/src/caspar-runtime.ts`,
+the `B-174` order note in the method body):
+
+1. **PLAN** — `#planLiveSeating`, unchanged and still byte-identical to the swap's. Every refusal
+   the bridge can detect without applying (unknown look, unresolvable source through the product's
+   own doors, collision, band) fires HERE, with the page untouched.
+2. **TELL THE PAGE** — `#tellPageLook`, moved BEFORE the apply via a `beforeApply` seam on
+   `reconcileLivePlates` (one injection point on the one path every switch command already flows
+   through, never a second code path). It carries the PLAN's fit facts explicitly — `#plateFits`
+   is still written only when an apply lands — and a refused `CG UPDATE` **aborts the switch
+   before any geometry command**: nothing moves at all, which is STRONGER than the old order's
+   lost-tell tail state (moved fills under unmoved holes).
+3. **HOLD** — the bridge sleeps `lookMixerHoldMs`: **configurable** (`--look-mixer-hold-ms`,
+   `BridgeOptions.lookMixerHoldMs`, the runtime option; `0` = no hold, order kept), **defaulting
+   to ONE CHANNEL FRAME of the channel's OBSERVED video mode** (`videoModeFramePeriodMs`,
+   `@cg/shared-ipc` — readable at all because [[B-189]] is fixed in the same change), 40 ms
+   fallback while the mode is unread. The rate suffix must be 4–5 digits: a custom mode id spelled
+   `1080p50` divides to 0.5 Hz and would have parked the mixer for TWO SECONDS, so a token outside
+   the ×100 convention is UNREAD and takes the fallback. `#withLiveSeatLock` still spans the whole
+   span, so no other GATED verb interleaves — but `take`/`out`/`stopItem`/`clearAll` are
+   deliberately un-gated, which is why step 3 ends with a re-check.
+4. **RE-ASK, THEN MOVE THE FILLS** — before the apply, the hook re-asks the two facts the plan
+   rests on (the row still owns live seats; the ledger still holds the records planned against)
+   and abandons the switch if either was true and is now false. Only that transition aborts, so
+   the off-air path is untouched. Without it, an `out` landing inside the hold left the apply
+   re-`PLAY`ing the whole union pre-seat onto the layers `out` had just cleared and
+   `registerLiveLayers` resurrecting a ledger for a row the stack believes idle — [[B-161]]'s
+   shape, reached with no take. Then `#applyLivePlates`, unchanged. On a wire-refused line,
+   `B-166`'s all-or-nothing geometry rollback runs as before AND `setActiveLook` **re-tells the
+   previous look** through the same fused writer, so the record follows whichever tell last landed
+   and the page does not END on a look the switch did not perform. ⚠ Where that revert tell is
+   itself refused, the record follows the PAGE (what the audience sees) and the message says so;
+   the next reconcile converges the fills. Both tails are pinned in `look-switch-refusal`.
+
+**Why this does not merely shift both halves:** the page's notification moved EARLIER (it no
+longer waits for the fills' ACKs), and only the mixer's application moved later. Measured, same
+harness, same probes, `1080i5000`, ten runs each:
+
+| sweep                                        | `k` per run (fields, 20 ms each)   | min / median / max   |
+| -------------------------------------------- | ---------------------------------- | -------------------- |
+| BEFORE (`SKEW-COUNT-01`, quiet box)          | 1, 1, 1, 1, 1, 2, 3, 3, 3, 3       | **20 / 30 / 60 ms**  |
+| BEFORE (re-run this session, box under load) | 1, 2, 3, 3, 3, 3, 3, 5, 5, 7       | 20 / 60 / 140 ms     |
+| **AFTER (hold in force, quiet box)**         | −1, −1, −1, −1, 0, 0, 0, 0, +1, +1 | **−20 / 0 / +20 ms** |
+
+This session's two sweeps are committed beside the harness, so the numbers can be re-read rather
+than believed: `tools/skew-harness/evidence/2026-08-31-hold-before/report.json` (row 2) and
+`…/2026-08-31-hold-after/report.json` (row 3); `SKEW-COUNT-01`'s own report is the already-tracked
+`…/2026-08-31-i5000/report.json` (row 1).
+
+The fair pairing is quiet-to-quiet; the loaded re-run is kept because it shows `k` is
+load-sensitive on this ungenlocked dev box, which the plant (genlocked, dedicated) is not
+expected to reproduce. The AFTER residual is ±1 FIELD, zero-centred — the page's paint clock
+against the channel tick, which **no fixed hold can remove**; a bigger or adaptive hold buys
+nothing further.
+
+⚠ **The mode caveat, recorded as the brief asks:** the page lag is constant in WALL-CLOCK (the
+two modes agreed in ms, not in ticks), but the hold is denominated in whole channel frames — so
+the derived default is per-mode (40 ms at `1080i5000`, 20 ms at `1080p5000`) and is right for
+`1080i5000` SPECIFICALLY because that is the plant's mode and the measured lag (~20–60 ms) spans
+about one of its frames. ⚠ The switch as a whole now lands ~one frame later on air — expected,
+harmless (nothing compares against a reference), and written here so it is read, not discovered.
+
+⚠ **The stopped/off-air path is byte-untouched** — stated because a separate off-air defect
+(stopped row: switch look, then PLAY → fills at the OLD arrangement under NEW holes) is being
+filed while this change lands. The reorder lives entirely inside the on-air branch's
+reconcile-and-tell; the off-air record-only early return, the take path, and the `CG ADD`
+look payload are unchanged, so the two changes do not collide.
+
+**CI, on the commit that carries the change (`e3c60f00`):**
+[run 33403122456](https://github.com/yasermostafaee/cg/actions/runs/33403122456) — `conclusion:
+success`, with the `E2E (Playwright)` job's own conclusion `success` (it RAN, it was not skipped).
+The Linux `e2e` debt is DISCHARGED; what remains below is a HARDWARE reading, which no CI can take.
+
+**What is still OWED, and why the box is `[~]`:** the owner's naked-eye check on the PLANT — the
+same two-look switch that was visibly skewed on 2026-08-24, now expected to move together.
+A dev-box distribution is the acceptance criterion this session was given and it is met; the
+plant's genlocked DeckLink chain and its CEF host are still different hardware, and `SKEW-COUNT-01`'s
+caveat that medians may shift by a field there stands until someone looks.
+
+### MEASURED 2026-08-31 (`SKEW-RESIDUE-01`) — what the residue IS, and the two axes swept. NOTHING implemented
+
+The owner, after the hold shipped: _"There's still a small delay when switching looks. Sometimes it
+isn't there at all; repeating it several times, sometimes yes and sometimes no, but very small."_ and
+_"Both directions are bad. When there is no black, the hole appears quickly but the previous boxes are
+still there. When the hole goes later, black is visible."_
+
+The first half is the measured distribution in words: `-20/0/+20 ms` means a field early, exact, or a
+field late, **random per switch**, because the page's paint clock has no fixed phase against the
+channel tick. **No constant hold can remove that.** The second half is what this session quantified.
+
+#### 1. What is on screen during the mismatch, by direction
+
+`tools/skew-harness --classify` now reads the WHOLE frame, not two probes, and classifies every pixel
+of the window against the recording's own settled states: **transient black** (an open mask over no
+picture), **misplaced picture** (still showing the outgoing look where the entering look shows
+otherwise) and **other** (neither — hole edges, codec, anything the rule does not cover). Ten runs,
+`1080i5000`, two looks, flat background; the per-run CONTROL (the classifier run on the settled
+frames either side) came back **≤ 0.04 %** on every run, which is what says these numbers describe
+the switch rather than the instrument.
+
+| direction                   | runs | BLACK, peak % of frame | BLACK visible | MISPLACED, peak % of frame | MISPLACED visible |
+| --------------------------- | ---- | ---------------------- | ------------- | -------------------------- | ----------------- |
+| **hole-early** (k = −20 ms) | 6/10 | **15.9 %**             | 20 ms         | **37.4 %**                 | 20 ms             |
+| **exact** (k = 0)           | 2/10 | 0                      | —             | 0                          | —                 |
+| **hole-late** (k = +20 ms)  | 2/10 | **2.3 %**              | 20 ms         | **15.8 %**                 | 20 ms             |
+
+🔴 **The two directions are NOT equally bad, and the worse one is the one this fixture produces most
+often.** Hole-early puts **seven times** the black on air (15.9 % against 2.3 %) and more than twice
+the misplaced picture. Frames on disk, both opened and confirmed by eye:
+`evidence/2026-08-31-residue-flat-2looks/skew-02-black.png` (hole-early: the column holes open with
+the banner pictures still in them — the top strip of each hole is picture, the bottom two-thirds is
+BLACK) and `.../skew-00-black.png` (hole-late: the banner holes still open with the column pictures
+inside them — a black bar between the two, no black anywhere else).
+
+⚠ `k = 0` is not "small"; it is **nothing at all**. The mismatch window is `[min, max − 1]` frames,
+which is EMPTY when both halves land on one frame — measured, not assumed (the classifier's own
+`k = 0` runs report zero of every class).
+
+#### 2. The two axes nobody had swept
+
+**PAGE CONTENT — real, and it is where the residue lives.** A full-frame `<video>` decoding every
+frame behind the same scene (a real scene element through the runtime's own `assetUrls` seam, still
+content plus one moving patch as the decoder's positive control — visible in every recorded frame):
+
+| scene                                    | k min / median / max   |
+| ---------------------------------------- | ---------------------- |
+| flat background, 2 looks                 | **−20 / −20 / +20 ms** |
+| **full-frame video background**, 2 looks | **0 / +20 / +60 ms**   |
+
+The whole distribution moves LATE by about one channel frame, and the hole-early half disappears:
+4 runs exact, 4 hole-late, none early. **The 40 ms hold was tuned against a page with nothing to do;
+a page with a video behind it lands one to one-and-a-half frames after the fills.**
+
+**NUMBER OF LOOKS — no effect, and this contradicts the owner's report.** Filler looks are built from
+the SAME two plates (so the union pre-seat and every wire command are identical) and are never
+entered; the measured switch is always banner → column:
+
+| looks                                                | k min / median / max |
+| ---------------------------------------------------- | -------------------- |
+| 2                                                    | −20 / −20 / +20 ms   |
+| 3                                                    | −20 / −20 / +20 ms   |
+| 4                                                    | −20 / −10 / +20 ms   |
+| 4, each filler carrying a full-frame panel + 8 boxes | −20 / −20 / +20 ms   |
+
+⇒ **`k` does not grow with look count**, even when the extra looks carry real content. The owner's
+1-box/2-box/3-box template most likely got worse for the axis ABOVE — its looks carry page content —
+rather than for the count. ⚠ Worth re-asking him what those looks contained before spending on this.
+
+#### 3. How an inactive look is hidden, and what `display:none` is worth
+
+**It is already `display: none`** — `applyArrangementToNodes` writes `node.style.display = on ? '' :
+'none'` (`packages/template-runtime/src/arrangement-view.ts`), driven by the one `resolveVisibilityOf`
+predicate, and `B-150`'s `LookMediaPark` additionally pauses and silences the drivers inside a hidden
+look. So an inactive look is out of the layout and paint cycle entirely: the premise that the page
+"carries every look's full-frame subtree at once" is true of the DOM and false of the frame budget.
+
+Measured rather than argued: with the hiding switched to `visibility: hidden` (a TEMPORARY local
+patch, reverted — `git diff` on that file is empty) and four heavy looks, `k` read
+**−20 / −10 / +20 ms** against `display: none`'s **−20 / −20 / +20**. No measurable difference on this
+fixture: at four looks the page has headroom either way, which is the same reason the look-count
+sweep is flat.
+
+⚠ **The repunch traverses ALL looks**: `sceneMaskHoles` calls `flattenElements(scene, 'paint')` over
+the whole scene and only then filters by on-screen-ness, so its cost grows with look count — but the
+sweep says that cost stays under one field at four looks.
+
+#### 4. Which remedy the data supports
+
+1. 🥇 **INTERSECTION MASK during the transition window** — punch `old ∩ new` for the window so every
+   open pixel is backed by a picture in both arrangements. It is the only candidate that removes BOTH
+   classes in BOTH directions, and the data says the worst direction costs **15.9 % of the frame
+   black plus 37.4 % misplaced** for one field. Its cost is a smaller picture for that same field.
+   ⚠ **The empty-intersection edge case, captured rather than reasoned about**: two looks that do not
+   overlap punch nothing, and the frame is the template alone —
+   `evidence/2026-08-31-residue-empty-intersection/empty-00-after.png`, a flat field with every box
+   gone. That is one field of "the boxes blinked", against today's one field of black rectangles
+   (`empty-00.png`, the same capture one frame earlier).
+   ⚠ **NOT the union**: it enlarges the open area, so the late-hole case gains black rather than
+   losing it. Recorded so the idea is not revived.
+2. 🥈 **A protocol variant** — _"close to the intersection now, open the new look in N ms"_. The tell
+   CAN carry it: `__cg` is a namespace object designed to be extended, one shared codec
+   (`packages/shared-schema/src/control-payload.ts`), and unknown members are silently dropped by the
+   reader, so an older page ignores a new field instead of failing. But the page does nothing
+   time-delayed today — `update()` is `async` with no `await` in its body — and no intersection
+   concept exists anywhere in the tree. It is candidate 1 PLUS a timer and a schema change.
+3. ❌ **PHASE-LOCK — dead, and the repo already measured why.** Nothing carries a channel frame
+   number: OSC's `/channel/N/framerate` is parsed as a RATE, `/foreground/file/frame` was measured
+   ABSENT (ADR 0004), `INFO` has no tick index, the bridge's tick tap keeps only a last-arrival
+   timestamp and throttles that event to 1 Hz, and the page's whole time base is `rAF` /
+   `performance.now()`. 2.5.0 has no scheduling verb. Phase-lock needs a mechanism that exists on
+   neither side.
+
+**RECOMMENDATION, in two lines:** take the intersection mask (1). It is the only option that removes
+black AND misplaced picture in BOTH directions without inventing a clock, and the number that decides
+it is `15.9 % black + 37.4 % misplaced for 20 ms` in the direction this fixture produced six times in
+ten — against a cost of one field at the intersection's smaller area.
+
+⚠ **And the hold's default should be re-judged against the page-content number rather than raised on
+instinct**: on a light page the distribution straddles zero (a bigger hold would make hole-late
+certain), while on a video-backed page it is already a frame short. A constant cannot serve both —
+which is the argument for (1) and against tuning.
+
+**CI, on the commit that carries these measurements (`41cd9dc6`):**
+[run 33419204741](https://github.com/yasermostafaee/cg/actions/runs/33419204741) — `conclusion:
+success`, with the `E2E (Playwright)` job's own conclusion `success` (it RAN; it was not skipped),
+alongside `Lint • Typecheck • Test • Build`. The Linux `e2e` debt for this session is DISCHARGED.
+
+**Evidence:** `tools/skew-harness/evidence/2026-08-31-residue-*/report.json` — `flat-2looks`,
+`video-2looks`, `flat-3looks`, `flat-4looks`, `flat-4looks-heavy`, `visibility-4looks`,
+`empty-intersection`. ⚠ The `.png` frames named above sit beside those reports and are GITIGNORED,
+like the `.mkv` recordings and for the same reason (a pattern frame is ~750 KB): they are on the
+machine that took them. The `report.json` files carry every number, including the per-frame series. The instrument gained a SEPARATION GUARD in this session: a crossing must reach
+40 % of what that probe settled between its two states, because the video background's own codec
+noise produced a crossing of 6.3 against a settled delta of 74 and reported `k = −340 ms` beside nine
+runs at +40.
+
+- **Cross-refs (fix):** the spec text moved with the code per spec discipline —
+  `openspec/changes/multibox-layout-switch/specs/runtime-multibox-layout/spec.md` (the switching
+  requirement), `tasks.md` 6.7/7.9 (dated amendments), `design.md` §2.9; [[B-158]] (its
+  fills-first mechanism section carries a dated re-judge note), [[B-166]]/[[B-167]] (the rollback
+  this extends with the revert tell — their end-state guarantees are re-asserted in
+  `look-switch-refusal` and `live-look-reconcile`), `look-switch-hold.integration.test.ts` (the
+  hold's duration, its observed-mode default, an explicit 0 surviving `??`).
+
+---
+
+## 🔴 `SKEW-INTERSECT-01` (2026-08-31) — THE RESIDUAL IS COVERED RATHER THAN CHASED: while the two halves can disagree, the page punches `outgoing ∩ entering`
+
+`SKEW-RESIDUE-01` ended with a ranking and a recommendation and built nothing. This is candidate
+(1) built, measured before and after on the owner's own geometry, with the two terms it does NOT
+address measured separately and filed as [[B-192]] and [[B-193]].
+
+### Why the earlier numbers were measured on a fixture that could not see it
+
+The banner/column pair's two looks are both mid-sized boxes, so the region one look punches and the
+other does not is 15.9 % of the frame one way and 2.3 % the other. **The owner's `3-ghab` is not
+like that**: `look-1` is ONE 1920×1080 plate over a full-frame JPG, so **every switch into or out
+of it opens or closes a FULL-FRAME hole** and the exclusive region is ~55 %. Two similarly-sized
+boxes cannot tell an intersection mask from an entering-look mask at all, because their
+intersection IS most of both.
+
+His geometry is now a committed fixture (`GHAB_FIXTURE` in `tools/skew-harness/src/geometry.ts`,
+read off `template.json` in the export he dropped at `fixtures/owner/`). **His `.vcg` and `.cgproj`
+are NOT committed** — undiffable binary, one of them a photograph of a person, re-exportable from
+his Designer at any time, and nothing in the gate reads them. The SHAPE is what discriminates and
+the shape is in the repo; `fixtures/README.md` carries the decision and the rects.
+
+### What was built
+
+The bridge tells the page the entering look TWICE: once with `from` — the look being left, so the
+page punches `outgoing ∩ entering` — and once without it, once the fills are in place. Every open
+pixel of the intersection is inside a hole of BOTH looks, so it is backed by a picture whether the
+`MIXER FILL` batch has landed yet or not. The mixer's move is aimed at the MIDDLE of that window: a
+LEAD (one channel frame) before it, a TAIL (one channel frame) after.
+
+⚠ **The UNION is the exact inverse and is now a test so it cannot come back**: it opens every pixel
+EITHER look punches, i.e. both failure directions at once.
+
+### The four decisions, stated rather than taken quietly
+
+**(1) WHERE the intersection is computed — in `sceneMaskHoles`, not in the applier.** It already
+flattens the whole scene and owns the pull-back into each element's local box; the same walk is
+asked about two visibility states (`ArrangementView.transitionFrom`) and the punches are
+intersected in SCENE pixels, once. A caller intersecting afterwards would be a second answer to
+_"which holes does this element punch"_, a package away from the first.
+
+**(2) HOW LONG the window lasts — long enough to strictly CONTAIN the mixer's move, and it is NOT
+the hold.** The hold aims the fills at the page's commit; the window covers the ±1 FIELD the aiming
+cannot remove. They share a UNIT (one channel frame of the observed mode) and a derivation
+(`#channelFrameMsFor`), and **neither reads the other's value**: the hold answers _how far behind
+does the page commit_, the window answers _how far apart can the two land_. A hold retuned for a
+heavier page must not drag the window with it. The hold's default is untouched.
+
+**(3) THE EMPTY INTERSECTION — accepted, no special case.** Two looks whose plates barely overlap
+show the template's own backdrop where both pictures will be, for the window (`empty-00-after.png`,
+captured in `SKEW-RESIDUE-01`). Today's alternative one frame earlier is two large black
+rectangles. A picture the author drew, held for a field or two, beats the channel.
+
+**(4) AN INTERRUPTED TRANSITION — the tail is a SECOND deterministic span an un-gated emergency
+verb can land in.** `B-174`'s hold opened the first one and `B-161`'s shape is what it risked. The
+answer is that the only thing scheduled after the fills is ONE `CG … UPDATE`: a payload for a page,
+carrying no playout verb, unable to seat anything. Pinned RED-FIRST — a `reconcileLivePlates`
+planted in the tail puts `PLAY 1-30 DECKLINK DEVICE 1` on the wire after the `out`, and the test
+reddens.
+
+**The invariant underneath all four:** the intersection is a SUBSET of the entering look's holes, so
+every exit ends with a tell carrying no transition — the entering look on success, the previous look
+on refusal or abandonment. `from` is an instruction about ONE payload that neither machine stores
+(red-first: retaining it on the page's view reddens _"the narrowing is NEVER STICKY"_). ONE reading
+of `narrowedFrom` gates the narrow and the settle, per golden rule 7.
+
+### TERM (a) — BEFORE / AFTER, ten runs each, `1080i5000`, whole-frame classification
+
+`--no-transition-mask` is the control: the SAME binary with the single-tell switch, so nothing here
+compares two compilations. Every window was confirmed `PLAY`-free on the wire, every run passed the
+cadence check, and the per-run positive control (the classifier run on the settled frames either
+side) is reported beside each row.
+
+| fixture · direction · page          | mask | **BLACK** peak % (runs showing any) | **MISPLACED** peak % | artefact ms (median) | control  |
+| ----------------------------------- | ---- | ----------------------------------- | -------------------- | -------------------- | -------- |
+| `ghab` full → boxes, flat page      | OFF  | **54.4 %** (2/10)                   | 45.3 % (7/10)        | 20                   | ≤ 0.06 % |
+| `ghab` full → boxes, flat page      | ON   | **0 % (0/10)**                      | 45.3 % (10/10)       | 60                   | ≤ 0.02 % |
+| `ghab` boxes → full, flat page      | OFF  | **54.3 %** (3/10)                   | 45.2 / 54.2 % (6/10) | 20                   | ≤ 0.03 % |
+| `ghab` boxes → full, flat page      | ON   | **0 % (0/10)**                      | 54.3 % (10/10)       | 80                   | ≤ 0.01 % |
+| banner → column, flat page          | OFF  | **15.9 %** (8/10)                   | 37.4 % (8/10)        | 20                   | ≤ 0.04 % |
+| banner → column, flat page          | ON   | **0 % (0/10)**                      | 15.9 % (10/10)       | 100                  | ≤ 0.04 % |
+| `ghab` full → boxes, **VIDEO** page | OFF  | **53.9 – 76.9 %** (9/10)            | ~0                   | 40 – 80              | ≤ 0.28 % |
+| `ghab` full → boxes, **VIDEO** page | ON   | **53.9 % (1/10)**                   | 45.8 % (6/10)        | 40 (that one run)    | ≤ 0.37 % |
+
+🔴 **The headline, and it is the owner's own case.** On a page carrying a decoding full-frame video
+— which is what his template is — the PRE-FIX switch put **54–77 % of the frame BLACK on nine
+switches out of ten**, for 40–80 ms. That is the "occasional near-full-frame black flash", and it
+is not occasional on that page. With the mask in force it is **one run in ten**.
+
+⚠ **AND THE ACCEPTANCE IS NOT MET AS WRITTEN, so it is stated plainly rather than rounded to.** The
+target was zero black AND zero misplaced. **Zero black is delivered** — 0 of 10, both directions,
+on both flat-page fixtures, and 1 of 10 on the heavy page (see the lead, below). **Zero misplaced
+is not, and cannot be**, and the reason is arithmetic rather than effort: "misplaced" is defined as
+_matches the outgoing settled frame while the entering one says otherwise_, so a frame with zero of
+it is a frame in which the hole set AND the fill set have both already changed. That is `k = 0` on
+every run — phase lock — which `SKEW-RESIDUE-01` measured impossible on every transport this
+version speaks (no channel frame number anywhere; `/foreground/file/frame` absent, ADR 0004; no
+scheduling verb on 2.5.0). What the mask does is **change what the misplaced pixels ARE**: before,
+they were the outgoing PICTURE showing through the entering look's holes; after, they are the
+outgoing LOOK still standing, whole, until its replacement is behind the hole.
+
+⚠ **The other half of the trade, stated too:** the artefact's DURATION grows from one field to
+2–5 fields, because the mask is deliberately narrowed a frame early and widened a frame late. An
+intermittent 54 % black flash becomes a deterministic 45–54 % "previous look still there" for
+60–100 ms. On banner/column even the magnitude improves (37.4 % → 15.9 %), because there the window
+sits AFTER the fills have moved; on the `ghab` forward direction it does not, because there the
+entering holes are a subset of the outgoing ones and the window sits BEFORE the fills move.
+
+### What each half of the window BUYS — measured by removing it
+
+| configuration                                          | BLACK peak % (runs)  | artefact ms |
+| ------------------------------------------------------ | -------------------- | ----------- |
+| `ghab` full → boxes, flat, lead = one frame (default)  | **0 % (0/10)**       | 60          |
+| `ghab` full → boxes, flat, **lead = 0**                | 54.4 – 75.7 % (2/10) | 20          |
+| `ghab` full → boxes, VIDEO page, lead = one frame      | 53.9 % (1/10)        | 40          |
+| `ghab` full → boxes, VIDEO page, **lead = two frames** | **0 % (0/10)**       | 20 – 220    |
+| `ghab` boxes → full, flat, tail = one frame (default)  | **0 % (0/10)**       | 80          |
+| `ghab` boxes → full, flat, **tail = 0**                | **0 % (0/10)**       | 60          |
+
+**The LEAD is load-bearing, proven by removing it**: without it the narrowing is a coin flip against
+the mixer and the black comes back on a fifth of presses on a light page. It is also the knob the
+HEAVY page needs — at two channel frames the video-backed page reaches 0 of 10 as well, which is the
+measured answer to "the default may not be enough there".
+
+**The TAIL, on this host, buys nothing measurable and costs duration**: at `0` the black is still 0
+of 10 and the artefact shortens from a median of 80 ms to 60 ms (term (c) from 3–5 fields to 1–3).
+That is because the page's own commit latency already puts the widening after the mixer — the tail
+is margin against a mixer that APPLIES a tick after it acknowledges, which this host did not
+exhibit in ten runs. **The default keeps the frame** rather than banking on one host's ordering, and
+an operator who wants the snappier switch now has a measured basis for `--look-transition-tail-ms 0`.
+
+⚠ **Two of the ten lead-two-frames runs FAILED the per-run control** (51.8 %, 53.6 % where it must
+be ~0). Read before quoting that row: the failure is at the control FRAMES either side, not inside
+the window — the background clip's loop point landing on one of them, which changes most of the
+picture. The classified windows themselves carry **0.0 % black in every frame**, which the
+`perFrame` series in that report states run by run.
+
+### TERMS (b) AND (c) — measured, reported SEPARATELY, and filed
+
+They are separate quantities and the whole point of reporting them apart is that no future report
+collapses the three again.
+
+- **(a) the mask/fill disagreement** — the tables above. Removed for black; converted for misplaced.
+- **(b) first-frame latency of a producer the switch had to START** — **+2 … +4 fields (40–80 ms)**
+  for a media clip; **0** when the producer was already seated. Filed as **[[B-192]]**, together
+  with the finding that made it reachable: on the plant a PARKED plate does not survive, so nine
+  switches in ten had to `PLAY` it — while `@cg/amcp-mock` keeps it seated and emits nothing.
+  ⚠ The "already-running LIVE input" half of the comparison is **OWED**: this host has one channel
+  and no usable DeckLink.
+- **(c) the gap between the new hole opening and the outgoing plate's picture leaving** —
+  **+3 … +5 fields (60–100 ms)** with the mask in force, **−1 … 0** without it. Filed as
+  **[[B-193]]**. With the mask it is the window's trailing half by construction: a designed wait
+  rather than a race.
+
+### ⚠ What this does NOT fix, so the owner is not misled
+
+**Going `look-1 → look-2` or `look-1 → look-3` with MEDIA sources may still show black at the
+newly-started boxes.** That is term (b) — the producer has no frame yet — and no mask can put a
+picture where there is none. It is [[B-192]], not this. On his template it will look like the two
+right-hand boxes arriving a frame or two after the layout does.
+
+**And on a heavy page the lead may need raising.** One video-page run in ten still blacked with the
+default one-frame lead, because that page commits later than a light one (`SKEW-RESIDUE-01` measured
+the video background moving `k` by a whole frame). `--look-transition-lead-ms` is the knob and it is
+read back on the boot line.
+
+### Evidence
+
+`tools/skew-harness/evidence/2026-08-31-intersect-*/report.json` — `ghab-fwd-before`,
+`ghab-fwd-after`, `ghab-rev-before`, `ghab-rev-after`, `bc-before`, `bc-after`,
+`ghab-video-before`, `ghab-video-after`, `ghab-play-fwd`, `ghab-play-rev`, plus `lead0`,
+`video-lead80` and `tail0`. ⚠ The `.mkv` recordings and the `.png` peak frames beside them are
+GITIGNORED for the same reason as every earlier sweep's (a pattern frame is ~750 KB); the
+`report.json` files carry every number, including the per-frame series and the wire commands of
+each window.
+
+**CI, on the commit that carries the fix and the measurements (`a7656b05`):**
+[run 33437892406](https://github.com/yasermostafaee/cg/actions/runs/33437892406) — `conclusion: success`, with the `E2E (Playwright)` job's own
+conclusion `success` (it RAN; it was not skipped), alongside `Lint • Typecheck • Test • Build`.
+The Linux `e2e` debt for this change is DISCHARGED. The local `pnpm gate` was green at
+**93 successful / 93 total, 0 cached**, and both apps' Playwright suites were run on this host
+before the push (275 + 93 passed) — a Windows pass, which is a reason to push and never a
+discharge.
+
+**Instrument changes in this session, all measurement-only:** a third probe (probe C) inside the
+arriving/departing plate's box, from which terms (b) and (c) are read as differences WITHIN one
+recording; `probePlacementIssues` now takes the FIXTURE it is asked about and gained two conditions
+— probe A must sit under a plate whose rect actually DIFFERS between the looks (a probe over an
+unmoved plate reads `k = 0` by construction and looks healthy), and probe C must be inside a hole in
+both looks. The background motion patch's rule was WEAKENED on purpose, from "outside every hole of
+both looks" to "outside every hole of at least one": the first is unsatisfiable for a fixture whose
+look punches the whole raster, and it would have refused the only fixture that can discriminate the
+fix. Both forms are asserted, including what the check must REJECT.
+
+## [ ] B-177 — a DeckLink input admits ONE producer, `CLEAR` returns before the destroy, and the failure arrives disguised as `404 File not found.` ⟨priority: high — the seating path re-`PLAY`s live layers, and the disguise sends the diagnosis to the wrong place⟩ — OPEN, filed 2026-08-25 from the DeckLink plant walk
+
+**Observed 2026-08-25** on the production plant (2.5.0 `69e8ad5`, host `192.168.21.114`) while
+running [`docs/recon/2026-08-25-decklink-model-walk.md`](../recon/2026-08-25-decklink-model-walk.md).
+Two independent instances, nine minutes apart.
+
+**Instance 1 — `CLEAR` immediately followed by `PLAY` on the same layer:**
+
+```
+16:01:05.594  CLEAR 1-10                    -> #202 CLEAR OK
+16:01:05.604  PLAY 1-10 DECKLINK DEVICE 1
+16:01:05.617  [error] EnableVideoInput - DeckLink SDI 4K [1|1080p5000] Could not enable video input.
+16:01:05.631  DeckLink SDI 4K [23487013|1080i5000] Destroyed.      <- 14 ms AFTER the failure
+```
+
+**Instance 2 — a plain re-`PLAY` over a decklink producer already live on that layer. No `CLEAR`
+is involved at all:**
+
+```
+16:10:15.776  PLAY 1-10 DECKLINK DEVICE 1   (a decklink producer was ALREADY live on layer 1-10)
+16:10:15.858  [error] EnableVideoInput - DeckLink SDI 4K [1|PAL] Could not enable video input.
+```
+
+Runs with a **~5 s gap** between `CLEAR` and `PLAY` initialised cleanly **every time**.
+
+**Expected:** re-seating a live source on a layer that already carries it either succeeds, or fails
+with an error that says what went wrong.
+**Actual:** the producer fails to open, and the operator is told a **file is missing**.
+**Env:** CasparCG 2.5.0 `69e8ad5`, DeckLink SDI 4K (index `1`, persistent ID `23487013`), single
+SDI input. Not reproducible against `@cg/amcp-mock`, which models `PLAY` as instantaneous and has
+no notion of device contention.
+
+### The three facts, from the log rather than from reasoning
+
+1. **`CLEAR` answers `202` BEFORE the producer is destroyed.** It is an acknowledgement, not a
+   destruction receipt. In instance 1 the `Destroyed.` line lands **14 ms after** the `202` — and
+   after the failure the `202` invited.
+2. **CasparCG constructs the NEW producer before destroying the OLD one** on the same layer. That
+   is why instance 2 fails with no `CLEAR` anywhere near it: a plain re-`PLAY` of the same device
+   collides **with itself**.
+3. ⇒ **Two producers cannot hold one physical input.** So **the same live source cannot be seated
+   on two boxes at once** on this hardware. That is a product-level constraint, not a timing bug,
+   and no amount of sequencing removes it.
+
+### 🔴 The disguise — this is its own hazard, and arguably the worse half
+
+The console answered:
+
+```
+#404 PLAY FAILED
+File not found.
+```
+
+When the decklink producer throws, CasparCG's producer registry **falls through to the FILE
+producer** and reports **that** producer's error. The failure therefore presents as a missing media
+file on a command that never mentioned a file.
+
+**Any code that reads a `404` from a live-source `PLAY` as "media missing" will mis-diagnose
+DeckLink contention** — and will send the operator to check a file path when the real answer is to
+wait for a destroy, or to stop asking one input to serve two boxes. A refusal message naming the
+wrong subsystem is worse than a bare failure, because it is actively followed.
+
+⚠ **This also means a `404` is NOT safely readable as "the argument was bad".** Any current or
+future preflight that classifies live-source failures by response code needs to know that `404` on
+a `DECKLINK` argument is ambiguous.
+
+### What the CODE does today — established by READING, not by guessing
+
+Both questions were answered by reading the seating path. Neither is a hypothesis.
+
+**(1) Does the seating path issue a `CLEAR` and a `PLAY` for the same device without waiting for
+the destroy? — YES, and in two distinct ways.**
+
+- **It re-`PLAY`s over an occupied layer with no `CLEAR` at all.** `CasparRuntime.#seatLiveLayers`
+  (`tools/caspar-bridge/src/caspar-runtime.ts`, the `else` branch of the `seatUnchanged` test)
+  pushes `playSource(...)` straight onto a layer that a previous seat may still hold. **That is
+  instance 2 exactly** — the plant reproduced this shape without any teardown involved.
+- **`teardownLiveLayers`** (same file) sends `out(slot)` — which is `CLEAR <ch>-<layer>`
+  (`command-builder.ts`) — then `mixerClear(slot)`, each `await`ed. 🔴 **The `await` is on the AMCP
+  ACK, and fact 1 says the ack precedes the destroy by ~14 ms.** So the code _does_ serialise, and
+  serialising is _not_ the same as waiting for the destroy. Nothing in the bridge waits for, or can
+  observe, `Destroyed.`.
+
+⚠ **FLAGGED AS A DESIGN DECISION, NOT A FACT — do not let a later reader take this as settled.**
+Whether any single flow performs `teardownLiveLayers` and then re-seats **the same device** with no
+intervening gap was **not** established here: it depends on take/swap orchestration above these two
+methods, and answering it properly means tracing the take path, not grepping. The re-`PLAY` case
+above is proven and sufficient to file; the teardown-then-seat case is **plausible and unverified**.
+
+**(2) Can two boxes be assigned the same live source today? — YES. Nothing prevents it.**
+
+`validateSourceAssignments` (`packages/shared-ipc/src/channels/sources.ts`) builds its duplicate key
+as `` `${assignment.templateId}\u0000${assignment.plateId}` `` and refuses only a **plate assigned
+twice**. **There is no constraint of any kind on two different plates sharing one `sourceId`**, and
+none anywhere else in the validator. An operator can assign the same DeckLink source to every box
+in a multibox template, the config validates, it persists, and the second seat cannot work on this
+hardware.
+
+⚠ **FLAGGED AS A DESIGN DECISION.** Whether that _should_ be refused is genuinely open and is
+**not** decided here:
+
+- refusing it at the config boundary is honest but **installation-specific** — a plant with two
+  cards, or a `route://`/NDI/stream source, has no such limit, and the validator is shared by every
+  installation;
+- allowing it and failing at the take is what happens today, except the failure says `File not
+found.`;
+- a third reading is that one source feeding several boxes should seat **once** and be routed, which
+  is a feature rather than a refusal.
+
+**This item does not choose. It records that nothing chooses today.**
+
+### Notes
+
+- **Priority `high` for the DISGUISE and the re-`PLAY`, not for the hardware limit.** The
+  one-producer-per-input constraint is physics and is fine once it is known. What is a defect is
+  that the product's own seating path can trigger it, and that when it does the operator is told to
+  look for a file.
+- **No fix is proposed here, deliberately.** A retry, a wait, a serialising gate and a config-time
+  refusal are all plausible and they are not equivalent; picking one needs the take-path trace
+  flagged above. Filing is the whole of this item.
+- ⚠ **`@cg/amcp-mock` cannot reproduce any of this** and its classifier docstring now says so. A
+  green suite is not evidence about this class of failure — which is precisely why it took a plant
+  visit to find, on a code path that has been green for weeks.
+- **Cross-refs:** [[C-021]] arm (a) — its owed on-air pass will meet this; [[C-015]] (the seating
+  path); [[C-027]] (parked by the same single-input finding); [[B-155]] (the other defect whose
+  evidence only a plant visit produces).
+- The number was verified free by the heading sweep immediately before this heading was written:
+  highest `B-` heading `B-176`; the duplicate audit printed exactly `B-056` and `B-080` and nothing
+  else; a whole-tree `git grep` for `B-177` returned only
+  [b-number-registry.md](b-number-registry.md)'s own "next free" pointer, and `B-178` returned
+  nothing. Filed in this file per [README.md](README.md)'s routing — a bridge/playout defect, not
+  cross-cutting tooling.
+
+---
+
+## [~] B-178 — the Designer's fit control is INERT under a look group: the author writes `fitMode` on the ELEMENT, the wire reads it off a source entry nothing ever writes ⟨priority: high⟩ — FIXED in this session
+
+**What:** a live plate authored `cover` reaches air as `contain`, for **every look-group template
+ever exported**. The Designer's fit control writes `fitMode` onto the plate ELEMENT; the look-group
+carrier reads it off `lookGroups[].sources[].fitMode`; and **nothing in the product ever writes that
+field.** The two never meet, so `resolvePlateFitMode` sees `undefined` at the authored level and
+falls through to the `contain` default for every plate.
+
+**The owner's repro, 2026-08-25:** two live plates side by side, left `contain`, right `cover`.
+Exported, loaded on the plant, taken. **Both rendered `contain`**, and nothing anywhere said so.
+
+### The evidence, from the artefacts
+
+`CG ADD` payload, plant log 20:28:32 (Tehran):
+
+```
+"__cg":{"look":"look-2","plates":{
+   "l1":{"aspect":1.7777777777777777,"mode":"contain"},
+   "l2":{"aspect":1.7777777777777777,"mode":"contain"}}}
+```
+
+The mixer geometry agrees exactly — channel `1920×1080`, boxes `943.6 × 1049.04` and
+`938.4 × 1049.04`:
+
+| plate | `FILL` sent          | contain would be     | cover would be      |
+| ----- | -------------------- | -------------------- | ------------------- |
+| `l1`  | `943.60 × 530.77 px` | `943.60 × 530.77` ✅ | `1864.96 × 1049.04` |
+| `l2`  | `938.40 × 527.85 px` | `938.40 × 527.85` ✅ | `1864.96 × 1049.04` |
+
+`FILL` and `CLIP` were **byte-identical** for both — the `contain` signature, since a contained
+picture lies wholly inside its box. Under `cover` they must differ.
+
+🔴 **The author's choice IS in the export — this is not a stale template.** The `.vcg`
+(`manifest.authoring.exportedAt = 2026-08-25T16:49:47Z`, nine minutes before the take) carries
+`fitMode: "cover"` on element `el-1787676336354-663598` in `compositions[1]` — one of the two plates
+that went to air.
+
+🔴 **And the carrier the wire is keyed by has no such field:**
+
+```json
+"lookGroups[0].sources": [
+  { "routeKey": "l1", "dynamic": false },
+  { "routeKey": "l2", "dynamic": false }
+]
+```
+
+`routeKey` and `dynamic`. `__cg.plates` is keyed by exactly those `routeKey`s.
+
+### The chain, confirmed at file:line
+
+⚠ **Every line number in this table is AT `9247e7cd`, the commit that carried the bug** — this is a
+diagnosis of the shipped state, so the pre-fix anchors are the evidence and re-pointing them at the
+repaired code would destroy it. Rows 4–7 no longer describe the tree; read them with
+`git show 9247e7cd:<path>`. The anchors elsewhere in this item, and all of `B-179`'s, describe the
+CURRENT tree and are named by symbol where the line is volatile.
+
+| #   | site                                                                 | what it does                                                                                                                                    |
+| --- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `apps/designer/src/renderer/features/inspector/StyleSection.tsx:805` | `updateElement(id, { fitMode: value })` — onto the **ELEMENT**                                                                                  |
+| 2   | `apps/designer/src/renderer/state/slices/looks.ts:110`               | `sources: [...group.sources, { routeKey: key, dynamic: false }]` — the **only** creator of a `LookSource`, writing neither field                |
+| 3   | `apps/designer/src/renderer/features/inspector/LooksSection.tsx:64`  | the look-group editor's prop type is `{ routeKey, dynamic }` — the UI does not even **model** a fit mode                                        |
+| 4   | `packages/vcg-format/src/live-sources.ts:332`                        | reads the never-written `src.fitMode`                                                                                                           |
+| 5   | `packages/vcg-format/src/live-sources.ts:299-311`                    | the element loop harvests `el.id` and `flat.rect` and **drops `el.fitMode`**                                                                    |
+| 6   | `packages/vcg-format/src/live-sources.ts:363`                        | `lookCarrier === null ? collectLiveSources(scene) : lookCarrier.sources` — mutually exclusive, so the element-reading collector is never called |
+| 7   | `tools/caspar-bridge/src/caspar-runtime.ts:4119`                     | `resolvePlateFitMode(override, frame.declaration.fitMode)` — always `undefined` ⇒ `DEFAULT_LIVE_FIT_MODE`                                       |
+
+Two aggravating facts found while confirming it:
+
+- ⚠ **The control renders unconditionally** (`StyleSection.tsx:665`, outside the look-group ternary
+  two lines above), so the author operates a live, responsive control that is a silent no-op.
+- 🔴 **The wire OUTRANKS the element on the page**, so the element-level fallback cannot rescue it:
+  `packages/shared-schema/src/scene-flatten.ts:586` reads `fit?.mode ?? el.fitMode ?? DEFAULT`, and
+  `CgPlateFit.mode` is non-optional and always sent. The bridge's `contain` actively overrides an
+  element that says `cover`.
+- The fault is confined to the AUTHOR's level: the operator's per-assignment override still works
+  (`caspar-runtime.ts:4037-4038`).
+
+**Why nothing caught it:** `collectLookCarrier` is exercised only by
+`packages/vcg-format/tests/look-carrier.test.ts` and `hidden-look-suppression.test.ts`, and **neither
+ever set a fit mode**. The one `C-028` carrier test drives `collectLiveSources` — the no-look path,
+where the field was read off the element and worked. **A fixture without a look group cannot see this
+bug**, which is exactly how it shipped.
+
+### ⭐ THE DECISION — the mode is PER LOOK, read off the element that serves that routeKey there
+
+The naive fix is to add `fitMode` to `lookGroups[].sources[]` beside `dynamic`, since the wire is
+keyed by `routeKey`. **That is wrong, and for the reason `C-028` already gave:** one `routeKey`
+appears in EVERY look, in a differently-shaped box each time. `l2` sits in `look-1` and `look-2`; a
+per-source mode forces one answer for boxes that may want different ones. It would also require a
+NEW per-source Designer control while leaving the existing per-element one inert — two controls for
+one concept, which is worse than the bug.
+
+**DECIDED: keep the mode on the ELEMENT, and carry it per LOOK, beside the rects.**
+
+- `TemplateLookCarrier.fits: Record<routeKey, LiveFitMode>` — a structural mirror of `rects`, which
+  is already per-look and per-routeKey.
+- `TemplateLookSchema.fits` on the wire, **optional**, because zod strips unknown keys and a
+  template packaged before this change carries none; requiring it would refuse every such record at
+  the IPC boundary and again at boot.
+- `lookPlateFits(live, activeLookId)` in `packages/shared-ipc/src/channels/templates.ts` — a
+  deliberate **sibling of `lookPlateRects`**, whose own header forbids a local spelling: _"a FUNCTION
+  OF THE CARRIER, not a method on any runtime, so the bridge cannot drift from the console."_
+- `LookSource.fitMode` is **DELETED**. A field that looks like the place to write a fit mode, and is
+  not, is precisely how this returns.
+
+**It is buildable because the mapping already existed and was thrown away.** `collectLookCarrier`'s
+element loop computes (look, routeKey) → element at `live-sources.ts:304-310`; `el.fitMode` was in
+scope on the same statement that wrote `rects[el.routeKey] = flat.rect`. It is a genuine FUNCTION,
+not a choice: a within-look duplicate `routeKey` is refused at export with `severity: 'error'`
+(`live-source-preflight.ts:481-496` + `Exporter.ts:370-376`), while the import path stays tolerant
+(first-wins) so the carrier remains total for a hand-crafted package.
+
+⚠ **`firstPlateFor` is NOT that mapping and must not be used for it** — it is keyed by `routeKey`
+alone and holds the globally-first plate in document order, so for a routeKey shared by two looks it
+returns look A's element and look B's authored mode would be unreachable.
+
+**A look switch had the same defect one layer up, found by the new tests:** `#plateFits` was written
+only by the TAKE, so `#tellPageLook` sent the OUTGOING look's modes while the reconcile had already
+moved the fills to the ENTERING look's. Fill in one shape, hole in another — `B-149` arriving through
+the switch. `reconcileLivePlates` now re-records from its own plan, on success only.
+
+### Does it generalise to `expectedAspect`? NO — and the reason is the point
+
+`LookSource.expectedAspect` is equally dead (same `addLookSource`, same zero writers), so an author's
+aspect assertion is dropped for look-group templates too — **and that disarms the take's
+aspect-mismatch refusal**, which needs BOTH the source's aspect and the author's
+(`live-plate-fit.ts:179`). Same class, one field wider.
+
+🔴 **But it must NOT become per-look.** `expectedAspect` asserts a property of the **FEED** — "this
+source delivers 16:9" — and a feed does not change shape when the operator presses a look. Two looks
+asserting different aspects for one source would be a contradiction about an external fact, which is
+exactly why `looks.ts`'s header keeps it on the declaration _"so two looks cannot disagree about what
+a HOLE asserts"_. `fitMode` asserts how that feed is **placed in a box**, and a look is precisely a
+change of box. **The two facts differ in kind, so they differ in carrier.** Filed separately as
+[[B-179]].
+
+### ⭐ THE PATTERN — "the system knows something and does not say it"
+
+This is the same class the repo has already named three times, verbatim, and it should not get a
+rival name: [[B-141]] (`bugs-runtime.md:3663`), [[B-143]] (`:3762`), [[B-144]] (`:3847`) — _"the
+system knows something and does not say it"_ — and [[R-053]] (`runtime.md:2492`) calls it _"the same
+zero-reader shape as [[B-143]]'s `assumed` flag"_. [[B-146]] (heading `:4086`, the sentence at `:4120`) carries the sharpest statement
+of the cost: _"A control that silently does nothing is the worst of the three outcomes."_ [[B-147]]
+is the near-exact twin — a control writing a field nothing reads.
+
+**Here, three things knew and none of them said:** the Designer knew the author had chosen `cover`;
+the exporter knew it was discarding an element-level field; the bridge knew it was defaulting rather
+than honouring. The operator got a well-formed payload with a legal value and no way to tell it apart
+from an authored `contain`.
+
+⚠ **A prior brief cited this pattern's other instances as `D-157` (a blocked Export that names
+nothing) and `B-178` (a snap guide drawn at the pointer). NEITHER EXISTS** — both appear in the tree
+only as "next free" pointers in [b-number-registry.md](b-number-registry.md), and a whole-tree sweep
+found no item describing either defect under any number. That is a further instance of the
+phantom-label failure the registry already records four times. If those two defects are real, they
+want filing; this item cites the pattern's REAL anchors above instead.
+
+### The signal — a per-take readout, with PROVENANCE
+
+`resolvePlateFitMode` now returns `{ mode, from }` where `from` is
+`'override' | 'authored' | 'default'`, decided at the one place the chain is walked. `'default'`
+means **nobody stated anything** — distinct from an authored `contain`, which produces the same
+picture and, before this, the same bytes. The bridge writes one line per take:
+
+```
+[caspar-bridge] item-1 live-plate fit — l1=contain (authored), l2=cover (authored)
+```
+
+**Why the bridge log:** it is demonstrably where a human already looks — the log that caught this bug
+is the artefact the owner was reading when they found it.
+
+**Why a readout and not a warning:** the first draft raised a ⚠ whenever any plate defaulted, and it
+fired on essentially every take, because most templates author no fit and for them the default is
+correct. A warning that is usually wrong is how a signal stops being read — and this exists precisely
+because the previous signal (none) was not read. It states facts and gives no advice; the diagnostic
+power is the word `default` appearing where the author expected `authored`.
+
+⚠ **Deliberately a log line and not a badge on the operator's row.** [[B-143]] already records that
+three per-plate facts want a row-level home and asks that the first of them build it deliberately
+rather than bolting on a private surface. This does not pre-empt that.
+
+**Acceptance:**
+
+- WHEN two plates in ONE look are authored with DIFFERENT fit modes THEN `__cg.plates` carries a
+  different `mode` for each, and their `MIXER FILL` rects differ accordingly
+- WHEN one `routeKey` appears in TWO looks with different authored modes THEN each look resolves to
+  its own, and a look switch carries the new mode in the same payload as the new look id
+- WHEN a plate's mode is `cover` THEN its `MIXER FILL` and `MIXER CLIP` DIFFER, `FILL` overflowing
+  the box on the wide axis and `CLIP` staying at the box
+- WHEN a plate's mode is `contain` THEN `FILL` and `CLIP` are byte-identical — the positive control
+- WHEN nobody authored a mode THEN the plate resolves to `contain` and the take log reports it as
+  `default`, distinguishably from an authored `contain`
+- WHEN a look-group template's DECLARATION carries a `fitMode` THEN it is IGNORED — the looks are the
+  authority, and a second home for one fact is what caused this
+
+**Where each bullet is pinned** (a bullet with no test is a claim, and this item is about claims
+that were never checked):
+
+| bullet                            | test                                                                                                                                |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| two modes in one look             | `look-carrier.test.ts` "TWO plates in ONE look…" · `live-look-reconcile…` "…reach air with DIFFERENT geometry"                      |
+| one routeKey, two looks           | `look-carrier.test.ts` "ONE source in TWO looks…" · `look-plate-fits.test.ts` · `live-look-reconcile…` "…the switch tells the page" |
+| `cover` FILL ≠ CLIP, by value     | `live-look-reconcile…` "…reach air with DIFFERENT geometry" (1864.96 × 1049.04 asserted)                                            |
+| `contain` FILL === CLIP (control) | same test, and "…resolves to the DEFAULT"                                                                                           |
+| defaulted vs authored, reported   | `live-look-reconcile…` "…the take SAYS SO as `default`" and "…an AUTHORED `contain` reports `authored`" (stderr captured)           |
+| the declaration is ignored        | `live-look-reconcile…` "the DECLARATION's fitMode is IGNORED under a look group"                                                    |
+| the parked-seat guard             | `live-look-reconcile…` "a PARKED seat must NOT overwrite the punched plate's facts"                                                 |
+| `fits` survives the wire schema   | `look-plate-fits.test.ts` "B-178 — `fits` survives the wire schema"                                                                 |
+
+### Notes
+
+- **Priority `high` because it reaches air and is silent.** The multibox look group is exactly the
+  feature the fit control was built for, so the control was inert in its own primary case.
+- **On-air behaviour change:** a look-group template whose author set `cover` will now render `cover`
+  where it rendered `contain`. That is the fix, and it is what the author always asked for.
+- 🔴 **THE TEMPLATE MUST BE RE-IMPORTED for the fix to reach an existing installation, and nothing
+  says so.** The bridge persists `TemplateInfo` and re-reads it at boot, so a registry written
+  before this change carries no `fits` at all. Such a record resolves every plate to `contain` and
+  the take readout reports `default` — which is TRUE of the record and FALSE of the author, who did
+  state a mode. Re-importing the `.vcg` rebuilds the carrier. ⚠ Same shape as this bug one level
+  out: the system knows the record predates the field and does not say so. Not fixed here (a
+  carrier-version stamp is its own decision); named so the first person to meet it is not misled by
+  a readout that is locally honest.
+- **Cross-refs:** [[C-028]] (the feature, and the comment that reasoned its way into this);
+  [[B-149]] (hole ≠ picture, the precedent); [[B-143]] / [[B-141]] / [[B-144]] / [[B-146]] /
+  [[B-147]] / [[R-053]] (the named pattern); [[B-179]] (`expectedAspect`, the same defect one field
+  wider); [[D-147]] (the aspect chain this deliberately does not touch).
+- The number was verified free by the heading sweep immediately before this heading was written:
+  highest `B-` heading `B-177`; the duplicate audit printed exactly `B-056` and `B-080` and nothing
+  else; `B-001` … `B-177` contiguous with no gaps; a whole-tree `git grep` for `B-178` returned only
+  [b-number-registry.md](b-number-registry.md)'s own "next free" pointer and `B-177`'s provenance
+  note, never a heading; `B-179` and `B-180` returned nothing at all.
+
+---
+
+## [x] B-179 — `expectedAspect` is dropped for every look-group template, which DISARMS the aspect-mismatch refusal, and the aspect that reaches air is the CATALOG's guess with nothing checking it ⟨priority: high — FIXED by `derive-look-sources`; the CHOICE between (a) and (b) was settled by the owner, and one Acceptance bullet is REJECTED with it⟩ · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-derive-look-sources/`, `RELEASE-0110-01` §0.3)
+
+**What:** two joined findings from the [[B-178]] investigation, filed here rather than folded into
+it because their fix is a different shape and touches a refusal that stops takes on air.
+
+1. **`LookSource.expectedAspect` has ZERO WRITERS**, exactly as `fitMode` did. `addLookSource`
+   (`apps/designer/src/renderer/state/slices/looks.ts:110`) is the only producer of a `LookSource`
+   and emits `{ routeKey, dynamic: false }`; the look-group editor's prop type
+   (`LooksSection.tsx:64`) does not model the field. `collectLookCarrier` copies `src.expectedAspect`
+   (`packages/vcg-format/src/live-sources.ts` — the `src.expectedAspect` spread in `collectLookCarrier`) and therefore always copies nothing.
+2. ⇒ **The take's aspect-mismatch refusal is DISARMED for every look-group template.** It fires only
+   when BOTH the source's aspect and the author's are present
+   (`tools/caspar-bridge/src/live-plate-fit.ts:179`); the author's half can never arrive. So a plate
+   whose feed is a different shape than the design assumed reaches air with no refusal, no warning,
+   and — under `contain`, the default — a picture quietly smaller than its box.
+
+### Where the aspect on the wire actually came from
+
+The plant payload carried `aspect: 1.7777777777777777` for both plates while **neither on-air
+element nor either source entry stated one**. Traced: it is **step 1** of `resolvePlateAspect`'s
+chain — the operator's `format` on the CATALOG entry, through `aspectForFormat`
+(`packages/shared-ipc/src/channels/sources.ts:127-159`). That is designed behaviour ([[D-147]]: the
+source outranks the author), not a defect in the chain. The other steps are excluded:
+
+- **step 2** (`SourceDefinition.aspect`) has **no input control anywhere** — `SourcesModal` renders
+  Name / Kind / Format plus a read-only derived aspect line, so it is reachable only by hand-editing
+  `bridge-source-catalog.json`;
+- **step 3** (the element's `expectedAspect`) is structurally dead under looks — finding 1 above;
+- **step 4** returns `aspect: null`, not a number.
+
+⚠ **`1.7777777777777777` does not pin the format**: `576p*`, `720p*`, `1080p*`, `1080i*` and
+`2160p*` all divide to the same IEEE double, and so does the Designer's own `expectedAspect: 16/9`
+element default (`element-defaults.ts:301`) — a red herring, since under looks that element field is
+never read.
+
+### 🔴 The measured disagreement, and why nothing can catch it
+
+CasparCG's own log for plate `l2` reported a clip of **`w: 1280 h: 608` — aspect 2.105**, against the
+bridge's assumed **1.778**. The picture was fitted to a shape the feed does not have.
+
+**And nothing in the product can notice.** Searched and NOT FOUND: the bridge never learns a live
+source's real dimensions. The only server-read geometry is the CHANNEL's raster via `INFO <channel>`
+(`caspar-runtime.ts`'s `videoModeRaster` read), which `channel-settings-store.ts:121-133` explicitly forbids feeding
+into placement; OSC maps framerate / producer / file-path / paused only
+(`packages/caspar-client/src/osc/event-mapper.ts`, and a grep for `width|height|aspect|resolution`
+across that package returns nothing). So the catalog's declared `format` is an unverified assertion
+that drives real geometry, and [[B-143]]'s `assumed` flag — the one fact that would say so — still
+has no readers.
+
+### 🔴 RE-SCOPED AND FIXED 2026-08-29 (`SOURCE-DECLARATION-DROP-02`) — the owner rejected this item's own premise, and the fix follows from that
+
+**This item did not choose between (a) and (b). The owner did, by rejecting the reasoning that made
+(a) attractive** — which is why this is a RE-SCOPE and not a tick. His words:
+
+> _"aspect and fit are per-plate right now and have nothing to do with the source — which I think is
+> correct."_
+
+**What that overturns, precisely.** The section below argues `expectedAspect` _"asserts a property of
+the FEED"_ and therefore cannot be per-look, so it belongs on the DECLARATION. The owner reads it as
+the author's intention for the BOX. The code supports his reading: `resolvePlateAspect` runs source
+`format` — source `aspect` — element `expectedAspect` — `assumed`, so **the real feed already
+outranks the author whenever the installation states a format** (verified in
+`tools/caspar-bridge/src/live-plate-fit.ts`). The author's number is a fallback and a VALIDATION
+input, never an assertion the system trusts over the feed. [[C-028]] had already settled the fit the
+same way, per element.
+
+🔴 **(a) IS GONE, not rejected on its merits.** [[B-188]] deleted the multi-frame group's source
+declaration outright, so _"a writer on the declaration"_ has no declaration to write to. **(b) — the
+HOIST — is what shipped:** `collectLookCarrier` reads `expectedAspect` off the plate ELEMENT that
+first serves each key in document order — the same element the carrier's `elementId` already names,
+so the entry describes one element rather than two halves of two. `dynamic` moved the same way, to
+the same `dynamicRoleIndex` the groupless path already used.
+
+**Findings 1 and 2 are therefore FIXED.** The author's `expectedAspect` reaches the carrier for a
+look-group template, so the take's mismatch refusal — which fires only when BOTH the source's
+aspect and the author's are present — is **armed again** for the configuration the product's
+flagship feature uses.
+
+🔴 **Acceptance bullet 3 is DELIBERATELY NOT IMPLEMENTED, and it falls with the premise.** It
+read: _"WHEN two plates serving one routeKey assert DIFFERENT aspects THEN that is named at authoring
+time, not resolved silently by document order."_ That refusal only makes sense if an aspect is a fact
+about an external feed that two looks may not contradict. Under the owner's reading it is two boxes
+carrying two authored intentions, which is not a contradiction — and the feed's own format wins
+over both when it is known. **Document order resolves it, and that is stated rather than silent:** it
+is documented at the carrier, pinned by a test, and named here.
+
+⚠ **What is NOT fixed, and is unchanged by any of this:** the rest of this item's second half
+stands. The bridge still never learns a live source's real dimensions, the catalog's declared
+`format` is still an unverified assertion driving real geometry, and [[B-143]]'s `assumed` flag still
+has no readers. Re-arming the refusal means the author's number is now CHECKED against the
+installation's claim — it does not make that claim true.
+
+### The fix is NOT [[B-178]]'s
+
+🔴 **`expectedAspect` must NOT become per-look.** It asserts a property of the **FEED** — "this source
+delivers 16:9" — and a feed does not change shape when the operator presses a look. Two looks
+asserting different aspects for one source would be a contradiction about an external fact, which is
+why `looks.ts`'s header keeps it on the declaration _"so two looks cannot disagree about what a HOLE
+asserts"_. [[B-178]]'s `fitMode` moved per-look because it describes how a feed is placed in a BOX,
+and a look is precisely a change of box. **The two facts differ in kind, so they differ in carrier.**
+
+**Two candidate fixes — SETTLED above; kept for the reasoning, which is why (a) looked
+right at the time:**
+
+- **(a) a writer on the declaration** — expose `expectedAspect` in the look-group sources editor, so
+  the author states it once for the group, where it belongs. Simple; but it is a SECOND place to
+  author an aspect beside the plate element's own field, and two spellings of one fact is the shape
+  this repo keeps paying for.
+- **(b) HOIST it from the elements, with a refusal on disagreement** — `collectLookCarrier` reads
+  every plate that serves a routeKey, and refuses at export when two of them assert different
+  aspects. Keeps one authoring surface; costs a new preflight refusal, and a refusal that blocks
+  Export needs the care [[B-146]]'s class demands.
+
+**Acceptance:**
+
+- WHEN an author sets `expectedAspect` on a plate in a look-group template THEN it reaches the
+  carrier, by whichever of (a)/(b) is chosen
+- WHEN the assigned source's aspect contradicts it THEN the take is refused under `cover` exactly as
+  it is for a non-look template — the refusal is armed again
+- WHEN two plates serving one routeKey assert DIFFERENT aspects THEN that is named at authoring
+  time, not resolved silently by document order
+
+### Notes
+
+- **Priority `high`** because a disarmed refusal is worse than an absent one: the guard exists, the
+  tests pass, and it cannot fire in the configuration the product's flagship feature uses.
+- **Same class as [[B-178]], [[B-141]], [[B-143]], [[B-144]], [[B-146]], [[B-147]] and [[R-053]] —
+  _the system knows something and does not say it._** Here the system does not even know it: the
+  author's assertion is discarded before anyone could check it.
+- ⚠ **Not fixed alongside [[B-178]] on purpose.** Re-arming a refusal changes which takes are
+  BLOCKED on air, and choosing between (a) and (b) is a product decision about where an aspect is
+  authored. [[B-178]] was a silent drop with an unambiguous fix; this is not.
+- **Cross-refs:** [[B-178]] (the same dead-field defect, one field over, fixed); [[D-147]] (the
+  aspect chain and why the source outranks the author); [[B-143]] (`assumed` has no readers — the
+  honesty half that would surface this); [[R-053]] (the mismatch refusal's operator surface);
+  [[C-028]] (the fit modes the aspect drives).
+- The number was verified free immediately before this heading was written: highest `B-` heading was
+  `B-178` (filed in the same session, directly above); the duplicate audit printed exactly `B-056`
+  and `B-080`; a whole-tree `git grep` for `B-179` returned only [[B-178]]'s own forward reference
+  and this file's pointer, never a heading; `B-180` returned nothing at all.
+
+## [~] B-189 — the channel-mode read DISCARDS every real CasparCG reply, so R-030's raster check is DISARMED on every real install and the "one-shot" `INFO` re-sends forever ⟨priority: medium — a guard that cannot fire, plus a per-sweep command on the wire, invisible to every test because the mock speaks the shape the code expects⟩ — filed 2026-08-31 from `SKEW-COUNT-01`'s wire tap; **FIXED 2026-08-31 (`SKEW-HOLD-01`) — both breaks, plus the MOCK now speaks the real dialect; see the fix section**
+
+**Found on a wire tap, not by reading code.** `B-174`'s harness (`tools/skew-harness`) proxies the
+bridge's AMCP socket, and every recorded switch window carried an ambient `INFO 1` — one per sweep
+tick, forever. The "one-shot" channel-mode read never latches, because it never succeeds.
+
+### Two independent breaks, each sufficient, mutually masking
+
+`CasparRuntime.#readChannelMode` sends `INFO <channel>` and then:
+
+1. 🔴 **It gates on the wrong response KIND.** It requires `response.kind === 'ok-multi'` (a `200`
+   multi-line block). The real 2.5.0 `69e8ad5` answers `INFO <channel>` with **`201 INFO OK`** plus
+   ONE payload chunk — measured on the tap — which `@cg/caspar-client`'s parser correctly classifies
+   as **`ok-line`**. The read returns early and records nothing.
+2. 🔴 **Even past that gate, the parse looks for a tag the server does not emit.**
+   `parseVideoModeFromInfo` (`@cg/shared-ipc`) matches `<video-mode>…</video-mode>`; the real reply
+   carries **`<format>1080p5000</format>`**. Zero matches, `null`, nothing recorded.
+
+**Why every test is green while both are broken:** `@cg/amcp-mock`'s `handleInfo` answers
+`INFO <ch>` as **`ok-multi` 200** with a **`<video-mode>`** tag — the expected shape on BOTH axes at
+once. The suites (and `awaitChannelModeRead`, the bridge tests' own quiescence helper) therefore
+prove the code agrees with the mock, and nothing anywhere had ever read the real server's reply
+until this tap did. The `B-155` lesson — _"the mock is precisely the thing that models the behaviour
+in question"_ — met on a query verb.
+
+### Consequences, in order of harm
+
+- **R-030's raster-mismatch check can never fire on a real install.** Its own doc says the
+  disagreement is "shouted on stderr and pushed to every browser"; in fact `observed` stays absent
+  for ever and `rasterVerdict` reports `unreadable` — "the check could not be performed" — which
+  reads as a shrug, not as a defect. A channel configured `1080i5000` against a server running
+  `1080p5000` mis-places every graphic with no warning anywhere. (`CLAUDE.md` golden rule 6: the
+  failure-silent branch was designed for an UNREACHABLE server, and a reply in the wrong dialect
+  lands in it indistinguishably.)
+- **The latch (`#modeReadFrom`) is set only on success, so the sweep re-sends `INFO <ch>` every
+  tick, indefinitely** — measured at one per 250 ms under the harness's sweep. Low priority, small,
+  but it is a permanent background command the design says should happen once per primary.
+- **`awaitChannelModeRead` never completes against a real server**, so any future test or tool that
+  reuses it off-mock will hang — the harness had to wait on reachability instead
+  (`tools/skew-harness/src/run.ts`, `whenServerReachable`).
+
+### The fix shape (as filed by `SKEW-COUNT-01`, which implemented nothing)
+
+Accept `ok-line` alongside `ok-multi` (joining `data` / `lines` respectively) and parse BOTH
+spellings of the mode tag (`<format>` first, `<video-mode>` kept for the mock and any build that
+speaks it) — then make the MOCK answer the measured real shape (`201` + `<format>`), not the other
+way round, so the suite stops vouching for a dialect no server speaks. A regression test belongs at
+the parser level with the REAL reply pasted verbatim.
+
+### ⭐ FIXED 2026-08-31 (`SKEW-HOLD-01`) — exactly that shape, and the FIXTURE is the load-bearing half
+
+- **`#readChannelMode`** accepts `ok-line` and `ok-multi` (`caspar-runtime.ts`, the `B-189` note at
+  the gate); **`parseVideoModeFromInfo`** matches `<format>` first, `<video-mode>` as fallback,
+  `<format>` winning when both appear (`@cg/shared-ipc` `channelSettings.ts`).
+- **The fixture speaks the server, not the code**: the REAL `INFO 1` reply — captured byte-exact
+  with a raw socket from 2.5.0 `69e8ad5` at `127.0.0.1:5250` on 2026-08-31 (`SKEW-HOLD-01`; status
+  line and terminal CRLF stripped, bare-`\n` interior kept) — is pasted VERBATIM into
+  `packages/shared-ipc/tests/channel-settings.test.ts` and must parse to `1080p5000`. That string's
+  provenance is the wire; a parser drifting from the real dialect reddens there first.
+- **`@cg/amcp-mock`'s `handleInfo`** now answers `INFO <ch>` in the captured reply's exact shape
+  (`201`/`ok-line`, one bare-`\n` chunk, `<format>`, terminal `\n\r\n`) with its own mode value —
+  its own suite asserts the envelope (`mock-integration.test.ts`) — so the whole bridge suite now
+  vouches for the dialect a server actually speaks.
+- **Both consequences asserted by value** (`channel-raster.integration.test.ts`): the raster
+  MISMATCH shout fires against the real dialect (`CHANNEL 1 RASTER MISMATCH` on stderr, pushed to
+  browsers), and the new one-shot test drives the latch with its own positive control — the count
+  GROWS while replies are refused (proving sweep and counter live), then FREEZES the tick after
+  one reply parses. **`awaitChannelModeRead` completes against the real dialect** — implicitly
+  re-proven by every bridge boot that drains it (nine suites), all green.
+
+### ⭐ The rule-8 saga (`awaitChannelModeRead`'s origin) — RE-JUDGED with this in hand: sibling, NOT root cause
+
+The question `SKEW-HOLD-01` was asked: the one-shot `INFO 1` intruded across three sessions, was
+twice dismissed as flake, and was remedied by the `awaitChannelModeRead()` drain — is `B-189` the
+root cause of that episode? **No — with the evidence, and with one real connection between them:**
+
+- ⚠ The document the question cites (`evidence-and-staging-rules`) **does not exist in this tree
+  or in memory** — the saga's substance was recovered from commit `5659ca5e` (2026-08-19,
+  _"flake family 3 — a wire-silence baseline needs a proven-quiescent wire"_) and
+  `tests/support/harness.ts`'s own doc. Per that commit: session AW's stop-hook red at
+  `live-seating:331` was "unreproducible then" (dismissal), `:346` struck twice in the fixing
+  session's gate runs, and the mechanism was the DESIGNED one-shot landing between a `before`
+  baseline and its `slice(before) → []` assertion under gate CPU load.
+- **Those flakes ran against the MOCK, where the old dialect PARSED** — the read succeeded, the
+  latch set on the first sweep, and the intruding `INFO 1` really was one command, once. `B-189`
+  (the read never succeeding) is a property of the REAL dialect only, so it cannot have caused a
+  mock-land timing flake. Sibling failures of one latch, not cause and effect.
+- **The real connection:** the saga's remedy was sound in mock-land ONLY. Against a real server
+  the drain waits on a latch that could never set — 15 s, then _"the quiescent-wire baseline
+  cannot be established"_ — which `SKEW-COUNT-01` hit in practice and had to route around
+  (`whenServerReachable`, `tools/skew-harness/src/run.ts`). With `B-189` fixed the drain is valid
+  against both dialects. Corroboration that the real dialect was OBSERVABLE well before the
+  filing: session AS's hardware recon (2026-08-18) already recorded `INFO 1-10` answering `201`.
+
+**Env:** 2.5.0 `69e8ad5` local, 2026-08-31, `SET 1 MODE` between `1080p5000`/`1080i5000` — the reply
+shape is the same in both. Wire evidence in `tools/skew-harness/evidence/2026-08-31-i5000/report.json`
+(`commands` arrays).
+
+- **Cross-refs:** [[B-174]] (the harness whose tap caught it, and whose fix's derived-default hold
+  READS the mode this repairs), [[B-155]] (the green-mock trap this repeats on a query verb),
+  [[R-030]] (the check this re-arms), [[B-100]]/[[B-101]] (the axis rules the silent-failure
+  branch was written for).
+
+## [~] B-191 — a look switched while the row is STOPPED is recorded but never TOLD, so the next PLAY comes up with the pictures on one look and the holes on another ⟨priority: high — a wrong layout on air, reached by an ordinary operator sequence, with no refusal and no message⟩ — filed AND FIXED 2026-08-31 (`RUNTIME-RECONCILE-01` S3)
+
+**The owner's sequence, 2026-08-31:** on air on the two-box look → **STOP** → while stopped, switch to
+the single-box look → **PLAY** → the fills and the holes come up on DIFFERENT looks. Two recoveries,
+both reported and both diagnostic: switching to another look and back repairs it (the on-air path
+reconciles correctly), and a further stop-and-play repairs it.
+
+### Answered BY VALUE, on the wire, not by reading
+
+`tools/caspar-bridge/tests/look-switch-stopped.integration.test.ts` drives exactly that sequence
+against the mock and reads the trace. The take after the stopped switch sends:
+
+```
+MIXER 1-60 VOLUME 1 | PLAY 1-30 DECKLINK DEVICE 1 | MIXER 1-30 VOLUME 0 |
+MIXER 1-30 FILL 0 0 1 1 | MIXER 1-30 CLIP 0 0 1 1 | PLAY 1-31 … | CG 1-60 PLAY 0
+```
+
+🔴 **`FILL 0 0 1 1` is the NEW look — the pictures are right — and `CG 1-60 PLAY 0` carries NOTHING.**
+No `CG ADD`, no `CG UPDATE`, no `__cg` payload: the page is never told, so it comes back up punching
+the look it was showing when it was stopped. (The parse is proven by a positive control in the same
+test: the same reader answers `two` for the first take's `CG ADD`.) So the decisive question — _does
+`#tellPageLook` run on the stopped path?_ — is answered **NO**, and the half that is stale is the
+PAGE, not the fills.
+
+### The mechanism: "off air" was used as a proxy for "no page"
+
+`setActiveLook` short-circuits when the row is off air with nothing seated, and records the look on
+case 2 of `#recordActiveLook`: _"there is no page to disagree… both re-enter through `#sendAdd`,
+which puts the look in the `CG ADD` payload."_ That justification is sound after **`out`** — the
+producer is destroyed, `#loaded` is cleared, and the next take really does rebuild the page. It is
+**false after `stop`**: `stopItem` leaves the producer RESIDENT (its own comment says so), `#loaded`
+stays set, and the take's `B-039` re-ADD is therefore skipped. The look is recorded against a build
+that never happens.
+
+**Fixed at the TAKE, and the first attempt at the fix is worth recording because it was wrong.**
+The obvious repair — tell the page from `setActiveLook` whenever a producer is resident — turns
+the picker into a verb that reaches the plant on an OFF-AIR row, and the suite said so immediately:
+[[B-151]]'s _"switching the look of a REHEARSING row sends NOTHING to CasparCG"_ went red, a pin the
+OWNER asked for because the same control drives PVW. It is also not enough on its own: the rehearse
+route reaches the identical mismatch by a different door (load → rehearse → switch → exit → play).
+
+So the repair sits in `#takeImpl`, in the `else` of the `B-039` re-ADD guard — **the one place both
+routes into air converge**: no producer ⇒ the re-ADD's payload carries the look, as it always did; a
+resident producer ⇒ the take TELLS the page the recorded look, before it seats the plates, so the
+holes and the fills land on one look. `setActiveLook`'s off-air branch is unchanged and still sends
+nothing, and case 2's justification in `#recordActiveLook` now names the take rather than overstating
+what `#sendAdd` can promise.
+
+⚠ **A refused tell does NOT refuse the take** (`B-161`, golden rule 10, in the direction that
+matters here): the plates are about to be seated and a take the operator was told did not happen —
+while the wire had already moved — is the worse outcome. It lands and SAYS what disagrees.
+
+### DATED FROM `git`, and the answer is "not a regression"
+
+`git log -S` on the early return: it entered with **`1f76edb0` (2026-08-20)**, LOOKS phase 3 — the
+first implementation already recorded the look and returned when nothing was seated — and
+**`c3425891` (2026-08-21)** only moved the write into `#recordActiveLook` and wrote case 2's
+justification. **No commit was found in which this sequence worked**, so the owner's memory of it
+working is most likely of the `out`-then-load path (which does rebuild the page) rather than
+stop-then-play. Stated plainly rather than guessed at.
+
+⚠ **`SKEW-HOLD-01`'s claim is CONFIRMED, not merely repeated:** its reorder is entirely inside the
+on-air branch's reconcile-and-tell, and the stopped path it left byte-untouched is precisely the one
+that was already broken. This session's change is the first touch that path has had since `B-178`.
+
+- **Cross-refs:** [[B-039]] (the re-ADD guard whose absence-after-stop is the other half of the
+  mechanism, and where the fix now lives), [[B-151]] (the rehearse pin the first attempt broke — it
+  is why the repair is at the take), [[B-161]] / golden rule 10 (why nothing is played or filled),
+  [[B-174]] (the on-air order, untouched by this), [[B-149]] (what a hole and a picture disagreeing
+  looks like on air).
+- **Number:** highest `B-` HEADING across every ref was `B-190` (taken earlier today by the
+  `@cg/vcg-format` determinism fix); `B-191` … `B-197` returned no headings anywhere.
+
+## [ ] B-192 — a plate PARKED by a look switch does not survive on the plant: re-entering the look that shows it emits a `PLAY`, and the box is EMPTY for that producer's first frame ⟨priority: high — it is `B-155` case 3 arriving through the park, on the owner's own template, and it is why term (b) is reachable at all⟩ — OPEN, filed 2026-08-31 from `SKEW-INTERSECT-01`'s §2 measurement
+
+**Status (2026-09-27, `LOOK-SWITCH-01` v3 — `B-273`):** candidate remedy 1 below is BUILT for the look switch.
+A switch now seats the incoming producer hidden BEFORE the page is told and lets it run three holds before the
+reveal, so the `PLAY` no longer lands inside the switch: on the owner's CasparCG, `ghab` 1 → 2, term (b) measured
+**0 fields in 10 of 10** (it was 0, 4, 4 and six 6s the same hour). Still OPEN for what it records beyond the
+switch: the live-input half below is still an owed hardware run. (The park a `media` clip could not survive was by
+design (`canHoldLivePlate`); since `MEDIA-PLATES-01` a clip follows its own `whenHidden` — `pause` and `continue`
+are held, and only `restart` is torn down.)
+
+**Measured, not reasoned about.** `tools/skew-harness --fixture ghab` reproduces the owner's
+membership exactly: `look-1` holds ONE plate (`guest-1`) and `guest-2` exists only in `look-2`. Ten
+switches `look-1 → look-2`, `1080i5000`, the transition mask in force:
+
+| run               | what the wire carried                                     | probe C (guest-2's box)                                  |
+| ----------------- | --------------------------------------------------------- | -------------------------------------------------------- |
+| 00 (first)        | `MIXER FILL`/`CLIP` only                                  | changes ONCE, with the fills                             |
+| 01 … 09 (9 of 10) | **`PLAY 1-31 "skew-src-2"`** + `VOLUME 0` + `FILL`/`CLIP` | changes TWICE: at the fills, then again 2–4 fields later |
+
+The first switch after the take is clean because the take's UNION PRE-SEAT put both producers on
+their layers. Every switch after it carries a `PLAY`, because the intervening switch back to
+`look-1` **parked** `guest-2` and the parked seat did not survive.
+
+🔴 **`@cg/amcp-mock` DISAGREES, and the disagreement is the finding.** The same sequence against the
+mock (`look-transition-window.integration.test.ts`'s fixture has the same membership) keeps both
+plates in the ledger across the park and emits **no `PLAY`** on the way back — asserted directly
+while investigating this. So the union pre-seat is correct in the product's own model and something
+about the plant's park does not hold. What that something is has NOT been established here; this
+item records the observation and the number, and does not guess at the cause.
+
+### Term (b) — the number the `PLAY` costs, which is what the owner would SEE
+
+From the fills landing (probe A) to `guest-2`'s box settling on its OWN picture (probe C's last
+change), in RECORDED FRAMES — a FIELD each at `1080i5000`:
+
+| case                                     | fields               | ms      |
+| ---------------------------------------- | -------------------- | ------- |
+| the producer was ALREADY seated (run 00) | **0**                | 0       |
+| the switch had to `PLAY` a media clip    | **2 … 4** (median 4) | 40 … 80 |
+
+Until then the box is open with nothing behind it: **black, in the shape of the box that just
+arrived.** `SKEW-COUNT-01` measured **+4 fields** for a REPLACING producer in the `B-155` context;
+this is the same quantity for a producer that is being STARTED, and it agrees.
+
+⚠ **The comparison the measurement could NOT complete: an already-running LIVE input.** This host's
+CasparCG reports ONE channel (`INFO` → `1 1080p5000 PLAYING`) and has no usable DeckLink, so
+`route://` would self-route and there is no second signal to point at. The "already seated" row
+above is the nearest honest stand-in — it isolates the START, which is the term's subject — but the
+live-input half is **OWED** and is a hardware run.
+
+### What this is NOT
+
+It is **not** the mask/fill disagreement (term a), which `SKEW-INTERSECT-01`'s transition mask
+removes: with the mask in force and every plate seated, black is **0 % in 10 runs of 10** in both
+directions. It is **not** term (c) either. The three are separate and are reported separately in
+[[B-174]] so that no future report can collapse them again — this one is the only one of the three
+that a mask cannot touch, because the pixel genuinely has no picture behind it yet.
+
+### Candidate remedies — RECORDED, NOT BUILT
+
+1. **Pre-roll the incoming producers before the switch.** This is what the union pre-seat already
+   intends; the finding is that it does not survive a park on the plant. Making it survive costs
+   nothing new in layers (they are already allocated) and is the smallest change if the park is
+   what breaks it.
+2. **Gate each hole on its own producer reporting a frame.** Correct per box, and it reintroduces
+   skew — per HOLE rather than per look — so the boxes would no longer arrive together. It also
+   needs a per-layer frame signal the OSC tap does not carry today (`/foreground/file/frame` was
+   measured ABSENT, ADR 0004).
+
+- **Cross-refs:** [[B-174]] (§2's measurement and the three terms), [[B-155]] (case 3 — a `PLAY`
+  inside a switch, which the union pre-seat exists to prevent), [[B-154]] (the park itself),
+  [[B-177]] (a DeckLink input admits one producer — why re-seating is not free on real hardware).
+- **Number:** highest `B-` HEADING across every ref was `B-191`; `B-192` … `B-198` returned no
+  headings anywhere. Cross-checked against the registry's dated pointer — _"Next free after this
+  session is `B-192`"_ — headings and pointer AGREE.
+
+## [ ] B-193 — the new hole and the outgoing plate's picture do not change together: measured at 3–5 fields apart with the transition mask, 0–1 without it ⟨priority: medium — it is a DURATION, not a black frame: the transition mask converts it from a race into a deliberate wait⟩ — OPEN, filed 2026-08-31 from `SKEW-INTERSECT-01`'s §2 measurement
+
+**Term (c) of the three.** A switch that drops a plate does two things the operator sees as one: the
+ENTERING look's hole opens, and the OUTGOING plate's picture leaves the box it was in. The gap
+between them, measured from probe B (the mask) and probe C (that box's content) in the same
+recording, in RECORDED FRAMES:
+
+| configuration                                 | fields (min … max)     | ms       |
+| --------------------------------------------- | ---------------------- | -------- |
+| `ghab`, `look-2 → look-1`, transition mask ON | **+3 … +5** (median 4) | 60 … 100 |
+| `ghab-seated`, `look-1 → look-2`, mask OFF    | **−1 … 0**             | −20 … 0  |
+
+Positive means the hole opened AFTER the picture left. **With the mask in force the gap is the
+window's trailing half by construction** — the fills move at the mixer and the mask widens a
+channel frame later — so it is a designed quantity rather than a race, and it is the reason the
+same runs report 54 % "misplaced" for 60–100 ms: that is the OUTGOING look still standing, exactly
+as intended, until its replacement is behind the hole. Without the mask the two are within a field
+of each other and the same span is a coin flip between that and a black frame.
+
+**So this is filed as a DURATION to be judged, not as a defect to be fixed.** The judgement is the
+owner's: a switch that takes ~2 extra channel frames and never shows black, against one that is
+immediate and shows black on a third to nine tenths of presses depending on the page. The two knobs
+that move it are `--look-transition-lead-ms` and `--look-transition-tail-ms`, and dropping either to
+`0` shortens the span and gives some of the black back — measured both ways, in [[B-174]].
+
+- **Cross-refs:** [[B-174]] (the mask, the window, and the before/after tables), [[B-192]] (term b —
+  the other half of §2), [[B-158]] (the switch's visual atomicity, which this quantifies one axis
+  of).
+- **Number:** highest `B-` HEADING across every ref was `B-192` (taken immediately above in this
+  same session); `B-193` … `B-199` returned no headings anywhere.
+
+## [x] B-194 — CAN THE PLATES SIT ABOVE THE PAGE, so that no mask exists and the skew class is structurally impossible? ⟨priority: high — the owner rejected all three skew outcomes and asked for zero "even if we change everything"⟩ — **FEASIBILITY STUDY, 2026-09-01 (`PLATES-OVER-PAGE-01`). VERDICT: REJECTED AS THINGS STAND. Nothing implemented.** ⚠ **AMENDED 2026-09-01 by [[B-195]]: the cost number below was measured with a probe far heavier than any real row, the layer argument has a cheaper shape, and the re-export claim is wrong. Read B-195 before acting on this item.**
+
+**The question.** The switch is split across two independent clocks — the page draws the holes on the
+browser's paint clock, CasparCG moves the pictures on the channel tick — and no constant aligns two
+clocks that drift. Phase-lock is dead (no channel frame number reaches the page on any transport;
+`/foreground/file/frame` absent per ADR 0004; no scheduling verb on 2.5.0). **While the page is above
+the plates and punches holes, this class can only be reshaped, never removed.** Putting the plates on
+layers ABOVE the CEF producer would mean **there is no hole**: the picture covers the page, a switch
+becomes `MIXER FILL`/`CLIP` only, the page is not involved, and misalignment becomes
+**unrepresentable**. [[B-174]], [[B-193]] and the whole `SKEW-*` family would dissolve.
+
+🔴 **This item exists so the question is CLOSED rather than deferred.** It is rejected for ONE
+measured reason, and the item states exactly what would reopen it.
+
+---
+
+### 1. Why the page is on top — the written reason, quoted, and it still holds
+
+Three documents converge, and none of them is an accident of implementation.
+
+**(a) The mechanism, from `live-source-multibox/design.md` §9a:**
+
+> "The whole HTML page is **ONE CasparCG layer**, sitting above the Live Source layers. Inside that
+> page the backdrop is an ordinary element beneath the plates. §9's `mode` seam makes a Live Source
+> paint **zero pixels** in `'output'` — but **painting nothing is not the same as ERASING what is
+> beneath it in the same page.**"
+
+**(b) The purpose, from `C-015` (`caspar.md`), which is where "below" was decided:**
+
+> "**Why at all:** An HTML template cannot render live video; CasparCG composites layers."
+
+and its acceptance: _"the bridge allocates a dedicated layer **below the template's layer** … so the
+source sits exactly behind the hole."_ `design.md` §4 states the constraint in one line —
+_"Templates sit on 70–99; \*\*C-015 needs sources \_below_ the template's layer\*\*."\_
+
+**(c) 🔴 THE REASON THAT ACTUALLY DECIDES IT — the owner's own ruling, `design.md` §9a-Z,
+2026-08-15**, recorded as the specification for which element carries the holes:
+
+> "**Mask by Z-ORDER, not by a declared role.** Each element is masked with the union of the rects of
+> the plates that sit **above it** … Elements above all plates are not masked at all."
+>
+> — chosen over the simpler rule because _"It fixes the correctness bug in 'mask everything below the
+> plate'. A caption authored ABOVE a guest box survives, because it is above the plate in z-order.
+> **Name supers over a live guest are ordinary broadcast, not an edge case.**"_
+
+**The page is on top so that the template can paint OVER the live picture.** That is the reason, it is
+the owner's, and **it was re-confirmed by the owner on 2026-09-01, in this session, when asked
+directly**: supers over a guest are coming, even though nothing exercises the capability yet.
+
+⚠ **What was checked and is worth recording, because it cuts the other way.** The only real multi-box
+template in evidence — the owner's `3-ghab`, read from `template.json` in his own export — draws
+**nothing** over a plate: the full-frame 1920×1103 JPG sits at `zIndex 0` on the ROOT layer, BELOW all
+three look instances, and `comp-2`/`comp-3`/`comp-4` contain **only** `video-placeholder` elements.
+The repo's one committed template fixture (`fixtures/templates/persian-lower-third`) has no live
+plates at all. **So the requirement is stated and standing, not yet exercised.**
+
+---
+
+### 2. What the overlay costs — MEASURED on this host, 2026-09-01
+
+Because the requirement stands, plates-over-page needs a **SECOND CEF layer above the plates** for
+anything that draws over a picture: two browser instances per row. CasparCG 2.5.0 `69e8ad5`,
+12 cores, `1080p5000`, the whole `casparcg.exe` process tree sampled over 15 s per state, with a
+representative overlay page (a lower-third, a bug, a `requestAnimationFrame` clock) served over HTTP
+exactly as the bridge serves a template.
+
+| state         | procs | working set | private | CPU (% of ONE core) |
+| ------------- | ----- | ----------- | ------- | ------------------- |
+| idle, no page | 9     | 969 MB      | 1066 MB | 17.6                |
+| 1 page        | 10    | 1074 MB     | 1141 MB | 133.9               |
+| 2 pages       | 11    | 1234 MB     | 1272 MB | 137.7               |
+| 3 pages       | 12    | 1503 MB     | 1513 MB | 300.5               |
+| 5 pages       | 14    | 1879 MB     | 1835 MB | 426.8               |
+
+⇒ **marginal cost of one CEF page: +1 process, ≈ +200 MB working set, ≈ +73 % of one core** (the
+mean over pages 1 → 5; ≈ 6 % of this 12-core machine each). Nine `casparcg.exe` processes exist
+before any page — CEF spawns its pool at startup — so a page's cost is a renderer process on top of
+that, not the whole browser.
+
+🔴 **And it is not only memory. The skew harness, run against each load** (`ghab-seated`,
+`1080i5000`, 10 runs each, the transition mask in force):
+
+| extra CEF pages | usable runs              | `k` median | black seen              |
+| --------------- | ------------------------ | ---------- | ----------------------- |
+| 0               | 10 / 10                  | −60 ms     | 1 / 10 (54.4 %)         |
+| 1               | 10 / 10                  | **−20 ms** | 2 / 10 (22.8 %, 48.1 %) |
+| 3               | **6 / 10** — 4 DISCARDED | −20 ms     | 1 / 6 (69.4 %)          |
+
+- **ONE extra page moves the page's commit two FIELDS later.** The quantity `B-174` spent three
+  sessions on is moved by 40 ms by adding a single browser to the channel.
+- **THREE extra pages made the channel stop sustaining cadence in 4 recordings out of 10** — one
+  captured **54 frames where 85 were due, 36 % of them lost.** With zero or one extra page: no
+  discards at all. Dropped channel ticks are dropped frames on air.
+
+⚠ **CORRECTED 2026-09-01 ([[B-195]] §4.d).** Both the cadence figures above were taken with a
+**full-frame 50 fps `requestAnimationFrame`** probe page, and the control that was owed was not run
+here. Run since: FIVE such pages break cadence 10/10 — but five STATIC pages of the same furniture,
+same settle, break **0/10** with `k` unchanged. **The cost measured was per-frame full-frame
+REPAINTING, not the page count**, and the client's real rows are strips of 448×144 … 1920×282 with a
+ticker at most. The "+3 breaks cadence" line must not be quoted as a page-count limit. Both sessions
+also ran the harness's own libx264 file consumer alongside, which the plant does not carry.
+
+**Multiply by the station.** The operator bank is **30 declared rows (70–99) with 5 ticked** by
+default (`DEFAULT_FIXED_BANK_COUNT = 30`, `DEFAULT_FIXED_BANK_VISIBLE_ROWS = 5`). Five rows able to
+draw over a picture is **five overlay pages on top of the five template pages the rows already
+carry** — ≈ +1.0 GB and ≈ +365 % of one core, on a channel where **three** extra pages already broke
+cadence. **That is the number this verdict rests on.**
+
+---
+
+### 3. What was measured IN FAVOUR — the premise holds, and it is worth keeping
+
+🔴 **`C-028`'s client criterion SURVIVES, measured directly rather than inferred.** Under `contain`,
+`FILL === CLIP`, so the producer should draw only the picture's own area and the margin should show
+the page. That is the whole reason this route looks free, and it had never been tested with the plate
+genuinely ABOVE a page. Run on 2026-09-01: layer **10** = an opaque full-frame CEF page (`#1040C0`
+with a `#F0C000` mark), layer **20** = a media producer with `FILL 0.25 0.25 0.5 0.5` and `CLIP` the
+same, recorded off the channel:
+
+```
+(1800, 1000)  rgb=( 16, 64,191)   OUTSIDE the plate, far corner  -> the PAGE
+( 100,  100)  rgb=(240,191,  0)   OUTSIDE, over the page's mark  -> the PAGE
+( 960,  540)  rgb=(126,126, 74)   INSIDE the plate               -> the PICTURE
+```
+
+**A clipped producer above a CEF page composites over it and leaves every other pixel to the page.**
+No black anywhere. So the architecture renders correctly, and the `contain` margin would still show
+the template — the client's requirement of 2026-08-23, preserved.
+
+⚠ The earlier evidence did NOT establish this. `C-028`'s on-air confirmation was taken with the page
+ABOVE and the hole already at the fitted rect, where the margin is un-punched page either way; and
+`design.md` §3's `CLIP` measurement (a fill moved out from under its clip "renders NOTHING AT ALL")
+proves `CLIP` bounds the layer without saying whether the area outside it is transparent or opaque
+black. The reading above is the one that answers it.
+
+**The plate's STROKE also survives.** It is rendered as a CSS `outline`, painted outside the declared
+rect and occupying no layout (`design.md` §9a.1, corrected 2026-08-14), so a frame drawn around a box
+is not covered by a picture that fills only the box.
+
+---
+
+### 4. What breaks — enumerated
+
+**4.1 The layer model cannot express the overlay-preserving form.** Plates would have to sit above
+THEIR row's template and below the NEXT row's, so every row needs an interleaved block. Today the
+Live Source band is ONE contiguous range (`layerRange {start,end}`, suggested 10–59) **validated
+DISJOINT** from the operator bank and the reserved range (`sources.ts`'s `overlaps-fixed-bank` /
+`overlaps-reserved`). Interleaving is not expressible in that model, and the bank's row numbers are
+operator-visible. Layer NUMBERS are not the constraint (`MAX_LIVE_SOURCE_LAYER = 9999`); the
+addressing model is.
+⚠ **AND THE PREMISE IS NARROWER THAN THIS PARAGRAPH ASSUMES ([[B-195]] §4.b).** Interleaving is
+only forced if the plates must go ABOVE the operator bank. Put the plate-bearing template's PAGE
+BELOW the live band instead — layers 1–9 are free — and the live band (10–59) and the bank (70–99)
+both stay exactly where they are, contiguous and disjoint. What that costs is one mapping: a bank
+row's layer is today the layer its template renders on.
+
+⭐ **The no-overlay form does NOT have this problem** — one band above the bank (say 110–159) is still
+contiguous and still disjoint, and "another row's graphic cannot draw over this row's guest" is
+exactly what that form means anyway.
+
+**4.2 `border-radius` on a plate becomes unachievable again.** `design.md`'s own words for the
+lone-plate case: _"the corners have nothing to hide them, and `MIXER FILL`/`CLIP` are rectangular, so
+a rounded plate floating over the programme **stays unachievable in v1 either way**."_ Today the punch
+makes it honest — _"the CSS hole rounds, and the live rectangle's square corners are covered by the
+backdrop that is being punched"_ — and that is exactly what putting the plate on top gives away.
+(⚠ Anchor note: this brief attributed the border-radius question to [[D-155]]; D-155 is the
+aspect-lock item. The border-radius reasoning is in `live-source-multibox/design.md`, §9a.1's closing
+section.)
+
+⚠ **4.3 IS WRONG AND IS REPLACED — see [[B-195]] §5.** The Runtime app REBUILDS the served HTML
+from the scene at IMPORT using its OWN bundled runtime
+(`apps/runtime/src/renderer/features/library/templateDelivery.ts:15-21`, `:202-211`); the `cg.js`
+inside a `.vcg` is never served. So a runtime change costs a **re-IMPORT**, not a re-export, and the
+`.vcg` files on disk stay valid. The `minRuntimeVersion` half of the paragraph survives as a real
+defect and is filed as [[B-196]] — in the OPPOSITE direction: a NEWER package in an OLDER app.
+
+**4.3 The export, and a SILENT migration.** `template.json`'s shape does not change — the mask is
+computed at runtime by `cg.js`, not baked into the scene — but `cg.js` does, and every `.vcg` carries
+it with a sha256 in `manifest.integrity`. **Every template must be re-exported and re-imported.**
+🔴 And nothing would refuse a stale one: `minRuntimeVersion` is written `'0.0.0'` by the exporter and
+is **never read anywhere in the tree**. An un-migrated template keeps punching, and under the new
+layering its hole shows the channel wherever the picture does not cover it — **black in the `contain`
+margin**, on air, with nothing said.
+
+**4.4 What is DELETED, and what survives.** The seam is clean, which is the one structural argument
+in this route's favour: **the bridge contains no mask code at all**, and `collectLiveSources`
+declares plate rects without it.
+_Deleted:_ `MaskHole` + `liveSourceMask` (`shared-schema/scene.ts`); `sceneMaskHoles`,
+`intersectPunches`, `ArrangementView.transitionFrom` (`scene-flatten.ts`); the whole of
+`template-runtime/src/live-source-punch.ts`; `scene-builder`'s build-time punch and `punchTargets`;
+`runtime.ts`'s re-punch (UNIT B′); `CgControl.from` **and `CgControl.plates`** — the fit facts cross
+the wire only so the page can punch at the FITTED rect, and a page that punches nothing does not need
+them. `CgControl.look` survives: the page still flips which look's CHROME is visible.
+_Survives untouched:_ `collectLiveSources` / `buildTemplateLiveSources`, `fitPictureToBox`
+(bridge-side, for `MIXER FILL`/`CLIP`), layer allocation, seating, the ledger, volumes, looks.
+
+**4.5 PVW / rehearse.** [[B-151]] established that PVW's plate placeholders are Runtime-side chrome
+drawn on top of the page frame, not a CasparCG layer. Under plates-over-page the page has no plate
+REGION at all, so [[R-049]]'s placeholder becomes the only representation and must be opaque and at
+the **fitted** rect to stay faithful — a change to that work, not a break. §9a-Z's "no preview/air
+divergence" rule gets easier, not harder: on air the picture really would be on top.
+
+**4.6 [[B-192]] survives this change untouched, and the owner must not be promised otherwise.** A
+plate whose producer the switch had to `PLAY` still has no first frame for **+2 … +4 fields**, and no
+compositing order puts a picture where there is none. Plates-over-page removes the mask/fill
+disagreement; it does not remove the black at a newly-started box.
+
+**4.7 The intersection mask shipped at `a7656b05` stays as it is.** Under this verdict there is
+nothing to fall back from. Had the route been adopted, the mask would not have been kept behind
+`--no-look-transition-mask` as a fallback but **deleted with the rest** — with no holes there is
+nothing to intersect, and `from` would be inert rather than optional.
+
+---
+
+### 5. 🔴 THE VERDICT — REJECTED, and the one thing that would reopen it
+
+**Rejected**, on the measurement in §2 and not on preference: the requirement that the template can
+paint over a live picture is standing and owner-confirmed, meeting it under plates-over-page costs a
+second CEF page per row, and **three extra pages already cost this channel 36 % of its frames in one
+recording out of ten.** Five rows is past that. The architecture is sound — §3 measured it — and the
+station cannot afford the thing that makes it usable.
+
+⭐ **THE ONE THING THAT WOULD REOPEN IT: retiring §9a-Z's over-the-picture requirement.** With "nothing
+in a template may ever draw over a live picture" accepted, the overlay disappears and with it §2
+entirely; the layer model works unchanged (§4.1); the deletion is clean (§4.4); and the skew class
+becomes structurally impossible. What would still be paid: `border-radius` on plates (§4.2), the
+re-export of every template with no gate against a stale one (§4.3), and the PVW rework (§4.5). That
+is a real option and a cheap one — it is simply not the one the owner has asked for.
+
+⚠ **What is NOT a reason to revisit this:** a faster machine. The cadence failure is a per-channel
+frame budget shared with the DeckLink consumer and the encoder, and the plant runs several Runtime
+stations against one CasparCG (`design.md` §9b.3). Doubling the cores does not make two browsers per
+row free; it moves the row count at which they stop being free.
+
+**Evidence.** `tools/skew-harness/evidence/2026-09-01-overpage-cef{0,1,3}/report.json` — the three
+harness sweeps of §2, ten runs each, with the per-run cadence figures the discards were read from.
+The CEF footprint table and the §3 compositing reading were taken by hand at the wire and are quoted
+here in full rather than left in a file; the `.mkv` recordings and `.png` frames beside those reports
+are GITIGNORED as every earlier sweep's are.
+
+⚠ **The plant was STARTED for this study and stopped again.** CasparCG was not running; channel 1
+declares a DeckLink SDI consumer and the config's own comment calls it PGM, so it was started only
+after the owner authorised it, and the machine was put back as found — channel cleared, mode returned
+to `1080p5000`, the two probe templates and the recording deleted, the server stopped.
+
+- **Cross-refs:** [[B-174]] (the skew and its three rejected outcomes), [[B-192]] / [[B-193]] (the two
+  terms a mask cannot touch), [[B-151]] / [[R-049]] (PVW), [[C-015]] (where "below the template's
+  layer" was decided), [[C-028]] (the `contain` margin), [[C-020]] (the air path, and why this host's
+  channel could not simply be started unattended — the owner authorised it for this study),
+  `live-source-multibox/design.md` §9a / §9a-Z / §9a.1 / §9a.2 / §9b (the dedicated-channel model,
+  evaluated and not adopted, whose §9b.5 is the nearest prior art to this question).
+- **Number:** highest `B-` HEADING across every ref was `B-193`; `B-194` … `B-200` returned no
+  headings anywhere, and the duplicate audit printed exactly the two accepted duplicates (`B-056`,
+  `B-080`). Cross-checked against the registry's dated pointer — _"Next free after this session is
+  `B-194`"_ — headings and pointer AGREE.
+
+## [x] B-195 — THE TEMPLATE AUDIT: **nothing in any real template draws over a live picture**, and the over-the-picture furniture is already SEPARATE ROWS ⟨priority: high — it re-scopes §9a-Z and corrects the affordability number [[B-194]] was rejected on⟩ — **AUDIT, 2026-09-01 (`TEMPLATE-OVERLAY-AUDIT-01`). VERDICT: §9a-Z RE-SCOPED. Nothing implemented.**
+
+[[B-194]] rejected plates-over-page on the cost of a second CEF page per row, and its closing line
+said the one thing that would reopen it is retiring the over-the-picture requirement. **Before
+retiring or re-scoping anything, the real templates had to be counted.** This is that count, plus the
+control measurement that corrects `B-194`'s own number.
+
+🔴 **THE TWO POPULATIONS ARE REPORTED APART AND THEIR COUNTS ARE NEVER MERGED.** A repo fixture is
+not evidence about the client's designs.
+
+---
+
+### 1. The framing — the split that decides everything
+
+- **CLASS 1 — SWITCH-BOUND.** Its geometry is tied to a plate's rect, so it must change on the SAME
+  FRAME the fills move. Per-look decoration, a frame around a box, rounded corners on the picture.
+- **CLASS 2 — SWITCH-FREE.** It appears, moves and disappears on its own trigger, independent of the
+  look switch. Logo, name super, clock, ticker, credits.
+
+CLASS 2 can live on a second page composited ABOVE the plates carrying **no mask at all**; with both
+pages maskless a look switch is `MIXER FILL`/`CLIP` only — one clock — and the [[B-174]] defect class
+is unrepresentable. **CLASS 1 is the only class that puts a frame-alignment requirement back.**
+
+---
+
+### 2. POPULATION A — the client's own exports (12 packages)
+
+`C:\Users\yaser\OneDrive\Desktop\temp\cg templates exports`, read as ZIPs: `manifest.json` +
+`template.json`, flattened with the PRODUCT'S OWN `flattenElements(scene,'paint')` +
+`applyArrangementGeometry` + `fitPictureToBox`, so the audit cannot disagree with what the page
+actually punches. Per LOOK, every non-plate element was intersected with every plate's FITTED rect
+and classified by paint order.
+
+**A.1 — the only package with live plates at all: `3ghab.vcg`** (re-exported **2026-09-01 14:32**,
+newer than the copy in the repo). Three looks; **exactly one** non-plate element in the whole scene:
+
+| element                            | rect                | paint position                                        | verdict per look                           |
+| ---------------------------------- | ------------------- | ----------------------------------------------------- | ------------------------------------------ |
+| `image "Image"` `el-1788260401106` | `0, −17  1920×1112` | root layer, `z=0`, **below all three look instances** | **PUNCHED** by `l1` / `l1,l2` / `l1,l2,l3` |
+
+**OVER = 0. AROUND = 0.** The one element that touches a plate is the backdrop the punch exists FOR.
+Its plate rects also moved with the re-export (`look-2` is now `32,258 887×498.94` and
+`1006,258 887×498.94`, against `23,301 916×515.27` in yesterday's copy).
+
+**A.2 — the other ELEVEN packages carry no live plate at all**, and this is the finding rather than a
+null result: **they ARE the over-the-picture furniture**, authored as separate templates.
+
+| package                                  | scene size | elements (named)                                                                                                          |
+| ---------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `ارم-روی-انتن.vcg` (logo, on air)        | 448×144    | `disc`, `mark`, `centre-dot`, `separator`, `wordmark`, `sub-tag`                                                          |
+| `زیرنویس-روی-انتن.vcg` (lower third)     | 1000×190   | `name-plate`, `role-plate`, `brand-square`, `star-mark`, `name`, `role`                                                   |
+| `نوار-خبر-روی-انتن.vcg` (news bar)       | 1920×136   | `bar`, `crawl` (ticker), `label-plate`, `live-dot` (comp), `label`                                                        |
+| `توالی-خبر-روی-انتن.vcg` (news sequence) | 1920×136   | `bar`, `rotator` (sequence), `label-plate`, `star-mark`, `label`                                                          |
+| `میانبرنامه-روی-انتن.vcg` (interstitial) | 1920×190   | `crawl-bar`, `crawl` (ticker), `program-slab`, `program-title`, `star-mark`, `panel`, `rotator` + three clock/brand comps |
+| `zirnevis-white.vcg`                     | 1920×282   | `Video`, `Ticker`                                                                                                         |
+| `zirnevis-white.cgproj`                  | 1920×1080  | comp `main`: `Video`, `Ticker`                                                                                            |
+| `logo1.vcg`                              | 200×226    | `Video`                                                                                                                   |
+| `parcham.vcg` (flag)                     | 200×200    | `Video`                                                                                                                   |
+| `pen.vcg`                                | 1920×1080  | `Path`                                                                                                                    |
+| `text.vcg`                               | 1920×1080  | `Text`, `Text`                                                                                                            |
+
+**CLASS EVIDENCE, stated per the rule rather than asserted.** Every one of these is **CLASS 2**, on
+three independent grounds each: (a) it contains **no plate**, so no geometry in it can reference one;
+(b) it is its own template with its own `lifecycle` / `playout` block and its own `fields` +
+`bindings` (2 and 2 in each of the five `روی آنتن` packages), so it is **operator-triggered**, not
+look-triggered; (c) it exists in no look, so it cannot exist "in more than one look at a different
+geometry".
+
+⇒ **CLASS 1 elements found in population A: ZERO. CLASS 2 elements inside a plate-bearing template:
+ZERO. CLASS 2 as separate rows: TEN templates.**
+
+**2.e — the re-authoring question is VACUOUS for what exists, and pointed for what does not.** No
+CLASS 1 element exists to re-author. The one that WOULD be CLASS 1 is a rounded corner on a picture
+(`design.md` §9a.1): it cannot be re-authored onto a background page, because a corner is hidden by
+covering it FROM ABOVE and a background page is below; and on an overlay page it would need the
+plate's rect, which is the definition of CLASS 1. It is also unavailable today — the Inspector offers
+no `border-radius` on a `video-placeholder` — so nothing is lost that anyone has.
+
+---
+
+### 3. POPULATION B — everything the repo can reach (9 packages + 1 synthetic)
+
+| package                                                                                 | plates  | result                                        |
+| --------------------------------------------------------------------------------------- | ------- | --------------------------------------------- |
+| `tools/skew-harness/fixtures/owner/3-ghab.vcg` (untracked; the owner's own, 2026-08-31) | 3 looks | 1 element, **PUNCHED** in all three. OVER = 0 |
+| `tools/skew-harness/fixtures/owner/3-ghab.cgproj`                                       | —       | project document, no rendered scene rows      |
+| `fixtures/templates/persian-lower-third.vcg`                                            | none    | 4 elements, no plate to be over               |
+| `fixtures/d121/crawl-*.vcg` (×4)                                                        | none    | 1 element each                                |
+| `fixtures/b034/hidden-*.vcg` (×2)                                                       | none    | 0–2 elements                                  |
+| `GHAB_FIXTURE` (synthetic, `tools/skew-harness/src/geometry.ts`)                        | 2 looks | **OVER = 0 by construction**                  |
+
+`GHAB_FIXTURE`'s zero is structural rather than measured: `scene.ts:107-110` builds each look's
+children as `[...filler, ...plates]` with every element at `zIndex: 0`, and `scene-flatten.ts:232-234`
+records that an equal `zIndex` "falls back to document order" through a stable sort (`:290`) — so the
+plates are always LAST, i.e. above the filler, which is therefore punched and never over.
+
+⇒ **Population B contains no element over a live picture either.**
+
+---
+
+### 4. THE SANDWICH, PRICED — and the measurement that CORRECTS `B-194`
+
+**4.a The shape.** Background page below the plates / plates / one overlay page above them.
+
+**4.b Is ONE shared overlay page enough, or does the preload model force one per ticked row?**
+**Neither, and the audit is why.** Quoting the code:
+
+- `tools/caspar-bridge/src/caspar-runtime.ts:2007-2009` — `#loadOnto` ends with
+  `const added = await this.#sendAdd(itemId, slot, templateId, fields, seq);`, under
+  _"B-039 — `CG ADD` only (play-on-load OFF in the builder): the producer is loaded, NOT playing."_
+  **A LOADED row already holds a live CEF producer, before any take.**
+- `packages/shared-ipc/src/channels/fixedLayers.ts:33-43` — `DEFAULT_FIXED_BANK_START = 70`,
+  `DEFAULT_FIXED_BANK_COUNT = 30`, `DEFAULT_FIXED_BANK_VISIBLE_ROWS = 5`.
+
+So the station already runs **one CEF page per loaded row, five ticked**. And §2 found nothing inside
+a plate-bearing template that would need moving to an overlay page — the furniture is already those
+rows. ⇒ **the sandwich needs ZERO additional CEF pages.** What it needs is an ORDER: the
+plate-bearing template's page BELOW the live band, everything else where it is.
+
+⭐ **And that order does NOT require the interleaving `B-194` §4.1 said was inexpressible.** With the
+background page below the live band, the live band (10–59) and the operator bank (70–99) both stay
+exactly as they are, still contiguous and still disjoint. Layers **1–9 are free** — the recon's own
+"1–9 is the only free band" under today's policy — which is where a background page would sit. The
+open question is not the numbering but that a bank row's layer is today the layer its template
+renders on (`FixedLayerBankSchema` is one `start` + `count`), so a plate-bearing row would need its
+page placed outside its own bank row. That is ONE mapping to change, not an addressing model.
+
+**4.c** `B-194`'s measured CEF table is used as-is and not re-measured.
+
+**4.d THE MEASUREMENT — and it overturned its own first reading.** Section 2 concluded "no CLASS 1 at
+all", so the measurement was owed. `1080i5000`, `ghab-seated`, ten recordings per configuration:
+
+| configuration (CEF pages incl. the harness's own template) | discards  | `k` median     | black    |
+| ---------------------------------------------------------- | --------- | -------------- | -------- |
+| 5 pages, ANIMATED probe, 10 s settle                       | **10/10** | no usable runs | —        |
+| 6 pages, ANIMATED probe (+1), 3 min later                  | **1/10**  | −60 ms         | —        |
+| 5 pages, ANIMATED probe, **60 s settle**                   | **10/10** | no usable runs | —        |
+| 5 pages, **STATIC probe**, 60 s settle                     | **0/10**  | −50 ms         | **0/10** |
+
+🔴 **A cost that FALLS as load rises is not a cost.** Six animated pages passed where five failed, so
+the first reading was not page count. The settled re-run then reproduced the five-page failure — and
+the STATIC control, same five pages, same furniture, same settle, **passed ten of ten with no black
+at all**. ⇒ **The measured cost is per-frame FULL-FRAME REPAINTING, not the number of pages.**
+
+⚠ **This corrects `B-194` §2.** Its "three extra pages break cadence" was taken with the SAME
+full-frame 50 fps `requestAnimationFrame` probe, so it measured a page far heavier than anything the
+client runs: the real rows are strips (448×144 … 1920×282), about half of them animated, and a
+ticker's per-frame work is a transform on one element rather than a full-frame repaint plus a text
+rewrite. **The number `B-194` was rejected on does not describe this station's load.**
+
+⚠ **Also confounded in both sessions:** the harness's cadence check is a SECOND file consumer doing a
+libx264 encode of `1080i5000` alongside the screen consumer — load the plant does not carry. Every
+"dropped frames" figure here and in `B-194` includes it.
+
+**4.e Affordability.** **+1 page is affordable.** Five static pages cost this channel nothing
+measurable (0/10 discards, `k` unchanged at −50 ms, black 0/10), and the +3 break `B-194` rested on
+did not survive its control. What is NOT affordable on this host is five full-frame 50 fps repainting
+pages — which is a statement about page CONTENT, and belongs in an authoring guideline rather than in
+an architecture verdict.
+
+---
+
+### 5. What changes and what dies under the sandwich — written answers, not a change
+
+| thing                                        | fate                                           | reason (one sentence)                                                                                                                                                                                                 |
+| -------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `liveSourceMask` + `MaskHole[]` (`scene.ts`) | **REMOVED**                                    | Nothing punches, so the mask value and the hole type have neither a producer nor a consumer.                                                                                                                          |
+| `sceneMaskHoles` (`scene-flatten.ts`)        | **REMOVED**                                    | Its only outputs are holes; the plate RECTS the bridge fills from come from `collectLiveSources`, which never calls it.                                                                                               |
+| `live-source-punch.ts`                       | **REMOVED** (whole file)                       | Apply / clear / re-punch exist only to write mask CSS onto live nodes.                                                                                                                                                |
+| the intersection mask shipped at `a7656b05`  | **REMOVED, not flagged**                       | With no holes there is nothing to intersect, so `--no-look-transition-mask` would be a flag whose both positions do nothing.                                                                                          |
+| `border-radius` per `design.md` §9a.1        | **NEEDS A NEW HOME — and there is none in v1** | A rounded picture needs its corners covered FROM ABOVE, and `MIXER FILL`/`CLIP` are rectangular; §9a.1 already calls this case "unachievable in v1 either way".                                                       |
+| the export format                            | **UNCHANGED**, and see §6                      | `template.json`'s shape does not change (the mask is computed at runtime), and the served page is rebuilt at IMPORT from the app's own runtime — so a **re-import**, not a re-export, is what a runtime change costs. |
+| layer numbering under `C-015`                | **ONE band added, none moved**                 | The live band and the operator bank stay; a background band below 10 is added, and C-015's "a dedicated layer BELOW the template's layer" inverts and must be rewritten.                                              |
+
+---
+
+### 6. 🔴 THE OUTCOME, recorded against `§9a-Z` and `B-194`
+
+**RE-SCOPED.** Over-the-picture is **CLASS 2 only**, and it is satisfied **today** — not by an overlay
+page but by the separate rows the client already authors and the bank already runs. §9a-Z's z-order
+rule ("elements above all plates are not masked") is what makes an over-the-picture element
+expressible INSIDE a plate-bearing template, and **no client template uses it**.
+
+**What §9a-Z's ruling got right and keeps:** _"Name supers over a live guest are ordinary broadcast,
+not an edge case."_ True of the plant — `زیرنویس (روی آنتن)` is exactly that super — and it is
+delivered by a row, not by an element inside the multibox template.
+
+⚠ **THE ONE THING THAT WOULD FLIP THIS BACK TO RE-CONFIRMED, and it is not hypothetical.** A name
+super **positioned under a particular guest BOX** is CLASS 1: its geometry follows the box, so it must
+move on the frame the fills move. Nothing in the client's set does that today — `زیرنویس` is a
+full-width card at a fixed place — but it is the obvious next thing to author for a multibox layout,
+and the owner confirmed on 2026-09-01 that supers over a guest are coming. **Authoring guidance
+follows from this audit rather than from taste: a super that must sit under a box is the one shape
+that re-imposes frame alignment, and a super at a fixed place on its own row never does.**
+
+- **Cross-refs:** [[B-194]] (whose §2 cost number and §4.1 layer argument this corrects, and whose
+  §4.3 re-export claim §5 above replaces), [[B-174]] / [[B-192]] / [[B-193]] (the skew class the
+  sandwich would make unrepresentable, and the two terms it would not), [[B-196]] (the compatibility
+  field this audit checked on the way past), [[C-015]] (sources below the template's layer),
+  [[C-028]] (the `contain` margin), `live-source-multibox/design.md` §9a / §9a-Z / §9a.1 / §9b.5.
+- **Evidence:** `tools/skew-harness/evidence/2026-09-01-sandwich-rows{5,6,5-settled,5-static}/report.json`.
+  The package audit itself was run with a scratch script over the two populations and is NOT
+  committed — its inputs are the client's own files, which are not in the repo, and its method is the
+  product's own flattener named above rather than a second geometry.
+- **The plant** was started for §4.d with the owner's standing authorisation, and put back as found:
+  channel cleared, mode returned to `1080p5000`, probe servers stopped, server stopped.
+- **Number:** highest `B-` HEADING across every ref was `B-194`; `B-195` … `B-201` returned no
+  headings anywhere, and the duplicate audit printed exactly the two accepted duplicates (`B-056`,
+  `B-080`). Cross-checked against the registry's dated pointer — _"Next free after this session is
+  `B-195`"_ — headings and pointer AGREE.
+
+## [~] B-196 — `minRuntimeVersion` is a compatibility gate with a WRITER, a SCHEMA and NO READER, and the value written could not gate anything even if one existed ⟨priority: medium — it advertises a check nobody performs, which is `P-031`'s shape one field over⟩ — filed 2026-09-01 (`TEMPLATE-OVERLAY-AUDIT-01` §5), **WIRED the same day (`SINGLE-CLOCK-SWITCH-01` §5): `P-031` forces wire-or-delete and the owner chose WIRE**
+
+**Confirmed by reading the writer and every reader**, as asked, rather than by inference.
+
+- **Writer — exactly one, and it is a literal.** `apps/designer/src/platform/Exporter.ts:410`:
+  `compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' }`.
+- **Schema.** `packages/shared-schema/src/manifest.ts:37-38` declares both as `z.string().min(1)`,
+  carried into `CompatibilitySchema` (`:75`) and copied verbatim into every package by
+  `packages/vcg-format/src/pack.ts:114`.
+- **Readers — NONE.** `git grep` over `packages apps tools` finds the field only at the writer, the
+  schema and the pack site. There is no semver comparison anywhere in the tree, and **no runtime
+  version constant exists at all** — the project deliberately maintains no semver
+  (`apps/designer/tests/splashCss.test.ts:334`: _"printing a semver the project does not maintain is
+  a false claim"_).
+- **And the value is inert by construction.** `'0.0.0'` is the minimum possible version, so even a
+  reader could never refuse anything on it.
+
+### What the hazard actually is — the framing this audit CORRECTS
+
+The obvious reading is "a stale `.vcg` runs stale page code". **That is wrong, and the code says so:**
+`apps/runtime/src/renderer/features/library/templateDelivery.ts:15-21` imports `cgCss`, `cgJsIife`
+and `cgJsLottieIife` from `@cg/single-file-export` — **the Runtime app's OWN bundled runtime** — and
+`:202-211` re-produces the served HTML from the scene with them. The `cg.js` inside the `.vcg` is
+never served. So a package exported a year ago and imported today is rendered by TODAY's runtime.
+
+⇒ **The real, unguarded direction is the opposite one: a NEWER package imported into an OLDER Runtime
+app.** The scene may declare a feature that app's runtime does not implement, and nothing compares
+anything — the import succeeds, the element renders as whatever the older code makes of it, and no
+surface says why. `minRuntimeVersion` is precisely the field that would catch it, and it is inert.
+
+### Precedent — the owner has already decided this exact shape
+
+[[P-031]] (`docs/prd/platform.md:1622`) is the schema-migration registry: _"DEAD CODE that advertises
+itself as the migration path"_, and the decision was **DELETE**, because _"it must stop presenting
+itself as the place a schema conversion goes, because a migration registered there is a conversion
+that never runs."_ **This is the same object one field over.** Either wire it — write the app's real
+runtime version at export and compare it at import — or delete it from the manifest under the same
+compatibility-floor policy. What it must not do is keep declaring a floor nobody enforces.
+
+**Acceptance:**
+
+- WHEN a `.vcg` is imported THEN either its declared `minRuntimeVersion` is compared against a real
+  runtime version and a package the app cannot render is REFUSED by name, or the field is gone from
+  the manifest schema and from the exporter
+- WHEN the field is kept THEN the exporter writes the app's actual version rather than `'0.0.0'`,
+  because a floor of zero is a floor nothing can fail
+- WHEN a package is refused on that comparison THEN the surface names the package, the version it
+  needs and the version this station has — a refusal an operator can act on
+
+### ✅ WIRED 2026-09-01 — what was built, and the objection it has to answer
+
+- **`packages/shared-schema/src/runtime-version.ts`** — `CG_RUNTIME_VERSION` (a CONTRACT version,
+  starting `1.0.0`), `parseSemver`, `compareSemver`, `runtimeShortfall` and
+  `runtimeShortfallMessage`. ONE comparison, with `available` defaulting to the constant so no caller
+  supplies its own idea of "current".
+- **`apps/designer/src/platform/Exporter.ts`** now writes `CG_RUNTIME_VERSION` instead of `'0.0.0'`.
+- **`apps/runtime/src/renderer/features/library/templateDelivery.ts`** compares after `unpack` and
+  BEFORE the render, and throws one sentence naming the package and both versions.
+
+**It FAILS OPEN on an unreadable version**, deliberately: every package written before this field
+meant anything carries `'0.0.0'`, which parses and compares below everything, so they all still
+import; a value that does not parse at all is a malformed manifest, which is `verify`'s job, and
+refusing on it here would put two authorities on one fact.
+
+🔴 **The honest caveat, recorded because `capabilities.ts` already rejected this shape once.** Its
+argument against a version compare — _"a number somebody must REMEMBER to bump, which is the class of
+guard that is already stale by the time it matters"_ — applies here too. What differs is that no
+DERIVED answer exists: the bridge case could compare a routed channel list against an exported one,
+because the unit of failure is enumerable; "this renderer does not do what this package assumes" is
+not. The mitigation is to make the number do as little as possible — it is a contract version, not a
+build version, and an ordinary release does not touch it.
+
+⚠ **And what it adds is the MESSAGE, not the refusal.** `SceneSchema`'s `schemaVersion: z.literal(1)`
+already rejects a bumped document and `ElementSchema` is a `z.union`, so an unknown element kind
+already fails to parse — as a zod error with a path into an element array. This turns that into a
+sentence that names the station as the thing that is behind.
+
+**Tests, red-first:** `packages/shared-schema/tests/runtime-version.test.ts` (12) and four in
+`apps/runtime/tests/template-delivery.test.ts` — neutering the comparison reddens the two guard tests
+while the legacy-`'0.0.0'` and current-version imports stay green.
+
+- **Cross-refs:** [[P-031]] (the decided precedent — dead compatibility machinery is deleted, not
+  left), [[B-195]] (the audit that found this), [[D-150]] (the self-contained package this field
+  travels in), [[B-190]] (the other manifest-level determinism defect).
+- **Number:** highest `B-` HEADING was `B-195`, taken immediately above in this same session;
+  `B-196` … `B-202` returned no headings anywhere.
+
+## [ ] B-197 — a rounded live plate loses the only home it had: with the plates composited ABOVE the page there is nothing left to hide their square corners ⟨priority: low — nothing offers the control today, but `design.md` §9a.1 records a PROMISE the reorder silently breaks⟩ — OPEN, filed 2026-09-01 from `SINGLE-CLOCK-SWITCH-01` §6
+
+**Written answer, not an implementation.** `single-clock-look-switch` moves the plate-bearing page
+BELOW its plates and retires the mask. That removes the mechanism `design.md`'s border-radius note
+(the unnumbered sub-heading at `:1876`, inside §9a.1) was counting on, and the note would otherwise
+stand as a promise nobody can keep.
+
+⚠ **[[D-155]] is NOT this.** D-155 is aspect-lock-on-resize — a Live Source keeping its declared
+aspect while the author drags a handle. The border-radius reasoning has never had an item; it lives
+only in that design sub-heading, which is why this one exists.
+
+### What the design promised, and why it stops being true
+
+Quoted:
+
+> - **Once a punch mechanism exists, `border-radius` becomes MEANINGFUL AND HONEST in the multi-box
+>   case** — the CSS hole rounds, and the live rectangle's square corners are covered by the backdrop
+>   that is being punched. The author gets exactly what they drew.
+> - **The earlier framing — "rounding is impossible" — was reasoning about the LONE-PLATE case:** a
+>   plate over the programme feed with NOTHING opaque behind it. There, the corners have nothing to
+>   hide them, and `MIXER FILL`/`CLIP` are rectangular, so a rounded plate floating over the programme
+>   **stays unachievable in v1 either way.**
+
+**Under the reorder every plate becomes the second case.** The picture is composited ON TOP of the
+page, so there is no longer anything opaque in front of its corners; `MIXER FILL` and `MIXER CLIP`
+remain rectangular. The multi-box case and the lone-plate case collapse into one, and it is the
+unachievable one.
+
+### The three candidate homes, and which survives
+
+1. **Producer-side, via a KEYER layer — the only home that does not re-impose frame alignment, and it
+   is UNMEASURED.** CasparCG's mixer offers `FILL`, `CLIP`, `CROP`, `PERSPECTIVE`, `OPACITY`,
+   `CHROMA`, `LEVELS`, `BLEND` and `KEYER`; none is a rounded mask, but `KEYER` makes a layer the key
+   for the one beneath it, and the fill+key pair is already in this design's vocabulary
+   (`live-source-multibox/design.md` §1a). A rounded-rectangle key on the layer above a plate would
+   round that plate's picture. **Cost:** one extra layer AND one extra producer per rounded plate, on
+   a band that has to stay above the plate and below the furniture. **Status: NOT VERIFIED.** This
+   project's rule is that the exact CasparCG mechanism is measured at recon and never assumed
+   (C-015 §1a says so in those words for the fill+key pair), and no such recon has run for a rounded
+   key.
+2. **Overlay-row-side, four corner patches drawn over the picture — REFUSED.** Its geometry is the
+   plate's rect, so it is CLASS 1 by `B-195`'s definition: it must move on the frame the fills move,
+   which re-imposes the exact frame-alignment requirement the single-clock switch exists to abolish.
+   Using it would trade a defect for the same defect in smaller pieces.
+3. **Dead — and this is where it already is.** The Inspector offers no `border-radius` on a
+   `video-placeholder`: the type is a "bare" kind in `field-registry.ts` and never carried
+   `BOX_DESCS`. Nothing shipped, so nothing regresses; what changes is that the reason moves from
+   "withheld pending the mechanism" to "withheld because the mechanism it was waiting for is gone".
+
+### The verdict, so this is not re-opened as a bug
+
+**Border-radius on a live plate is DEAD under the reorder, and stays dead until (1) is measured.** It
+should be re-opened by a recon that answers one question on real hardware — _does a rounded key layer
+above a plate round that plate's picture, and at what cost per plate?_ — not by an authoring request.
+If the answer is yes, it becomes a producer-side feature with a layer budget; if no, the control is
+withdrawn permanently and `design.md` §9a.1's sub-heading should say so.
+
+⚠ **What must NOT happen** is a rounded corner drawn from a row above, because it looks like the
+cheap answer and is the one shape that puts the two clocks back.
+
+- **Cross-refs:** `single-clock-look-switch` (the change that removes the punch), [[B-195]] (the
+  CLASS 1 / CLASS 2 split this verdict rests on), [[B-194]] (where the corner loss was first named),
+  [[D-155]] (aspect-lock — a different item, recorded here because this brief conflated them),
+  [[C-021]] (the DECKLINK / NDI / fill+key producer arms, where a keyer recon would belong).
+- **Number:** highest `B-` HEADING across every ref was `B-196`; `B-197` … `B-203` returned no
+  headings anywhere, and the duplicate audit printed exactly the two accepted duplicates (`B-056`,
+  `B-080`). Cross-checked against the registry's dated pointer — _"Next free after this session is
+  `B-197`"_ — headings and pointer AGREE.
+
+## [x] B-198 — ONE `MIXER` batch is not atomic: a departing box lingered a whole channel frame over the arriving plate, in 1 recording of 100 ⟨priority: high — it is the ONLY thing standing between `single-clock-look-switch` and its all-or-nothing acceptance, and it is on air⟩ — FIXED 2026-09-02 by `MIXER-BATCH-ATOMICITY-01`; measured 2026-09-01 by `SINGLE-CLOCK-SWITCH-02` §3
+
+**What:** with the plate-bearing page moved BELOW its plates and the mask retired, a look switch is
+`MIXER FILL` / `CLIP` and nothing else — and the page/mixer skew `B-174` chased for three sessions
+is **gone: `k = 0` in 100 recordings of 100**, every direction, every pair. What the measurement
+exposed underneath it is a different disagreement, between the FILLS THEMSELVES: in one recording,
+`MIXER 1-30 FILL 0 0 1 1` (the arriving full-frame plate) took effect ONE CHANNEL FRAME before
+`MIXER 1-31 FILL …` (the departing box moving off screen), so for 40 ms the outgoing box was drawn
+on top of the incoming full-frame picture.
+
+**The measurement, at `1080i5000`, `a7976e14`, on the file consumer:**
+
+| campaign                                          | recordings | `k` (channel frames) | BLACK frames | MISPLACED frames    | discarded |
+| ------------------------------------------------- | ---------- | -------------------- | ------------ | ------------------- | --------- |
+| `1 → 2` (full → two-box)                          | 10         | 0 in all 10          | 0            | 0                   | 0         |
+| `2 → 1`                                           | 10         | 0 in all 10          | 0            | 0                   | 0         |
+| `1 → 3` (full → three-box)                        | 10         | 0 in all 10          | 0            | 0                   | 0         |
+| `3 → 1`                                           | 10         | 0 in all 10          | 0            | 0                   | 0         |
+| `1 → 2 → 3` (the `2 → 3` leg, having come from 1) | 10         | 0 in all 10          | 0            | 0                   | 0         |
+| `3 → 2 → 1` (the `2 → 1` leg, having come from 3) | 10         | 0 in all 10          | 0            | **1 run: 2**        | 0         |
+| `2 → 1` again, plain, 20 more                     | 20         | 0 in all 20          | 0            | 0                   | 0         |
+| `2 → 1` again, via 3, 20 more                     | 20         | 0 in all 20          | 0            | 0                   | 0         |
+| **total**                                         | **100**    | **0 in 100 of 100**  | **0**        | **2 frames, 1 run** | **0**     |
+
+**The one run, in full** (`evidence/2026-09-01-singleclock/seq-3-2-1`, run 06):
+
+```
+probe A (the fills)  @ 40      probe B (the page)   @ 40      k = 0
+probe C (the box's own content) @ 42      <- TWO FIELDS LATE, and it is the tell
+peak MISPLACED 22.68 % of the frame, for 2 recorded frames = 1 channel frame = 40 ms
+peak BLACK 0 %   peak OTHER 0.14 %   settled-frame CONTROL 0 %
+wire: CG 1-9 UPDATE 0 "{\"__cg\":{\"look\":\"look-ghab-full\"}}"
+      MIXER 1-30 FILL 0 0 1 1
+      MIXER 1-30 CLIP 0 0 1 1
+      MIXER 1-31 FILL 0.729167 0.998148 0.001042 0.001852
+      MIXER 1-31 CLIP 0.729167 0.998148 0.001042 0.001852
+```
+
+🔴 **22.68 % IS NOT AN APPROXIMATE NUMBER — IT IS THE BOX.** `guest-2`'s rect in `look-2` is
+916 × 515 = 471 740 px of a 1920 × 1080 frame = **22.75 %**, and the classifier reads areas to
+about one 4 × 4 block. The misplaced region is the departing box, exactly, and nothing else.
+
+**Why it is NOT the defect `single-clock-look-switch` removes.** That defect was the PAGE against
+the MIXER — two independent clocks, no shared tick, `k` = 20 / 30 / 60 ms and then ±1 field. Here
+probe A and probe B read the SAME frame index in all 100 recordings including this one: the page and
+the fills are together, always. What split is `MIXER 1-30` against `MIXER 1-31` — two commands in
+ONE batch, on ONE socket, to ONE channel.
+
+⚠ **It was invisible before, and that is the honest reason it is only being filed now.** A 40 ms
+one-frame residue sat inside a 60–100 ms artefact the mask produced on every switch; there was
+nothing to see it against. Removing the larger term is what made the smaller one measurable — which
+is the ordinary shape of this kind of work and not a regression.
+
+### What it is probably NOT, checked rather than assumed
+
+- **Not a `PLAY`.** `containedPlay` is `false` and the wire above carries none. The `ghab3` fixture
+  seats every plate in every look for exactly this reason, so nothing is ever parked and nothing has
+  to be re-started.
+- **Not a dropped channel tick.** 76 frames recorded against 76 expected; the whole campaign of 102
+  recordings discarded **none** and the worst deficit anywhere was 2 frames of ~76 (2.6 %, inside
+  the harness's 4 % refusal threshold).
+- **Not the classifier's tolerance.** `settledResidualPct` is **0** for this run — the settled
+  frames either side classify as nothing at all, which is the per-run positive control the
+  classification rests on.
+- **Not the sequence.** The SAME leg (`look-2 → look-1`) ran 10 + 20 + 20 = 50 times, with and
+  without the `via` leg, and 49 were clean. The one non-zero is in the `via` set, but so are 19
+  clean ones and the plain set is 20 for 20 — this reads as a rare timing split, not as a state
+  carried across the previous switch.
+
+### The candidates, none measured
+
+1. **CasparCG applies a multi-command `MIXER` batch across two ticks when the batch straddles a
+   frame boundary.** The bridge sends the commands back to back on one socket; nothing in AMCP
+   2.5.0 makes a group of `MIXER` commands atomic with respect to the channel tick, and
+   `MIXER … DEFER` + `MIXER COMMIT` is the verb pair that exists to say otherwise. **This is the
+   first thing to measure**, and it has a cheap probe: send the same batch with `DEFER`/`COMMIT` and
+   re-run this campaign.
+2. **The bridge's own send ordering.** The batch is issued as separate `#send` calls; if any await
+   between them can yield across a tick, the split is ours rather than the server's.
+3. **The recording.** The file consumer writes one frame per FIELD at `1080i5000`, so a 40 ms
+   artefact is 2 recorded frames — which is what was seen. A capture that blended fields would show
+   this differently, but nothing here de-interlaces.
+
+### Why this blocks the change
+
+`SINGLE-CLOCK-SWITCH-02`'s acceptance is **all-or-nothing by instruction**: _"zero black and zero
+hole-misalignment in EVERY recording. Any non-zero recording is a failure — stop, report it, land
+nothing."_ 99 of 100 is an improvement of a kind the owner has rejected three times, so it is
+reported as a failure and **nothing was pushed**. The implementation exists as one local commit
+(`a7976e14`) and is not on the remote.
+
+⚠ **What a reader must NOT conclude from this item.** The reorder is not being reported as
+ineffective — the term it targets measured **zero in 100 of 100**, which is the first time any
+`B-174` campaign has produced a zero at all. What is reported is that the acceptance names a
+condition this residual also fails, and that the residual has a different cause.
+
+- **Cross-refs:** `single-clock-look-switch` (the change this gates), [[B-174]] (the page/mixer
+  skew, measured gone), [[B-192]] (term (b), producer start latency — a different residual, also
+  untouched), [[B-155]] (the `PLAY`-carrying window, excluded here by construction), [[C-021]]
+  (where a `DEFER`/`COMMIT` recon would belong).
+- **Number:** highest `B-` HEADING across every ref was `B-197`; `B-198` … `B-201` returned no
+  headings anywhere — every occurrence is a provenance sentence or this file's own pointer.
+  Cross-checked against the registry's dated pointer — _"Next free after this session is `B-198`"_ —
+  headings and pointer AGREE.
+
+### FIXED 2026-09-02 — `MIXER-BATCH-ATOMICITY-01`: the batch is STAGED, and one `COMMIT` lands it
+
+**The mechanism, from the code rather than from the symptom.** `#applyLivePlates` sends a
+seating batch line by line and **awaits each line's AMCP response before writing the next**
+(`caspar-runtime.ts`, the `for (const [i, line] of lines.entries())` loop; `#send` resolves on
+`result.response`, i.e. the ACK). So plate 2's `FILL` is not merely a separate socket write from
+plate 1's — it is a full command/ACK round trip behind it. `CommandQueue` is pipelined
+(`pipelineDepth: 4`) and this caller never fills it: **the pipeline exists and the bridge
+serialises itself.** A local round trip is O(0.2–2 ms) against a 40 ms channel frame at
+`1080i5000`, so a tick falls inside a gap a few percent of the time — which is the 1-in-50 that
+was observed.
+
+**The forced reproduction, and the false start that is worth recording.** A test-only injector
+(`faultInjection.mixerLineDelayMs`) delays `MIXER` lines at the SEND SEAM — deliberately at the
+seam and not inside the loop, because the fix changes the loop and forcing that vanished with the
+defect would prove nothing. The FIRST version delayed _every_ line and produced a **different**
+signature: `k` = 1–2 channel frames and **77.04 %** of the frame misplaced, against the reported
+`k` = 0 and 22.68 %. That is the same mechanism at the wrong amplitude — a per-line delay also
+separates a plate's own `FILL` from its own `CLIP` and drags the probe that reads the second
+plate. Narrowing the injector to the **plate boundary** (a `MIXER` line whose target differs from
+the previous one) reproduced the reported event exactly:
+
+|                 | reported, 1 run in 50     | forced, 6 runs of 6         |
+| --------------- | ------------------------- | --------------------------- |
+| `k`             | 0                         | 0                           |
+| peak MISPLACED  | 22.68132716049383 %       | **22.68132716049383 %**     |
+| peak BLACK      | 0                         | 0                           |
+| duration        | 40 ms (2 recorded frames) | 40 ms in 5 of 6, 80 ms in 1 |
+| settled control | 0                         | 0 / 0.0023 %                |
+
+Identical to fifteen significant figures, because it is the same box.
+
+**What this build offers, measured on the wire, with a control.** `MIXER … FILL … DEFER` answers
+`202 MIXER OK` and the getter still reports the OLD value; `MIXER 1 COMMIT` answers `202` and the
+getter then reports the new one. The control that makes those readings mean anything: a bogus
+trailing token (`… FILL 0 0 1 1 BANANAS`) answers **`501 MIXER FILL FAILED`** and `MIXER 1 BANANAS`
+answers **`400 ERROR`** — this parser does not silently swallow words it does not know.
+
+🔴 **AND TWO SCOPE FACTS THAT ARE WIDER THAN THE VERB LOOKS, BOTH MEASURED:**
+
+1. **A commit is CHANNEL-WIDE.** `MIXER 1-30 COMMIT` applied a change staged on **1-31** as well —
+   the layer token is accepted and IGNORED. There is no per-layer commit.
+2. **The staging area is SHARED BETWEEN CONNECTIONS.** A change deferred on socket B was applied
+   by a `COMMIT` issued on socket A. And a deferred change nobody commits **hangs** (1500 ms with
+   no commit left it unapplied).
+
+**The fix.** Every `MIXER` line of a seating batch goes out with ` DEFER` — appended at the ONE
+send site through `CommandBuilder.deferMixer`, which returns a `PLAY` untouched, so a `MIXER` added
+to that batch later is staged by construction rather than by somebody remembering. A single
+`MIXER <ch> COMMIT` is sent **after every plate has staged, arriving and departing alike** (the
+off-frame park is the departing half and stages with the rest), and **before** the clearing sweep,
+whose `MIXER … CLEAR` is applied at once and must not be undone by a later commit. A failed batch
+commits early rather than being left staged, because a staged change nobody commits hangs and would
+then be applied by whatever commits next, at a moment nothing chose; committing it reaches exactly
+the state a failed batch reached before `DEFER`, which is what `B-166`'s rollback is written for.
+
+⚠ **The rollback itself is NOT deferred, and that is a scope decision rather than an oversight.**
+`B-166`'s re-fit re-emits the prior geometry on a failure path; it is non-atomic today, it was not
+what this defect measured, and deferring it would need its own commit inside a path that is already
+unwinding. Filed as a known residual rather than fixed silently.
+
+🔴 **WHAT THE OWNER MUST DECIDE, BECAUSE IT IS NOT A CODE QUESTION.** `command-builder.ts` carried a
+standing ban on this verb pair — _"which this project forbids until it is known whether `COMMIT`
+applies only the deferring connection's queue; on a plant running several stations against one
+CasparCG, a `COMMIT` that applies everyone's is the same harm the channel-scope ban exists to
+prevent."_ **That question is now answered, and the answer is unfavourable: it applies everyone's.**
+What the fix does about it is bound the exposure, not remove it:
+
+- our `COMMIT` is issued only when **we** have staged something, so an empty batch of ours never
+  sweeps somebody else's;
+- the window between our first `DEFER` and our `COMMIT` is one seating batch — milliseconds;
+- the only party that can be harmed is one that itself uses `DEFER` on the same channel, and the
+  only party that can harm us is one that issues `COMMIT` on it.
+
+`reservedLayers` exists precisely because the company's PLAYOUT system drives the same CasparCG, so
+this is not hypothetical — but whether that system uses `DEFER` is a fact about their software that
+cannot be read from here. **If it does, this needs a different answer; if it does not, the ban's
+premise no longer applies and the comment should be replaced by this record.**
+
+### 2026-09-02 — the two questions `MIXER-DEFER-SAFETY-01` was sent to answer
+
+**§2 — has anything else on this server ever used `DEFER`? The log CAN answer it, and the answer is
+no — for this machine.**
+
+AMCP command logging is ON at `[info]` and records the peer:
+`Received message from 127.0.0.1: MIXER 1-30 FILL 0 0 1 1`. Retention as found:
+`D:\programs\casparcg-server-v2.5.0-stable-windows\log`, **14 files, `caspar_2026-07-28.log` …
+`caspar_2026-09-02.log`** — one per day the server ran, so 14 days of coverage across a 37-day span.
+
+|                        | count  | peers                                  | channels           |
+| ---------------------- | ------ | -------------------------------------- | ------------------ |
+| every command received | 49 436 | `127.0.0.1` (49 216) + `Console` (220) | —                  |
+| `MIXER … DEFER`        | 1 440  | **`127.0.0.1` only**                   | **channel 1 only** |
+| `MIXER … COMMIT`       | 286    | `127.0.0.1` only                       | channel 1 only     |
+
+Of the 1 440 deferrals, **1 436 are from 2026-09-02** — this project's own campaigns. The other
+**four are from 2026-08-15**, on layers 20/21, paired with two commits at 12:49:43 and 14:25:21: a
+hand probe, and almost certainly the recon that produced the ban's wording in `command-builder.ts`.
+`DEFER` appears nowhere outside a received command (0 hits).
+
+⇒ **No other client has ever deferred on channel 1 in the retained window.** ⚠ **AND THAT DOES NOT
+TRANSFER TO THE PLANT.** Every peer in 49 436 commands is loopback: **no remote client has ever
+connected to this server at all.** This is the development machine; `reservedLayers` describes a
+plant where a separate playout system drives the same CasparCG, and this log is silent about it. The
+question is answered for the box the measurement was taken on and is open for the one that matters.
+
+**2026-09-05 — and now answered for the plant, by the owner's own enumeration** (`MIXER-DEFER-ABORT-01`):
+over every retained CasparCG log on the playout machine (`192.168.21.114`), exactly **two** senders
+have ever issued an AMCP command — `192.168.21.93` (this bridge) and `Console`. No second client has
+ever connected, so no foreign `DEFER` or `COMMIT` has ever existed there: the cross-connection half
+is **dormant — real in design, absent in practice** (retained logs, not the machine's whole history).
+The record, the re-runnable command and the condition that wakes it live where the mixer path is
+changed — `command-builder.ts`, `deferMixer`'s doc — and the half that needs no second client, our
+own commit failing to ARRIVE, is [[B-221]].
+
+**§5 — the pipelining fallback, costed. It is NOT a substitute.**
+
+The root cause is that the bridge awaits each line's ACK while `CommandQueue` is already pipelined at
+`pipelineDepth: 4`. Removing the awaits has zero cross-connection exposure — so it is the obvious
+fallback if the `DEFER` ban has to be reinstated. Measured as the wall-clock span from the FIRST to
+the LAST `MIXER` line of one batch, taken from the **server's own log timestamps** (the only clock
+that shares a frame with the channel tick), 16 batches of 5–22 lines each way, same fixture, back to
+back:
+
+|                                            | min    | p50        | p90    | max     |
+| ------------------------------------------ | ------ | ---------- | ------ | ------- |
+| **serialised** (awaits, as at `eb228a64`)  | 1.0 ms | **2.0 ms** | 5.0 ms | 80.0 ms |
+| **pipelined** (awaits removed, no `DEFER`) | 0.0 ms | **2.0 ms** | 3.0 ms | 65.0 ms |
+
+As a fraction of the 40 ms frame — **and that fraction IS the split probability**: p50 **5.0 % → 5.0 %**,
+p90 12.5 % → 7.5 %.
+
+🔴 **Pipelining moves the median not at all.** On loopback the ACK round trip is already
+sub-millisecond, so the awaits were never what dominated the window; the residual is ~5 % of a frame
+either way, which is the same order as the 1-in-50 (2 %) the defect was measured at. **It would not
+have closed `B-198`.** `DEFER`/`COMMIT` is atomic by construction and has no residual at all — the
+picture does not move until the commit, whatever happens in between.
+
+⚠ **What this does NOT say.** It was measured with CasparCG on the same host. On a plant where the
+server is across a LAN the round trip is milliseconds, the serialised window grows with it, and
+pipelining would then buy a great deal more — but so would the residual, and it would still not be
+zero. If the fallback is ever taken, re-measure it there rather than carrying these numbers over.
+
+⚠ **A first attempt at this measurement was wrong and is recorded so the numbers are not read as
+better than they are:** the pipelining patch initially re-sent every line on each iteration, which
+inflated the batches to 9–49 lines and made the two columns incomparable. The table above is the
+corrected run, at 5–22 lines both ways — the same shape as the serialised one.
+
+## [x] B-199 — a seating batch that DIES between its first `DEFER` and its `COMMIT` leaves a staged change the next commit — anyone's — puts on air ⟨priority: high — it survives the process that made it, and it lands attached to an action that had nothing to do with it⟩ — FIXED 2026-09-02 by `MIXER-DEFER-SAFETY-01`
+
+**What:** `B-198` made a look switch atomic by staging every `MIXER` line and committing once. That
+opens a window between the first `DEFER` and the `COMMIT`, and a batch that THROWS inside it reaches
+neither of the commit points on the ordinary paths. Nothing on a normal path throws there — `#send`
+converts every wire failure into `{ ok: false }` — but a `TypeError`, a bad plan, or a process death
+does, and the staged line then outlives the batch that made it.
+
+**The three outcomes, measured on the plant (CasparCG 2.5.0, channel 1), and the first is the one
+that decides:**
+
+| branch                            | what was done                                                                             | what happened                                                                                             |
+| --------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **dropped connection**            | staged a `FILL`, **destroyed the socket**, reconnected, committed from the NEW connection | the dead connection's change **was applied**. `0 0 1 1` → `0.42 0.42 0.3 0.3`                             |
+| **hang**                          | staged one plate, never committed                                                         | on air stayed the OUTGOING geometry, unchanged, at +0.5 s, +2 s and +5 s — nothing half-applied …         |
+| **hang, then an unrelated batch** | staged a change on a DIFFERENT layer and committed that                                   | …and the stale half was flushed **with it**: layer 30 moved to `0.11` on a commit that was about layer 31 |
+| **commit anyway**                 | staged one plate, committed                                                               | plate 1 on the new geometry, plate 2 on the old — a shape no look authored, **persisting**                |
+
+🔴 **A DROPPED CONNECTION DOES NOT CLEAR THE STAGING AREA.** That is the fact that makes this worth
+a high priority rather than a note: a bridge that crashes mid-batch leaves a landmine in the server,
+and the next commit from ANY client — the next bridge start, another station, the playout system —
+detonates it at a moment nothing chose.
+
+**Why the commit-anyway branch is the one to choose, rather than the least bad of three.** It is
+bounded, immediate, and attached to the action that caused it, so an operator can attribute it — and
+it is REPAIRABLE, which the other two are not. The ledger (`#liveLayers`) is written by
+`registerLiveLayers`, which is past the throw, so it still describes the geometry the row was on and
+the console is still showing. Re-emitting it puts the picture back where the sentence says it is.
+`B-166`'s rollback is the same move on the failure-CODE path; this is it on the failure-THROW path.
+
+**The fix.** `#applyLivePlates` is now a thin guard around `#applyLivePlatesUnguarded`:
+
+```ts
+try {
+  return await this.#applyLivePlatesUnguarded(itemId, plan, mode);
+} finally {
+  const abandoned = this.#stagedMixerChannel !== null;
+  await this.#commitStagedMixer(); // idempotent — ordinary paths cost nothing
+  if (abandoned) await this.#reassertLedgerGeometry(itemId);
+}
+```
+
+⚠ **A WRAPPER, not a `try` inside the method**, because the method has TWO callers — `#takeImpl` and
+`reconcileLivePlates` — and a guard either of them could be added without is one somebody eventually
+is. The staging accumulator moved from a local to `#stagedMixerChannel` for the same reason: the
+thing that drains it has to sit outside the thing that fills it.
+
+**Red-first, and the seam that makes it possible.** Nothing on an ordinary path throws inside the
+window, so a test needs a fault injector: `faultInjection.throwAfterMixerLines` throws after N
+**STAGED** lines — counted on ` DEFER`, not on `MIXER`, so the throw is guaranteed to land inside
+the window rather than on a caller's own un-staged mixer command (a take's un-mute is the one that
+caught this). Two tests: a TAKE that dies still commits what it staged (its ledger is empty, so there
+is correctly nothing to re-assert), and a SWITCH that dies commits AND re-asserts every layer the
+ledger names, un-deferred. **Removing the `finally` reddens both.**
+
+- **Cross-refs:** [[B-198]] (the staging this guards), [[B-166]] (the same repair on the failure-code
+  path), [[B-200]] (the rollback that is still un-deferred).
+- **Number:** highest `B-` HEADING across every ref was `B-198`; `B-199` … `B-205` returned no
+  headings anywhere. Cross-checked against the registry's dated pointer — _"Next free after this
+  session is `B-199`"_ — headings and pointer AGREE.
+
+## [ ] B-200 — `B-166`'s rollback re-fit is not staged, so an all-or-nothing undo can itself land across two frames ⟨priority: low — a failure path, and the frames it can split are already a refused switch⟩ — OPEN, filed 2026-09-02 from `MIXER-DEFER-SAFETY-01` §6
+
+**What:** `B-198` stages every `MIXER` line of a SEATING batch so a switch's geometry lands on one
+channel frame. `B-166`'s rollback — the re-emission of the prior geometry when a switch is refused
+part-way — is still sent un-deferred, line by line. It is therefore exposed to exactly the split
+`B-198` closed: measured at 1 recording in 50 on the forward path, and there is no reason the undo
+would be luckier.
+
+**Why it was left, stated rather than hidden.** It is a FAILURE path; the frames it can split belong
+to a switch the operator is being told did not happen, so the artefact rides on top of a state that
+is already wrong and already being reported. Deferring it needs a commit of its own inside a path
+that is already unwinding, and `B-199`'s guard now commits on the way out — so a rollback that
+deferred without its own commit would be flushed by that guard at a moment neither of them chose.
+It is a small change that has to be made carefully, not a small change.
+
+**What closing it looks like:** stage the rollback's `mixerFit` lines and commit them before the
+method returns, with the `B-199` guard left as the backstop rather than the mechanism. The existing
+`B-166` all-or-nothing tests pin the CONTENT of the rollback and would carry over unchanged; what is
+missing is a wire-order test that the rollback's lines are staged and committed exactly once.
+
+- **Cross-refs:** [[B-166]] (the rollback itself), [[B-198]] (the staging), [[B-199]] (the guard that
+  constrains how this can be done).
+- **Number:** derived in the same sweep as `B-199` above — highest heading `B-198`, `B-199` … `B-205`
+  absent, registry pointer `B-199`; `B-200` is the next after the one this session took.
+
+## [x] B-201 — the offline mock never learned the bed half: it published no bed slots and refused every bed row as `not-fixed`, so ELEVEN Runtime E2E specs could not load a plate-bearing package anywhere ⟨priority: high — it is the whole offline surface for the feature `a7976e14` shipped, and it made CI unreadable for three runs⟩ — FIXED 2026-09-02 by the `MIXER-DEFER-SAFETY-01` delta
+
+**What:** `single-clock-look-switch` (`a7976e14`) split the bank in two and made the halves refuse
+each other: a package that declares live plates is a graphics BED, so the picker disables `Load`
+for it on an operator row (`requiredBankFor`) and the bridge refuses the same thing as
+`wrong-bank`. The bridge learned the new half for free, because its `LayerManager` is fenced at
+boot with `fixedBankSlots(bank)` — the UNION — and answers every membership question from that
+set.
+
+🔴 **`MockRuntime` holds no fenced set. It rebuilt the range by hand, in FOUR places, and every
+one of them was the operator half:**
+
+| site                 | what it did                                          | what it should ask     |
+| -------------------- | ---------------------------------------------------- | ---------------------- |
+| `fixedLayersState()` | looped `start … start + count - 1`                   | `fixedBankSlots(bank)` |
+| `loadFixed()`        | `layer < bank.start + bank.count`, else `not-fixed`  | `isFixedBankLayer`     |
+| `clearBankLayer()`   | the same range, else `not-in-bank`                   | `isFixedBankLayer`     |
+| `clearLayer()`       | the same range, so ours-vs-foreign was never reached | `isFixedBankLayer`     |
+
+So the offline Layers panel had **no bed rows at all** — no `Graphics beds` group head, and no row
+a bed package could go on — and even when aimed at one directly, the load answered `not-fixed`.
+The seed's own comment claimed it showed "both groups exactly as a real station does". It showed
+one.
+
+**What it cost, measured.** Eleven specs across five files (`assignment-freeze`,
+`live-source-sources`, `look-inputs`, `pvw-live-plate-placeholder`, `pvw-look-source-name`) each
+failed as `locator.click: Test timeout of 30000ms exceeded` waiting on a **disabled** `Load`
+button. On CI (`workers: 1`, `retries: 1`, `timeout: 30_000`) that is `11 × 2 × 30 s = 11 min` of
+pure timeout plus the ~1.8 min the suite takes green — against a 20-minute job cap, so the run was
+killed mid-suite with turbo still buffering and **nothing was ever printed**. Three runs running:
+`33632277519` attempts 1 and 2, and `33637419829`. See `P-038` — the reason this rode two pushes
+is not that the failure was subtle, it is that CI could not say it.
+
+🔴 **THE SHAPE, and it is golden rule 6 with the serial numbers filed off.** `a7976e14` was
+careful: it put the union in ONE function and routed every bridge-side consumer through it. What
+it did not do is look for consumers that were not asking a FUNCTION at all — four inline
+`start`/`count` arithmetic expressions, each a predicate in everything but name, each answering a
+narrower question than the code around it believed it asked. **A range rebuilt by hand is a second
+derivation**, and it cannot be found by grepping for the predicate's name, because it never uses
+the name.
+
+**The fix.**
+
+- `isFixedBankLayer(bank, channel, layer)` added beside `fixedBankSlots` in
+  `packages/shared-ipc/src/channels/fixedLayers.ts` — the membership question the bridge never had
+  to ask out loud, now askable by anything that holds a bank instead of a fenced set. Channel is
+  part of the question, not the caller's job.
+- All four mock sites go through it (`fixedLayersState` through `fixedBankSlots`, the other three
+  through the predicate), and aliases through `layerAlias`, which answers from the half that OWNS
+  the layer.
+- `seedFixedObservations` seeds the bed rows `empty`, derived from the seeded bank rather than a
+  literal range: an unseeded bed row reads `unknown`, which the occupancy gate refuses for a
+  DIFFERENT reason, and two refusals in a row is two rounds of work.
+- `loadTemplate` in the E2E fixture takes the next free row **of the half the package belongs
+  on**, via `requiredBankFor` — the same predicate the picker and the bridge use, never a local
+  guess. A caller that names a layer still gets it unchanged, so a spec can still aim at the wrong
+  half deliberately.
+- The mock's bed half now derives `start`/`count` from `defaultFixedLayerBank()` and states its
+  E2E deviation (all rows ticked, because Playwright reaches a row by clicking it) as an explicit
+  `visibility` record rather than an omission.
+
+**Proof:** the five spec files go 11 failed → **12 passed**, and their wall time drops 55.4 s →
+17.7 s, which is the eleven 30-second timeouts leaving.
+
+- **Cross-refs:** [[B-202]] (the same restated-instead-of-derived shape one layer down, on the
+  SHIPPED path), [[P-038]] (why CI could not tell anyone), [[B-100]] and [[P-012]] (a second copy
+  is how a rule drifts).
+- **Number:** highest `B-` HEADING across every ref was `B-200`; `B-201` … `B-205` returned no
+  headings anywhere (every hit is a prior session's derivation note). Cross-checked against the
+  registry's dated pointer — "Next free after this session is `B-201`" — headings and pointer
+  AGREE.
+
+## [x] B-202 — two answers to "the default bed bank": a station whose config file predates the beds comes up with NINE visible bed rows where a fresh install gets TWO ⟨priority: medium — display noise rather than air, but it lands on the installs that have been running longest⟩ — FIXED 2026-09-02 by the `MIXER-DEFER-SAFETY-01` delta
+
+**What:** there are exactly two ways a bank reaches a reader with no bed half of its own, and they
+were computed by different code.
+
+| path                            | who takes it                                                                                       | what it produced                                                     |
+| ------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| the schema's `low` `.default()` | a persisted `bridge-fixed-layers.json` written before `a7976e14` — i.e. **every upgraded station** | `{ start, count }` with **no `visibility`** ⇒ **9** visible bed rows |
+| `defaultFixedLayerBank()`       | a station with no file at all                                                                      | ticks written out in full ⇒ **2** visible bed rows                   |
+
+`isLayerVisible` reads an ABSENT tick as VISIBLE, so the omission is not "unspecified", it is the
+maximum. And it contradicts the file's own stated intent one screen above:
+`DEFAULT_LOW_BANK_VISIBLE_ROWS` is documented as "TWO, not nine and not one … nine visible bed rows
+would be eight rows of noise".
+
+The chain to an operator's screen is short and every hop is ordinary: `bin/caspar-bridge.mjs`
+always configures a `fixedLayersPath`, a PRESENT file is `FixedLayerBankSchema.safeParse`d in
+`fixed-layers-store.ts`, that feeds `fixedBankSlots`, which feeds the per-slot publish, and
+`LayersPanel` filters on `isLayerVisible`. Nine rows pass. `saveFixedLayerBank` writes on every
+applied `setConfig`, so any station that ever touched bank config has such a file — and
+`NoBankModal` still tells operators to hand-write one with no `low` key.
+
+**Effect is DISPLAY ONLY, and that is measured rather than assumed:** fencing derives from
+`start`/`count` and never from the tick record, so a widened tick set changes which rows are SHOWN
+and nothing about what is allocated or what reaches air.
+
+⚠ **Neither answer was asserted.** The test literally named "the schema's own defaults agree with
+it — one answer to 'the default bank'" checked `start` and `count` on the **operator** half and
+never looked at `low`; the low-bank test asserted `parsed.low` equals `{ start, count }` — the
+shape, not the picture. **The divergence sat underneath the one test named for preventing it.**
+
+**The fix.** `defaultLowBankVisibility()` is now the single computation, called by BOTH the
+schema's `.default()` (as a thunk, so each parse gets its own record) and `defaultFixedLayerBank`.
+Three assertions were added, and all three redden when the fix is removed:
+
+1. the upgrade parse yields the ticks, not just the shape;
+2. the UPGRADE path and the FRESH path show the SAME bed rows — asserted on what is VISIBLE rather
+   than on record shape, because an absent tick and an explicit `true` are the same picture and it
+   was the picture that diverged;
+3. each parse gets its own tick record.
+
+- **Cross-refs:** [[B-201]] (the same shape in the offline mock), [[B-195]] (the one-in-twelve
+  measurement `DEFAULT_LOW_BANK_VISIBLE_ROWS` is derived from).
+- **Number:** derived in the same sweep as `B-201` above — highest heading `B-200`, `B-201` …
+  `B-205` absent, registry pointer `B-201`; `B-202` is the next after the one this session took.
+
+## [x] B-203 — the Layers panel calls a BED row `Layer 1`, which is already the name of an operator row: two rows, one name, on the surface air is driven from ⟨priority: high — a duplicate row name on a playout surface, and the row it collides with is the top operator row⟩ — FIXED 2026-09-02 by the `MIXER-DEFER-SAFETY-01` delta
+
+**What:** `defaultLayerAlias` is the canonical row name and it knows about both halves — it
+picks the WORD from `isLowBankLayer` (`Bed` vs `Layer`) and the NUMBER from `bankPosition`,
+which counts down from each half's OWN top. `FixedBankConfigModal` calls it. The rehearsal
+overlay's `rowNameFor` calls it. **`LayerRow` did not:**
+
+```ts
+const rowName = slot.alias ?? `Layer ${String(bankPosition)}`; // LayerRow.tsx
+```
+
+It was handed a bare `bankPosition: number` and formatted the label itself — correct for
+exactly one half of the bank. So on the operator's main list, with the default bank:
+
+| row                         | what `defaultLayerAlias` says | what the Layers panel said |
+| --------------------------- | ----------------------------- | -------------------------- |
+| layer 89 (top operator row) | `Layer 1`                     | `Layer 1`                  |
+| layer 9 (top bed row)       | `Bed 1`                       | **`Layer 1`**              |
+
+🔴 **Two rows with the same name, on the surface an operator takes to air from** — and the
+accessible name and tooltip carried it too (`Row 21 · Layer 1 · CasparCG layer 1-9`), so it
+was not a display-only truncation but the row's identity everywhere the panel states it. The
+same row simultaneously answered to `Bed 1` in the bank config dialog and in the rehearsal
+overlay, so the three surfaces disagreed about what to call one layer.
+
+**Why nobody saw it:** `B-201`. The offline mock never published bed slots at all, so no bed
+row has ever rendered in the E2E suite or in test mode — there was no bed row anywhere to
+carry a wrong label. The two defects are one investigation and the second was only reachable
+once the first was fixed.
+
+**The fix.** `LayerRow` takes `defaultAlias: string` — the whole answer, resolved by the PANEL
+through `defaultLayerAlias` — instead of `bankPosition: number` it formats itself. That is the
+same shape `acceptsBank` already used one prop below: the row is handed the answer, and the
+one derivation lives in the panel for every row.
+
+**Pinned by** `fixed-layers.spec.ts`, which now asserts the top bed row reads `Bed 1` — an
+assertion that could not have existed before, because the row did not render.
+
+⚠ **This is the FIFTH hand-restated derivation from the same change**, and the first in
+SHIPPED renderer code rather than in the mock or a test. The other four are catalogued under
+`B-201`. The pattern is worth naming once more because it is what a `git grep` for the
+predicate's NAME cannot find: `` `Layer ${n}` `` never mentions `defaultLayerAlias`, so the
+only way to it is to ask which code CONSTRUCTS a value the canonical function already owns.
+
+- **Cross-refs:** [[B-201]] (why no bed row ever rendered, and the other four restatements),
+  [[B-202]] (the same shape in the schema default).
+- **Number:** highest `B-` HEADING across every ref was `B-202` (taken earlier this session);
+  `B-203` … `B-207` returned no headings anywhere. The registry entry for this session names
+  `B-203` as next free; headings and pointer AGREE.
+
+## [x] B-204 — the bridge's startup VOLUME recovery walks the operator half only, so a bed row muted by a dead rehearse is never re-asserted ⟨priority: medium — the ordinary take path self-heals it, so this is the belt of a belt-and-braces that is missing for half the bank⟩ — FIXED 2026-09-02 by `BANK-HALF-SWEEP-01`
+
+**What:** `#reassertDeclaredVolumes` exists because **mixer state is CHANNEL state and survives the
+bridge process**. Its own comment states the case: _"A bridge that died mid-rehearse left a muted
+layer behind … without this the next operator would take that graphic to air silent, with nothing
+anywhere explaining why."_ It runs once when the primary first becomes reachable, best-effort and
+idempotent.
+
+It iterates `bank.start … bank.start + bank.count - 1` — **the operator half, and nothing else**
+(`tools/caspar-bridge/src/caspar-runtime.ts`). Bed rows 1–9 get no `MIXER VOLUME` re-assert at
+startup.
+
+The mute that strands them is not half-aware, which is what makes the asymmetry reachable: rehearse
+entry sends `mixerVolume(slot, 0)` for whatever slot the item is on, with no bank-half test. A bed
+row can rehearse — it is a row like any other — so it can be left muted by a process that dies.
+
+⚠ **WHAT KEEPS THIS AT MEDIUM, stated rather than left for the reader to hope:** `take()` sends
+`mixerVolume(slot, INTENDED_VOLUME)` **unconditionally**, deliberately not gated on
+`#rehearsing.has(itemId)` — the comment there says gating it _"would reintroduce exactly the
+dependence on our own bookkeeping being correct that this exists to remove"_. So an ordinary take
+of that bed row un-mutes it. The residual is every route to air that is NOT a take of that row: a
+reconcile, a look switch that re-seats without a take, or an operator reading a level meter and
+finding a bed silent for a reason nothing explains. That residual is precisely what
+`#reassertDeclaredVolumes` was written to close, and it is closed for twenty rows and open for nine.
+
+**What closing it looks like:** iterate `fixedBankSlots(bank)` instead of the operator range — the
+same one-line shape used to fix the four `MockRuntime` copies in `B-201`. It is a WIRE-PATH change
+(it emits `MIXER VOLUME` on nine more layers at startup), so it was deliberately NOT made by the
+session that found it: `MIXER-DEFER-SAFETY-01` authorised exactly one wire-path change and this is
+not it. Filed, not hidden.
+
+**The fix (`BANK-HALF-SWEEP-01`, 2026-09-02).** `#reassertDeclaredVolumes` iterates
+`fixedBankSlots(bank)` — the union, from the one function that returns it — instead of the
+operator range. Nine more `MIXER VOLUME 1` lines at startup on a default bank, all `normal`
+priority, all idempotent. Red-first: a new `rehearse.integration.test.ts` case boots a bank whose
+beds sit at **2–6** (not the default 1–9, so a hand-widened `1 … 9` fails as loudly as a missing
+walk), mutes ONLY the bed rows, and asserts every one reads `1` after first reachability; the
+existing "covers EVERY declared row" case now derives its rows from `fixedBankSlots` too. Both
+were run against the unfixed bridge first: `bed layer 2: expected +0 to be 1`. Walking the operator
+range again reddens both.
+
+**The "medium" reasoning, VERIFIED rather than inherited.** `take()` does send
+`mixerVolume(slot, INTENDED_VOLUME)` unconditionally and un-gated on `#rehearsing`
+(`caspar-runtime.ts`, the `volumeOk` send), so an ordinary take of the row does heal it — that
+part holds. The residual is every route to air that is NOT a take of that row, enumerated:
+
+| route                                                                                                                 | does it un-mute the row?                                                                    | left after this fix?                                                      |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| a take whose own `MIXER VOLUME` line FAILED (`volumeOk.ok === false`)                                                 | no — the take proceeds and only logs; the startup re-assert is the backstop                 | equal on both halves now                                                  |
+| the row goes live by ANOTHER route while rehearsing, and the bridge dies before `#abortRehearsalsThatWentLive` sweeps | no — `#rehearsing` is empty after a restart, so nothing exits the rehearse                  | equal on both halves now                                                  |
+| `restore` / reconnect re-`ADD` (`#decidePendingRestores` → `#sendAdd`)                                                | no — every producer the bridge creates is created MUTED (C-015 §6.5); only a take raises it | by design, both halves                                                    |
+| a look switch (`reconcileLivePlates`)                                                                                 | touches PLATE layers' volume (held/un-held), never the row's own CG layer                   | n/a                                                                       |
+| `update` (UPDATE)                                                                                                     | no `PLAY`, no un-mute — golden rule 10                                                      | by design                                                                 |
+| the operator reading a meter and finding a bed silent for a reason nothing explains                                   | no                                                                                          | the window is now startup → first reachability, same as the operator half |
+
+**Medium stands**, with one thing the entry did not say: the bed WORKFLOW makes any residual last a
+programme rather than a segment. `DEFAULT_LOW_BANK_VISIBLE_ROWS` is two precisely so the next
+programme's bed can be rehearsed while the current one is on air, so the bed that is rehearsing is
+the one a crash mutes, and the one whose next take is at the programme boundary. Before this fix
+that was a programme-length exposure to every row in the table; after it, the same rows are re-asserted at
+the moment they were for the operator half.
+
+⚠ **What the re-assert itself does NOT consult, recorded rather than left implicit.** It blankets
+every declared row with `VOLUME 1` and asks nothing about what is on the layer
+(`live-source-multibox/design.md` records this as a constraint on the Live Source range). A
+producer that survived the dead process on a declared row — ours, loaded-but-not-taken and
+therefore created muted, or a foreign one — is un-muted at first reachability until the restore
+sweep adopts it. That is a pre-existing property of the operator half and it now applies to nine
+more layers, all template layers: beds lie BELOW the Live Source band by `low-bank-not-below-band`,
+so no live box can be un-muted here. Filed as [[B-207]], not fixed — it is a wire-path change beyond
+the two this session authorised.
+
+- **Cross-refs:** [[B-201]] (the same restatement, four times, in the mock), [[B-205]] (the other
+  bridge-side instance, found in the same sweep), [[P-039]] (the guard that now flags the shape),
+  [[B-207]] (what the re-assert consults about the layer: nothing).
+- **Number:** highest `B-` HEADING across every ref was `B-203` (taken earlier this session);
+  `B-204` … `B-208` returned no headings anywhere. The registry entry for this session names
+  `B-204` as next free; headings and pointer AGREE.
+
+## [x] B-205 — the fail-closed UNTICK gate walks the operator half only, so a live config install can hide a bed row whose occupancy cannot be verified ⟨priority: medium — a safety gate that silently does not apply to half the bank⟩ — FIXED 2026-09-02 by `BANK-HALF-SWEEP-01`
+
+**What:** installing a bank LIVE is validated like a load, **plus** a fail-closed untick rule that
+`validateFixedBank` cannot carry on its own. The rule's purpose is in its own comment: _"A LIVE
+install that arrives with layers already hidden must not slip an occupied or unverifiable layer out
+of sight in one step."_ It raises `untick-occupied` or `untick-unknown`.
+
+The loop that enforces it runs `next.start … next.start + next.count - 1` — **the operator half**.
+A `git grep` of the whole method finds exactly ONE such loop; there is no bed-half equivalent
+anywhere. So a live install may hide any bed row it likes, and the refusal never fires.
+
+⚠ **WHAT KEEPS THIS AT MEDIUM, and it is a genuine partial mitigation rather than a reason not to
+fix it.** `LayersPanel` filters rows on
+`isLayerVisible(bank, layer) || slot.binding !== null || slot.observed.kind === 'producer'` —
+part A's honesty override, which keeps a BOUND or observably-OCCUPIED row visible whatever its
+tick. That covers the `untick-occupied` half: a bed row carrying a producer stays on screen even
+if hidden.
+
+🔴 **It does NOT cover `untick-unknown`, which is the half that fails closed for a reason.** A bed
+row whose occupancy is UNVERIFIABLE is neither bound nor observed as a producer, so the honesty
+override does not retain it — and the gate that should have refused the untick never ran. The row
+disappears from the operator's list while the bridge cannot say whether anything is on it. "We do
+not know" is exactly the state the rule refuses to let anyone hide, and it is hideable on nine
+rows.
+
+**What closing it looks like:** run the same body over `fixedBankSlots(next)` rather than the
+operator range, so both halves meet one gate. WIRE-ADJACENT and safety-critical (it changes when a
+config install is REFUSED), so it was not made by the session that found it, for the same reason as
+`B-204`. The existing `untick-occupied` / `untick-unknown` tests would carry over; what is missing
+is a bed-row case for each.
+
+**The entry under-counted, and the correction is the first thing the fix records.** It said a
+`git grep` of the method found "exactly ONE such loop". That was true of `setFixedLayers` — the
+LIVE-INSTALL path, taken when no bank is in force — but the LIVE-CHANGE path it delegates to,
+`validateFixedBankChange` in `fixed-layers-store.ts`, walked `next.start … bankEnd(next)` too. So
+the hole was not "a live config install can hide a bed row": **every live tick change could**, on
+every station that already had a bank, which is all of them. Both loops are closed here.
+
+**The fix (`BANK-HALF-SWEEP-01`, 2026-09-02).** Both walks iterate `fixedBankSlots(next)`; the
+bodies are unchanged. Red-first, four tests, each run against the unfixed gate before the fix and
+each with the beds at **2–6** rather than the default 1–9 so a hand-widened `1 … 9` cannot pass:
+
+| path                        | test                                                                                                                                               | red before the fix                           |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| change, occupied bed        | `fixed-layers-store.test.ts` — `untick-occupied` naming `layer 4`                                                                                  | `expected FixedLayersConfigError` (no throw) |
+| change, unknown bed         | `fixed-layers-store.test.ts` — `untick-unknown` naming `layer 6`, distinguishable                                                                  | `expected FixedLayersConfigError` (no throw) |
+| change, over REAL occupancy | `fixed-layers-wire.integration.test.ts` — S10's three steps on a bed: blind refuses, empty applies on the BED record, a foreign `PLAY 1-6` refuses | blind untick accepted (`ok: true`)           |
+| install, unknown bed        | `template-persistence.integration.test.ts` — pre-hidden bed `3` refuses blind, applies once hearing                                                | install accepted (`ok: true`)                |
+
+A fifth pins the symmetry that an ALREADY-hidden bed row is not re-adjudicated. Removing the bed
+half from either walk reddens the tests on that path.
+
+**What the gate now refuses that it did not before — stated so nobody meets it as a surprise.**
+On a bank whose beds are declared (every bank since `a7976e14`, including upgraded ones through
+the schema default):
+
+1. Unticking a bed row while the CasparCG link is down, or while no fresh OSC has been heard,
+   is REFUSED with `untick-unknown` naming the layer. Yesterday it applied silently, and the row
+   left the operator's list while the bridge could not say whether anything was on it.
+2. Unticking a bed row that carries a producer — ours or foreign — is REFUSED with
+   `untick-occupied`. Yesterday it applied; the panel's honesty override kept the row on screen
+   anyway, so the operator saw no change but the config carried a tick the gate would have refused.
+3. Installing a bank live with a bed row pre-hidden is subject to both refusals.
+
+The operator-visible surface is the bank-config dialog, which already renders both codes for
+operator rows ("an occupied (or unverifiable) row cannot be unticked until its template is
+removed") — the sentence was true of half the rows and is now true of all of them. No new code,
+no new message: the refusal the operator meets on a bed row is the one they already meet on an
+operator row, and the offline mock refuses neither (it has no untick gate), so no E2E spec changes.
+
+⚠ **Adjacent, found while reading the same function, and NOT fixed here:** `validateFixedBankChange`
+refuses `start`, `channel` and `count` changes mid-session but says nothing about `low.start` or
+`low.count`, while two comments (`sources.ts`'s bed-band check, the config modal) state that the bed
+range "is fixed at install and the validator refuses a change". It does not. That is a NEW refusal,
+which this fix must not smuggle in — filed as [[B-206]].
+
+- **Cross-refs:** [[B-204]] (the other bridge-side instance), [[B-201]] (the pattern, catalogued),
+  [[P-039]] (the guard that now flags the shape), [[B-206]] (the bed range is not fixed at install).
+- **Number:** derived in the same sweep as `B-204` above — highest heading `B-203`, `B-204` …
+  `B-208` absent; `B-205` is the next after the one filed immediately above.
+
+## [ ] B-206 — the bed range is NOT fixed at install: `validateFixedBankChange` refuses a moved or resized operator half and says nothing about `low.start` / `low.count` ⟨priority: medium — two comments promise a refusal that does not exist, and the tick record it would protect is keyed by the range that can move⟩ — OPEN, filed 2026-09-02 from `BANK-HALF-SWEEP-01` §3
+
+**What:** the live-change validator (`tools/caspar-bridge/src/fixed-layers-store.ts`) refuses
+`renumber-refused` when `next.start !== current.start`, `channel-change-refused` on the channel,
+and `resize-refused` when `next.count !== current.count`. It compares nothing on `next.low`. A
+`fixedLayers.set-config` carrying `low: { start: 2, count: 5 }` against a bank whose beds are 1–9
+applies, mid-session, with the bridge's `LayerManager` re-fenced to the new union and every
+consumer that keyed on the old range — ticks, aliases, the panel's grouping, `bankPosition` — now
+reading a record written for a different set of layers.
+
+**Two places already say it cannot happen**, which is what makes this worth a number rather than
+a note:
+
+- `packages/shared-ipc/src/channels/sources.ts`, the bed-band check: _"the bed range is fixed at
+  install (`renumber-refused` / `resize-refused`), the band is edited from the Sources surface, so
+  the band's own validator is the door every change to this relationship passes through."_ The
+  door is only a door if the OTHER side cannot move. It can.
+- `FixedBankConfigModal.tsx`: _"Its `start`/`count` are carried through untouched: like the
+  operator half's, they are fixed at install and the validator refuses a change."_ The modal
+  carries them through untouched, so the product's own UI cannot produce the change — but the
+  wire can, and `NoBankModal` still tells operators to hand-edit the file.
+
+**Why it was NOT fixed by the session that found it.** It is a NEW refusal — the gate would refuse
+a request it accepts today — and the prompt that found it (`BANK-HALF-SWEEP-01` §3) said in so
+many words not to smuggle a new refusal into a bug fix. It sits in the same function as `B-205`
+and is the same operator-only assumption one clause over, which is exactly why it was read.
+
+**What closing it looks like:** two more clauses in `validateFixedBankChange`, mirroring the
+operator half's — `next.low.start !== current.low.start` → `renumber-refused`,
+`next.low.count !== current.low.count` → `resize-refused` — with messages naming the BED range,
+plus a store unit test per clause and a wire test that the refusal applies nothing. The
+`low-bank-not-below-band` comment then becomes true.
+
+- **Cross-refs:** [[B-205]] (the same function, one clause over), [[B-201]] (the pattern).
+- **Number:** highest `B-` HEADING across every ref was `B-205`; `B-206` … `B-210` returned no
+  headings anywhere. Cross-checked against the registry's dated pointer — _"Next free after this
+  session is `B-206`"_ — headings and pointer AGREE.
+
+## [ ] B-207 — the startup VOLUME re-assert consults nothing about what is on the layer, so a producer that survived the dead process is audible from first reachability until the restore sweep adopts it ⟨priority: low — a window of seconds at startup, on a layer that will be re-muted by the adopt; a tension between two rules rather than a defect in either⟩ — OPEN, filed 2026-09-02 from `BANK-HALF-SWEEP-01` §2
+
+**What:** `#reassertDeclaredVolumes` (R-022) blankets every declared row — both halves, since
+`B-204` — with `MIXER VOLUME 1` once the primary is first live. It exists to undo a dead process's
+rehearse mute. It asks nothing about the layer first. C-015 §6.5 later made _"every producer the
+bridge creates is created MUTED; audio is raised only by an explicit recorded intent"_ THE rule,
+and `#sendAdd` mutes before every `CG ADD`. The two are consistent on an EMPTY layer. They are not
+on a layer carrying a producer the dead process created and never took: that producer was created
+muted, survives the process (mixer state is channel state), and is un-muted by the re-assert —
+before `#decidePendingRestores` runs from the occupancy sweep, adopt-clears it, and re-adds it
+muted. A template with autoplaying audio is audible in that window. `live-source-multibox/design.md`
+already records the same property as the reason the Live Source range sits OUTSIDE the bank
+(_"that walk would have unmuted every live box at first reachability"_); this entry is that record
+applied to the bank's own rows.
+
+**Scope after `B-204`:** nine more layers, all template layers. Beds lie below the Live Source
+band by `low-bank-not-below-band`, so no live box is reachable by the walk.
+
+**Why it was left:** any change is a wire-path change to a startup path measured on hardware, and
+`BANK-HALF-SWEEP-01` authorised exactly two, neither of which this is. Filed, not hidden.
+
+**What closing it looks like:** either order the re-assert AFTER the restore sweep's first
+adoption pass (so the walk lands on layers the bridge has already re-created muted or cleared),
+or restrict it to rows whose ledger says they were ON AIR — the row a rehearse mute strands is by
+construction not on air, so the second option needs the persisted ledger to carry that fact.
+
+- **Cross-refs:** [[B-204]] (the walk this is about), [[B-121]] (the reconnect re-add path).
+- **Number:** derived in the same sweep as `B-206` above — highest heading `B-205`, `B-206` …
+  `B-210` absent; `B-207` is the next after the one filed immediately above.
+
+## [ ] B-208 — the consumer side lies the way the producer side does: a DeckLink `ADD` for a device the server cannot open answers `403` with " Check syntax." in the log, the `DEVICE` spelling answers `404 File not found.`, an `ADD` at a running index REPLACES the consumer, and `REMOVE`'s `202` precedes the destroy ⟨priority: medium — nothing in the product sends these verbs yet except `C-029`'s off-by-default flag, but any code that will must know the replies do not mean what they say⟩ — OPEN, filed 2026-09-04 from `PGM-OUTPUT-ALARM-01`'s §3 measurement
+
+**Measured 2026-09-04** on the plant (`192.168.21.114`, `2.5.0 69e8ad5`, DeckLink drivers present,
+the card the config names gone) and on the dev host's 2.5.0 (no DeckLink drivers at all), read with
+a raw socket, the dev host's log read alongside. The brief asked, before any code trusted an `ADD`
+reply, whether the consumer side has an equivalent of [[B-177]]'s `#404 PLAY FAILED / File not
+found.` disguise. **It has two.**
+
+**Instance 1 — a device CasparCG cannot open is a "syntax" error:**
+
+```
+ADD 1 DECKLINK 99                          -> 403 ADD FAILED       (plant 6 ms, dev host 2 ms)
+[error]    Check syntax.                                            <- the only log line
+[info]    [decklink_consumer] Uninitialized.
+```
+
+`get_device` throws `user_error("Decklink device 99 not found.")` (`util.h:244`); the AMCP queue
+maps every `user_error` to `403` and logs the fixed string " Check syntax." (`AMCPCommandQueue.cpp:66`).
+The message the exception carries never reaches the wire OR the log. So `403 ADD FAILED` is the
+same reply as an illegal parameter, and the log actively points at the grammar.
+
+**Instance 2 — the spelling `ADD 1 DECKLINK DEVICE <n>` is itself a grammar error, and it is
+disguised as a missing FILE:**
+
+```
+ADD 1 DECKLINK DEVICE 99                   -> 404 ADD FAILED       (50 ms)
+[error]   Exception: Dynamic exception type: class std::invalid_argument
+[error]   std::exception::what: invalid stoll argument
+[error]    File not found.
+```
+
+`parse_amcp_config` takes the device token positionally (`config.cpp:190`, `std::stoll(params.at(1))`),
+so `DEVICE` throws inside the factory; the registry swallows any factory exception and throws
+`file_not_found("No match found for supplied commands. Check syntax.")` (`frame_consumer_registry.cpp:171`),
+which the queue answers as `404` — **byte-identical to `ADD 1 FOOBAR`**. This is [[B-177]]'s
+mechanism exactly (the fall-through disguise), one registry over. Any document that writes the `ADD`
+this way — the session brief did — is writing a command that can never succeed.
+
+**Instance 3 — `ADD` at an index that is already running REPLACES it, with a gap:**
+
+```
+03:12:55.754  ADD 1 SCREEN                      (port 600 already held the config's screen)
+03:12:55.755  Screen consumer [1|1080p5000] Initialized.        <- the NEW one
+03:12:55.755  202 ADD OK
+03:12:55.783  Screen consumer [1|1080p5000] Uninitialized.      <- the OLD one, 28 ms after the OK
+```
+
+`output::add` calls `remove(index)` BEFORE `initialize` and emplaces after (`output.cpp:64-72`).
+The old consumer leaves the map first; if the new one's `initialize` throws, the channel has LOST
+the old one and gained nothing. `INFO` cannot show any of this — `port_600` reads the same before
+and after.
+
+**Instance 4 — `REMOVE`'s receipt precedes the destroy, exactly like `CLEAR`'s:**
+
+```
+03:12:57.173  REMOVE 1 SCREEN  -> 202 REMOVE OK
+03:12:57.189  Screen consumer [1|1080p5000] Uninitialized.      <- 16 ms after
+03:13:22.717  REMOVE 1-601     -> 202 REMOVE OK
+03:13:22.730  Screen consumer [1|1080p5000] Uninitialized.      <- 13 ms after
+```
+
+`output::remove` erases the map entry under the lock and answers; the object dies on the
+`destroy_consumer_proxy`'s detached thread. `INFO` reflects the erase immediately, so on the AMCP
+axis the consumer is "gone" before the device is released — the same 13–16 ms window [[B-177]]
+measured for a producer, and the same consequence: an `ADD` of the SAME device issued on the `202`
+can collide with the release. (Also measured: the numeric form is `REMOVE 1-601`, not `REMOVE 1 601`
+— the latter is parsed as a consumer spec and answers `404`.)
+
+**Expected:** a `403`/`404` on a consumer verb means what the code says; a receipt means the thing
+is gone; an `ADD` does not silently remove something first.
+**Actual:** above.
+**Env:** as stated. Not reproducible against `@cg/amcp-mock` beyond the codes, which it now answers
+(`handleAdd`/`handleRemove` refuse with these measured codes by default).
+
+### What this means for code, today and later
+
+- [[C-029]]'s creation path (`--create-missing-consumers`, OFF by default) was built INSIDE these
+  facts: it sent the declaration's own grammar (never the `DEVICE` word), only for a kind the
+  check found ABSENT (so instance 3 cannot fire), read `403` as "CasparCG cannot open that device
+  either" rather than as its own syntax, and verified a `202` by re-reading `INFO`. That path was
+  RETIRED on 2026-09-28 (`FOLLOWUPS-01` A): the bridge never sends a consumer `ADD` now.
+- ⚠ Any future path that REMOVEs and re-ADDs the same DeckLink device must not issue the `ADD` on
+  the `REMOVE`'s `202` — wait for the destroy or a settle (instance 4), exactly [[B-177]]'s rule.
+- ⚠ Nothing may classify a consumer verb's failure by response code alone: `403` is "parameter OR
+  device", `404` is "grammar OR kind OR — through the fall-through — anything the factory threw".
+
+**Regression-test note:** `tools/amcp-mock` answers the measured codes; `output-check.integration.test.ts`
+drives the `403` path. Instances 3 and 4 are properties of the real server and have no mock model —
+recorded here so the next reader does not learn them on air.
+
+- **Cross-refs:** [[B-177]] (the producer-side original), [[C-029]] (the only sender of these verbs
+  today, and the reason the measurement was taken), [[C-021]] (Q2: nothing enumerates — a probe is
+  not a picker).
+- **Number:** the highest `B-` heading across the three bug files was `B-207`; `git grep -n "B-208"`
+  returned only the registry's forward pointers and the `B-207` provenance notes, never a heading.
+  Recorded in [b-number-registry.md](b-number-registry.md).
+
+---
+
+## [~] B-209 — the audit record keeps the refusal CODE and not the COMMAND it answered, so fourteen `amcp-404` takes could not be traced to a verb ⟨priority: high — the forensic surface could not answer the first question a refused take raises⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` — <https://github.com/yasermostafaee/cg/actions/runs/33880494176> (`E2E (Playwright)` RAN, 10m26s, `success`)
+
+**Observed 2026-09-04** in the station's own record (`~/.cg-runtime/bridge-audit.ndjson` on the
+bridge host `192.168.21.93`): from `11:37:32Z` every take answered `outcome: failed,
+errorCode: amcp-404` — fourteen in a row — and no row said which of a take's up-to-five
+commands (`MIXER … VOLUME 0`, `CG … ADD`, `MIXER … VOLUME 1`, the plate seating, `CG … PLAY`) the
+server had refused. The bridge prints no AMCP exchange anywhere; the only wire trace in the
+product is the mock's. `RUNTIME-FIX-0904` §1 had to reconstruct the verb by reading `#takeImpl`
+top to bottom (`MIXER` never answers 404; a refused `PLAY` needs the `ADD` to have landed; so the
+`ADD`).
+
+**Repro:** boot a bridge without `startServing()` (the bare-id branch), `loadFixed`, `take`.
+**Expected:** the `take` row carries the refused line beside `amcp-404`.
+**Actual (before):** `command` did not exist; the row carried the code alone.
+
+**Fix:** `AuditEntrySchema.command` (optional, ≤256). `#send` — the one chokepoint every AMCP line
+passes — returns `command: summarizeWireLine(line)` beside a non-ok code (and on a throw);
+`#sendAdd`, `#takeImpl` (ADD and PLAY), `#updateImpl`, `#stopItemImpl`, `#nextItemImpl` and
+`#outImpl` carry it out; `auditVerdict` copies it. The summariser keeps the verb, the target and
+the FIRST quoted argument (for `CG ADD` the URL — host and the ephemeral port), elides later
+quoted arguments, caps at 200, never throws. A refusal before the wire records no command. The
+Audit panel shows it under the ids.
+
+**Regression-test note:** `tools/caspar-bridge/tests/audit-command.integration.test.ts` — red first
+on the current tree (`expected undefined to be defined`), 3/3 after; `wire-line-summary.test.ts`.
+
+- **Cross-refs:** [[B-141]] (the record this extends), [[B-214]] (the incident), [[C-032]] (why
+  the port in the URL matters).
+- **Number:** the highest `B-` heading across the three bug files was `B-208`; `git grep -n "B-209"`
+  returned only the registry's forward pointers, never a heading. Recorded in
+  [b-number-registry.md](b-number-registry.md).
+
+---
+
+## [~] B-210 — the Audit log shows raw ISO-8601 UTC stamps to the millisecond to a control room at UTC+3:30 ⟨priority: high — an operator correlating a row with the wall clock is three and a half hours off, and the `Z` is the easiest thing on the screen to miss⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` (run `33880494176`, see [[B-209]])
+
+**Observed 2026-09-04:** the panel's first column read `2026-09-04T12:18:47.561Z` for an action the
+operator performed at 15:48:47 by the clock on the wall. Nothing on the surface said the stamp was
+UTC except the trailing `Z`.
+
+**Repro:** open the Audit log on a console whose zone is not UTC.
+**Expected:** the console's local time, to the second; the date only where it changes; the record's
+UTC stamp still reachable.
+**Actual (before):** the raw stamp, on every row.
+
+**Fix:** `auditFormat.ts` `auditTimeParts` (Intl, the browser's zone; `12:18:47.561Z` →
+`15:48:47` in `Asia/Tehran`, pinned); the time cell carries the UTC stamp as its title; the local
+date is a band where it changes down the newest-first list. The record on disk is untouched.
+
+**Regression-test note:** `apps/runtime/tests/auditFormat.test.ts`,
+`auditPanel.legibility.dom.test.ts` (B-210 block), `tests/e2e/audit-legibility.spec.ts`.
+
+- **Cross-refs:** [[B-211]] (the same surface, the other column), [[B-141]].
+- **Number:** taken with [[B-209]]; see the registry entry.
+
+---
+
+## [~] B-211 — the Audit log's ITEM / DETAIL column shows two raw UUIDs per row where the operator's names are `Bed 1` and `3ghab` ⟨priority: high — a forensic surface an operator cannot read is a forensic surface nobody reads⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` (run `33880494176`, see [[B-209]])
+
+**Observed 2026-09-04:** every row read `item-e602d912-… · f00a5363-…`. The row the operator
+had pressed PLAY on was `Bed 1`; the template was `3ghab`. The constraint, stated because it
+decides the fix: **the ids may not be deleted.** A name can be renamed or repeated; an id cannot;
+shortening a UUID to its first eight characters for display is fine, deleting it would turn a
+record into a story.
+
+**Repro:** take a row, open the Audit log.
+**Expected:** the row's name as the Layers table gives it and the template's name as the picker
+gives it, first; the ids beneath, complete and copyable.
+**Actual (before):** the ids alone.
+
+**Fix:** `placeName` (through `layerAlias` / `defaultLayerAlias` — the table's own two functions;
+a layer outside the bank reads `layer 60 (not a row)`), `templateName` (through
+`templateDisplayName`, so the file name outranks the manifest name exactly as on the row),
+`shortId` (`item-e602d912…`, full id in the title, copy button with a local confirm — a toast
+renders under a modal). `MockRuntime`'s audit entries now carry the slot (parity), so the offline
+log names rows too. ⚠ The sentence qualifying the console name — _"It is a LABEL you typed, not a
+verified sign-in — it says which console, not which person"_ — is byte-identical, and a test pins
+it: naming the row better must not read as naming the person better.
+
+**Regression-test note:** `auditPanel.legibility.dom.test.ts` (B-211 block), `auditFormat.test.ts`,
+`tests/e2e/audit-legibility.spec.ts`.
+
+- **Cross-refs:** [[B-210]], [[B-143]] (the actor caveat this deliberately leaves alone), [[B-215]]
+  (why a layer can be "not a row").
+- **Number:** taken with [[B-209]]; see the registry entry.
+
+---
+
+## [~] B-212 — the in-use refusal names a COUNT and not a LOCATION, and its only concrete remedy was Remove All ⟨priority: high — on a live station a refusal that withholds the precise remedy while naming the sweeping one is steering toward the sweeping one⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` (run `33880494176`, see [[B-209]])
+
+**Observed 2026-09-04:** _"2 stack item(s) still use this template — remove them (or Remove All)
+first."_ The owner was looking at rows that all read EMPTY, could not find the two, and pressed
+Remove All. The record shows why nothing on screen matched: the two items were on CasparCG layers
+60 and 61 — dynamic layers no row shows (see [[B-215]]) — so "them" pointed at nothing visible.
+
+**Repro:** with a template still held by an item, press Delete from station.
+**Expected:** each item's place named — a row by the name the table gives it, a layer outside the
+bank as CasparCG names it with "not one of this station's rows" said — and the way there offered.
+**Actual (before):** a count, and a nudge toward Remove All.
+
+**Fix:** `templates.remove` carries `references: { itemId, slot? }[]`; `describeTemplateReferences`
+in `@cg/shared-ipc` is the ONE wording for the bridge, the mock and the disconnected library path
+(`LibraryStore.remove(id, references, bank)`); Remove All is not mentioned. The picker renders each
+reference under the list with its remedy: **Show <row>** closes the picker and asks the Layers
+table (`rowFocus.ts`) to scroll to the row, focus it and select it; an item NO row shows gets
+**Remove item** — confirm-gated, naming its layer and that removal takes it off air if it is on
+air — issuing `stack.remove` for that one id. The fragment _"item(s) still use this template"_ is
+kept verbatim for every count, because the E2E and the DOM tests match on it (a singular "still
+uses" broke both on the first local run — recorded so the next wording change sweeps first).
+
+**Regression-test note:** `packages/shared-ipc/tests/template-references.test.ts`,
+`tools/caspar-bridge/tests/template-remove-references.test.ts`,
+`apps/runtime/tests/templateRemoval.dom.test.ts` (B-212 block), `LibraryStore.test.ts`,
+`tests/e2e/live-source-sources.spec.ts` (the Show-row step).
+
+- **Cross-refs:** [[B-215]] (why the items were invisible), [[R-005]], [[B-122]] (the same
+  "sweeping remedy" shape on CLEAR ALL).
+- **Number:** taken with [[B-209]]; see the registry entry.
+
+---
+
+## [~] B-213 — the layer table's `State (n)` counts rows in ERROR as on air ⟨priority: high — a refused take rendered as a graphic on air, in the sacred air colour⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` (run `33880494176`, see [[B-209]]); the `(N in error)` mark reads the owner's `rgb(255 28 28)` (`colors.errorMark`; it was `colors.errorText` at `79b66c33`, split into a mark and a text role by `RUNTIME-REDESIGN-01` Phase 2A — the warning triangle keeps his value, the NUMBER beside it takes the legible `colors.errorText` so it clears the 4.5 text floor on the header)
+
+**Observed 2026-09-04:** `State (2)` in green with exactly two occupied rows, both in `ERROR`
+(two refused takes); earlier `(3)` = two refused rows plus one genuinely on air from another
+console.
+
+**What it was derived from — established before the label was touched:** `items.filter(isOnAir)`
+— STOP ALL's predicate, which counts `error` because an errored row MAY be showing something and
+must still be offered STOP. The status itself is the reconciled one: the bridge's ack, refined by
+OSC when there is any; a refused take settles to `error`, never to `playing`. So the count was
+ack-derived, not intent-derived, and its defect is specifically that `error` wore the air colour.
+Not a deeper intent-vs-confirmed defect; not filed as one.
+
+**Repro:** two rows whose takes were refused.
+**Expected:** no air count; `(2 in error)`.
+**Actual (before):** `(2)` in the air colour.
+
+**Fix:** `stack/onAir.ts` gains `isOnAirOrUnsettled` (the renderer's ONE spelling of the R-010
+predicate — the Server settings gate now delegates to it instead of carrying a copy) and
+`airTally` → `{ onAir, inError }`. `LayerTableHeader` renders `(N on air)` in the air colour and
+`(N in error)` in the error colour, never one number, neither when zero, the §4 grey kept. STOP
+ALL keeps `isOnAir`.
+
+⚠ **Noted, not fixed:** the same `error` ambiguity cuts the other way for the R-010 gate — a row
+that WAS on air and whose `update` was refused reads `error`, which `isOnAirStatus` does not
+count, so `setConfig` would be allowed over a possibly-live graphic. Outside this session's
+boundary (the refusal path); recorded here for the next reader.
+
+**Regression-test note:** `apps/runtime/tests/onAir.test.ts`, `layerTableHeader.dom.test.ts`
+(tally block), `layersPanel.unreachableLabels.dom.test.ts` (`(1 on air)`),
+`tests/e2e/audit-legibility.spec.ts` (the tally step).
+
+- **Cross-refs:** [[B-122]] (`isOnAir` is not CLEAR ALL's predicate either), [[R-010]], [[B-081]]
+  (the grey).
+- **Number:** taken with [[B-209]]; see the registry entry.
+
+---
+
+## [ ] B-214 — every take is refused `amcp-404` by `192.168.21.114` since 11:37:32Z on 2026-09-04, 118 s after the same `CG ADD` was accepted — the server process answering there changed and has no html producer ⟨priority: high — the station cannot put any graphic to air⟩ — FILED 2026-09-04, the measurement handed to the owner
+
+**Measured 2026-09-04** from the bridge's own record on `192.168.21.93` (the bridge host; nothing
+was sent to the plant):
+
+```
+11:35:29.818Z  load  ok      L99  f00a5363   (list-only: nothing on the wire)
+11:35:34.588Z  take  ok      L99  f00a5363   <- CG ADD + CG PLAY both accepted by .114
+11:36:01.635Z  take  ok      L99             (bare CG PLAY, producer resident)
+11:36:44.641Z  take  ok      L99             (the last accepted take)
+11:37:07…28Z   out   ok      x7              (CLEAR ALL pressed three times; CLEARs accepted)
+11:37:32.856Z  take  failed  L99  amcp-404   <- the first refusal; thirteen more follow
+```
+
+Same template, same layer, same bridge process (the running bridge dates from `12:18:58Z`; the
+previous one wrote every row above), no `set-config` applied today (the connection file is dated
+2026-08-24). After a `CLEAR` the take's `CG ADD` is the first CG verb and `MIXER` never 404s, so
+the `ADD` was refused.
+
+**What CasparCG `69e8ad5` says a URL `CG ADD` can 404 for** (`cg_proxy.cpp`,
+`html_producer.cpp`, `AMCPCommandQueue.cpp`, read from source): `find_record` returns the `.html`
+record for ANY name ("a hack to allow query params"); `html::create_cg_producer` returns empty
+only for a name that is neither a template-folder file nor `http:`/`https:`-prefixed;
+`get_or_create_proxy` returns empty only when `find_record` misses or the factory returns empty;
+`cg_add_command` maps that to `file_not_found` → `404`. **With an html cg producer registered, a
+URL `CG ADD` cannot answer 404 on that build.** Therefore:
+
+- **(a) reachability of the serve host is NOT the cause.** An unfetchable URL yields `202` and a
+  blank page, exactly as the server-connection dialog says; the dialog's sentence stands. This
+  side was verified: all three templates answer `200` on the live ephemeral port `64373`, and
+  node.exe is allowed inbound on the domain profile.
+- **(b), in a specific form, is the finding:** the process answering at `192.168.21.114:5250`
+  changed between `11:36:44Z` and `11:37:32Z` (a restart, or a different build/install started)
+  and the one answering since has NO html producer registered — CEF did not initialise in it. The
+  same code path applies to both rows: `ارم روی انتن` on an operator row and `3ghab` on `Bed 1`
+  both left at the `ADD`, so classification and bank fencing are cleared.
+
+⚠ Both `BRIDGE LIVE` and `PRIMARY A HEALTHY` stay green throughout — the AMCP socket is up and
+answering. A missing html producer is invisible to every health surface the product has.
+
+**The measurement, for the owner — one line, on the PLAYOUT machine (`192.168.21.114`), in a
+PowerShell window there (not the CasparCG console, not the AMCP console), typed as ONE line:**
+
+`Select-String -Path 'D:\casparcg-server-v2.5.0-stable-windows\log\caspar_*.log' -Pattern 'Starting CasparCG|Initialized .* module|CEF|html|Could not find template' | Select-Object -Last 40`
+
+Read for: a `Starting CasparCG …` line between 15:06 and 15:08 local (a restart), whether the html
+module is listed as initialised in that start, and the `Could not find template http://192.168.21.93:…`
+errors from 15:07:32 on. (The log path is the plant's per [[C-030]]; if the install lives
+elsewhere, the `log\caspar_*.log` half is what matters.) A second, read-only check from the AMCP
+console window connected to `.114`: `VERSION` — anything other than `2.5.0 69e8ad5` means a
+different install answered.
+
+**Expected:** a take after a CLEAR re-ADDs and plays. **Actual:** every take since `11:37:32Z`
+answers `amcp-404`.
+
+**Regression-test note:** none possible here — the defect is on the plant. What the product now
+does about it is [[B-209]] (the record names the refused line) and [[C-031]] (the boot line says
+how many templates the bridge holds, so the first question has an answer).
+
+- **Cross-refs:** [[B-177]] (a `404` is not proof the subject is a file — the fall-through class),
+  [[B-162]] (the dialog sentence, and why reachability is `202`-with-nothing), [[C-032]] (the
+  ephemeral port), [[B-101]] (a green socket says nothing about a producer).
+- **Number:** taken with [[B-209]]; see the registry entry.
+
+---
+
+## [ ] B-215 — a REFUSED fixed-row load leaves a slotless item that the next restore seats on a DYNAMIC layer outside every declared bank, where no row shows it ⟨priority: high — the bridge then CLEARs and blocks on a layer the operator cannot see⟩ — FILED 2026-09-04 from `RUNTIME-FIX-0904` §4
+
+**Measured 2026-09-04** from the record:
+
+```
+11:34:20.949Z  load  failed  L99  e506e319  item-493243df  wrong-bank
+11:35:20.162Z  out   ok      L60  e506e319  item-493243df           <- the same item, now on 60
+11:35:25.595Z  load  failed  L99  e506e319  item-281ae6e2  wrong-bank
+11:52:57.632Z  out   ok      L61  e506e319  item-281ae6e2           <- and this one on 61
+12:01:24.552Z  remove ok     L60 / L61                              <- Remove All
+```
+
+**Mechanism, from the code:** `#loadFixedImpl` records the intent (`applyIntent load`) BEFORE the
+`wrong-bank` refusal, so the refused item stays in the reconciler as a slotless `error` item. The
+browser retains it (`RetainedAirStateSchema` includes `error`). On the next resync `restore()`
+finds no retained slot and **`#slotForRestore` falls through to `#allocate()`** — the
+`DEFAULT_LAYER_POLICY` `custom` range, layers 60–69 — so the item comes back holding a dynamic
+layer outside both halves of the bank. From then on it is a real slot holder: `CLEAR ALL` sends
+`CLEAR 1-60` to the plant (seven times that afternoon), the in-use refusal counts it, the old
+`State (n)` counted it, and no row shows it. The only surfaces that reveal it are the audit log
+and, now, the in-use refusal's "CasparCG layer 60, which is not one of this station's rows".
+
+**Expected:** a refused load leaves nothing behind, or leaves something every surface can show.
+**Actual:** an invisible item on a layer the station never declared, cleared on the plant by a
+bulk verb.
+
+**Not fixed here:** the load refusal path and restore are outside `RUNTIME-FIX-0904`'s boundary.
+Two candidate fixes, for the session that takes it: (1) a `wrong-bank` / `not-fixed` /
+`slot-bound` refusal removes the item it just recorded (the refusal touched nothing else, so
+there is nothing to keep); (2) `#slotForRestore` refuses to allocate for a retained item whose
+state is `error` and whose slot is absent (`skip: 'no-layer'` with a reason the panel can show).
+(1) is the narrower and the one that makes (2) unreachable.
+
+**Regression-test note:** none yet — the test is the fix's. The shape to pin: `loadFixed` refused
+`wrong-bank` → `stackSnapshot()` holds no such item; and a retained `{ state: 'error' }` with no
+slot is skipped by `restore()`, never allocated.
+
+- **Cross-refs:** [[B-212]] (the refusal that could not name it), [[B-092]] / [[B-108]] (restore
+  and its skips), [[B-201]] (the wrong-bank refusal itself), [[B-114]] (release by the same door).
+- **Number:** taken with [[B-209]]; see the registry entry.
+
+## [~] B-216 — 🔴 the three doors that may touch a live layer answered ONE row THREE ways, and one of them let an UPDATE seat a REHEARSING row's plates — `B-161`'s own defect, reached through the flag `B-161` added ⟨priority: HIGHEST — bare video on air from a configuration verb, on a row whose whole contract is "nothing is sent to CasparCG"⟩ — CLOSED IN CODE 2026-09-04 by `UPDATE-INFORCE-02` (`openspec/changes/multibox-layout-switch/` 7.14f, `openspec/changes/add-multibox-audio/` 8.8); the plant check `B-161` owed was RUN the same day (below); Linux `gate:e2e` DISCHARGED for `f09b5b28` — <https://github.com/yasermostafaee/cg/actions/runs/33894720866> (`E2E (Playwright)` RAN, 563 s, `success`)
+
+**Measured 2026-09-04 at the mock's AMCP wire** — `tools/caspar-bridge/tests/ownership-is-the-ledger.integration.test.ts`,
+run RED on `f23c065b` before any code changed. An UPDATE carrying one new binding, on a row that
+was `load`ed, put on PVW (`enterRehearse`) and never taken:
+
+```
+PLAY 1-30 "route://2"   MIXER 1-30 VOLUME 0 DEFER   MIXER 1-30 FILL 0 0 0.25 0.25 DEFER      MIXER 1-30 CLIP …
+PLAY 1-33 "route://5"   MIXER 1-33 VOLUME 0 DEFER   MIXER 1-33 FILL 0.25 0 0.25 0.25 DEFER   MIXER 1-33 CLIP …
+PLAY 1-31 "route://3"   MIXER 1-31 VOLUME 0 DEFER   MIXER 1-31 FILL 2 2 0.25 0.25 DEFER      MIXER 1-31 CLIP …
+PLAY 1-32 "route://4"   MIXER 1-32 VOLUME 0 DEFER   MIXER 1-32 FILL 2 2 0.25 0.25 DEFER      MIXER 1-32 CLIP …
+```
+
+Four producers created and sized on a row nobody had taken — [[B-161]]'s wire signature, byte for
+byte — on a row on PVW, whose contract ([[R-022]]) is _"nothing is ever sent to CasparCG"_. The same
+run then measured the rest of the record's dispute: the ledger persisted with those four seats and a
+restarted bridge **adopted them and reported no rehearsal** (`liveLayers().size === 1`,
+`rehearseState() === []`); and in the cell the record could not decide — not on air, not
+rehearsing, ledger NON-EMPTY (an on-air row's seats adopted at boot, the row re-delivered as
+`loaded`) — **`update` recorded and sent nothing while `setActiveLook` moved the plates**
+(`{ updateMoved: false, switchMoved: true }`), and a raise on those seats answered `sent: false`.
+
+### The three spellings, and the one cell where they disagreed
+
+| door                                  | asked, on `f23c065b`                                              | anchor                                 |
+| ------------------------------------- | ----------------------------------------------------------------- | -------------------------------------- |
+| `update` → `#applyBindingTransaction` | `#ownsLiveSeats` = on air **OR rehearsing**                       | `caspar-runtime.ts:4999`, gate `:5052` |
+| `swapLiveSource`                      | **ledger non-empty** (its own outer gate), then the transaction's | `:6976`, then `:7046`                  |
+| `setActiveLook`                       | on air **OR ledger non-empty**                                    | `:5498`                                |
+| a volume RAISE (`setLivePlateVolume`) | `#ownsLiveSeats`                                                  | `:7248`                                |
+
+They agree everywhere except **not on air, not rehearsing, ledger NON-EMPTY**, where
+`setActiveLook` moved plates and `update`/`swapLiveSource` refused — and, the worse half,
+**rehearsing, nothing seated**, where `update` seated plates and the other two did not.
+
+**The route that reaches the disputed cell is boot adoption ([[B-145]]):** the persisted ledger
+comes back at boot while the row's status comes back only when the browser re-delivers its stack
+and OSC re-derives it, and its rehearsal never comes back. Until this fix a second route existed —
+rehearse, then UPDATE — and it is the one the record was arguing about.
+
+### The record's contradiction, settled by the measurement above
+
+- `PATCH-BX-01` (`09eb9760`, 2026-08-23 17:57): _"a rehearsing row's plates are never seated …
+  a `swapLiveSource`/`update` on one was probed and left the ledger empty."_ **TRUE for the swap**
+  — that door carried its own ledger-only gate, so it never reached the transaction. **FALSE for
+  `update`** from `008ac12b` (2026-08-23 13:53, four hours EARLIER, and green ever since): [[B-161]]
+  put `rehearsing` inside `#ownsLiveSeats` and its `neighbour 2` test asserted _"a rehearsing row
+  still seats"_ as the feature. The two statements were written the same afternoon about the same
+  tree and both cited a measurement.
+- The `NOTAKE-02` audit: _"a row rehearsing when the bridge restarts comes back with seats and no
+  rehearsal flag."_ **TRUE** — for exactly a rehearsing row that had received an UPDATE with
+  bindings. ⚠ Its text is not in the tree under that name; the claim was re-measured here rather
+  than cited.
+
+### 🔴 THE RULE, decided (the owner, `UPDATE-INFORCE-02` §2) — ownership is the LEDGER
+
+**The ledger is the truth about what the bridge OWNS; status is the truth about what the operator
+SEES; the rehearse flag is a claim about a browser-side preview and a mute interlock, and it has no
+seats of its own.** `enterRehearse` sends at most one `MIXER VOLUME 0` to the TEMPLATE layer
+(`caspar-runtime.ts:3303`) and seats nothing; PVW is rendered in the browser
+(`rehearse-live-plate-placeholders`). So every door that may touch a live layer asks ONE predicate:
+
+`#ownsLiveSeats(itemId)` = `isOnAirStatus(item)` **OR** `#liveLayers` holds seats for the item.
+
+Both halves, read once: not the status alone (a row whose seats survived a restart would be refused
+a re-point its pictures visibly need), and not the ledger alone (an on-air row can hold an EMPTY
+ledger — taken on the empty look, or every plate a `media` clip that §12.4's fallback tore down —
+and under a ledger-only spelling it was told `ok` while nothing was sent, `setActiveLook`'s old
+note). PANIC already scoped itself by the ledger for the same reason ([[B-122]] one verb along).
+
+⚠ **NOT by persisting the rehearse flag.** Considered and rejected at `caspar-runtime.ts:1166`:
+the mute does not survive a restart either — startup re-asserts every declared row's volume
+(`#reassertDeclaredVolumes`, both halves since [[B-204]]) — so a persisted flag would outlive the
+condition it describes and interlock `PLAY` on a layer that is no longer muted. Re-verified
+2026-09-04; the reasoning holds.
+
+### The fix
+
+- `#ownsLiveSeats` reads `on air OR ledger non-empty`; the `#rehearsing` half is gone.
+- `setActiveLook` and `swapLiveSource`'s outer gate call `#ownsLiveSeats` instead of their own
+  spellings — one predicate, four doors (`update`, `swapLiveSource`, `setActiveLook`, the raise).
+- The raise gate is unchanged in code and changed in meaning: a raise on adopted seats now reaches
+  the producer that is genuinely on the channel; a raise on a row with no seats reaches nothing and
+  records the intent, as before.
+- Seven comments that named the seated-off-air state _"the `exitRehearse` window"_ now name it
+  the boot-adoption window; `CLAUDE.md` golden rule 10's rehearse clause is corrected; the
+  `add-multibox-audio` design/spec and `multibox-layout-switch` 7.14d/7.14f carry the reversal.
+
+### Regression tests — MEASURED RED, then GREEN, then RED AGAIN under mutation
+
+| where                                                        | asserts                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ownership-is-the-ledger.integration.test.ts` (new, 5 tests) | rehearsing + nothing seated: UPDATE, SWAP, SWITCH reach NO layer and the edits are in force; a restart finds no seats and no flag; the boot-adoption route makes BOTH doors move; rehearsing WITH seats re-points; a raise reaches owned seats and nothing on a seatless row |
+| `live-look-reconcile` `neighbour 2`                          | **REVERSED** — a rehearsing row with nothing seated: no `PLAY`/`VOLUME`/`FILL`, no seat, edit kept                                                                                                                                                                           |
+| `live-plate-audio-verbs` GOLDEN RULE 10 block                | rewritten to the ledger axis: `loadedWithSeats` sends a raise; `loadedWithoutSeats` sends nothing; rehearsal changes neither                                                                                                                                                 |
+| `live-plate-panic` "a RAISE on the same row"                 | **REVERSED** — a raise on the adopted-seats row reaches the wire and the guest is audible; rule 10's subject is the seatless row                                                                                                                                             |
+
+**RED on `f23c065b`:** 4 of the 5 new tests (the wire above; seats after restart; `updateMoved:
+false`; `sent: false`). **GREEN after the fix:** 102/102 across the three suites. **Mutation:**
+restoring `return this.#rehearsing.has(itemId)` reddens **12** tests — 4 new, 6 audio, 2 reconcile
+(including the pre-existing _"switching the look of a REHEARSING row sends NOTHING"_, which the
+shared predicate now protects too).
+
+### Repro / Expected / Actual
+
+**Repro:** load a multi-box row, press ON PVW, change one per-look input in the Inspector, press
+UPDATE. **Expected:** nothing reaches CasparCG; the binding is in force for the take. **Actual (on
+`f23c065b`, at the mock wire):** four `PLAY`s, four `VOLUME 0`, eight `FILL`/`CLIP`, four seats in
+the ledger — pictures on the channel under a template that is not on air. **Regression test:** the
+new file's first test, plus the reversed `neighbour 2`.
+
+### ✅ THE PLANT CHECK `B-161` OWED — RUN 2026-09-04, through the running bridge's own WebSocket
+
+Driven exactly as the Runtime SPA drives it (`stack.stop` → `stack.update` with `lookBindings` →
+`stack.take`, actor `UPDATE-INFORCE-02 (Claude)` in the audit), against the plant
+(`192.168.21.114:5250`, `2.5.0 69e8ad5`) and read back with read-only `INFO 1` polls. The row: the
+owner's `comp1` (`3ghab.vcg`, template `e506e319…`) on layer 9, active look `look-3`, plates
+`l1`=DeckLink 1, `l2`=`m1.mkv`, `l3`=`m2.mkv` on layers 10–12. ⚠ The running bridge (PID 19648,
+started 18:25, `dist` of 16:57) carries [[B-161]]'s gate and NOT this fix — for a STOPPED row the
+two gates agree (not on air, not rehearsing, ledger empty), so the check exercises the rule as it
+stood; deploying this fix to the plant is the owner's bridge restart.
+
+| step                                              | reading                                                                                                                                                             |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| STOP                                              | `{accepted:true}`; 2.5 s later `INFO 1` shows layers 10–59 EMPTY, the ledger holds no seat, status `loaded`                                                         |
+| UPDATE, inputs swapped (`l2`→media2, `l3`→media1) | `{accepted:true}` in **2 ms**; **nothing appeared on layers 10–59 across 39 `INFO 1` polls over 8 s**; ledger still empty; `lookSourceOverride` recorded = the swap |
+| TAKE                                              | `{accepted:true}` in **34 ms**; seats `L10:l1 L11:l3 L12:l2`; `INFO 1`: L10 decklink, L11 `m1.mkv`, L12 `m2.mkv` — **plate `l2` on media2, plate `l3` on media1**   |
+| the same, in reverse (bindings cleared)           | identical readings; the row came back `l2`→`m1.mkv`, `l3`→`m2.mkv`, on air, as found                                                                                |
+
+The second half is what proves the edit was **GATED rather than DISCARDED**: the take came up with
+the swapped inputs already in force (the planner kept both clips on their layers and re-labelled
+the plates — a pure geometry move, no re-`PLAY`). What the `<screen/>` consumer showed during the
+8 s is the owner's to read; `INFO 1` is the record here. ⚠ **The DeckLink fixture has changed:**
+`INFO CONFIG` now declares `<decklink><device>1</device>` and `INFO 1` lists a running
+`decklink@301` — the config that named the dead card `23487013` ([[C-029]]) has been repaired since
+2026-09-04 morning, so the check ran with the program output ATTACHED, and nothing appeared on it
+either by the same reading.
+
+### Not covered here
+
+[[B-204]] / [[B-205]] (closed), the mixer `DEFER` exposure, term (b) / [[B-192]], the orphan html
+layers on dead template-server ports: untouched, and this item makes no claim about them.
+
+- **Cross-refs:** [[B-161]] (the rule, and the first spelling this reverses), [[B-145]] (boot
+  adoption — the route that reaches the disputed cell), [[B-122]] (PANIC's ledger scope, the
+  precedent), [[R-022]] (rehearse sends nothing to CasparCG), [[B-204]] (the startup volume
+  re-assert the no-persisted-flag reasoning rests on), `CLAUDE.md` golden rule 10.
+- **Number:** taken from the headings (highest `B-215`) and cross-checked against the registry's
+  dated pointer (_"Next free after this session is `B-216`"_) — they agree; see the registry entry.
+
+## [~] B-221 — a link that dies between a batch's first `DEFER` and its `COMMIT` strands the staged half on the server: the commit is SENT on every exit path and cannot ARRIVE on a dead socket, and nothing on the reconnect path ever committed it ⟨priority: high — the orphan lands with the next `COMMIT` on the channel, ours or anyone's, on layers that action never touched⟩ — FILED AND CLOSED IN CODE 2026-09-05 by `MIXER-DEFER-ABORT-01` for the in-process case; the process-death case is OPEN pending an owner decision (below); the plant run of the reconnect path is OWED; CI for `7f85b3bb` COMPLETED GREEN — <https://github.com/yasermostafaee/cg/actions/runs/33936819497> (`Lint • Typecheck • Test • Build` RAN 435 s, `E2E (Playwright)` RAN 578 s, both `success`; read 2026-09-05 by `ARRANGEMENT-DEADWOOD-01`)
+
+**What:** `B-198` stages every `MIXER` line of a seating batch and commits once; `B-199` put that
+commit in a `finally` so a batch that THROWS still commits. This is the abort a `finally` cannot
+close. When the socket dies between the first `DEFER` and the `COMMIT`, every send after the death
+fails at once — the batch's own failure-path commit, the guard's `finally` commit, `B-166`'s
+rollback — while the lines acked BEFORE it are already in the server's deferred vector, which
+belongs to the server process and not to the socket ([[B-199]] measured exactly that). And
+`#commitStagedMixer` DRAINED its field before sending, so once the commit failed nothing in the
+process remembered that anything was staged. Reconnect ran `#loaded.clear()`, the pending-restore
+decision and `reconcileOnReconnect` — status work, never a `COMMIT` — so the orphan waited for the
+next commit on the channel: the next take or switch of ANY row on it. Per layer the LAST staged line
+stands, so that batch overrides the orphan on the layers it also stages and applies it unchanged on
+the layers it does not — one row's box jumping to a shape no look authored, attached to another
+row's take, which is `B-199`'s "hang, then an unrelated batch" row and the least diagnosable of its
+three outcomes.
+
+**Measured 2026-09-05 at the mock's AMCP wire, RED on the tree before any fix** —
+`tools/caspar-bridge/tests/live-look-reconcile.integration.test.ts`, `🔴 B-221 — a link that dies
+mid-stage …`. ⭐ **The injector is SERVER-SIDE:** the mock's own `MIXER` handler is wrapped so it
+STAGES the first deferred line exactly as the real server does and then destroys every AMCP socket
+before the ack is written. Nothing in the bridge can reach it, so the same injector that produced
+the red is what proves the fix.
+
+| step                                                             | reading                                                                                                                                                                                    |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| six-box row on air; `setActiveLook('solo')`                      | refused (`ok: false`); exactly ONE line reached the server — `MIXER 1-30 FILL 0 0 1 1 DEFER`                                                                                               |
+| the bridge's commits (the failure path's, then the `finally`'s)  | **neither arrived**: zero `MIXER 1 COMMIT` on the server's trace; the mock reports `stagedMixerCount(1) === 1`; layer 30 still on its grid cell — staged is not applied                    |
+| the session reconnects (`VERSION`/`INFO` handshake on the trace) | **nothing follows the handshake** — `the orphan is committed: expected [] to deeply equal [ 'MIXER 1 COMMIT' ]`. The handshake is the positive control: the instrument was live and silent |
+
+### §1 — the state, established before anything was touched
+
+| item                                                | status                        | anchor                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [[B-198]] — the deferred batch                      | closed **and verified**       | `eb228a64`; the campaign re-run at zero in 100 of 100 and the forced reproduction at 0 % on 10 of 10 (`single-clock-look-switch/tasks.md` 4.3); the byte-for-byte golden sequence pins it                                                                                                                                                        |
+| [[B-200]] — `B-166`'s rollback, un-deferred         | **filed only**                | `bugs-runtime.md` `[ ] B-200`; `#applyLivePlatesUnguarded`'s `moved`/`unmuted` loops send `mixerFit`/`mixerVolume` with no `deferMixer` — by decision, and untouched here                                                                                                                                                                        |
+| `command-builder.ts` ban text                       | **gone**                      | `git grep -i -E "forbid\|banned\|\bban\b\|until it is known\|prohibit" -- tools/caspar-bridge/src/command-builder.ts` → no hits; `deferMixer`'s doc carries the measurements instead                                                                                                                                                             |
+| `CommandQueue` `pipelineDepth: 4`, the awaited send | as remembered, one correction | `packages/caspar-client/src/queue/command-queue.ts:109` (`options.pipelineDepth ?? 4`); the awaited send is `await this.#adapter.send(line, { priority })` inside `#send` — ⚠ the cited `caspar-runtime.ts:6022` was NOT the seam: on `d6a12d58` it sits inside `#applyLivePlates`'s doc comment (the `B-199` guard), ~4 000 lines above `#send` |
+
+**The staging map — eleven emitters, not eight.** The remembered eight are all real, but one of
+them is a wrapper since `B-199` and three helpers do the actual staging, committing and repairing:
+
+| method                             | `DEFER`s                                                              | issues `COMMIT`                                                                                   | `MIXER` outside any batch                                                                                                                                                |
+| ---------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `#takeImpl`                        | —                                                                     | —                                                                                                 | the page layer's un-mute (`INTENDED_VOLUME`, own seq) — sent AFTER `#applyLivePlates` returns                                                                            |
+| `enterRehearse` / `exitRehearse`   | —                                                                     | —                                                                                                 | `VOLUME 0` / `VOLUME INTENDED_VOLUME`, un-deferred                                                                                                                       |
+| `#reassertDeclaredVolumes`         | —                                                                     | —                                                                                                 | one `VOLUME` per bank slot, `normal` lane                                                                                                                                |
+| `#applyLivePlates`                 | —                                                                     | **yes** — the `finally` (`B-199`)                                                                 | via `#reassertLedgerGeometry` on the throw path                                                                                                                          |
+| `#applyLivePlatesUnguarded`        | **yes** — three sites: the seating loop, the departing mute, the park | **yes** — twice: the failure-path commit before the rollback, the good-path commit after the park | `MIXER CLEAR` at four sites (the dropped preset — INSIDE the staged window; the take rollback; the live teardown; the clearing sweep) and `B-200`'s un-deferred rollback |
+| `#commitStagedMixer` (helper)      | —                                                                     | **the one sender**, via `#sendMixerCommit`                                                        | —                                                                                                                                                                        |
+| `#reassertLedgerGeometry` (helper) | —                                                                     | —                                                                                                 | `FILL`/`CLIP` per ledger record, un-deferred, by design                                                                                                                  |
+| `setLivePlateVolume`               | —                                                                     | —                                                                                                 | one `VOLUME`, un-deferred                                                                                                                                                |
+| `teardownLiveLayers`               | —                                                                     | —                                                                                                 | `MIXER CLEAR` per record                                                                                                                                                 |
+| `#sendAdd`                         | —                                                                     | —                                                                                                 | the born-muted `VOLUME 0` after `CG ADD`                                                                                                                                 |
+
+Every `DEFER` in the tree goes through `deferMixer` from inside `#applyLivePlatesUnguarded`; every
+`COMMIT` goes through `#commitStagedMixer`, called from three places (the `finally`, the failure
+path, the good path). One helper sends, three sites call — the prediction "exactly one site issuing
+`COMMIT`" is true of the sender and false of the call sites, and the difference is the whole design:
+the helper is idempotent precisely so three sites can call it.
+
+### §2 — the one question: is there a reachable path that writes `DEFER` and never writes `COMMIT`?
+
+**Yes — one class, plus the one no process can close.** Each candidate, with what decides it:
+
+| candidate                                                        | verdict                              | why                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a throw between the first stage and the commit                   | **not reached**                      | `B-199`'s `finally` in `#applyLivePlates` (`68da3bfe`) commits and repairs; two red-first tests pin it                                                                                                                                                                                                                                       |
+| a rejected send (non-`202`)                                      | **not reached**                      | `#send` never rejects — every wire failure becomes `{ ok: false }` — and the failure branch commits BEFORE `B-166`'s rollback; the server is alive to receive it                                                                                                                                                                             |
+| an early `return`/`continue` inside the staged region            | **not reached**                      | the only `continue` (the dropped preset) stays inside the loop above the commit; the one `return` before any staging is `placements.length === 0 && parked.length === 0 && previous.length === 0`; every other `return` is after the failure-path commit; the `finally` backs all of them                                                    |
+| an exception from seating/geometry code between stage and commit | **not reached**                      | `parkedFit`, `releaseLivePlate`, `mixerFit`, `same()` all sit inside the `try` — that IS `B-199`'s case                                                                                                                                                                                                                                      |
+| an `await` that never settles                                    | **not reached**                      | every `await` in the window is a `#send` → `CommandQueue.enqueue`, which arms a per-entry timer in `pump()` (default 2 000 ms) and rejects every entry on `close`/`dispose` (`failAll`); the hold is `sleepMs`; nothing can hang                                                                                                             |
+| a `CommandQueue` timeout or drain                                | **reached, as a sub-case**           | a line that times out on a LIVE server commits fine (the server is answering); a line that times out on a HUNG server with the socket still open is followed by a `COMMIT` that times out too — the same class as the row below, arriving through `AmcpTimeoutError` instead of `AmcpDisconnectedError`                                      |
+| **socket disconnect / reconnect mid-batch**                      | **REACHED**                          | `CommandQueue.onClose` → `failAll(AmcpDisconnectedError)` → `{ ok: false, 'amcp-send-failed' }` → the failure-path commit and the `finally` commit are both SENT and both fail (`AmcpTransport.send`: `socket not writable`); the lines acked before the death are **staged-and-abandoned** on the server, and the drained field forgot them |
+| process death (SIGKILL, crash) mid-batch                         | **reached, unreachable from inside** | no `finally` runs; the next start has no memory; only a connect-time `COMMIT` covers it — see OPEN below                                                                                                                                                                                                                                     |
+
+⭐ **The third thing:** the commit IS in a `finally` and the `finally` is not enough, because what
+fails on this path is DELIVERY, not control flow. A `finally` guarantees the send; nothing but a live
+socket guarantees the arrival, and by construction this path has none.
+
+### §3 — from CasparCG 2.5.0's source (`v2.5.0-stable`, `src/protocol/amcp/AMCPCommandsImpl.cpp`), not from reasoning
+
+```cpp
+class transforms_applier
+{
+    static tbb::concurrent_unordered_map<int, std::vector<stage::transform_tuple_t>> deferred_transforms_;
+    …
+    std::future<void> commit_deferred()
+    {
+        const int  channel_index = ctx_.channel_index;
+        const auto f = ctx_.channel.stage->apply_transforms(deferred_transforms_[channel_index]).share();
+        return std::async(std::launch::deferred, [=]() { f.get(); deferred_transforms_[channel_index].clear(); });
+    }
+    void apply()
+    {
+        if (defer_) {
+            auto& defer_tranforms = deferred_transforms_[ctx_.channel_index];
+            defer_tranforms.insert(defer_tranforms.end(), transforms_.begin(), transforms_.end());
+        } else
+            ctx_.channel.stage->apply_transforms(transforms_);
+    }
+};
+tbb::concurrent_unordered_map<int, std::vector<stage::transform_tuple_t>> transforms_applier::deferred_transforms_;
+```
+
+1. **Does an uncommitted staged change persist indefinitely? YES — the memory is right, and the
+   reason is structural.** `deferred_transforms_` is a **`static`** member: one map for the whole
+   process, keyed by channel index, not by connection. The only code that empties a channel's
+   vector is `commit_deferred()`, after it has applied it. So a staged change lives until a `COMMIT`
+   names its channel or the server process exits — which is why a dropped connection does not clear
+   it (there is no per-connection state to clear) and why a commit from any socket applies it.
+   `mixer_clear_command` calls `stage->clear_transforms(…)` (the APPLIED transforms) and
+   `clear_command` calls `stage->clear(…)` (the layers); neither touches the vector.
+2. **Is there a verb that DISCARDS a staged batch? NO.** The identifier `deferred_transforms_` is
+   referenced in exactly two places — `apply()` appends, `commit_deferred()` applies-then-clears —
+   and the word `DEFER` in exactly one (the constructor pops it as a flag). `COMMIT` is the only
+   exit from the staged state.
+3. **The least-bad terminal action on an aborted batch: commit the partial, then repair.** Leaving
+   it staged is not "leaving it": with no discard verb, "staged" means "applied later, by the next
+   commit on the channel, whoever sends it, on layers that commit never meant to touch" — a wrong
+   geometry that arrives attached to an unrelated action, which nobody can attribute. Committing it
+   applies a wrong geometry NOW, bounded to the batch's own layers, attached to the action that
+   caused it — and, because the ledger was written from the same failure path, REPAIRABLE by
+   re-asserting what the ledger names. That is `B-199`'s decision for `B-199`'s reasons; this item
+   only moves it to the one moment a dead link can be repaired at.
+
+### The fix — committed on the next link, guarded at the seam (`tools/caspar-bridge/src/caspar-runtime.ts`)
+
+- **`#sendMixerCommit(channel)`** — the ONE place a `COMMIT` is sent and its landing judged:
+  `ok && onPrimary` (the adoption bookkeeping's gate, for the adoption bookkeeping's reason — in
+  mirror-sync a backup-only ack is `ok` while the primary never saw it). Anything short of that
+  writes **`#orphanedMixerChannel`**. `#commitStagedMixer` still drains its field first and sends
+  exactly once, so the normal path is **byte-identical** — the golden sequence test stayed green
+  untouched.
+- **`#flushOrphanedStaging()`** — on the primary's next `healthy` (`#wireAdapter`'s `state-change`
+  handler, FIRST after `setLinkDown(false)`): commit the orphan, and if that lands, re-assert the
+  ledger's geometry for every row seated on that channel through `#reassertLedgerGeometry` under the
+  row's seat lock — `B-199`'s repair, unchanged, reused. A commit that fails again re-orphans through
+  the same helper; the repair is then skipped because it would not land either. Nothing is sent
+  unless this process staged something and failed to commit it.
+- **GREEN with the injector still in place:** after the reconnect handshake the server receives
+  `MIXER 1 COMMIT` before any other band-layer traffic, then all six records' `FILL`/`CLIP`
+  un-deferred; `stagedMixerCount(1) === 0`; layer 30 is back on the grid cell the ledger names.
+  The whole suite: 66 of 66.
+- **The mock had to learn the verb pair first** (`tools/amcp-mock`): it used to APPLY a `DEFER`
+  line at once and answer `400` to `COMMIT`, so a bridge that staged and lost its commit looked,
+  offline, exactly like one that committed. It now models the queue as the source keeps it — one
+  per channel, owned by the mock, appended by `DEFER`, applied-in-order-then-emptied by `COMMIT`,
+  the layer token on a commit ignored, untouched by `CLEAR`/`MIXER CLEAR`/undeferred lines — with
+  `stagedMixerCount(channel)` as the server-side observation and six tests of its own
+  (`live-producers.test.ts`).
+
+### The guard — an invariant at the send seam, and its red-first proof
+
+Chosen over a batch helper and over a lint rule because the seam is the one place a line cannot
+bypass: a helper can be skipped by a hand-built `${line} DEFER`, and a lint rule sees shapes in
+this repo's source, not a string built at runtime. In `#send`, before the write and before its own
+`try`: a line ending in ` DEFER` whose channel is not the armed `#stagedMixerChannel` **throws**
+(`INVARIANT (B-221): a MIXER line was staged with no armed commit for its channel …`). Thrown
+before the write, the unbalanced line never reaches the server; thrown inside a batch, `B-199`'s
+guard commits what WAS armed and repairs, so the mistake is refused to the operator instead of
+landing on air. It cannot fire on any current path — every staging site arms before it sends.
+
+**Reintroduced verbatim, and it fired:** the arm at the seating loop's staging site
+(`if (line.startsWith('MIXER ')) this.#stagedMixerChannel = placement.slot.channel;`) removed →
+`live-look-reconcile.integration.test.ts`: **62 of 66 red, 186 `INVARIANT (B-221)` hits**, the first
+reading `… (armed: null) — it would never be committed. Line: MIXER 1-30 VOLUME 0 DEFER`. Restored →
+**66 of 66 green**. That is how "the guard finds nothing on the current tree" was told apart from a
+failing guard: it found 186 things on a tree with the shape in it and nothing on the tree without.
+
+🔴 **What it cannot see — how a second unbalanced batch would hide from it:**
+
+1. **A batch that arms and stages correctly on a path with no commit at all** — a new `deferMixer`
+   caller outside `#applyLivePlates`'s wrapper (a deferred `setLivePlateVolume`, say): the field is
+   armed, the seam is satisfied, and the line waits for the next unrelated batch's commit. Only a
+   call-site restriction (a lint rule beside `cg/bank-shape`, or `#applyLivePlates` being the sole
+   home) would see that shape; it is not built here.
+2. **A commit that is sent but not delivered** — this item's own subject. A seam checks a SHAPE; it
+   cannot check an arrival. `#flushOrphanedStaging` covers it, not the guard.
+3. **Anything another client stages** — invisible from here by construction (dormant; see
+   [[B-198]]'s 2026-09-05 note).
+4. **A staged line that is later `CLEAR`ed un-deferred inside the same batch.** The dropped-preset
+   path sends `out` + `MIXER CLEAR` while the preset's own earlier lines (`VOLUME 0`, possibly a
+   `FILL`) are still staged, and the batch's commit then re-applies them onto the emptied layer.
+   Benign as measured by reading: a stale fill on an EMPTY band layer that every seat overwrites
+   with its own — but it is a balanced batch to the guard and a wrong order to the server.
+5. **The audio half of the repair.** `#reassertLedgerGeometry` re-asserts geometry only (`B-199`'s
+   decision). A staged `VOLUME` flushed by the orphan commit — a plate coming back from HELD, say —
+   is not re-muted by the repair; the next reconcile is. Pre-existing on the throw path too.
+6. **A take arriving in the same event-loop turn as `healthy`.** The take is unlocked by design; a
+   staged line of its own landing BEFORE the flush's commit would be split by it, once, by one frame
+   — `B-198`'s residual, at reconnect, under a race the seat lock cannot cover.
+7. **Process death** — below.
+
+### OPEN — the process-death half, an owner decision rather than a code change
+
+`#orphanedMixerChannel` lives in the process. A bridge killed mid-batch takes it with it, and the
+next start cannot know the server is holding an orphan. Two ways to close it, neither taken here
+because both are decisions rather than fixes:
+
+- **A `MIXER <ch> COMMIT` on every connect, unconditionally.** Closes it completely and is exactly
+  the cross-connection exposure `B-198` bounded — it sweeps whatever any other client has staged.
+  DORMANT as of 2026-09-05 (two senders, ever), so today it would sweep nothing; the day a second
+  client appears it becomes the harm the ban existed for.
+- **Persist the open-batch flag** beside the ledger (`B-145`'s persistence) — written before the
+  first `DEFER`, cleared at the commit — so the next start commits only when THIS bridge left
+  something staged. Bounded to our own work, at the cost of a disk write on the hot path of every
+  switch.
+
+- **Cross-refs:** [[B-198]] (the staging, and the 2026-09-05 dormancy note), [[B-199]] (the throw
+  guard this extends, and the plant measurements it rests on), [[B-166]] (the rollback that runs
+  on the same failure path), [[B-200]] (the un-deferred rollback, untouched), [[B-145]] (the
+  persistence the OPEN option would ride), [[B-209]] (the seam argument, reused), `CLAUDE.md`
+  golden rule 8 (probe the axis you judge — a `finally` proves the send, not the arrival).
+- **Owed:** the plant run of the reconnect path — no AMCP was sent to `192.168.21.114` this
+  session by instruction; the mock models the server's queue from its source, and the source is
+  not the plant.
+- **CI (read 2026-09-05 by `ARRANGEMENT-DEADWOOD-01` §5 — the run `MIXER-DEFER-ABORT-01` left
+  unclaimed):** <https://github.com/yasermostafaee/cg/actions/runs/33936819497> for `7f85b3bb`
+  (`dev`, push) — run `status: completed`, `conclusion: success`. Jobs: `Detect changed paths` 9 s
+  · `Docs check` 54 s · `Lint • Typecheck • Test • Build` **435 s, `success`** ·
+  `E2E (Playwright)` **578 s, `success`** · `required` 2 s. Both heavy jobs RAN — non-zero
+  durations, not the path-filtered 0 s that renders green and discharges nothing — so the tree at
+  this commit, `live-look-reconcile.integration.test.ts` and the `INVARIANT (B-221)` included, is
+  verified on Linux. It puts none of this item's claims in doubt. The plant run above stays owed:
+  CI never touches `192.168.21.114`.
+- **Number:** highest `B-` HEADING across every ref was `B-220` (`bugs-designer.md:3986`);
+  `git grep -n "B-221" HEAD` returned exactly ONE hit — the registry's own "Next free" pointer —
+  and `B-222` returned nothing. Cross-checked against the registry's dated pointer — _"Next free
+  after this session is `B-221`"_ — headings and pointer AGREE.
+
+## [ ] B-222 — the headline crawl breaks up on the plant's PGM while three videos on the same channel stay smooth: measured, the strap template is cheap and compositor-driven, and the cost that scales with 1920×1080 at 50 Hz sits in the html producer's own frame path — a full-raster copy per paint on CEF's UI thread, and a free-running CEF timer with no genlock to the channel tick ⟨priority: high — visible on air on every crawl⟩ — FILED 2026-09-05 by `TICKER-JUDDER-01`; NOT a template defect (the §A4 fix was withheld by measurement, not by choice); the plant-side trial is the OWNER's (§C below, report only); §D/§E added 2026-09-05 by `STRAP98-PAINT-01` — at the hold the CRAWL is the only painter (the frozen video decodes nothing and draws no frame of its own), so §C(b)'s "move the video to a media layer" clause is WITHDRAWN; the surviving lever is sizing each producer to its footprint
+
+**Observed** by the owner on the real PGM output (not Remote Desktop), plant `192.168.21.114`,
+channel `1080p5000`, 2026-09-05: four rows on air including html layers 97, 98, 99, each created at
+`cw=1920&ch=1080`; three videos in boxes perfectly smooth; **only the ticker stutters**, somewhat
+better with a single box; CasparCG logs not one dropped frame (a `late` grep matched `Latency` in
+`ffmpeg[…] Latency: N` lines — decode latency, not drops); i7-7700K 4C/8T, GeForce GT 730 (2022
+driver), 24 GB; with the screen consumer running CPU 64 %, GPU Copy 73 % / 3D 29 %; with it stopped
+CPU 54–63 %, Copy 55 % / 3D 32 % — **the ticker still stutters**.
+
+### §A1 — the state, with anchors (nothing changed)
+
+Layer 97 is the stored template `9e1115d9…` (`میان‌برنامه (روی آنتن)`, the IRIB-style strap comp
+exported alone: scene 1920×190, 50 fps, `playout.mode: manual`, `lifecycle {outPoint 60,
+contentStart 55}`), the record read from the bridge host's own `~/.cg-runtime/bridge-templates/`.
+
+| what animates                                              | how, and by which property                                                                                                                                                                                                                                                 | anchor                                                 |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `ir-crawl` (ticker, 1560×76, speed 120 px/s, 4 headlines)  | a JS `requestAnimationFrame` loop writes `transform: translateX(d px)` on `.cg-ticker-track` every frame; items are absolutely positioned spans fed 256 px ahead of the entering edge and recycled 64 px past the leaving edge; the track carries `will-change: transform` | `ticker-driver.ts:419-446`, `scene-builder.ts:700-706` |
+| `ir-rotator` (sequence, 360×134, dwell 4000 ms)            | a 400 ms `translate()` + `visibility` on the item node at each advance; during the dwell a rAF loop runs every frame and writes NOTHING (it only compares elapsed time)                                                                                                    | `sequence-driver.ts:530-560`                           |
+| the clock inside `st-tehran` / `st-gmt`                    | a rAF loop every frame; DOM write only when the formatted text changes (`HH:mm`, once a minute) or the colon phase flips (once a second: `opacity` on the colon spans)                                                                                                     | `clock-driver.ts:509-530`, `578-590`                   |
+| the strap's keyframed shapes/text (bar, slab, star, panel) | the `FrameDriver` in `once` mode during the intro 0→60 and the outro only; at the hold it has ENDED — measured: 74 frame-driver ticks per play, none afterwards                                                                                                            | `frame-driver.ts:113-146`                              |
+| layer 98 (`zirnevis-white`, 1920×282)                      | a `<video>` element the size of the strap, base64-inlined and **decoded inside the page** (CEF's software decoder on the plant), plus a second ticker (1710×72, four HARD-CODED items, no field binding)                                                                   | the stored record `16a31af6…`                          |
+| layer 99 (logo bug, 448×144)                               | nothing continuous after the intro: zero paints, zero raster in 6 s                                                                                                                                                                                                        | the stored record `6624cc34…`                          |
+
+**Compositor-only or main-thread?** The track is its own compositor layer (measured: layer id 8,
+3096×76, `drawsContent`); its tiles were rasterised **twice in six seconds** (5 raster tasks, 2
+source frames — when items are fed), never per frame; **Layout ran 9 times in 6 s** (feed-time
+width measurement), never per frame. So the motion is compositor-driven, but each step is
+main-thread-triggered: JS + style recalc + prepaint + commit ≈ 0.7–0.8 ms per frame. **Painted
+surface:** the page is 1920×1080 (`applyOutputPosition` resizes `html`/`body` to the `cw`/`ch`
+raster, `position.ts:238-241`) with the 1920×190 stage translated into it; Blink's per-frame damage
+is the band (1560×76); **but CEF's off-screen path hands CasparCG the whole 1920×1080 BGRA buffer
+on every paint and CasparCG copies all 8,294,400 bytes of it regardless of `dirtyRects`**
+(`html_producer.cpp:326-361`; single-threaded `memcpy` when `enable-gpu` is off, line 356). At the
+CasparCG level the per-frame surface is the whole page. **Expensive-to-paint features:** the crawl's
+`text-shadow` blur 6 (raster once per fed item), `box-shadow` blur 26 on the bar and the panel and
+three linear gradients (static at the hold), the clock's `text-shadow` blur 8 (repainted once a
+second on a 399×183 layer). Nothing is repainted per frame on the CPU rasteriser.
+
+### §A2 — the measurement (before; nothing was changed, so there is no after)
+
+Method: the stored HTML served over local HTTP at `/template/t?cw=1920&ch=1080`, opened in headless
+system Chrome through Playwright at a 1920×1080 viewport with CEF 2.5.0's default switches
+(`--disable-gpu --disable-gpu-compositing --disable-gpu-vsync --enable-begin-frame-scheduling`),
+driven exactly as CasparCG does — `update(<the logged payload>)` then `play()` — and profiled at the
+hold for 6 s: an in-page rAF sampler, a DevTools trace (`devtools.timeline`, `cc`, `viz`), the CDP
+layer tree. 🔴 **Machine: Intel i5-10400 (6C/12T, 2.9–4.3 GHz), Intel UHD 630, 16 GB, Windows 11;
+Chrome's rAF runs at 60 Hz here, not the plant's 50.** The script and traces are in the session's
+scratch record; the numbers:
+
+| layer 97 at the hold, software mode       | value                                                                                                             |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| rAF frames / 6 s                          | 361 → 60.2 fps; gap p50/p90/p99/max = 16.70 / 16.70 / 16.80 / 16.80 ms; **0 long frames > 25 ms**                 |
+| renderer main thread per frame            | `ProxyMain::BeginMainFrame` **0.73–0.84 ms** (JS 0.30, style 0.05, prepaint 0.06, paint-walk 0.17, commit 0.07)   |
+| compositor thread per frame               | ≈ 0.3 ms (`MainFrame.Draw` 0.12 + `ReadyToCommit` 0.10)                                                           |
+| viz software draw per frame               | `Display::DrawAndSwap` **0.37 ms**, ≈ 9 quads                                                                     |
+| raster                                    | 52 tasks in 6 s, 11.3 ms total — track layer 5 tasks / 2 source frames; rotator layer 19 / 19; root 14 / 1        |
+| Layout / Paint events in 6 s              | 9 (1.35 ms) / 750 (60.8 ms — the per-frame paint WALK of the root and the band's cull rect; no raster follows)    |
+| rAF loops alive at the hold               | exactly three of ours: ticker `step`, sequence dwell `step`, clock `paint`                                        |
+| layer 98 (video + ticker)                 | 60.3 fps, 0 long frames; main thread ≈ 1.2 ms/frame; 2 raster tasks (the video is a compositor video layer)       |
+| layer 99 (logo bug)                       | 60.3 fps; 0 Paint, 0 raster; ≈ 0.25 ms/frame of JS+commit                                                         |
+| same, GPU compositing allowed (UHD 630)   | rAF 75 fps (no vsync); `DrawAndSwap` 0.14 ms; +≈ 0.6 ms/frame on the GPU process                                  |
+| CPU contention, 10 spinners on 12 threads | layer 97 **0 long frames**, main thread 0.95 ms/frame; a CSS-animation control and a JS-rAF control page: 0 and 0 |
+| CPU contention, 16 spinners on 12 threads | layer 97 **0 long frames** (1.03 ms/frame); the CSS control 1 draw gap of 26 ms                                   |
+
+**What this proves:** the template's own per-frame work is small (≈ 1.5 ms of CPU across three
+threads at 60 Hz on this box), the moving element is a promoted layer, nothing is re-rasterised or
+re-laid-out per frame, and the page keeps every frame under a CPU load Chromium on Windows can be
+given. **What it cannot prove:** anything about CEF's off-screen path (the per-paint copy, the
+`frames_` queue, the CEF timer against the channel tick), the 7700K sharing four cores with three
+decoders, the GT 730's upload path, or a 50 Hz cadence. Chromium is not CEF and this box is not the
+plant.
+
+### §A3 — the predictions
+
+- **P1 (not on its own layer; wide repaint) — MISS.** The track is composited (`will-change:
+transform`, `scene-builder.ts:706`; layer 8, 3096×76); the region rasterised per frame is zero.
+- **P2 (a rotator animates continuously) — HALF.** The page never reaches an idle frame — three rAF
+  loops stay alive — but the rotator PAINTS only at the colon blink (1/s) and the 400 ms slide every
+  4 s (19 raster tasks in 6 s on its own layer). The continuous painter is the crawl alone.
+- **P3 (no JS writing layout; CSS animation) — MISS in the letter, hit in the substance.** The crawl
+  is JS-driven, not CSS (`ticker-driver.ts:424`), but the property it writes is compositor-only and
+  no layout is written per frame.
+- **The third thing — where the cost that scales with 1920×1080 × 50 Hz actually is:** in the
+  html producer, not in the page. Per paint per html layer, CasparCG copies 8.3 MB on the CEF UI
+  thread that all html producers share (`html_producer.cpp:346-361`) and uploads it to the GPU —
+  two full-HD html layers repainting at 50 Hz are ≈ 0.83 GB/s before a single video, which is
+  what a GT 730's **Copy engine at 73 %** looks like. And frame delivery is a free-running CEF timer
+  (`windowless_frame_rate = ceil(channel fps)`, `html_producer.cpp:583-584`) with **no genlock to
+  the channel tick**: a 4-deep queue (`frames_max_size_ = 4`, line 135) that returns the previous
+  frame as a still whenever it is empty at the tick (`receive` → `try_pop`, lines 196-266, the
+  SILENT `late-frame` tag) and drops the oldest when it overflows (line 372). Two 50 Hz clocks that
+  are not the same clock beat; a late paint under load empties the queue. Either way the channel
+  outputs 50 frames — **repeats without drops, on continuously moving content only, worse with more
+  load** — which is exactly what the owner saw. The videos do not show it because the ffmpeg
+  producer decodes AHEAD into a buffer; the html producer cannot render ahead.
+
+### §A4 — why no template change shipped
+
+Gate 1 (identical render) and gate 3 (no restructure) were never the obstacle; gate 2 was: **there
+is no after-number to beat.** The only change our code could make is to move the crawl off the
+main thread (a Web Animations API `transform` on the track with the feeder reading the animation's
+`currentTime`), which would spare ≈ 0.7 ms of main-thread work per frame and make the motion
+survive a starved renderer main thread — and the contention runs above show the JS-driven page
+keeping every frame under 133 % oversubscription, so the measurement gives that change nothing to
+fix. It is listed here as the one option on our side, NOT shipped: a restructure of `TickerDriver`'s
+pause/resume/`setItems` model, with no evidence it reaches the mechanism above.
+
+**What the owner should look at on PGM to judge this record:** the crawl at a steady point in its
+lap — a repeated frame shows as a momentary hold followed by a double-length step, with the clock's
+colon blink and the panel's slide unaffected. Nothing in the template changed, so there is nothing
+to "see fixed" from §A; the judgement points are for the §C trial.
+
+### §C — the plant-side knobs, from 2.5.0's own source (report only; nothing was sent to the plant)
+
+1. **`<html>` settings** (`src/shell/casparcg.config:55-60`, read in `src/modules/html/html.cpp`):
+   `remote-debugging-port` (0 = off; CEF's DevTools port), `enable-gpu` (**default `false`** — CEF
+   renders and composites in SOFTWARE: `--disable-gpu`, `--disable-gpu-compositing`,
+   `--disable-gpu-vsync=gpu` appended, `html.cpp:200-206`; `true` appends `--enable-webgl` and
+   `--use-angle=<angle-backend>`, lines 170-183), `angle-backend` (`gl` default; `d3d11`/`d3d9`;
+   only read when gpu is on), `cache-path`. Always on regardless: `windowless_rendering_enabled`,
+   `no_sandbox`, `--enable-begin-frame-scheduling`, `--disable-web-security`,
+   `--autoplay-policy=no-user-gesture-required` (lines 193-198, 236-240). Even with `enable-gpu`
+   on, 2.5.0's producer still receives a CPU buffer through `OnPaint` (no `OnAcceleratedPaint`, no
+   shared texture in the file) — the GPU path adds a per-frame GPU→CPU readback per html layer.
+2. **Frame rate:** `browser_settings.windowless_frame_rate = int(ceil(format_desc.fps))`
+   (`html_producer.cpp:583-584`) — the channel's rate, 50 here; a CEF timer, not the channel tick.
+3. **Painted surface size:** the browser is created at `format_desc.square_width × square_height`
+   (`html_producer.cpp:577-578`, `GetViewRect` line 323) — the CHANNEL raster. The ONLY override is
+   in the producer's URL: `width=<n>` / `height=<n>` matched by regex over the whole URL
+   (`html_producer.cpp:677-692`) set that producer's `format_desc` — a smaller page, a smaller
+   buffer, a smaller copy. ⚠ The bridge's `cw=`/`ch=` do NOT match that regex (no `width=` in
+   them), and a smaller frame must be placed with `MIXER FILL`, or the mixer stretches it over the
+   channel — to be verified on the dev host before the plant. Nothing else in the config affects
+   it.
+4. **Recommendation, in order.** ⚠ Owner's call. (a) **First: `<remote-debugging-port>9222`** —
+   zero risk to air; lets the owner record a DevTools Performance trace of the plant's own CEF
+   renderer, which is the one measurement this session could not take and which decides between
+   "the page is late" and "the copy/queue is late". (b) **The lever that changes the arithmetic is
+   fewer full-HD html paints per second:** move layer 98's video out of HTML into a CasparCG media
+   layer (the ffmpeg producer, the same path as the three smooth boxes) and keep only the ticker in
+   HTML; later, a bridge change to size each html producer to its template's footprint
+   (`width=1920&height=190` + `MIXER FILL`) cuts the strap's copy 5.7×. (c) **Do not touch
+   `enable-gpu`** on this card: it moves CEF's raster and composite onto the GT 730 whose Copy
+   engine is already the busiest unit, adds a readback per html frame, and 2.5.0's own producer
+   comments record a stutter class specific to gpu mode (`html_producer.cpp:214-222`).
+   `angle-backend` is moot while gpu is off; `cache-path` is irrelevant. Stopping the screen
+   consumer is load relief (−5 % CPU, −18 % Copy measured by the owner), not the cause.
+
+### §D — the hold, measured (2026-09-05, `STRAP98-PAINT-01`): the CRAWL is the painter; the video is not, and §C(b)'s first clause is WITHDRAWN
+
+§A profiled layer 97 and reported layer 98's cost as "its in-page video". That claim was never
+measured AT THE HOLD, and at the hold it is false.
+
+**What the runtime does with this template once it is up** (anchors, nothing changed):
+
+- `holdBehavior: "freeze"` PAUSES the element and CANCELS the driver's rAF — `seekMs(introEndMs)`,
+  `handle.pause()`, `settledHold = true`, `running = false`, `cancelFrame()`
+  (`video-driver.ts:538-545`). No decode, no timer, nothing scheduled.
+- The freeze lands at **5.02 s, not 14.32 s.** The element carries `phases.source: "composition"`,
+  so it FOLLOWS the composition window and `introEndMs` is the derived hold `H`
+  (`runtime.ts:1288-1331`); measured, `H` = 5.02 s = frame 251 = the scene's own
+  `lifecycle.contentStart`. The clip's remaining 9.3 s are never played on air.
+- `auto-out` + `holdSource: "content-driven"` waits on `waitForContent()`
+  (`playout-controller.ts:355-375`); the ticker's `repeat: "infinite"` never completes, so the hold
+  never ends, no outro is ever taken, and the graphic stays up until `stop()`. That is why the hold
+  is the steady state worth measuring.
+- D-133's hold loop (`playout-controller.ts:409-424`) would re-render `[contentStart -> outPoint]`
+  every frame, but this scene has ZERO keyframe blocks, so `frameDependent(251, 520)` is false and
+  no FrameDriver opens. Confirmed at the wire below: with the crawl stopped the page draws nothing.
+
+**Method** — as §A2, at the hold: the stored record's own HTML (bridge-templates
+`16a31af6…`) served over local HTTP at `/template/t?cw=1920&ch=1080`, headless system Chrome
+152.0.7977.76 at a 1920×1080 viewport with CEF 2.5.0's software switches
+(`--disable-gpu --disable-gpu-compositing --disable-gpu-vsync --enable-begin-frame-scheduling`),
+driven `update("{}")` then `play("{}")`, 20 s to reach the hold, then a 6 s CDP trace.
+🔴 **Machine: i5-10400 6C/12T, UHD 630, 15.8 GB, Windows 11 26100; Chrome's rAF is 60 Hz here, not
+the plant's 50.** Variants are compared against EACH OTHER on this box, never against a target.
+
+| layer 98 at the hold            | draws / 6 s | quads per draw | RunTask ms / 6 s (renderer + compositor + viz) | ms per drawn frame | video frames decoded in the window |
+| ------------------------------- | ----------- | -------------- | ---------------------------------------------- | ------------------ | ---------------------------------- |
+| (a) as shipped                  | 362         | 6.36           | 647.8                                          | 1.79               | **0** (138 → 138)                  |
+| (b) the video element removed   | 362         | 5.36           | 577.1                                          | 1.59               | n/a                                |
+| (c) the ticker element removed  | **0**       | —              | 94.9                                           | —                  | **0** (250 → 250)                  |
+| (d) the ticker kept, `speed: 0` | **0**       | —              | 124.0                                          | —                  | **0** (138 → 138)                  |
+
+**Reading: (b) ≈ (a); (c) and (d) draw NOTHING.** The crawl is the painter. The video's entire
+marginal cost at the hold is ONE composited quad per already-drawn frame — 70.7 ms across 6 s, 0.20 ms
+per drawn frame — with zero decode and zero raster, and it exists only because the crawl has already
+caused a frame to be produced. **§C recommendation (b)'s first clause — "move layer 98's video out of
+HTML into a CasparCG media layer" — is WITHDRAWN: it removes no paints.** (Its second clause, sizing
+each producer to its footprint, stands and is quantified below.) A media-layer move would not even
+have rendered the same picture: see `P-043`.
+
+**Why (d) exists, and why (c) alone would have been the wrong control.** Removing the ticker removes
+the scope's only hold driver, so B-032's guard resolves `content-driven` back to `timed`
+(`runtime.ts:677-678`) and the graphic takes its outro and ends — (c) is not "(a) minus the crawl".
+(d) holds the lifecycle identical to (a) (same content-driven hold, video frozen at the same 5.02 s)
+and changes only whether the crawl MOVES. It draws nothing either.
+
+**Controls.** The in-page rAF sampler was removed and (a) and (d) re-run: (a) still drew 361 frames
+(677.2 ms), (d) still drew 0 (134.3 ms) — the sampler is not what produces the frames. And the
+zero-draw readings are not a dead instrument: the SAME 6 s windows recorded 362 `BeginFrame` and 362
+`FireAnimationFrame` events, so the trace was live while it recorded no draws.
+
+**Two §A statements this corrects.**
+
+1. §A1's layer-98 row — "decoded inside the page" — is true for the first 5.02 s and false for every
+   second after it. The element is paused and its decoded-frame counter does not move again.
+2. §A1 and §A2 record layer 99 as "zero paints, zero raster in 6 s". That does not generalise: over
+   **24 s it drew 408 frames (28 % duty)**. It is `loop-cycle` with `holdMs 8000`, so it re-plays its
+   70-frame intro about every 9.4 s and a 6 s window can land wholly inside one hold. §A's own
+   sampling window was the reason it looked free.
+
+### §E — the steady-state arithmetic for the REAL on-air set (report only)
+
+The concurrent set, reconstructed from the bridge's own audit (`~/.cg-runtime/bridge-audit.ndjson`,
+2026-09-05, take/stop/out folded in order) is channel 1 layers **9, 97, 98, 99 — FOUR html producers,
+not three** — over the three media producers at layers 10/11/12 in `bridge-live-layers.json`.
+
+| layer | template   | scene     | measured          | duty  | paints/s at the plant's 50 Hz |
+| ----- | ---------- | --------- | ----------------- | ----- | ----------------------------- |
+| 9     | `e506e319` | 1920×1080 | **0** draws / 6 s | 0 %   | **0**                         |
+| 97    | `9e1115d9` | 1920×190  | 360 draws / 6 s   | 100 % | **50**                        |
+| 98    | `16a31af6` | 1920×282  | 361 draws / 6 s   | 100 % | **50**                        |
+| 99    | `6624cc34` | 448×144   | 408 draws / 24 s  | 28 %  | **14**                        |
+
+**≈ 114 full-HD html paints per second at the hold**, each an 8,294,400-byte copy on the ONE CEF UI
+thread every html producer shares (§A3) — **≈ 945 MB/s** before a frame of video is decoded. **The two
+crawls are 100 of those 114 — 88 %.** Layer 9 is free; the frozen video is free; the logo costs 12 %.
+
+**What would change that number** — named only, each an OWNER decision, none built:
+
+1. **Size each producer to its own footprint** (`width=`/`height=` in the producer URL +
+   `MIXER FILL`, §C3): 1.46 MB for layer 97, 2.17 MB for 98, 0.26 MB for 99 per paint — **≈ 185 MB/s,
+   an 80 % cut**, and the largest lever by a wide margin. Still owed its dev-host verification.
+2. **One page carrying both crawls**: 114 → 64 paints/s, and one fewer producer contending for the
+   shared CEF UI thread.
+3. **A Web Animations crawl**: already declined in §A4 on measurement — it moves ~0.7 ms of
+   main-thread work per frame and changes no copy at all.
+
+**Repro:** the plant as observed above; not reproducible on this dev box (no CEF, no 50 Hz OSR path).
+**Expected:** a crawl that advances 2.4 px every 20 ms, every frame.
+**Actual:** repeated frames on the crawl only; the channel reports no drops.
+**Regression test:** none in this repo — the mechanism named is in CasparCG's html producer, not in
+our code path; the measurement harness (serve-and-profile) lives in the session record and can be
+re-run against any stored template.
+
+- **Cross-refs:** [[B-098]] (the other place "a longer rope is not the fix" was learned), `R-030`
+  (the `cw`/`ch` raster the bridge appends, and why it is not CasparCG's `width=`), [[B-223]] (the
+  same session's §B), `P-043` (2.5.0 DOES play this WebM's alpha, and composites it premultiplied —
+  measured for §D's withdrawn move), the `caspar.md` html-producer notes.
+- **Owed:** the plant-side trial and its visual judgement (owner); a DevTools trace of the plant's
+  CEF if `remote-debugging-port` is set; the dev-host verification of `width=`/`height=` +
+  `MIXER FILL` before any bridge change — now the LARGEST remaining lever (§E), since §D removed the
+  other one.
+- **Number:** highest `B-` HEADING across the three bug files was `B-221` (this file); `git grep
+-n "B-222" HEAD` returned only the registry's own "Next free" pointer; `B-223` returned nothing.
+  Cross-checked against the registry's dated pointer — _"Next free after this session is
+  `B-222`"_ — headings and pointer AGREE. Two numbers taken this session: `B-222` (this) and
+  `B-223` (below).
+
+## [~] B-223 — the program-output alarm shouted at the operator over a stopped SCREEN consumer: five lines about persistent IDs, slot indexes, drivers and the server log, full-width, over a preview window that has nothing to do with air ⟨priority: high — an alarm spent on a non-event is an alarm nobody reads when it is real⟩ — FILED AND CLOSED IN CODE 2026-09-05 by `TICKER-JUDDER-01` §B; Linux `gate:e2e` DISCHARGED for `3b431f67` (carries `dfe3adf1`) — <https://github.com/yasermostafaee/cg/actions/runs/33969010294> (`E2E (Playwright)` RAN 621 s, `success`; `Lint • Typecheck • Test • Build` RAN 422 s, `success`; read 2026-09-05)
+
+**What:** `C-029`'s banner compared what `casparcg.config` declares against what runs and alarmed
+on ANY difference, softening only its tone for a monitor. With the plant's screen consumer stopped
+by hand (2026-09-05, to measure the ticker) the operator got: _DECLARED OUTPUT NOT RUNNING — CHANNEL
+1 IS MISSING A CONFIGURED CONSUMER … casparcg.config declares screen and CasparCG is not running it.
+Running: decklink, system-audio. Checked 14:08:44 …_ followed by the addressing reading, the rule
+CasparCG reads the number by, the failed-at-start paragraph and the startup-log recipe. **The
+owner: "this should not matter to the operator at all."** He is right: the alarm exists for a dead
+DeckLink — air off — and a preview window on the playout machine is not the operator's business.
+
+**The rule now, in one place (`outputSeverityOf` / `isAirOutputKind` / `checksLosingAir`,
+`@cg/shared-ipc` `outputs.ts`):** severity by air-criticality — _does anything outside the playout
+machine depend on this consumer?_ Over every kind 2.5.0 can declare (`src/shell/casparcg.config`,
+`src/modules/` at `v2.5.0-stable`):
+
+| kind           | severity | why                                                                                    |
+| -------------- | -------- | -------------------------------------------------------------------------------------- |
+| `decklink`     | air      | SDI/HDMI out of the card — this plant's air path; the alarm stays exactly as loud      |
+| `bluefish`     | air      | SDI out of a Bluefish card                                                             |
+| `ndi`          | air      | video over the network to whatever subscribes                                          |
+| `ffmpeg`       | air      | a stream or a recording — the console cannot tell which, and both leave the machine    |
+| `artnet`       | air      | DMX to a lighting rig; nobody declares Art-Net for a preview                           |
+| _unknown_      | air      | only the LOCAL list is enumerated, so a stale list can only make the console louder    |
+| `screen`       | local    | a preview window on the playout machine's own display                                  |
+| `system-audio` | local    | the machine's own sound device — the audio twin of `screen`; air audio is embedded SDI |
+
+**Two surfaces.** The operator's banner renders ONLY for a check losing air, and carries the
+headline plus ONE line per channel (`decklink (device 23487013)`, "CasparCG is not running it",
+"the fix is on the playout machine", "Details: Server connection ▸ Outputs"). The engineering
+detail moved to a read-only `OutputsSection` inside the Server connection dialog: declared / running
+/ checked-at per channel, an AIR row with `C-030`'s words, the restart paragraph and the creation
+outcome, a preview / local-monitor row for a local kind, the kept verdict dated for an unreachable
+server. The bridge's stderr line follows the same rule (🔴 for air, a plain "noted, not alarmed"
+line for local). **Nothing gates on it** (§B.4, by `git grep` over `outputs` / `missing` /
+`outputVerdictOf` / `isAirOutputKind`): the readers are the two surfaces, `health()`, and the
+off-by-default `#createMissingConsumer` — no refusal, no disabled control, no failover.
+
+**Red-first, per severity class, with the sources stashed:** `outputMissingBanner.dom.test.ts` —
+10 of 18 red against the old banner, among them `🔴 a missing screen consumer renders NO banner`
+and `🔴 the banner carries the headline and one line per channel`; `output-addressing.test.ts` —
+2 of 5 red against the old stderr line (`🔴 a channel missing only a screen consumer is a plain
+note`); `outputs.test.ts` — the unknown-kind case cannot pass on the old enumerated air list. Then
+sources restored, `@cg/shared-ipc` rebuilt, all green. `outputMissingBanner.addressing.dom.test.ts`
+was folded into `outputsSection.dom.test.ts` (17 cases) — every `C-030` assertion moved to the
+surface that now carries the words; none was dropped. The E2E gains a scenario that stops the
+screen consumer and asserts no alert plus the preview row.
+
+**Repro:** stop the screen consumer on a plant whose config declares `<screen/>`.
+**Expected:** nothing for the operator; a preview row in Server connection ▸ Outputs.
+**Actual (before):** a full-width amber banner with five lines of engineering instructions.
+**Regression tests:** the three suites above; `pgm-output-missing.spec.ts` (Linux `gate:e2e` OWED).
+
+- **Cross-refs:** `C-029` (the alarm, corrected in place — `openspec/changes/pgm-output-alarm/`
+  proposal §"Correction 2026-09-05", design §6, tasks §7), `C-030` (the addressing words, now on
+  the technical surface), [[B-172]] (why it is a strip), [[B-222]] (the same session's §A).
+- **Number:** derived with `B-222` above — `B-223` returned nothing in `git grep -n "B-223" HEAD`;
+  the registry's pointer agrees.
+
+## [~] B-224 — the Layers header's STATE tally reads `STATE (1 ON AIR) (…` when rows are both on air and in error: the second count is cut off for lack of room, so the operator cannot see how many rows are in error ⟨priority: high — the one number a refused take leaves behind is the one that was clipped⟩ — FILED AND CLOSED IN CODE 2026-09-05 by `LAYERS-HEADER-COUNT-01`; Linux `gate:e2e` DISCHARGED for `c1b68132` (carries `829f5fb7`) — <https://github.com/yasermostafaee/cg/actions/runs/33972591471> (`E2E (Playwright)` RAN 535 s, `success`; `Lint • Typecheck • Test • Build` RAN 173 s, `success`; read 2026-09-05)
+
+**Observed** by the owner, 2026-09-05, Runtime → Layers with one row ON AIR and rows in ERROR: the
+head read `STATE (1 ON AIR) (…` — the error count clipped. Two owner decisions the fix rests on:
+_"Showing only the numbers is enough; the colour says whether it is an error or on air"_, and
+_"The STATE column can also be wider — the NAME column is far too wide."_
+
+### §1 — the state, established before anything was touched
+
+- **Derivation, unchanged and confirmed:** `airTally(items)` in
+  `apps/runtime/src/renderer/features/stack/onAir.ts:84-92` — `onAir` = `isOnAirOrUnsettled` over
+  each item's RECONCILED `status` (plus `pending`), `inError` = `status === 'error'`, never one number;
+  passed as `tally` from `LayersPanel.tsx:380` and rendered by `LayerTableHeader.tsx`. Exactly what
+  `RUNTIME-FIX-0904` / [[B-213]] established (status-derived, never intent; `error` no longer wears the
+  air colour). **Not touched by this fix.**
+- **States the tally carries — exactly two.** `onAir` counts `playing`, `on-air`, `updating`,
+  `exiting`, `unconfirmed` and any `pending`; `inError` counts `error`. Not counted, by design:
+  `idle`/`loaded` (READY, nothing on air), `unverified` (the link is down and the whole head greys
+  itself, §4 of `B-081`), `disconnected`, and REHEARSING — which is a row FLAG, not a status, and by
+  `R-022` is precisely the state in which a graphic cannot reach air. Zero counts are not rendered.
+- **Column sizing, and why STATE truncated:** `layerTable.ts` — every column is a FIXED px width
+  except the flexible ones; STATE was `132 px` (`W.stateFull`) at the full and compact densities
+  and `34 px` icon-only at tight; NAME was `minmax(132px, 1fr)`; TEMPLATE `minmax(160px, 2fr)`. The
+  header cell wore `overflow: hidden; text-overflow: ellipsis` on a `white-space: nowrap` row
+  (`LayerTableHeader.tsx` `styles.cell` / `styles.header`). Measured in Chrome at the head's font:
+  `STATE (1 on air) (2 in error)` needs **160 px** (175 at two digits each) — a CSS clip of a
+  fixed-width cell, not a string cut in JS.
+- **The longest row NAME that actually exists:** the NAME column shows the row's alias (`slot.alias
+?? 'Layer N'`, `LayerRow.tsx:331`). Every real alias, measured at the alias font (`600 1.05rem`,
+  the app stack — Persian resolves to Segoe UI on Windows, Vazirmatn elsewhere; both measured):
+  `میانبرنامه روی انتن` (the owner's screenshot) **127 px** · `Debate — 4 box` 123 · `LOWER THIRD`
+  (mock) 109 · `زیرنویس اصلی` (plant, layer 98) 106 · `STUDIO FEED` 102 · `لوگوی اصلی` (plant, 99)
+  89 · `Layer 30` 64. The longest TEMPLATE name in the plant's records, `میان‌برنامه (روی آنتن)`,
+  would be 144 px if an operator ever aliased a row with it. ⚠ The old alias floor of 132 fit the
+  longest real name by 5 px; the old STATE width of 132 clipped its own row label `NOT CONNECTED`
+  (136 px needed) by 4.
+
+### §2 — the fix
+
+| what                   | before                                                               | after                                                                                                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| head, 1 on air + 2 err | `STATE (1 ON AIR) (2 IN ERROR)` → clipped to `STATE (1 ON AIR) (…`   | `STATE ● 1 ▲ 2` — each number in its state's colour, the row's own lucide mark beside it (`CircleDot` / `TriangleAlert`); text reads `State 1 2`; tooltip `1 on air — …` / `2 in error — …` |
+| head, single state     | `STATE (4 ON AIR)`                                                   | `STATE ● 4`, no separator                                                                                                                                                                   |
+| head at tight (34 px)  | `STATE` clipped, counts impossible                                   | the marks are dropped, the numbers wrap under the word (the head is a wrapping flex row; no `overflow: hidden` on it)                                                                       |
+| STATE column           | 132 px                                                               | **150 px** — holds `NOT CONNECTED` (136) and the compact tally at two digits (≈ 90)                                                                                                         |
+| NAME column (full)     | `minmax(132px, 1fr)` — absorbed slack beside an ellipsizing template | `minmax(150px, 220px)` — the floor fits every real name (127) and the template-name case (144); the CEILING is the owner's "far too wide": the template now takes all the slack             |
+| NAME column (compact)  | `minmax(132px, 1fr)`                                                 | `minmax(150px, 1fr)` — no template column to give the slack to                                                                                                                              |
+| accessible name        | `1 items on air` / `2 items in error`                                | unchanged                                                                                                                                                                                   |
+
+TEMPLATE, the verb columns, the rows' own content and every other string are untouched. Nothing
+was translated.
+
+**Red-first, sources stashed:** `layerTableHeader.dom.test.ts` 5 of 9 red on the old head
+(among them `🔴 1 on air and 2 in error: BOTH numbers are in the DOM, in the compact form` and
+`🔴 a single state renders as one mark and one number, with no stray separator`);
+`layerTable.test.ts` 9 of 9 red on the old widths (`🔴 the floor fits the longest real row name
+with room for the dirty chip`, `🔴 is at least as wide as the widest row state label`). Restored,
+all green. `lookPicker.dom.test.ts`'s density-arithmetic literal follows the new widths; the
+`§4` unreachable-labels test reads the number. New E2E `layers-header-tally.spec.ts`: the head
+and the seeded longest name (`MockRuntime` layer 73) hold `scrollWidth ≤ clientWidth` at the
+default width and with the Inspector open — Linux `gate:e2e` OWED.
+
+**Predictions:** P1 HIT (a CSS clip of a fixed 132 px head cell; the JS string was whole). P2 HIT
+(two states; the others are excluded by construction, above). P3 MISS in the letter — NAME was
+not a bare `1fr` absorbing everything: `layerTable.ts` had already narrowed it to a `1fr` SHARE
+against the template's `2fr` by decision; it was still the only other flexible column, so at any
+width above ~900 px it grew with the panel. The structural cause of "too wide" was the share, and
+the fix is a ceiling rather than a smaller share, so the width is deterministic.
+
+**Repro:** one row ON AIR and two rows in ERROR; look at the Layers header.
+**Expected:** both counts visible, whole, at every width.
+**Actual (before):** the second count clipped at 132 px.
+**Regression tests:** `layerTableHeader.dom.test.ts`, `layerTable.test.ts`,
+`layers-header-tally.spec.ts`.
+
+- **Cross-refs:** [[B-213]] (the derivation this leaves alone), `R-022` (why REHEARSING is not
+  counted), `B-081` §4 (the grey), the `layerTable.ts` header (why widths are fixed px).
+- **CI, read 2026-09-05:** run #1263 for `829f5fb7` —
+  <https://github.com/yasermostafaee/cg/actions/runs/33971260484> — **FAILED** in
+  `E2E (Playwright)` on ONE assertion, twice (retry included): `audit-legibility.spec.ts:72`
+  expected `/\(3 on air\)/` and received `"3"` — the old parenthesised wording, pinned by a
+  spec this fix's rule-9 sweep MISSED because the spec spells it as a regex SOURCE string
+  (`on air\\)`, a backslash between the words and the parenthesis), so a sweep for `on air)`
+  matched nothing and read clean. Every other runtime spec passed on Linux, including the new
+  `layers-header-tally.spec.ts` (#36 ✓) and `pgm-output-missing.spec.ts` (#57–59 ✓); the unit
+  gate (`Lint • Typecheck • Test • Build`) was green. The lesson is recorded in memory: sweep the
+  bare words, case-insensitively, then read every assertion hit. Fixed in the follow-up commit
+  (the spec now asserts the number as the visible text, the words in `aria-label` and `title`).
+- **CI for the fix, read 2026-09-05:** run #1264 for `c1b68132` —
+  <https://github.com/yasermostafaee/cg/actions/runs/33972591471> — `status: completed`,
+  `conclusion: success`; `E2E (Playwright)` **RAN** 535 s, `success`
+  (<https://github.com/yasermostafaee/cg/actions/runs/33972591471/job/101323643537>);
+  `Lint • Typecheck • Test • Build` RAN 173 s, `success`. Both heavy jobs ran, so the tree at
+  `c1b68132` — the header, the column model, `layers-header-tally.spec.ts` and the corrected
+  `audit-legibility.spec.ts` included — is verified on Linux. **DISCHARGED.**
+- **Owed:** the owner's visual check at the two widths.
+- **Number:** highest `B-` HEADING across the three bug files was `B-223` (this file);
+  `git grep -n "B-224" HEAD` returned only the registry's own "Next free" pointer, `B-225` nothing.
+  Cross-checked against the registry's dated pointer — _"Next free after this session is
+  `B-224`"_ — headings and pointer AGREE. One number taken.
+
+## [~] B-225 — CasparCG restarting under a running bridge empties air and the console says nothing: the reconnect resets every row to IDLE, the browser mirrors that back as `cleared`, and nothing distinguishes "the server restarted" from "the socket blinked" ⟨priority: high — with NSSM auto-restart the channel returns emitting a valid, correctly-timed BLACK picture, which is not a fault to anything downstream⟩ — FILED 2026-09-05 by `RESTART-RESTORE-01`; **CLOSED IN CODE 2026-09-06 by `RESTART-NOTICE-01` §B** on the owner's choice of option (2), DETECT AND SAY; Linux `gate:e2e` DISCHARGED for `c4477d1c` (carries `0e4aae58`) — <https://github.com/yasermostafaee/cg/actions/runs/34000690814> (`E2E (Playwright)` RAN 626 s, `success`; `Lint • Typecheck • Test • Build` RAN 523 s, `success`; read 2026-09-06); the plant check is the OWNER's (§D below) and remains OWED
+
+### ✅ 2026-09-06 — SHIPPED: the console says so, and one press puts the rows back (`RESTART-NOTICE-01` §B)
+
+**The owner's decision, 2026-09-05**, choosing between (1) do nothing, (2) detect and say with a
+one-press put-it-back, and (3) restore automatically: **(2)**. The reason is on record and became the
+acceptance criterion — _an unattended machine must not put a graphic on air_ — so option (3) is
+REFUSED and nothing in the bridge re-seats a row without a press.
+
+**What the kept signal actually proves, and it is narrower than the title of this item.** The
+detection keeps what `:1609-1634` was already computing and discarding; it adds no probe and no wire
+traffic. It proves: _at the moment the primary session re-entered `healthy` with the OSC tap PROVEN
+HEARING, layers this bridge had put producers on reported no producer._ It does **not** prove the
+server restarted — CasparCG publishes no boot marker, uptime or channel generation on any wire this
+bridge reads (`osc.health`/`uptimeSec` is modelled and never emitted; `INFO` carries no such field).
+`newConnection` narrows it honestly, since a restart necessarily kills the AMCP socket while a
+recovered OSC flap does not, and the notice's wording branches on it rather than asserting a cause.
+
+**How the one press tells a server-took-it-away row from a deliberately-cleared one.** Two conditions,
+both required: the row was ON AIR immediately before the reconnect, **and** `reconcileOnReconnect`
+reset it because its layer went silent.
+
+🔴 **The first condition was assumed redundant and is not — this is the correction this session owes
+the record.** The natural reading is that the reconcile only touches `played` records, so its output
+IS the on-air set. It is false: `played` means _a `PLAY` was sent and not retracted_, and **`out` does
+not retract it** — `stop` sets `played = false` (`reconciler.ts:661`), the `out` intent (`:675-687`)
+deliberately does not, because `idle` is its unevidenced TARGET rather than an observation. So a row
+the operator CLEARED an hour ago is still `played: true` and lands inside the reset set. Without the
+status filter the notice offered to put a deliberately-cleared graphic back on air — [[B-109]]
+exactly. The filter is `isOnAirStatus` (the ONE canonical predicate, reused) **minus `exiting`**, that
+subtraction being a separate question: `exiting` means a CLEAR the operator asked for is in flight, so
+restoring would act against a command already given.
+
+**Surface.** `EmptiedAirNotice` renders in the chrome directly above the LAYER LIST, beside
+`OrphanLayersBanner` — **not** a sixth top-of-page banner. The five up there (`ConnectionBanner`,
+`BridgeSkewBanner`, `FailoverBanner`, `RasterMismatchBanner`, `OutputMissingBanner`) describe the link
+or the plant's configuration: standing conditions the operator cannot resolve from the banner. This
+one names ROWS in the list below it and offers to act on them, which is the region
+`OrphanLayersBanner` already owns. Amber attention treatment, never the on-air red. Not translated
+(multi-language is deferred for both apps).
+
+**Dismissal — three ways it ends, never a timer:** the press restores every row (rows leave the notice
+individually, so a partial press leaves the rest listed WITH their reasons); DISMISS clears it
+bridge-side, so two browsers cannot disagree, and changes nothing on air; or the rows retire
+themselves — an ordinary take or a remove drops a row through the one narrowing point.
+
+**The inverses (`RESTART-NOTICE-01` §B.4), each handled:**
+
+- **Dismissed** → the notice is gone, air is unchanged, the rows sit on the stack as `idle`, and an
+  ordinary take puts any of them back.
+- **A second restart mid-restore** → the new reconnect REPLACES the notice rather than merging into
+  it, and the restore's refusal write-back is stamped with the notice's `at` so it cannot overwrite
+  the newer measurement. Replacement is deliberate: a merged list would carry rows that are no longer
+  BACKED by a measurement, and between two reconnects the operator may have cleared one deliberately —
+  which is the one thing the offer must never contain. Rows that drop off are not lost; they are on
+  the stack and a take puts them back.
+- **The template is no longer in the registry** → it cannot happen while the row is on the stack:
+  `templateRemove` refuses `in-use` for exactly that reason, and a test pins the invariant.
+  `restoreEmptiedAir` keeps an `unknown-template` guard as **defence in depth, named as such**,
+  because the failure it prevents is the silent one — a take whose `CG ADD` fetches a template the
+  serve endpoint no longer has renders a BLACK layer that reports a healthy producer.
+
+**Shipped:** `EmptiedAirNoticeSchema` + four channels (`packages/shared-ipc/src/channels/emptiedAir.ts`);
+`#raiseEmptiedAir` / `#retireFromEmptiedAir` / `emptiedAir()` / `restoreEmptiedAir()` /
+`dismissEmptiedAir()` in `caspar-runtime.ts`; routes and the push in `bridge.ts`; the contract,
+`WebSocketRuntime`, the honestly-empty `MockRuntime` half and `useEmptiedAir`; the
+`EmptiedAirNotice` strip. Tests: `tools/caspar-bridge/tests/emptied-air-notice.integration.test.ts`
+(8) and `apps/runtime/tests/emptiedAirNotice.dom.test.ts` (8), plus the `mock-bridge-parity` guard
+extended with the new namespace.
+
+⚠ **KNOWN LIMITATIONS, stated rather than left to be discovered.** (1) There is **no E2E** for this
+surface and there cannot be one today: the Playwright suite runs against the offline mock, where a
+notice can never be raised by design (a seeded one would be a lie about air, and its press would offer
+to restore rows nothing took away). The DOM test is the coverage. (2) The strip lives in
+`styles.chrome`, which is not rendered while a MONITOR is fullscreen — the same existing gap
+`OrphanLayersBanner` has; in that mode empty air is visible on PGM itself. Neither is a blocker;
+both are the owner's to weigh.
+
+**Observed** by the owner, 2026-09-05 on `192.168.21.114`. CasparCG now runs as a Windows service
+installed with NSSM, WITH AUTO-RESTART, so it lives in Session 0 — no window, no console, no Remote
+Desktop capture, and the declared `screen` consumer can never run there (harmless: [[B-223]] already
+classifies a missing `screen` as local, and the operator is shown nothing). The owner restarted the
+service. Program output went EMPTY and every layer stopped. The bridge never died — `caspar-bridge.mjs
+--host 0.0.0.0`, PID 2736, up since 15:06:02 local and still up at 20:51 — and the browser never lost
+its socket. The Runtime showed every row **stopped**: no banner, no alarm, no tally. The rows were put
+back BY HAND: four `take`s in 4.97 s, 17:12:17.807 → 17:12:22.777, the last four lines of
+`~/.cg-runtime/bridge-audit.ndjson`.
+
+⭐ **What auto-restart changes, and why this is filed now.** Before, a dead CasparCG stayed dead: the
+SDI output disappeared, and loss of signal is a condition downstream equipment can detect and act on.
+Now NSSM brings it back within seconds, the DeckLink consumer starts from `casparcg.config`, and the
+channel emits a valid, correctly-timed, entirely black picture. ⚠ **A valid black signal is not a
+fault to anything downstream.** Whether that matters depends on this station's downstream chain, which
+this session does not know — it is stated as the consequence, for the owner to judge.
+
+### §1 — the state, established before anything was touched
+
+**(a) What the bridge does when its AMCP link drops and comes back.** All of it is
+`session.on('state-change')`, `caspar-runtime.ts:1576-1655`, in this order:
+
+| step                                                              | what it does                                                                                                                                                                 | puts content back?    |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| link LEAVES `healthy` → `#reconciler.setLinkDown(true)` (`:1652`) | every on-air row publishes as `unverified` — "WAS ON AIR", muted ([[B-086]])                                                                                                 | no                    |
+| the session's own cycle (`server-session.ts:227-273`)             | fresh transport + queue, `VERSION` → `INFO` handshake, then a 150 ms RESYNC drain                                                                                            | no                    |
+| `to === 'healthy' && from !== 'degraded'` (`:1588-1597`)          | forgets the per-connection facts: `#declaredConsumers`, `#outputReadAt`, the mode latch, `#outputCreateAttempted` — so `INFO CONFIG` and `INFO <ch>` are re-read ([[C-029]]) | no                    |
+| `session.on('healthy')` (`:1555-1558`)                            | `#loaded.clear()` — producer-existence bookkeeping dropped, so the next take re-`ADD`s ([[B-054]]/[[B-039]])                                                                 | no                    |
+| `#reconciler.setLinkDown(false)` (`:1600`)                        | lifts the demotion                                                                                                                                                           | no                    |
+| `#flushOrphanedStaging()` (`:1605`, body `:6150-6162`)            | **returns immediately unless `#orphanedMixerChannel !== null`** — i.e. unless a `MIXER … COMMIT` of ours is on record as undelivered ([[B-221]])                             | only in that one case |
+| `#decidePendingRestores(...)` (`:1623`)                           | decides parked restores — `#pendingRestore` is **empty** here, see (b)                                                                                                       | no                    |
+| `reconcileOnReconnect(occupiedKeys)` (`:1634`)                    | 🔴 **resets every `played` item whose layer is silent to `idle`** (`reconciler.ts:549-565`)                                                                                  | no — the opposite     |
+| the health snapshot / output check (`:7885-7929`)                 | re-reads the declared and running consumers on the next tick                                                                                                                 | no                    |
+
+**Nothing on this path puts content back.** `#reassertDeclaredVolumes` (`:3493-3501`) is not on it at
+all: it is latched one-shot per PROCESS by `#volumesReasserted` (`:7925-7928`), so on a CasparCG
+restart under a running bridge it does not run a second time. Benign here — a restarted CasparCG boots
+with default mixer state — but it is a startup repair for a dead BRIDGE, not for a dead server.
+
+**(b) Is there a `restore` at all? Yes — and it is keyed to the wrong socket.**
+`CasparRuntime.restore(items)` exists (`:2234`) and is [[B-092]]'s: it rebuilds the stack from the
+BROWSER's retained intent. Its only trigger is the SPA↔bridge WebSocket `open` handler —
+`WebSocketRuntime.#connect` → `#resync(reconnected)`, `WebSocketRuntime.ts:358-384`. **A CasparCG
+restart does not touch that socket**, so `restore()` is never called and `#pendingRestore` is empty at
+the healthy transition. It restores rows, slots, position/source/look overrides and the frozen level-2
+pin; it can distinguish nothing about the server, because it never runs in response to the server.
+([[B-215]]'s slotless-item defect is on this same path, and is unrelated to this item.)
+
+**(c) What survives on our side — and the two halves point OPPOSITE WAYS. This is the crux.**
+
+- 🔴 **The browser's INTENT is overwritten with the empty truth.** `reconcileOnReconnect` sets the row
+  to `idle`; the snapshot publishes; `WebSocketRuntime.ts:661-663` mirrors it (unsuppressed —
+  `#resyncing` is false, nothing is resyncing); `StackRetentionStore.mirror` is replace-all
+  (`:78-81`); and `retainedStateFor('idle')` is **`cleared`**
+  (`shared-schema/src/runtime/item-state.ts:233-234`) — which that same file defines as "the layer is
+  KNOWN EMPTY … **NOT restorable**" (`:172-181`). Within one publish, the record that those rows were
+  ever on air is gone from the only place that outlives the bridge. **A restore after the fact is
+  therefore not merely absent — the evidence it would need has been destroyed**, and destroyed
+  correctly by [[B-109]]'s rule, which exists to stop a restart re-`ADD`ing a graphic the operator
+  deliberately cleared. The two cases retain identically and nothing downstream can tell them apart.
+- ⚠ **The LEDGER survives intact and becomes a lie.** `#liveLayers` is persisted on every change to
+  `~/.cg-runtime/bridge-live-layers.json` (`bridge.ts:599-629`) and nothing on the reconnect path
+  prunes it. Read 2026-09-05: it still names three seats for `item-ba823a50…` — channel 1 layers 10,
+  11, 13, producers `DECKLINK DEVICE 1`, `"m1"`, `"m2"` — layers a restarted CasparCG has emptied.
+  Consequence, because one predicate reads it: `#ownsLiveSeats` (`:5039-5044`) is `on air OR the
+ledger holds seats`, so it answers **true** for a row the console shows as stopped. Every
+  configuration door gates on it — `update`, `swapLiveSource`, `setActiveLook`, a volume raise — so an
+  UPDATE that changes an input on such a row seats that one producer (a seat with no prior producer is
+  `PLAY`ed; `:6218`, `:6275`): one video box on air, alone, over black, with no template above it.
+  That is [[B-161]]'s shape reached through a stale ledger rather than through the rehearse flag.
+- The row model, the declared item and the frozen level-2 pin survive as records — they travel on
+  `RetainedStackItem` (`StackRetentionStore.ts:100-144`) and are re-delivered on the SPA's next
+  connect. It is the AIR STATE, and only the air state, that is lost.
+
+**(d) Can we tell a RESTART from a dropped socket? No — nothing today distinguishes them.**
+
+- The handshake sends `VERSION` then `INFO` and **discards both replies** beyond `isOk`
+  (`server-session.ts:275-290`). CasparCG's `INFO` carries no boot time or generation counter, and
+  nothing keeps the previous reply to compare against.
+- `INFO CONFIG` is re-read (`:1588-1597`), but it reports the DECLARATION — identical across a
+  restart by construction.
+- An `osc.health` event carrying `uptimeSec` is MODELLED (`shared-schema/src/runtime/osc.ts:64`,
+  `osc/change-tracker.ts:58`) and **never emitted**: `osc/event-mapper.ts` maps only `osc.framerate`
+  and the four layer kinds. Whether CasparCG 2.5.0 publishes any uptime address at all is unmeasured
+  — a recon question, not a claim.
+- The one signal that DOES exist is the one already computed and thrown away: at `:1609-1634` the
+  bridge samples real occupancy and derives exactly the set of rows that were on air and whose layers
+  are now empty. It then spends that fact on a status change and says nothing. "Restart" versus
+  "somebody cleared our layers by hand" is not separable from it — but for this purpose the two are
+  the same event: **what we believed was ours is gone.**
+
+### §2 — the one question
+
+> **Neither, and here is the third thing:** putting air back after a CasparCG restart has never been
+> designed, attempted or refused — what our system DOES do is a designed behaviour that worked exactly
+> as specified, and the specification is to go honestly empty.
+
+`openspec/specs/runtime-caspar-bridge/spec.md` (and its archived sources, `2026-07-18-runtime-onair-honest-linkloss`,
+`2026-07-22-runtime-amcp-probed-liveness`) says it in the server's own words: a played item whose slot
+is not occupied within the staleness bound — _"the producer is gone, e.g. CasparCG restarted"_ — SHALL
+be reset to **IDLE**. The restart was not an unhandled case; it is the named example in the scenario.
+
+⚠ **The record is SILENT on the opposite direction.** Every restore decision on file is about a dead
+BRIDGE with CasparCG still rendering — [[B-092]] (the browser owns the intent across the bridge's
+death), [[B-145]] (the ledger outlives the process), [[B-107]]/[[B-109]] (which retained states may be
+re-seated). Nothing asks what should happen when CasparCG dies and the bridge lives. Correction to the
+premise this item was raised under: the phrase _"the config stays the boot-time baseline"_ on file
+(`caspar.md:1928`, [[C-029]]) is about which DeckLink device the bridge may name in a
+`--create-missing-consumers` `ADD` on a multi-card box. It is not a decision about air surviving a
+dead bridge, and it does not speak to this at all.
+
+### §3 — what the operator sees, and what nothing tells him
+
+| surface                                                  | during the outage                                                                                     | after the restart                                                                        |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `ConnectionBanner`                                       | nothing — it watches the browser→bridge link, which never dropped                                     | nothing                                                                                  |
+| server pill (`StatusBar.tsx:146`)                        | red `OFFLINE` while the AMCP socket is down and retrying                                              | back to `HEALTHY`                                                                        |
+| rows                                                     | `unverified` — "WAS ON AIR", muted ([[B-086]])                                                        | **stopped** (`idle`)                                                                     |
+| on-air tally ([[B-224]], `LayerTableHeader.tsx:145-152`) | the number, greyed (`onAirCountStale`)                                                                | **absent — a zero count is not rendered**                                                |
+| `OutputMissingBanner` ([[B-223]])                        | `unverifiable` only if the LAST check had found a program output missing; here it had not, so nothing | nothing — the DeckLink consumer restarted from `casparcg.config`, so the verdict is `ok` |
+| the [[R-058]] dead-channel chip                          | —                                                                                                     | nothing — it fires on a channel that ticked and STOPPED; this one ticks                  |
+
+🔴 **The uncomfortable answer: there is no such moment.** No surface in the product says "the channel
+is alive and carrying nothing". Every alarm we have watches a different axis: `ConnectionBanner`
+watches the browser's link, the pill watches AMCP reachability, [[B-223]]'s check watches CONSUMERS
+(existence and configuration — never content), [[R-058]] watches whether the channel produces frames
+at all. A restarted CasparCG passes every one of them: reachable, consumers running, frames flowing.
+**Air being blank is not the same as a row being stopped, and a tally of zero is not an alarm** — it
+is the absence of a number, rendered identically to a console nobody has taken anything on yet. The
+app looks calm and empty because, on every axis it measures, everything is fine.
+
+⭐ One thing the display DOES tell us, and it is evidence rather than inference from a log: the rows
+came back **stopped** and not `unverified`, so the `heard` branch at `:1633` was taken — OSC was
+arriving from the restarted server when it went healthy, and `reconcileOnReconnect` ran with real
+occupancy. Had the tap been blind, `:1645-1650` would have left them on a muted "WAS ON AIR" instead.
+
+### §4 — the reconnect [[B-221]] owed: what the record actually holds
+
+🔴 **The bridge's record does not reach the reconnect, and this must be reported rather than
+reconstructed.** Three writers were checked:
+
+- **The audit NDJSON records operator VERBS only.** Its whole vocabulary over 1524 lines is `take`
+  491, `stop` 318, `update` 309, `out` 112, `load` 64, `remove` 63, `import` 52, `next` 41, `failover`
+  40, `reconnect` 34. The `reconnect` action is emitted from exactly one place — `setConfig`'s step 6
+  (`:8777-8782`), an OPERATOR applying a new connection config — **never from an automatic socket
+  reconnect**. The only September `reconnect` line is dated 2026-09-04. There is no entry for the
+  2026-09-05 restart, and by construction there could not be one.
+- **The `state-change` handler writes no log line at all.** `caspar-runtime.ts:1576-1655` contains no
+  `process.stderr.write`; neither does `#flushOrphanedStaging` (`:6150-6162`).
+- **stderr is not captured.** `~/.cg-runtime/bridge-stderr.log` is 175 bytes, last written 2026-07-27;
+  the running bridge writes to its terminal.
+
+So: whether `#flushOrphanedStaging` ran (it did — it is called unconditionally at `:1605`), whether it
+found anything (it returns at `:6152` unless a commit is on record as undelivered), whether
+`#reassertDeclaredVolumes` ran (it did not — one-shot per process, already spent at 15:06) — the first
+and third are answered from the CODE, and the second is **not answered by any record**. The audit
+shows no operator verb between 16:44:57 and 17:12:17, and the owner's restart was deliberate rather
+than mid-take, so an orphan is very unlikely; but `setActiveLook`, `swapLiveSource` and volume changes
+are not audited verbs, so a look switch in that window would have left no timestamped trace, and this
+is stated as unproven rather than as a clean run.
+
+⚠ **What this discharges of [[B-221]]: nothing.** The owed plant run needs a socket death BETWEEN a
+batch's first `DEFER` and its `COMMIT` — the mock reproduces it by destroying every AMCP socket
+mid-stage, server-side. A clean NSSM service stop with no batch in flight cannot produce an orphan, so
+`#orphanedMixerChannel` was null and the flush was an early return. **What this exercise DOES show —
+and it is worth having — is that the reconnect path around the flush survives a real CasparCG restart
+on real hardware**: the session re-handshook, `#loaded` cleared, and the operator's very next take at
+17:12:17 was accepted and rendered, which is [[B-054]]/[[B-039]]'s re-`ADD` working on the plant.
+`B-221`'s mixer-orphan case and its process-death case both remain OWED, unchanged.
+
+### §5 — the options, with costs
+
+| option                    | what it costs                                                                                                                                                                                                                                                          | air risk                                                                                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Do nothing**            | Zero to build. The re-seat itself is CHEAP — measured at 4.97 s for four rows. **The cost is entirely DISCOVERY**, and nothing tells him: §3 shows every surface reads normal. The bound on air-loss is "until a human looks at the picture"                           | Unbounded blackout, silent. Worst on the quiet rows — a logo or a strap that should sit there all day and that nobody is watching the way they watch a live box |
+| **Detect and SAY**        | Small, and smaller than it looks: §1(d) shows the bridge ALREADY computes the set at `:1609-1634` and discards it. The smallest honest version is to keep that set on the health snapshot and have the Runtime say it. No new probe, no new AMCP verb, no wire traffic | None — it sends nothing. A "put it back" affordance re-issues the takes the operator would have pressed, on his press                                           |
+| **Restore automatically** | Largest, and it needs a new persistence layer FIRST: §1(c) shows the intent is destroyed within one publish, so there is nothing left to restore FROM. That means retaining pre-reconnect air state ahead of the reconcile and deciding when it expires                | The whole list below                                                                                                                                            |
+
+🔴 **Every way an automatic restore can be wrong**, all of them live here today:
+
+1. **A stale ledger.** The ledger already survives the restart naming producers that no longer exist
+   (§1(c)); a restore built on it re-`PLAY`s from a record nothing has verified.
+2. **The retention says `cleared`.** `idle` → `cleared` → not restorable, and a row the operator
+   deliberately emptied retains IDENTICALLY. Restoring from it re-`ADD`s a graphic he took off —
+   [[B-109]] exactly, re-opened.
+3. **A half-restart.** One channel back, another still initialising; or the DeckLink consumer failing
+   this time while AMCP answers — [[C-029]]'s own incident. The restore then seats onto a channel with
+   no output and reports success.
+4. **A restart during a take.** The row's status is `unconfirmed`; nobody knows whether the `PLAY`
+   landed. Restoring adds a second `ADD`/`PLAY` on top of an unresolved one.
+5. **A restore racing the operator.** He is already re-taking by hand when it fires; two seatings of
+   the same layer, and [[B-155]]'s re-seat-inside-a-switch class is exactly this shape.
+6. **An automatic action putting a graphic on air with nobody watching.** The worst of the six and the
+   least reversible: the console decides, unattended, that something should be on the station's output.
+   Every other rule in this codebase says a take is the operator's press.
+
+⭐ **Recommendation — Detect and SAY.** It is the only one of the three that changes the failure mode
+rather than trading it for another. Today's behaviour is not wrong, it is MUTE: the reconcile-to-idle
+is correct and specified, and the defect is that a correct decision is taken silently about the
+station's output. Detection is already computed and thrown away, so the honest minimum is small and
+sends nothing to the wire; and an operator told "the server restarted, these four rows were on air"
+recovers in the 5 s the audit already measures. Automatic restore buys those same five seconds at the
+price of six failure modes and of an unattended machine putting graphics on air — and it cannot even
+be built until the retention stops being overwritten, which is a change to [[B-109]]'s rule and needs
+the owner. **The owner decides; this session built nothing.**
+
+- **Cross-refs:** [[B-092]] (restore, and the socket it is keyed to), [[B-107]]/[[B-109]] (why the
+  retained state is `cleared`), [[B-145]] (the ledger that survives), [[B-054]]/[[B-039]] (the re-`ADD`
+  that made the manual recovery work), [[B-086]] (the `unverified` demotion), [[B-161]]/[[B-216]]
+  (`#ownsLiveSeats`, the predicate a stale ledger misleads), [[B-221]] (the reconnect path this run
+  exercised without discharging), [[B-223]] (the output check that watches consumers), [[B-224]] (the
+  tally that renders no zero), [[R-058]] (the chip that watches frames), [[C-029]].
+- **Owed:** nothing was built, so nothing is owed in code. If the owner takes "Detect and SAY", it is
+  a UI change and owes a Linux `gate:e2e`.
+- **Number:** highest `B-` HEADING across the three bug files was `B-224` (this file);
+  `git grep -n "B-225" HEAD` returned only the registry's own "Next free" pointers and one back-
+  reference in the `B-224` entry, `B-226` nothing. Cross-checked against the registry's dated pointer
+  — _"Next free after this session is `B-225`"_ — headings and pointer AGREE. One number taken.
+
+## [ ] B-226 — the row's CLEAR is gated on CasparCG REACHABILITY and REMOVE is not, so in the window «bridge up, CasparCG unreachable» the only enabled control on a row is the IRREVERSIBLE one and the graceful remedy is withheld ⟨priority: high — it inverts the safe default exactly when the console's model is least trustworthy, and it is what stops `unverified` being added to R-017's refusal⟩ — FILED 2026-09-06 by `R017-ONE-AUTHORITY-01` §2; report only, nothing built
+
+**Measured at HEAD `40b95341`**, reading the two gates side by side:
+
+| control        | `disabled`                                                    | anchor                                                            |
+| -------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| row **CLEAR**  | `needsCaspar \|\| awaiting`                                   | `layerRowActions.ts`, the `clear` literal                         |
+| row **REMOVE** | `linkDown \|\| awaiting` (plus R-017's on-air term)           | `layerRowActions.ts`, the REMOVE half of `load-remove`, via `act` |
+| **CLEAR ALL**  | `needsCaspar`                                                 | `LayersPanel.tsx`                                                 |
+| **REMOVE ALL** | `linkDown \|\| items.length === 0` (plus R-017's on-air term) | `LayersPanel.tsx`                                                 |
+
+with `const needsCaspar = linkDown || deps.casparReach !== 'reachable'`.
+
+**What:** the two differ by one term — `casparReach` — and the difference runs the wrong way. With the
+BRIDGE up and CasparCG unreachable, `linkDown` is false and `needsCaspar` is true, so **CLEAR and CLEAR
+ALL go disabled while REMOVE and REMOVE ALL stay enabled.** The row in that window reads `unverified`
+("WAS ON AIR"), which is precisely the state in which nobody can say what is on the layer — and the only
+verb the console still offers for it destroys the row, its fields, its position override, its per-look
+composition and its frozen level 2, none of which come back.
+
+Each gate is defensible ALONE. CLEAR is reachability-gated because an enabled button that cannot send is
+"not a capability, it is the appearance of one" (its own comment). REMOVE is not, because it is a LIST
+operation the bridge can perform whether or not CasparCG answers. **The defect is the pair**: the
+graceful remedy is withheld and the irreversible one is offered, in the one window where the console's
+own model is least trustworthy.
+
+### Why it is filed now, and what it blocked
+
+`R017-ONE-AUTHORITY-01` §2 asked whether R-017's REMOVE should refuse on `unverified` as well as on the
+shared on-air set. `unverified` is the strongest fail-open in that set — it is DERIVED only from an
+`on-air`/`playing` base (`reconciler.ts`'s `reconcileStatus`), so an idle row can never wear it and it
+always means "this row WAS on air and the wire cannot back it".
+
+🔴 **It could not be added, and this asymmetry is the whole reason.** Adding it closes the last enabled
+control on such a row: CLEAR already disabled by `needsCaspar`, REMOVE then refused by status, and no
+back door — the browser's retention re-publishes the row after a reload and `retainedStateFor` maps
+`unverified` back to `'on-air'`, so a reload returns it to the same state. R-017's own note that _"on a
+genuinely dead link nothing is newly stranded"_ was written against a tree in which CLEAR was UNGATED;
+the gating landed later, and the note did not follow it.
+
+**So the fix direction is this item, not a wider REMOVE gate.** Once the row always has a reachable
+graceful remedy, `unverified` can be added to the refusal without trapping anybody — and that is the
+better end state, because it is the one status in the fail-open set that positively asserts a prior air
+claim.
+
+**Candidates, not a decision:**
+
+- **(A) Ungate CLEAR from reachability**, back to always-enabled like CLEAR ALL's B-122 treatment. Cheap,
+  and consistent with "an emergency control is never gated on the believed state" — but it re-opens the
+  thing the gating fixed: a button that sends nothing and reports afterwards.
+- **(B) Gate REMOVE on reachability too**, so the two move together. Symmetrical and small; the cost is
+  that a row could then be neither cleared nor removed while CasparCG is down, which is this item's own
+  complaint arriving from the other side.
+- **(C) Keep both gates and make the REMOVE path clear the layer BEST-EFFORT**, which it already does —
+  and say so in the tooltip, so the operator knows the destructive verb is the one that still works.
+  Honest but weakest: it documents the inversion rather than removing it.
+
+**Repro:** bridge up, CasparCG stopped; take a row to air, wait for it to read WAS ON AIR.
+**Expected:** the graceful remedy is at least as available as the irreversible one.
+**Actual:** CLEAR and CLEAR ALL are disabled; REMOVE and REMOVE ALL are enabled.
+
+- **Cross-refs:** [[B-122]] (an emergency control is not gated on the believed status — the rule this
+  pair breaks in the other direction), [[B-086]]/[[B-093]] (`unverified`'s two writers), `R-017` (the
+  refusal that had to stop short of `unverified` because of this), [[B-225]] (`#ownsLiveSeats` reading a
+  stale ledger — a different lie about the same window), `R-021` stage 4 d1 (a blocked row keeps CLEAR
+  and REMOVE, the principle this generalises).
+- **Owed:** nothing built. Whichever candidate wins is a UI change and owes a Linux `gate:e2e`.
+- **Number:** highest `B-` HEADING across the three bug files was `B-225`; `git grep -n "B-226" HEAD`
+  returned only the registry's own "Next free" pointers and one back-reference inside the `B-225` entry,
+  and `B-227` nothing. Cross-checked against the registry's dated pointer — _"Next free after this
+  session is `B-226`"_ — headings and pointer AGREE. One number taken.
+
+---
+
+## [~] B-227 — 🔴 the live-seat LEDGER outlives what it describes: after a CasparCG restart the reconciler resets the row to IDLE and `#liveLayers` goes on naming layers whose producers are gone, so `#ownsLiveSeats` reads TRUE for a row the console shows stopped — and an UPDATE on it puts bare video on air ⟨priority: HIGHEST — a configuration verb seating producers over black, on a row nobody has taken, after an event the operator was never told about⟩ — FILED AND CLOSED IN CODE 2026-09-06 by `RESTART-NOTICE-01` §A; Linux `gate:e2e` DISCHARGED for `c4477d1c` (carries `0e4aae58`) — <https://github.com/yasermostafaee/cg/actions/runs/34000690814> (`E2E (Playwright)` RAN 626 s, `success`; `Lint • Typecheck • Test • Build` RAN 523 s, `success`; read 2026-09-06)
+
+**Found** by `RESTART-NOTICE-01` §A while acting on [[B-225]]'s findings; **measured at the wire**, not
+inferred. It is [[B-161]]'s defect reached through a stale BELIEF instead of through the rehearse flag
+[[B-216]] removed, which makes it the third distinct route into the same hazard.
+
+### §1 — the mechanism
+
+`#ownsLiveSeats` (`caspar-runtime.ts:5022`) is `isOnAirStatus(item) OR the ledger holds seats`, and it
+is the ONE predicate behind all four doors that may touch a live layer ([[B-216]]). On a CasparCG
+restart the reconnect resets the row's status to `idle` — correct, and untouched — while nothing
+corrected the ledger, so its second half kept the answer TRUE. Golden rule 10's gate is exactly that
+predicate, so an UPDATE on the stopped row re-entered the binding reconcile and SEATED.
+
+Measured on the mock's AMCP trace with the fixture from `ownership-is-the-ledger`: a `swapLiveSource`
+on a row the console showed **stopped**, after a restart, put
+
+```
+PLAY 1-30 "route://6"
+MIXER 1-30 VOLUME 0 DEFER
+MIXER 1-30 FILL 0 0 0.25 0.25 DEFER
+MIXER 1-30 CLIP 0 0 0.25 0.25 DEFER
+```
+
+on the wire — a real producer, on a real channel layer, with no template above it.
+
+### §2 — why the two were never joined (the question `RESTART-NOTICE-01` §A.1 asked)
+
+🔴 **Not a deliberate record of INTENT outliving the truth — a MISSED JOIN, and the dates settle it:**
+
+| when       | what                                                                                                                                                        |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-07-15 | `f82e9e68` ([[B-086]]) — `reconcileOnReconnect`, in `@cg/caspar-client`'s Reconciler, which knows an item's TEMPLATE slot and has never heard of a ledger   |
+| 2026-08-10 | `7e595ac5` — the ledger's types, four weeks later                                                                                                           |
+| 2026-08-18 | `229885cd` ([[B-145]]) — `reconcileLiveLayers`, **the ONE spelling of "correct the ledger's claim by the server's evidence"** … wired to the BOOT door only |
+
+So the identical physical event — CasparCG came back with empty layers — was reconciled against the
+ledger when met at BOOT and not when met at RECONNECT. Nobody chose that: the reconnect path simply
+predates the thing it needed to correct, and the function that does the correcting arrived five weeks
+later on the other door.
+
+### §3 — the fix
+
+`#reconcileLedgerOnReconnect` calls **the same `reconcileLiveLayers`**, from the **same one occupancy
+sample** `reconcileOnReconnect` reads, one line above it. No second spelling of the three-valued rule.
+
+🔴 **The `heard` gate is the positive control and it is load-bearing.** It runs only inside the branch
+that has already proven the OSC tap is HEARING (`hasFreshOsc`). From a blind tap silence is evidence of
+nothing ([[B-101]], [[B-053]]), and dropping seats there is the INVERSE fault and the worse one — the
+console would forget producers genuinely on the channel and could then neither re-point nor tear them
+down. A blinked socket is the same distinction from the other side: the server kept its producers, they
+come back `occupied`, and every record is KEPT.
+
+**Other ledger consumers, each named and checked** (`RESTART-NOTICE-01` §A.3): `#liveLayerKeys` →
+`#isLiveLayer`, which fences `clearLayer` (`live-source` refusal) and `clearAll`. Dropping a record
+un-fences that coordinate — and it is safe, because the only records dropped are ones the server
+positively reports EMPTY: `clearLayer` then refuses the same layer as `foreign` (no fresh `html`
+observation), and there is no producer of ours left to protect. `#flushOrphanedStaging`,
+`#reassertLedgerGeometry`, `#applyLivePlatesUnguarded`, `setLivePlateVolume(s)`, PANIC and
+`teardownLiveLayers` all read by `itemId` and correctly find nothing for a row whose seats are gone.
+**HELD (parked) plates are NOT at risk**: a hold is a `MIXER FILL` moving the box off frame
+(`parkedFit`, [[B-154]]) — the producer stays and stays OSC-visible, which is the whole point of
+§12.4's no-re-`PLAY` cut.
+
+**Repro:** take a multi-box row to air; restart the CasparCG service under the running bridge; wait for
+the row to read stopped; press UPDATE with any input change.
+**Expected:** nothing reaches a layer — `UPDATE` is a configuration verb (golden rule 10).
+**Actual (before the fix):** `PLAY` + `MIXER VOLUME` + `FILL`/`CLIP` per plate, bare video on air.
+
+- **Shipped:** `#reconcileLedgerOnReconnect` in `caspar-runtime.ts`, called from the `heard` branch of
+  `session.on('state-change')`; `tools/caspar-bridge/tests/ledger-outlives-truth.integration.test.ts`
+  (3 tests — the drop, the four doors, and the blip inverse as the positive control).
+- **Cross-refs:** [[B-161]] (a configuration verb is never a playout verb — the rule broken),
+  [[B-216]] (one predicate, four doors — `#ownsLiveSeats`, whose second half went stale), [[B-145]]
+  (`reconcileLiveLayers`, reused rather than re-derived), [[B-086]]/[[B-053]] (the reconnect reset this
+  now travels with), [[B-101]] (why the `heard` gate is not optional), [[B-225]] (the same reconnect,
+  seen from the operator's side).
+- **Owed:** a Linux `gate:e2e` (the same push carries UI changes for [[B-225]]); the owner's plant
+  check is `RESTART-NOTICE-01` §D.
+- **Number:** highest `B-` HEADING across the three bug files was **`B-226`**
+  (`git grep -n -E "^## \[.\] B-2[0-9][0-9]"`); `git grep -n "B-227" HEAD` returned only the registry's
+  own "Next free" pointers and one back-reference inside the `B-226` entry, and `B-228` nothing.
+  Cross-checked against the registry's dated pointer — _"Next free after this session is `B-227`"_ —
+  headings and pointer AGREE. One number taken.
+
+---
+
+## [~] B-228 — 🔴 REMOVE ALL's gate omits BOTH exemptions the per-row REMOVE and the bridge apply, so the bulk button is disabled for a press the bridge would accept — the exact UI↔wire disagreement `#removeRefusal`'s own doc says must not exist ⟨priority: high — it is the same withheld-graceful-remedy shape as [[B-226]], and it stood behind a RED Linux `e2e` on `dev`⟩ — FILED AND CLOSED IN CODE 2026-09-06 by `RESTART-NOTICE-01` (owner: "close it"); Linux `gate:e2e` DISCHARGED for `c4477d1c` — <https://github.com/yasermostafaee/cg/actions/runs/34000690814> (`E2E (Playwright)` RAN 626 s, `success`; `Lint • Typecheck • Test • Build` RAN 523 s, `success`; read 2026-09-06). **`dev`'s Linux `e2e` is GREEN again** — the two runs this item named as red are superseded by this one
+
+### ✅ 2026-09-06 — SHIPPED: the bridge publishes the exemption; both surfaces read it
+
+**The fix is neither candidate written up below.** Both of those had the renderer recompute the
+bridge's rule from inputs, which rebuilds one level up the mirrored-copies problem `R-017` had just
+spent a commit deleting — and it is not even possible for the second exemption, since
+`#declaredLayerClass` is bridge knowledge that never crosses the seam. **The bridge answers its own
+question once and SAYS so**: `#removeExempt` is extracted from `#removeRefusal` (one body, two
+readers), joined onto the item at the single publication seam `#published()`, and carried on the wire
+as `StackItemState.removeExempt`.
+
+⭐ **THE PRINCIPLE, worth more than the fix:** _a decision is the predicate PLUS everything else the
+decision consults. Publish the ANSWER from the side that can compute it; do not ship the inputs and
+hope both sides recompute the same rule._ `R-017` got the shared FUNCTION right and still shipped a
+disagreement, because only the predicate was swept across.
+
+Both renderer surfaces now resolve through one `removeIsRefused` (`removeGate.ts`), which reads the
+published fact. **ABSENT MEANS NOT EXEMPT** — a publisher that forgets the field leaves REMOVE
+refused on a live row rather than enabling it, and a test pins that asymmetry so it cannot be
+inverted. `removeExempt` is deliberately **not** in `RetainedStackItemSchema`: retention is a
+whitelist, and a retained copy would come back describing a plant the browser has not spoken to since.
+
+### 🔴 CORRECTION to this item's own §2 — the failing E2E was BOTH messenger and stale
+
+The filing above said the E2E at `server-settings.spec.ts:102` was the messenger and must not be
+changed. **That was half right, and the other half was wrong.** Measured after the fix landed:
+
+- REMOVE ALL's tooltip went from **2 row(s) are on air** to **1**, against a seed that puts exactly
+  two rows on air — so the restore-blocked row is now correctly exempt. That is the defect, real and
+  closed, and the E2E did surface it.
+- But the second on-air row (`seedLooksStackItem`) is **genuinely on air and genuinely not exempt**,
+  so REMOVE ALL stays correctly disabled and the spec's click still asked for something the product
+  now rightly refuses. **B-228's fix alone does not make that spec pass**, and no correct fix could.
+
+So the spec's unblock path was ALSO stale: `R-017` moved the remedy to Clear-All, updated part 1 of
+that file — which asserts Remove-All is disabled, nine lines above the click that contradicted it —
+and missed its sibling. Part 2 now uses Clear-All, **plus an ADDITION that pins the exemption**: the
+tooltip must read `1 row(s) are on air`, which fails on the defect and says in its comment what the
+number means, so a seed change makes the reason visible rather than silently re-arming it.
+
+### The extended agreement test — and what it still would NOT catch
+
+`removeOnAir.agreement.dom.test.ts` (renamed — it now renders the real panel, which is the lint
+tier's own discriminator) asserts over the **decision** (`is REMOVE refused for this row,
+right now?`) rather than the predicate, for the ROW (`layerRowActions`) and the BULK (the real
+`LayersPanel`, rendered), across status × pending × exemption, plus the bulk's OR-of-rows behaviour
+and the absent-means-not-exempt asymmetry. It goes red on the pre-fix code (4 of its assertions).
+
+⚠ **Stated plainly, because the whole item is made of this mistake:** it pins the two RENDERER
+surfaces against the published fact and **cannot** prove the bridge computes that fact correctly or
+that it reaches the wire. A bridge publishing `removeExempt: false` for a genuinely blocked row would
+leave both surfaces agreeing with each other and both wrong, with every renderer assertion green.
+That half is proved where it can be — against a real runtime and a real wire — by a new case in
+`tools/caspar-bridge/tests/remove-on-air-refusal.integration.test.ts` asserting that what the bridge
+PUBLISHES and what it REFUSES are the same answer, reached through `load` onto a dynamic layer
+outside the declared bank (the `B-212` arm, which only a real runtime can construct). **Neither file
+is sufficient alone.**
+
+⭐ **And what NEITHER catches:** a THIRD surface added later that gates REMOVE on `isOnAirStatus`
+directly. Nothing enumerates the set of surfaces that make this decision — the guard is that
+`removeIsRefused` is the only renderer-side spelling and its header forbids a second entry point,
+which is a convention, not a mechanism. That is the same gap `R-017` fell into one level down.
+
+**Shipped:** `removeExempt` on `StackItemStateSchema`; `#removeExempt` + the publish in
+`caspar-runtime.ts`; `removeGate.ts`'s `removeIsRefused`, read by `layerRowActions` and
+`LayersPanel`; `MockRuntime`'s blocked seed carries the same published fact (or the offline console
+disagrees with the bridge, which is where the E2E would have seen it).
+
+---
+
+**The original filing follows, unchanged, for the diagnosis it records.**
+
+**Found** while diagnosing why the Linux `e2e` job went red on `b07d2fad` and stayed red on
+`0e4aae58`. ⭐ **The failing E2E was RIGHT — it is the messenger, not the defect**, which is worth
+recording because the obvious "fix" is to change the test and it would have buried this.
+
+### §1 — the disagreement, measured
+
+`R-017` gave REMOVE a real refusal, and the bridge decides it in ONE place, `#removeRefusal`
+(`caspar-runtime.ts:8926`), with **two exemptions**:
+
+| exemption                                                                                        | why                                                                                                        |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| a **restore-blocked** row (`#restoreBlocked.has(itemId)`, `:8946`)                               | its layer is held by a producer provably NOT ours, so REMOVE destroys nothing of ours (`R-021` stage 4 d1) |
+| an item on **no declared operator row** (`#declaredLayerClass(...) !== 'operator-row'`, `:8949`) | no row ⇒ no STOP and no CLEAR to press, so refusing leaves [[B-212]]'s incident with no remedy at all      |
+
+That method's own header says, in as many words:
+
+> ⚠ The RENDERER carries the identical exemption (`layerRowActions`, `blocked`), and it has to: this
+> is the one place where the shared predicate alone would make the two sides disagree, because the UI
+> knows the row is blocked and would otherwise disable a verb the bridge accepts.
+
+The ROW's REMOVE does carry it (`layerRowActions.ts:387`, `const blocked = deps.restoreBlocked`).
+🔴 **REMOVE ALL does not:**
+
+```ts
+// LayersPanel.tsx:402
+const removeBlockedCount = items.filter(isOnAirStatus).length;
+```
+
+Neither exemption. So a stack whose only on-air row is restore-blocked disables REMOVE ALL while
+`stack.remove-all` would accept it.
+
+⭐ **The comment above that line (`:386-401`) is the tell, and it is worth reading before fixing.** It
+reasons carefully — and correctly — about which PREDICATE to use, rejecting `isOnAir` on `B-122`
+grounds and choosing `isOnAirStatus` precisely so "the UI and the wire" cannot "disagree about the
+same press". It then disagrees about the same press, because the predicate was the only half swept:
+the EXEMPTIONS are part of the bridge's answer and were not carried across. Getting the shared
+function right is not the same as getting the shared ANSWER right.
+
+### §2 — how it shows, and why nothing local caught it
+
+`apps/runtime/tests/e2e/server-settings.spec.ts:102` clicks `Remove all items` to clear the stack so
+Apply is reachable. The E2E fixture's seed includes `seedBlockedStackItem()` — a restore-blocked row
+published `status: 'on-air'` — so under `R-017` the button is disabled from the first frame and
+Playwright waits the full 30 s (`element is not enabled`, twice with the retry). Reproduced locally on
+2026-09-06: part 1 of that file passes, part 2 fails on that line.
+
+⚠ **Part 1 of the SAME FILE was updated by `R-017` and asserts the new truth**
+(`await expect(page.getByRole('button', { name: 'Remove all items' })).toBeDisabled()`, `:64`) while
+part 2, nine lines below, still clicks it. That is golden rule 9's shape — the sweep for consumers
+stopped inside the file it had already opened — and `pnpm gate` does not run Playwright (`P-028`), so
+the only signal was CI.
+
+### §3 — the two candidate fixes, for the owner
+
+- **(A) Carry the exemptions into the count.** `removeBlockedCount` becomes the number of rows that
+  are on air AND not exempt, which needs per-row `restoreBlocked` and the declared-layer-class —
+  neither is on `StackItemState`, so the count has to be computed from the SLOTS the panel already
+  renders rather than from `items`. Correct, and it makes the two sides agree by construction.
+- **(B) Ask the bridge.** A `stack.remove-all-refusal` read, so the count is not re-derived in the
+  renderer at all. Heavier, but it removes the possibility of a third divergence.
+
+⚠ **Whichever wins, the E2E at `:102` should be left ASSERTING what it asserts.** If (A) or (B) lands,
+Remove-All becomes enabled there and the test passes unchanged. Rewriting it to use Clear-All would
+make the suite green while leaving the disagreement in place — the fix that hides the bug.
+
+> 🔴 **SUPERSEDED BY MEASUREMENT — see the CORRECTION above.** This paragraph was wrong on a fact it
+> asserted rather than checked: the seed puts a SECOND row on air (`seedLooksStackItem`) which is
+> genuinely not exempt, so Remove-All stays correctly disabled there and no correct fix makes that
+> click land. The spec's unblock really was stale as well. Left in place rather than edited, because
+> the reasoning it applies is right and only its premise was unmeasured — which is the same error one
+> level down that produced the item.
+
+**Repro:** open the Runtime against the offline mock with the fixed-bank seed armed (the E2E fixture's
+default); the only on-air row is the restore-blocked seed.
+**Expected:** REMOVE ALL is enabled — the bridge exempts that row and would accept the press.
+**Actual:** REMOVE ALL is disabled, tooltip "1 row(s) are on air".
+
+- **Cross-refs:** `R-017` (the item that introduced both halves), [[B-226]] (the graceful remedy
+  withheld while the irreversible one stays enabled — the same shape, filed by the same item),
+  [[B-212]] (the orphan the second exemption exists for), `R-021` stage 4 d1 (the first exemption's
+  rule), [[B-122]] (the prohibition the `:386` comment correctly honours), `P-028` (why the gate could
+  not catch it).
+- **Owed:** ~~nothing built~~ — CLOSED, see above. `dev`'s Linux `e2e` was RED from `b07d2fad` until
+  this landed — runs <https://github.com/yasermostafaee/cg/actions/runs/33992738274> (`b07d2fad`) and
+  <https://github.com/yasermostafaee/cg/actions/runs/33997761591> (`0e4aae58`), both `E2E (Playwright)`
+  `failure`, same single test, `Lint • Typecheck • Test • Build` `success` in both. Every `gate:e2e`
+  debt on `dev` was undischargeable across that span, [[B-225]]'s and [[B-227]]'s included; all three
+  are discharged by `c4477d1c`'s run. ⭐ **Worth keeping: for two commits `dev` carried a green `ci`
+  and a red `e2e`, and the only thing standing between that and the owner's end-of-day merge was
+  somebody reading the run.**
+- **Number:** highest `B-` HEADING across the three bug files was **`B-227`**
+  (`git grep -n -E "^## \[.\] B-2[0-9][0-9]"`); `git grep -n "B-228" HEAD` returned only the registry's
+  own "Next free" pointers and one back-reference inside the `B-227` entry, and `git grep -n "B-229"
+HEAD` returned nothing. Cross-checked against the registry's dated pointer — _"Next free after this
+  session is `B-228`"_ — headings and pointer AGREE. One number taken.
+
+## [~] B-229 — the lock screen holds the POINTER and not the KEYBOARD: with the console locked, Tab still reaches every on-air control behind the scrim, and nothing but the overlay itself ever reads `lock.engaged` ⟨priority: high — an engaged lock is the one state in which the console promises it cannot be operated, and it can be⟩
+
+**What:** `LockOverlay` puts up a `position: fixed; inset: 0` scrim at `z-index: 1000` carrying
+`role="dialog"` + `aria-modal="true"` (`LockOverlay.tsx:123`), and that scrim is the whole barrier.
+It is:
+
+- **not portalled** — it renders as the last child of `<main>` (`App.tsx:423`), so every console
+  control stays in the same sequential focus order, ahead of it;
+- **not focus-trapped** — there is no `keydown` handler anywhere in the file, so Tab past the PIN
+  input and the `UNLOCK` button walks into the document behind the scrim;
+- **not backed by `inert` or a `tabIndex` sweep** — `git grep -n -e "inert" -e "tabIndex" -e "pointerEvents"`
+  over `apps/runtime/src/renderer` finds nothing that suppresses anything while the lock is engaged.
+
+**And there is no second line of defence, on either side of the seam.** `lock.engaged` is read in
+exactly TWO places in the whole renderer: `App.tsx:424`, which hands it to the overlay, and
+`StatusBar.tsx:532`, which paints the 🔒 chip. No verb, no panel and no gate consults it. On the
+bridge, `#lock` is written by `engage` / `release` and read back by `state()`
+(`caspar-runtime.ts:1231`, `9428`–`9461`) and **no intent handler consults it before executing** — a
+take, a clear or a REMOVE arriving while the console is locked is executed exactly as if it were not.
+
+**Why:** the scrim is 94 % opaque (`rgba(15, 23, 42, 0.94)`), so the focus ring on whatever is
+focused behind it is invisible. The failure mode is not somebody deliberately defeating the lock —
+it is the ordinary one the lock exists for: a rack keyboard bumped, a sleeve on the Enter key, an
+operator resuming and pressing before looking. `Modal.tsx:20`–`23` states the invariant for ordinary
+dialogs in as many words — _"Tab cycling trapped inside so the operator cannot tab onto an on-air
+button behind the scrim"_ — and the one surface where it matters most is the one that does not have
+it.
+
+⭐ **The existing argument for the divergence is CORRECT and does not cover this.**
+`Modal.tsx:41`–`45` says `LockOverlay` is deliberately not built on the primitive, because the
+primitive gives every dialog a ✕, Escape and backdrop-click, and _"a lock screen with a way out is
+not a lock"_. That justifies not inheriting the three EXITS. **It does not justify not inheriting
+the TRAP**, which is the half that is about safety rather than convenience — and inheriting the trap
+alone is what the divergence should have meant.
+
+**Acceptance:**
+
+- With the lock engaged, sequential focus navigation (Tab and Shift-Tab, from any starting point,
+  including a focus that was already outside the card when the lock engaged) cannot land on any
+  element outside the lock card.
+- The lock still has NO way out but the PIN — the ✕, Escape and backdrop-click stay absent.
+- Focus lands in the PIN input when the lock engages, and returns there after a failed release.
+- An E2E asserts the trap with a real layout engine, with a negative control proving it can fail.
+
+**Notes:** the fix is a focus trap, not a re-parenting onto `Modal` — see the ⭐ above. Whether the
+BRIDGE should also refuse intents while locked is a separate and larger question (it would change
+what a lock means for a second browser on the same bridge) and is deliberately NOT part of this
+item's acceptance; it is named here only so the next reader knows the renderer is currently the
+only enforcement there is. Found by `MODALS-AND-SETTINGS-01` §1 while inventorying the dialogs.
+
+- **Cross-refs:** [[B-230]] (the other focus defect in the same wave, in the primitive rather than
+  around it), `Modal.tsx` module note (the deliberate divergence, and its exact scope), `R-020`
+  (the PIN's digit normalisation, unaffected).
+- **Owed:** nothing built — report only.
+
+### ✅ IMPLEMENTED 2026-09-06 by `MODAL-CONTRACT-02` (`fface751`) — Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/34039564468 (the `E2E (Playwright)` job RAN and passed on `2ed9de26`, 557 s — not skipped)
+
+**Both halves, because either alone is the defect.** The renderer trap moved to
+`ui/focusTrap.ts` and BOTH full-window surfaces call it — `Modal` composes it with its
+exits, `LockOverlay` composes it alone. `Modal.tsx`'s note justified withholding the three
+EXITS from a lock screen and that reasoning was always right; it never applied to the TRAP,
+and reading the one as the other is why the lock inherited neither.
+
+The bridge gates at `handleMessage`, the single chokepoint every request passes, and each of
+its 60 routes now declares a `LockPolicy` as a REQUIRED argument — 25 `read`, 32
+`operator`, plus `lock.release` (the way out), `stack.restore` (reconnect machinery,
+unreachable from any operator control) and `templates.import` (split on the `redelivery`
+flag the wire already carries). A CENSUS walks the whole table, so "the lock refuses
+everything" is asserted of every channel rather than sampled.
+
+⭐ **The owner declined the emergency carve-out** (2026-09-06): CLEAR, CLEAR ALL and STOP are
+refused too. The reasoning is recorded beside the rule so nobody harmonises it with
+[[B-226]] later — a lock is a DELIBERATE act with a KNOWN PIN, so the verb is two seconds
+away, whereas `B-226`'s disabled CLEAR is a system condition the operator cannot undo and
+withholding it there would strand him. Falsified against the tree first: no documented
+emergency path, operator-guide sentence or spec requires a verb to survive the lock.
+
+One exported constant, `LOCK_ENGAGED_REFUSAL`, per the `R-017` discipline. It rides the
+frame error — the one shape all 60 channels share — and `bridgeErrorFrom` passes a non-skew
+message through verbatim, so it reaches all fourteen existing `err.message` surfaces with no
+renderer change ([[B-152]]).
+
+⚠ **The MOCK takes no parity here, and that is recorded rather than missed.** `R-017`'s
+parity rule applies to a refusal the UI must RENDER; the lock's is AIR SAFETY, and the mock's
+link is a constant `offline-mock` with no socket and no playout server, so there is no air
+for it to protect. The exemption expires the day the lock grows a rule the UI must render.
+
+⚠ **A residual, named:** a dialog left OPEN when the lock engages portals to `document.body`
+and so paints above the non-portalled overlay, and both would install a trap. The bridge half
+neutralises the consequence — no intent from that dialog executes — so it is a cosmetic
+overlap rather than an air-safety hole, and it is not fixed here.
+
+## [~] B-230 — `usePrompt` declares `autoFocus` on its input and the modal primitive silently takes the focus away: the lock PIN dialog opens with the caret on the ✕ ⟨priority: medium — it is the console's only PIN entry, and the operator's first keystrokes go nowhere⟩
+
+**What:** `useDialog.tsx:171` puts `autoFocus` on the prompt's `<input>`. `Modal.tsx:306` runs
+`ref.current?.querySelector(FOCUSABLE)?.focus()` in a `useEffect` on open, and the first focusable
+element in a `Modal` is the header's ✕ (`Modal.tsx:371`, `className="cg-modal-close"`). React
+applies `autoFocus` during commit; the passive effect runs after. **The effect wins.**
+
+**MEASURED, not reasoned** — a throwaway jsdom probe rendering `usePrompt`'s dialog reported:
+
+```
+ACTIVE: BUTTON {"ariaLabel":"Close","type":"button","cls":"cg-btn cg-btn--ghost cg-modal-close"}
+```
+
+**Why:** `usePrompt` has exactly one call site — `StatusBar.tsx:272`, the LOCK button's PIN prompt —
+so the whole blast radius is the one flow an operator runs at a shift change, under mild time
+pressure, usually without looking at where the caret is. The dialog is a single-field form; there is
+no other plausible place for focus to be.
+
+**And the second defect is that the code still reads as if it works.** `autoFocus` is sitting there
+in `useDialog.tsx` doing nothing, so the next reader will conclude the input is focused without
+testing it, exactly as this one nearly did. Two mechanisms claim the same job, one silently wins,
+and the loser was never removed.
+
+⚠ **The existing test cannot catch it.** `tests/modal.dom.test.ts:99` asserts focus-on-open lands on
+a `BUTTON` inside the dialog — true, and it is the correct assertion for the primitive, whose whole
+argument (`Modal.tsx:365`–`369`) is that focus should land on the harmless ✕. The gap is that
+nothing asserts what happens when a dialog has a FIELD the operator is meant to type into, which is
+a different question the primitive does not currently have an answer for.
+
+**Acceptance:**
+
+- Opening the PIN prompt puts focus in the PIN input.
+- Opening a `useConfirm` dialog still puts focus on the ✕ — the safe default is unchanged.
+- Whichever mechanism loses is DELETED rather than left in place.
+- A unit test pins both, so the two cases cannot silently converge again.
+
+**Notes:** the shape of the fix is a decision, not a one-liner — either `Modal` grows an explicit
+"initial focus" seam (a ref or a selector) that `usePrompt` uses and every other dialog leaves
+alone, or `usePrompt` focuses its input in its own effect after the primitive's. The first is the
+one that generalises; the second is smaller and keeps the rule in one file. Found by
+`MODALS-AND-SETTINGS-01` §1.
+
+- **Cross-refs:** [[B-229]] (focus and the lock, one layer out), `Modal.tsx:365`–`369` (why the ✕ is
+  the right default for every dialog that is not a form).
+- **Owed:** nothing built — report only.
+
+### ✅ IMPLEMENTED 2026-09-06 by `MODAL-CONTRACT-02` (`fface751`, `a24bc948`) — Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/34039564468 (the `E2E (Playwright)` job RAN and passed on `2ed9de26`, 557 s — not skipped)
+
+🔴 **The filed diagnosis was RIGHT about the symptom and WRONG about the mechanism, and the
+difference decides the fix.** It reads "the modal primitive silently takes the focus away" —
+a one-time race at open. Measured in a real browser against `fface751~1`, driving the actual
+lock-PIN dialog:
+
+| step                              | `document.activeElement` |
+| --------------------------------- | ------------------------ |
+| dialog opens                      | `BUTTON` — the ✕         |
+| focus placed on the field BY HAND | `INPUT.cg-field`         |
+| after ONE keystroke               | `BUTTON` — the ✕ again   |
+| after TWO keystrokes              | `BUTTON` — the ✕         |
+
+The primitive's effect depended on `onClose`, which every caller passes as an INLINE ARROW —
+a new identity every render — so it tore down and set up again on EVERY COMMIT, and its setup
+moves focus. Tuning `autoFocus` to win the open-time race would have left that untouched.
+
+🔴 **AND THE SYMPTOM NOBODY HAD PREDICTED: the PIN comes out BACKWARDS.** Focus leaving and
+returning resets a controlled input's caret to 0, so each character is inserted before the
+last — the probe typed `1` then `2` and the field held **`21`**. An operator typing
+`1234` at the lock screen got `4321`, and his correct PIN was refused with nothing on
+screen explaining why. This item was filed as `medium`; on that evidence it was closer to a
+lockout.
+
+**The fix is structural.** The trap arms ONCE (`useFocusTrap`, deps `[enabled]`) and the
+dialog NOMINATES where focus lands (`data-modal-autofocus`), so exactly one thing moves
+focus and there is no race to win. The dead `autoFocus` attribute is GONE rather than left
+reading as if it worked — the same defect class as a correct comment above incorrect code.
+`tests/e2e/modal-initial-focus.spec.ts` asserts the VALUE as well as the focus, because
+`pressSequentially` re-focuses per key and focus alone reads correct at the end while the
+value is wrong.
+
+## [ ] B-231 — a renamed bridge config file was left on the station's disk with no migration and no warning: `bridge-source-mappings.json` is still there, read by nothing ⟨priority: low — the configuration it held was silently abandoned, and the class is the one any settings consolidation will meet again⟩
+
+**What:** `~/.cg-runtime/bridge-source-mappings.json` exists on the bridge host (129 bytes, last
+written 2026-08-10) and **nothing in the tree reads or writes it**: `git grep -n -e "source-mappings" -e "sourceMappings" -e "SourceMappings" -- tools apps packages`
+returns zero hits. `1608a804` ("Live Source 4a — the installation names its lives, and the Inspector
+binds each plate") renamed the concept to `SourceAssignments` and the store to
+`bridge-source-assignments.json`; the old file was not read, not migrated and not removed, and
+nothing said so.
+
+**Nothing is broken today** — the surviving file holds one dev-era mapping (`"id": "aaa"`, a route
+producer on channel 1) and the station's real assignments are in
+`bridge-source-assignments.json`. The item is filed for the CLASS, on a measured instance.
+
+**Why:** a persisted config file whose reader is renamed away resets the operator's configuration
+silently. There is no boot warning, no migration, and no inventory of what `~/.cg-runtime/` is
+supposed to contain — so the only way to notice is to list the directory and know which names are
+current, which is precisely the knowledge a station operator does not have. **This is the exact
+failure a settings consolidation is most likely to cause** (`MODALS-AND-SETTINGS-01` §5.3 names it
+in the abstract; this entry is the instance that already happened).
+
+**Acceptance:**
+
+- A superseded bridge config file is either migrated on first boot or named in a boot line that
+  says it is obsolete and being ignored.
+- The set of files the bridge owns under `~/.cg-runtime/` is written down in one place.
+- Renaming a persisted store's file obliges the same commit to say what happens to the old one.
+
+**Notes:** deliberately NOT scoped as "delete the stale file" — the useful output is the rule, since
+the next rename is the one that will cost something. Found by `MODALS-AND-SETTINGS-01` §3 while
+inventorying where each setting is stored, by listing the live bridge host's config directory.
+
+- **Cross-refs:** [[B-116]] (the other thing wrong with `~/.cg-runtime/` layout — a config file
+  inside `templatesDir`), `1608a804` (the rename).
+- **Owed:** nothing built — report only.
+
+## [~] B-232 — the emptied-air notice spoke in IDS: it listed the rows it was offering to put back on air as `1-9 · e506e319-6e68-4603-a5f4-290b21616250` ⟨priority: high — the one sentence an operator reads when air has just gone empty under him, naming the rows in a language he has never typed⟩ — FILED AND CLOSED IN CODE 2026-09-06 by `MODALS-AND-SETTINGS-01`'s delta prompt
+
+**What:** `EmptiedAirNotice`'s `rowLabel` was
+`` `${channel}-${layer} · ${row.templateId}` `` — a channel-layer coordinate and a RAW
+TEMPLATE UUID. The operator knows those rows as «لوگوی اصلی» and «زیرنویس اصلی», the NAME
+column two panels below, and has never typed a UUID.
+
+Confirmed on the plant the same day: the notice fires, PUT BACK ON AIR works, the picture
+comes back — the naming was the only defect left in the surface.
+
+**Why it is filed as a CLASS and not as a one-off:** this is the FOURTH surface to print an
+id at an operator, and each previous fix was made where it was found.
+
+| where                           | what it printed                            | fixed by              |
+| ------------------------------- | ------------------------------------------ | --------------------- |
+| The audit log                   | `item-e602d912-… · f00a5363-…` per row     | [[B-210]] / [[B-211]] |
+| The program-output alarm        | persistent ids, slot indexes, driver names | [[B-223]]             |
+| The stack row and the Inspector | the raw `templateId`                       | `useTemplateIndex`    |
+| **The emptied-air notice**      | **`1-9 · e506e319-…`**                     | **this item**         |
+
+Four surfaces, one rule, and nowhere that stated it. **So the rule is now written down**
+(`CLAUDE.md` golden rule 11) and implemented once, in `renderer/ui/operatorNaming.ts`:
+_an operator-facing surface names things in the operator's words; internal ids live behind
+a tooltip or on the technical surface, never in the sentence he reads under pressure._
+
+⚠ **The id is RELOCATED, not deleted.** [[B-211]]'s finding stands — a name can be renamed
+or repeated and an id cannot — so both ids move to the line's `title`.
+
+**Acceptance:**
+
+- The notice lists the ROW'S NAME first and the template's name second. — **done**
+- The real layer number survives as a quiet secondary, VISIBLE and not hover-only, per
+  `R-028`'s "he may need it to clear that layer by hand". — **done**
+- No UUID on the visible line; both ids on the `title`. — **done**
+- A row with no alias falls back to `Layer N` / `Bed N` through the canonical
+  `defaultLayerAlias`. — **done**
+- A layer outside every bank still says so rather than being given an invented name, and
+  the coordinate is not printed twice. — **done**
+
+**What else the sweep found, and what was done about each:**
+
+- **`LayersPanel`'s restore-MIGRATIONS strip** printed `${m.itemId} — it declares live
+plates, so it moved…`. Same family, same chrome, and the panel already holds all three
+  inputs the rule needs. **Fixed here.**
+- **`LayersPanel`'s restore-SKIPS strip** prints `${s.itemId} — <reason>`. **NOT fixable in
+  the renderer** and filed as [[B-233]]: `RestoreSkipSchema` carries only `itemId`, and a
+  skipped row is by definition NOT on the stack, so there is nothing to join against.
+- **`OrphanLayersBanner`'s owned-occupancy strip** prints `under item “<itemId>”`. Filed as
+  part of [[B-233]] — it needs a new prop AND a copy decision, which is more than this
+  sweep should take on its own authority.
+- **`LiveSourcesPanel`'s stranded-release toast** prints `Nothing was sent — ${row.itemId}
+is no longer stranded`, while the SAME function uses the resolved `names` two lines
+  later. A different tab, so out of this surface's family; filed as part of [[B-233]].
+- **Deliberate and left alone:** the audit log's `IdChip` ([[B-211]] — forensic, shortened +
+  `title` + copy button); `Inspector.tsx:473` and `useTemplatePicker.tsx:454`, which put the
+  id in a `title`, which is exactly what the rule permits; and `liveLayerRows.ts`'s
+  `ownerLabelFor`, whose id fallback is reasoned in place — a friendly placeholder there
+  would be indistinguishable from the stranded state the function exists to detect.
+
+**⭐ A SECOND DEFECT WAS FOUND IN THE FIX ITSELF, and it is worth keeping.** The first
+spelling rendered `names.join(' · ')` as ONE text node. Row names are Persian, template
+names often Latin, and the `·` separators and the trailing coordinate are NEUTRALS — so
+in a line whose base direction is the chrome's LTR, which side of a name they land on stops
+being something the author chose. Each name now renders in its own `<bdi>`
+(`ui/OperatorNames.tsx`) with the separators outside the isolates, and **the audit log had
+the identical defect for the identical reason** — both compose the same `names` array — so
+it was fixed in the same commit. ⚠ Recorded honestly: **this was a precaution, not an
+incident.** The owner raised a display concern and then withdrew it; the isolation was kept
+on its own merits, under the standing rule that Persian/RTL is non-negotiable and mixed
+RTL/LTR is tested rather than assumed.
+
+**⭐ AND THE OWNER'S ADDITION, built in the same commit:** the rows the notice names are now
+MARKED in the layer table itself, in the notice's own amber, so the operator can SEE which
+rows one press of PUT BACK ON AIR would restore instead of carrying two or three names in
+his head from the strip down to the list. Matched on `itemId` — the same key
+`emptiedAir.restore({ itemIds })` is addressed by — so the mark and the press cannot
+disagree about the set. One `background-image`, so nothing moves (`R-033`) and the
+selection ring is untouched (a row can be both marked and selected and shows both).
+
+**A claim checked rather than assumed:** the plant screenshot showed `Bed 1 · 3ghab` for
+one row while the table's first row read «لوگوی اصلی». That looked like a second defect —
+an alias failing to resolve for the bed half — and it is not. Reading the station's own
+`~/.cg-runtime/bridge-fixed-layers.json`: `aliases` holds `98` and `99`, and `low.aliases`
+is ABSENT. Layer 9 is a bed nobody has named, so `Bed 1` is the correct fallback, and the
+table's first row is layer 99 — a different row. The `Configure` modal splits bed aliases
+into `low.aliases` correctly (`FixedBankConfigModal.tsx:295`, `:311`); nothing is wrong.
+
+- **Cross-refs:** [[B-233]] (the three surfaces this sweep did not fix, and why), [[B-211]]
+  (ids relocated, never deleted), [[B-223]] (engineering off the operator surface),
+  [[B-225]] (the notice this names the rows of), `R-028` (why the layer number stays
+  visible), `operator-surface` §2 (which upheld that reasoning against a tooltip).
+- **Owed:** ~~a Linux `gate:e2e`~~ — **DISCHARGED for `57ca77d3`**, the commit that carries
+  the change: <https://github.com/yasermostafaee/cg/actions/runs/34027203380>. Run
+  `status: completed` / `conclusion: success`; the `E2E (Playwright)` job's OWN conclusion
+  is `success` and it RAN for 593 s with its `E2E` step `success` — a `skipped` job would
+  have discharged nothing (`P-029`). `Lint • Typecheck • Test • Build` also RAN (267 s,
+  `success`), so the whole tree at that SHA is verified on Linux, not just the diff.
+
+## [~] B-233 — three more operator-facing surfaces still print raw item ids, and one of them cannot be fixed without widening the wire ⟨priority: medium — the same defect as [[B-232]], in three places that sweep could not honestly close⟩
+
+**What:** [[B-232]] wrote the rule down and fixed the two surfaces that could be fixed from
+the renderer. Three remain, each for a different reason:
+
+1. **`LayersPanel`'s restore-SKIPS strip** (`LayersPanel.tsx`, `role="alert"`,
+   "N rows did not come back after the bridge restarted: `${s.itemId} — <reason>`").
+   🔴 **This one needs a WIRE change.** `RestoreSkipSchema` carries `itemId`, `reason` and
+   an optional `detail` — no slot and no templateId — and a skipped row is BY DEFINITION
+   not on the stack, so the renderer has nothing to join against. The bridge does hold both
+   at the moment it decides (`caspar-runtime.ts:2327`–`2341` iterates `items`, each with its
+   `templateId`, and `#slotForRestore` has the placement), so the fix is to carry them in
+   the skip. **This is the worst of the three**: it is the strip that names rows the
+   operator has just LOST, and it names them in the one language he cannot act on.
+2. **`OrphanLayersBanner`'s owned-occupancy strip** — `under item “<itemId>”`. Needs the
+   stack passed in (a new prop from `App`, which already holds `items`) AND a copy
+   decision: naming it by its LAYER would repeat the coordinate the sentence prints two
+   words earlier, so the sentence has to change shape, not just its value.
+3. **`LiveSourcesPanel`'s stranded-release toast** — `Nothing was sent — ${row.itemId} is no
+longer stranded`. The cheapest of the three and the clearest: the SAME function already
+   resolves `names` and uses it two lines later, so this is one identifier out of step with
+   its own neighbours. A different tab, which is the only reason [[B-232]] left it.
+
+**Why:** filed rather than swept because each needs something [[B-232]]'s brief did not
+authorise — a schema change, a new prop plus new copy, and a surface outside the family.
+Left un-filed they would be re-found one at a time, which is the pattern golden rule 11 now
+exists to stop.
+
+**Acceptance:**
+
+- Each of the three names its subject in the operator's words, through `operatorRowName`.
+- `RestoreSkipSchema` carries what the naming needs; the bridge fills it at the point it
+  already holds it.
+- No id is deleted — each moves to a `title`, per [[B-211]].
+
+**Notes:** (3) is a five-minute change and could go on its own. (1) is the valuable one and
+should not be bundled with it. Found by `MODALS-AND-SETTINGS-01`'s delta sweep.
+
+- **Cross-refs:** [[B-232]] (the rule and the two fixes), [[B-211]], `CLAUDE.md` golden
+  rule 11.
+- **Owed:** nothing built — report only.
+
+### ✅ IMPLEMENTED 2026-09-06 by `MODAL-CONTRACT-02` (`e7d896b1`, corrected in `5864e204`) — Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/34039564468 (the `E2E (Playwright)` job RAN and passed on `2ed9de26`, 557 s — not skipped)
+
+All three go THROUGH `ui/operatorNaming.ts`, per golden rule 11 — this is application, not
+invention.
+
+**1. The restore-SKIPS strip — the WIRE widened, and it is the only one here that needed to.**
+`RestoreSkipSchema` gains `templateId` and `slot`, OPTIONAL and ADDITIVE exactly like its
+existing `detail`, so a bridge that predates this still validates and its skips render as a
+SHORTENED id (the module's documented last resort). **Producers:** one —
+`CasparRuntime.restore()`, whose six skip sites all had the `RetainedStackItem` in scope
+already carrying both fields; they spread ONE helper so the next skip reason cannot be added
+without the naming. `MockRuntime` is not a producer ([[B-108]]: test mode has no retention).
+**Consumers:** `useRestoreSkips` → the `LayersPanel` strip, and `restoreSkipReason`, which
+reads only `reason`/`detail` and is untouched.
+
+⭐ **One ripple the spec caught and reasoning had not:** the panel's template index was built
+from the STACK's items, so a skipped row's `templateId` was never fetched and the name
+rendered with the template silently missing. **Widening a wire is half a fix if the consumer
+never looks the value up.**
+
+**2. The owned-occupancy strip — NO wire change, and the contrast is the finding.** An
+occupancy warning names an item whose LOAD raised it, so that item IS on the stack and the
+`itemId → templateId` join succeeds. `B-232`'s note said this banner "holds neither the
+stack nor the registry"; it now calls those hooks itself rather than taking props, because
+nothing here is mirrored on a second surface (the reason `B-232` threaded `emptiedAirRows`
+from `App` does not apply). The id is RELOCATED not deleted — the full pair is on the row's
+`title` — and the LAYER NUMBER stays in the sentence per `R-028`.
+
+**3. The stranded-release toast** now names the layers the operator actually pressed Release
+on. Here the id is DROPPED rather than relocated: a toast has no `title` and no copy button,
+and there is nothing to relocate — the SUBJECT of the sentence is the coordinate his button
+was labelled with.
+
+⚠ **The three exemptions hold** (the audit `IdChip`, `title=` tooltips, `ownerLabelFor`),
+with one residual named rather than changed: `ownerLabelFor` falls back to the FULL raw
+`itemId` when an item is on the stack but its template is unknown, and that value reaches
+"Seated for …" on the Live Sources tab. It is the same last-resort shape `operatorRowName`
+already blesses, but `shortId` would serve it better. Left alone under the brief.
+
+## [~] B-234 — ENTER on the lock PIN dialog locks the console and leaves the dialog OPEN on top of the lock screen ⟨priority: high — a regression this session introduced, reported from the plant within the hour, and it hides the lock screen behind a dialog the operator did not ask for⟩ — FIXED 2026-09-06 by `MODAL-CONTRACT-02`
+
+**Reported by the owner, 2026-09-06, in the running console:** pressing the dialog's `Lock`
+BUTTON locks the console and closes the dialog, which is right. Pressing **ENTER** locks the
+console and the dialog **stays open**, stacked over the lock screen.
+
+### 🔴 It is a regression of [[B-230]]'s fix, and that is the honest framing
+
+Before `B-230`, focus was stolen to the ✕ on every keystroke, so **Enter never reached the
+field's handler at all** — it activated the ✕ instead, closing the dialog and locking
+nothing. Making Enter work is what exposed this. Fixing one focus defect uncovered a second
+that had been unreachable behind it.
+
+### The mechanism, measured rather than reasoned about
+
+1. Enter closes the prompt (`settle`), so `Modal` unmounts;
+2. the focus trap's cleanup restores focus to whatever held it when the trap armed — the
+   status bar's own `🔒 Lock…` BUTTON, which is what the operator pressed to get here;
+3. the browser then runs the Enter keydown's **DEFAULT ACTION**, and Enter on a focused
+   button is a **CLICK** — so the prompt re-opens, while the `engage` already in flight
+   raises the lock screen behind it.
+
+⚠ **It does NOT reproduce against the offline mock** — tried in the dev server and in the
+built bundle before the cause was found. The mock resolves `lock.engage` fast enough that
+`lock.engaged` has already flipped and the status bar has swapped that button for the
+`🔒 LOCKED` chip, so there is nothing left for the default action to click. A **real
+bridge** is slower, the button is still mounted, and it fires.
+
+⭐ **The lesson worth keeping: a race whose outcome depends on SOCKET LATENCY is one the
+offline mock cannot exhibit.** Every local surface said the fix was complete; the plant
+disagreed within the hour. When a fix changes WHICH element has focus at the end of an
+event, the default action is a second consumer of that key and has to be accounted for.
+
+### The fix
+
+`e.preventDefault()` on the Enter that submits, INSIDE the length guard — so no default
+action survives the submit whatever receives focus next. The trap's focus restore is
+correct and unchanged; a synthetic click the operator never made is not.
+
+**Acceptance:**
+
+- WHEN the operator presses Enter on the lock PIN dialog THEN the console locks and the
+  dialog closes, exactly as the button does — one dialog on screen, the lock screen
+- WHEN the PIN is too short THEN Enter neither submits NOR prevents the default, so the
+  `minLength` rule is still visible rather than silently eating the key
+- WHEN a dialog's key handler closes that dialog THEN it prevents the default action, because
+  focus will have moved by the time the browser runs it
+
+**Linux e2e DISCHARGED:** https://github.com/yasermostafaee/cg/actions/runs/34039564468 (the `E2E (Playwright)` job RAN and passed on `2ed9de26`, 557 s — not skipped).
+
+**Verified:** `tests/usePrompt.enter.dom.test.ts` (the mechanism — `preventDefault`, plus a
+negative control on the too-short path, red without the fix) and
+`tests/e2e/lock-prompt-enter.spec.ts` (the outcome, against a REAL bridge, asserting the
+full set of open dialogs rather than one being hidden).
+
+- **Cross-refs:** [[B-230]] (the fix this regressed from), [[B-229]] (the focus trap whose
+  restore is the second half of the chain).
+- **Prefix class:** `B-`, a runtime bug.
+- **Number:** highest `B-` HEADING across the three bug files was `B-233`; the registry's
+  dated pointer reads _"Next free after this session is `B-234`"_ — headings and pointer
+  AGREE.
+
+---
+
+## [~] B-236 — the stored channel raster is a claim with no author: removing the typed field left the value defaulting to 1920×1080 with nothing able to change it, so an install whose channel is not 1080 carries a standing mismatch banner and no in-console remedy ⟨priority: high — the value reaches AIR on the served template URL, so every graphic on such a channel is mis-placed, silently, and only where nobody in this app can see it⟩ — FILED AND CLOSED IN CODE 2026-09-07 by `STALE-CLAIMS-02` §1
+
+**Observed 2026-09-07**, and reported honestly by the session that created it rather than found
+by a later one: `STATION-CHROME-01` §4 made the Channel tab read-only on four findings that all
+hold — the configured raster reaches air as `?cw=&ch=`, the served page can derive it from CEF's
+own viewport, the console can derive it from `INFO <channel>`, and no case exists where a typed
+raster is more correct than what the channel reports about itself. What it did not have a place
+to fix was the consequence: `ChannelSettingsStore.hydrate` back-fills every DECLARED channel with
+`REFERENCE_RASTER`, and that value is only ever changed by a **writer**. With the field gone
+there was no writer left.
+
+**Repro:** point the bridge at a channel whose `video-mode` is not 1080 (`720p5000` is the
+`C-018` box). The console shows CHANNEL RASTER MISMATCH permanently; the Channel tab shows the
+stored 1920×1080 with no control; every `CG ADD` carries `cw=1920&ch=1080`.
+**Expected:** the console holds the raster the channel actually has.
+**Actual (before):** it holds 1920×1080 for ever, and says so in red with no remedy it can name.
+
+⭐ **Re-adding the typed field would NOT have closed it.** It answers _"the server says
+1280×720"_ with _"type 1280×720"_ — the guess `ChannelSection` exists to prevent, and a second
+source of truth for a number that reaches air.
+
+**Fix — the bridge is the writer, and the value it writes is the server's own.**
+`ChannelSettingsStore.adoptObserved(channel)` replaces the stored raster with `observed` and
+persists it. Three properties, each load-bearing:
+
+- **`unreadable` NEVER adopts, and never becomes agreement.** The gate is the canonical
+  `rasterVerdict` (golden rule 6): `mismatch` is the only verdict meaning both sides are known
+  and disagree. An unmapped token or an absent reading is a recorded GAP — the check could not be
+  performed — and a gap repaired as though it were a disagreement is the defect the check exists
+  to catch. Proved load-bearing by PLANTING the plausible wrong spelling (`!== 'match'` with the
+  null check dropped): three specs redden, the stored raster becomes `{}`, and the log line reads
+  `(undefined×undefined)`.
+- **It corrects a BELIEF; it does not ACT.** It writes the settings entry, `channel-settings.json`
+  and one stderr line, publishes `channelSettings.changed`, and puts NOTHING on the wire — no
+  `PLAY`, `MIXER`, `CLEAR`, `LOADBG` or `STOP`, measured on the mock with a positive control. What
+  is already on air keeps the `?cw=&ch=` it was served with; the correction reaches the next
+  `CG ADD` and the next `liveSourceFitFor`.
+- **Declined while anything is ON AIR**, reusing `#onAirCount`. This is NOT the operator refusal
+  `setChannelSettings` performs and the difference is which way the value moves: that one refuses
+  a new CLAIM of unknown truth, this one declines for now to delete a claim already known false.
+  The reason it must decline is that the raster reaches air by two routes with different timings —
+  the template gets it once at `CG ADD`, a Live Source plate gets it every time a look switch
+  recomputes `MIXER FILL` with no re-ADD — so adopting mid-show pulls the plate out from under
+  its own template's box. Uniformly mis-placed is a worse picture than correct and a better one
+  than coming apart.
+
+**Parity:** `MockRuntime.#mockRaster` declines a stored value that contradicts `MOCK_VIDEO_MODE`
+for the same reason, at READ time (no persisted key or schema changes). Its stale entry is a real
+state, not a hypothetical: a browser that used the typed field before `STATION-CHROME-01` removed
+it.
+
+⚠ **THE WINDOW THIS LEAVES OPEN, stated rather than papered over.** The mode read is ONE-SHOT per
+`(channel, primary)` (`#modeReadFrom`, the `B-189` latch), so a DEFERRED adoption is retried only
+when the next reading arrives — a reconnect, a failover or a restart. An install that has never
+adopted and whose bridge restarts mid-show therefore keeps the wrong raster until air clears and
+the channel is read again. Nothing regresses: that is the state it was already in. Closing it
+means retrying when air clears, and what would justify building that is a measurement ON THE PLANT
+of whether a mid-show adopt really does separate a plate from its template — the proposition this
+gate currently rests on by argument alone.
+
+**Operator copy changed with the behaviour, both halves:** the mismatch banner no longer names
+`channel-settings.json` as the remedy (adoption would overwrite a hand-edit) and names AIR, which
+is what actually holds the correction back; and `ChannelSection`'s _"Declared by"_ line is keyed
+on the VERDICT rather than on whether any reading exists, because answering _"read back from the
+server"_ beside a number the server has just contradicted tells the operator the opposite of the
+fact that row is there to give him.
+
+**Regression-test note:** `tools/caspar-bridge/tests/channel-settings-store.test.ts`
+(`adoptObserved` — B-236 block: adopts + persists, the two `unreadable` doors, the `match` and
+`unconfigured` no-ops, and no file written on a no-op);
+`tools/caspar-bridge/tests/channel-raster.integration.test.ts` (adoption end-to-end with the
+wire-silence measurement and its positive control, the unreadable case, the on-air deferral);
+`apps/runtime/tests/channelSectionProvenance.dom.test.ts` (the provenance sentence, red against
+the old spelling).
+
+- **Cross-refs:** [[B-189]] (the latch that makes the read one-shot, and so bounds the retry),
+  [[B-145]] (boot adoption — why a live channel can meet a standing mismatch at all), [[R-030]],
+  [[R-022]] (PVW is a browser render, so the preview's raster reaches no server).
+- **Prefix class:** `B-`, a runtime bug.
+- **Number:** assigned by the prompt. Verified free — `git grep B-236` returned only this
+  session's own files. ⚠ **The registry's dated pointer was EIGHT numbers behind**: it reads
+  _"Next free after this session is `B-235`"_, while `B-235` and `B-237`–`B-242` are all in use
+  in code, tests and `openspec/changes/station-setup/tasks.md` with no PRD heading of their own.
+  B-236 was the one genuine gap in that span. Pointer corrected in the registry.
+
+## [~] B-247 — the release REASON is computed, emitted, and delivered nowhere: `CasparRuntime` declares 19 emitters and the bridge seam forwards 18 ⟨priority: high — it is the one signal that tells an operator a guest's picture LEFT the ledger deliberately rather than by fault, and it reached nobody⟩ — FILED AND CLOSED IN CODE 2026-09-14 by `PLATE-RELEASE-15`
+
+**Repro:**
+
+1. Take a multi-box row whose plates include a `media` clip (the plant's `e506e319` binds
+   `l1 → sdi` (decklink), `l2 → media1`, `l3 → media2`).
+2. Read the bridge ledger — `~/.cg-runtime/bridge-live-layers.json`. Three seats.
+3. Switch to a look that shows `l1` only.
+4. Read the ledger again. **ONE seat.** The two `media` frames are gone, and the wire agrees
+   (`INFO` reports their band layers empty).
+5. Look for anything, anywhere, that says WHY. There is nothing — no audit line (a look switch
+   is not an audited action), no toast, and on the LIVE PLATES tab the two frames read
+   `Not seated`, whose tooltip says _"nothing is on a layer for this plate **yet**"_.
+
+**What is NOT the bug:** the narrowing itself is CORRECT. `multibox-layout-switch` §12.4 chose
+`held` for a producer a look stops showing, with a named fallback for the one form that cannot be
+held — a `media` clip runs to its end while parked and comes back BLACK, so it is torn down and
+re-seated on return. `LEDGER-SEAT-14` established this against the plant's own files and
+reproduced it against the AMCP mock with a positive control: the same row, same switch, with the
+two clips re-pointed at decklinks, keeps all three seats (parked at `fill=(2,2)`). Do not "fix"
+the teardown.
+
+> ⚠ **Superseded premise — `MEDIA-PLATES-01` (`R-071`, 2026-09-28).** A 2.5.0 clip that is not
+> looping does not come back black: it freezes on its last frame. A clip now follows its own
+> `whenHidden` — `pause` (the default) and `continue` are held like a live input, and only
+> `restart` keeps this teardown; the `Cleared` pill's sentence names that setting. What this
+> entry fixed — the release made observable — is unchanged.
+
+**The bug is that §12.4's own escape clause was never wired.** It calls the fallback _"a NAMED,
+OBSERVABLE behaviour"_ rather than _"a teardown nobody can distinguish from a bug"_, and
+`releaseLivePlate` duly composes an operator-facing sentence for every plate the reconcile lets
+go, which `#applyLivePlatesUnguarded` duly emits on `livePlateReleased` — **subscribed by three
+tests and nothing else.** `wirePublishes` forwarded 18 of the runtime's 19 emitters. So the word
+existed, was correct, and was unreachable: the `B-147` (reader-less `autoSqueeze`) / `B-143`
+(zero-reader `assumed`) class, on the path to air.
+
+The operator-visible cost is that `Not seated` cannot distinguish a frame that never had a
+producer from one that WAS ON AIR and was cleared — and its sentence's `yet` asserts a history
+that did not happen. Reassuring in exactly the case where it should not be.
+
+**Fixed by:** a publish channel (`liveLayers.plate-released`) carrying the release verbatim; the
+forward in `wirePublishes`; `liveLayers.onPlateReleased` on both bridge implementations; and the
+tab's second word — `Cleared`, in the same amber as `hidden by look` and `Not seated`, with the
+bridge's own sentence on the row's `title`. Retraction is structural: `declaredFrameRows` skips a
+plate that has a ledger record before it consults the release, so a stale event cannot outlive the
+state it describes.
+
+**The guard, which is the half that outlives the fix:**
+`tools/caspar-bridge/tests/publish-coverage.test.ts` enumerates the emitters a real
+`CasparRuntime` declares, wraps each `subscribe`, calls the real `wirePublishes`, and fails naming
+any emitter that got no subscriber. It is `B-074`'s route-coverage guard one class over — the PUSH
+side, which is quieter still, because an unforwarded emitter produces no error at either end.
+**Planted twice and measured red both times** (`livePlateReleased` → `expected [
+'livePlateReleased' ] to deeply equal []`; `rehearseChanged` → the same naming that emitter), then
+reverted.
+
+**Regression-test note:** `tools/caspar-bridge/tests/publish-coverage.test.ts` (the guard);
+`tools/caspar-bridge/tests/live-layers-wire.test.ts` (the `B-247` end-to-end — a browser receives
+the release UNASKED; red-first, `timed out waiting for a frame` without the forward);
+`apps/runtime/tests/liveSourcesPanel.dom.test.ts` (five `B-247` blocks: `Cleared` vs `Not seated`
+with an unreleased control frame, the shared amber, the structural retraction with its positive
+control, a `held` release NOT reading cleared, and the invariant that keeps `CLEARED_PILL`'s
+wording honest — a plate the template no longer declares yields no row, so the pill's clip cause
+can never be the wrong one); `apps/runtime/tests/mock-bridge-parity.test.ts`
+(the new method exists on both backends).
+
+- **Cross-refs:** [[B-145]] (the ledger this reports on), [[B-147]] and [[B-143]] (the
+  written-but-unreachable class), [[B-074]] (the route-coverage guard this one is modelled on),
+  [[B-232]] and [[B-211]] (golden rule 11 — the bridge's sentence names the plate handle, so it
+  rides a `title` rather than the row), [[B-225]] (`emptiedAir` — what it looks like when the
+  answer to "should this be standing state?" is YES).
+- **Prefix class:** `B-`, a runtime bug.
+- **Number:** `B-247`. Verified free before filing — the registry's duplicate audit printed
+  exactly `B-056` and `B-080`, the highest existing HEADING is `B-236`, and `git grep B-247`
+  returned nothing outside this session's own files. The registry's pointer already read
+  _"next free is `B-246`"_; `B-246` is claimed without a heading, so `B-247` is the next.
+
+**Known bound, stated rather than hidden:** the release is an EVENT, so a browser that was not
+connected when the reconcile ran — or one that reloads — shows `Not seated` for that frame again.
+That under-claims (the frame genuinely has no seat; only the HISTORY is missing) and never
+over-claims. Making it standing bridge state is a real decision with a real cost, and it was not
+taken here; if it is ever wanted, `emptiedAir` is the shape.
+
+## [ ] B-248 — a timing set is IN FLIGHT and the row says nothing: the console's only signal is a disabled input ⟨priority: medium — the window is one round trip, but it is the one moment the operator is asking "did that take?"⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA A7`
+
+**What:** `stack.set-pass-timing` is a round trip — the console SETS an intent, the bridge sends a
+`CG UPDATE`, the page APPLIES it — and while it is in flight the row shows no sign of it. The only
+change on screen is that the Timing section's two inputs go `disabled`, which says that something
+is happening but not what, and says it in the one vocabulary a control cannot explain itself in.
+
+**Why:** `R-063` settled the doctrine that a row shows whether a change is DECLARED, APPLIED or
+merely UNCONFIRMED. Every other per-row verb on this surface wears it. A timing set does not,
+because a CONFIGURATION verb does not move the row's STATUS: the bridge publishes `timingOverride`
+only on acceptance, so between the press and the answer there is nothing for the row to render.
+The window is short, and the moment is exactly when an operator is deciding whether to press again.
+
+**What was done instead, and why it is not enough:** the control is UNCONTROLLED, so it structurally
+cannot display a number the bridge has not accepted — which is the important half (nothing is ever
+shown as set before it is carried). The missing half is the positive signal that the press was
+received at all.
+
+**Acceptance:**
+
+- WHEN a pass-count or gap set is in flight THEN the row wears the treatment it already has for an
+  unconfirmed change (`TAKING` / `UNCONFIRMED`, the amber clock), rather than a second in-flight
+  vocabulary invented for this control
+- WHEN the set is accepted THEN the treatment clears and the section states what was sent
+- WHEN the set is refused THEN the refusal reaches the persistent surface (it already does) and no
+  in-flight treatment is left behind
+
+**Notes:** ⚠ `DELTA A7` asked this to cross-reference `LOOK-PENDING-08` as the item that will own
+the in-flight visible-duration floor. **That identifier does not exist in this tree** — `git grep
+LOOK-PENDING` returns 0 hits across all tracked and untracked files — so it is recorded here as
+unresolved rather than cited as if it were real. The doctrine this belongs under is `R-063`
+(`docs/prd/runtime.md:3703`, `[x]` RECORDED 2026-09-13); whoever owns the visible-duration floor
+should adopt this item.
+
+⚠ The number: `B-248`. The registry's pointer at `b-number-registry.md:2815` already reads _"Next
+free after this session is `B-248`"_ — `B-246` is claimed without a heading and `B-247` is taken by
+`PLATE-RELEASE-15`. The brief's note said `B-246`; that was stale, and it is a claim rather than a
+heading either way.
+
+## [ ] B-250 — the stack row's dirty chip cannot see a staged POSITION, so one edit is invisible on the surface the operator watches ⟨priority: medium — the edit is never lost, but the row denies it exists⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B4`
+
+**What:** `isItemDirty` answers for a staged position only when its caller hands it the row's
+APPLIED position. The Inspector does (`Inspector.tsx`, via `item.position ?? defaultPositionOf`);
+the stack row does not (`LayersPanel.tsx`, which passes `undefined`). So after the operator moves
+a graphic and leaves the panel, the Inspector's chip says there is an unapplied edit and the row's
+chip says there is not.
+
+**Measured, not reasoned** (2026-09-15, one staged position, the two callers' own argument lists):
+
+```
+{ inspectorSeesPosition: true,  rowSeesPosition: false,
+  inspectorSeesTiming:   true,  rowSeesTiming:   true  }
+```
+
+**Why it is a defect and not a choice:** it was a choice until 2026-09-14. The old contract was
+that the position kept its OWN lifecycle — its own dirty dot and its own `Apply position` button —
+and a row chip that ignored it was correct, because UPDATE did not send it. The owner then folded
+the position into the one commit («دکمه apply position فقط یه مرحله اضافیه و همون دکمه update باید
+پوزیشن رو هم اعمال کنه و همچنین discard هم روش کار کنه»). UPDATE sends it now and DISCARD drops it,
+so the row's UPDATE verb has work to do that the row's chip denies — and a Discard pressed from the
+row throws away an edit nothing on that surface ever said was there. `draftStore.ts`'s own header
+already argues exactly this for the Inspector's chip; the row was not carried across with it.
+
+**Why the fix is not one line:** the row has `item.position` but not the template's manifest
+default, and `defaultPositionOf(templateId)` is what resolves "nothing set" into a comparable
+value. `LayersPanel` can reach that store, so it is small — but it is a second caller learning a
+resolution rule, which is the shape golden rule 6 warns about. The better shape is that
+`isItemDirty` takes the `StackItemState` it is already being fed piecemeal and resolves both
+halves itself, leaving one place that knows what "applied" means. That is a refactor with five
+callers and it was not in `DELTA B4`'s authorised scope.
+
+**Acceptance:**
+
+- WHEN a position is staged for a row THEN the stack row's dirty chip reads dirty, in agreement
+  with the Inspector's
+- WHEN it is discarded or applied THEN both chips clear together
+- AND the resolution of "what is applied" happens in ONE place, not once per caller
+
+**Notes:** the TIMING half of the same function does agree across both callers, and deliberately —
+`timingOverride` IS the applied truth, carried on the item, so there is nothing to resolve and the
+row was given the argument when `DELTA B4` added it. The two arguments are asymmetric for a
+reason, and `LayersPanel.tsx` carries that reason at the call site.
+
+⚠ The number: `B-250`. `B-248` (this session, `DELTA A7`) and `B-249` (this session,
+`bugs-designer.md`) are taken; the registry's pointer at `b-number-registry.md:2815` reads
+_"Next free after this session is `B-248`"_ and is stale by two. Verified free before filing:
+`git grep B-250` across `docs`, `apps`, `packages`, `tools` and `openspec` returned exactly one
+hit — the `LayersPanel.tsx` call-site comment written by this same item.
+
+## [~] B-251 — Station setup kept an unapplied draft across a dismissal, so a typed value read exactly like an applied one ⟨priority: medium — the pane governs the connection host, the template-serve address and the failover strategy, and an operator reading a value that is not in force is `R-063` violated by the surface that configures the thing⟩ — FILED AND CLOSED IN CODE 2026-09-22 by `MODAL-TRUTH-01` Part A
+
+**Repro (owner, 2026-09-22):** open Station setup ▸ Servers, change a field, dismiss without
+applying, open it again. The typed value is still in the field.
+
+**What it is, measured.** `App` keeps `StationSetupDialog` MOUNTED and toggles its `open` prop
+(it returns `null`), so every section BELOW it unmounts on close and drops its draft for free —
+the bank's aliases and the Live sources band both reset, measured, before anything changed. The
+SERVERS fields are the exception: they live in the dialog's own `useState`, which survives, and
+the only thing that used to correct them was the asynchronous `connections.config()` the reopen
+fires. Three jsdom measurements:
+
+```
+bridge answers          -> the field resets, but only AFTER the round trip
+config() REJECTS        -> the field never resets (and the rejection was unhandled)
+config() never answers  -> the field never resets
+```
+
+So the stale draft was on screen for the whole of every reopen, and permanently on a station
+whose bridge is down — which is when an operator opens this dialog.
+
+**It is DISPLAY-ONLY — the draft reaches no store.** Swept on two axes: by module import (only
+`App.tsx` imports `features/stationSetup/`, and only `open` / `section` / `requestId` cross that
+boundary) and by persistence (no `localStorage` or `sessionStorage` under `stationSetup/`,
+`fixedLayers/` or `sources/`; `sourceStore` and `delimiterStore` are caches of what the bridge
+has ACCEPTED, never of a draft). The one path from unsaved to applied is a press of
+`Apply servers` by an operator who believes the value is already in force — a perception defect
+with a one-press consequence, not a leak.
+
+**Fix:** the discard is a LOCAL act, done at the moment of closing, waiting on nothing. The seven
+field assignments the load, `Revert` and the close-discard each need are now one
+`restoreServersDraft`; they were written out twice and missing a third time, which is how the
+third came to be absent. A stale Servers `status`/`refusal` is cleared with them, as
+`sectionMessages` already was.
+
+⚠ **`B-240`'s question is GONE — and this paragraph said the opposite for a few hours, which
+is worth leaving visible.** It read: _"`B-240` is untouched. The ✕, Escape and the backdrop
+still ASK before dropping a draft … this is what happens once the operator has answered
+`Leave and discard`."_ The owner then reported the defect as STILL PRESENT, and driving the
+real app found why: the question's own cancel path (Escape, or its `Cancel`) leaves Station
+setup open with the edit in it, which from the operator's seat is the defect it was guarding.
+The confirm was removed under `MODAL-TRUTH-01 · DELTA A`; the rail's dirty dot is now the
+whole of the warning and `Revert` is still the named discard. See the supersession block in
+`openspec/changes/station-setup/specs/runtime-ui/spec.md` for the full argument.
+
+⚠ **And the lesson that outlives it:** the dom spec that shipped with this fix toggled the
+dialog's `open` prop — the mechanism `App` uses, red before the change, green after — and
+was still blind to what the owner saw, because it never pressed the ✕. A model of the
+operator's sequence is not the sequence. The surface-level e2e
+(`apps/runtime/tests/e2e/station-setup-draft-discard.spec.ts`) is the one that can fail on
+this class, and it does: it went red on the shipped build with
+_"a confirmation dialog appeared on the way out"_.
+
+**Acceptance:**
+
+- WHEN Station setup is dismissed with an unapplied Servers draft THEN reopening shows the
+  APPLIED configuration
+- AND it does so before any reopen read has answered, and on a bridge that never answers at all
+- AND a Servers outcome or refusal from a previous opening is gone
+
+**Notes:** pinned by `apps/runtime/tests/stationSetupDraftDiscard.dom.test.ts` — three Servers
+assertions red before the change, plus the Layers and Live sources panes, which were already
+green and are held anyway: the contract is "closing discards", not "closing happens to unmount".
+No pane qualified for a confirm-on-close escape; none holds work that is expensive to reproduce,
+and `B-240`'s question already covers the warning. Cross-refs [[B-240]] (the dismissal question
+this completes), [[B-252]] (the same failure class, one dialog along).
+
+## [~] B-252 — the audit log asserted a count it had not read, sat on “Reading…” forever with no bridge, and floated its footer 276 px above the frame’s bottom edge ⟨priority: medium — three statements on one forensic surface, each of them a claim the dialog could not support⟩ — FILED AND CLOSED IN CODE 2026-09-22 by `MODAL-TRUTH-01` Part B
+
+**Repro (owner, 2026-09-22, screenshot):** open the audit log with no bridge running.
+
+**Three defects, measured.**
+
+1. **THE FOOTER.** In Chromium at 1280×800 with an empty record: a 736 px shell, a body with
+   36 px of slack, and **276 px of dead region UNDER the footer**. The rule already existed and
+   already named this exact failure — `PLATES-AUDIO-11` DELTA §2, in `Modal.tsx`'s
+   `styles.bodyFlush`: _"A declared height alone does not put the footer at the bottom … with
+   fewer rows than the frame holds it is CONTENT-sized: the footer floats up under the last row
+   and the frame's lower third is dead space."_ The audit log never got it because that same
+   note scoped the fix to the `frame="fixed"` opt-in rather than to every framed size, to avoid
+   re-tuning two signed-off surfaces for a third. Taking the opt-in invents nothing: same
+   `bodyFlush`, same `--r-modal-h-frame`, the template picker untouched. After: 1 px under the
+   footer, 311 px of slack inside the scroll region where it belongs.
+2. **THE COUNTER.** `Reading the audit record…` in the body and `0 of 0 events` in the footer,
+   at the same moment. The BODY was the truthful half — `health === null` genuinely means "not
+   asked yet" — and the counter was the stale one: it rendered `entries.length`
+   unconditionally over an `entries` initialised to `[]`, so every read was preceded by a
+   footer stating a total of the record it had not opened.
+3. **THE MISSING FAILURE STATE.** `refresh()`'s `Promise.all` rejected into `void refresh()` as
+   an unhandled rejection, `health` stayed `null`, and the dialog showed `Reading…` for as long
+   as it was open. Silence where an error belongs.
+
+**Why 2 and 3 are one defect:** both come from deciding whether the READ happened by looking at
+`health`, which answers a different question — is the WRITER live. That is golden rule 8's axis
+error and [[B-141]]'s own rule one layer up: a negative observation is not a result until a
+positive control proves the instrument is live. The fetch's condition is now the fetch's own
+value, and `B-141`'s three empty states gain a fourth reading — the one where nothing was read
+at all.
+
+**Acceptance:**
+
+- WHEN the read has not answered THEN the footer states no count
+- WHEN it completes THEN the body has stopped saying it is reading
+- WHEN the record cannot be read THEN the dialog says so, with the bridge's own words, and
+  Refresh reports not-accepted rather than flashing success
+- AND the footer sits on the frame's bottom edge whatever the body's height
+
+**Notes:** pinned by `apps/runtime/tests/auditPanel.readState.dom.test.ts` (five specs on what
+the surface SAYS; three red before) and, for the geometry, by
+`apps/runtime/tests/e2e/library-audit-geometry.spec.ts` in Chromium — jsdom has no layout, so a
+box asserted there passes against a surface of any shape (golden rule 12c). ⚠ That spec's first
+positive control used `scrollHeight` and was WRONG: `scrollHeight` is
+`max(content, clientHeight)`, so it equals the box height for any content shorter than the box
+and reads the same on a broken build as on a fixed one. It fired on the fixed build; the control
+measures the body's SLACK instead. Cross-refs [[B-141]] (the three empty states this joins),
+[[B-251]] (the same failure class, one dialog along).
+
+## [x] B-253 — a muted empty layer is indistinguishable from a clean one: `CLEAR` does not reset a layer’s mixer state, so anything seated on it later is silently muted with nothing in the observed state to explain it ⟨priority: high — the failure is SILENT and it is on AIR: a guest’s audio, or a bed’s, simply is not there, and every surface the operator can reach says the layer is fine⟩ — FILED 2026-09-22 by `MODAL-TRUTH-01` §6 · FIXED IN CODE by `BRIDGE-TRUTH-01` §2 · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-bridge-truth`)
+
+⚠ **SEVERITY CORRECTED 2026-09-23 (`BRIDGE-TRUTH-01 · REPLY 1` R3a) — the heading is kept as
+filed.** Our own take re-asserts `MIXER … VOLUME 1` on every take (R-022,
+`caspar-runtime.ts:3515`), so OUR next take on a cleared layer was always audible. The residue
+silenced only a producer that did not come through our take — a hand-typed `PLAY`, the Playout's
+own automation, a layer returned to them by a bank re-cut. Wrong, and invisible to `INFO`, but not
+the "plays, looks right, and is silent" take the prompt described. The Playout team was told the
+overstated version (Reply P §3); that correction goes in our next letter.
+
+**Confirmed in our code.** The operator's LOAD sends nothing on the wire. The paths that stop after
+the muted `CG ADD` are the deferred restore's re-ADD (a restored row whose layer was empty) and
+`setPosition`'s re-ADD of a loaded row; then `CLEAR` removes the producer and keeps `VOLUME 0`.
+
+**The fix:** `#resetEmptiedLayerMixer` sends `MIXER <ch>-<layer> CLEAR` after our `CLEAR` on
+`out`, `remove`, the bank clear and the orphan clear — only when the `CLEAR` landed on the primary,
+and only inside the declared bank. The test is the discriminating one: after our clear, a raw
+`PLAY` from another client, then `MIXER … VOLUME` read over the wire — `0` before the fix
+(measured, red first), `1` after (`clear-resets-mixer.integration.test.ts`).
+
+**`#reassertDeclaredVolumes` is NOT this fix's predecessor, and it stays.** It is `8248c7ee`
+(2026-07-30, R-022) and was written for a bridge that died mid-rehearse; the mute-before-`CG ADD`
+it now also covers arrived later (`6336af29`, 2026-08-14). It is not dead: a bridge that DIES with a
+muted layer — mid-rehearse, or between a re-ADD and a take — never gets to clear anything, and the
+boot-time blanket is still the only recovery.
+
+**The mock and a docstring said `MIXER CLEAR` left volume alone "on the real one".** No measurement
+backed that — the commit that wrote it measured `FILL`/`CLIP` only. Both now model the Playout
+team's live measurement (a 2.5.0-based core, `stage.cpp` unmodified): `MIXER CLEAR` → volume `1`.
+⭐ So the Live Source teardown, which has sent `MIXER … CLEAR` all along, already resets each plate
+layer's volume to unity. ⚠ Named, not measured: a plate seat sends `PLAY` and then its muting
+`MIXER … VOLUME 0` inside a `DEFER`/`COMMIT` batch, so a plate seated on a unity layer — a cold one,
+or one a teardown reset — may be audible from its `PLAY` until the `COMMIT`. That window was
+believed to start muted; it deserves a wire measurement of its own.
+
+**Measured 2026-09-22** on the Playout team's fork, during the same recon week that produced
+[[C-040]]. `CLEAR` removes the PRODUCER on a layer; it does not reset that layer's MIXER. A layer
+left at `MIXER VOLUME 0` by a previous seat therefore reads, in every observed-state channel this
+app has, exactly like a layer that was never touched — and the next producer seated on it plays
+muted.
+
+**Why it is this session's family and is filed here rather than fixed.** It is the bridge-side
+spelling of _a surface asserting a state that is not in force_: the observed state says "empty",
+which is true of the producer and false of the mixer, and nothing the operator can see carries
+the difference. `MODAL-TRUTH-01` was authorised for two renderer dialogs; this is the wire, and
+a wire change does not ride a renderer bugfix commit.
+
+**Acceptance (sketch, to be settled when it is worked):**
+
+- WHEN a layer is cleared THEN its mixer state is reset with it, OR
+- WHEN a producer is seated on a layer whose mixer is not at unity THEN the ledger and the
+  console SAY so before it goes to air
+- ⚠ NOT answered by un-muting on every seat without saying so: a deliberate mute that a seat
+  silently undoes is the same defect with the sign flipped, and `silenceAllLivePlates` stays
+  unscoped either way
+
+**Notes:** the measurement is the Playout fork's, so the first step when this is worked is to
+re-measure against the CasparCG version the install actually runs — `2.5.0-stable` behaviour is
+not assumed from a fork's. Cross-refs [[C-040]] (the same recon), [[C-041]] (the audit-path flag
+found in the same run).
+
+## [~] B-254 — the Station setup dismissal question turned leaving into a two-step act whose first step looked exactly like the defect it guarded ⟨priority: medium — it made a FIXED defect read as unfixed to the owner, which is worse than the original: it spends the operator's trust in the surface and in the fix⟩ — FILED AND CLOSED IN CODE 2026-09-22 by `MODAL-TRUTH-01 · DELTA A`
+
+**Repro (owner, 2026-09-22, after [[B-251]] shipped):** open Station setup ▸ Servers, change a
+field, close without saving, reopen — the edit is still there.
+
+**What it actually was, measured in Chromium before anything changed.** [[B-251]]'s
+close-discard is sound: every pane and both dismissal paths discard correctly, reopening at
+the applied value — Servers host, the serve host, the strategy select, the Layers row name and
+the Live sources band, via the ✕ and via Escape. The question was `B-240`'s confirm:
+
+```
+type a host → press ✕ → the question opens → press Escape (or its `Cancel`)
+           → Station setup is STILL OPEN, with the edit still in it
+```
+
+From the operator's seat that is indistinguishable from "I closed it without saving and my
+edit survived". **A guard whose own cancel path reproduces the symptom it guards is not a
+guard**, and this one had the additional cost that it made a landed fix look like a live
+defect.
+
+**Why removing it is `B-240`'s own argument rather than an overrule.** `B-240` held — citing
+`R-017` — that a confirmation met on every exit is one an operator learns to dismiss without
+reading. Its premise was that leaving LOST something silently. After [[B-251]] it does not:
+closing discards, always, which is the conventional contract for a modal with an explicit
+Save, and `Revert` is still the named visible discard for a draft the operator wants gone
+without leaving. The rail's dirty dot and count are now the whole of the warning, and they are
+on every tab before he reaches for the ✕. **Everything else in `B-240` stands** — one name for
+discard, one for commit, never a `Close` beside an `Apply`, and ONE dismissal path.
+
+**Acceptance:**
+
+- WHEN the dialog is dismissed with an unapplied draft THEN it closes, no confirmation
+  appears, and reopening shows the applied configuration
+- WHEN nothing is unapplied THEN it closes the same way — one behaviour, not two
+- AND the rail marks every section holding a draft, on every tab
+
+**Notes:** the supersession argument lives in
+`openspec/changes/station-setup/specs/runtime-ui/spec.md`, replacing the requirement rather
+than sitting beside it. Cross-refs [[B-251]] (the fix this was hiding), [[B-255]] (the test
+lesson it taught), `B-240` (the decision amended).
+
+## [x] B-255 — a green test over a live defect: Part A's dom spec modelled the operator's sequence instead of driving it ⟨priority: medium — it is the failure the prompt that found it was named for, and it is a rule about how this repo writes tests rather than a defect in one⟩ — FILED AND CLOSED IN PROCESS 2026-09-22 by `MODAL-TRUTH-01 · DELTA A`
+
+**What happened.** [[B-251]]'s fix shipped with a dom spec that toggled the dialog's `open`
+prop on one mounted instance. That is genuinely the mechanism `App` uses — it keeps
+`StationSetupDialog` mounted and flips `open` — and the spec was red before the change and
+green after. It was still blind to what the owner saw, because **it never pressed the ✕**: the
+dismissal raised a question ([[B-254]]), and backing out of that question left the dialog open
+with the edit in it. The spec asserted the right thing about the wrong path.
+
+**The rule, stated so it outlives this instance.** A test that reproduces the MECHANISM a
+change touches is not the same as a test that drives the SEQUENCE an operator performs. Where
+a defect is reported as a lifecycle — _open, do this, close, reopen_ — the spec that can fail
+on it drives that lifecycle end to end, through the affordances the operator actually presses,
+and asserts on what the surface SAYS. Golden rule 12 already says a green gate is no evidence
+about anything that renders; this is the same argument one notch finer: **a green
+component-level test is no evidence about a path the component is not the only thing on.**
+
+**What closed it.** `apps/runtime/tests/e2e/station-setup-draft-discard.spec.ts` — open, edit,
+close via the ✕, reopen, read the field, on two panes, asserting additionally that no
+confirmation dialog appears at any dismissal. It went RED on the shipped build with _"a
+confirmation dialog appeared on the way out"_, which is precisely the evidence the dom spec
+could not produce. The dom spec is KEPT beside it: it still pins the state-level discard, and
+its own header now says which half each one owns.
+
+**Notes:** the owner's `DELTA A3` named this before it was found — _"a harness that cannot
+express the bug must not be copied"_. Recorded as a bug rather than a note because it cost a
+round trip and a false "done". Cross-refs [[B-251]], [[B-254]], and golden rule 12 in
+`CLAUDE.md`.
+
+## [~] B-256 — the Station setup discard did nothing on a console whose bridge had NEVER answered, because `loaded` was null and the discard was guarded on it ⟨priority: high — it is a FIXED defect that stayed live on exactly the stations most likely to have it: a console whose bridge is down is the one an operator opens Station setup to diagnose⟩ — FILED AND CLOSED IN CODE 2026-09-22 by `MODAL-TRUTH-01 · DELTA A`
+
+**Repro (owner, 2026-09-22, after [[B-254]] shipped):** «هنوز تب servers ایراد داره ولی live
+sources درسته الان» — Live sources reverts to the stored values on close and reopen; Servers
+still shows the temporary ones.
+
+**The split he noticed IS the diagnosis.** Live sources and Layers unmount with the dialog and
+reset for free. The Servers fields live in the dialog's own `useState` and are restored from
+`loaded` — what the bridge last stated — and the close-discard read
+`if (loaded !== null) restoreServersDraft(loaded)`. On a console whose bridge has never
+answered, `loaded` is `null` from boot to close, so that branch does **nothing at all**. His
+own screenshot two messages earlier is that station: `not read yet`, `not configured`, `No
+health reading from the bridge yet`.
+
+**🔴 Why the test written for exactly this missed it, which is the half worth keeping.**
+[[B-251]] shipped with a spec named _"the discard does NOT wait on the bridge: a `config()`
+that never answers"_. It lets the FIRST read land and only then takes the bridge away — so
+`loaded` holds a config and the discard has something to restore to. **A bridge that goes away
+and a bridge that was never there are different states of the same variable**, and the spec
+covered the wrong one while being named for the right one. The same shape as [[B-255]] one
+layer down: the test asserted the right thing about the wrong condition.
+
+**The fix.** `null` is an ANSWER, not a reason to do nothing: nothing is in force, so the
+honest state is the one a first open shows. That state is declared once (`UNREAD_SERVERS`) and
+read in three places — the initial `useState`, the close-discard, and the backup draft a
+station with no `servers.B` is offered — and the decision moved INSIDE `restoreServersDraft`,
+which is what makes it impossible to forget at a call site. `revertServers` carried the same
+early return; it is unreachable today (`serversDirty` is false without a `loaded`, so the
+button is not drawn) and was deleted anyway, because a dormant copy of a defect is how the
+defect comes back.
+
+**Acceptance:**
+
+- WHEN the bridge has never answered AND the operator edits a Servers field, closes and
+  reopens THEN the field shows what a first open shows, not the edit
+- AND the same holds when the bridge answered once and then went away
+- AND no call site decides what `null` means — the restore does
+
+**Notes:** the object is TYPED, not `as const`: the first spelling's literal types flowed into
+`useState` as `useState<false>` and friends, nine errors, every one of them reported at a
+SETTER rather than at the declaration. Caught by the uncached gate, which is what it is for.
+⚠ A residual, NOT fixed here and deliberately: with no `loaded`, `serversDirty` is false, so
+the rail shows no dirty dot for Servers on a bridge-less station — the operator gets no mark
+that he holds unapplied edits there. It is arguably correct (there is no baseline to be dirty
+against) and changing it would re-open the dirty semantics [[B-254]] just made load-bearing.
+Cross-refs [[B-251]], [[B-254]], [[B-255]].
+
+## [x] B-257 — one principal's lock strands another principal's channels: the lock is bridge-wide, its PIN is known only to whoever engaged it, and the permission gate exempts it from channel scope on the premise that it is "console-wide" ⟨priority: high — the channel-2 operator loses CLEAR, CLEAR ALL and PANIC on their own channel to a principal with no grant there, and the only ways out are that principal's PIN or a bridge restart⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1 · FIXED IN CODE by `BRIDGE-TRUTH-01 · REPLY 1` · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-bridge-truth`)
+
+**What.** `CasparRuntime` holds ONE `#lock` per bridge (`engage` / `release`,
+`caspar-runtime.ts:9890`). While it is engaged, `refusedWhileLocked` refuses every `operator`
+route on every socket, whoever is signed in there — `CLEAR`, `CLEAR ALL` and PANIC included, which
+is [[B-229]]'s owner answer. The PIN is set fresh at every engage and held only in memory
+(`StatusBar.tsx:628`). The permission gate resolves `lock.engage` to NO channel, so any principal
+holding the `operator` class may engage it, for the reason `playout-authz-channels/design.md` §5
+gives: _"It has no channel to scope to. The lock is console-wide."_
+
+**Why it is wrong.** [[B-229]]'s no-carve-out answer rests on one sentence: _"the operator who
+engaged it ends it in the time it takes to type four digits, so an emergency verb behind the lock
+is two seconds away and not unreachable."_ That was true while a bridge had one operator.
+Per-channel grants ([[C-038]]) made a bridge shareable by principals who operate different
+channels, and the sentence does not survive the move: the principal facing the lock need not be
+the one who engaged it, holds no PIN, and may hold no grant on the engager's channels while the
+engager holds none on theirs. The lock is not console-wide. It is bridge-wide, which makes it
+every-channel-wide.
+
+**Measured 2026-09-23** — a scratch spec against the shipped gate, run and deleted (§1 of that
+prompt changes nothing). One bridge, auth ON, the fake Playout on loopback, AMCP dead. A is
+`cg-op1` re-minted with channel 1 only; B is `cg-op2` re-minted with channel 2 only.
+
+- Control 1 — A's `layers.clear` on channel 2 is refused with the channel sentence. The grants
+  really are disjoint, and the channel gate is live.
+- Control 2 — B's `layers.clear` on channel 2, before the lock, is not refused.
+- A's `lock.engage` answers `ok: true`.
+- B's `layers.clear` on channel 2, `stack.silence-all-live-plates` and `stack.clear-all` are all
+  three refused with `LOCK_ENGAGED_REFUSAL`. B's `lock.release` with any other PIN answers
+  `pin-mismatch`.
+
+**Reachable where.** In the shipped code, on any auth-ON bridge where two principals holding
+different grants are signed in. Not yet on an on-air plant, because none runs auth ON — the real
+installation has no address yet. The five fixture users all hold channel 1, which is why no
+existing suite meets it.
+
+**Acceptance (sketch — every shape of the fix changes a refusal CONDITION, so the choice is the
+owner's):**
+
+- WHEN a principal engages the lock THEN no principal loses an emergency verb on a channel the
+  engager holds no grant for — by one of: the lock scoped to the engager's granted channels;
+  `lock.engage` requiring a grant on every declared channel (all-or-nothing, the bulk verbs'
+  rule); or the lock scoped to the engaging console rather than to the bridge
+- AND [[B-229]]'s no-carve-out answer still holds for the principal who engaged it
+- AND auth OFF is byte-identical
+
+**Resolution (2026-09-23, owner, `REPLY 1` R1):** option 1 — the lock covers the ENGAGER's
+channel set, captured at engage (`LockState.channels`, absent for auth OFF and for a `'*'` engager,
+which keep the every-channel lock byte for byte). It refuses an intent only when it touches a
+covered channel the requester holds; a principal holding none is refused by PERMISSION instead,
+naming the channel. PANIC is judged by where its ledger reaches and stays unscoped in what it
+silences. The design, the PANIC check and the rendering are `openspec/changes/archive/2026-09-23-bridge-truth/design.md`
+§2–§4; the test is `lock-scope.integration.test.ts`.
+
+**Notes:** `silenceAllLivePlates` stays unscoped whatever is chosen — this is about who can
+REFUSE it, not about its scope. Cross-refs [[B-229]], [[C-038]], [[B-258]], [[B-259]],
+[[B-260]].
+
+⚠ **2026-09-23, `CHANNEL-AUTHORITY-01` — one line of this fix's spec asserted a hazard, and is
+inverted.** It was measured on a station that declares ONLY channel 1, so the channel-2 operator's
+"own channel" was never this station's, and `lock-scope.integration.test.ts` asserted as the fix
+that their `layers.clear` on channel 2 reached the wire as `CLEAR 2-40`. That is [[B-261]]: a write
+to a channel the station does not operate, passed by the permission gate because the grant was
+true. The line now asserts the STATION's refusal — never the lock's — and silence at the wire.
+**B-257's own property is untouched**: the lock does not reach that operator, whose PANIC passes and
+lands, proven at the wire in the same spec. The CLEAR half of this fix becomes reachable only on a
+station that declares a second channel.
+
+**The audit this was found by** — `BRIDGE-TRUTH-01` §1, the re-run of the table
+`PLAYOUT-AUTHZ-01` lost to compaction. Every exemption the lock has, and every place the auth or
+permission gate reuses a lock-era condition, each answering one question: _does this
+justification transfer to the permission axis?_ Every handler named was read at `5c07fc09`; the
+four lines marked MEASURED were driven through a socket.
+
+| #   | Exemption (allowed past, or never meeting, the lock gate)                                                                                       | The lock's justification                                                         | Transfers to the permission axis?                                                                                                                                                                                                                                                                                          |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1  | `LockPolicy` `read` — every read route, `bridge.capabilities` included                                                                          | answers a question and changes nothing                                           | **Yes.** Every `read` handler is a pure getter; `auth.state` alone has a side effect (it arms the D9 poller), named in `authGateState` and off the wire. `refusedByAuth` reuses it for an EXPIRED session on purpose, and NOT for a never-authenticated one, where only `bridge.capabilities` and `auth.*` answer.         |
+| A2  | `unlock` — `lock.release`                                                                                                                       | it IS the way out of the lock                                                    | **No — and it was not copied.** Refused for an invalid session; class `operator`.                                                                                                                                                                                                                                          |
+| A3  | `resync` — `stack.restore`                                                                                                                      | the client's reconnect machinery, not a press; grants the operator nothing       | **The ALLOW: no — and it was not copied** (refused when invalid since `PLAYOUT-AUTH-01`; class `operator`; channel-checked per retained slot and fenced to the bank's channel). **The "not a press" half: yes — and it was NOT carried** to the refusal record. MEASURED: [[B-258]].                                       |
+| A4  | `operator-unless-redelivery` — `templates.import` with `redelivery: true`                                                                       | the same machinery, told apart by a flag the wire already carries                | As A3 on the permission axis, with the same record defect. ⚠ **On the lock's OWN axis the justification is false**: the flag is client-asserted, and a redelivery of a held id replaces its HTML, so a locked console DOES accept a catalogue change. MEASURED: [[B-260]].                                                 |
+| A5  | the `auth` frame — outside the route table, so the lock gate never sees it                                                                      | none from the lock; it exists so the auth gate can run before a principal exists | **Not a lock exemption copied — a permission-axis path that bypasses the lock.** A token refresh must pass it; a CHANGE of principal on a locked console has no written reason, while `auth.sign-out` is refused there. MEASURED: [[B-259]].                                                                               |
+| A6  | a malformed request, or an unknown channel — answered before the lock gate                                                                      | a skewed page must be told its real problem, not sent to type a PIN              | **Yes.** The auth gate sits after the parse for the same reason, and a shape error reveals nothing `bridge.capabilities` does not already publish.                                                                                                                                                                         |
+| A7  | publishes (`wirePublishes`) — the lock never gated delivery                                                                                     | a locked console must still SEE what it may not touch                            | **Yes** for an expired session (ADR 0010 rule 4: reads keep answering); **deliberately not** for a never-authenticated one. Not channel-scoped — `R-062`'s decision, per `playout-authz-channels` §5.                                                                                                                      |
+| A8  | bridge machinery with no socket — boot adoption, the occupancy reconcile, `#reassertDeclaredVolumes`, the rehearse abort, emptied-air detection | not a press; there is nobody to lock                                             | **Yes** — none of them acts with a principal's authority.                                                                                                                                                                                                                                                                  |
+| A9  | the deferred restore — `#decidePendingRestores`, when CasparCG becomes reachable                                                                | the restore was already exempt; nothing is sent until occupancy is known         | **Yes, with the time-shift named.** Authorised when asked (class and channel); once accepted a restored row is STATION state, like any row whose author has signed out. It reaches `MIXER VOLUME 0` + `CG ADD` on the bank's channel with no `PLAY`, possibly after that principal expired or was revoked. Not re-checked. |
+| A10 | the template completion stop — `SELF-STOP-24`, over HTTP, as `runAsTemplate`                                                                    | the template's own authored contract (golden rule 13)                            | **Yes** — it acts only on a take the gates authorised, with a per-take 128-bit token spent on first use.                                                                                                                                                                                                                   |
+
+| #   | Where the auth or permission gate reuses a lock-era condition                                              | The lock-era reason                                                                         | Transfers?                                                                                                                                                                                                                            |
+| --- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1  | `refusedByAuth` reads `route.lock !== 'read'` for an invalid session                                       | A1–A4                                                                                       | Yes for `read`; deliberately not for `resync`, `unlock` or a redelivery. Pinned by the `auth-gate` census.                                                                                                                            |
+| B2  | the gate ORDER — lock, then auth, then authz                                                               | _"a locked console is a fact the operator already knows and can act on in four keystrokes"_ | **Partly.** True for the principal who engaged it. A never-authenticated socket, or any OTHER principal, is told to use a PIN it does not hold. Both answers refuse and nothing reaches the wire, so it misdirects rather than leaks. |
+| B3  | `DELTA B`: a resumed token writes no `sign-in` row                                                         | resync's "not a press"                                                                      | Yes — and the one place that half WAS carried.                                                                                                                                                                                        |
+| B4  | 🔴 `playout-authz-channels` §5: `lock.engage` / `lock.release` have no channel scope — "console-wide"      | [[B-229]]: the operator who engaged it ends it in four digits                               | **NO, AND IT IS LIVE** — this entry.                                                                                                                                                                                                  |
+| B5  | `auth.sign-out` is `lock: 'operator'`, `perm: 'read'`                                                      | the no-carve-out answer                                                                     | Settled at `lock-refuses-intents.integration.test.ts:281`; listed so nobody re-opens it.                                                                                                                                              |
+| B6  | the class of every lock-exempt route — `stack.restore`, `templates.import`, `lock.release` — is `operator` | —                                                                                           | Correct: the permission gate inherits none of the lock's allows.                                                                                                                                                                      |
+
+## [x] B-258 — a signed-in viewer's reconnect is written into the audit log as refused presses the viewer never made ⟨priority: medium — the record is the product ([[B-141]]), and these rows are false statements about a named person⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1 · FIXED IN CODE by `BRIDGE-TRUTH-01 · REPLY 1` · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-bridge-truth`)
+
+**What.** `WebSocketRuntime.#resync` stands down only for a signed-out or expired console
+(`WebSocketRuntime.ts:939`). A signed-in principal without the `operator` class — a viewer —
+re-delivers its template library (`templates.import`, `redelivery: true`) and its retained stack
+(`stack.restore`) on every (re)connect, exactly as an operator's console does. The permission gate
+refuses each frame, correctly: a viewer must not restore. It then writes a `refused` row for each
+one, naming the viewer (`bridge.ts:1476`).
+
+**Why it is wrong.** The lock exempted those two frames as _"the client's own reconnect machinery,
+not a press"_. The permission gate was right not to copy the ALLOW. It did not carry the other
+half of the reason either, and that half does transfer: the refusal is recorded as a press.
+`DELTA B` applied it to `sign-in` rows (_"a resume is not a sign-in"_), and a successful
+re-delivery already writes no row (`caspar-runtime.ts:9965`) — so a refused one is the only
+re-delivery the log records, and the row blames a person.
+
+**Measured 2026-09-23** (scratch spec, run and deleted): `cg-view` signs in and sends
+`stack.restore` with an empty list; the answer is `AUTHZ_ROLE_REFUSAL`, and `audit.recent` then
+holds `action: refused`, `refused.channel: stack.restore`, under her name and `sub`, directly
+above her `sign-in`. ⚠ **Read from code, NOT measured:** each refused template re-delivery also
+reaches the console as a resync error — _"Re-delivery of template … failed on reconnect —
+re-import it manually."_ plus the role sentence — one per template.
+
+**Acceptance (sketch):**
+
+- WHEN a principal without the `operator` class reconnects THEN no `refused` row is written for
+  its reconnect machinery AND the console surfaces nothing about it
+- AND a real refused press by the same principal still writes its row
+
+**Notes:** two ends could own it — the console withholding a re-delivery its principal cannot be
+granted, or the bridge declining to record a refusal of a frame marked as machinery — and the
+second trusts a client-asserted flag ([[B-260]]). Cross-refs [[B-257]], [[C-038]].
+
+## [x] B-259 — an `auth` frame replaces the principal on a LOCKED console, while `auth.sign-out` is refused there ⟨priority: medium — nothing reaches the wire, but the lock's no-carve-out answer is kept on one door and not on its sibling, and the record shows a sign-in with no end to the session it displaced⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1 · FIXED IN CODE by `BRIDGE-TRUTH-01 · REPLY 1` · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-bridge-truth`)
+
+**What.** The `auth` frame is handled before the route table (`bridge.ts:1352`), so the lock gate
+never sees it. That is deliberate for the AUTH gate — it has to run before a principal exists —
+and nothing written says what it should mean for the LOCK.
+
+**Measured 2026-09-23** (scratch spec, run and deleted): `cg-op1` signs in and engages the lock.
+Their `auth.sign-out` is refused with `LOCK_ENGAGED_REFUSAL` (the settled answer,
+`lock-refuses-intents.integration.test.ts:281`). An `auth` frame on the same socket carrying
+`cg-admin`'s token is ACCEPTED; `auth.state` then names `cg-admin`; the audit shows her `sign-in`
+after `cg-op1`'s `lock-engage`, and no row ends `cg-op1`'s session.
+
+**Why it matters.** A token REFRESH — same `sub`, about ten minutes before expiry — must pass the
+lock, or a lock held across a token's lifetime lapses the session behind it. A CHANGE of
+principal has no written reason to pass: it is sign-out and sign-in in one frame, and sign-out is
+the act [[B-229]] and `playout-authz-channels` §7 keep behind the PIN. The console still cannot
+act (the new principal is locked out too), so this is about the lock's integrity and the record,
+not about air.
+
+**Acceptance (sketch — the owner's call):**
+
+- EITHER a different `sub` is refused while the lock is engaged, and the refresh still passes
+- OR it passes, and the record says which principal was displaced
+- AND `auth.sign-out`'s settled answer is re-opened by neither
+
+**Notes:** Cross-refs [[B-229]], [[B-257]], [[C-037]].
+
+## [x] B-260 — a locked console replaces a template's HTML, with no audit row, by marking the import `redelivery: true` ⟨priority: medium — what the next take puts on air changes behind the lock, and nothing records who changed it⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1 · FIXED IN CODE by `BRIDGE-TRUTH-01 · REPLY 1` · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-bridge-truth`)
+
+**What.** `refusedWhileLocked` passes `templates.import` whenever `redelivery === true`
+(`bridge.ts:549`), and the client sets that flag. `#templateImportImpl` deliberately does NOT keep
+the bridge's copy of an id it already holds (`caspar-runtime.ts:9998` — [[B-085]]'s local-wins
+repair), and a re-delivery writes no audit row (`caspar-runtime.ts:9965`).
+
+**Measured 2026-09-23** (scratch spec, auth OFF, run and deleted): import `tpl-lock` as `v1`;
+engage the lock. Control — a plain import of `v2` is refused with `LOCK_ENGAGED_REFUSAL` and the
+held HTML is still `v1`. The SAME frame with `redelivery: true` answers `registered: true`, and the
+held HTML is now `v2`. The audit holds `import` and `lock-engage`, and nothing after them.
+
+**Why it is wrong.** `LockPolicy`'s own reason for splitting the channel on the flag is _"rather
+than exempting the channel outright and letting a locked console accept a catalogue change"_ — and
+a locked console accepts one. On the permission axis the flag buys nothing (class `operator`), but
+a principal holding that class can replace a template on air on a channel it holds no grant for,
+and the record does not say so: `templates.*` is station-wide by the authz design's §5.
+
+**Acceptance (sketch):**
+
+- WHEN the lock is engaged THEN a re-delivery registers only an id the bridge does not hold —
+  restore what was LOST, never overwrite — or it is refused
+- AND a re-delivery that changes held HTML writes a row
+- AND [[B-085]]'s offline-repair case is answered explicitly rather than lost
+
+**Notes:** Cross-refs [[B-229]], [[B-257]], [[B-258]].
+
+## [x] B-261 — a station writes to channels it does not operate: `layers.clear` and `playoutLayers.clear` honour whatever channel a request names, the console's own orphan strip and playout tab OFFER them, and the dynamic allocator places on a constant ⟨priority: high — `CLEAR` on a partner Playout's live programme output, one confirm away on the operator's own screen, with auth ON and with auth OFF⟩ — FILED 2026-09-23 by `CHANNEL-AUTHORITY-01` §1.3 · FIXED IN CODE by `CHANNEL-AUTHORITY-01` commit 1, `9d114657` · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-channel-authority`)
+
+**What.** Three facts about a channel live in three places — the Playout's catalogue says it
+EXISTS, a grant says a principal MAY OPERATE it, the declared bank says THIS STATION operates it —
+and nothing made the third one decide where the bridge writes. `CHANNEL-RESOLUTION-01` fenced one
+door, `stack.restore`, and said so: every other door that takes an explicit channel read it from
+the request and compared it to nothing about the station.
+
+**Measured 2026-09-23** (loopback; a fake CasparCG serving three channels; the bank declares
+channel **2**; the principal is the test Playout's real `cg-op2` grant in shape — channels 1 AND 2
+of this host, channel 1 standing for the Playout's own programme output; "their" html graphic
+played onto both channels from a second AMCP client). Each door sent channel 1:
+
+| door                      | auth OFF — at the wire  | auth ON — at the wire   | what stopped it                                     |
+| ------------------------- | ----------------------- | ----------------------- | --------------------------------------------------- |
+| `layers.clear`            | **`CLEAR 1-20`**, `ok`  | **`CLEAR 1-20`**, `ok`  | nothing                                             |
+| `playoutLayers.clear`     | **`CLEAR 1-60`**, `ok`  | **`CLEAR 1-60`**, `ok`  | nothing                                             |
+| `fixedLayers.clear-layer` | nothing — `not-in-bank` | nothing — `not-in-bank` | `isFixed`, `caspar-runtime.ts:9084` (at `709843ce`) |
+| `fixedLayers.load` + take | nothing — `not-fixed`   | nothing — `not-fixed`   | `isFixed`, `caspar-runtime.ts:2148` (at `709843ce`) |
+
+With auth ON the permission gate PASSED both clears, because the grant was true.
+
+**The console offered both.** Neither needed a crafted client:
+
+- the orphan sweep took its candidates from every channel OSC reports — a server's whole output,
+  the partner's programme channel included — so every html graphic the Playout had on channel 1
+  sat in the orphan strip as _"on air but not on your stack"_, with a confirm-gated CLEAR;
+- `playoutLayersState()` reported its rows on `DEFAULT_CHANNEL` (the constant 1), so on a
+  channel-2 station the playout tab listed and observed channel 1, and its CLEAR sent
+  `{ channel: 1 }`.
+
+**And a door that names no channel chose one.** `#allocate` placed every dynamic row on
+`DEFAULT_CHANNEL`. The shipped policy is empty, so a stock station never reaches it; a deployment
+that declares its own ranges does, and its take on a channel-2 station went out as `CLEAR 1-10`,
+`MIXER 1-10 VOLUME 0`, `CG 1-10 ADD`, `CG 1-10 UPDATE`, `MIXER 1-10 VOLUME 1`, `CG 1-10 PLAY 0` — the
+2026-09-22 incident's shape, with a `PLAY` it did not have.
+
+**Why it is wrong.** A grant is a fact about a PERSON and a catalogue row is a fact about the
+PLAYOUT; only the declaration is a fact about this station. The test Playout's `cg-op2` really
+may operate channel 1 — from the Playout. Reading the grant as permission for THIS bridge to write
+there is how a permission gate blesses a write to somebody else's air.
+
+**Fixed (commit 1):** a station fence in the request gate — after sign-in, before permission — that
+refuses any route naming a channel `#declaredChannels()` does not contain, auth OFF included, with
+its own sentence; the orphan sweep and the playout tab read the same predicate; the allocator
+places on the declared channel; the restore fence and the channel-settings store stop keeping their
+own copies of the list. `tests/station-channel-fence.integration.test.ts` is the measurement above,
+made permanent, each case beside its declared-channel control.
+
+**Notes:** `BRIDGE-TRUTH-01`'s [[B-257]] spec asserted this hazard AS a fix — "B's CLEAR on channel
+2 reaches the wire", on a station declaring channel 1 — and is inverted here; see [[B-257]]'s note.
+Cross-refs [[B-257]], [[C-038]], [[C-039]], [[R-062]].
+
+## [x] B-262 — The control socket accepts any Origin: a page in any browser on the CG Control machine can reach it ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` · → closed by `CENTRAL-BRIDGE-01` (v3) §B · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
+
+**Observed:** `new WebSocketServer({ host, port })` in `bridge.ts` has no `verifyClient`; the
+connection handler never reads the upgrade's `Origin`. With auth ON a page still needs a token to
+do anything; with auth OFF — every dev bridge, and an installed station until its Playout is set —
+any page open in any browser on that machine can drive the station through `ws://127.0.0.1:5280`.
+**Expected:** only the console's own origins connect. Filed, not fixed: "no new safety mechanism"
+(`DESKTOP-APPS-01`).
+**→ `CENTRAL-BRIDGE-01` (v3):** CG Bridge listens on the network, so an origin check could only be a
+second guess about who is calling. It is closed on the one fact the bridge can check: **CG Bridge never
+runs with auth OFF** — its service configuration always names a Playout — and every connection must
+present a Playout token the bridge verifies (signature, issuer, audience, expiry, D9) before it gets any
+state or any command. Identity and channels come from that token only; nothing a console says about
+itself is trusted (the actor field was already ignored, `actor-context.ts`). An expired or revoked token is
+refused the same way. The `Origin` header is not read.
+
+## [x] B-264 — A bridge timeout showed the operator an internal request name: `Bridge request timed out: setup.check` ⟨priority: medium⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-C` C2
+
+**Found on the owner's first installed run.** First-run's check, against a Playout address typed
+without a port, put `Bridge request timed out: setup.check` under the field as its only output.
+**Cause:** `WebSocketRuntime` built both of its timeout errors (`auth` and every channel) as
+`new Error('Bridge request timed out: <channel>')`, and the renderer shows caught errors' messages
+at **27 sites across 16 files** (walked 2026-09-23 by `err instanceof Error ? err.message …` and
+`String(err)`). The bridge's own refusals were already clean: its three messages that embed a
+channel name are exactly the skew shapes `bridgeErrorFrom` turns into `BRIDGE_SKEW_MESSAGE`.
+**Fix, at the source:** `BridgeTimeoutError` — message _"The bridge did not answer in time."_, the
+channel kept on the object for diagnostics (the `BridgeSkewError` idiom), so all 27 sites are
+correct unchanged. `bridgeTimeoutWords.test.ts` pins the words, the absent name, and that
+`setup.check` is waited for `SETUP_CHECK_WAIT_MS` rather than the old 8 s. **Still worth knowing:**
+any FUTURE error raised in the platform layer with an internal name in its message would reach the
+same 27 sites; the walk found no other such source today.
+
+## [x] B-265 — A bank-less first-run bridge took the console's remembered channel-1 logo as its own: the channel-2 view counted it on air, and a restart told the operator to load it again ⟨priority: high⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-D` j
+
+**Found on the owner's installed station**, moved by hand from channel 1 (the Playout's programme
+channel) to channel 2 with our logo still looping on `1-99`. The channel-2 view read `0 loaded ·
+1 on air` over empty rows, and after a restart showed _"1 row did not come back … layer 1-99 (not
+a row) … declare a row for it … then load it onto that row"_ — advice that would have put the logo
+back on the programme output. **Cause:** the console re-delivers its retained stack on every
+connect; the fresh bridge had no bank, so `#declaredChannels()` answered channel 1 (the schema
+default) and the restore accepted the item. Replayed against the mock with the owner's bank and
+template: with the logo still on `1-99` it was adopted (no command); with `1-99` silent the same
+path sent `MIXER 1-99 VOLUME 0` and `CG 1-99 ADD` to channel 1. **Fix:** a first-run station
+declares no channel until its bank is written; a restored on-air item on an undeclared channel, or
+a stack item left on one by a bank change, becomes a STRAY — never seated, never re-ADDed, shown only
+in Station setup to a station-admin with one action (take it off air: `CG STOP` then `CLEAR` on that
+exact layer); a stray whose layer a hearing tap reads empty is dropped. Every channel view counts
+and mentions only its own channel (`onChannel`). Tests: `one-channel-station.integration.test.ts`
+(j, at the mock's wire), `layersPanel.channelScope.dom.test.ts`, `stationSetupChannelScope.dom.test.ts`.
+
+## [x] B-266 — Right after first-run the channel read `· READ ONLY` with no controls, until a reload ⟨priority: high⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-D` i
+
+**Cause, at its one source:** `authStateFor` composes the principal's grants with the server list
+AND the declared channels, but `auth.state-changed` was pushed only on the connection-config event.
+First-run writes the connection and then the bank, so the console kept the bank-less answer
+(channel 1) after channel 2 was declared. The push now follows `fixedConfigChanged` too. Tests:
+`authz-strip-freshness.integration.test.ts` (red without the fix), `first-run.spec.ts` (channel 2 is
+operable at once, no reload; control: an operator without the grant reads READ ONLY).
+
+## [x] B-267 — The programme-output alarm was false on the Playout's fork: "CHANNEL 1 HAS NO DECKLINK/FFMPEG OUTPUT" while the output carried our logo ⟨priority: high⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-D` g
+
+The fork's `INFO 1` (its own reply, `tools/caspar-amcp-probe/evidence/casparcg-2.5.0-6b29237-apasai-core/`)
+lists only `pgm` and `ndi` while its `INFO CONFIG` declares `pgm`, `decklink` device 1, an RTP
+`ffmpeg` and `ndi`, which its operators state are live. **Fix:** a running kind stock CasparCG does
+not ship (`pgm`) proves the output list is not stock, so a declared kind absent from it is reported
+UNKNOWN (`ChannelOutputCheck.unknown`), never MISSING; a list of no consumers or only stock ones is
+judged as before. Tests: `output-fork.test.ts` (the fork's replies; controls: a consumer-less
+channel and a stock list still alarm), `output-unknown.test.ts`.
+
+## [x] B-268 — A row's `#` and default name counted rows from 1: "Layer 1" on the row that is layer 99 ⟨priority: high⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-D` h
+
+`defaultLayerAlias` now names the word and the REAL layer (`Layer 99`, `Bed 59`); the Layers
+table's `#` is the layer. Custom names are kept. Test: `layersPanel.channelScope.dom.test.ts`
+(control: a named row keeps its name).
+
+## [x] B-269 — A station declared on the wrong channel had no way back without a file edit ⟨priority: high⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-D` e
+
+`validateFixedBankChange` refused any channel change ("fixed at install"). It now allows the bank's
+channel to be REPLACED while nothing of ours holds air on the current channel (on air, unsettled,
+unverified or a resident producer), and otherwise refuses with one sentence: _"Something of ours is
+still on air on channel N — take it off air first."_ Station setup → Channel → **Change channel…**
+(station-admin only; absent for anyone else) reuses first-run's list and its on-air warning. The
+station stays single-channel; `MULTI-CHANNEL-01` widens it. Tests: `one-channel-station` (e),
+`stationSetupChannelScope.dom.test.ts`, `fixed-layers-store.test.ts`.
+
+## [ ] B-270 — A row CLEAR on a row that holds no item of ours writes no audit row ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01-D` D1
+
+Found establishing the channel-1 AMCP record for the Playout team: `clearBankLayer`
+(`fixedLayers.clear-layer`) sends `CLEAR <ch>-<l>` then `MIXER <ch>-<l> CLEAR` and records nothing,
+so whether the owner's CLEAR of `1-99` in the 16:01 run happened cannot be read from the station's
+records. Every other verb that reaches air is audited (`out`, `stop`, `take`, …). Not fixed here.
+
+## [x] B-271 — A refused fresh take left its graphic ADDed on the layer, and a graphic refused after its plates left them on air unframed ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 1) · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+`FIELD-FIXES-01` §0 replayed the owner's Bed 59 take (2026-09-26 09:40Z, `amcp-403`) on the mock: the
+take `CG ADD`ed its graphic, the first plate's `PLAY 2-60 DECKLINK DEVICE 1` was refused, the plate
+was rolled back, and the graphic was left ADDed and unplayed on 2-59. A graphic whose own `CG PLAY`
+failed after its plates were seated left the plates on air with no graphic around them. **Owner's
+decision:** a fresh take airs everything or nothing. **Fix:** the take stops at the first refused
+plate, never plays the graphic, undoes what it seated through the one rule (`B-272`) and removes the
+graphic it added the way `out()` does; the graphic's refused `CG PLAY` undoes the same way; the row
+ends in ERROR carrying `takeRefusal`. The success wire is pinned byte for byte. Change:
+`openspec/changes/archive/2026-09-26-field-fixes` §1. Test: `take-all-or-nothing.integration.test.ts`.
+
+## [x] B-272 — The take's rollback cleared the layer whose PLAY had just been refused — on a re-take of a row on air, a working picture ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (the Rule) · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+The take's rollback cleared every layer it had touched, including the one whose `PLAY` the server had
+refused — a layer CasparCG leaves exactly as it was. On a re-take of a row already on air that `CLEAR`
+took a working studio picture off air (replayed in `FIELD-FIXES-01` §0.5; on a DeckLink the re-`PLAY`
+fails by construction, `B-177`). Three sites cleaned up after a refusal, each its own way. **Fix:** one
+rule, `refusal-cleanup.ts` — cleared only if the refused operation put a producer there, never if one
+of ours was there before — called by all of them through `#clearAfterRefusal`. The re-take itself is
+now refused by the bridge (`B-274`). Test: `take-all-or-nothing.integration.test.ts` ("THE RULE").
+
+## [x] B-273 — A look switch whose new look needs a refused plate shows a hole on air until the page is put back ⟨priority: medium⟩ — FILED 2026-09-26 by `FIELD-FIXES-01-A` · CLOSED IN CODE AND MEASURED 2026-09-27 by `LOOK-SWITCH-01` (v3) · archived 2026-09-27 (`openspec/changes/archive/2026-09-27-look-switch-all-or-nothing`)
+
+Established from `setActiveLook`: the page is told the NEW look before the fills move; a plate the new
+look needs that is refused (a preset dropped at the take) commits the fills that landed, puts every
+plate back, and only then re-tells the page the previous look. For that window the page shows the new
+look's boxes with nothing in the refused plate's box — a few frames. If the re-tell is refused too, the
+page stays on the new look over the old geometry. What a switch should do is the owner's decision
+(`openspec/changes/archive/2026-09-26-field-fixes/design.md` §3).
+
+**Owner's decision (2026-09-27):** a look switch is all-or-nothing, like a take. **Status (2026-09-27,
+`LOOK-SWITCH-01` v3, `openspec/changes/archive/2026-09-27-look-switch-all-or-nothing`): CLOSED IN CODE AND MEASURED.** A switch now
+seats the plates its new look needs hidden (`OPACITY 0` + `VOLUME 0` + the fit, committed before the `PLAY`)
+BEFORE the page is told; a refused plate refuses the switch with no page `UPDATE` and nothing on air changed, and
+the row says which source failed in `FIELD-FIXES-01`'s line, with no banner; accepted, the plates run hidden for
+three holds and are revealed in the switch's one `MIXER COMMIT`. Every seat onto a fresh layer (take, swap,
+restore) is hidden the same way. Measured by CC on the owner's own CasparCG 2.5.0 (`127.0.0.1:5250`, no DeckLink
+on that machine — `design.md` §3 v3): `ghab` 1 → 2 with a freshly seated plate, 10 runs — `k` = 0 in 10 of 10
+(9 were excluded before), BLACK and MISPLACED 0 %, term (b) 0 fields in 10 of 10 (baseline median 6), CONTROL
+≈ 0.01 % (baseline 22.78 % in 9); the reverse direction and the `ghab3` control likewise clean. The first
+measurement failed on term (b) in 3 runs of 10; the one fix cycle added the preroll. `B-192` is the same hole
+reached through a torn-down `media` plate, and this closes its switch path (see its status).
+
+## [x] B-274 — The bridge took a row that was already on air: only the console's PLAY greyed it ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 2) · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+A second console on a stale snapshot, or a take whose reply was slow, reached `take()` with the
+page on air; the re-take re-`PLAY`ed every plate (on a DeckLink that fails by construction, `B-177`)
+and the rollback took the working pictures off air. **Owner's decision:** the bridge refuses a take
+of a row that is on air, or whose previous take has not resolved, for every console, with nothing
+sent. **Fix:** `#takeImpl` refuses `already-on-air` on `#ownsLiveSeats` (on air or unsettled, or the
+ledger holds the row's seats); its two halves are one function, `ownsLiveSeats` in `@cg/shared-schema`,
+which the console's PLAY and `MockRuntime.take` call too, and PLAY names the row. Tests:
+`take-on-air-refusal.integration.test.ts`, `takeOnAirGate.test.ts`.
+
+## [x] B-275 — A take reply slower than 5 s turned an on-air row into "loaded", and a late OK never put it back ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 2) · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+`INTENT_TIMEOUT_MS` (5 s) expired the take in `Reconciler.expireIntent`, which retracted its play
+evidence (`B-079`): with the page's producer on OSC the row read `loaded`, PLAY came back, and the
+late OK settled the ack without restoring the evidence. **Fix, in that one place:** an expired take is
+unresolved, not failed — it keeps its evidence, reads `unconfirmed`, PLAY stays unavailable, the
+bridge refuses a take meanwhile, and its own reply resolves it. Tests:
+`reconciler-failed-take.test.ts`, `take-on-air-refusal.integration.test.ts` (the slow reply).
+
+## [x] B-276 — No bridge wrote an AMCP log, so a refused take could not be read back from the station ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+On 2026-09-26 Bed 59's take was refused `amcp-403` and nothing on the owner's machine said which
+command was refused or what the server answered: the installed app keeps `bridge.log` and the audit,
+and neither carries the exchange. The dev bridge wrote none either — the only AMCP trace in the tree
+was the mock's. `FIELD-FIXES-01` §0 had to replay the take on the fake. **Fix, in one place:** the
+bridge logs every exchange from the session queue into `<state-home>/logs/amcp.log`
+(`%APPDATA%\CG Control\logs\amcp.log` for the installed app), 5 MB then one previous file, the take
+token redacted, fail-open. Tests: `amcp-log.integration.test.ts` (the bundled sidecar, red first
+against the old CLI), `command-queue.test.ts`.
+
+## [x] B-277 — An AMCP refusal reached the operator as "CasparCG refused the command (AMCP 403)" ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` A · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+The console's one fallback for a server reply quoted its number, which says nothing about what
+went wrong to anyone not reading CasparCG's source. **Fix:** one mapping,
+`apps/runtime/src/renderer/ui/amcpRefusal.ts`, tailored by what the refused command was for (a
+DeckLink input on 403 or 404; a file on 404 of a media or stream play; the graphic on 404 of
+`CG ADD`; one line per code otherwise), with each code's meaning read from CasparCG 2.5.0's source.
+The number goes to the log. Tests: `amcpRefusal.test.ts`.
+
+## [x] B-278 — A refused take was reported by a generic banner naming no row and no source ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` B · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+On 2026-09-26 Bed 59 read ERROR while an amber banner at the top said only "CasparCG refused the
+command (AMCP 403)" — no row, no source, no reason. **Fix:** the refusal lives with the row: one line,
+_"Bed 59 · studio1 (DeckLink 1): the server has no such input, or it is in use."_, on the row and in
+its Inspector, in that channel's view only, with a mark on the strip for another channel's view and no
+banner; it clears on the next take that lands, or a clear. Tests: `takeRefusalLine.test.ts`,
+`take-refusal-line.spec.ts`.
+
+## [x] B-279 — The Inspector said "ON AIR NOW" for the look of a take the server had refused ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` C · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+The look badge asked `isOnAir`, which is true for `error`, so after Bed 59's refused take the Inspector
+said `look-2 ON AIR NOW` under a row reading ERROR. **Fix:** it asks `claimsAir`, the row's own green ON
+AIR mark (`on-air`, or an acknowledged take), and so do its "actually on air" notes. Tests:
+`lookBindings.dom.test.ts`, `look-inputs.spec.ts`.
+
+## [x] B-280 — Drag and drop did nothing in the installed apps: Tauri's native handler took every drop ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` F · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+In the installed CG Designer an asset dragged from Assets onto the canvas was not added, though the
+same drag works in the browser. Tauri 2's `dragDropEnabled` defaults to true, and on Windows its native
+handler then takes the drop before the page's HTML5 events fire. **Fix:** `"dragDropEnabled": false` on
+both apps' window (CG Control drops a `.vcg` into its picker and reorders list fields the same way).
+Tests: `tauriWindows.test.ts` in each app. The proof is a real OS drag in the new installer.
+
+## [x] B-281 — The installed apps said their name three times in one corner, without the Apasai logo ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` G · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+CG Control's corner read "CG Control" in the title bar, again in a native menu bar under it (one
+submenu: Open bridge log, Reload, Quit), and a third time as the header's `CG CONTROL` brand; the
+Designer opened on a `cg Designer` heading. **Fix:** the name appears once, in the title bar —
+`APASAI CG CONTROL` / `APASAI CG DESIGNER` — with icons and a favicon made from the Apasai logo; the
+menu and both in-app brands are gone (the log folder opens from the audit log; Quit is the close
+button; Reload is F5). `productName`, identifiers and folders are unchanged. Tests:
+`tauriWindows.test.ts`, `appTitle.test.ts`, `starter-landing.spec.ts`, the installer smoke.
+
+## [x] B-282 — "SILENCE ALL PLATES · EVERY CHANNEL" was bright amber with nothing to silence ⟨priority: low⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` K · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+With two channels and no live plate anywhere the header showed an amber, live every-channel silence
+that answered "Nothing was sent — no channel holds a live plate". **Fix:** both silence controls are
+disabled and neutral, at the same size, while their scope holds no seat, by the predicate the bridge
+answers from (`ledgerChannels`), and amber as soon as a plate is live. Tests:
+`silenceHasTarget.test.ts`, `silence-controls.spec.ts`.
+
+## [x] B-283 — another system's layer below CG's bands raised a notice that could not be closed ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` L · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+On channel 1 a blue notice sat under the header: _"Layer 1-5 is carrying video (ffmpeg) — placed by
+another system. Not clearable from here."_ The Playout's own playlist plays on a low layer
+practically all the time, the Station layers tab already lists it, and the notice could not be
+closed. **Fix:** the orphan strips speak only for layers inside CG's bands (`isInCgBands`, 50 and
+up); below them another system's layer raises no notice and no mark and is listed on Station layers
+as before. Inside the bands both strips stand and mark the channel, and each is dismissible: the
+dismissal holds, across a reload, until the strip holds a new layer or a different producer. Tests:
+`orphanLayersBanner.dom.test.ts`, `orphan-layers.spec.ts`.
+
+## [x] B-284 — CG Control showed two loading screens, and both installed apps a white frame ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` J · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+Since the Tauri build a launch showed the window's own starting page (a name and a sliding bar)
+and then the console's splash — two designs one after the other — with a white window before the
+first and between the two. **Fix:** the starting page is composed at staging from the console's own
+`index.html` (the same splash, byte for byte, build stamp included); what it reports while it waits
+(`STARTING BRIDGE`) and a start failure appear inside that splash; inside CG Control the console's
+splash continues it with no entrance replayed; both apps' windows paint the splash's ground from the
+first frame. Tests: `startingPage.test.ts`, `startingPage.dom.test.ts`, `splash.dom.test.ts`,
+`tauriWindows.test.ts`, `splash.spec.ts`.
+
+## [x] B-285 — the dev station's PROGRAM monitor read "No return signal" beside a working feed ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` H · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
+
+On `pnpm dev:station`, on `--fake` and against the real Playout, PROGRAM read _"No return signal"_
+while the installed CG Control showed the picture from the same feed. The frames did not stop in
+Vite's proxy, the bridge's listener or the relay — the relay was never asked: in a development build
+(what Vite serves) the picture's `<img>` lost its `src` to React StrictMode's second mount, and no
+request was made. **Fix:** the picture's layout effect sets `src` on every mount and removes it on
+every unmount. And `localhost`: the dev station sends a `localhost:5174` page to `127.0.0.1:5174`,
+the origin the Playout's CORS list admits. Tests: `dev-station.spec.ts` (through Vite),
+`programPicture.dom.test.ts`, `vite-config.test.ts`, `station-plan.test.ts`.
+
+## [x] B-286 — a backup server is sent the primary's media paths, byte for byte ⟨priority: medium⟩ — FILED 2026-09-27 by `PLAYOUT-SOURCES-01` §0.8 · CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` A (§4) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: a Playout pair on `2.9.1`
+
+The bridge builds each AMCP line once, and `RedundancyAdapter.send` mirrors that SAME string to
+server B (`mirror-sync`, the default — `redundancy-adapter.ts:250-253`) or replays the journaled
+string at failover (`:195-199`, `:492-503`). There is one source catalogue per bridge, and a
+server's own config holds only its host and ports (`connections.ts:306-311`), so a media plate's
+`PLAY` carries server A's file path to B unchanged. A backup Playout is a separate install whose
+media paths can differ (the Playout's answer, S1), so B can be asked to play a file it does not
+have — on the failover, which is the moment the backup exists for.
+
+Found while establishing `PLAYOUT-SOURCES-01` §0.8, which makes a Playout's media (D11) bindable
+to a plate and so makes the case reachable. **Not fixed there**: a per-server path needs the
+Playout to say where each install keeps an item, which the contract does not carry yet. Anchors:
+`CasparRuntime`'s `#send` → `RedundancyAdapter.send`;
+`openspec/changes/archive/2026-09-27-playout-sources/design.md` §0.8. ⚠ The line anchors above moved with
+`c8626f4b`; at `a8b59df5` they are `redundancy-adapter.ts:254-257` (the fan-out), `:199-203` (the failover
+replay), `:515-526` (`replayJournalTo`) and `connections.ts:309-318`.
+
+**Closed in code (`PLAYOUT-FEATURES-01` A, 2026-09-30).** Playout `2.9.1` gives each D11 item `source` and a
+`fingerprint` (the same for the same bytes on any server; given only when `clip`'s bytes really match) and a
+`?fingerprint=` filter (`PLAYOUT-CG-RESPONSE-ROUTE-ON-DONE-v1.md` §2). The bound clip keeps its fingerprint
+through every re-read; CG Bridge looks each one up in the BACKUP Playout's own D11 (the configured Playout's
+address at server B's host) when a clip is bound, after server B reconnects and every 30 s, and caches the
+answers (`backup-media.ts`). A take, a swap and a restore read the cache and never wait. `RedundancyAdapter`
+gains a per-server line, `SendOptions.serverB`, keyed to SERVER B (not the backup role, so after a failover
+B still gets its own), kept in the journal beside A's so a failover catch-up and a corrective resend send
+each server its own. A clip B lists goes to B at B's path; a clip with no fingerprint, one B lacks, a backup
+older than `2.9.1` (its items carry no fingerprint) or a list not read yet sends B NOTHING — the primary airs
+it, the row says `Backup has no copy of <name>; this box stays empty on the backup` (a reason other than a
+missing copy in brackets), a clip's `PAUSE`/`RESUME`/`CALL` reaches the primary only, and while B is the
+primary such a clip is refused (`backup-no-copy`). **Tests:** `backup-media.integration.test.ts` (B's own
+path; control: the clip B lacks sent nothing while A airs it; no fingerprint; an old backup; the take not
+waiting — measured under 2 s against the lookup's 5 s bound; transport verbs), `backup-media.test.ts`,
+`redundancy-adapter.test.ts` (`serverB` under all three strategies, a failover, B as primary). Planted
+plain mirroring: 4 of 5 red. **Owed:** a backup Playout on `2.9.1` beside a primary — and whether a backup
+accepts the primary's CG token for its D11 is for that pair to show (if not, every clip reads "its media list
+has not been read" and stays empty on the backup, which is the safe side).
+
+## [x] B-287 — `SendOptions.target` is documented as an override and read by nothing ⟨priority: low⟩ — FILED 2026-09-28 by `ROUTE-PLATES-01` §0.5 · CLOSED IN CODE 2026-09-28 by `FOLLOWUPS-01` C (deleted)
+
+`SendOptions.target` (`packages/caspar-client/src/redundancy/types.ts`) says it overrides where a
+line goes — `'primary'`, `'backup'` or `'both'` — and `RedundancyAdapter.send` never reads it: the
+strategy alone decides (`redundancy-adapter.ts`, `send`), so a caller that passes `target:
+'primary'` under `mirror-sync` still reaches server B. Nothing in the bridge passes it today, which
+is why nothing is broken; the hazard is the next caller who trusts the type. Found while
+establishing `ROUTE-PLATES-01` §0.5 (what reaches server B for a plate), which needed a line that
+must NEVER reach B and so could not use it: C4's route lines go by the new `mirror: false` instead,
+which IS read, bypasses the journal as well, and is tested under all three strategies. The fix is
+to honour `target` or delete it; which is a decision, not a rider.
+
+**Closed — deleted (`FOLLOWUPS-01` C, the owner's decision of 2026-09-28: nothing reads it, and
+`mirror: false` does its job).** `SendOptions.target` and the `SendTarget` type (and its
+`@cg/caspar-client` export) are gone; `types.ts` now says the strategy alone decides and names
+`mirror: false` as the one exception a caller may ask for. **Correction to the filing:** "nothing in
+the bridge passes it today" was not so. Four sites passed `target: 'primary'`: the `R-030` mode read
+(`#readChannelMode`), `C-029`'s `INFO CONFIG` read (`#readServerConfig`) and its slow re-read
+(`#readChannelOutputs`), all believing it kept the read off server B, plus `C-029`'s consumer `ADD`
+(retired the same day, `FOLLOWUPS-01` A). The three reads lose the option and keep their wire
+byte-identical, since the adapter never read it; their comments now say what really happens — under
+`mirror-sync` the read fans out, and each fact is filed under `result.winner`, the server that
+answered, which is what already kept it correct. **Verified:** a `target: 'primary'` planted back at
+one site fails the bridge's typecheck (`TS2353`, not a property of `SendOptions`); removed → clean.
+
+## [x] B-288 — PVW needed its own copy of the page in the browser: a template imported anywhere else could not be rehearsed ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` §1 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
+
+**Repro:** import a template from one browser — another machine, another profile, another channel;
+open CG Control where the channel's list carries it but that browser did not import it (a fresh
+profile, the installed app, another channel); put the row ON PVW. **Actual:** "REHEARSAL
+UNAVAILABLE IN THIS BROWSER — This browser has no local copy of the rendered page … Re-import it in
+this browser to rehearse it." A re-import in that browser made it work — a manual side step.
+**Expected:** PVW renders the page the bridge already stores and serves to CasparCG
+(`/template/<id>~<version>`), on any machine, in any browser or the installed app, with no import
+there. **Cause (§0):** `window.cg.templates.html` was a deliberately LOCAL read
+(`WebSocketRuntime.ts`, "never a bridge round trip") of the browser's own OPFS library
+(`LibraryStore`: `library/<channel>@<id>.json`, or a pre-channel `library/<id>.json`), written only by
+an import in that browser; OPFS belongs to one profile and one origin. Not a regression of
+`CHANNEL-TEMPLATES-01`'s `~version` key — the browser's store never carried a version — nor of the
+installed app's origin, which has been `http://127.0.0.1:5174/` since the first installer (`42af1a96`);
+`FIELD-FIXES-01` H's localhost → `127.0.0.1` redirect does send a dev-station page opened at
+`localhost` to another origin, whose OPFS starts empty. **Fix:** a read-class `templates.page` asks
+the bridge for the page of the version the row's channel lists; the browser's copy is a fallback
+only when the bridge cannot be reached; when the bridge has no file, PVW says so in one line naming
+the template and the reason. Nothing stored is deleted, and PVW still sends nothing to CasparCG.
+**Regression tests:** the page-source unit, the bridge's `templates.page` integration, and the e2e
+(profile A imports; a fresh profile B rehearses; control: with the file gone from the bridge's store,
+B shows the one line).
+
+## [x] B-289 — A media plate's raise jumped where a Playout input ramps; "AUDIO → ON gave no sound" was not reproduced ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` §2 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
+
+**Seen (owner, 2026-09-29):** on his local CasparCG a media clip played with no sound, and AUDIO → ON
+on its row changed nothing. **Established (§0, measured on his CasparCG 2.5.0 through the real
+console):** a D11 plate was already seated silent — `MIXER <ch>-<L> VOLUME 0 DEFER` committed before
+its `PLAY` — and ON reached CasparCG on the plate's own layer and was HEARD (`MIXER 1-61 VOLUME 1`;
+the channel's OSC audio peak 0 → about 1.1×10⁸ with `m1.mkv`); the reveal after a `pause` or
+`continue` hide restored it and PANIC silenced it. Two differences from a D10 input: the raise was a
+bare JUMP where a D10 raise ramps 25 frames, and a clip swapped in place was not muted before its
+`PLAY`. His own session's wire (CasparCG's log, 14:25–14:28) carries no raise for layers 60–61; audio
+presses are not audited, so the records cannot say whether ON was pressed — the one press consistent
+with that silence is box 2's while the one-box look hid it (a hidden plate stays muted and takes its
+level when shown again, and it was cleared before that). PVW has never played audio (plates are
+placeholders; a template's own video is created muted, `c41bba8e`) — unchanged: hearing a source
+before air is PFL. **Fix (the owner's decision, 2026-09-29):** a D11 clip starts silent EXACTLY like a
+D10 input, contract v1.3 rule 2 — one predicate (`startsSilentFromPlayout`) for both the mute before
+an in-place `PLAY` and the 25-frame ramp. **Regression tests:** `media-plates.integration.test.ts`
+(`VOLUME 0` before `PLAY`; ON → `VOLUME 1 25` on the plate's own layer; a `pause` switch-away sends 0
+and the way back the declared volume; control: the page layer's `VOLUME 1`), and
+`playout-sources.integration.test.ts` (the old media control, superseded).
+
+## [x] B-291 — A station set up before the five-row default kept showing every row ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §7 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
+
+**Seen (owner, installed `0.9.0` over the older install):** at start every row was shown again, where
+`FIELD-FIXES-01` I ([[R-070]]) gives five template rows (99–95) and five beds (59–55). **Cause (§0):**
+by design — [[R-070]] changed only the bank built for a NEW channel and kept a saved bank as written
+(`default-bank-boot.integration.test.ts` pinned 30 rows shown after an upgrade), and a first-run that
+could not read the channel's occupancy within 3 s also saves every row shown. Not another station
+(the console shows a bound or occupied row whatever the ticks say), and not a regression. **Fix (the
+owner's decision, 2026-09-29 — nothing has been delivered, so no compatibility is owed):** a bank that
+no operator has applied since first-run declared it with every row shown — every template row an
+explicit `true`; an operator's Apply writes hidden rows only — is brought ONCE to the five-row rule:
+the bridge waits until the channel's occupancy is known, keeps every occupied row shown, and applies
+the change through the same validated door (a row is hidden only while provably empty), then
+persists it. An operator's own Show choices are never touched. **Regression tests:** a bank saved in
+the old shape opens as 5 + 5; control: an occupied row 90 stays shown; control: with occupancy
+unknown, nothing changes.
+
+## [x] B-292 — A layer of ours cleared from outside stayed ON AIR, and plates left in our band could not be cleared ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` (DELTA B, B1–B3) · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
+
+**Seen (owner, installed `0.9.0` against `.111`):** station A had templates on air; station B, a second
+install on the same channel, cleared them — and on a multi-box page B's CLEAR removed the page but
+left its plates (60–79) on air, while A went on showing everything ON AIR. Two stations on one
+channel stop being a supported case ([[R-068]], `CENTRAL-BRIDGE-01`); what is fixed here holds
+whoever clears our layer — another AMCP client, the Playout, or CasparCG itself. **Cause (§0):**
+CasparCG 2.5 erases a cleared layer from its stage, so its OSC simply stops (`stage.cpp:314-316`, the
+monitor state is rebuilt from the layers that exist, `:219-223`; measured on the plant's core,
+`docs/recon/2026-09-22-apasai-core-validation.md` §5), and the bridge only turned a row idle on an
+explicit `producer "empty"` — which the real core never sends for a cleared layer and `@cg/amcp-mock`
+sent on every tick, hiding the gap from every test. A plate not in this bridge's ledger could be
+cleared from no surface: the "not on your stack" strip refused anything but an `html` page, and an
+empty row's CLEAR refuses layers outside the declared rows. **Fix:** OSC silence on a layer we hold
+on air is a QUESTION — after about 1 s of silence while the channel's OSC is still arriving, one
+`INFO <ch>-<layer>` read; if CasparCG says the layer is empty, the row goes off air with a notice in
+the existing family ("Layer 60 on CH 2 was cleared outside CG Control"); nothing is re-sent, nothing
+is put back. The strip also lists occupied layers in 50–99 that nothing in this bridge's ledger holds,
+each clearable, and "clear all listed", both confirmed. Never a layer outside 50–99, never a
+channel-wide `CLEAR`, never a layer the ledger holds. `@cg/amcp-mock` now behaves like the core: a
+cleared layer goes silent, and `INFO <ch>` / `INFO <ch>-<layer>` answer with per-layer stage data.
+**Regression tests:** one bridge plus a raw AMCP client — a foreign `CLEAR` of the page and one plate
+(both off air within the target, with the notice; control: the other plates and another item stay
+ON AIR); a leftover plate listed and cleared from the strip (control: a plate the ledger holds is
+not listed).
+
+**Closed in code (2026-09-30, `RELEASE-091-01`; archived 2026-09-30).** The read is `INFO <ch>`, not
+`INFO <ch>-<layer>`: the core ignores the layer and answers the whole channel, and the bridge's own
+guard refuses layer-addressed `INFO` (`BRIDGE-TRUTH-01` §3) — same reply, one read per channel. The
+rule for WHEN to ask is `silentLayersToAsk`. Measured clear → row off air: 1.10–1.15 s (six runs). The
+strip's CLEAR covers every listed layer in 50–99, CLEAR ALL LISTED appears with two or more, and one
+predicate (`inAnyLayerBand`) serves the bridge's door, the strip and the offline mock. The faithful mock
+turned 30 tests red; all were fixed in the product (the bridge counts its own acknowledged `CLEAR`), and
+the same work found and fixed the AMCP wire log going silent after any reconnect. Tests:
+`media-plates.integration.test.ts`, `silent-layer-question.test.ts`, `stage-fidelity.test.ts`,
+`orphanLayersBanner.dom.test.ts`, e2e `layers-cleared-outside.spec.ts`.
+
+**Live on the owner's CasparCG 2.5.0 (2026-09-30).** A second raw AMCP client cleared a page-only row's
+layer (`CLEAR 1-99`) five times: off air in the console after 1124–1284 ms (median 1167), one `INFO 1`
+the bridge's only line, nothing re-sent. Preparing that run found the operator's re-take after a foreign
+clear `CG PLAY`ing the emptied layer (the bridge still recorded the producer as resident); fixed — the
+foreign clear now forgets it, as the operator's own clear does — and the four live re-takes went back on
+air with `CG ADD`. Test: the re-take case in `media-plates.integration.test.ts` (red first).
+
+## [x] B-293 — A template's URL did not always change with its version, and its page carried no cache header ⟨priority: high — CasparCG's CEF keeps pages on disk⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0, rule 12 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
+
+**Found (§0, asked to confirm):** the Playout team's rule 12 says CEF caches template pages on disk, so a
+template's URL must change with its version and carry cache headers. The prompt expected
+`/template/<id>~<version>` to do it; it does only half the time. `TemplateRegistry.#freeServeKey` served a
+version at the BARE template id whenever that key was free, and qualified it (`<id>~<versionId>`) only while
+another version held the bare id — so after a version was collected a later version of the same template
+could be served at the same URL as an older one. The `200` carried `content-type` alone: no
+`Cache-Control`, no `ETag` (`template-http-server.ts`). **Fix:** every new version is served at its
+qualified key, `<templateId>~<versionId>`, for life (a record written before carries its stored key, which
+no later version is ever given), and the page is sent `Cache-Control: no-store`. ⚠ **This changes the URL a
+take sends in `CG ADD`** — the path segment gains `~<versionId>`; nothing else in a take's wire moves.
+**Built (2026-09-30, closed in code; the Linux e2e is owed):** as specified — the 404 is `no-store` too, and
+`take-all-or-nothing`'s recorded take wire moved by exactly that one line.
+
+## [x] B-294 — Every console re-delivered its own copy of the stack and the template library on connect, and a stale copy could win ⟨priority: high — with two consoles on one bridge⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0.2 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
+
+**Found (§0.2):** the console kept two stores of shared truth in its own OPFS — the template library
+(`library/*.json`) and the retained stack (`stack/retained.json`) — and re-delivered both on every connect
+(`WebSocketRuntime.#resync`), because the bridge held the stack only in memory. With one bridge and one
+console that was the restart story ([[B-092]]); with several consoles on one bridge it is a fight: a
+re-delivery naming a channel REPLACED a different version the bridge held (local-wins), and removal
+tombstones lived only as long as the bridge process, so after a bridge restart any console's old copy
+brought a removed template back. **Fix:** CG Bridge persists the stack itself and restores it at start from
+its own file; a console re-delivers nothing — the bridge is the one store, the console a view of it.
+
+**Built (2026-09-30, closed in code; the Linux e2e is owed):** the bridge's `bridge-stack.json`, restored
+before its socket listens (`756a7f81`); the console's `#resync` only reads (the restore report, the strays,
+the snapshots); `stack.restore` is gone from the contract; a `templates.import` marked `redelivery` is
+refused before every gate with no audit row (the removal tombstones and two lock classes went with it); an
+import or a removal with CG Bridge unreachable is refused with a sentence. The console's two browser stores
+stay as DISPLAY copies, never sent — the offline view needs them. The restore's report (`B-108`) is
+standing bridge state (`stack.restore-report`, a push, a dismissal per channel). Spec: `central-bridge`
+(`runtime-caspar-bridge`, `runtime-template-library`), with `runtime-retention-state` and
+`operator-surface` amended in place.
+
+## [x] B-295 — A failed OSC bind stopped the server's session before AMCP was ever dialled, and said nothing ⟨priority: high — on the Playout machine UDP 6250 is the engine's⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0.1 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
+
+**Found (§0.1):** `ServerSession.loop()` bound the OSC socket first and, on failure, emitted `error` and
+RETURNED — so a bridge whose OSC port was taken never dialled AMCP at all, and the only listener on that
+event was a no-op, so nothing reached the log. On the Playout machine the engine holds UDP
+`127.0.0.1:6250`; a bridge there would have sat silent and disconnected forever. **Fix:** a failed OSC bind
+is logged and the session dials AMCP anyway — OSC silence is a confirmation fact, never a reason to leave
+the command axis down (golden rule 8, [[B-101]]); the bind is retried on each reconnect cycle. With
+[[C-046]] the bridge never asks for 6250 at all.
+
+## [x] B-296 — The dev station's isolation test connected to this host's own CasparCG and bound a station port, on every gate ⟨priority: high — the dev host runs the owner's CasparCG⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) 8.1 · `ada038bf` · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
+
+**Found (8.1):** `tools/dev-station/tests/isolation.test.ts` starts the REAL bridge with exactly
+`pnpm dev:station`'s arguments, to prove a dev run writes nothing outside its own folder. Its scratch state
+held no CasparCG connection, so the bridge fell back to its defaults — `127.0.0.1:5250` and UDP `6251`.
+Measured with `netstat` during a run (2026-09-30): the test's bridge held UDP `6251`, a station port, and
+an AMCP session with the `casparcg.exe` running on the dev host. That test is in `pnpm gate`, so every gate
+on this host — the pre-push one and the Stop hook's — did the same. **Fix:** the test writes the station's
+connection as first-run would — a closed loopback port, OSC `0` — so the bridge binds no station port and
+dials no real core; re-measured, it held only its ephemeral listeners and nothing on `5250` or `6251`. The
+test also plants CG Bridge's `%ProgramData%` folder and proves it byte-identical afterwards. `bridgeArgs`
+is unchanged.
+
+## [x] B-297 — On a separate server, CG Bridge refused every explicit channel grant: a token's `127.0.0.1` never matched the Playout's network address ⟨priority: high — the separate server is a supported placement⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §5 · `801a402f` (task 5.6) · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
+
+**Found (§5, "Separate server"):** the prompt's own test, written as the placement really is — the fake
+Playout and its CasparCG on a network address, CG Bridge driving that address, an operator's token
+granting channel 1 on `127.0.0.1` — went red: the load was refused with `This sign-in does not cover
+channel 1…`. A grant's `host` is the Playout's `casparHost` (the contract's join key,
+`PLAYOUT-INTEGRATION-CONTRACT-v1` §3.2 and §4.4), and on `.111` the Playout spells it `127.0.0.1` (the
+bridge-host letter §3). The D4 reader already read a loopback row as the Playout's host
+(`DESKTOP-APPS-01-A` A4, `resolveCasparHost`); the token verifier read the grant literally, and
+`grantsChannel` compared it with the hosts CG Bridge drives. So on the Playout's own machine (AMCP to
+`127.0.0.1`) every grant matched, and on a separate server (AMCP to the Playout's address) none did:
+every operator refused every command — and, from Playout `2.9.2`, `cg-admin` too, whose `"*"` becomes an
+explicit list when not every channel is CG-licensed (`CENTRAL-BRIDGE-01-A` A3). **Fix:** the verifier
+reads a grant by the ONE host rule (`resolveGrantHosts`, beside `resolveCatalogueHost`), with the same
+Playout host the D4 reader is given; another machine's grant and `"*"` pass as they are, and with a
+loopback Playout address nothing is rewritten. ⚠ One edge stays, the same for grants and D4 rows: a CG
+Bridge ON the Playout machine given the machine's network address as its Playout (instead of the
+installer's loopback default) rewrites both to that address while it drives `127.0.0.1`, so neither joins —
+an undocumented configuration; both documents say `/S` alone there.
+
+## [x] B-298 — An NDI input that is a channel's own output could be taken on that channel: a feedback loop ⟨priority: medium — nothing tells an operator which NDI name is which channel's output⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` B · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) (§2)
+
+**Found:** the Playout lists NDI inputs by the name its NDI finder sees — on `.111`, `MTA (APASAI)` is
+channel 1's own output, and `MTA (APASAI-CGTEST2)` is channel 2's (`PLAYOUT-CG-RESPONSE-ROUTE-ON-DONE-v1.md`
+§1.2). Nothing in the console said which, so a plate on channel 1 could be bound to channel 1's own
+output: a picture of itself inside itself, a frame later each time. We asked for a mark (our
+`CG-CONTROL-REPLY-ROUTE-ON-SOURCES-2026-09-29.md` §3); `2.9.1` gives it: `ownOutputOf: {casparHost,
+casparChannel}` on such a D10 input — RELIABLE when present, and its ABSENCE means "unknown", not "safe"
+(their §3), only in the D10 of the server that owns the output. **Fix:** the mark is parsed and joined to
+this station's channel by D4's host rule (a loopback host names the Playout that listed it); ONE
+predicate, `sourceLoopsOn`, is asked by the picker (the row disabled, `Own output of CH n (would loop)` in
+its `title`) and by the bridge — the take's resolver (`source-own-output`, `“name” is the own output of CH
+n (would loop).`), the seating filter, and the binding door a swap and an UPDATE pass
+(`#refuseBindingChange`, which a plate already on air never reached through the resolver). Every other
+channel, and an input without the mark, is unchanged; nothing is guessed from a name. **Tests:**
+`route-plates.integration.test.ts` (`B-298`: refused on its own channel with nothing sent; control: CH 1's
+output and an unmarked input play on CH 2; a swap to it refused, control: a swap to the unmarked input
+lands), `sourcePicker.dom.test.ts`, `takeRefusalLine.test.ts`. **Owed:** `.111` lists `MTA (APASAI)` with
+`ownOutputOf` channel 1; CG's test channel is 2, so there it is offered (the control) — the refusal needs
+`MTA (APASAI-CGTEST2)` listed, which the Playout team offered to add.
+
+## [x] B-299 — A swap (or an UPDATE) to a Playout route the row's channel may not show was ACCEPTED, sent nothing, and left the old picture on air ⟨priority: medium — the console said the swap landed when it had not⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` B (found building `B-298`) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) (§2)
+
+**Found (measured):** on a CH 2 row with `ورودی ۳` (`route://9-12`, channels 1 and 2) on air,
+`swapLiveSource(row, 'l1', 'ورودی ۴')` — a route whose `compatibleChannels` name channel 1 only — answered
+`{ ok: true }`, put nothing on the wire, and the ledger's seat still named `route://9-12`. Contract v1.3 rule 1
+(`ROUTE-PLATES-01`) was kept by the take's resolver and the seating filter, but the binding door a swap and
+an UPDATE pass (`#refuseBindingChange`) asked only the duplicate-input and band questions: for a plate
+already punched the planner never asks the resolver, it resolves the plate from the showable entries alone,
+the new route was not among them, and the change was recorded as landed. **Fix:** the binding door asks
+rule 1 (and `B-298`'s loop) of every NEW or CHANGED binding against the one in force, with the take's own
+clause (`Plate "l1": “ورودی ۴” can't be shown on CH 2.` — since `B-308`, `Plate 1: “ورودی ۴” can't be shown on CH 2.`), before anything is written or sent; an unchanged
+binding is never refused for what became of its entry since (`unbindableChange`'s doctrine). **Tests:**
+`route-plates.integration.test.ts` (`B-299`: the swap refused, nothing sent, the seat unchanged; control: a
+swap to `ورودی ۵` lands; and a mark added after binding never refuses a neighbour's swap — control: the
+marked input bound anew is refused). Each planted out goes red on its own test.
+
+## [~] B-300 — An open template picker did not follow a removal made on another console ⟨priority: high — two consoles on one CG Bridge is the delivered shape⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §1 · `openspec/changes/console-polish/`
+
+**Repro:** two consoles on one CG Bridge, the template picker open on both, on the same channel. Remove a
+template on A. **Expected:** B's open list drops it within a second; had B chosen it, B is told in words that
+it was removed on another console, by whom. **Actual:** B's list kept it until the picker was closed and
+opened again, and a Load of it from B was refused as `That template is not registered with the bridge —
+re-import it.` **Cause (§0):** the picker read `templates.list` once, when it opened
+(`useTemplatePicker.tsx`, "pulled at OPEN time rather than subscribed"), although the bridge already pushes
+`templates.changed` to every console; the push names no one. The Library and Import dialogs the owner named
+are retired (`R-028`, `UI-POLISH-01` C/D): the picker is the only template list. **Regression test:** two
+consoles on one bridge, the picker open on both — A removes, B's list drops it within 1 s; control: B's
+other templates unchanged, and a take from B of one still listed works.
+
+## [~] B-301 — A refused Load left an invisible error item that the Layers badge counted forever ⟨priority: high — the badge said `2 in error` on a station with no error on any row⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §2 · `openspec/changes/console-polish/`
+
+**Repro:** Load, onto a row, a template the bridge no longer lists on that channel (removed on another
+console while this console's picker was open — `B-300`). **Expected:** the Load is refused once, where it
+was asked, with its reason; no row changes and nothing is counted. **Actual:** the refusal toast, and the
+Layers header's `N in error` grew by one per attempt and never cleared, across restarts. **Cause (§0):** the
+bridge's fixed Load created the stack item (`applyIntent`) BEFORE its checks, and each refusal then marked
+that item `error` (`applyAck(…, false)`) — an item with no layer, which no row shows and nothing clears, saved
+to `bridge-stack.json` and restored at start. The badge counted every `error` item in the view, and an item
+with no layer is in every channel's view. A failed `.vcg` import creates no item; the owner's two counted
+errors are two refused Loads. **Regression test:** a broken `.vcg` import fails with its reason and leaves
+the badge at 0; a refused Load leaves the badge at 0; control: a real row error counts, and clears when
+fixed.
+
+## [~] B-302 — The source picker's tabs sat flush against the popover's edge ⟨priority: low⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §3 · `openspec/changes/console-polish/`
+
+**Repro:** open any plate's source field (Look inputs, Source defaults, the on-air swap). **Expected:** the
+`Inputs` / `Media` tabs start where the rows below them start. **Actual:** `Inputs 0` touched the popover's
+left edge. **Cause:** the picker's tab strip is the shared `.cg-tab-strip`, which carries no inline padding;
+every other part of the panel pads itself. **Regression test:** e2e measures the first tab's text against the
+rows' text inset in a real engine.
+
+## [~] B-303 — A Persian source name in the plate field was reordered, and a default the Playout stopped listing was not marked ⟨priority: medium⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §4 · `openspec/changes/console-polish/`
+
+**Repro:** a plate whose Source default is the input `NDI کانالِ ۱ (APASAI)`, on a Playout that no longer lists
+it. **Expected:** the field reads `Default («NDI کانالِ ۱ (APASAI)»)` with the name in the order the Playout
+shows it, and the `Unavailable` mark. **Actual:** `Default (NDI ۱ کانال (APASAI))`, no mark. **Cause:** the
+choice's label was one string (`Default (${name})`), so the name was laid out inside the English line; and a
+name that starts with a Latin letter is laid out left to right even when isolated (`dir=auto` takes the
+first strong letter). The default branch read only the name, never the entry's status. (The prompt's
+`Missing` mark does not exist; the existing mark is `Unavailable`.) **Regression test:** e2e measures the
+name's runs in each place it is drawn; the default reads `Unavailable`.
+
+## [~] B-304 — `first-run.spec.ts:129` failed by a strict-mode race between two copies of one check line ⟨priority: medium — 3/3 red on Windows, one CI flake⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §10.1 · `openspec/changes/console-polish/`
+
+**Repro:** `npx playwright test tests/e2e/first-run.spec.ts` on the dev host. **Expected:** green.
+**Actual:** `strict mode violation: … [data-check="api"] resolved to 2 elements`, at once (a strict-mode
+violation is not retried), and the file's four serial siblings did not run. **Cause:** while the check runs,
+first-run's Sign in section showed the still-`checking` API line as its blocker — the same line, a second
+time — so an unscoped locator met two; in CI the first look usually landed after the check had answered and
+the copy was gone. **Fix:** the Sign in section shows a blocker only once the check has a verdict, and the
+spec reads the check where it lives. **Regression test:** the spec, 3 of 3 locally and in CI.
+
+## [~] B-305 — `pgm-return.spec` and `channel-air.spec` fought over `127.0.0.1:9250` when run together ⟨priority: low — local parallel runs only; CI runs one worker⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §10.2 · `openspec/changes/console-polish/`
+
+**Repro:** run both specs in one parallel batch. **Expected:** green. **Actual:** `pgm-return.spec.ts:151`
+saw a second reader on its fake feed. **Cause:** `pgm-return.spec` holds a fake programme feed on the rule
+port `127.0.0.1:9250`, and two other specs dial exactly that when they show the monitors —
+`channel-air.spec`'s CLI bridge (no port seam on the CLI) and `pvw-from-bridge.spec`'s in-process bridge.
+**Fix:** `pgm-return.spec` runs its station and its feed on its own loopback address, still on the rule
+port. **Regression test:** the three specs in one parallel batch, green.
+
+## [~] B-306 — The on-air swap dialog labels each plate with its bare id and opens with an explanatory paragraph ⟨priority: medium⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` A1 · `openspec/changes/console-polish/`
+
+**Repro:** on an ON AIR row with live plates, open SOURCE. **Expected:** each plate named in the operator's
+words, every source by the Playout's own name in its own direction, labels and values only. **Actual:**
+each plate is labelled with the template author's id (`guest-1`); the dialog opens with a four-line
+paragraph explaining what a substitution does; a plate with no template assignment reads `— none —`.
+**Cause:** the dialog predates golden rule 11's plate wording (`Plate N`, the id on the `title`, as the
+Inspector's Look inputs and the defaults dialog name a plate) and the owner's no-prose rule. **Fix:**
+`Plate N` with the id on the `title`; the paragraph removed; the template's assignment named through the
+choice label every source picker uses (`Template assignment (…)`, `none set`, `Not listed` with the id on
+its `title`, `Unavailable`). What a swap SENDS is unchanged. **Regression test:** a Persian-plus-Latin
+source name reads in logical order with no id in the dialog's text; the paragraph's absence pinned;
+control: the swap sends exactly what it sent.
+
+## [~] B-307 — Bridge tests read the AMCP mock's wire trace whole while it is still being written ⟨priority: medium — it can turn a CI run red⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` A2 · `openspec/changes/console-polish/`
+
+**Repro:** CI run 37140336493 (attempt 1): `plate-band.integration.test.ts:174` threw
+`SyntaxError: Unterminated string in JSON`. **Expected:** a trace read during traffic sees whole lines.
+**Actual:** it parsed a half-written last line. **Cause:** `traceFlush()` is a barrier for writes queued
+BEFORE it; a test that polls the trace while CG Bridge is still sending (the boot volume blanket) can read a
+line the mock is still writing. Fifty bridge tests carry their own copy of the reader
+(`readFileSync(trace).split('\n').map(JSON.parse)`). **Fix:** ONE shared reader in the bridge tests'
+support folder that parses only complete lines — a trailing partial line waits for the next read — and
+every copy uses it. Test-only. **Regression test:** handed a half-written last line, the old reader throws
+and the shared one returns the complete lines.
+
+## [~] B-308 — Some of CG Bridge's sentences name a live plate by its template id ⟨priority: low⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` (found while fixing `B-306`); BUILT 2026-10-04 by `RELEASE-0110-01` Part A (change `console-polish`)
+
+**Repro:** a swap CasparCG refuses reads `CasparCG refused the substitution, so plate "guest-1" is still on
+its previous source.` **Expected:** a plate is named in the operator's words in any sentence an operator
+reads (golden rule 11). **Actual:** twelve sentences in `tools/caspar-bridge/src` write `plate "<id>"`
+(`caspar-runtime.ts`, `live-plate-release.ts`, `live-plate-fit.ts`); some are log lines, some reach a
+console. **Cause:** they predate the plate wording. **Fix:** every sentence CG Bridge says about a plate that
+reaches a console names it `Plate N` — its position in the template's declaration, through ONE numbering,
+`@cg/shared-ipc`'s `plateLabel`, which the console's `plateLabelOf` now calls too — and isolates every source
+name it carries (`isolateText`, the string form of a `<bdi>`, moved to `@cg/shared-ipc` with `directionOf`).
+The id is relocated, not deleted: it stays in each payload (`plateId`, `plateIds`, `refused`) and in the log
+lines, which keep it with `Plate N` beside it where the row is in hand. The second axis of the sweep found six
+more sentences of the same shape (`Plate "<id>": …` in the binding door and the take's resolver), the
+unassigned-plates list (built through a helper, so a per-line search missed it) and `seatCollisionMessage`;
+all are reworded. One is kept on purpose: `This template has no live plate called "<id>".` — the plate is not
+declared, so it has no position and its id is the only name it has. Copy only: no refusal condition and no
+wire changed. **Tests:** the bridge's unit and integration suites read every sentence with `Plate N` and no
+id (`live-plate-release`, `live-plate-fit`, `live-plate-assignment` — numbered from the whole template when
+only a subset must resolve — `live-look-reconcile`, `route-plates`, `playout-sources`, `live-source-swap`);
+`live-source-swap-names.spec.ts` (Chromium, a real CG Bridge and AMCP mock): a refused swap's dialog reads
+`… so Plate 1 is still on its previous source. Nothing was cleared.` with no plate id, and the row's Persian
+alias reads right to left. **Control — the wire:** the refused swap (`live-source-swap`, and the e2e's six
+lines) and the solo look switch with its plate releases (`live-look-reconcile`, eighteen lines) send exactly
+what the unchanged bridge sent, recorded before the change. **Positive control:** the e2e fails on the old
+build at `plate "l1"`.
+
+## [~] B-309 — More operator sentences that name a plate, a look or a template by its id ⟨priority: low⟩ — FILED 2026-10-04 by `RELEASE-0110-01` Part A (found by `B-308`'s sweep); BUILT 2026-10-04 by `RELEASE-0111-01` Part B (change `console-polish`, tasks §11)
+
+**Repro / Actual:** outside `B-308`'s scope (CG Bridge's live-plate sentences), the same sweep found:
+`seatCollisionMessage` names the LOOK by its id (`in look "two"`; a look has an authored `name`,
+`looks.ts:85`); the console's audio toast lists plate ids (`Audio not applied to guest-1, guest-2 — those
+plates are unchanged.`, `LiveSourcesPanel.tsx:315`, fed by `LayerRow.tsx:1289`); the swap dialog's picker is
+labelled `Live source for l1` (`LiveSourceSwapDialog.tsx:147`, an accessible name); and `@cg/shared-ipc`'s
+assignment validator names plate, template and source by id (`sources.ts:1059`, `:1068` — a malformed-file
+message; the console shows its own words for `unknown-source`). **Expected:** golden rule 11 — `Plate N`, the
+look's name, the template's name. **Fix:** not built.
+
+**Built (`RELEASE-0111-01` Part B).** Two anchors above were wrong: the toast is fed from `LayersPanel.tsx`
+(`applyPlateVolumes`), not `LayerRow.tsx:1289`, which feeds the plate audio dialog's own sentence (now in
+`B-311`); and the validator's `unknown-source` cannot fire in production (every caller passes `catalog: null`),
+and no console ever shows its text — it reaches a boot failure in the service log and a wire field the console
+discards. The sweep found one more sentence of the same shape: an accepted take's message named the look by
+its id (`caspar-runtime.ts`, `B-191`'s). **Fix:** one helper, `lookLabel` (`@cg/shared-ipc`, beside
+`plateLabel`): a look is the name its author gave it. (1) `seatCollisionMessage` takes the template's looks
+and reads `… in look “<name>”`, the name in its own isolate, `in one of its looks` when the template no longer
+names it; (2) the take's message reads `… to punch look “<name>” …` the same way; both write the ids to a log
+line. (3) The Live plates toast reads `Audio not applied to Plate 1 and Plate 3 — those plates are unchanged.`
+through `LiveSourcesPanel`'s new `plateLabelOf` (the row's template, from `LayersPanel`), and counts the plates
+(`2 plates`) when it has no plate word — never the id; and the SOLO/ON/OFF buttons no longer follow it with
+`AsyncButton`'s generic `Not accepted.`, which replaced it (returned `cancelled`, as PANIC does). (4) The swap
+picker's accessible name is `Live source for Plate 1` (the label's `title` keeps the id). (5) The validator
+says `A plate of one template is assigned twice on channel 2 — …` / `A plate is assigned to a source this
+installation does not define — …`; the ids are RELOCATED to the error's `detail`, which the bridge logs at
+start and on a refused change. **Tests:** `operator-naming.test.ts` (`lookLabel`); `live-look-bindings.test.ts`
+(the collision sentence: `Plate 1 and Plate 2`, the Persian look and input names each in a right-to-left
+isolate, logical order, no id; a look no longer named); `look-switch-refusal.integration.test.ts` (a re-take
+whose look tell CasparCG refuses: on air, the Persian look name, no id); `liveSourcesPanel.dom.test.ts` (the
+toast, and its count control); `liveSourceSwap.dom.test.ts` (the picker's name); `sources.test.ts` (both
+validator sentences, and the ids in `detail`). **Control — the wire:** `live-look-reconcile.integration`
+(`B-308`'s recorded look switch, 18 lines, and the refused swap) is unchanged and green; a refused binding
+change sends nothing, as before.
+
+## [~] B-310 — A Log page read while the audit file rotates comes back EMPTY ⟨priority: low — a CI red once; on a station, the first row of a new day⟩ — FILED 2026-10-04 by `RELEASE-0110-01` (CI run 37185337111); BUILT 2026-10-04 by `RELEASE-0111-01` Part C (change `console-polish`, tasks §11)
+
+**Repro:** CI run <https://github.com/yasermostafaee/cg/actions/runs/37185337111> (`c4933ece`):
+`audit-page.integration.test.ts:71` — "a console holding channel 1 gets a FULL page" — got **0** rows where
+it wants 100; the same test passed in CI on `ae9f9c25` and in the local gate on `c4933ece`. **Suspected
+cause (not yet proven):** the test's 300 rows are dated `2026-10-01`, so the bridge's first row of the test
+day (the operator's sign-in) ROTATES the record — the writer renames the current file the moment a row
+lands on a new day. `readAuditPage` (`packages/audit/src/reader.ts:133-140`) handles a rotation mid-read by
+reading again from a fresh list, but only twice and with no wait, and then answers `{ entries: [] }`; and
+`CasparRuntime.auditPage` falls back to the in-memory tail on any read error. Either path gives an empty page.
+**Expected:** a page read during a rotation waits for the rename and reads the record; it never answers
+empty while rows exist. **Proposed fix:** retry `MOVED` with a short bounded wait (and say so in the page if
+it still cannot read), and date the test's rows from the test's own clock so the suite does not depend on
+the calendar. **Not fixed here:** `RELEASE-0110-01` changes no product behaviour beyond `B-308`.
+
+**Cause (proved by `RELEASE-0111-01` §C0 — not the one suspected above):** `auditFiles` builds the list in
+TWO reads — the rotated names (`readdir`), then the current file's first row — and the writer's rename landing
+between them gives a list holding neither the file just rotated nor (until the writer opens its fresh one) any
+current file. The list was EMPTY, so the page was `{ entries: [], next: null }` and no file was opened for the
+`MOVED` check to catch. The two suspected paths cannot give 0 with one rotation: `MOVED` is raised at most once
+(the retry lists after the rename), and the in-memory fallback holds the operator's own sign-in row, which a
+page shows (measured). The test raced its own sign-in: that row rotates the record as it lands, and the
+unfiltered page passed only when its read beat the rotation. **Fix:** `readAuditPage` takes the list again once
+the page is read and keeps the page only when nothing moved (a rename always adds a rotated name and changes
+the current file's first row); otherwise it reads again — five reads, waits of 10–40 ms — and a record still
+moving is `AuditRecordMovedError`, which `CasparRuntime.auditPage` lets through so the Log says the read
+failed, never pages the in-memory tail instead. **Regression tests (deterministic — a `readdir` spy answers,
+then the rotation runs; no timeout raised):** `packages/audit/tests/page.test.ts` (the rename inside the
+listing, the whole rotation inside it, a cursor taken before it, a record that never holds still — each red on
+the old reader: `[]`, one row with `next: null`, `[]`, an empty page instead of the error) and
+`tools/caspar-bridge/tests/audit-page.integration.test.ts` (the rename through the real socket: the old reader
+fails with CI's own words, `expected [] to have a length of 100 but got +0`; the refusal in words). The
+integration test's first case asks for the takes, which every order of its sign-in's rotation answers the same.
+
+## [ ] B-311 — The plate audio surfaces still name a plate by its id ⟨priority: low⟩ — FILED 2026-10-04 by `RELEASE-0111-01` Part B (found by `B-309`'s sweep)
+
+**Repro / Actual:** the two surfaces built around a plate's audio label each plate with its id, and their
+sentences follow. (1) The row's plate audio dialog (`LivePlateAudioDialog.tsx`): each plate row's label is
+`<bdi>guest-1</bdi>` with `Frame N` under it (`:371`, `:374` — the rest of the console says `Plate N`), the
+slider's accessible name is `Volume for guest-1` (`:389`), and a refusal reads `The change was refused for
+guest-1, guest-3 — those plates are unchanged.` (`:236`, pinned by `livePlateAudio.dom.test.ts:328`). (2) The
+Live plates tab (`LiveSourcesPanel.tsx`, `PlateAudioStrip.tsx`): the plate column shows the id as text with
+`title="Template plate handle"` (`:678`); the row's and the strip's accessible names (`Volume for guest-1`,
+`Silence guest-1`, `Solo guest-1 — …`, `Open the row that declares guest-1`); the release confirm (`This
+layer carries "guest-1" (route://1-1).`, `:407-408`); and PANIC's partial failure (`Silenced 3 plate(s), but
+guest-2 did not take — those may still be audible.`, `panicReport.ts:77-80`). (3) `LooksBindingsSection.tsx:585`
+puts the id in an accessible name ON PURPOSE (`Input for guest-1 in look …`, its comment: "every existing
+finder and every screen reader still names the plate") — the opposite of what `B-309` did for the swap picker.
+**Why it was not folded into `B-309`:** each surface is built on the id, so rewording one more sentence there
+would leave the surface disagreeing with itself — `B-309`'s toast already reads `Plate 1` beside a column that
+shows `guest-1`. The Live plates tab also shows each layer's producer (`route://1-1`), which reads as a
+TECHNICAL surface (golden rule 11's exemption) — the owner's call whether it is one. **Expected:** one pass per
+surface: `Plate N` in every label, accessible name and sentence (`plateLabelOf`), the id on a `title`, PANIC's
+failure naming the plate AND its layer (`R-028`: the layer number stays visible in a sentence), and one answer
+for `LooksBindingsSection`'s finders. **Fix:** not built.
+
+## [~] B-312 — On the installed CG Bridge, the backup (server B) set in Station setup is dropped at the next start ⟨priority: high — the client runs a pair from day one⟩ — FILED 2026-10-04 by `RELEASE-0112-01` §0.1 · `openspec/changes/backup-session/` (tasks §1)
+
+**Repro / Actual:** on the CG Bridge service, a station admin adds server B in Station setup. It is applied at
+once and saved to `.cg-runtime/bridge-connection.json` (`bridge.ts:4287-4289`), and the pair mirrors. At the
+next service start — a reboot, an upgrade, a recovery restart — server B is gone: every line goes to server A
+alone, and nothing says so. **Cause:** the service always passes `--caspar-host` (`serviceFlags`,
+`service-config.ts:113`), so the CLI builds the connection from flags with no server B
+(`bin/caspar-bridge.mjs:592-640`), and `createBridge` takes a given connection over the saved file
+(`bridge.ts:2039-2042`). **Why it matters:** after any restart the backup core receives nothing from CG, so on
+a failover it airs whatever CG layers it last held, or none. **Expected:** the saved server B, with its
+strategy and auto-failover, back in force after a restart; server A stays the configuration file's.
+
+## [~] B-313 — A CG Bridge on the backup engine's machine can become a second sender on the backup core ⟨priority: high — never two senders on one core⟩ — FILED 2026-10-04 by `RELEASE-0112-01` §0.4 · `openspec/changes/backup-session/` (tasks §4)
+
+**Repro / Actual:** the Playout's engine installer ticks «CG Bridge هم نصب شود» by default and runs our
+installer with `/S` (`PLAYOUT-CG-RESPONSE-0110-111-v1.md` §4.2) — on the backup engine's machine too. That CG
+Bridge drives `127.0.0.1:5250`, the backup core, which admits loopback with no approval (`BH` 44). In first-run
+it sends only reads (`VERSION`, `INFO`, `OSC SUBSCRIBE`, `INFO CONFIG`). But a console given the backup engine's
+address finds it automatically (`bridgeUrl.ts:60-74`), and once a station admin gives it a channel it writes
+layers 50–99 on the core the primary's CG Bridge also writes as its server B. The core's `DEFER` list is one per
+channel, shared by every AMCP connection, so each bridge's `COMMIT` applies the other's half-built mixer changes
+(`V13S` 207-213). No engine publication says an engine is a backup (`RELEASE-0112-01` §0.4). **Expected:** CG
+Bridge is never the second sender: while another CG Bridge drives its server B's core, it sends that core
+nothing and says so; the guide says to untick the box on the backup engine; the Playout team is asked for a
+role signal.
+
+## [~] B-314 — First-run's channel pick takes a declared server B out of the connection ⟨priority: medium — the backup core is dropped mid-run, in silence⟩ — FILED 2026-10-04 by `RELEASE-0112-01` (found building `pnpm dev:station --fake --pair`) · `openspec/changes/backup-session/` (tasks §6)
+
+**Repro / Actual:** a CG Bridge started with a server B already declared — its `--backup-*` flags, as the dev
+station's `--pair` and the suites start it — runs first-run; the station admin picks a channel. First-run writes
+`servers: { A }` (`firstRunConnection`, `firstRunStation.ts:121-133`) through `connections.set-config`, which
+applies it at once and saves it: server B is out of the connection, the backup core receives nothing from then
+on, and nothing says so; the next restart's flags bring it back. Station setup's **Change channel…** onto a
+channel on another CasparCG host writes through the same function and drops a Station-setup server B the same
+way (`ChannelScopeCards.tsx:87-91`). The installer never writes a backup flag, so a fresh installed station does
+not meet the first half. The unit test pinned the drop as "ONE server", from before a backup was a product
+feature. **Expected:** first-run names server A — the host the Playout's list names — and leaves a declared
+server B as it is; removing server B stays Station setup's.
+
+## [~] B-315 — A healthy station reads `⚠ A NOT PRODUCING · CH 2` for a channel it no longer serves ⟨priority: medium — a false alarm on the primary's status bar⟩ — FILED 2026-10-04 by `RELEASE-0112-01` (found on `pnpm dev:station --fake --pair`) · `openspec/changes/backup-session/` (tasks §6)
+
+**Repro / Actual:** a bridge whose server A session lives through first-run — its connection named by flags
+that first-run writes back unchanged, as the installed service's `--caspar-host` and the dev station's
+`--pair` are — on a core with more than one channel. Before a channel is declared the bridge serves every
+channel (`#servesOscChannel`), so it hears channel 2 tick; the pick declares channel 1, and channel 2's OSC is
+dropped before the channel-tick tap (`CENTRAL-BRIDGE-01` rule 7, `transport.ts:240-248`). The tap keeps
+channel 2's last tick, which ages past `CHANNEL_TICK_STALE_MS` and is published as not producing
+(`caspar-runtime.ts`, the health snapshot): the status bar reads `⚠ A NOT PRODUCING · CH 2` over a core that
+is producing. Only a reconnect clears it. A channel that Change channel… removes does the same. Measured: the
+pair run showed it; a one-engine run did not, because its first-run write rebuilt server A's session (two
+`OSC SUBSCRIBE` lines against one). **Expected:** R-058's list holds only the channels the station serves; a
+served channel that stops is still said.
+
+## [~] B-316 — Every line to the backup core carries the primary's channel number ⟨priority: critical — a graphic on another programme's air; every build up to `0.11.2` is unsafe with a server B⟩ — FILED 2026-10-05 by `RELEASE-0113-01` §0 · `openspec/changes/backup-channel-map/`
+
+**Repro / Actual:** a station with a server B. CG Bridge sends core B every line it sends core A, byte for byte
+but for a clip's file path (`B-286`): `CG 1-80 ADD …`, `PLAY 1-60 …`, `MIXER 1-60 FILL … DEFER`, `MIXER 1
+COMMIT`, `CLEAR 1-80`, the boot volume blanket, `INFO 1` — through the one seam (`RedundancyAdapter.send`,
+`lineFor`/`journalLineFor`), and again through the journal's failover catch-up and corrective resend. After a
+failover every line, the primary-only reads included, goes to B with the same numbers. A hand-made
+`route://H-L` is mirrored too, naming B's channel H. But on the Playout, redundancy belongs to a CHANNEL: a
+mirror is a NEW channel on the backup engine with the backup's own number — its largest channel + 1, so the
+mirror of A's channel 1 is usually B's channel 2 or higher, while B's channel 1 is its own default channel and
+may be airing another programme (`PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md` §2). So `PLAY 1-50 …` sent to B lands
+on B's channel 1. Reads are wrong the same way after a failover: B's OSC is filtered by A's numbers, `INFO 1`
+asks B's channel 1, and B's `NOT PRODUCING · CH 1` speaks of B's channel 1. **Why nothing caught it:** the fake
+pair gave B the same channels as A (`fake-station.ts`: channels 1 and 2 on both, the same catalogue), so every
+verbatim line landed on the right channel by coincidence, and the line-for-line wire test proved that
+coincidence. **Expected:** never A's channel number on B. Each channel's B number comes from a mapping — B's
+own D4 (`mirrorOf`, Playout `2.9.5`), or a station admin's explicit entry checked against B's D4 — and an
+unknown or invalid mapping sends B nothing for that channel, and says so (`R-089`).
+
+**Found by CI before release, fixed (2026-10-05, `RELEASE-0113-01`):** the first fix (`63307bca`) made
+`B-313`'s guard compare per channel, but the guard read server B's machine for a channel only on its NEXT reading,
+while the mapping was in force the moment it resolved — so a mapping that appeared sent core B its lines
+(`MIXER 2-88 VOLUME 1`) before the guard had looked for another CG Bridge driving that channel. A `B-313` test
+reddened on `950aa2a2`'s PR run ([37323750849](https://github.com/yasermostafaee/cg/actions/runs/37323750849)) and
+was green locally by timing. Now a backup channel carries a line only once a COMPLETED reading made WITH it came
+back clean (`CoreGuard.clearsB`), and a refresh asked for during a reading is one more reading after it. Pinned
+deterministically: a neighbour whose `/health` answers 2.5 s late holds the window open, and the old seam sends
+core B four layer lines inside it (red), the new one none.
+
+## [~] B-317 — The Set up check runs on whatever CG Bridge the console is already connected to, and Connect then dials another ⟨priority: high — the owner was stuck on his own PC with `0.11.3`⟩ — FILED 2026-10-07 by `RELEASE-0114-01` §0 · `openspec/changes/console-check-scope/`
+
+**Repro / Actual (the owner's PC, 2026-10-07, read from the console's own record, nothing dialled):** the
+console's station record said `http://192.168.21.111:8080`, so its socket was on `.111`'s CG Bridge. He typed
+`http://127.0.0.1:8080` and pressed Check. `setup.check` went out over THAT socket (`WebSocketRuntime.setup.check`
+→ `#invoke`), so `.111`'s CG Bridge (`0.11.2`) probed `127.0.0.1` — its OWN loopback — and every line came back
+about `.111`: its Playout `2.9.5`, its CasparCG (`VERSION 2.5.0 6b29237 Dev`), its v2rayN, its ports, and
+"The Playout and CasparCG run on this machine". Before a sign-in the bridge checks only "this station's Playout"
+(`checksThisStation`), and `.111`'s own Playout is configured as `http://127.0.0.1:8080`, so the loopback address
+passed that narrowing by coincidence. "CG Bridge found at 192.168.21.111:5280" was the socket's address, never the
+typed one's. `Connect` then saved `127.0.0.1` and dialled `ws://127.0.0.1:5280` on the owner's PC, where nothing
+listens: `NOT CONNECTED … 127.0.0.1:5280`. A later record held a typed `http://192.168.111:8000` — the URL parser
+reads the three-part `192.168.111` as `192.168.0.111`: picture 5. With no CG Bridge answering, Check on Set up
+said `Bridge disconnected — command rejected. Not sent to CasparCG.` (the console→bridge refusal), the Sign in
+fields stayed disabled with no reason, and first-run's opaque ground covered the red banner's `Retry connection`
+and `Set up again`: nothing more could be done. Two more of the same family, found by reading: a CG Bridge set up
+on the Playout's machine as `http://127.0.0.1:8080` refuses a console's check of the Playout's REAL address
+before a sign-in, and advertises `127.0.0.1` as the sign-in address — so a console on another PC signs in to its
+own loopback.
+
+**Expected:** ONE CG Bridge address — the CG Bridge field if a person typed it, else the Playout's host on
+`5280` — used by the check, its "found at" line, `Connect`, the banner and the reconnect. The check runs on THAT
+CG Bridge; a remembered address from another session is offered as a choice ("Use … (last used)"), never used
+silently; a CG Bridge on another host than the Playout is said in one line. `Connect` only when CG Bridge
+answered there. Set up never shows the console→bridge refusal; it says
+`CG Bridge is not answering at <host>:<port>.` and keeps Check, the address fields and Sign in usable. A
+loopback address CG Bridge advertises names CG Bridge's machine; and where the typed host is CG Bridge's and CG
+Bridge names its own Playout by loopback on the same port, the console asks the check by CG Bridge's own name
+for it. CG Bridge's before-sign-in narrowing is NOT changed (`RELEASE-0114-01`'s hard stop: no refusal condition
+changes).
+
+**Acceptance:**
+
+- WHEN the station record names `.111` and the typed Playout is `127.0.0.1` THEN the check and `Connect` both use
+  `127.0.0.1:5280`, and the check never runs on `.111`
+- WHEN no CG Bridge answers, then one appears, then it disappears THEN Set up says so in words each time and the
+  owner is never left without Check, the fields and Sign in
+- WHEN the typed Playout is CG Bridge's own host on `8080` and that CG Bridge's Playout is `http://127.0.0.1:8080`
+  THEN an unsigned console's check runs there, asked for `http://127.0.0.1:8080`; and the console signs in at the
+  Playout's real address, never at its own loopback
+
+## [~] B-318 — The VPN/proxy line fires on a process alone, in red, and says "this machine" about CG Bridge's machine ⟨priority: medium — a false alarm that sent the owner to quit software that was not in the way⟩ — FILED 2026-10-07 by `RELEASE-0114-01` §0.3 · `openspec/changes/console-check-scope/`
+
+**Repro / Actual:** `checkInterceptors` (CG Bridge, `connection-check.ts`) failed the line whenever a process
+whose name matched v2rayN, xray, sing-box, … was running — "even with its TUN off" — before it looked at a proxy
+or a route. It runs on CG Bridge's machine, so a v2rayN quit on the console's PC can never clear it (the owner's
+line came from `.111`). **Expected:** the line appears only while something actually intercepts — a known
+process with an active system proxy (a listener on its address), a tunnel adapter up, or a route proved to leave
+through one — and names what it found (process and PID, the proxy and its holder, the adapter). Amber; red only
+when the route to the Playout or CasparCG host goes through the tunnel. Its words name CG Bridge's machine.
+**Acceptance:** planted states — process gone: no line; proxy key left on with no listener: no line; a real proxy
+on: amber, naming it; the route to the Playout through the tunnel: red.
+
+## [~] B-320 — The sign-in gate has no way out of a wrong station ⟨priority: high — the owner was stuck, and reinstalling did not help⟩ — FILED 2026-10-10 by `SIGNIN-ESCAPE-01` Part A1 · `openspec/changes/sign-in-gate-escape/`
+
+**Repro / Actual (CG Control `0.11.4`, the owner's PC, 2026-10-10; reproduced by running, nothing dialled):** the
+console's station record named his own PC (`192.168.21.93`), where a CG Bridge had just been installed to test.
+Its Playout was `http://127.0.0.1:8080`, and nothing runs there. CG Bridge answered and advertised
+`auth: playout`, so the console opened on the sign-in gate. The check's one line
+(`127.0.0.1 answers, but nothing listens on port 8080.`) locked the fields (`signInLocked`), and the card had
+nothing else: `PlayoutConnection` is given `mayChange={false}`, so no Change; the NOT CONNECTED banner's
+`Set up again` exists only while the link is down, and it was live; and there is no ✕. Reinstalling changed
+nothing: the record (`cg.runtime.station.v1`) lives in the WebView2 profile
+(`%LOCALAPPDATA%\app.cgbroadcast.control\EBWebView`), outside the install folder. `RELEASE-0114-01` A4 ("no dead
+end") covered Set up and the banner, not the gate. Reproduced at `bf011d79` by
+`tests/e2e/sign-in-gate-escape.spec.ts` (a real CG Bridge CLI whose Playout is its own loopback, reached at a
+documentation address) and on the installed apps by the release acceptance's `stuck-station` phase.
+
+**Expected:** inside CG Control the gate offers the banner's own `Set up again` (one component): always,
+whatever the check says, and never locked with the fields. It forgets this console's station and starts it
+again on Set up's question, and it sends nothing to CG Bridge or CasparCG. A browser has no such control.
+Signing in, the gate's place above the lock, its focus trap and every refusal condition are unchanged.
+
+**Acceptance:**
+
+- WHEN the record names a CG Bridge that answers and whose Playout does not THEN the gate offers `Set up again`
+  under `Sign in`; pressing it forgets the record and shows Set up; a good address typed there connects
+- WHEN the same gate is in a browser THEN it has no `Set up again`
+- WHEN a sign-in can work THEN signing in beside it is unchanged, and nothing is forgotten
+
+## [~] B-321 — The sign-in gate's line names CG Bridge's loopback, not the address on its card ⟨priority: medium — the owner read `127.0.0.1` under `192.168.21.93`⟩ — FILED 2026-10-10 by `SIGNIN-ESCAPE-01` Part A3 · `openspec/changes/sign-in-gate-escape/`
+
+**Repro / Actual:** the gate's card said `http://192.168.21.93:8080` and its one line said
+`127.0.0.1 answers, but nothing listens on port 8080.` Before a sign-in, the console asks CG Bridge's check for
+the Playout by the address CG Bridge knows it by: `B-317`'s `playoutAsBridgeNamesIt` turns `.93` into
+`127.0.0.1`. CG Bridge probes that, correctly for its own machine, and words its line in that name
+(`noAnswer`, `connection-check.ts`). The console showed the answer as it came back. The cause is the console's,
+so no CG Bridge change is needed. Reproduced by running: the same e2e read `127.0.0.2 answers, …` under a card
+reading `http://192.0.2.93:…`. **Expected:** the console says the answer back in the address it was given. In
+the lines about the Playout and CasparCG, the host and origin it asked by read as the card's. CG Bridge's lines
+about its own machine (`route`, `proxy`) keep its words. **Acceptance:** the owner's line reads
+`192.168.21.93 answers, but nothing listens on port 8080.`; a check asked as given is shown unchanged.
+
+## [~] B-322 — A pass count set while a row is stopped never reaches the page: the resident take tells it no timing ⟨priority: high — every surface says `Until stop` while the graphic closes after one pass⟩ — FILED 2026-10-10 by `LOGO-LOOP-01` · `openspec/changes/resident-take-timing/`
+
+**Repro / Actual (CG Control + CG Bridge `0.11.4`, the owner's logo, a `loop-cycle` template, 2026-10-10):** on
+air he set a count of one more and pressed `Update`; it played one more pass and closed. Stopped, he set
+`Until stop`, pressed `Update`, then `Play`: it played one pass and closed. Off air, `setPassTiming` records and
+sends nothing (golden rule 10) on the promise that the next take carries it. It does on one route only. After
+`out` or a clear the take re-ADDs and `#sendAdd` attaches `timing`. After `stop` the producer stays resident, so
+the take sends `#tellPageTake`'s `CG UPDATE` and `CG PLAY`, and that `CG UPDATE` carried the take token and the
+look and no `timing`. The owner's `amcp.log`, every take after a stop: `CG 1-99 STOP 0` →
+`CG 1-99 UPDATE 0 "{\"__cg\":{\"take\":\"…\"}}"` → `MIXER 1-99 VOLUME 1` → `CG 1-99 PLAY 0`. The same hole
+`B-191` closed for the look and `SELF-STOP-24` for the token.
+
+**Expected:** the resident take's `CG UPDATE` carries the recorded `timing` in the same control object as the
+token and the look, built by the one helper `#sendAdd` also uses. No extra command; an off-air `Update` still
+sends zero AMCP; a row with no override sends today's bytes.
+
+**Acceptance:**
+
+- WHEN a looping row was told a count of one on air, is stopped, set to `Until stop` and taken THEN the take's
+  `CG UPDATE` carries `timing: { passes: 'infinite' }`, with one `CG PLAY` and no `CG ADD`
+- WHEN the same row is taken out instead of stopped THEN the re-ADD carries the same `timing`
+- WHEN a row has no override, or its template does not admit pass timing, THEN no `timing` is sent
+
+**Notes:** the bridge half alone does not fix the owner's sequence; the page dropped the value too (`B-323`).
+
+## [~] B-323 — A settled loop throws away the pass timing it is told, so its next run plays the last count ⟨priority: high — `B-322`'s other half; without it the bridge's fix reaches nothing⟩ — FILED 2026-10-10 by `LOGO-LOOP-01` · `openspec/changes/resident-take-timing/`
+
+**Repro / Actual (confirmed by running, `take-tell-is-inert.test.ts`):** after a stop or a self-end the page's
+loop controller is settled, and `PlayoutController.setRemainingPasses` and `setDelayMs` returned at their
+`settled` guard. So a `CG UPDATE` carrying `timing: { passes: 'infinite' }` before the `CG PLAY` was dropped,
+and `play()` seated the last count the page had been told (`DELTA B0`'s `pendingPasses`), here the on-air "one".
+The guard exists so that a configuration verb never re-arms a finished graphic; it also discarded the value.
+
+**Expected:** a settled `loop-cycle` controller remembers the count and the gap for its next `play()` and changes
+nothing else. It never re-arms. Ships in CG Control: a page is baked at import from the console's own runtime,
+so the template must be re-imported after the upgrade (`C-034`).
+
+**Acceptance:**
+
+- WHEN a settled loop is told `passes: 'infinite'` and played THEN it loops until stopped
+- WHEN a settled loop is told a count THEN no frame is painted and no event fires until it is played
+- WHEN a settled loop is told a gap and played THEN its passes are separated by that gap
+
+## [~] B-324 — The Connection card's typed address is dropped in silence on a tab switch ⟨priority: high — the owner typed an address, changed tab, and could not tell it was gone⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` Part A · `openspec/changes/servers-simplify/`
+
+**Repro / Actual (CG Control `0.11.4`, the owner's picture 5, 2026-10-10; reproduced by running,
+`stationSetupConnection.dom.test.ts` at `7d68fc8b`):** in Station setup → Servers the Playout card's `Change`
+opened an address field and a CG Bridge field. He typed into the CG Bridge field, changed tab, and came back to the
+card as it was before he typed: the field gone (`undefined`), no mark on the rail, nothing said. The fields lived
+inside `PlayoutConnection`, which unmounts with its tab; nothing outside it knew there was an edit.
+
+**Expected:** what is typed survives a tab switch like every other draft on that tab, the card says `Not connected
+yet`, the rail marks the tab, and closing the dialog (or `Revert`) discards it.
+
+**Acceptance:**
+
+- WHEN a CG Bridge address is typed, the tab changed and changed back THEN the field still holds it, the card says
+  `Not connected yet` and the rail marks the tab
+- WHEN the dialog is closed and opened again THEN the card reads the station as it is, and the rail is quiet
+
+## [~] B-325 — A Station setup draft crosses to another CG Bridge when the console is re-pointed with the dialog open ⟨priority: high — the suspected path of the owner's own PC (`.93`) into `.32`'s server A and serve host⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` Part A · `openspec/changes/servers-simplify/`
+
+**Repro / Actual (reproduced by running, `stationSetupConnection.dom.test.ts` at `7d68fc8b`):** Station setup stays
+mounted while the console is re-pointed at another CG Bridge (`Connect` retargets the socket), and a reconnect
+re-reads the stack, the health and the lock, never `connections.config`. So the Servers fields AND their baseline
+kept the first CG Bridge's values on the second: no mark on the rail, and `Apply servers` sent them there. Measured:
+open on a CG Bridge whose server A and serve host are `192.168.21.93`, re-pointed at one whose server A is
+`127.0.0.1`, `Apply servers` sent `192.168.21.93`. The owner's `.32` held `.93` in both (his pictures 3 and 4, no
+mark on the rail), and he had been on the `.93` CG Bridge that day.
+
+**Expected:** when the link comes back while the dialog is open, the configuration and the serve state are read
+again. On another CG Bridge the draft is dropped with the baseline it was typed against; on the same one a draft
+being typed stands unless what is stored there changed.
+
+**Acceptance:**
+
+- WHEN the dialog is open on CG Bridge X with a draft and the console is re-pointed at Y THEN every field reads Y,
+  the rail is quiet, and `Apply servers` sends nothing of X
+- WHEN the link blinks back to the SAME CG Bridge THEN the draft being typed stands
+
+## [~] B-326 — A graphics (serve) host that names another machine is never judged ⟨priority: high — `B-162` again: a take reports success and shows nothing⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` Part B · `openspec/changes/servers-simplify/`
+
+**Repro / Actual (the owner's logs from the `.32` CG Bridge, 2026-10-10):** the serve host held `192.168.21.93` (his
+own PC). CG Bridge logged `template HTTP server LAN-EXPOSED on 0.0.0.0:7911 — CG ADD URL host is 192.168.21.93`, and
+every `CG 1-99 ADD` after it carried `http://192.168.21.93:7911/template/…`, each answered `202 CG OK`: CasparCG on
+`.32` fetched the page from another machine. With the graphics host set back to `127.0.0.1`, the graphic rendered.
+`hostsUnableToFetchTemplates` (the one predicate behind the boot line, the apply answer and the dialog) judges only a
+LOOPBACK bind or host against a remote CasparCG; a host that is neither loopback nor CG Bridge's own passes.
+
+**Expected:** a serve host that is neither loopback nor one of the addresses CG Bridge's machine has (the list the
+candidate chips come from) means every configured CasparCG fetches graphics from another machine: the one predicate
+says so, the check shows a failed line naming the host, and offers `Detect automatically`.
+
+**Acceptance:** WHEN the serve host is `192.0.2.93` on a CG Bridge whose addresses do not include it THEN the check's
+line fails naming it, the boot line and the apply answer name every configured server, and `Detect automatically`
+clears the field; WHEN it is one of CG Bridge's own addresses or loopback THEN nothing is said.
+
+## [~] B-327 — The check cannot see a CasparCG host that does not join the Playout's, so meters, sources and grants are dropped in silence ⟨priority: high — the owner's programme meter read `— LUFS` with picture and sound present, and the check read all green⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` · Part C · `openspec/changes/servers-simplify/`
+
+**Repro / Actual (the owner's pictures 3 and 6, 2026-10-10):** server A read `192.168.21.93`, later
+`192.168.21.32`. A reading from the Playout is kept only if `hostIsOurs(host)` — the Playout's `casparHost`,
+resolved by `resolveCasparHost` against this CG Bridge's own Playout host, must be one of the configured CasparCG
+hosts (`bridge.ts`, the meters, the sources and the grants). On a CG Bridge that sits on the Playout's machine the
+Playout names `127.0.0.1` and nothing is rewritten, so A must read `127.0.0.1`; on a separate server it must read
+the Playout's address. The owner confirmed: A = `.32` left the meter empty, A = `127.0.0.1` brought it back. The
+check judged none of this: the console never sent `casparHost`, so the AMCP line probed the Playout's host, and no
+line reads the join.
+
+**Expected:** the console's check sends the configured server A host; an `After sign-in` line says whether it joins
+the Playout's, through `hostIsOurs`, naming both hosts and the cost when it does not; the CasparCG card then offers
+`Use the Playout's`, which writes `resolveCasparHost(casparHost, <this CG Bridge's Playout host>)` through
+`connections.set-config` (refused on air, as today). The contract's join is reported, never relaxed.
+
+**Acceptance:** both placements, one fixture each — a CG Bridge whose own Playout is `127.0.0.1` (A `127.0.0.1`
+joins, A `192.168.21.32` does not) and one whose Playout is `192.168.21.32` (the reverse); in each the line and `Use
+the Playout's` give the right answer and the meter returns.
+
+**Two more found on the way, both on the path the line needs (Part C):** a signed-in console asked the check by the
+address its own record held, and CG Bridge compares that with its own Playout's origin — on the owner's station the
+two differ, so `After sign-in` carried no line of CG Bridge's own (his picture: `After sign-in · 1 OK`). And the
+route answered CG Bridge's own lines only when NO CasparCG host was named, so a console that sent one lost them all.
+The console now always asks by the name CG Bridge advertises; the route asks two questions — is this the station's
+own Playout (its lines and the join), and may an unsigned caller ask this (the narrowing, byte for byte as before).
+
+## [~] B-328 — A stopped page wiped by the Playout's channel clear is taken by the resident route: the plates with no template behind them ⟨priority: high — on air, the owner's multi-frame showed its inputs over the Playout's playlist⟩ — FILED 2026-10-12 by `DONGLE-RECOVER-01` · `openspec/changes/dongle-recover/`
+
+**Repro / Actual (the owner's `.32`, Playout `2.9.8`, CG Bridge `0.11.4`, 2026-10-11):** the Playout's license
+dongle was pulled, and its own license rule cleared the whole channel (`CLEAR <channel>`, LICENSE §4), stopped pages
+included. A STOPPED row keeps its page resident (C-012) and the bridge records that (`#loaded`). `B-292`'s silence
+question watches only layers held ON AIR, so the wiped page stayed "resident". The next Play took the resident route
+onto an empty layer. `amcp.log` 06:37:24Z: `CG 1-59 UPDATE … << 403 CG UPDATE FAILED`, the plates'
+`PLAY 1-60` / `PLAY 1-61` `202`, then `CG 1-59 PLAY 0 << 202`, with no `CG ADD`. A second outage at ~06:44–06:51Z
+did the same to the stopped `1-98` (06:52:03Z), and the stale row then failed `CG STOP << 403` until it was cleared
+at 07:22:23Z.
+
+**Expected:** a take of a page the core no longer holds puts the page back. Read from CasparCG `v2.5.0-stable`: a
+`CG UPDATE` is answered `403` exactly when the layer's foreground holds no CG producer (`get_expected_cg_proxy`), so
+the resident route's first line already asks the question. On that answer from the primary, the bridge forgets the
+page and the same take goes on by the ADD route. It is not refused, nothing is sent on the bridge's own initiative,
+and a resident page keeps the resident route.
+
+**Acceptance:** `dongle-recover.integration.test.ts` — the owner's timeline on the AMCP mock with a second client in
+the Playout's place. A stopped single graphic, a stopped multi-frame row and a stopped row refused during the outage
+each add their page before their `CG PLAY` after the clear. The 06:37:24Z capture replays as `UPDATE (403)` → `ADD`
+(with the look) → plates → `PLAY`. Finding the layers gone sends nothing but `INFO`. No banner names a layer that was
+not on air. A page that was not wiped keeps one `CG UPDATE` + one `CG PLAY`. Back inside the window (no clear),
+nothing changes.
+
+## [~] B-329 — The session-refresh refusal is logged once a minute for hours ⟨priority: low — log only, but it buried every line that mattered⟩ — FILED 2026-10-12 by `DONGLE-RECOVER-01` A2b · `openspec/changes/dongle-recover/`
+
+**Repro / Actual:** the owner's stderr log of the 2026-10-10/11 process holds 408 identical lines `the Playout
+refused the session refresh before using the token (cg_not_licensed); the token is kept`, one per 60 s retry.
+
+**Expected:** the first refusal of a run is logged in full, the repeats are counted, and the run's end logs
+`… refused (code) N times, last at <ISO>`. The retry, its cadence and the kept token are unchanged.
+
+**Acceptance:** `bridge-session.test.ts` — six or more refusals produce one refusal line and, once the refresh takes,
+one count line. Control: every retry was presented with the same token.
+
+## [~] B-330 — The bridge's license lags the Playout's return by up to a minute ⟨priority: medium — CG refuses takes the Playout would allow⟩ — FILED 2026-10-12 by `DONGLE-RECOVER-01` H3 · `openspec/changes/dongle-recover/`
+
+**Repro / Actual:** a take is refused on the license the bridge HOLDS, which the reader re-read every 60 s. The
+Playout reads a returned dongle within ~10 s (LICENSE §4). Measured on the reader: 60 000 ms from the Playout
+answering `licensed` to the bridge holding it. Every take in that minute is refused with the old sentence.
+
+**Expected:** while the held license reads `false`, the reader reads at the 5 s floor. While licensed, the cadence is
+the minute, so a removal is still seen within the minute; changing that is the owner's call.
+
+**Acceptance:** `license-return-cadence.test.ts` — return seen within 5 s; one read a minute while licensed; removal
+within the minute (unchanged); never more than one read per 5 s while unlicensed.
+
+## [~] B-331 — After a Clear the row's PLAY stays green until the next command ⟨priority: high — the console says ON AIR over an empty layer⟩ — FILED 2026-10-12 by `CLEAR-STALE-AND-PR-CI-01` · no OpenSpec change (restores `runtime-ui`'s "Clear-All … idle", which every Clear already owed)
+
+**Repro / Actual (the owner, installed apps, 2026-10-12):** Clear on a playing row takes the graphic off air, but the
+row's PLAY stays green. It un-greens only on the next command: Clear on the same row again, or Clear/Stop on any other
+row. Stop does not do this.
+
+**Cause:** a 2.5.0 core answers `202 CLEAR OK` before it erases the layer (`AMCPCommandsImpl.cpp` `clear_command` only
+queues `stage->clear(index)`, an `executor_.begin_invoke`), so a frame composed before the erase reports the page over
+OSC after the reply. Since `b7844d2f` (`RELEASE-091-01` B2, 2026-09-29) the bridge notes its own `202` as `empty`
+(`noteCleared`). That note made the late `html` a CHANGE to the OSC change tracker, so it reached the reconciler. An
+`out` keeps the item's play evidence, so the late page derived ON AIR and was pushed. The layer then fell silent and
+nothing re-published the row (state is derived at read time but pushed only on events), until another command's push
+re-read every row. Stop is immune because its intent retracts play evidence, so the same page derives `loaded`. Present
+in every release from `v0.9.1`/`v0.10.0` on, `v0.11.4` and `v0.11.5` included.
+
+**Fix:** when an item's own CLEAR is acknowledged by the PRIMARY, the bridge tells the reconciler
+(`noteProducerCleared`). It records `empty` and ignores a page reported for that item until its next take, or a
+failover. No AMCP is added. Play evidence and Stop are untouched, and a backup-only acknowledgement changes nothing.
+
+**Acceptance:** `clear-pushes-off-air.integration.test.ts` on the mock in the core's own order
+(`clearRepliesBeforeErase`). Without another command, a Clear PUSHES the row idle (red before the fix: `on-air`). A
+second Clear is harmless: accepted, idle, no error. Clear on A leaves B pushed ON AIR, then Clear on B. A re-take goes
+back on air. Stop is still pushed READY with its producer kept. Unit: `reconciler-cleared-producer.test.ts`.
+
+**Open (not fixed here):**
+
+- A re-take after a Clear rests at the take's ack `playing`, not OSC's `on-air`, with or without this fix (measured by
+  ablation). The late frame leaves the change tracker at `html`, so the re-ADD's page is suppressed as a repeat.
+- The bank-scoped clear of a bound row (`B-125`, `#reconcileClearedSlot`) has the same late-frame exposure. That path is
+  reachable only through a race and is not tested.
+- The mock's default CLEAR still erases synchronously. Making the core's order the default would re-run every
+  integration test against it, which is a separate item.
+
+## [~] B-332 — A take onto a long-silent layer is questioned mid-flight: its re-ADD is lost, or the row is reset to idle ⟨priority: high — on air, a Play can put nothing on air while the row says playing⟩ — FILED 2026-10-12 by `CLEAR-STALE-AND-PR-CI-01` · no OpenSpec change (restores `B-328`'s ADD route and `B-292`'s scope)
+
+**Repro / Actual:** found as `dongle-recover.integration.test.ts` S1 failing under load: 3/12 copies at `aefc1773`,
+4/24 with `B-331` ablated, so it predates `B-331`. A stopped row whose page the Playout's `CLEAR <channel>` wiped is
+taken again. The take counts as "held on air" from its intent, and `B-292`'s silence question runs every 250 ms on
+any held layer silent for 1 s. If it fires before the take's `CG ADD` lands, `INFO` does not list the layer yet, so
+the row is reset as "cleared outside CG Control" and its resident page forgotten. Measured with the take's first reply
+held 700 ms: the `403` no longer re-routes to the ADD, and the take sends `CG UPDATE` (403), `INFO`, `CG PLAY` onto
+the EMPTY layer while the row reads `playing`. Under load the other outcome was seen: the page on air under a row
+reset to idle.
+
+**Expected:** a take still in flight is not a layer held on air. Its layer is silent until its own ADD lands. Once the
+take settles, the next question covers the layer as before.
+
+**Fix:** `#heldOnAirLayers` skips an item whose take is in flight (`status === 'playing' && pending`). No AMCP is added
+(it removes one `INFO`).
+
+**Acceptance:** `take-not-questioned-mid-flight.integration.test.ts` — with the take's first reply held 700 ms, the
+take re-ADDs, the page goes on air, the row reads on air, and no "cleared outside" banner names the layer (red before
+the fix: no `ADD`). Control: with no hold the same test was green before the fix. `dongle-recover` under the same load:
+0/24 after, against 7/36 before. Not shown: whether the owner's "READY with PLAY disabled" sighting
+(`DONGLE-RECOVER-01-v2`) was this race.

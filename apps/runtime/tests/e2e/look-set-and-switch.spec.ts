@@ -1,0 +1,399 @@
+import type { Page } from '@playwright/test';
+import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
+
+/**
+ * 🔴 `RUNTIME-REDESIGN-01` §4 — **LOOKS: the set is the template's own, and a switch keeps the
+ * source on its frame.**
+ *
+ * ── WHAT THIS PROVES ON THE OPERATOR'S SURFACE ────────────────────────────────
+ *
+ * 1. **A template with an IRREGULAR look set renders exactly its own looks.** The e2e-armed
+ *    library carries `e2e-looks-six`: SIX frames, FIVE looks of 1, 2, 3, 4 and 6 frames, word
+ *    ids (`pair` places frames 2 and 5). The picker must show those five, in authored order,
+ *    with each segment's thumbnail holding that look's own frames — and NO sixth segment. A
+ *    picker that invented a look per frame count would show "5 frames"; one that numbered
+ *    looks would show `1…5`; one that read the id would have nothing to read.
+ * 2. **The strip's geometry is what the token home declares**, read in Chromium — jsdom has no
+ *    layout (golden rule 12c), so the 38 px button, the 100 px floor and the 27 × 19 thumbnail
+ *    can only be measured here.
+ * 3. 🔴 **RED-FIRST: switch away and back — the same source is on the same frame.** Driven on
+ *    PVW, where the console draws the join (`R-049`): a per-look input is bound through the
+ *    Inspector, the placeholders' names AND boxes are read, the look is switched to one that
+ *    places none of those frames and back, and every placeholder reads the same name in the
+ *    same box. Red with the mock's switch dropping the row's per-look composition; green with
+ *    it kept. The wire half is `tools/caspar-bridge/tests/look-switch-preserves-bindings…`.
+ *
+ * ⚠ Against the offline MockRuntime, which shares the bridge's validators. Windows runs are
+ * NON-authoritative (golden rule 12a); the Linux `e2e` job is what discharges this.
+ */
+
+const SIX = 'e2e-looks-six';
+
+/** `PLAYOUT-SOURCES-01` — the station's sources are the seeded Playout's inputs. */
+test.use({ playoutSources: E2E_PLAYOUT });
+
+/** The offline mock retains no page, so PVW needs a stand-in to have a frame at all. */
+async function stubRetainedPage(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (
+      window as unknown as { cg: { templates: { page: () => Promise<unknown> } } }
+    ).cg.templates.page = () =>
+      Promise.resolve({
+        kind: 'page',
+        source: 'bridge',
+        html: `<!doctype html><html><head><style>
+           html,body{width:1920px;height:1080px;margin:0;overflow:hidden;background:transparent}
+           .cg-stage{position:absolute;inset:0}
+         </style></head><body><div class="cg-stage"></div>
+         <script>window.play=function(){};window.stop=function(){};
+                 window.update=function(){};window.next=function(){};</script>
+         </body></html>`,
+      });
+  });
+}
+
+/** The band, and the template default (level 2) for every frame of the six: the Playout's Studio 1. */
+async function seedSources(page: Page): Promise<void> {
+  await page.evaluate(async (templateId) => {
+    const w = window as unknown as {
+      cg: {
+        sources: {
+          setConfig: (req: unknown) => Promise<{ ok: boolean }>;
+          setAssignments: (req: unknown) => Promise<{ ok: boolean }>;
+        };
+      };
+    };
+    await w.cg.sources.setConfig({ layerRange: { start: 60, end: 79 } });
+    await w.cg.sources.setAssignments({
+      assignments: ['l-1', 'l-2', 'l-3', 'l-4', 'l-5', 'l-6'].map((plateId) => ({
+        templateId,
+        plateId,
+        sourceId: 'in-studio-1',
+      })),
+    });
+  }, SIX);
+}
+
+const px = (s: string): number => Number.parseFloat(s);
+const round = (n: number): number => Math.round(n);
+
+/*
+ * 🔴 `MONITORS-01` — THE STRIP IS FOLDED AWAY WHEN THE CONSOLE BOOTS, and this file's
+ * subject lives inside it, so it is opened first.
+ *
+ * The default moved from SHOWN to HIDDEN because neither box was confidence monitoring:
+ * PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default), and PVW is a LOCAL browser
+ * render of the rehearsing rows (`R-022` — nothing is ever sent to CasparCG). None of
+ * that changes what this file proves, so the state each test was written against is
+ * established rather than its assertions being rewritten.
+ *
+ * `app.showMonitors()` asserts the strip is actually up before returning — see the
+ * fixture. Boot state itself is proved in `shell-chrome.spec.ts` §B4.
+ */
+test.beforeEach(async ({ app }) => {
+  await app.showMonitors();
+});
+test('§4 — a six-frame template with five irregular looks renders exactly its own five', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  const layer = await app.loadTemplate(SIX);
+  const picker = app.layerRow(layer).locator('[data-look-picker]');
+  await expect(picker).toBeVisible();
+
+  // THE SET — the template's five, in authored order, and nothing else.
+  const segments = picker.locator('[data-look-id]');
+  await expect(segments).toHaveCount(5);
+  expect(
+    await segments.evaluateAll((els) => els.map((e) => e.getAttribute('data-look-id'))),
+  ).toEqual(['solo', 'pair', 'trio', 'quad', 'panel']);
+  // THE NAMES are the authored names — not ordinals, not frame counts.
+  await expect(segments.nth(1)).toHaveText('Pair');
+  // THE FRAME COUNT is each look's OWN: 1, 2, 3, 4, 6 — six frames, five looks, no five-frame
+  // look. The thumbnail draws exactly that many cells.
+  const frames = await segments.evaluateAll((els) =>
+    els.map((e) => ({
+      declared: e.getAttribute('data-look-frames'),
+      drawn: e.querySelectorAll('[data-look-frame]').length,
+      cells: [...e.querySelectorAll('[data-look-frame]')].map((c) =>
+        c.getAttribute('data-look-frame'),
+      ),
+    })),
+  );
+  expect(frames.map((f) => f.declared)).toEqual(['1', '2', '3', '4', '6']);
+  expect(frames.map((f) => f.drawn)).toEqual([1, 2, 3, 4, 6]);
+  // …and `pair` really is frames 2 and 5 — membership, not a count.
+  expect(frames[1]?.cells).toEqual(['l-2', 'l-5']);
+  expect(frames[3]?.cells).toEqual(['l-1', 'l-2', 'l-4', 'l-6']);
+  // No look was invented from the frame count: nothing declares five frames.
+  await expect(picker.locator('[data-look-frames="5"]')).toHaveCount(0);
+  // The tooltip says the frame count in the operator's words and carries the id.
+  await expect(segments.nth(1)).toHaveAttribute('title', '2 frames · pair');
+  await expect(segments.nth(0)).toHaveAttribute('title', '1 frame · solo');
+  // The AUTHORED default is what a fresh row marks — `trio`, the third, not the first.
+  await expect(segments.nth(2)).toHaveAttribute('aria-pressed', 'true');
+  await expect(picker.locator('[aria-pressed="true"]')).toHaveCount(1);
+});
+
+test('§4 — the look strip is exactly what the token home declares, measured in Chromium', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  const tokens = await page.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    const read = (n: string): string => cs.getPropertyValue(n).trim();
+    return {
+      btnH: read('--r-look-btn-h'),
+      btnMinW: read('--r-look-btn-min-w'),
+      btnPad: read('--r-look-btn-pad'),
+      btnRadius: read('--r-look-btn-radius'),
+      btnText: read('--r-look-btn-text'),
+      btnGap: read('--r-look-btn-gap'),
+      stripGap: read('--r-look-strip-gap'),
+      ctxGap: read('--r-look-ctx-gap'),
+      ctxMinW: read('--r-look-ctx-min-w'),
+      thumbW: read('--r-look-thumb-w'),
+      thumbH: read('--r-look-thumb-h'),
+    };
+  });
+  // Non-empty FIRST, then identity (`PROMPT.md` §11).
+  for (const [name, value] of Object.entries(tokens)) {
+    expect(value, `${name} is declared`).not.toBe('');
+  }
+
+  const row = app.fixedRow(99); // the seeded look-bearing row
+  await row.scrollIntoViewIfNeeded();
+  const strip = await row.locator('[data-look-picker]').evaluate((line) => {
+    const label = line.querySelector<HTMLElement>('[title]');
+    const strip = line.querySelector<HTMLElement>('[data-look-strip]');
+    const btns = [...line.querySelectorAll<HTMLElement>('[data-look-id]')].map((b) => {
+      const cs = getComputedStyle(b);
+      const r = b.getBoundingClientRect();
+      const t = b.querySelector<HTMLElement>('[data-look-thumb]')?.getBoundingClientRect();
+      return {
+        h: r.height,
+        w: r.width,
+        minW: cs.minWidth,
+        padding: cs.padding,
+        radius: cs.borderRadius,
+        fontSize: cs.fontSize,
+        gap: cs.columnGap,
+        thumbW: t?.width ?? 0,
+        thumbH: t?.height ?? 0,
+      };
+    });
+    return {
+      lineGap: getComputedStyle(line).columnGap,
+      labelMinW: label === null ? '' : getComputedStyle(label).minWidth,
+      stripGap: strip === null ? '' : getComputedStyle(strip).columnGap,
+      btns,
+    };
+  });
+
+  expect(strip.btns.length, 'the seeded row has three looks').toBe(3);
+  for (const [i, b] of strip.btns.entries()) {
+    expect(round(b.h), `look ${String(i)} height`).toBe(px(tokens.btnH));
+    expect(b.w, `look ${String(i)} is at least the floor`).toBeGreaterThanOrEqual(
+      px(tokens.btnMinW) - 0.5,
+    );
+    expect(b.minW).toBe(tokens.btnMinW);
+    expect(b.padding).toBe(tokens.btnPad);
+    expect(b.radius).toBe(tokens.btnRadius);
+    expect(b.fontSize).toBe(tokens.btnText);
+    expect(b.gap).toBe(tokens.btnGap);
+    expect(round(b.thumbW), `look ${String(i)} thumbnail width`).toBe(px(tokens.thumbW));
+    expect(round(b.thumbH), `look ${String(i)} thumbnail height`).toBe(px(tokens.thumbH));
+  }
+  expect(strip.stripGap).toBe(tokens.stripGap);
+  expect(strip.lineGap).toBe(tokens.ctxGap);
+  expect(strip.labelMinW).toBe(tokens.ctxMinW);
+});
+
+const marker = (page: Page, plateId: string) => page.locator(`[data-live-plate="${plateId}"]`);
+
+/** Name and box of every placeholder PVW draws, keyed by plate. */
+async function placeholders(
+  page: Page,
+): Promise<Record<string, { name: string; box: { x: number; y: number; w: number; h: number } }>> {
+  return page.evaluate(() =>
+    Object.fromEntries(
+      [...document.querySelectorAll<HTMLElement>('[data-live-plate]')].map((el) => {
+        const r = el.getBoundingClientRect();
+        return [
+          el.getAttribute('data-live-plate') ?? '',
+          {
+            name: el.textContent ?? '',
+            box: {
+              x: Math.round(r.x),
+              y: Math.round(r.y),
+              w: Math.round(r.width),
+              h: Math.round(r.height),
+            },
+          },
+        ];
+      }),
+    ),
+  );
+}
+
+test('🔴 §4 — RED-FIRST: switch away and back, and the same source is on the same frame', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1600, height: 900 });
+
+  await seedSources(page);
+  await stubRetainedPage(page);
+  const layer = await app.loadTemplate(SIX);
+  const row = app.layerRow(layer);
+  await row.getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await app.selectLayerRow(layer);
+
+  // TRIO is the default: frames 1, 3 and 5 on the template default.
+  await expect(marker(page, 'l-3')).toContainText('Studio 1');
+
+  // The row's OWN composition for this look — frame 3 shows Studio 3 in TRIO. What a switch
+  // that re-derived the frames from the template would lose.
+  const looks = app.inspector.locator('[aria-label="Look inputs"]');
+  await expect(looks).toBeVisible();
+  await app.chooseSource(looks.locator('[data-look-binding="trio:l-3"]'), { input: 'Studio 3' });
+  await app.applyEdits();
+  await expect(marker(page, 'l-3')).toContainText('Studio 3');
+
+  const before = await placeholders(page);
+  // Non-empty FIRST, then identity: three frames, each named and boxed.
+  expect(Object.keys(before).sort()).toEqual(['l-1', 'l-3', 'l-5']);
+  for (const p of Object.values(before)) {
+    expect(p.box.w).toBeGreaterThan(0);
+    expect(p.box.h).toBeGreaterThan(0);
+  }
+  expect(before['l-3']?.name).toContain('Studio 3');
+  expect(before['l-1']?.name).toContain('Studio 1');
+
+  // AWAY — to SOLO, which places only frame 1 (full raster).
+  const seg = (id: string) => row.locator(`[data-look-id="${id}"]`);
+  await seg('solo').click();
+  await expect(seg('solo')).toHaveAttribute('aria-pressed', 'true');
+  // POSITIVE CONTROL: the switch really moved the picture — frames 3 and 5 are gone and frame
+  // 1 is a different box.
+  await expect(marker(page, 'l-3')).toHaveCount(0);
+  await expect(marker(page, 'l-5')).toHaveCount(0);
+  await expect
+    .poll(async () => (await placeholders(page))['l-1']?.box.w)
+    .not.toBe(before['l-1']?.box.w);
+
+  // …AND BACK.
+  await seg('trio').click();
+  await expect(seg('trio')).toHaveAttribute('aria-pressed', 'true');
+  await expect(marker(page, 'l-3')).toContainText('Studio 3');
+
+  // 🔴 THE PROPERTY — every frame TRIO places carries the same source in the same box,
+  // including the one whose source is the row's own per-look binding.
+  await expect.poll(async () => placeholders(page)).toEqual(before);
+});
+
+/**
+ * 🔴 `CONSOLE-LOOK-06` DELTA 11 — THE SELECTED LOOK ON AN ON-AIR ROW.
+ *
+ * WHICH segment carries the mark is pinned without a browser in `lookPicker.dom.test.ts`. Two
+ * things only a real engine can answer are here, and the first is the more interesting:
+ *
+ *   1. 🔴 THE MARK IS ABSENT IN TEST MODE, EVEN ON A ROW CLAIMING AIR — because it keys on the
+ *      row's own rendered TONE, and `rowState` maps a simulated air claim to `attention`, never
+ *      `onair` (`R-006`: "the mock may simulate, but it may not claim air that does not
+ *      exist"). Passing `isOnAir(item)` instead would have painted the sacred green over a
+ *      claim the console is forbidden to make, and no unit test would have noticed.
+ *   2. The rule PAINTS when the marker is present, and paints green — `color-mix` is a function
+ *      jsdom does not resolve the way Chrome does.
+ */
+test('DELTA 11 — no green for a SIMULATED air claim, and the air colour when the mark is real', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1400, height: 900 });
+  const row = app.fixedRow(99);
+  const selected = row.locator('[data-look-strip] [aria-pressed="true"]');
+  await expect(selected).toHaveCount(1);
+
+  /*
+    The seeded row 99 CLAIMS AIR — its accessible name reads `SIM ON AIR` — and that is exactly
+    the case that must NOT go green. This is the assertion that would have caught the wrong
+    predicate.
+  */
+  await expect(row).toHaveAttribute('aria-label', /SIM ON AIR/);
+  await expect(
+    row.locator('[data-look-onair]'),
+    'a simulated air claim must not wear the air colour',
+  ).toHaveCount(0);
+
+  await page.mouse.move(5, 880); // off every control: a hover reading is a different rule
+  const blue = await selected.evaluate((el) => getComputedStyle(el).backgroundColor);
+
+  /*
+    …and the rule itself PAINTS. The marker is put on the real segment in the real document and
+    the browser is asked what it resolves — a measurement of the rendered rule rather than a
+    reading of the stylesheet, and the only way to see a `color-mix` ground without a plant.
+
+    🔴 POLLED, NOT SAMPLED, and this is the third time in this programme that mattered. The
+    segment TRANSITIONS its background, and a transition interpolates in OKLAB — so reading in
+    the same tick as the attribute returns the START colour, serialised as
+    `oklab(0.42402 -0.0312399 -0.0653808)`, which is the blue wearing an unfamiliar notation.
+    The first cut of this assertion read exactly that and concluded the rule had not applied.
+    Same family as the guides toggle read under the pointer and the fader ring read mid-fade:
+    **a computed colour is only a value once it has stopped moving.**
+  */
+  const green = await selected.evaluate(async (el) => {
+    el.setAttribute('data-look-onair', '');
+    await new Promise((r) => {
+      setTimeout(r, 400);
+    });
+    const bg = getComputedStyle(el).backgroundColor;
+    el.removeAttribute('data-look-onair');
+    return bg;
+  });
+  expect(green, 'the on-air rule did not repaint the segment').not.toBe(blue);
+
+  /*
+    ⚠ AND THE NOTATION IS NOT FIXED EITHER — a settled `color-mix` serialises as
+    `color(srgb …)`, a moving one as `oklab(…)`. So the colour is painted onto a 1 × 1 canvas
+    and the PIXEL is read: whatever the notation, that is the sRGB the operator's screen gets.
+  */
+  const px = async (colour: string): Promise<[number, number, number]> =>
+    page.evaluate((c) => {
+      const cv = document.createElement('canvas');
+      cv.width = 1;
+      cv.height = 1;
+      const ctx = cv.getContext('2d');
+      if (ctx === null) throw new Error('no 2d context');
+      ctx.fillStyle = c;
+      ctx.fillRect(0, 0, 1, 1);
+      const d = ctx.getImageData(0, 0, 1, 1).data;
+      return [d[0] ?? 0, d[1] ?? 0, d[2] ?? 0];
+    }, colour);
+
+  const [gr, gg, gb] = await px(green);
+  const [br, bg2, bb] = await px(blue);
+  /*
+    By CHANNEL against the colour it REPLACES, never by hex: the ground is `color-mix`ed from
+    `--r-onair`, the owner's held value, and re-spelling it here would be a second home for it
+    (§4 — identity by TOKEN, never by hex).
+  */
+  // The new ground is GREEN-dominant…
+  expect(gg, `the on-air ground is not green-dominant: ${green}`).toBeGreaterThan(gr);
+  expect(gg, `the on-air ground is not green-dominant: ${green}`).toBeGreaterThan(gb);
+  /*
+    …and the one it replaces is BLUE-dominant, which is the distinction that matters and the
+    one a cruder metric missed: the first cut compared `g - r` on both and they tied at 42
+    exactly, so a real change read as no change. Two grounds, two different dominant channels
+    is the claim — "the selected look stops being blue and becomes green".
+  */
+  expect(bb, `the ground it replaces is not blue-dominant: ${blue}`).toBeGreaterThan(bg2);
+  expect(bb, `the ground it replaces is not blue-dominant: ${blue}`).toBeGreaterThan(br);
+
+  // …and the probe left nothing behind.
+  await expect(row.locator('[data-look-onair]')).toHaveCount(0);
+});

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { LottiePlayerHandle } from '@cg/lottie-bridge';
 import { LottieDriver, type LottieDriverOptions } from '../src/lottie-driver.js';
 
@@ -70,18 +70,28 @@ function makeDriver(over: Partial<LottieDriverOptions> = {}): {
 } {
   const handle = mockHandle();
   const clock = makeClock();
-  const driver = new LottieDriver({
+  const resolved = {
     handle,
     fr: 100, // 100 fps → 1 frame every 10ms (clean math)
     ip: 0,
     op: 100,
     speed: 1,
     introEnd: 5,
+    // A DEGENERATE outro by default (`outroStart === op`), which is what a marker-less
+    // clip gets. An earlier revision omitted `outroStart` entirely and every outro
+    // computation ran on `undefined`.
+    outroStart: 100,
     idleIn: 5,
     idleOut: 10,
-    holdBehavior: 'freeze',
+    holdBehavior: 'freeze' as const,
     clock,
     ...over,
+  };
+  // Mirrors the runtime's own derivation so a test never has to remember to keep the two
+  // in step; pass `hasOutro` explicitly to assert on a mismatch deliberately.
+  const driver = new LottieDriver({
+    ...resolved,
+    hasOutro: over.hasOutro ?? resolved.outroStart < resolved.op,
   });
   return { driver, handle, clock };
 }
@@ -209,5 +219,232 @@ describe('LottieDriver — driven-frame render', () => {
     const count = handle.frames.length;
     clock.advance(50);
     expect(handle.frames).toHaveLength(count); // no paint after destroy
+  });
+});
+
+/**
+ * D-135 — the PLAYHEAD path. `positionAt()` paints the frame the Designer's playhead
+ * asks for, through the SAME mapping the driver's own clock uses.
+ *
+ * The singularity IS the requirement, not an implementation detail that happens to hold:
+ * D-135's acceptance is that scrub and play agree, and the cheapest way to guarantee that
+ * is for there to be nothing to reconcile. A forked implementation could satisfy every
+ * frame assertion below and still be wrong, so the first test asserts the MECHANISM.
+ */
+describe('LottieDriver — positionAt (the Designer playhead)', () => {
+  /** The one mapping both paths must route through. */
+  const mapping = (): unknown =>
+    (LottieDriver.prototype as unknown as Record<string, unknown>)['clipPositionAt'];
+
+  it('the clock path and the playhead path resolve the frame through ONE function', () => {
+    const spy = vi.spyOn(
+      LottieDriver.prototype as unknown as { clipPositionAt: (...a: unknown[]) => unknown },
+      'clipPositionAt',
+    );
+    expect(mapping()).toBeTypeOf('function');
+    try {
+      const a = makeDriver({ introEnd: 100 });
+      a.driver.reset();
+      a.driver.start(); // the driver's OWN clock
+      a.clock.advance(10);
+      const viaClock = spy.mock.calls.length;
+      expect(viaClock).toBeGreaterThan(0);
+
+      const b = makeDriver({ introEnd: 100 });
+      b.driver.positionAt(10, null); // the PLAYHEAD
+      expect(spy.mock.calls.length).toBeGreaterThan(viaClock);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('paints exactly what the driver’s own clock paints, across intro, hold and outro', () => {
+    // A sweep rather than a spot check: the two paths must agree at every phase and at
+    // every boundary, which is what makes a later fork fail loudly instead of drifting.
+    // Elapsed 0 is IN the sweep on purpose: the in-point is not a special case, and the
+    // two paths must agree there too. An earlier revision excluded it to accommodate a
+    // poster exception at the boundary — and excluding the boundary from the sweep is how
+    // the boundary broke unobserved.
+    for (const elapsed of [0, 10, 25, 49, 50, 51, 120, 1000]) {
+      const clocked = makeDriver({ introEnd: 5, holdBehavior: 'freeze' });
+      clocked.driver.reset();
+      clocked.driver.start();
+      clocked.clock.advance(elapsed);
+
+      const positioned = makeDriver({ introEnd: 5, holdBehavior: 'freeze' });
+      positioned.driver.positionAt(elapsed, null);
+      expect(last(positioned.handle)).toBe(last(clocked.handle));
+    }
+
+    // …and the OUTRO leg, which this test's NAME has always claimed and which it did not
+    // cover until 2026-08-13. The helper never passed `outroStart`, so every outro
+    // computation in this file ran on `undefined`; the audit (design §9A.1) found no
+    // assertion had been made vacuous by it, but a sweep that names a phase should sweep it.
+    for (const elapsed of [0, 10, 49, 50, 200]) {
+      const clocked = makeDriver({ introEnd: 5, outroStart: 50, op: 60 });
+      clocked.driver.reset();
+      void clocked.driver.playOutro();
+      clocked.clock.advance(elapsed);
+
+      const positioned = makeDriver({ introEnd: 5, outroStart: 50, op: 60 });
+      positioned.driver.positionAt(0, elapsed);
+      expect(last(positioned.handle)).toBe(last(clocked.handle));
+    }
+  });
+  it('🔴 zero elapsed paints `ip`, NEVER the poster — the boundary is not a special case', () => {
+    // The whole defect, at unit level. `posterFrame` is deliberately far from `ip` so the
+    // two can never be confused; an earlier revision returned the poster here, which made
+    // the composition's in-point the one frame on the canvas that lied about the clip.
+    const { driver, handle } = makeDriver({ ip: 3, introEnd: 50, posterFrame: 30 });
+    driver.positionAt(0, null);
+    expect(last(handle)).toBe(3);
+    // Before the run's start, still `ip` — clamped, never extrapolated back, never the
+    // poster.
+    driver.positionAt(-500, null);
+    expect(last(handle)).toBe(3);
+    // And one frame in, unchanged from what it always did.
+    driver.positionAt(10, null);
+    expect(last(handle)).toBe(4);
+  });
+
+  it('positions the OUT phase from the out-point even at zero elapsed', () => {
+    const { driver, handle } = makeDriver({ ip: 0, introEnd: 5, outroStart: 50, op: 60 });
+    driver.positionAt(0, 0);
+    expect(last(handle)).toBe(50);
+  });
+  it('it never starts a clock, and a LIVE driver is not fought', () => {
+    const { driver, handle, clock } = makeDriver({ introEnd: 100 });
+    driver.positionAt(10, null);
+    expect(last(handle)).toBe(1);
+    // No rAF was armed: the playhead is the only clock on this path.
+    expect(clock.pending).toHaveLength(0);
+
+    // Once the driver runs its own lifecycle it OWNS the frame — a stray tick is a no-op.
+    driver.reset();
+    driver.start();
+    clock.advance(30);
+    const owned = last(handle);
+    const count = handle.frames.length;
+    driver.positionAt(0, null);
+    driver.positionAt(900, null);
+    expect(handle.frames).toHaveLength(count);
+    expect(last(handle)).toBe(owned);
+  });
+
+  it('a frozen hold is owned too — the playhead does not yank it out of the hold', () => {
+    const { driver, handle, clock } = makeDriver({ introEnd: 5 });
+    driver.reset();
+    driver.start();
+    clock.advance(100); // past introEnd → settled freeze at 5
+    expect(last(handle)).toBe(5);
+    const count = handle.frames.length;
+    driver.positionAt(0, null);
+    expect(handle.frames).toHaveLength(count);
+  });
+
+  it('a destroyed driver paints nothing', () => {
+    const { driver, handle } = makeDriver();
+    driver.destroy();
+    const count = handle.frames.length;
+    driver.positionAt(10, null);
+    expect(handle.frames).toHaveLength(count);
+  });
+});
+
+describe('LottieDriver — the follow window: an intro at an OFFSET, an outro with a BOUNDED end', () => {
+  // media-phases-follow-composition — the window [introStart → introEnd] / hold /
+  // [outroStart → outroEnd] through the ONE mapping (`clipPositionAt`), never beside it.
+  // fr 100 ⇒ 1 animation frame every 10 ms. The follow shape: introEnd === outroStart === H.
+  const FOLLOW = {
+    ip: 0,
+    op: 250,
+    introStart: 100,
+    introEnd: 150,
+    outroStart: 150,
+    outroEnd: 175,
+    hasOutro: true,
+    idleIn: 150,
+    idleOut: 150, // absent authored idle ⇒ zero span ⇒ freeze at H
+  } as const;
+
+  it('reset() parks at the WINDOW start, not the clip in-point', () => {
+    const { driver, handle } = makeDriver(FOLLOW);
+    driver.reset();
+    expect(last(handle)).toBe(100);
+  });
+
+  it('the intro plays [introStart → introEnd] and freezes at H — never visiting the head', () => {
+    const { driver, handle, clock } = makeDriver(FOLLOW);
+    driver.reset();
+    driver.start();
+    expect(last(handle)).toBe(100);
+    clock.advance(250); // 25 frames in
+    expect(last(handle)).toBe(125);
+    clock.advance(300); // past the 500 ms window span → freeze at H
+    expect(last(handle)).toBe(150);
+    expect(Math.min(...handle.frames)).toBe(100); // the skipped head is never painted
+  });
+
+  it('a freeze at H resolves whenComplete (the hold IS the completion point)', async () => {
+    const { driver, clock } = makeDriver(FOLLOW);
+    driver.reset();
+    driver.start();
+    clock.advance(600);
+    await expect(driver.whenComplete()).resolves.toBeUndefined();
+  });
+
+  it('the outro plays [outroStart → outroEnd] once and resolves AT outroEnd, never at op', async () => {
+    const { driver, handle, clock } = makeDriver(FOLLOW);
+    driver.reset();
+    driver.start();
+    clock.advance(600); // settle the hold
+    const done = driver.playOutro();
+    expect(last(handle)).toBe(150); // outro paints its start synchronously
+    clock.advance(200);
+    expect(last(handle)).toBe(170);
+    clock.advance(100); // past the 250 ms outro span → clamp to outroEnd
+    expect(last(handle)).toBe(175);
+    await expect(done).resolves.toBeUndefined();
+    expect(Math.max(...handle.frames)).toBe(175); // op (250) is never asked for
+  });
+
+  it('positionAt maps the playhead through the SAME window — scrub and play cannot disagree', () => {
+    const { driver, handle } = makeDriver(FOLLOW);
+    driver.positionAt(0, null);
+    expect(last(handle)).toBe(100);
+    driver.positionAt(250, null);
+    expect(last(handle)).toBe(125);
+    driver.positionAt(2000, null); // deep in the hold
+    expect(last(handle)).toBe(150);
+    driver.positionAt(2000, 200); // 200 ms into the OUT segment
+    expect(last(handle)).toBe(170);
+    driver.positionAt(2000, 9000); // far past the OUT segment → clamp to outroEnd
+    expect(last(handle)).toBe(175);
+  });
+
+  it('an authored idle range composes with H — the window is unchanged, the hold loops', () => {
+    const { driver, handle, clock } = makeDriver({
+      ...FOLLOW,
+      holdBehavior: 'idle-loop',
+      idleIn: 140,
+      idleOut: 160,
+    });
+    driver.reset();
+    driver.start();
+    clock.advance(500); // exactly the intro span (50 frames) → the hold begins
+    clock.advance(100); // 10 idle frames in
+    expect(last(handle)).toBe(150); // 140 + (60 % 20)... asserted precisely below
+    const inIdle = handle.frames.filter((f) => f >= 140 && f < 160);
+    expect(inIdle.length).toBeGreaterThan(0);
+  });
+
+  it('absent introStart / outroEnd keep the shipped defaults (ip / op) — nothing moved for old scenes', () => {
+    const { driver, handle, clock } = makeDriver({ introEnd: 5, outroStart: 60, op: 100 });
+    driver.reset();
+    expect(last(handle)).toBe(0); // ip
+    const done = driver.playOutro();
+    clock.advance(1000); // 100 frames ≫ [60 → 100]
+    expect(last(handle)).toBe(100); // clamps to op, as always
+    return done;
   });
 });

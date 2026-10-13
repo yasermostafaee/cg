@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * REGRESSION canary (CI failure of reconnect-reconciliation :133/:243) —
@@ -54,7 +54,7 @@ it(`the orphan survives a bridge death racing the template fetch — ${String(IT
       strategy: 'mirror-sync',
       autoFailoverEnabled: true,
     };
-    const r = new CasparRuntime(config);
+    const r = new CasparRuntime(config, {}, { layerPolicy: TEST_LAYER_POLICY });
     runtime = r;
     r.start();
     await r.startServing();

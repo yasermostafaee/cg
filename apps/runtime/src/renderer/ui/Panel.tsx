@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Maximize2, Minimize2, X } from 'lucide-react';
-import { colors } from '../theme.js';
+import { colors, cssVars } from '../theme.js';
 import { Button } from './Button.js';
 import { Icon } from './Icon.js';
 import { useShellLayoutContext } from '../hooks/shellLayoutContext.js';
@@ -41,7 +41,21 @@ import type { PanelId } from '../hooks/useShellLayout.js';
 const styles = {
   panel: {
     background: colors.panel,
-    borderRadius: '0.25rem',
+    /*
+     * 🔴 `MONITORS-01` — audit rows 23 and 38, adopted as ONE value because this app has
+     * ONE panel primitive.
+     *
+     * It was `0.25rem` (4 px, the scale's `sm`). Measured in Chromium at 1280 × 800 the
+     * reference draws `.inspector` at **6 px** and `.monitor` at **5 px** — one pixel
+     * apart, and not a system: the drawing simply does not give a panel corner one value.
+     * `--r-radius-md` is 6, so the Inspector's is taken and the monitor's rides it. Giving
+     * the monitor its own 5 would spend a second token copying an inconsistency, against
+     * this programme's own "one bar for four panels" rule (`design.md` §12.3).
+     *
+     * ⚠ Row 38's OTHER half — the monitor's `#101722` ground — is NOT taken; see
+     * `design.md` §19.3 for why (it is not among the reference's own declared colours).
+     */
+    borderRadius: cssVars['--r-radius-md'],
     border: `1px solid ${colors.border}`,
     display: 'flex',
     flexDirection: 'column' as const,
@@ -58,8 +72,32 @@ interface Props {
   title: string;
   /** Override the region's accessible name when the visible title is decorative. */
   ariaLabel?: string;
+  /**
+   * 🔴 `AUDIT-CLOSE-01` B3 — SOMETHING OTHER THAN A LABEL AT THE HEAD OF THE BAR.
+   *
+   * The reference draws the layers card as ONE 40 px line carrying the TABS and the bulk
+   * verbs; the app spent a 53 px bar saying `LAYERS` and a second 40 px strip on the tabs
+   * below it, and the audit measured the pair. When a panel's tabs already name it, the word
+   * is a third statement of the same thing and the line it costs is taken from the row list.
+   *
+   * So a panel may put its own node where the title goes. `title` STILL COMES IN and is still
+   * the region's accessible name by default — the label is relocated, not deleted, which is
+   * the same distinction golden rule 11 draws about ids. A panel that passes nothing here is
+   * unchanged.
+   */
+  heading?: ReactNode;
   /** Panel-specific header controls, rendered BEFORE the shared fullscreen one. */
   actions?: ReactNode;
+  /**
+   * 🔴 `CONSOLE-LOOK-06` §2 — a COMPACT head: the reference's 32 px monitor bar.
+   *
+   * Opted into by the panel, never sniffed from `id`: `--r-panel-bar-h`'s 52 px is a FLOOR
+   * that exists because the LAYERS bar carries bulk verbs with a 36 px minimum, and lowering
+   * it for everyone would take that argument away. The two monitor panes carry an 11 px label
+   * and one read-out, so they ask for the smaller box explicitly and every other panel is
+   * untouched.
+   */
+  compactHead?: boolean;
   children: ReactNode;
   /** Extra style on the panel root (how it sizes inside its parent's layout). */
   style?: CSSProperties;
@@ -84,19 +122,21 @@ export function Panel({
   id,
   title,
   ariaLabel,
+  heading,
   actions,
   children,
   style,
   as: Root = 'section',
   onClose,
+  compactHead = false,
 }: Props): JSX.Element {
   const layout = useShellLayoutContext();
   const focused = layout.focus === id;
 
   return (
     <Root aria-label={ariaLabel ?? title} style={{ ...styles.panel, ...style }}>
-      <header className="cg-panel-header">
-        <span className="cg-panel-title">{title}</span>
+      <header className={`cg-panel-header${compactHead ? ' cg-panel-header--monitor' : ''}`}>
+        {heading ?? <span className="cg-panel-title">{title}</span>}
         <div className="cg-panel-actions">
           {actions}
           {/*

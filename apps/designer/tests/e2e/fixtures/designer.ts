@@ -209,9 +209,21 @@ export class DesignerApp {
     await this.canvas.click({ position: pos });
   }
 
-  /** D-137 — the Live Source Inspector's source-id input. */
+  /**
+   * D-137 — the Live Source Inspector's source-id input.
+   *
+   * 🔴 **`combobox`, NOT `textbox`, since `B-188`, and the role change is not cosmetic.** The
+   * field now carries a `list` attribute (a `<datalist>` offering the source ids the template
+   * already uses), and per HTML-AAM an `<input type="text">` WITH a `list` has the implicit role
+   * **combobox**. Nothing about the markup looks different; twelve specs went red at once on
+   * `element(s) not found`, which is exactly the failure a Windows E2E run exists to catch and
+   * `pnpm gate` cannot.
+   *
+   * ⚠ `exact: true` is load-bearing. Playwright's `name` match is a case-insensitive
+   * SUBSTRING by default, so an un-exact `{ name: 'source' }` elsewhere now matches this field too.
+   */
   get liveSourceIdInput(): Locator {
-    return this.inspector.getByRole('textbox', { name: 'Live Source source id' });
+    return this.inspector.getByRole('combobox', { name: 'Live Source source id', exact: true });
   }
 
   /**
@@ -239,6 +251,16 @@ export class DesignerApp {
   /** D-147 — choose an aspect preset by its option VALUE (`16:9`, `custom`, …). */
   async setLiveSourceAspect(value: string): Promise<void> {
     await this.liveSourceAspectSelect.selectOption(value);
+  }
+
+  /** `C-028` — the Live Source Inspector's FIT MODE picker (`contain` / `cover`). */
+  get liveSourceFitModeSelect(): Locator {
+    return this.inspector.getByRole('combobox', { name: 'fit' });
+  }
+
+  /** `C-028` — choose a fit mode by its option VALUE (`contain` / `cover`). */
+  async setLiveSourceFitMode(value: 'contain' | 'cover'): Promise<void> {
+    await this.liveSourceFitModeSelect.selectOption(value);
   }
 
   /** D-028 — add a ticker band by placing the Ticker tool (auto-selected). */
@@ -821,21 +843,18 @@ export class DesignerApp {
   /**
    * Set a preview scope's session-only timing. `scope` is the group title shown in
    * the modal ("Timing (session)" for the root, "Timing — <instance>" for a child).
+   *
+   * ADR 0009 — there is no `mode` option and there cannot be one: the playout mode is
+   * designer-owned and the preview shows it as a fact. Set it with `setPlayoutTiming`
+   * (the Inspector) BEFORE opening the preview, which is what a designer actually does.
    */
   async setPreviewTiming(
     scope: string,
     opts: {
-      mode?: 'manual' | 'auto-out' | 'loop-cycle' | 'content-driven';
       holdMs?: number;
       repeat?: number;
     },
   ): Promise<void> {
-    if (opts.mode !== undefined) {
-      await this.previewDialog
-        .getByRole('combobox', { name: 'Preview playout mode' })
-        .first()
-        .selectOption(opts.mode);
-    }
     if (opts.holdMs !== undefined) {
       await this.previewDialog
         .getByRole('spinbutton', { name: 'Preview hold duration in milliseconds' })

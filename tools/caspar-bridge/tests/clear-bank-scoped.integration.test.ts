@@ -7,6 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { FixedLayersClearLayerChannel, type ConnectionConfig } from '@cg/shared-ipc';
 import { createBridge, type BridgeHandle } from '../src/bridge.js';
 import { HEALTH_MS } from './support/harness.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * THE BANK-SCOPED CLEAR AND ITS GUARD.
@@ -31,12 +32,12 @@ let mock: MockHandle | null = null;
 let bridge: BridgeHandle | null = null;
 let tracePath: string | null = null;
 
-/** Bank 70–79 on channel 1; reservation 50–59. Deliberately DISJOINT and NOT adjacent,
+/** Bank 70–79 on channel 1; reservation 30–39. Deliberately DISJOINT and NOT adjacent,
  *  so "one below the floor" (69) is neither reserved nor in the bank — it isolates the
  *  membership half of the guard from the reservation half. */
 const BANK_START = 70;
 const BANK_COUNT = 10;
-const RESERVED = { ranges: [{ from: 50, to: 59 }] };
+const RESERVED = { ranges: [{ from: 30, to: 39 }] };
 
 afterEach(async () => {
   await bridge?.close();
@@ -70,13 +71,7 @@ function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
 async function recvLines(m: MockHandle, file: string): Promise<string[]> {
   await m.traceFlush();
   if (!fs.existsSync(file)) return [];
-  return fs
-    .readFileSync(file, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(file);
 }
 
 /** Boot a bridge with the bank + reservation above. `visibility` models ticked rows. */
@@ -98,6 +93,7 @@ async function boot(
       : {
           fixedLayers: {
             channel: 1,
+            low: { start: 50, count: 9 },
             start: BANK_START,
             count: BANK_COUNT,
             ...(over.visibility !== undefined ? { visibility: over.visibility } : {}),
@@ -130,6 +126,72 @@ it('THE REQUIREMENT — an UNKNOWN occupancy does NOT block the clear', async ()
   expect(await b.runtime.clearBankLayer(1, 77)).toEqual({ ok: true });
   const lines = await recvLines(mock, tracePath);
   expect(lines.some((l) => l.startsWith('CLEAR 1-77'))).toBe(true);
+});
+
+/**
+ * R-021 task 4.4 (design.md §d test 6) — **THE BOUNDARY, WITH BOTH DOORS OPEN AT
+ * ONCE.**
+ *
+ * b1 gave the DECLARED bank a hard Clear that survives OSC silence. The obvious
+ * failure mode of granting that is not that it fails to work — the test above
+ * proves it works — it is that it quietly becomes a general clear-anything door,
+ * and R-015's silence refusal stops applying to the layers it was written for.
+ *
+ * So this exercises BOTH doors under ONE silence, one layer apart. It is a single
+ * test on purpose: two tests in two files, each passing, is exactly how these two
+ * rules would drift apart without anything going red.
+ */
+it('R-015 IS UNTOUCHED one layer outside the bank — the same silence, the opposite answer', async () => {
+  const b = await boot();
+  if (mock === null || tracePath === null) throw new Error('mock not booted');
+
+  // Layer 69 is one below the bank floor and NOT reserved (the reservation is
+  // 50–59), so it isolates the membership half of the guard. Nothing has ever been
+  // observed on either layer, so both are `unknown` — the SAME state of knowledge.
+  //
+  // INSIDE the bank: cleared. The permission is structural (config says this layer
+  // is the operator's), and silence may not withdraw it — that is b1.
+  expect(await b.runtime.clearBankLayer(1, 70)).toEqual({ ok: true });
+  // ONE LAYER OUTSIDE it: refused, and `foreign` — the R-015 rule, unchanged.
+  // Silence licenses nothing there, because nothing declares that layer ours, and
+  // it could be carrying anybody's live graphic.
+  expect(await b.runtime.clearLayer(1, 69)).toEqual({ ok: false, reason: 'foreign' });
+
+  const lines = await recvLines(mock, tracePath);
+  expect(lines.some((l) => l.startsWith('CLEAR 1-70'))).toBe(true);
+  // The refusal is a refusal on the WIRE, not merely in the return value.
+  expect(lines.some((l) => l.startsWith('CLEAR 1-69'))).toBe(false);
+});
+
+/**
+ * …and the same boundary with the layer OBSERVED as foreign, which is the
+ * `restore-blocked` row's own situation.
+ *
+ * C-012's Stop/Clear split is what makes this safe to allow: STOP is the graceful
+ * exit and is offered only where a producer of OURS is resident (the row holds it
+ * for a non-html observation — `layerRow.restoreBlocked.dom.test.ts`), while CLEAR
+ * is the hard kill and is deliberately available whatever is there. An operator
+ * clearing a decklink off their own declared row is the sanctioned act; asking it
+ * to exit gracefully is not a thing to try on air.
+ */
+it('a FOREIGN producer on a declared row is still clearable — and not one layer outside', async () => {
+  const b = await boot();
+  if (mock === null || tracePath === null) throw new Error('mock not booted');
+
+  mock.emitOsc('/channel/1/stage/layer/72/foreground/producer', ['decklink']);
+  mock.emitOsc('/channel/1/stage/layer/69/foreground/producer', ['decklink']);
+  await new Promise((r) => setTimeout(r, 300));
+
+  expect(await b.runtime.clearBankLayer(1, 72)).toEqual({ ok: true });
+  // The BANK door is bank-scoped: 69 is outside the declared rows, so it refuses it.
+  expect((await b.runtime.clearBankLayer(1, 69)).ok).toBe(false);
+  /*
+    🔴 `RELEASE-091-01` (DELTA B, B3, `B-292`) — SUPERSEDES `clearLayer(1, 69)` → `foreign`. Layer 69 is
+    inside CG's bands (the plate band), and a producer there that no ledger record holds — a plate
+    another station left behind — is now clearable through the strip's own door, `layers.clear`,
+    whatever its kind. The bank door above did not widen; the orphan door did, inside 50–99 only.
+  */
+  expect(await b.runtime.clearLayer(1, 69)).toEqual({ ok: true });
 });
 
 it('refuses a layer ONE BELOW the bank floor and ONE ABOVE its ceiling — and sends nothing', async () => {
@@ -171,13 +233,13 @@ it('refuses a RESERVED layer, and reports `reserved` rather than `not-in-bank` �
   // The reason proves which one ran FIRST. That ordering is the property that keeps a
   // reserved layer refused even if a bank were ever to overlap the reservation: the
   // reservation wins rather than being shadowed by a membership that happens to hold.
-  const res = await b.runtime.clearBankLayer(1, 55);
+  const res = await b.runtime.clearBankLayer(1, 35);
   expect(res.ok).toBe(false);
   expect(res.reason).toBe('reserved');
   expect(res.message).toContain('reserved playout range');
 
   const lines = await recvLines(mock, tracePath);
-  expect(lines.some((l) => l.startsWith('CLEAR 1-55'))).toBe(false);
+  expect(lines.some((l) => l.startsWith('CLEAR 1-35'))).toBe(false);
 });
 
 it('an UNTICKED in-bank layer is STILL clearable — a tick is a display concern, not membership', async () => {
@@ -197,11 +259,11 @@ it('with NO bank declared, every layer is refused — there is no bank to be in'
   const b = await boot({ noBank: true });
   if (mock === null || tracePath === null) throw new Error('mock not booted');
 
-  for (const layer of [1, 55, 70, 75, 80]) {
+  for (const layer of [1, 35, 70, 75, 80]) {
     const res = await b.runtime.clearBankLayer(1, layer);
     expect(res.ok, `layer ${String(layer)}`).toBe(false);
     expect(res.reason, `layer ${String(layer)}`).toBe(
-      layer >= 50 && layer <= 59 ? 'reserved' : 'not-in-bank',
+      layer >= 30 && layer <= 39 ? 'reserved' : 'not-in-bank',
     );
   }
   const lines = await recvLines(mock, tracePath);
@@ -223,7 +285,7 @@ it('a COERCED coordinate cannot slip past the reservation — the guard validate
   // Uncaught, a string-typed coordinate would therefore read as in-bank while the
   // reservation never saw it. Both are refused up front instead.
   const coerced: [unknown, unknown][] = [
-    ['1', '55'], // reserved, as strings — the dangerous one
+    ['1', '35'], // reserved, as strings — the dangerous one
     ['1', '75'], // a real bank layer, as strings
     [1, '75'],
     [1, 75.5],
@@ -238,7 +300,7 @@ it('a COERCED coordinate cannot slip past the reservation — the guard validate
 
   // Nothing reached CasparCG for any of them — in particular no `CLEAR 1-55`.
   const lines = await recvLines(mock, tracePath);
-  expect(lines.some((l) => l.startsWith('CLEAR 1-55'))).toBe(false);
+  expect(lines.some((l) => l.startsWith('CLEAR 1-35'))).toBe(false);
   expect(lines.some((l) => /^CLEAR 1-75/.test(l))).toBe(false);
 });
 
@@ -251,7 +313,7 @@ it('the WIRE boundary also rejects a malformed coordinate, so the handler only s
   expect(req.safeParse({ channel: 1, layer: 70 }).success).toBe(true);
   for (const payload of [
     { channel: '1', layer: '70' },
-    { channel: '1', layer: '55' },
+    { channel: '1', layer: '35' },
     { channel: 1, layer: 70.5 },
     { channel: 1, layer: -1 },
     { channel: 0, layer: 70 },
@@ -278,7 +340,12 @@ it('a bank OVERLAPPING the reservation cannot boot at all — the two sets can n
       // onto the reservation: 55–64 would have tripped the DYNAMIC-POLICY overlap
       // first and proved a different refusal. This isolates `overlaps-reserved`.
       reservedLayers: { ranges: [{ from: 75, to: 84 }] },
-      fixedLayers: { channel: 1, start: BANK_START, count: BANK_COUNT },
+      fixedLayers: {
+        channel: 1,
+        low: { start: 50, count: 9 },
+        start: BANK_START,
+        count: BANK_COUNT,
+      },
       runtimeTuning: { sweepMs: 150, occupancyStaleMs: 800 },
     }),
   ).rejects.toThrow(/reserved/i);

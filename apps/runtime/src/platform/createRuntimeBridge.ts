@@ -1,6 +1,8 @@
-import { DEFAULT_BRIDGE_WS_URL } from '@cg/shared-ipc';
+import { consoleSourceCatalog, type StationChannel, type StationChannels } from '@cg/shared-ipc';
 import type { AppInfo, BridgeLinkStatus, RuntimeBridge } from '../shared/runtime-bridge.js';
 import { MockRuntime } from './MockRuntime.js';
+import { resolveBridgeUrl } from './bridgeUrl.js';
+import { shellCloseGuard, shellKeyboardLanguage, shellReportsKeyboardLanguage } from './desktop.js';
 import { WebSocketRuntime } from './WebSocketRuntime.js';
 import { LibraryStore } from './library/LibraryStore.js';
 import { initRuntimeWorkspace } from './library/workspace.js';
@@ -11,15 +13,6 @@ const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'bro
 
 /** Boot probe budget — reachable within this window → use the bridge (C-001). */
 const PROBE_TIMEOUT_MS = 1500;
-
-export interface CreateRuntimeBridgeOptions {
-  /**
-   * Reconnect-reconciliation — surface for a failed template re-delivery
-   * during the post-reconnect resync (the renderer passes its command-error
-   * reporter). Only used by the live `WebSocketRuntime` backend.
-   */
-  onResyncError?: (message: string) => void;
-}
 
 /**
  * Build the browser `RuntimeBridge`, deciding the backend **once** at boot (C-001 Phase 1).
@@ -41,29 +34,23 @@ export interface CreateRuntimeBridgeOptions {
  * The backend is fixed for the session either way — a live link that later drops surfaces
  * as `disconnected`, never a silent fall-back to a simulation.
  */
-export async function createRuntimeBridge(
-  options: CreateRuntimeBridgeOptions = {},
-): Promise<RuntimeBridge> {
+export async function createRuntimeBridge(): Promise<RuntimeBridge | null> {
   // The ONLY door to the mock. Never inferred from a failed probe.
   if (isTestMode()) return createMockBridge();
 
   const url = resolveBridgeUrl();
-  // B-085 — the browser-local template library (source of truth). Hydrated from
-  // persistent storage BEFORE the runtime is returned, so the renderer's first
-  // `templates.list()` sees the operator's library even with the bridge down.
+  // `CENTRAL-BRIDGE-01` (D8) — CG Control with no Playout address yet: nowhere to connect, and the
+  // console asks for it (`main.tsx`) rather than guessing a bridge.
+  if (url === null) return null;
+  // B-085 / B-092 — this console's DISPLAY copies of the library and the stack, hydrated BEFORE
+  // the runtime is returned so the first `templates.list()` and `stack.snapshot()` have something
+  // to show with CG Bridge unreachable. `CENTRAL-BRIDGE-01` (`B-294`): never sent — the bridge
+  // keeps both for every console.
   const workspace = await initRuntimeWorkspace();
   const library = new LibraryStore(workspace);
-  // B-092 — the browser-local stack INTENT, so the stack survives a restart of
-  // the bridge process. Hydrated BEFORE the first connect: the retention is
-  // re-delivered during `#resync`, and an unhydrated store would re-deliver
-  // nothing and let the empty snapshot stand.
   const stackRetention = new StackRetentionStore(workspace);
   await Promise.all([library.hydrate(), stackRetention.hydrate()]);
-  const ws = new WebSocketRuntime(url, {
-    library,
-    stackRetention,
-    ...(options.onResyncError !== undefined ? { onResyncError: options.onResyncError } : {}),
-  });
+  const ws = new WebSocketRuntime(url, { library, stackRetention });
   try {
     await withTimeout(ws.whenReady(), PROBE_TIMEOUT_MS);
   } catch {
@@ -74,10 +61,10 @@ export async function createRuntimeBridge(
   return ws;
 }
 
-function resolveBridgeUrl(): string {
-  const override = (globalThis as { __CG_BRIDGE_URL__?: string }).__CG_BRIDGE_URL__;
-  return typeof override === 'string' && override.length > 0 ? override : DEFAULT_BRIDGE_WS_URL;
-}
+// `P-041` — the bridge URL is decided in ONE module, `./bridgeUrl.ts`: the harness override,
+// else the page's own host with the bridge's default port, else loopback. It used to be a
+// constant `ws://127.0.0.1:5280` here, which is correct on the dev machine and wrong on every
+// other machine that opens the page — and only ever tested on the former.
 
 function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -96,6 +83,52 @@ function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
 }
 
 /**
+ * 🔴 `SELF-STOP-24` §2.5 — **AN E2E SEAM FOR "THE PAGE FINISHED", GATED ON `CG_E2E`.**
+ *
+ * The same convention `RefusalBanner`'s `CG_TEST_REFUSE` and `MockRuntime`'s `CG_E2E_ORPHAN`
+ * seeds already use in this app.
+ *
+ * ⚠ **WHY A SEAM AND NOT A TIMER.** The signal this models comes from a page running inside
+ * CasparCG's CEF, reporting over HTTP to the bridge that served it. Offline there is no page,
+ * no CEF and no HTTP route — so there is nothing a spec could wait for. The alternative would
+ * be product code that guesses at completion after N milliseconds, which is the single thing
+ * `C-013` forbids in so many words: *"nothing guesses at completion with a timer"*. A seam adds
+ * no behaviour; it makes an existing entry point reachable from a test.
+ *
+ * ⚠ It cannot fire in production: without `CG_E2E` the properties are never assigned, and the
+ * whole mock is unreachable without an explicit test-mode request in the first place.
+ */
+function armCompletionSeam(mock: MockRuntime): void {
+  const w = globalThis as unknown as {
+    CG_E2E?: boolean;
+    CG_TEST_TAKE_TOKEN?: (itemId: string) => string | undefined;
+    CG_TEST_TEMPLATE_COMPLETED?: (take: string) => boolean;
+  };
+  if (w.CG_E2E !== true) return;
+  // The token a row's page would be holding. A spec asks for it rather than being handed a
+  // guess, so a stale-token case can be built out of a REAL previous token.
+  w.CG_TEST_TAKE_TOKEN = (itemId: string) => mock.currentTakeToken(itemId);
+  w.CG_TEST_TEMPLATE_COMPLETED = (take: string) => mock.templateCompleted(take);
+}
+
+/**
+ * `FIELD-FIXES-01` L — **AN E2E SEAM FOR "ANOTHER SYSTEM PUT SOMETHING ON A LAYER"**, gated on
+ * `CG_E2E` exactly as the completion seam above. Offline there is no OSC tap and no sweep, so a
+ * spec that must watch a dismissed notice come back when a producer APPEARS has nothing to wait
+ * for. The seam reaches the mock's one entry point for an observation and adds no behaviour.
+ */
+function armOrphanSeam(mock: MockRuntime): void {
+  const w = globalThis as unknown as {
+    CG_E2E?: boolean;
+    CG_TEST_ORPHAN_APPEARS?: (orphan: { channel: number; layer: number; producer: string }) => void;
+  };
+  if (w.CG_E2E !== true) return;
+  w.CG_TEST_ORPHAN_APPEARS = (orphan) => {
+    mock.observeOrphanForTest(orphan);
+  };
+}
+
+/**
  * The in-memory simulation, wrapped to satisfy the `RuntimeBridge` contract. Its link
  * status is a constant `offline-mock`, which the UI renders as a loud, persistent TEST MODE
  * banner — not a pill among pills.
@@ -109,36 +142,225 @@ function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
 export function createMockBridge(): RuntimeBridge {
   const mock = new MockRuntime();
   const OFFLINE: BridgeLinkStatus = 'offline-mock';
+  armCompletionSeam(mock);
+  armOrphanSeam(mock);
 
   return {
     getAppInfo: () => Promise.resolve(APP_INFO),
+
+    // `TEXT-DIGITS-01` — the shell is not the bridge: test mode asks the same (absent) shell.
+    keyboard: {
+      reportsLanguage: () => shellReportsKeyboardLanguage(),
+      language: () => shellKeyboardLanguage(),
+    },
+
+    // `R-094` — nor is the window's close: the same shell door the live console uses.
+    closeGuard: shellCloseGuard(),
 
     link: {
       status: () => OFFLINE,
       // Constant mode — never changes, so nothing to emit; the unsubscribe is a noop.
       onStatusChanged: () => () => undefined,
+      // §4 — the offline mock never resyncs: there is no socket, so its stack is ALWAYS the
+      // settled answer. Constant `false` is the honest value here, not a
+      // stub — a mock that reported a delivery in flight would suppress an alarm test mode
+      // is genuinely entitled to raise.
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+      // `B-153` — there is no bridge PROCESS in test mode, so there is nothing this page
+      // could be skewed against. `null` is the honest answer and not a stub: a mock that
+      // reported skew would raise an alarm about a build that does not exist, and one that
+      // reported "checked, fine" would be a claim nobody made.
+      skew: () => null,
+      onSkewChanged: () => () => undefined,
+      // `CENTRAL-BRIDGE-01` — no CG Bridge in test mode, so no release to differ from.
+      versionMismatch: () => null,
+      onVersionMismatchChanged: () => () => undefined,
+      // `CENTRAL-BRIDGE-01` — test mode has no CG Bridge to name.
+      bridgeAddress: () => null,
+    },
+
+    /*
+      🔴 `C-037` — TEST MODE DOES NOT AUTHENTICATE, and `off` is the honest answer rather
+      than a stub. There is no bridge PROCESS here to hold a principal and no Playout to sign
+      in to, so `off` is literally true: this backend has no gate. Reporting `unknown` would
+      make the console withhold controls waiting for an answer that will never come, and
+      reporting `playout` would put a sign-in in front of a simulation.
+
+      ⚠ `signIn` REJECTS rather than pretending. A mock that resolved would let a spec pass
+      against a sign-in path that was never exercised — the vacuous-green shape this repo has
+      been bitten by more than once.
+    */
+    auth: {
+      capabilities: () => ({
+        mode: 'off' as const,
+        signInUrl: null,
+        refreshUrl: null,
+        contractVersion: null,
+        // Test mode is never an installed station, so it is never in first-run.
+        setupPhase: null,
+      }),
+      onCapabilitiesChanged: () => () => undefined,
+      state: () => ({ kind: 'off' as const }),
+      onStateChanged: () => () => undefined,
+      signIn: () =>
+        Promise.reject(
+          new Error('Test mode does not authenticate — there is no Playout to sign in to.'),
+        ),
+      signOut: () => Promise.resolve(),
     },
 
     stack: {
       load: (req) => Promise.resolve(mock.load(req.itemId, req.templateId, req.fields)),
       take: (req) => Promise.resolve(mock.take(req.itemId)),
-      update: (req) => Promise.resolve(mock.update(req.itemId, req.fields, req.mergeMode)),
+      update: (req) =>
+        Promise.resolve(mock.update(req.itemId, req.fields, req.mergeMode, req.lookBindings)),
       stop: (req) => Promise.resolve(mock.stop(req.itemId)),
       // R-028 (5.4) — advance the template's sequence.
       next: (req) => Promise.resolve(mock.next(req.itemId)),
       out: (req) => Promise.resolve(mock.out(req.itemId)),
       remove: (req) => Promise.resolve(mock.remove(req.itemId)),
+      dismissError: (req) => Promise.resolve(mock.dismissError(req.itemId)),
       setPosition: (req) => Promise.resolve(mock.setPosition(req.itemId, req.position)),
-      removeAll: () => Promise.resolve(mock.removeAll()),
-      clearAll: () => Promise.resolve(mock.clearAll()),
-      stopAll: () => Promise.resolve(mock.stopAll()),
+      // C-015 (6.5f) — the per-plate audio intent.
+      setPlateVolume: (req) =>
+        Promise.resolve(mock.setPlateVolume(req.itemId, req.plateId, req.volume)),
+      // `add-multibox-audio` — the MAP door (FADER / ON-OFF / SOLO).
+      setPlateVolumes: (req) => Promise.resolve(mock.setPlateVolumes(req.itemId, req.volumes)),
+      // `MEDIA-PLATES-01` §1.D — the transport on a seeded clip, with the bridge's refusals.
+      mediaPlateTransport: (req) =>
+        Promise.resolve(mock.mediaPlateTransport(req.itemId, req.plateId, req.action)),
+      // PANIC — no arguments: the scope is the LEDGER's, not the caller's.
+      silenceAllLivePlates: () => Promise.resolve(mock.silenceAllLivePlates()),
+      // `MULTI-CHANNEL-01` §2 C — PANIC for one channel, from the same mock ledger.
+      silenceChannelLivePlates: (req) =>
+        Promise.resolve(mock.silenceChannelLivePlates(req.channel)),
+      // R-048 — the per-plate live-source swap.
+      swapLiveSource: (req) =>
+        // Session BM: `lookId` absent is R-048 (every look); present is one look’s binding.
+        Promise.resolve(mock.swapLiveSource(req.itemId, req.plateId, req.sourceId, req.lookId)),
+      // §14 (LOOKS) Stage E — the row’s look picker.
+      setActiveLook: (req) => Promise.resolve(mock.setActiveLook(req.itemId, req.lookId)),
+      setPassTiming: (req) =>
+        Promise.resolve(
+          mock.setPassTiming(req.itemId, { passes: req.passes, delayMs: req.delayMs }),
+        ),
+      // `MULTI-CHANNEL-01` §2 B — the optional channel, modelled by the mock's own scope.
+      removeAll: (req) => Promise.resolve(mock.removeAll(req?.channel)),
+      clearAll: (req) => Promise.resolve(mock.clearAll(req?.channel)),
+      stopAll: (req) => Promise.resolve(mock.stopAll(req?.channel)),
       snapshot: () => Promise.resolve(mock.stackSnapshot()),
       onStateChanged: (handler) => mock.stackChanged.subscribe(handler),
+      /*
+       * B-108 — PARITY BY HONEST EMPTINESS, not by a missing method.
+       *
+       * Test mode has no bridge at all (`link.status()` is a constant
+       * `offline-mock`), so it has no retention, no `restore()` and therefore no
+       * rows a restore could fail to bring back. The truthful report is an EMPTY
+       * one, delivered once, forever — which is exactly what a healthy live session
+       * reports too, so the surface behaves identically in both backends instead of
+       * being absent in one.
+       *
+       * This is the same shape as `templates.page` answering `unreachable` here: the mock
+       * answers the contract with the true value for a session that has no such
+       * thing, rather than dropping the method and forcing every consumer to branch.
+       */
+      onRestoreSkips: (handler) => {
+        handler([]);
+        return () => undefined;
+      },
+      // Same shape, same reasoning: no retention means no restore, so no row can have
+      // been re-homed, and the truthful report is an empty one delivered once.
+      onRestoreMigrations: (handler) => {
+        handler([]);
+        return () => undefined;
+      },
+      // `CENTRAL-BRIDGE-01` — nothing to dismiss, so a dismissal did nothing: `ok: false`, as the
+      // bridge answers a dismissal of an empty half.
+      dismissRestoreReport: () => Promise.resolve({ ok: false }),
+    },
+
+    /*
+      `DESKTOP-APPS-01` — test mode has no plant to check and no Playout to list, so the honest
+      answers are EMPTY ones: no lines, no route, the catalogue ABSENT. And no desktop door: the
+      simulation is not CG Control, so the Playout address cannot be changed from here.
+    */
+    setup: {
+      // `B-317` — test mode has no CG Bridge: no lines, and nowhere the check ran.
+      check: () => Promise.resolve({ lines: [], localAddress: null, bridge: null }),
+      bridgeAddressFor: () => null,
+      routeAddress: () => Promise.resolve({ address: null }),
+      catalogue: () => Promise.resolve({ rows: null }),
+      // `DESKTOP-APPS-01-D` d — no plant, so nothing can be read: unknown, which warns of nothing.
+      channelOccupancy: () => Promise.resolve({ state: 'unknown' as const, layers: [] }),
+      canSetPlayoutAddress: () => false,
+      setPlayoutAddress: () =>
+        Promise.reject(new Error('Only CG Control can change the Playout address.')),
+      // `CENTRAL-BRIDGE-01` — test mode has no station record: nothing kept, nothing to forget.
+      bridgeOverride: () => null,
+      forgetStation: () => false,
+      // `R-091` — test mode is not CG Control: no Windows to read, no step to take.
+      localBridgeState: () => Promise.resolve(null),
+      localBridgeAct: () =>
+        Promise.resolve({ kind: 'failed' as const, reason: 'Test mode is not CG Control.' }),
+    },
+
+    /*
+      `DESKTOP-APPS-01-D` j — test mode serves one simulated channel and has no other to leave
+      anything on, so the honest answer is an empty list, and there is nothing to take off air.
+    */
+    strays: {
+      list: () => Promise.resolve([]),
+      onChanged: () => () => undefined,
+      takeOffAir: () =>
+        Promise.resolve({ ok: false, message: 'Test mode has nothing on another channel.' }),
+    },
+
+    /*
+      `CENTRAL-BRIDGE-01` (D7) — test mode has no Playout, so no bridge session: `off`, which draws
+      nothing, and a sign-in has nothing to sign in.
+    */
+    bridgeSession: {
+      state: () => Promise.resolve({ state: 'off' as const }),
+      onChanged: () => () => undefined,
+      signIn: () => Promise.resolve({ ok: false, failure: 'unexpected' as const }),
+      // `RELEASE-0112-01` — no Playout, no engine: the primary `off`, no backup.
+      engines: () =>
+        Promise.resolve({
+          primary: {
+            engine: 'primary' as const,
+            address: null,
+            state: 'off' as const,
+            version: null,
+          },
+          backup: null,
+        }),
+      onEnginesChanged: () => () => undefined,
+      signInBackup: () => Promise.resolve({ ok: false, failure: 'unexpected' as const }),
+    },
+
+    // `PLAYOUT-FEATURES-01` D — test mode has no Playout, so no license read: nothing is refused.
+    license: {
+      state: () => Promise.resolve({ license: null }),
+      onChanged: () => () => undefined,
+    },
+
+    // `RELEASE-0113-01` (`R-089`) — test mode has no backup engine: `null`, which draws nothing.
+    backupChannels: {
+      state: () => Promise.resolve({ backup: null }),
+      onChanged: () => () => undefined,
+      setEntries: () => Promise.resolve({ ok: false, message: 'Test mode has no backup engine.' }),
+    },
+
+    // `PLAYOUT-FEATURES-01` E — test mode has no Playout, so no meters: the meter sits at the floor.
+    meters: {
+      onReading: () => () => undefined,
     },
 
     connections: {
       config: () => Promise.resolve(mock.config()),
       setConfig: (req) => Promise.resolve(mock.setConfig(req)),
+      templateServe: () => Promise.resolve(mock.templateServeInfo()),
       health: () => Promise.resolve(mock.health()),
       failover: () => Promise.resolve(mock.failover()),
       onHealthChanged: (handler) => mock.healthChanged.subscribe(handler),
@@ -151,12 +373,46 @@ export function createMockBridge(): RuntimeBridge {
       onOrphansChanged: (handler) => mock.orphansChanged.subscribe(handler),
       ownedOccupancy: () => Promise.resolve(mock.ownedOccupancy()),
       onOwnedOccupancyChanged: (handler) => mock.ownedOccupancyChanged.subscribe(handler),
+      // `B-292` — offline parity by honest absence: there is no CasparCG and no other client in
+      // test mode, so nothing outside CG Control can clear a layer of ours, and nothing ever will.
+      clearedOutside: () => Promise.resolve([]),
+      onClearedOutsideChanged: () => () => undefined,
+    },
+
+    /*
+      B-225 — offline parity. There is no CasparCG in test mode, so nothing can empty air
+      under us and the notice is permanently `null`. The verbs are still present and still
+      answer honestly (`restored: 0`, `dismiss` → `ok: false`): a contract half-implemented
+      offline is how a surface comes to be exercised in one mode and broken in the other.
+    */
+    emptiedAir: {
+      notice: () => Promise.resolve(mock.emptiedAir()),
+      restore: (req) => Promise.resolve(mock.restoreEmptiedAir(req.itemIds)),
+      dismiss: () => Promise.resolve(mock.dismissEmptiedAir()),
+      onNoticeChanged: (handler) => mock.emptiedAirChanged.subscribe(handler),
+    },
+
+    /*
+      C-016 — offline parity by honest absence. Test mode has no bridge and so no relay: there is
+      no picture to request (`feedUrl` is `null`), nothing is ever watched (the status is empty),
+      and nothing will ever change it. The pane then reads "No return signal", which is true.
+    */
+    pgmReturn: {
+      feedUrl: () => Promise.resolve(null),
+      // `PLAYOUT-FEATURES-01` E — no relay, so no sound either.
+      audioUrl: () => Promise.resolve(null),
+      status: () => Promise.resolve([]),
+      onStatusChanged: () => () => undefined,
     },
 
     // R-021 stage 2a — fixed-bank parity (offline: occupancy honestly unknown).
     fixedLayers: {
       config: () => Promise.resolve(mock.fixedLayersConfig()),
       setConfig: (req) => Promise.resolve(mock.setFixedLayers(req)),
+      // `MULTI-CHANNEL-01` — every declared bank, the plural door, and its push.
+      banks: () => Promise.resolve(mock.fixedLayerBanks()),
+      setBanks: (req) => Promise.resolve(mock.setFixedLayerBanks(req.banks)),
+      onBanksChanged: (handler) => mock.fixedBanksChanged.subscribe(handler),
       // R-021 stage 3 — the exact-slot load (mock models the bridge's refusals).
       load: (req) =>
         Promise.resolve(
@@ -176,6 +432,20 @@ export function createMockBridge(): RuntimeBridge {
       onStateChanged: (handler) => mock.playoutStateChanged.subscribe(handler),
     },
 
+    // B-145 (2.8) — the bridge-owned Live Source ledger (offline: e2e-seeded, else
+    // empty, because the mock has seated nothing). No clear verb: the sanctioned
+    // ones are item-scoped and already on `stack`.
+    liveLayers: {
+      state: () => Promise.resolve(mock.liveLayersState()),
+      onStateChanged: (handler) => mock.liveLayersChanged.subscribe(handler),
+      // `B-247` — declared so the SPA can subscribe on either backend; never fired offline,
+      // for the reason the emitter's own note gives (the mock has no look reconcile).
+      onPlateReleased: (handler) => mock.livePlateReleased.subscribe(handler),
+      // `MEDIA-PLATES-01` §1.E — the seeded clips' transport state (`CG_E2E_MEDIA_STATE`).
+      mediaState: () => Promise.resolve(mock.mediaPlateStates()),
+      onMediaStateChanged: (handler) => mock.mediaStateChanged.subscribe(handler),
+    },
+
     lock: {
       engage: (req) => mock.engage(req.pin),
       release: (req) => mock.release(req.pin),
@@ -183,26 +453,39 @@ export function createMockBridge(): RuntimeBridge {
       onStateChanged: (handler) => mock.lockChanged.subscribe(handler),
     },
 
+    // `CHANNEL-TEMPLATES-01` — each channel's own list, the channel passed through as named.
     templates: {
-      get: (req) => Promise.resolve(mock.templateGet(req.templateId)),
-      list: () => Promise.resolve(mock.templateList()),
+      get: (req) => Promise.resolve(mock.templateGet(req.templateId, req.channel)),
+      list: (req) => Promise.resolve(mock.templateList(req?.channel)),
       // B-038 Phase 2 — offline accepts and IGNORES `req.html`: the mock has no
       // HTTP server and no CasparCG, so there is nothing to serve. Only the live
       // bridge retains the HTML; offline stays "OFFLINE (mock) — nothing renders".
-      import: (req) => Promise.resolve(mock.templateImport(req.template, req.redelivery ?? false)),
+      import: (req) => Promise.resolve(mock.templateImport(req.template, req.channel)),
       // R-005 — the mock applies the same refuse-while-referenced predicate as the bridge.
-      remove: (req) => Promise.resolve(mock.templateRemove(req.templateId)),
+      remove: (req) => Promise.resolve(mock.templateRemove(req.templateId, req.channel)),
       // R-028 (o1) — the catalogue push, mirrored by the mock's own emitter.
       onChanged: (handler) => mock.templatesChanged.subscribe(handler),
+      // `CONSOLE-POLISH-01` (`B-300`) — who changed it, mirrored by the mock's own emitter.
+      onActed: (handler) => mock.templatesActed.subscribe(handler),
       // R-022 — the mock retains no rendered page (it accepts and ignores `html`
-      // at import, per the note above), so it honestly holds none. The rehearsal
-      // panel renders its "unavailable in this browser" state rather than a blank
-      // box — which is the truthful answer in test mode, not a degradation.
-      html: () => Promise.resolve(null),
+      // at import, per the note above), and test mode has no bridge to ask, so it
+      // honestly holds none: `RELEASE-091-01` §1's `unreachable`. The rehearsal panel
+      // says so in one line rather than showing a blank box — the truthful answer
+      // in test mode, not a degradation.
+      page: () => Promise.resolve({ kind: 'missing', reason: 'unreachable' } as const),
     },
 
     audit: {
       recent: (req) => Promise.resolve(mock.auditRecent(req.limit, req.action, req.actor)),
+      // `CONSOLE-POLISH-01` (`R-083`) — the page and the rows since, through the same predicate.
+      page: (req) => Promise.resolve(mock.auditPage(req.cursor, req.filter ?? {})),
+      onAppended: (handler) => mock.auditAppended.subscribe(handler),
+      health: () => Promise.resolve(mock.auditHealth()),
+      // `FIELD-FIXES-01` G — the simulation is not CG Control: no log folder to open.
+      // `CENTRAL-BRIDGE-01` — test mode has no CG Bridge, so no logs to download.
+      canDownloadLogs: () => false,
+      downloadLogs: () =>
+        Promise.resolve({ accepted: false, message: 'Test mode has no CG Bridge.' }),
     },
 
     update: {
@@ -210,17 +493,6 @@ export function createMockBridge(): RuntimeBridge {
       state: () => Promise.resolve(mock.updateState()),
       cancel: () => Promise.resolve(mock.updateCancel()),
       onStateChanged: (handler) => mock.updateChanged.subscribe(handler),
-    },
-
-    settings: {
-      get: () => Promise.resolve(mock.settingsGet()),
-      // Drop absent keys so `exactOptionalPropertyTypes` stays happy and a
-      // missing field never overwrites the stored value with `undefined`.
-      set: (req) =>
-        Promise.resolve(
-          mock.settingsSet(req.telemetry !== undefined ? { telemetry: req.telemetry } : {}),
-        ),
-      onChanged: (handler) => mock.settingsChanged.subscribe(handler),
     },
 
     // R-034 — offline parity. The mock stands in for the bridge's disk-persisted
@@ -233,12 +505,28 @@ export function createMockBridge(): RuntimeBridge {
     // its delete CASCADE (`pruneAssignmentsForCatalog`), so a refusal the
     // operator meets here is the one the real station would give.
     sources: {
-      config: () => Promise.resolve(mock.sourceCatalog()),
-      setConfig: (req) => Promise.resolve(mock.setSourceCatalog(req)),
-      onConfigChanged: (handler) => mock.sourceCatalogChanged.subscribe(handler),
+      // `PLAYOUT-SOURCES-01` §1.E — as the bridge's route hands it over: the console never shows a
+      // stream URL, and it never even HOLDS one with its password in it. `PLATE-BAND-01` — with the
+      // plate band in force beside it, built by the bridge's own composition.
+      config: () =>
+        Promise.resolve(consoleSourceCatalog(mock.sourceCatalog(), mock.plateBandInForce())),
+      // `PLAYOUT-SOURCES-01` §1.F — the band only.
+      setConfig: (req) => Promise.resolve(mock.setSourceBand(req)),
+      onConfigChanged: (handler) =>
+        mock.sourceCatalogChanged.subscribe((catalog) =>
+          handler(consoleSourceCatalog(catalog, mock.plateBandInForce())),
+        ),
       assignments: () => Promise.resolve(mock.sourceAssignments()),
       setAssignments: (req) => Promise.resolve(mock.setSourceAssignments(req)),
       onAssignmentsChanged: (handler) => mock.sourceAssignmentsChanged.subscribe(handler),
+      mediaSearch: (req) => Promise.resolve(mock.searchMedia(req)),
+      // Nothing to read again offline: the seeded lists are all there is.
+      refresh: () => Promise.resolve({ ok: true as const }),
+      // `MEDIA-PLATES-01` §1.A — a bound clip's Loop and When hidden, on the mock's bound media.
+      setMediaPlayback: (req) =>
+        Promise.resolve(
+          mock.setMediaPlayback(req.mediaId, { loop: req.loop, whenHidden: req.whenHidden }),
+        ),
     },
 
     delimiters: {
@@ -264,5 +552,45 @@ export function createMockBridge(): RuntimeBridge {
       set: (req) => Promise.resolve(mock.setChannelSettings(req)),
       onChanged: (handler) => mock.channelSettingsChanged.subscribe(handler),
     },
+
+    // `R-062` gap 2 — offline parity: the answer an auth-OFF bridge gives (no catalogue, no
+    // principal), recomputed from the mock's bank and settings whenever either changes.
+    stationChannels: {
+      list: () => Promise.resolve(mockStationChannels()),
+      onChanged: (handler) => {
+        const emit = (): void => handler(mockStationChannels());
+        const offBank = mock.fixedConfigChanged.subscribe(emit);
+        const offSettings = mock.channelSettingsChanged.subscribe(emit);
+        return () => {
+          offBank();
+          offSettings();
+        };
+      },
+    },
   };
+
+  /**
+   * The bridge's `stationChannelsFor` with auth OFF, over the mock's two sources. The declared
+   * channels are the banks', or channel 1 without one — `#declaredChannels()`'s own rule.
+   */
+  function mockStationChannels(): StationChannels {
+    const banks = mock.fixedLayerBanks();
+    const declared = new Set(banks.length > 0 ? banks.map((b) => b.channel) : [1]);
+    const entries = new Map<number, StationChannel['sources']>();
+    // `MULTI-CHANNEL-01` — every declared bank's channel, in channel order.
+    for (const bank of banks) entries.set(bank.channel, ['bank']);
+    for (const s of mock.channelSettingsState().settings) {
+      const sources = entries.get(s.channel);
+      if (sources === undefined) entries.set(s.channel, ['channel-settings']);
+      else sources.push('channel-settings');
+    }
+    return {
+      channels: [...entries.entries()].map(([channel, sources]) => ({
+        channel,
+        named: null,
+        declared: declared.has(channel),
+        sources,
+      })),
+    };
+  }
 }

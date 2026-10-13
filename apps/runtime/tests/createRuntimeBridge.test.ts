@@ -3,6 +3,17 @@ import { WebSocket as WsWebSocket } from 'ws';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import { createRuntimeBridge } from '../src/platform/createRuntimeBridge.js';
+import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
+
+/**
+ * Every case here arms the URL override, so there is always a bridge to create; `null` is the
+ * CG Control page with no Playout address yet (`bridgeUrl.test.ts`), never one of these.
+ */
+async function created(): Promise<RuntimeBridge> {
+  const bridge = await createRuntimeBridge();
+  if (bridge === null) throw new Error('no bridge URL: the override was not armed');
+  return bridge;
+}
 
 /** Unreachable CasparCG + ephemeral OSC bind — the probe only needs the WS up. */
 function ephemeralConnection(): ConnectionConfig {
@@ -43,7 +54,7 @@ it('selects the WebSocketRuntime (live) when the bridge is reachable', async () 
   handle = await createBridge({ port: 0, connection: ephemeralConnection() });
   globals.__CG_BRIDGE_URL__ = handle.url;
 
-  const bridge = await createRuntimeBridge();
+  const bridge = await created();
   expect(bridge.link.status()).toBe('live');
 
   // It really talks to the bridge: snapshot returns an array (empty real stack).
@@ -62,7 +73,7 @@ it('does NOT fall back to the mock when no bridge answers — it stays live and 
   // Point at a port nobody is listening on → connection refused.
   globals.__CG_BRIDGE_URL__ = 'ws://127.0.0.1:5281';
 
-  const bridge = await createRuntimeBridge();
+  const bridge = await created();
 
   // The live backend, honestly reporting that it cannot reach anything.
   expect(bridge.link.status()).toBe('disconnected');
@@ -77,7 +88,7 @@ it('enters the mock ONLY on an explicit test-mode request', async () => {
   globals.__CG_BRIDGE_URL__ = 'ws://127.0.0.1:5281';
   globals.CG_E2E = true;
 
-  const bridge = await createRuntimeBridge();
+  const bridge = await created();
   expect(bridge.link.status()).toBe('offline-mock');
 
   // Still fully interactive — that is the mock's value, and why it survives as a test tool.

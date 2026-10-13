@@ -4,7 +4,11 @@ import { TemplateRegistry } from '../src/template-registry.js';
 import {
   TemplateHttpServer,
   deriveServeOptions,
+  guessLanHost,
+  hostsUnableToFetchTemplates,
   isLoopbackHost,
+  servesFromAnotherMachine,
+  templateServeUnreachableWarning,
 } from '../src/template-http-server.js';
 import type { TemplateInfo } from '@cg/shared-ipc';
 
@@ -29,6 +33,7 @@ function info(templateId: string): TemplateInfo {
 interface HttpResult {
   status: number;
   contentType: string | undefined;
+  cacheControl: string | undefined;
   body: string;
 }
 
@@ -43,6 +48,7 @@ function get(url: string): Promise<HttpResult> {
           resolve({
             status: res.statusCode ?? 0,
             contentType: res.headers['content-type'],
+            cacheControl: res.headers['cache-control'],
             body,
           }),
         );
@@ -52,33 +58,62 @@ function get(url: string): Promise<HttpResult> {
 }
 
 describe('TemplateHttpServer', () => {
-  it('serves the stored HTML for a known id and 404s an unknown id', async () => {
+  it('serves the stored HTML at its version’s key with `no-store`, and 404s an unknown key', async () => {
     const reg = new TemplateRegistry();
-    reg.import(info('t1'), '<!doctype html><html><body>v1</body></html>');
-    server = new TemplateHttpServer((id) => reg.html(id));
+    const v1 = reg.importOn(
+      [1],
+      info('t1'),
+      '<!doctype html><html><body>v1</body></html>',
+    ).versionId;
+    server = new TemplateHttpServer((key) => reg.htmlForServeKey(key));
     await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
 
-    const known = await get(server.urlFor('t1'));
+    const known = await get(server.urlFor(`t1~${v1}`));
     expect(known.status).toBe(200);
     expect(known.contentType).toBe('text/html; charset=utf-8');
+    // 🔴 `CENTRAL-BRIDGE-01` (`B-293`) — CasparCG's CEF keeps pages on disk: never store this.
+    expect(known.cacheControl).toBe('no-store');
     expect(known.body).toBe('<!doctype html><html><body>v1</body></html>');
 
     const unknown = await get(server.urlFor('nope'));
     expect(unknown.status).toBe(404);
+    expect(unknown.cacheControl).toBe('no-store');
 
     const root = await get(`http://127.0.0.1:${String(server.port)}/`);
     expect(root.status).toBe(404);
   });
 
-  it('serves the replacement HTML after a re-import (reads the live registry)', async () => {
+  it('🔴 B-293 — a re-import is served at a NEW path; the released version’s path serves nothing, never the new page', async () => {
     const reg = new TemplateRegistry();
-    reg.import(info('t1'), '<html><body>v1</body></html>');
-    server = new TemplateHttpServer((id) => reg.html(id));
+    const v1 = reg.importOn([1], info('t1'), '<html><body>v1</body></html>').versionId;
+    server = new TemplateHttpServer((key) => reg.htmlForServeKey(key));
     await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
 
-    expect((await get(server.urlFor('t1'))).body).toBe('<html><body>v1</body></html>');
-    reg.import(info('t1'), '<html><body>v2</body></html>');
-    expect((await get(server.urlFor('t1'))).body).toBe('<html><body>v2</body></html>');
+    expect((await get(server.urlFor(`t1~${v1}`))).body).toBe('<html><body>v1</body></html>');
+    // Nothing holds v1, so the re-import releases it — and v2 is served at ITS OWN path.
+    const v2 = reg.importOn([1], info('t1'), '<html><body>v2</body></html>').versionId;
+    expect((await get(server.urlFor(`t1~${v2}`))).body).toBe('<html><body>v2</body></html>');
+    expect((await get(server.urlFor(`t1~${v1}`))).status).toBe(404);
+  });
+
+  it('🔴 CHANNEL-TEMPLATES-01 — a HELD version keeps its path; the new one is served beside it', async () => {
+    const reg = new TemplateRegistry();
+    const v1 = reg.importOn([1, 2], info('t1'), '<html><body>v1</body></html>').versionId;
+    // A row on channel 1 took v1: its page was served from v1's path.
+    reg.hold('row-on-ch1', v1);
+    server = new TemplateHttpServer((key) => reg.htmlForServeKey(key));
+    await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
+
+    const v2 = reg.importOn([2], info('t1'), '<html><body>v2</body></html>').versionId;
+    // v1's path is untouched, byte for byte…
+    expect(reg.serveKeyOf(v1)).toBe(`t1~${v1}`);
+    expect((await get(server.urlFor(`t1~${v1}`))).body).toBe('<html><body>v1</body></html>');
+    // …and v2 is served at its own, qualified path.
+    const key2 = reg.serveKeyOf(v2) ?? '';
+    expect(key2).toBe(`t1~${v2}`);
+    expect((await get(server.urlFor(key2))).body).toBe('<html><body>v2</body></html>');
+    // Control: the qualified path of a version that does not exist is a 404.
+    expect((await get(server.urlFor('t1~0000000000000000'))).status).toBe(404);
   });
 
   it('builds a /template/<id> URL on the configured serve host + bound port', async () => {
@@ -90,25 +125,155 @@ describe('TemplateHttpServer', () => {
 });
 
 describe('deriveServeOptions (host/reachability)', () => {
-  it('serves loopback when CasparCG is local', () => {
+  it('serves loopback when every CasparCG is local', () => {
     expect(isLoopbackHost('127.0.0.1')).toBe(true);
-    const opts = deriveServeOptions('127.0.0.1');
+    const opts = deriveServeOptions(['127.0.0.1']);
     expect(opts).toEqual({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
   });
 
   it('binds a routable interface (opt-in) when CasparCG is remote', () => {
     expect(isLoopbackHost('192.168.1.50')).toBe(false);
-    const opts = deriveServeOptions('192.168.1.50');
+    const opts = deriveServeOptions(['192.168.1.50']);
     expect(opts.bindHost).toBe('0.0.0.0');
     expect(typeof opts.serveHost).toBe('string'); // guessed LAN IPv4 (or loopback fallback)
   });
 
   it('honors explicit serve-host / port / bind overrides', () => {
-    const opts = deriveServeOptions('192.168.1.50', {
+    const opts = deriveServeOptions(['192.168.1.50'], {
       serveHost: '10.0.0.9',
       port: 8080,
       bindHost: '0.0.0.0',
     });
     expect(opts).toEqual({ bindHost: '0.0.0.0', port: 8080, serveHost: '10.0.0.9' });
+  });
+
+  /*
+    🔴 B-162 — THE DEFECT ROW, AND IT IS THE ONE NOBODY WAS LOOKING AT.
+
+    `urlFor()` builds ONE string and mirror-sync hands it to EVERY server, so the
+    derivation must satisfy the STRICTEST reader — the remote one — regardless of
+    which server happens to be primary. Deriving it from the primary alone bound
+    `127.0.0.1` and advertised `127.0.0.1` for a loopback-primary / remote-backup
+    pair, so the backup fetched itself: boxes on air, no template over them, and a
+    200 from `CG ADD` either way.
+
+    The assertions are deliberately environment-independent. `guessLanHost()`
+    enumerates real interfaces, so its VALUE differs between the owner's machine,
+    a CI container and a network-less sandbox — asserting "not loopback" would be
+    asserting a property of the host. What IS invariant is that a remote BACKUP
+    must produce the same decision a remote PRIMARY does, and that the bind must
+    be routable. Both fail on the pre-fix code; the second fails on every host.
+  */
+  it('binds routable and advertises a reachable host when only the BACKUP is remote', () => {
+    const opts = deriveServeOptions(['127.0.0.1', '192.168.21.50']);
+    expect(opts.bindHost).toBe('0.0.0.0');
+    expect(opts.serveHost).toBe(guessLanHost());
+    // The rule stated as an equality: WHICH server is remote cannot matter.
+    expect(opts).toEqual(deriveServeOptions(['192.168.21.50']));
+  });
+
+  it('is unchanged for a remote primary with a loopback backup (the combination that worked)', () => {
+    const opts = deriveServeOptions(['192.168.21.50', '127.0.0.1']);
+    expect(opts.bindHost).toBe('0.0.0.0');
+    expect(opts.serveHost).toBe(guessLanHost());
+  });
+
+  it('stays fully loopback when BOTH servers are local (no LAN exposure)', () => {
+    const opts = deriveServeOptions(['127.0.0.1', 'localhost']);
+    expect(opts).toEqual({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
+  });
+
+  it('treats an empty server set as all-loopback (nothing configured can fail to reach us)', () => {
+    expect(deriveServeOptions([])).toEqual({
+      bindHost: '127.0.0.1',
+      port: 0,
+      serveHost: '127.0.0.1',
+    });
+  });
+});
+
+describe('hostsUnableToFetchTemplates (B-162 — the correctness verdict)', () => {
+  const loopbackServe = { bindHost: '127.0.0.1', port: 7911, serveHost: '127.0.0.1' };
+  const lanServe = { bindHost: '0.0.0.0', port: 7911, serveHost: '192.168.21.93' };
+  /*
+    `B-326` — the machine's own addresses are an input now (the list Station setup's chips show). These
+    cases are about the two LOOPBACK halves, so the machine is the one the routable host names.
+  */
+  const thisMachine = ['192.168.21.93'];
+
+  it('names a remote server that a loopback serve address cannot reach', () => {
+    expect(
+      hostsUnableToFetchTemplates(['127.0.0.1', '192.168.21.50'], loopbackServe, thisMachine),
+    ).toEqual(['192.168.21.50']);
+  });
+
+  it('is silent when every configured server is loopback', () => {
+    expect(
+      hostsUnableToFetchTemplates(['127.0.0.1', 'localhost'], loopbackServe, thisMachine),
+    ).toEqual([]);
+  });
+
+  it('is silent when the serve address is routable', () => {
+    expect(
+      hostsUnableToFetchTemplates(['127.0.0.1', '192.168.21.50'], lanServe, thisMachine),
+    ).toEqual([]);
+  });
+
+  /*
+    🔴 `B-326` (`SERVERS-SIMPLIFY-01` T3) — THE OWNER'S `.32`: the serve host was `192.168.21.93`, his own
+    PC. The bind was `0.0.0.0` and the host routable, so neither loopback half saw it — and CasparCG fetched
+    every page from a machine that does not serve it.
+  */
+  it('🔴 B-326 — a host that is not this machine leaves EVERY server unable, a local one too', () => {
+    expect(
+      hostsUnableToFetchTemplates(['127.0.0.1', '192.168.21.50'], lanServe, ['192.168.21.32']),
+    ).toEqual(['127.0.0.1', '192.168.21.50']);
+  });
+
+  it('B-326 — loopback, this machine’s own address, and a NAME are not judged as another machine', () => {
+    expect(servesFromAnotherMachine('127.0.0.1', ['192.168.21.32'])).toBe(false);
+    expect(servesFromAnotherMachine('127.0.0.2', ['192.168.21.32'])).toBe(false);
+    expect(servesFromAnotherMachine('192.168.21.32', ['192.168.21.32'])).toBe(false);
+    expect(servesFromAnotherMachine('cg-bridge.local', ['192.168.21.32'])).toBe(false);
+    // Positive control: the owner's host on the owner's `.32`, and an unspecified address.
+    expect(servesFromAnotherMachine('192.168.21.93', ['192.168.21.32'])).toBe(true);
+    expect(servesFromAnotherMachine('0.0.0.0', ['192.168.21.32'])).toBe(true);
+  });
+
+  it('B-326 — the boot and apply line says it in its own words, never "loopback-only"', () => {
+    const line = templateServeUnreachableWarning(['127.0.0.1'], lanServe, ['192.168.21.32']);
+    expect(line).toContain('192.168.21.93 is NOT this machine (192.168.21.32)');
+    expect(line).toContain('NO TEMPLATE');
+    expect(line).not.toContain('LOOPBACK-ONLY');
+    // Control: the loopback half keeps its own sentence.
+    expect(
+      templateServeUnreachableWarning(['192.168.21.50'], loopbackServe, ['192.168.21.32']),
+    ).toContain('LOOPBACK-ONLY');
+  });
+
+  /*
+    Either half alone is fatal, so each is pinned on its own. A routable BIND
+    with a loopback advertised host is the `setConfig` retry-fallback shape and
+    the `--template-serve-host 127.0.0.1` typo shape; the reverse is what a
+    `guessLanHost()` that found no non-internal IPv4 would produce.
+  */
+  it('names the server when the bind is routable but the advertised host is loopback', () => {
+    expect(
+      hostsUnableToFetchTemplates(
+        ['192.168.21.50'],
+        { bindHost: '0.0.0.0', port: 7911, serveHost: '127.0.0.1' },
+        thisMachine,
+      ),
+    ).toEqual(['192.168.21.50']);
+  });
+
+  it('names the server when the advertised host is routable but the bind is loopback', () => {
+    expect(
+      hostsUnableToFetchTemplates(
+        ['192.168.21.50'],
+        { bindHost: '127.0.0.1', port: 7911, serveHost: '192.168.21.93' },
+        thisMachine,
+      ),
+    ).toEqual(['192.168.21.50']);
   });
 });

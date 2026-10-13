@@ -19,18 +19,26 @@
  * Pure and React-free: the density arithmetic is the kind of thing that is wrong
  * by 30px and invisible until an operator drags a panel, so it is unit-testable
  * without a DOM.
+ *
+ * `RUNTIME-REDESIGN-01` PHASE 3 — THE NUMBERS LIVE IN THE TOKEN HOME. The verb box,
+ * the verb gap and the row padding are `LAYER_ROW_PX` in `theme.ts`, where the
+ * `--r-row-*` tokens the stylesheet reads are derived from the same object. This
+ * module does the arithmetic on them; it no longer spells them. A second copy here
+ * is how a header word comes to sit above a column of a different width.
  */
 
+import { LAYER_ROW_PX } from '../../theme.js';
+
 /**
- * The minimum hit target for a row verb, in px.
+ * The minimum hit target for a row verb, in px — the verb's own height.
  *
  * These get pressed under time pressure by someone half-watching a monitor, so
  * this is a FLOOR that density is never allowed to trade away — the columns drop
  * text to make room, never shrink the buttons. Sits between WCAG 2.5.8's 24px
- * minimum and 2.5.5's 44px enhanced target: 34 is comfortable for a mouse in a
+ * minimum and 2.5.5's 44px enhanced target: 36 is comfortable for a mouse in a
  * gallery while keeping ~30 rows scannable in one list.
  */
-export const VERB_TARGET_PX = 36;
+export const VERB_TARGET_PX: number = LAYER_ROW_PX.verbH;
 
 /**
  * Width of one verb column, in px — WIDER than the hit-target floor, and set by
@@ -39,10 +47,10 @@ export const VERB_TARGET_PX = 36;
  * Icon-only verbs are only safe because the sticky header prints the word each
  * glyph stands for directly above it, so a verb column has to be wide enough for
  * its longest word ("REMOVE", ~37px at the header's type size). Sizing the column
- * to the 34px button instead would have produced a header of clipped stumps —
+ * to the 36px button instead would have produced a header of clipped stumps —
  * which is the one thing that would make the icons unsafe again.
  */
-const VERB_COL_PX = 48;
+const VERB_COL_PX: number = LAYER_ROW_PX.verbW;
 
 /**
  * Gap between verb buttons, in px.
@@ -57,7 +65,7 @@ const VERB_COL_PX = 48;
  * quarter of the button. The 4px it replaces read as a seam in one control block
  * rather than as five separate controls.
  */
-const VERB_GAP_PX = 12;
+const VERB_GAP_PX: number = LAYER_ROW_PX.verbGap;
 
 /**
  * How many verbs get a BUTTON on the row (the rest are right-click only).
@@ -71,26 +79,54 @@ const VERB_GAP_PX = 12;
  * CLEAR (hard kill) are the inverse of the reference product's, and the header word
  * is precisely the channel that retires the misread. Adding a button here without
  * adding its head to `VERB_HEADS` re-opens it.
+ *
+ * 🔴 **THE ADMISSION RULE, and the half two sessions had to work out for themselves.**
+ * A control enters this block ONLY IF it is declared for EVERY row of the surface, and
+ * its head joins `VERB_HEADS` in the SAME change that adds the button.
+ *
+ *   · availability that varies by STATE is fine — a disabled button in its own fixed
+ *     column, which is the established pattern;
+ *   · PRESENCE that varies by ROW is not. It either shifts every head to its right
+ *     onto the wrong glyph, or claims a column whose head is a word most rows make
+ *     false.
+ *
+ * Anything conditional goes to the row's CONTEXT MENU (or the Inspector), never into
+ * the block. That is not a preference: `operator-surface` `§4` records SOURCE (R-048)
+ * and plate AUDIO (C-015 6.5f) each arriving at it independently, from this comment,
+ * with the block left at six both times. Written down here so the FOURTH control does
+ * not rediscover it by collision. The MENU's own rule — and why it is different — sits
+ * beside the C6 boundary in `PlayoutPanel.tsx`.
  */
 export const VERB_COUNT = 6;
 
-/** Gap between table columns, and the row's horizontal padding, in px. */
+/** Gap between table columns, in px. */
 const COL_GAP_PX = 12;
-const ROW_PAD_PX = 12;
+/**
+ * The row's horizontal padding — the token home's `padX` (`--r-row-pad`). The
+ * VERTICAL padding is the same token's `padY`; the width model never needs it, and
+ * the row takes both through `ROW_GEOMETRY.padding` below.
+ */
+const ROW_PAD_PX: number = LAYER_ROW_PX.padX;
 
 /**
- * The row's VERTICAL padding, in px — above and below the tallest cell.
+ * Fixed column widths in px. The `alias` column is the flexible one.
  *
- * Taken from the owner's mock-up, where a row is roughly twice its button's height.
- * The first version had effectively none (content plus a 10px allowance), so the
- * list read as a dense ledger rather than a set of separate rows. Padding is what
- * makes a row a target the eye can land on and the hand can hit, which matters more
- * on this surface than fitting a 31st row on screen — the list scrolls, and a
- * mis-click does not.
+ * `B-224` (2026-09-05) — three of these were re-measured in Chrome at the fonts the table
+ * actually renders with (the app stack resolves Persian to Segoe UI on Windows and to the
+ * bundled Vazirmatn elsewhere; both were measured, the wider kept):
+ *
+ * | string, at its cell's font                                   | px       |
+ * | ------------------------------------------------------------ | -------- |
+ * | `NOT CONNECTED` + the 25px mark + the 0.45rem gap (row state) | 136      |
+ * | `STATE` head + `● 12` + `▲ 12` (the compact tally, both)      | ≈ 90     |
+ * | `STATE (12 on air) (12 in error)` (the old head, both)        | ≈ 175    |
+ * | `میانبرنامه روی انتن` — the longest REAL row name (alias font) | 127      |
+ * | `میان‌برنامه (روی آنتن)` — the longest template name, if aliased | 144      |
+ *
+ * The old `stateFull: 132` clipped its own `NOT CONNECTED` by 4 px and clipped the header's
+ * tally whenever both counts were non-zero. The old `aliasMin: 132` fit the longest real
+ * name by 5 px — and nothing else beside it.
  */
-const ROW_PAD_Y_PX = 15;
-
-/** Fixed column widths in px. The `alias` column is the flexible one. */
 const W = {
   /** Row number — `1..n`, up to two digits plus breathing room. */
   rowNum: 34,
@@ -98,23 +134,44 @@ const W = {
    * State: icon + word. Collapses to the icon alone at the tightest density.
    *
    * Sized for the 25px mark plus the longest label the column has to hold without
-   * ellipsis — `NOT CONNECTED`. A column that clipped its own state word would
-   * defeat the point of pairing the colour with a word at all.
+   * ellipsis — `NOT CONNECTED` (136 px measured) — and for the header's tally in its
+   * compact form (`STATE ● 12 ▲ 12`, ≈ 90 px), with room to spare. WIDENED from 132 by
+   * owner decision (`B-224`: _"the STATE column can also be wider"_); the width comes out
+   * of the alias column's slack, never out of the template or the verbs.
    */
-  stateFull: 132,
+  stateFull: 150,
   stateIconOnly: 34,
   /**
-   * The alias — the row's primary label. Flexible, with a floor.
+   * The alias — the row's primary label. Flexible, with a floor AND a ceiling.
    *
-   * NARROWED, and it no longer takes all the slack. A row name is short by nature
-   * (`Layer 3`, `CLOCK`, `BREAKING`) while the template name is the longest text on
-   * the row — Persian programme titles — so giving the alias the whole `1fr` left it
-   * with dead space beside a template name that ellipsized. The two now SHARE the
-   * slack, weighted toward the template (see `gridTemplateColumns`).
+   * The FLOOR fits the longest real row name on one line (`میانبرنامه روی انتن`, 127 px at
+   * the alias font) and the longest template name should an operator alias a row with it
+   * (144 px), with a little room for the dirty chip. A NAME column that fits `Layer 3` and
+   * clips a real Persian name is not narrower, it is broken.
+   *
+   * The CEILING is the owner's `B-224` decision — _"the NAME column is far too wide"_: at
+   * the full density the alias no longer absorbs any slack at all; every spare pixel goes
+   * to the template, which holds the longest text on the row (Persian programme titles).
+   * A row name is short by nature (`Layer 3`, `CLOCK`, `BREAKING`), and the ceiling leaves
+   * 70 px over the longest real one. At the compact density there is no template column
+   * to give the slack to, so the alias keeps its `1fr` there.
    */
-  aliasMin: 132,
+  aliasMin: 150,
+  aliasMax: 220,
   /** The template name's floor. Flexible above it, and the wider of the two. */
   templateMin: 160,
+} as const;
+
+/**
+ * `B-224` — the widths a test can hold the model to, exported so the assertion reads the
+ * same number the grid does rather than a copy of it.
+ */
+export const COLUMN_PX = {
+  stateFull: W.stateFull,
+  stateIconOnly: W.stateIconOnly,
+  aliasMin: W.aliasMin,
+  aliasMax: W.aliasMax,
+  templateMin: W.templateMin,
 } as const;
 
 /** The verb block's total width — fixed, because it is never allowed to reflow. */
@@ -233,10 +290,14 @@ export function gridTemplateColumns(density: Density): string {
     // explicit floor (0 for the alias at the tightest density) makes the text the
     // thing that gives way, never a control.
     //
-    // The TEMPLATE gets 2fr against the alias's 1fr — it holds the longest text on
-    // the row (Persian programme titles) while a row name is short by nature, so an
-    // even split left one ellipsizing beside the other's dead space.
-    `minmax(${String(spec.aliasFloor)}px, 1fr)`,
+    // `B-224` — WHERE THE TEMPLATE COLUMN EXISTS, the alias is CAPPED (`aliasMax`) and
+    // the template takes every spare pixel: it holds the longest text on the row
+    // (Persian programme titles) while a row name is short by nature, so a share for
+    // the alias only ever bought dead space beside an ellipsizing title. Without a
+    // template column the alias is the only flexible column and keeps its `1fr`.
+    spec.showTemplate
+      ? `minmax(${String(spec.aliasFloor)}px, ${String(W.aliasMax)}px)`
+      : `minmax(${String(spec.aliasFloor)}px, 1fr)`,
     ...(spec.showTemplate ? [`minmax(${String(W.templateMin)}px, 2fr)`] : []),
     `${String(VERBS_WIDTH_PX)}px`,
   ].join(' ');
@@ -245,7 +306,13 @@ export function gridTemplateColumns(density: Density): string {
 /** Shared row geometry, so the header and the rows are padded identically. */
 export const ROW_GEOMETRY = {
   columnGap: `${String(COL_GAP_PX)}px`,
-  padding: `${String(ROW_PAD_Y_PX)}px ${String(ROW_PAD_PX)}px`,
+  /**
+   * The row's padding, READ FROM THE TOKEN (`--r-row-pad`) rather than composed from
+   * the numbers above — the numbers above are the same values, but the row must take
+   * them the way the stylesheet does, so a Playwright measurement of the row and a
+   * read of the token home are one fact. `minWidthFor` still sums the numbers.
+   */
+  padding: 'var(--r-row-pad)',
   /** The header keeps the horizontal padding but sets its own vertical rhythm. */
   headerPaddingX: `${String(ROW_PAD_PX)}px`,
 } as const;

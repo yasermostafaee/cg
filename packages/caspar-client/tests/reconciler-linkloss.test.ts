@@ -102,6 +102,30 @@ describe('Reconciler — B-086 link-loss honesty', () => {
     expect(r.reconcileOnReconnect(new Set())).toEqual([]);
   });
 
+  /*
+    🔴 `B-292` (`RELEASE-091-01` DELTA B, B1) — the same reset, reached without a reconnect: the bridge
+    asked CasparCG about a layer of ours that went silent and was told it is gone.
+  */
+  it('🔴 B-292 — `markLayersEmptied` turns a played item on an emptied layer IDLE, and it stays idle as the truth decays — control: an item on another layer stays ON AIR', () => {
+    let now = 1000;
+    const r = onAir(() => now);
+    r.applyIntent({ kind: 'load', itemId: 'item-2', templateId: 'tpl-1', fields: {} }, 3);
+    r.assignSlot('item-2', { channel: 1, layer: 11, server: 'primary' });
+    r.applyIntent({ kind: 'take', itemId: 'item-2' }, 4);
+    r.applyAck(4, true);
+
+    const changed = r.markLayersEmptied(new Set(['1:10']));
+    expect(changed.map((s) => s.itemId)).toEqual([ITEM]);
+    expect(r.get(ITEM)?.status).toBe('idle');
+    // Past the truth's TTL it does NOT fall back to its `playing` ack — that fallback was the bug.
+    now = 10_000;
+    expect(r.get(ITEM)?.status).toBe('idle');
+    // CONTROL — the other item, on layer 11, keeps its on-air reading.
+    expect(r.get('item-2')?.status).toBe('playing');
+    // Asking again is a no-op: the item is no longer played.
+    expect(r.markLayersEmptied(new Set(['1:10']))).toEqual([]);
+  });
+
   it('setLinkDown is idempotent and returns nothing when the state is unchanged', () => {
     const r = onAir(() => 1000);
     expect(r.setLinkDown(false)).toEqual([]); // already up

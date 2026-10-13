@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ScanSearch, ZoomIn, ZoomOut } from 'lucide-react';
+import type { ExportIssue } from '@cg/shared-ipc';
 import type { Element, Scene } from '@cg/shared-schema';
+import { lookGroupOf } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import {
   getAll as assetUrlGetAll,
@@ -18,7 +20,9 @@ import {
   primeAll as primeAllSharedImages,
 } from '../sharedLibrary/sharedImageUrlCache.js';
 import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
+import { LookPicker } from './LookPicker.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
+import { arrangementViewOf, boxInstanceIds } from '../../state/slices/arrangements.js';
 import { PreviewHost } from './PreviewHost.js';
 import { B042Probe, b042ProbeEnabled } from './B042Probe.js';
 import {
@@ -71,6 +75,12 @@ interface Props {
    * single header row reads:  [tools] ……… [zoom controls].
    */
   showToolbar?: boolean;
+  /**
+   * D-157 — the live preflight issues, so the canvas can MARK the boxes that are blocking
+   * the export. Passed rather than recomputed: the same list the status bar counts and the
+   * Export button refuses on, so the three surfaces cannot disagree about which boxes.
+   */
+  issues?: readonly ExportIssue[];
 }
 
 // B-027 — the minimum zoom is DYNAMIC (the cover-fit of the pasteboard over the viewport,
@@ -205,6 +215,7 @@ export function CanvasArea({
   editingTextId,
   bindModeFieldId,
   showToolbar = false,
+  issues = [],
 }: Props): JSX.Element {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
@@ -333,6 +344,51 @@ export function CanvasArea({
       cancelled = true;
     };
   }, [sceneId]);
+
+  // ⭐ multibox-layout-switch C2 — the ACTIVE ARRANGEMENT, pushed into the preview's
+  // `runtime.setArrangementView()` so switching one visibly moves the canvas.
+  //
+  // A separate message from `scene-replace` on purpose: a switch is not a scene edit and
+  // must not rebuild. The runtime re-punches the masks on the live nodes, so the page keeps
+  // everything it is holding — which is also the manoeuvre being previewed.
+  const activeArrangementId = useDesignerSelector((st) => st.activeArrangementId);
+  const arrangements = scene?.arrangements ?? [];
+  const arrangementView = arrangementViewOf(
+    arrangements.find((a) => a.id === activeArrangementId) ?? null,
+    scene === null ? [] : boxInstanceIds(scene),
+  );
+  // Serialized so the effect re-fires on a CELL edit, not only on an id change — dragging a
+  // cell's geometry has to move the canvas as it is typed, which is the whole point of
+  // authoring against a live preview.
+  const arrangementViewKey = JSON.stringify(arrangementView ?? null);
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { kind: 'cg-preview', action: 'arrangement', view: JSON.parse(arrangementViewKey) },
+      '*',
+    );
+  }, [arrangementViewKey]);
+
+  // ⭐ LOOKS phase 2 (§14, phase 1's D.5) — the ACTIVE LOOK, pushed into the preview's
+  // `runtime.setActiveLook()`. THIS is the production caller phase 1 said did not exist
+  // yet. Same contract as the arrangement message above: not a scene edit, no rebuild —
+  // the runtime flips instance visibility and re-punches on the live nodes, which is the
+  // cut being previewed. The RESOLVED id is posted (session pick, else the group's
+  // default), so a stale session pick can never address a deleted look.
+  const activeLookIdSession = useDesignerSelector((st) => st.activeLookId);
+  const lookGroup = scene === null ? undefined : lookGroupOf(scene);
+  const effectiveLookId =
+    lookGroup === undefined
+      ? null
+      : (lookGroup.looks.find((l) => l.id === activeLookIdSession)?.id ??
+        lookGroup.defaultLookId ??
+        null);
+  useEffect(() => {
+    if (effectiveLookId === null) return;
+    iframeRef.current?.contentWindow?.postMessage(
+      { kind: 'cg-preview', action: 'look', lookId: effectiveLookId },
+      '*',
+    );
+  }, [effectiveLookId]);
 
   // Stream live scene updates to the existing iframe via postMessage,
   // rAF-throttled so we never queue more than one rebuild per frame.
@@ -872,6 +928,15 @@ export function CanvasArea({
       <PreviewHost />
       <div className={s.header} aria-label="Canvas header">
         {showToolbar && <CanvasToolbar tool={tool} />}
+        {/* multibox-layout-switch C2 — always visible, because the right panel switches to
+            element properties the moment you select something to adjust. */}
+        {/* A′'s ArrangementPicker is DISABLED, not deleted (owner, 2026-08-19) — see
+            `tasks.md` §1b P2.DEL. The LOOKS selector below is the authoring control. */}
+        <LookPicker
+          looks={lookGroup?.looks ?? []}
+          activeId={effectiveLookId}
+          onPick={(id) => designerStore.setActiveLook(id)}
+        />
         <span className={s.spacer} />
         <span className={s.zoomReadout} data-testid="zoom-readout">
           {zoomPct}%
@@ -968,6 +1033,7 @@ export function CanvasArea({
                   frameOffset={frameOffset}
                   currentFrame={currentFrame}
                   onPan={applyPan}
+                  issues={issues}
                 />
               </div>
             </div>

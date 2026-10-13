@@ -1,3 +1,4 @@
+import type { ArrangementView } from '@cg/shared-schema';
 import type {
   ClockElement,
   LottieElement,
@@ -25,6 +26,15 @@ export type LifecycleEvent =
   | 'play.start'
   | 'play.end'
   | 'update'
+  /**
+   * 🔴 `SELF-STOP-24` / `C-013` — the ROOT finished ON ITS OWN. Emitted once per run, before
+   * `stop.start`/`stop.end`, and NEVER for an exit that `stop()`, `out()` or `remove()` began.
+   *
+   * It exists because `stop.end` cannot answer the question: every exit converges there, so a
+   * listener on it cannot tell a template that FINISHED from one that was TAKEN OFF — and the
+   * whole of `C-013` is that distinction.
+   */
+  | 'self-end'
   | 'stop.start'
   | 'stop.end'
   | 'error';
@@ -35,8 +45,23 @@ export interface ErrorEvent {
   elementId?: string;
 }
 
+/**
+ * 🔴 `SELF-STOP-24` — what a `self-end` carries.
+ *
+ * `take` is the token the page was last given, which names the RUN that just ended. Absent when
+ * the page was never given one — a Designer preview, a single-file artifact dropped over
+ * `file://`, any host that is not this bridge.
+ *
+ * ⚠ **The event fires either way, and the absence is the reporter's problem rather than the
+ * runtime's.** Keeping "the lifecycle ended" separate from "there is somewhere to report it"
+ * is what lets the preview observe a self-end while opening no connection at all.
+ */
+export interface SelfEndEvent {
+  take?: string;
+}
+
 export type EventListener<E extends LifecycleEvent> = (
-  payload: E extends 'error' ? ErrorEvent : void,
+  payload: E extends 'error' ? ErrorEvent : E extends 'self-end' ? SelfEndEvent : void,
 ) => void;
 
 /**
@@ -60,6 +85,57 @@ export interface TemplateRuntime {
    * absent from `data` back to its declared default.
    */
   update(data: Partial<FieldValues>, opts?: UpdateOptions): Promise<void>;
+  /**
+   * `multibox-layout-switch` `tasks.md` 4.2 / 4.3 — switch the ACTIVE ARRANGEMENT (or clear
+   * it with `undefined`), re-punching every mask against the new geometry and visibility.
+   *
+   * This is the seam an arrangement switch drives. It does not rebuild the scene: the boxes
+   * are moved by the view's geometry and the masks are reassigned on the live nodes, so a
+   * switch costs the page none of its content.
+   *
+   * ⚠ It does not ANIMATE the change — the transition modes are stage G. Called on its own
+   * it is a CUT, which is exactly `design.md` §13.5's free mode and the one that ships first.
+   */
+  setArrangementView(view: ArrangementView | undefined): void;
+
+  /**
+   * 🔴 `TIMING-BUILD-21` §6 / §7 — CHANGE THE LIVE PASS TIMING WITHOUT RESTARTING THE GRAPHIC.
+   *
+   * The seam a console's "two more passes then out" reaches. Everything else that changes a
+   * playout knob today does it by tearing the runtime down and rebuilding it (the Designer
+   * preview's `scene-replace`), which is a black frame in the middle of a live template. This
+   * changes the running controller in place.
+   *
+   * - `passes` is PASSES REMAINING FROM NOW; the pass on screen is not one of them, and `0`
+   *   means "after this pass, go out" — an instruction, not a stop, so `mode`'s out behaviour
+   *   still runs. `'infinite'` keeps it going.
+   * - `delayMs` takes effect from the NEXT gap. The gap in flight keeps its original length:
+   *   the controller re-reads the delay at every boundary rather than snapshotting it, so a
+   *   change can never stretch or truncate a wait already running.
+   *
+   * ⚠ ROOT SCOPE ONLY. A nested composition instance keeps its own lifecycle, exactly as the
+   * per-scope overrides do — a row's timing is the row's, not every child's.
+   *
+   * ⚠ A settled graphic ignores it, and so does a non-cyclic `mode`: see
+   * `PlayoutController.setRemainingPasses` for why each is a silent no-op HERE rather than a
+   * refusal. The refusal belongs at the surface, where a reason can be given.
+   */
+  setPassTiming(timing: { passes?: number | 'infinite'; delayMs?: number }): void;
+
+  /**
+   * `multibox-layout-switch` §14 (LOOKS) phase 1D — switch the ACTIVE LOOK. Exactly one
+   * look's instance is visible; the switch is a visibility flip plus a re-punch — a CUT,
+   * v1's only mode. Returns `false` (and changes nothing) for an unknown look id or a
+   * scene with no multi-frame group; a fresh build enters the group's DEFAULT look.
+   *
+   * ⚠ Phase 2's Designer UI is this seam's first production caller (via the preview's
+   * `look` message); in phase 1 it is exercised by tests only — said here so the next
+   * reader does not take an unreferenced method for dead.
+   */
+  setActiveLook(lookId: string): boolean;
+
+  /** The active look's id, `undefined` when the scene has no multi-frame group. */
+  activeLookId(): string | undefined;
 
   /** Play the exit animation. Stub for M3.2-α — instant transition. */
   stop(opts?: StopOptions): Promise<void>;
@@ -168,6 +244,23 @@ export interface RuntimeBootOptions {
    * `'output'`, the safe direction.
    */
   mode?: RenderMode;
+
+  /**
+   * B-134 — whether this surface paints the EDITOR BACKDROP.
+   *
+   * A SECOND axis, deliberately not folded into {@link RenderMode}, because the two
+   * genuinely disagree on one surface. `mode` answers "does a Live Source paint SMPTE
+   * bars?" — and the Preview modal wants `'author'` there, because it cannot show real
+   * live video either. This answers "is this the editing canvas?" — and the Preview
+   * modal wants `false`, because it is a preview of AIR and the backdrop never reaches
+   * air (B-129). Overloading `mode` for both would force one of the two answers to be
+   * wrong on that surface.
+   *
+   * Absent ⇒ `true`, which changes nothing for `'output'` (where the backdrop is
+   * already never painted) and preserves the canvas behaviour for every existing
+   * `'author'` caller. Only the Preview modal passes `false`.
+   */
+  paintEditorBackdrop?: boolean;
 
   /**
    * D-062 — image `assetId` → resolved URL. After building the scene the runtime
@@ -294,6 +387,11 @@ export interface PlayoutOverride {
   holdSource?: HoldSource;
   holdMs?: number;
   repeat?: number | 'infinite';
+  /**
+   * `TIMING-BUILD-21` — the gap BETWEEN passes (not the hold WITHIN one; see `holdMs` and
+   * `PlayoutObjectSchema.delayMs`). Session-only here, like every other key on this type.
+   */
+  delayMs?: number;
   /**
    * D-102 Phase 1 — PER-ELEMENT ticker timing, keyed by the ticker element's id (replaces the
    * old per-scope `tickerRepeat`/`tickerBoundary`, which could only address one ticker per

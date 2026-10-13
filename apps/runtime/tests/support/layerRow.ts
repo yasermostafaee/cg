@@ -1,4 +1,5 @@
 import { StrictMode, createElement } from 'react';
+import { fillBridgeStub } from './authStub.js';
 import { connectionsStub, type Reachability } from './reachability.js';
 export type { Reachability };
 import { createRoot, type Root } from 'react-dom/client';
@@ -9,6 +10,7 @@ import type { StackItemState } from '@cg/shared-schema';
 import { LayerRow } from '../../src/renderer/features/layers/LayerRow.js';
 import { resolveRowBinding, type RowBinding } from '../../src/renderer/features/layers/rowState.js';
 import type { LayerRowActionDeps } from '../../src/renderer/features/layers/layerRowActions.js';
+import type { RowPlateAudio } from '../../src/renderer/features/layers/plateAudio.js';
 
 /**
  * R-028 part B — the shared harness for LayerRow DOM tests.
@@ -83,12 +85,22 @@ export function rowDeps(over: Partial<LayerRowActionDeps> = {}): LayerRowActionD
   const binding = over.binding ?? bindingFor(itemWith('loaded'));
   return {
     binding,
+    // `C-038` — OPEN by default: this helper serves the per-verb availability specs, whose
+    // subject is the row's state and not the principal. The identity gate has its own file.
+    canOperate: true,
+    // DELTA 8 — the operator words each verb toasts with.
+    rowName: 'Row 1',
+    layerName: '1-89',
     observed: binding.kind === 'bound' ? { kind: 'producer', producer: 'html' } : { kind: 'empty' },
     hasNext: false,
     linkDown: false,
     casparReach: 'reachable',
     dirty: false,
     rehearsing: false,
+    // R-021 stage 4 — a spec that is ABOUT the blocked row sets this AND the
+    // matching observation; every other spec describes a row whose restore was
+    // never parked, which is the ordinary case.
+    restoreBlocked: false,
     templateAvailable: true,
     toggleRehearse: () => Promise.resolve({ accepted: true }),
     load: () => Promise.resolve({ accepted: true }),
@@ -100,6 +112,11 @@ export function rowDeps(over: Partial<LayerRowActionDeps> = {}): LayerRowActionD
     clear: () => Promise.resolve({ accepted: true }),
     clearLayer: () => Promise.resolve({ accepted: true }),
     remove: () => Promise.resolve({ accepted: true }),
+    // R-048 (6.9) — the default row's template declares NO live plates, which is
+    // the ordinary case; a spec about the swap says so explicitly.
+    hasLivePlates: false,
+    swapSource: () => Promise.resolve({ accepted: true }),
+    plateAudio: () => Promise.resolve({ accepted: true }),
     onError: () => undefined,
     ...over,
   };
@@ -136,9 +153,14 @@ export function stubBridge(link: Link, reach: Reachability = 'both-up'): RowStub
       out: stubs.out,
       remove: stubs.remove,
     },
-    templates: { list: stubs.list, onChanged: () => () => undefined },
+    templates: {
+      list: stubs.list,
+      onChanged: () => () => undefined,
+      // `B-300` — an open picker listens for who changed the list.
+      onActed: () => () => undefined,
+    },
   };
-  (window as unknown as { cg: typeof cg }).cg = cg;
+  (window as unknown as { cg: typeof cg }).cg = fillBridgeStub(cg);
   return stubs;
 }
 
@@ -157,9 +179,11 @@ export async function renderLayerRow(options: {
   template?: TemplateInfo | null;
   link?: Link;
   dirty?: boolean;
-  bankPosition?: number;
+  defaultAlias?: string;
   /** Render the row as already SELECTED (drives the toggle-select assertions). */
   selected?: boolean;
+  /** `B-232` — render the row as one the emptied-air notice names. */
+  emptiedAir?: boolean;
   /** Observe what a row click reports back to the panel. */
   onSelect?: (itemId: string | null) => void;
   onUpdate?: (itemId: string) => Promise<{ accepted: boolean }>;
@@ -181,6 +205,33 @@ export async function renderLayerRow(options: {
    * bootstrap window, and it is the one combination that must NOT read as EMPTY.
    */
   stackReady?: boolean;
+  /**
+   * 🔴 **SESSION BR — REQUIRED BY `LayerRow`, AND THIS HARNESS NEVER PASSED IT.**
+   *
+   * `rehearsing` is a required prop; the render below omitted it, so every spec built
+   * through this helper has rendered with it `undefined` — falsy. **The DOM-level
+   * rehearsing appearance was therefore UNREACHABLE from this harness**, and no spec using
+   * it has ever asserted anything about a row on PVW. (R-022’s rehearse behaviour IS
+   * covered, but through `layerRowActions` directly — the pure function, not the render.)
+   *
+   * Exposed here so the state is reachable at all. It defaults to `false`, which is exactly
+   * what every existing spec was already getting, so nothing that passes today changes.
+   * ⚠ Nothing uses it yet: naming the visual a rehearsing row SHOULD have is a judgement
+   * this session did not make. Recorded as a gap rather than guessed at.
+   */
+  rehearsing?: boolean;
+  /** `LayerRow`’s display index. Was passed below but never declared here. */
+  displayPosition?: number;
+  /**
+   * `add-multibox-audio` — the LIVE PLATES this row's item owns, for the read-only audio
+   * summary. Defaults to none, which is every row that has no live plates — the ordinary case.
+   *
+   * `B-164` — each plate carries its own `volume` and `held` rather than a bare id, because
+   * the summary's denominator is what the ACTIVE LOOK SHOWS (`held === false`) and its
+   * numerator is audibility. A harness that could only express ids could not express the
+   * owner's three-look table at all.
+   */
+  seatedPlates?: readonly RowPlateAudio[];
 }): Promise<RenderedRow> {
   const link = options.link ?? 'live';
   const stubs = stubBridge(link, options.reach ?? 'both-up');
@@ -207,6 +258,7 @@ export async function renderLayerRow(options: {
         null,
         createElement(LayerRow, {
           slot,
+          acceptsBank: 'high' as const,
           // The row takes its item OUT of the binding now — there is no `item` prop
           // to pass, which is what stops a verb asking a nullable what it carries.
           binding,
@@ -214,9 +266,12 @@ export async function renderLayerRow(options: {
           // A standalone row is the first row AND the bank's first position; specs
           // that care about the difference drive the panel, not one row.
           displayPosition: options.displayPosition ?? 1,
-          bankPosition: options.bankPosition ?? 1,
+          rehearsing: options.rehearsing ?? false,
+          defaultAlias: options.defaultAlias ?? 'Layer 1',
           selected: options.selected ?? false,
+          emptiedAir: options.emptiedAir ?? false,
           dirty: options.dirty ?? false,
+          seatedPlates: options.seatedPlates ?? [],
           onSelect: options.onSelect ?? ((): void => undefined),
           onUpdate: options.onUpdate ?? stubs.update,
         }),

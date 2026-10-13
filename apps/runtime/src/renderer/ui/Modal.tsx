@@ -1,8 +1,10 @@
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
-import { colors } from '../theme.js';
+import { X, type LucideIcon } from 'lucide-react';
+import { useActionRowFit } from '@cg/gesture';
+import { colors, cssVars } from '../theme.js';
 import { Button, type ButtonVariant } from './Button.js';
+import { useFocusTrap } from './focusTrap.js';
 import { Icon } from './Icon.js';
 import { Notice, type NoticeRole } from './Notice.js';
 
@@ -43,30 +45,78 @@ import { Notice, type NoticeRole } from './Notice.js';
  * gives every dialog a visible ✕, Escape-to-close and backdrop-click-to-close —
  * three ways out — and a lock screen with a way out is not a lock. Its scrim is
  * hand-rolled for that reason and that reason only.
+ *
+ * ⚠ `B-229` — THAT PARAGRAPH IS ABOUT THE EXITS, AND IT WAS READ AS BEING ABOUT
+ * MORE. The lock does not take the ✕, Escape or the backdrop, and must not. It
+ * DOES take the focus trap, which is the opposite kind of mechanism — an exit lets
+ * the operator leave, and the trap stops focus leaving on its own. Reading the one
+ * rule as the other left the lock inheriting neither, and Tab walked through a
+ * 94 %-opaque lock screen onto a TAKE. The containment now lives in
+ * `ui/focusTrap.ts` and both surfaces call it.
  */
 
-const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 const styles = {
+  /*
+    🔴 `SETTINGS-POLISH-04` §7 — THE SCRIM IS A GROUND *AND* A BLUR, AND BOTH ARE SPELLED HERE.
+
+    The blur is not decoration. At the reference's 0.76 a scrim with no blur reads as FLAT
+    BLACK — the console stops being dimmed and becomes an absence — so the darker ground is
+    only correct WITH it. See the token home for the pair.
+
+    ⚠ Both are inline for the reason the ground already was: this object sets `background`
+    inline, so a `[data-modal-layer]` rule in `controls.css` would lose to it silently. Putting
+    the blur in the stylesheet while the ground stays here is exactly the split that produces a
+    "half the effect applied" bug nothing fails on.
+  */
   scrim: {
     position: 'fixed' as const,
     inset: 0,
-    background: 'rgba(0, 0, 0, 0.6)',
+    background: cssVars['--r-modal-scrim'],
+    backdropFilter: cssVars['--r-modal-scrim-blur'],
+    WebkitBackdropFilter: cssVars['--r-modal-scrim-blur'],
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
     padding: '1rem',
   },
+  /** A dialog opened FROM a dialog: above it, and through a lighter scrim — and a shallower blur. */
+  scrimSub: {
+    background: cssVars['--r-modal-scrim-sub'],
+    backdropFilter: cssVars['--r-modal-scrim-sub-blur'],
+    WebkitBackdropFilter: cssVars['--r-modal-scrim-sub-blur'],
+    zIndex: 1001,
+  },
+  /**
+   * 🔴 `R-094` — A DIALOG ABOUT THE WINDOW ITSELF (`Close CG Control?`), above every gate that can
+   * cover the console: the lock (1000), the sign-in gate (1001) and first-run (1002). The window
+   * can be closed whatever covers the console, and a close held behind a gate would be a window
+   * that silently refuses to close. Below the anchored panels (1100) and the tooltip (3000).
+   * The base scrim's ground and blur; only the stacking differs.
+   */
+  scrimWindow: { zIndex: 1050 },
   dialog: {
     background: colors.panel,
     border: `1px solid ${colors.border}`,
-    borderRadius: '0.4rem',
-    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
-    padding: '1rem 1.25rem',
+    // `STATION-CHROME-02` §0 — from the token home. It was a bare `0.4rem`, which is a
+    // radius spelled at a call site: the guard only reads `controls.css`, so this one had
+    // no reviewer. Same corner, one declaration.
+    borderRadius: cssVars['--r-modal-radius'],
+    boxShadow: cssVars['--r-modal-shadow'],
+    /*
+      🔴 `REPAIR-03` B — FLUSH CHROME FOR EVERY SIZE, not only `fixed`.
+
+      This was `padding: '1rem 1.25rem'` with a `0.75rem` gap, so the head, body and footer
+      were three stacked blocks inside one padded box and none of them had an edge of its
+      own. The reference draws a head BAND with its own ground and a rule under it, a body
+      that owns its padding, and a footer BAND with its own ground and a rule over it — which
+      is exactly the shape `fixed` already had. Generalising it is one treatment instead of
+      two, not a second one.
+    */
+    padding: 0,
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.75rem',
+    gap: 0,
     color: colors.text,
     /**
      * Bounded by the VIEWPORT, so a dialog whose content grows with config —
@@ -76,16 +126,201 @@ const styles = {
      */
     maxHeight: '88vh',
     minHeight: 0,
+    /*
+      🔴 `MODAL-CHROME-10` §2(b) — **THE ROUNDED FRAME CLIPS ITS CHILDREN.**
+
+      A rounded box does not clip by default, so every child that paints a ground of its own
+      — the head band, the footer band, Station setup's full-bleed rail — painted its own
+      SQUARE corner over the frame's arc and the dialog read as a rectangle with four small
+      notches. Measured in Chromium at 1400 x 900 by hit-testing 2 px in from each corner
+      (inside the frame's box, outside its radius): the picker, the import dialog (since
+      retired, `UI-POLISH-01` D) and the
+      audit log returned the head band at the top and `.cg-modal-footer` at the bottom, and
+      Station setup returned `.cg-rail` bottom-left and the footer bottom-right. Four
+      modals, one cause.
+
+      🔴 **IT IS FIXED AT THE CONTAINER, NOT ON EACH CHILD.** Rounding the bands instead would
+      need a different radius per corner per band, would have to be redone for every new
+      band, and would still be wrong the moment a child is full-bleed on one edge only. One
+      declaration here is the whole family, including the ones not written yet.
+
+      ⚠ Nothing inside a dialog is allowed to overflow it after this. Native `<select>`
+      popups are unaffected (the browser paints them outside the page box); the body owns the
+      scrolling it already had (`styles.body` is `overflow-y: auto`). If a future popover
+      needs to escape the frame, it portals — it does not delete this line.
+    */
+    overflow: 'hidden' as const,
+  },
+  /**
+   * 🔴 `STATION-CHROME-02` §2 — **THE FIXED FRAME.**
+   *
+   * A dialog whose HEIGHT is declared rather than derived from its content, and whose
+   * chrome therefore goes FLUSH: no padding on the shell, a rule under the head, a rule
+   * over the footer, and a body that owns its own edges so an internal rail can reach
+   * them.
+   *
+   * ── WHY A HEIGHT, WHICH NO OTHER DIALOG HAS ─────────────────────────────
+   *
+   * Station setup is five sections behind five tabs, and their content lengths have
+   * nothing to do with each other — Delimiters is five rows, Layers is thirty-four. With
+   * an intrinsic height the dialog GREW AND SHRANK under the operator as he moved along
+   * the rail: the frame he was aiming at, and everything he could see behind it, moved
+   * on every press. That is the one property he notices immediately and no unit test
+   * would have caught, so `station-setup-frame.spec.ts` measures the box on all five.
+   *
+   * ⚠ **A SHORT SECTION MUST NOT STRETCH TO FILL IT.** The empty space below Delimiters
+   * is correct; growing a card to swallow it would be worse than the space. Only the
+   * PANE is `flex: 1` — nothing inside it is.
+   *
+   * ⚠ `padding: 0` here means a `fixed` dialog's BODY has no padding either, and its
+   * content is expected to bring its own (Station setup's rail and pane each do). That
+   * is deliberate: a padded body cannot host a rail that touches the frame.
+   */
+  /*
+   * 🔴 `MONITORS-01` — AUDIT ROWS 71 AND 74, AND WHY THEY LAND ON `fixed` RATHER THAN ON
+   * THE PRIMITIVE.
+   *
+   * Row 71 is the reference's `.settings` frame: measured in Chromium at 1280 × 800 it
+   * renders `border-radius: 16px` and
+   * `box-shadow: 0 32px 100px rgba(0,0,0,.6), 0 0 0 1px rgba(0,0,0,.2)` — a soft 100 px
+   * lift plus a hairline ring — against this primitive's `--r-radius-md` (6) and
+   * `--r-shadow-2` (`0 4px 16px`). Row 74 is that frame's title: 19 px / 650 against the
+   * shared `1rem / 700`.
+   *
+   * ⚠ **THE REFERENCE HAS NO ONE NUMBER FOR THESE, so a primitive-wide change would be
+   * inventing one.** Its own dialogs render `.settings` at radius 16 and the audio dialog
+   * at 14 (audit row 70), and their titles at 19 px, 20 px and 22 px (rows 62, 74, 98). A
+   * single value here would have to pick one of those and apply it to three surfaces the
+   * drawing gives three values for. So these take the `-fixed` scope this file already
+   * uses for every other Station-setup measurement — the frame that was actually measured
+   * gets the numbers that were actually measured.
+   *
+   * ⚠ NOT taken, and out of this session by the owner's own scope: the modal WIDTH table
+   * and the button family (audit rows 70, 87, 106).
+   */
+  dialogFixed: {
+    padding: 0,
+    gap: 0,
+    height: cssVars['--r-modal-h-fixed'],
+    maxHeight: cssVars['--r-modal-h-fixed'],
+    borderRadius: cssVars['--r-modal-radius-fixed'],
+    boxShadow: cssVars['--r-modal-shadow-fixed'],
+    /*
+     * 🔴 `SETTINGS-MATCH-02` — THE FRAME'S OWN GROUND, AND WHY IT IS SPELLED HERE.
+     *
+     * This dialog's surfaces are the reference's measured family (see the token home's
+     * `SETTINGS-MATCH-02` block) and every other one of them is a `controls.css` rule. This
+     * one cannot be: `styles.dialog` sets `background` INLINE, and an inline style beats a
+     * `[data-modal-size='fixed']` selector every time — silently, with the frame simply
+     * rendering the old ground. The same trap `Modal`'s `library` body padding already
+     * carries a warning about, and the first spelling of this change walked into it: the
+     * e2e read `rgb(20, 27, 37)` where the drawing paints `rgb(21, 25, 31)`.
+     *
+     * ⚠ So: a surface this dialog overrides is a CSS rule UNLESS the primitive sets that
+     * property inline, in which case it belongs here. The frame, the footer band and the head
+     * band's rule are the three.
+     */
+    background: cssVars['--r-setup-surface'],
+    borderColor: cssVars['--r-modal-line'],
   },
   /** The title row: heading on one side, the close affordance on the other. */
   titleRow: {
     display: 'flex',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '0.75rem',
+    // `REPAIR-03` B — the reference's `.modal-head`: its own band, ground and rule.
+    gap: cssVars['--r-modal-head-gap'],
+    padding: cssVars['--r-modal-head-pad'],
+    background: cssVars['--r-modal-head-bg'],
+    borderBottom: `1px solid ${colors.border}`,
+    boxSizing: 'border-box' as const,
     flexShrink: 0,
   },
-  title: { fontSize: '1rem', fontWeight: 700, margin: 0 },
+  /**
+   * `REPAIR-03` B — THE HEAD EMBLEM (audit rows 62, 72, 98, 113), a 42 px box holding one
+   * glyph. Optional: the reference draws it on the picker, the import wizard, the audit log,
+   * the audio dialog and Station setup, and deliberately NOT on its confirm dialog — a
+   * question asked in words does not want a decorative mark beside it.
+   */
+  emblem: {
+    width: cssVars['--r-modal-emblem-box'],
+    height: cssVars['--r-modal-emblem-box'],
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: cssVars['--r-modal-emblem-radius'],
+    background: cssVars['--r-modal-emblem-bg'],
+    border: `1px solid ${cssVars['--r-modal-emblem-line']}`,
+    color: cssVars['--r-modal-emblem-ink'],
+  },
+  /**
+   * The fixed frame's head: its own padding, and the rule that separates it. Phase 7 took the
+   * reference's `.settings-head` as rendered — a 90 px floor, `21px 28px` — from the token home.
+   */
+  titleRowFixed: {
+    alignItems: 'center',
+    /*
+      ⚠ TRANSPARENT, and that is a restatement rather than an omission. `REPAIR-03` B gave
+      the BASE head band the outer family's `#172230` ground; the reference's
+      `.settings-head` has none — it sits on the frame's own surface — so the `fixed` frame
+      must put it back to nothing or it would inherit a ground Phase 7 measured as absent.
+    */
+    background: 'transparent',
+    gap: cssVars['--r-modal-head-gap-fixed'],
+    minHeight: cssVars['--r-modal-head-min-h-fixed'],
+    padding: cssVars['--r-modal-head-pad-fixed'],
+    /* `SETTINGS-MATCH-02` — this frame's own line, inline for the reason `dialogFixed` gives. */
+    borderBottom: `1px solid ${cssVars['--r-setup-card-line']}`,
+    boxSizing: 'border-box' as const,
+  },
+  title: {
+    // REPAIR-03 B — the reference's .modal-head title renders 18 px / 650; 650 resolves
+    // to the 700 face on this app's static Exo 2 (A3), so 700 is what is spelled.
+    fontSize: cssVars['--r-modal-title-text'],
+    fontWeight: Number(cssVars['--r-weight-bold']),
+    margin: 0,
+  },
+  /** `MONITORS-01` audit row 74 — the `fixed` frame's own title: 19 px / 650, as measured. */
+  titleFixed: {
+    fontSize: cssVars['--r-modal-title-text-fixed'],
+    // The reference's `.settings-head h2` renders 650; on this app's static Exo 2 that
+    // resolves to the 700 face (`REPAIR-03` A3), so the weight that renders is the one named.
+    fontWeight: Number(cssVars['--r-weight-bold']),
+    /*
+      `SETTINGS-MATCH-02` — and its TRACKING, which the side-by-side found and no measurement
+      of the app alone could: the reference's `h1` renders `letter-spacing:-0.02em` here
+      against the primitive's default of none. A 19 px title set loose reads as a wider word
+      than the drawing's at the same size.
+    */
+    letterSpacing: cssVars['--r-setup-title-tracking-frame'],
+  },
+  /**
+   * `SETTINGS-MATCH-02` — the `fixed` frame's EMBLEM, which the reference draws one size
+   * larger than the outer family's: `.settings-emblem` is 44 × 44 with a 12 px corner and a
+   * 23 px glyph, against `.modal-icon`'s 42 / 10 / 20. Scoped for the same reason the frame's
+   * radius, title and close box are — two families, two measured numbers.
+   */
+  emblemFixed: {
+    width: cssVars['--r-setup-emblem-box'],
+    height: cssVars['--r-setup-emblem-box'],
+    borderRadius: cssVars['--r-setup-emblem-radius'],
+  },
+  /** The title and its subtitle stack; the close affordance stays on the row's far end. */
+  titleStack: { display: 'flex', flexDirection: 'column' as const, minWidth: 0 },
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 7 — the SUBTITLE under the title, the reference's
+   * `.settings-subtitle` (13 px, muted, 3 px under). Optional: a dialog says WHAT it is scoped
+   * to here — Station setup names its channel and primary — and most dialogs have nothing to
+   * add. Not a message and not the body: it is chrome, pinned with the title.
+   */
+  subtitle: {
+    margin: `${cssVars['--r-modal-subtitle-gap']} 0 0`,
+    fontSize: cssVars['--r-modal-subtitle-text'],
+    fontWeight: 400,
+    lineHeight: 1.55,
+    color: colors.textMuted,
+  },
   /**
    * The body SCROLLS; the title and the footer do not. A dialog that asks a
    * destructive question must keep its buttons visible however long the content
@@ -100,6 +335,8 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.75rem',
+    // REPAIR-03 B — the body owns its inset now that the frame is flush.
+    padding: cssVars['--r-modal-body-pad'],
   },
   /**
    * §3 — THE MESSAGE REGION, PINNED TO THE ACTION ROW.
@@ -134,11 +371,169 @@ const styles = {
   },
   footer: {
     display: 'flex',
-    gap: '0.5rem',
     justifyContent: 'flex-end',
     alignItems: 'center',
     flexShrink: 0,
+    /*
+      `REPAIR-03` B — the reference's `.modal-foot`: its own band, ground, rule and FLOOR.
+
+      ⚠ 72 px here is the OUTER `.modal` family's floor; `footerFixed` below keeps 74 px,
+      which is the Station-setup frame's. Two families, two measured numbers, and neither is
+      composed from what a section puts in it — see `--r-modal-foot-h-base`.
+    */
+    gap: cssVars['--r-modal-foot-gap'],
+    padding: cssVars['--r-modal-foot-pad'],
+    background: cssVars['--r-modal-foot-bg'],
+    borderTop: `1px solid ${colors.border}`,
+    minHeight: cssVars['--r-modal-foot-h-base'],
+    boxSizing: 'border-box' as const,
   },
+  /**
+   * 🔴 `PLATES-AUDIO-11` DELTA §2 — **THE BODY TAKES THE SLACK, SO THE FOOTER SITS ON THE
+   * FRAME'S BOTTOM EDGE.**
+   *
+   * A declared height alone does not put the footer at the bottom. `styles.body` is
+   * `overflowY: auto` with `minHeight: 0` but no `flex`, so with fewer rows than the frame
+   * holds it is CONTENT-sized: the footer floats up under the last row and the frame's lower
+   * third is dead space. Giving the body the remaining track is what pins the band.
+   *
+   * ⚠ Applied only where a caller opted in with `frame="fixed"`, NOT to every framed size.
+   * `library` and `ledger` keep exactly the layout `MODAL-CHROME-10` §4 measured and
+   * `modal-frame-chrome.spec.ts` holds; changing their body's flex would be re-tuning two
+   * signed-off surfaces to fix a third.
+   */
+  bodyFlush: { flex: '1 1 auto' },
+  /**
+   * The fixed frame's footer BAR — its own padding, a rule above it, and the raised
+   * surface that makes it read as chrome rather than as the last row of the content.
+   * §2's assertion measures its top edge: it must not move as the tab changes.
+   */
+  footerFixed: {
+    padding: cssVars['--r-modal-foot-pad-fixed'],
+    /* `SETTINGS-MATCH-02` — the reference's `.foot-actions{gap:9px}`, not the frame head's 14. */
+    gap: cssVars['--r-setup-foot-actions-gap'],
+    borderTop: `1px solid ${cssVars['--r-setup-card-line']}`,
+    /*
+      Phase 7 — the DIALOG's own surface, as the reference paints its `.panel-foot`
+      (`background:var(--surface)`), not the raised one: the rule above it is what separates
+      it from the pane, and a raised band under a sunken pane read as a third surface.
+
+      `SETTINGS-MATCH-02` — and that surface is this frame's own, inline for the reason
+      `dialogFixed` gives: the base `styles.footer` sets `background` here too.
+    */
+    background: cssVars['--r-setup-surface'],
+    /*
+      🔴 A FLOOR, so the bar's height does not depend on whether this section has buttons.
+      Without it a tab carrying none collapses the footer and its TOP EDGE moves — see
+      `--r-modal-foot-h` for the measurement that forced this, and `styles.dialogFixed` for
+      why a moving edge is the defect this frame exists to remove.
+    */
+    minHeight: cssVars['--r-modal-foot-h'],
+    boxSizing: 'border-box' as const,
+  },
+  /** The fixed frame's body fills the frame; only the scroll container inside it scrolls. */
+  bodyFixed: { flex: 1, padding: 0, gap: 0 },
+  /**
+   * 🔴 `SETTINGS-MATCH-02` §8 — THE SUB-DIALOG'S GROUND AND ITS FOOTER BAND, INLINE.
+   *
+   * The same trap `dialogFixed` carries a warning about, met a second time and caught the same
+   * way — by opening the dialog and reading what it PAINTS. `styles.dialog` sets `background`
+   * and `styles.footer` sets `background` inline, so the `[data-modal-size='record']` rules in
+   * `controls.css` lost silently: measured, the frame came back `rgb(20, 27, 37)` (the
+   * console's `--r-surface`) against the drawing's `#15191f`, and the footer `rgb(20, 32, 45)`
+   * (the outer family's band) against its `#12171e`.
+   *
+   * ⚠ Every OTHER surface of this family is a stylesheet rule and belongs there. These two are
+   * here for one reason: the primitive already sets that property inline.
+   */
+  dialogRecord: { background: cssVars['--r-setup-surface'] },
+  /**
+   * 🔴 `MODAL-CHROME-10` §4 — **THE FRAME IS FIXED AND THE CONTENT SCROLLS**, for the two
+   * dialogs whose content is a LIST the operator filters.
+   *
+   * ── WHAT WAS WRONG, MEASURED ────────────────────────────────────────────
+   *
+   * The picker and the audit log took their height from their content, so filtering RESIZED
+   * the frame under the operator's hand. Measured in Chromium at 1400 x 900: the picker was
+   * 792 tall with every template listed, 484.1 with `Graphics beds` selected and 457.3 with
+   * a search that matched nothing — a 335 px jump, on a surface whose whole job is filtering.
+   * The footer he is aiming at moved every time he typed.
+   *
+   * ── WHY THIS IS `fixed`'S DISCIPLINE AND NOT A SECOND ONE ────────────────
+   *
+   * `STATION-CHROME-02` already answered this question once, for Station setup: a declared
+   * height, an inner scroll region and a viewport clamp, and `station-setup-frame.spec.ts`
+   * holds it on all five panes. The SAME height expression is reused rather than a second
+   * number invented — `--r-modal-h-frame`, which `--r-modal-h-fixed` is now an alias of, so
+   * the three framed dialogs cannot drift apart. The clamp is what makes it safe on a short
+   * screen: `min(810px, 100vh - 64px)` is 536 at 1280 x 600, exactly as Station setup is.
+   *
+   * ⚠ **A SHORT LIST MUST NOT STRETCH TO FILL IT** — the same warning `dialogFixed` carries.
+   * The empty space under two rows is correct; growing the list to swallow it would put the
+   * footer back where the content decides.
+   *
+   * ⚠ This is a HEIGHT only. Both dialogs keep their own widths (`--r-modal-w-library`,
+   * `--r-modal-w-ledger`), which are the reference's and are not this item's subject.
+   */
+  dialogFramed: {
+    height: cssVars['--r-modal-h-frame'],
+    maxHeight: cssVars['--r-modal-h-frame'],
+  },
+  /*
+    🔴 `SETTINGS-POLISH-04` §1 — AND THE GAP AND THE PADDING, for the same reason and by the
+    same route.
+
+    `controls.css` had declared all three of this family's footer values since
+    `SETTINGS-MATCH-02` and all three were losing to `styles.footer`'s inline ones — the trap
+    two lines up, met a THIRD time in this one object. Measured: `gap: 12px` where the rule
+    said 9, and `padding: 16px 26px` where it said `16px 24px`.
+
+    The reference's `.sub-foot{gap:9px}` is the same NINE the pane footer's `.foot-actions`
+    takes — one family, one number, spelled once in `--r-sub-foot-gap`. The dead declarations
+    are gone from the stylesheet; see the note left in their place for why leaving them would
+    be worse than never having written them.
+  */
+  footerRecord: {
+    background: cssVars['--r-sub-foot-bg'],
+    gap: cssVars['--r-sub-foot-gap'],
+    padding: cssVars['--r-sub-foot-pad'],
+  },
+  /**
+   * 🔴 `SETTINGS-MATCH-02` §1 — **THE FIXED FRAME IS A RAIL BESIDE A PANEL, AND THE PANEL
+   * OWNS THE MESSAGE AND THE FOOTER.**
+   *
+   * ── THE DEFECT THIS SHAPE FIXES, MEASURED ───────────────────────────────
+   *
+   * The outer box was already identical on all five tabs — measured 1140 × 736 at 1280 × 800,
+   * five times, before anything here changed. What was NOT identical is what the operator
+   * actually looks at: with the message region a SIBLING of the body, a Servers refusal took
+   * its 109 px out of the body, so the RAIL and the PANE shrank from 565 px to 456 px the
+   * moment he pressed Servers, and grew back when he left. The frame stood still while
+   * everything inside it moved, which is the same complaint one layer in.
+   *
+   * The reference has no such region: its `.panel` is a column holding the scroll and the
+   * `.panel-foot`, and its `.sidebar` runs the FULL height of the body — measured, its footer
+   * starts at x = 297 against a frame at x = 70 with a 226 px rail, so the footer does not
+   * span the rail at all.
+   *
+   * So the frame is now that: `head / [rail | panel(scroll, message, foot)]`. The rail's
+   * height is the body's height and nothing a section does can change it, the message is
+   * still OUTSIDE the scroll and still directly above the actions (which is the whole of
+   * `AUDIT-CLOSE-01` delta A — the refusal is not something to scroll for), and the inset it
+   * used to need is gone because it is no longer spanning a column it does not belong to.
+   */
+  panelFixed: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+  },
+  /**
+   * The pinned region inside that column — it takes the PANE's own inset, because it is the
+   * last item in the pane's column and takes the column's rhythm.
+   */
+  messageFixed: { padding: cssVars['--r-modal-message-pad-fixed'] },
 } as const;
 
 /**
@@ -161,6 +556,19 @@ const styles = {
  * consistency" the owner forbade. Picking the solid amber leaves `Clear all`
  * EXACTLY as it is and makes the `Remove` confirms LOUDER than their old outline.
  * So no safety signal weakens in either direction, which is the tie-breaker.
+ *
+ * 🔴🔴 **AMENDED 2026-09-13 BY THE OWNER (`MODAL-CHROME-10` §3) — THE HUE IS REVERSED AND
+ * THE ARGUMENT IS NOT.** The console confirm's destructive button is now RED, harmonised with
+ * Station setup's deletes. This table is deliberately UNCHANGED: `destructive` still resolves
+ * to `caution-strong`, and the reversal is one `[data-modal-layer="base"]` rule in
+ * `controls.css` — which is where the sub-dialog's own red already lives, so both weights of
+ * the family sit at the same door and the annotation of the superseded "do not harmonise them"
+ * is beside them.
+ *
+ * ⚠ **THE PARAGRAPH ABOVE STILL DECIDES THE WEIGHT.** "Picking `danger` would have made
+ * `Clear all` quieter" is exactly why the reversal takes the red FAMILY at a primary's fill
+ * weight and not the row buttons' outline. The colour changed; the rule that no safety signal
+ * may weaken did not.
  *
  * `cancel` is `neutral` and never `ghost`: neutral must not mean INVISIBLE. A
  * ghost has no fill and no border and reads as a line of static text — the picker's
@@ -233,6 +641,12 @@ export interface ModalMessage {
   text: string;
   /** The specifics, when there are any — the bridge's own message, which names the layer. */
   detail?: string;
+  /**
+   * 🔴 `MODAL-CHROME-10` ADDENDUM C §C4(e) — the CONTROLS that resolve this message, seated
+   * inside it. See `Notice`'s `remedies` for why a control slot does not reopen §3's "the
+   * message is DATA" decision: §3 is about the SENTENCE, which is still a string here.
+   */
+  remedies?: ReactNode;
 }
 
 interface ModalProps {
@@ -241,6 +655,24 @@ interface ModalProps {
    * one treatment; the string supplies the words.
    */
   title: string;
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 7 — one line under the title saying what this dialog is SCOPED
+   * to (Station setup: `Channel 1 · Primary A`). Chrome, pinned with the title, rendered
+   * `[data-modal-subtitle]`; see `styles.subtitle`. Pass nodes so a name can sit in its own
+   * `<bdi>` (golden rule 11).
+   */
+  subtitle?: ReactNode;
+  /**
+   * 🔴 `REPAIR-03` B — THE HEAD EMBLEM (audit rows 62, 72, 98, 113): one lucide icon in a
+   * 42 px box at the start of the head band, as the reference draws it on the picker, the
+   * import wizard, the audit log, the audio dialog and Station setup.
+   *
+   * ⚠ OPTIONAL ON PURPOSE, and the omission is a decision the drawing makes too: its own
+   * `#confirm-dialog` has none. A confirmation asks a question in words and a decorative mark
+   * beside a destructive one is furniture where the sentence is the whole content. So a
+   * dialog that ASKS gets no emblem; a dialog that is a PLACE gets one.
+   */
+  emblem?: LucideIcon;
   /**
    * The action buttons, built from {@link ModalAction} so the role decides the
    * treatment. CANCEL first in DOM order — the row is right-aligned, so first in
@@ -257,7 +689,7 @@ interface ModalProps {
    * ── IT IS NOT A `ReactNode` ANY MORE, AND THAT IS THE FIX ──────────────────
    *
    * It was, and every one of the four dialogs that used it passed a node carrying
-   * its OWN style — three of them `color: colors.error`, which measures 2.13:1 on
+   * its OWN style — three of them `color: colors.alarmFill`, which measures 2.08:1 on
    * this dialog's surface. The region was adopted; the treatment was not, because
    * a `ReactNode` prop asks each caller to decide what a message looks like, and
    * four callers gave four answers.
@@ -275,72 +707,228 @@ interface ModalProps {
   children?: ReactNode;
   ariaLabel?: string;
   /**
-   * How wide the dialog is. `prose` (the default) is the ~460px column that reads
-   * well for a confirm question; `wide` is for dialogs carrying a TABLE of
-   * per-row controls, which at prose width wrap into an unreadable stack.
+   * How wide the dialog is. `prose` (the default) is the ~460px column that reads well
+   * for a confirm question; `wide` is the two-column-plus width.
+   *
+   * ── THE CRITERION IS THE COMPARISON, NOT THE MARKUP ─────────────────────
+   *
+   * This used to say `wide` is "for dialogs carrying a TABLE of per-row controls, which
+   * at prose width wrap into an unreadable stack" — and the TEMPLATE PICKER met that
+   * description while being `prose`, which made the sentence false about the tree it was
+   * describing. The picker was not the defect; the criterion was.
+   *
+   * It named an IMPLEMENTATION where the deciding property is whether the operator reads
+   * DOWN A COLUMN — comparing one row against another — which is what alignment across
+   * rows is for and what prose width destroys. The fixed-bank config dialog has that
+   * (thirty layers × checkbox + alias + observed state, scanned down the list); the
+   * picker does not (one name and one action per row, read one row at a time), so it
+   * stacks into a column at prose width and loses nothing.
+   *
+   * Stated that way the rule returns the width every dialog already has. The full
+   * requirement is in `openspec/specs/runtime-ui` — this comment points at it rather
+   * than being the only place it exists, which is the drift the whole
+   * `runtime-modal-contract` change was written to end.
+   *
+   * ⭐ `fixed` is the third, and it is a FRAME rather than a width: a declared height as
+   * well as a declared width, and flush chrome to go with them. Its criterion is narrow —
+   * a dialog whose content is SWITCHED rather than scrolled, so that an intrinsic height
+   * would move the frame under the operator as he switches. Station setup's five tabs are
+   * the only case today. Do not reach for it to make a dialog "look important"; see
+   * `styles.dialogFixed`.
+   *
+   * ⭐ `ledger` is the fourth, and it is a WIDTH again, not a frame: a dialog that IS a table
+   * read across many columns — the audit log, whose one row carries a time, an actor, an
+   * action, names over ids over a refused line, and an outcome. `RUNTIME-REDESIGN-01` Phase 8
+   * took it from `03-audit-log.html` as rendered (`--r-modal-w-ledger`, 1222 at 1280). Its
+   * height stays intrinsic and its table scrolls, which is exactly why it is not `fixed`.
+   *
+   * ⭐ `library` is the fifth, added by `RUNTIME-REPAIR-04`, and it is a width too — a
+   * dialog that reads a list DOWN one column while describing the destination ACROSS
+   * another. The template picker is the only case, and it is the reference's own BASE
+   * `.modal` width (`--r-modal-w-library`, 1120 at 1280) rather than a width invented for
+   * it. It is not `wide`: `wide` IS the audio dialog's 860 and two other dialogs wear it.
+   *
+   * ⭐ `import` was the sixth (`RUNTIME-REPAIR-05`, the reference's 750 px `#import-dialog`); it
+   * went with that dialog (`UI-POLISH-01` D — `Import a .vcg` opens the OS chooser directly).
    */
-  size?: 'prose' | 'wide';
+  /**
+   * ⭐ `record` is the seventh, added by `SETTINGS-MATCH-02` §8: the SUB-DIALOG every add,
+   * edit and remove inside Station setup opens. The reference's own
+   * `.sub-dialog{width:min(480px,calc(100vw - 32px))}` — narrower than `prose`'s 500, and its
+   * own frame rather than a near-miss of one, because that family also has its own head, body
+   * and footer paddings and its own footer ground.
+   */
+  size?: 'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'record';
+  /**
+   * 🔴 `PLATES-AUDIO-11` §5 — **TAKE THE FRAMED HEIGHT, on a size that does not imply it.**
+   *
+   * `MODAL-CHROME-10` §4 gave the picker and the audit log a declared height and an inner
+   * scroll region, derived from their SIZE (`library`, `ledger`). The live-plate audio dialog
+   * needs the same discipline for the same reason — its body is a list of FRAMES whose length
+   * changes under the operator, and a row switched from a three-frame look to a one-frame one
+   * moved the footer he was aiming at — but its size is `wide`, which is worn by the
+   * live-source SWAP dialog too. Widening the size test would have framed a dialog nobody
+   * measured and nobody asked for: a few select rows in a 736 px box.
+   *
+   * ⚠ **So this is a DOOR, not a second mechanism.** It resolves to the same `dialogFramed`
+   * style and the same `--r-modal-h-frame` expression as the other three. There is one height
+   * rule in this file and there must go on being one — the alternative is four dialogs with
+   * four numbers that agree until somebody retunes one.
+   *
+   * The reference frames its own audio modal the same way: measured on `08-live-audio.html`,
+   * `#audio-dialog` renders `height: calc(100vh - 48px)` with `overflow: hidden` and its body
+   * on `flex: 1 / overflow-y: auto`, and the box is 860 × 752 at 1280 × 800 with three frames,
+   * with one, and with none.
+   */
+  frame?: 'auto' | 'fixed';
+  /**
+   * 🔴 `SETTINGS-MATCH-02` §1 — the `fixed` frame's RAIL, beside the panel rather than above
+   * it, and running the frame's full height.
+   *
+   * It is a named REGION rather than part of `children` because of what that buys: the
+   * message region and the footer band then live in the PANEL's column, so a refusal cannot
+   * take height out of the rail (see `styles.panelFixed` for the measurement). A caller that
+   * put the rail inside `children` could only get that by laying out the footer itself, which
+   * is the primitive's job.
+   *
+   * Meaningless for every other size, and ignored there: only Station setup has a rail.
+   */
+  rail?: ReactNode;
+  /**
+   * `STATION-CHROME-01` §6 — which LAYER this dialog is on.
+   *
+   * `sub` is a dialog opened FROM another dialog: every Add and every Edit. It stacks
+   * above the base layer and lays a lighter scrim, so the dialog underneath stays visible
+   * and the operator can see he is one step deeper rather than somewhere else.
+   *
+   * ⚠ It is a z-index and a scrim, and NOTHING about the keyboard. Which surface owns
+   * Escape and Tab is decided by the trap STACK in `focusTrap.ts` — arm order, not a prop
+   * — so a caller cannot get the two out of step by forgetting this.
+   *
+   * `window` (`R-094`) is a dialog about the WINDOW, not the console: `Close CG Control?`. It
+   * stacks above the lock, the sign-in gate and first-run, because the window can be closed
+   * whatever covers the console. The base scrim; see `styles.scrimWindow`.
+   */
+  layer?: 'base' | 'sub' | 'window';
 }
 
-const WIDTHS: Record<'prose' | 'wide', string> = {
-  prose: 'min(460px, 92vw)',
-  wide: 'min(720px, 94vw)',
+/** `STATION-CHROME-02` §2 — the frames, resolved from the token home and never spelled here. */
+const WIDTHS: Record<'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'record', string> = {
+  prose: cssVars['--r-modal-w-prose'],
+  wide: cssVars['--r-modal-w-wide'],
+  fixed: cssVars['--r-modal-w-fixed'],
+  ledger: cssVars['--r-modal-w-ledger'],
+  library: cssVars['--r-modal-w-library'],
+  record: cssVars['--r-modal-w-record'],
 };
 
 export function Modal({
   title,
+  subtitle,
+  emblem,
   footer,
   message,
   onClose,
   children,
   ariaLabel,
   size = 'prose',
+  frame = 'auto',
+  rail,
+  layer: layerLevel = 'base',
 }: ModalProps): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
+  /** `STATION-CHROME-02` §2 — one read of the frame decision, four places apply it. */
+  const fixed = size === 'fixed';
+  /*
+    `MODAL-CHROME-10` §4 — the two LIST dialogs take the fixed frame's height discipline. Read
+    once, here, so the style and any future consumer cannot come to disagree about which
+    sizes are framed.
+
+    ⭐ `PLATES-AUDIO-11` §5 adds the third route into the SAME decision: an explicit `frame`
+    opt-in, for a dialog whose size is shared with one that must not be framed. Still one
+    read, still one style, still one height expression.
+  */
+  const framed = size === 'library' || size === 'ledger' || frame === 'fixed';
+  /*
+   * `MONITORS-01` audit row 74 — the `fixed` frame takes the drawing's own 19 px / 650 for
+   * its title; every other dialog keeps the one shared treatment. Composed here rather than
+   * at the two `<h2>` sites so the subtitle and no-subtitle branches cannot drift apart.
+   */
+  const titleStyle = fixed ? { ...styles.title, ...styles.titleFixed } : styles.title;
   // One shape downstream, so the region never has to ask which form it was given.
   const messages: readonly ModalMessage[] =
     message === undefined ? [] : Array.isArray(message) ? message : [message as ModalMessage];
 
+  /*
+    🔴 `B-230` — THE TRAP IS ARMED ONCE, AND THAT IS THE FIX AS MUCH AS THE SHARING IS.
+
+    This used to be one effect that did three things — move focus in, wrap Tab, handle
+    Escape — with `[onClose]` for its dependency list. Every caller passes `onClose` as an
+    inline arrow, so its identity changes on EVERY render, so the effect tore down and set
+    up again on every keystroke. Its setup moves focus. Typing one character into a
+    dialog's field therefore threw focus onto the ✕, which is why `usePrompt`'s `autoFocus`
+    looked "defeated by the primitive": it was not a race at mount, it was focus being
+    taken again on every commit.
+
+    Splitting them fixes it structurally rather than by tuning a dependency list: the trap
+    arms once (`useFocusTrap`, deps `[enabled]`), and the ESCAPE handler — which moves no
+    focus and is therefore free to re-register — keeps reading the latest `onClose`.
+
+    ⭐ `data-modal-autofocus` is how a dialog nominates where focus LANDS, resolved INSIDE
+    the trap rather than by a competing `autoFocus` attribute. One thing moves focus, so
+    there is no race to win: see `usePrompt`, the one caller that needs it.
+  */
+  const layer = useFocusTrap(ref, true, { initialFocusSelector: '[data-modal-autofocus]' });
+  /*
+    🔴 `B-319` — THE ACTION ROW KEEPS ITS BUTTONS INSIDE THE DIALOG, for every size and every
+    footer variant, because it is the footer that is watched rather than a dialog. One row while
+    one row holds them; `data-stacked` — a column, see `.cg-modal-footer[data-stacked]` in
+    `controls.css` — when a child would leave the row. This frame CLIPS (`overflow: hidden`), so
+    a spilled `Cancel` here was not drawn outside the dialog: it was cut off and unreachable.
+  */
+  const fitFooter = useActionRowFit<HTMLDivElement>();
+
   useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    ref.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
-
     function onKeyDown(e: KeyboardEvent): void {
-      if (e.key === 'Escape') {
-        // Capture-phase + stop: Escape belongs to the top-most dialog, not to whatever is
-        // behind the scrim.
-        e.stopPropagation();
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
+      if (e.key !== 'Escape') return;
+      /*
+        🔴 `STATION-CHROME-01` §6 — ESCAPE BELONGS TO THE TOP-MOST DIALOG, and until this
+        change that sentence was a COMMENT rather than a mechanism.
 
-      const nodes = [...(ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
-      const first = nodes[0];
-      const last = nodes[nodes.length - 1];
-      if (first === undefined || last === undefined) return;
+        It used to read "Capture-phase + stop: Escape belongs to the top-most dialog" above
+        a bare `e.stopPropagation()`. That is not what `stopPropagation` does: it stops the
+        event reaching other NODES, and every dialog registers this handler on the SAME node
+        (`document`), so a second dialog's handler still ran. With an Add dialog open over
+        Station setup, one Escape closed BOTH — the operator lost the settings dialog he was
+        working in because he cancelled a small form on top of it.
 
-      // Wrap at the ends, so focus can never escape the dialog onto an on-air control.
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
+        `layer.isTop()` reads the shared trap stack, so the answer is the same one the TAB
+        trap gives — one notion of "which surface owns the keyboard", not two that can drift.
+        `stopPropagation` stays for the ordinary case (a key must not reach the console
+        behind the scrim); it is simply no longer load-bearing for the nesting.
+      */
+      if (!layer.isTop()) return;
+      e.stopPropagation();
+      onClose();
     }
 
     document.addEventListener('keydown', onKeyDown, true);
     return () => {
       document.removeEventListener('keydown', onKeyDown, true);
-      previous?.focus();
     };
-  }, [onClose]);
+  }, [onClose, layer]);
 
   return createPortal(
     <div
-      style={styles.scrim}
+      style={
+        layerLevel === 'sub'
+          ? { ...styles.scrim, ...styles.scrimSub }
+          : layerLevel === 'window'
+            ? { ...styles.scrim, ...styles.scrimWindow }
+            : styles.scrim
+      }
       role="presentation"
+      data-modal-layer={layerLevel}
       onClick={onClose}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -350,11 +938,48 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel ?? title}
-        style={{ ...styles.dialog, width: WIDTHS[size] }}
+        data-modal-size={size}
+        style={{
+          ...styles.dialog,
+          ...(fixed ? styles.dialogFixed : {}),
+          ...(framed ? styles.dialogFramed : {}),
+          ...(size === 'record' ? styles.dialogRecord : {}),
+          width: WIDTHS[size],
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={styles.titleRow}>
-          <h2 style={styles.title}>{title}</h2>
+        <div style={fixed ? { ...styles.titleRow, ...styles.titleRowFixed } : styles.titleRow}>
+          {/*
+            🔴 `REPAIR-03` B — THE HEAD EMBLEM (audit rows 62, 72, 98, 113).
+
+            Optional, and `aria-hidden` through `Icon`'s own default: it is a MARK, not a
+            control and not information. The dialog's name is its title, which is what the
+            accessible name comes from; an emblem that announced itself would make every
+            dialog open with a decorative word before its own.
+          */}
+          {emblem !== undefined && (
+            <span
+              style={fixed ? { ...styles.emblem, ...styles.emblemFixed } : styles.emblem}
+              data-modal-emblem=""
+            >
+              <Icon
+                icon={emblem}
+                size={Number.parseFloat(
+                  fixed ? cssVars['--r-setup-emblem-glyph'] : cssVars['--r-modal-emblem-glyph'],
+                )}
+              />
+            </span>
+          )}
+          {subtitle === undefined ? (
+            <h2 style={titleStyle}>{title}</h2>
+          ) : (
+            <div style={styles.titleStack}>
+              <h2 style={titleStyle}>{title}</h2>
+              <p style={styles.subtitle} data-modal-subtitle="">
+                {subtitle}
+              </p>
+            </div>
+          )}
           {/*
             THE CLOSE AFFORDANCE, in the primitive so EVERY modal has one.
 
@@ -378,11 +1003,6 @@ export function Modal({
             <Icon icon={X} size={16} />
           </Button>
         </div>
-        {children !== undefined && (
-          <div style={styles.body} className="cg-modal-body" data-modal-body="">
-            {children}
-          </div>
-        )}
         {/*
           §3 — OUTSIDE `body`, ABOVE `footer`. The order of these two elements IS
           the fix: a message rendered into `children` above would scroll away with
@@ -392,21 +1012,90 @@ export function Modal({
           `alert` and a neutral outcome is a `status`, and a wrapper that announced
           both as one would re-flatten the distinction the roles exist to keep.
         */}
-        {messages.length > 0 && (
-          <div style={styles.message} className="cg-modal-message" data-modal-message="">
-            {messages.map((m, i) => (
-              <Notice
-                key={`${m.role}:${String(i)}`}
-                noticeRole={m.role}
-                text={m.text}
-                {...(m.detail !== undefined ? { detail: m.detail } : {})}
-              />
-            ))}
-          </div>
-        )}
-        <div style={styles.footer} className="cg-modal-footer">
-          {footer}
-        </div>
+        {(() => {
+          const bodyNode =
+            children === undefined ? null : (
+              <div
+                style={
+                  /*
+                    `RUNTIME-REPAIR-04` — `library` is FLUSH like `fixed`, and for the same
+                    reason: its body is a two-column layout whose divider must reach the head
+                    band and the footer, as the reference's `.template-layout` does. The inset
+                    moves to the columns, which is where the reference puts it
+                    (`.template-tools{padding:20px 24px 14px}`).
+
+                    ⚠ This is decided HERE and not in `controls.css`, because the padding is an
+                    INLINE style: a `[data-modal-size='library'] .cg-modal-body` rule loses to
+                    it every time, silently, and the column just renders 44 px narrow.
+                  */
+                  size === 'fixed' || size === 'library'
+                    ? { ...styles.body, ...styles.bodyFixed }
+                    : frame === 'fixed'
+                      ? { ...styles.body, ...styles.bodyFlush }
+                      : styles.body
+                }
+                className="cg-modal-body"
+                data-modal-body=""
+              >
+                {children}
+              </div>
+            );
+          const messageNode =
+            messages.length === 0 ? null : (
+              <div
+                style={fixed ? { ...styles.message, ...styles.messageFixed } : styles.message}
+                className="cg-modal-message"
+                data-modal-message=""
+              >
+                {messages.map((m, i) => (
+                  <Notice
+                    key={`${m.role}:${String(i)}`}
+                    noticeRole={m.role}
+                    text={m.text}
+                    {...(m.detail !== undefined ? { detail: m.detail } : {})}
+                    {...(m.remedies !== undefined ? { remedies: m.remedies } : {})}
+                  />
+                ))}
+              </div>
+            );
+          const footerNode = (
+            <div
+              ref={fitFooter}
+              style={{
+                ...styles.footer,
+                ...(fixed ? styles.footerFixed : {}),
+                ...(size === 'record' ? styles.footerRecord : {}),
+              }}
+              className="cg-modal-footer"
+            >
+              {footer}
+            </div>
+          );
+          /*
+            🔴 `SETTINGS-MATCH-02` §1 — THE RAIL IS THE BODY'S FIRST COLUMN and the other three
+            are the second one's. See `styles.panelFixed`: this is what stops a refusal taking
+            109 px out of the rail, and it is the reference's own shape.
+          */
+          if (!fixed || rail === undefined) {
+            return (
+              <>
+                {bodyNode}
+                {messageNode}
+                {footerNode}
+              </>
+            );
+          }
+          return (
+            <div className="cg-modal-frame" data-modal-frame="">
+              {rail}
+              <div style={styles.panelFixed} className="cg-modal-panel" data-modal-panel="">
+                {bodyNode}
+                {messageNode}
+                {footerNode}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>,
     document.body,

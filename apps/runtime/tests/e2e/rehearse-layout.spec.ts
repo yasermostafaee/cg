@@ -5,9 +5,9 @@ import { test, expect, buildValidVcg } from './fixtures/runtime.js';
  * R-022 — the REHEARSE surface's LAYOUT, which is a separate failure class from
  * its behaviour and was not covered at all when the feature landed.
  *
- * Why it escaped: the offline mock retains no rendered page (`templates.html`
- * resolves `null` — deliberately, see `createRuntimeBridge`), so PREVIEW renders
- * its "unavailable in this browser" text and the rehearsal IFRAME never exists in
+ * Why it escaped: the offline mock retains no rendered page (`templates.page`
+ * answers `unreachable` — deliberately, see `createRuntimeBridge`), so PREVIEW
+ * renders its one-line reason and the rehearsal IFRAME never exists in
  * test mode. Every geometry defect below lives in that iframe's box. These specs
  * therefore stub the retained page — a TEST-ONLY override of one bridge method,
  * not a change to what the mock honestly holds.
@@ -30,12 +30,32 @@ function previewTransport(page: Page) {
 async function stubRetainedPage(page: Page): Promise<void> {
   await page.evaluate(() => {
     (
-      window as unknown as { cg: { templates: { html: () => Promise<string> } } }
-    ).cg.templates.html = () =>
-      Promise.resolve('<!doctype html><html><body style="margin:0;background:#123"></body></html>');
+      window as unknown as { cg: { templates: { page: () => Promise<unknown> } } }
+    ).cg.templates.page = () =>
+      Promise.resolve({
+        kind: 'page',
+        source: 'bridge',
+        html: '<!doctype html><html><body style="margin:0;background:#123"></body></html>',
+      });
   });
 }
 
+/*
+ * 🔴 `MONITORS-01` — THE STRIP IS FOLDED AWAY WHEN THE CONSOLE BOOTS, and this file's
+ * subject lives inside it, so it is opened first.
+ *
+ * The default moved from SHOWN to HIDDEN because neither box was confidence monitoring:
+ * PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default), and PVW is a LOCAL browser
+ * render of the rehearsing rows (`R-022` — nothing is ever sent to CasparCG). None of
+ * that changes what this file proves, so the state each test was written against is
+ * established rather than its assertions being rewritten.
+ *
+ * `app.showMonitors()` asserts the strip is actually up before returning — see the
+ * fixture. Boot state itself is proved in `shell-chrome.spec.ts` §B4.
+ */
+test.beforeEach(async ({ app }) => {
+  await app.showMonitors();
+});
 test('the rehearsal iframe never widens the shell — PROGRAM stays on screen', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1400, height: 900 });
@@ -220,29 +240,50 @@ test('row verbs rest neutral, tint on hover, and only the engaged toggle stays f
   await expectBg('PLAY', 'rgb(34, 221, 122)'); // --r-verb-play #22DD7A
 });
 
-test('the transport reads PLAY / NEXT / STOP, and the caveats cost no permanent height', async ({
-  app,
-}) => {
+test('the transport reads PLAY / NEXT / STOP, and is there before anything is', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1400, height: 900 });
   const layer = await app.importVcg('valid.vcg', await buildValidVcg('tpl-e2e-1'));
   await stubRetainedPage(page);
-  await app.layerRow(layer).getByRole('button', { name: 'ON PVW', exact: true }).click();
 
   const pvw = page.getByRole('region', { name: 'PREVIEW' });
-  await expect(pvw.getByRole('button', { name: 'PLAY', exact: true })).toBeVisible();
-  await expect(pvw.getByRole('button', { name: 'NEXT', exact: true })).toBeVisible();
-  await expect(pvw.getByRole('button', { name: 'STOP', exact: true })).toBeVisible();
 
-  // R-022's acceptance requires the caveats to be stated IN the panel, so they are
-  // DISCLOSED rather than deleted — reachable in one click, costing no height until
-  // asked for. Both halves are asserted: hidden by default, and really there.
-  const caveats = page.getByText('not pixel-identical');
-  await expect(caveats).toBeHidden();
-  const toggle = pvw.getByRole('button', { name: 'What rehearsal does not prove' });
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await toggle.click();
-  await expect(caveats).toBeVisible();
+  /*
+    🔴 `CONSOLE-LOOK-06` §2 — PRESENT BEFORE THERE IS ANYTHING TO DRIVE, each disabled by its
+    own condition. This is the half that changed: the transport used to be rendered by
+    `RehearsalStage`, so it did not exist until a row was rehearsing and a page had loaded,
+    and the row of buttons appeared under the operator's hand. Our own rule in `LayersPanel`
+    says why that is wrong — "controls that come and go move the target under the operator's
+    hand mid-reach".
+  */
+  for (const verb of ['PLAY', 'NEXT', 'STOP'] as const) {
+    await expect(pvw.getByRole('button', { name: verb, exact: true })).toBeVisible();
+    await expect(pvw.getByRole('button', { name: verb, exact: true })).toBeDisabled();
+  }
+  // …and the scope they act on is stated beside them, because they drive EVERY rehearsing
+  // frame and never the selected one.
+  await expect(pvw.getByText('ALL LAYERS')).toBeVisible();
+
+  await app.layerRow(layer).getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await expect(pvw.getByRole('button', { name: /^PLAY/ })).toBeEnabled();
+
+  /*
+    🔴 SUPERSEDED BY THE OWNER, 2026-09-12, and replaced rather than deleted so the change is
+    visible: «آیکون اینفو و نمایش توضیحات روی canvas نیاز نیست» — the info icon and the
+    on-canvas description are not wanted. What this used to assert was the DISCLOSURE (hidden
+    by default, one click to open).
+
+    `R-022`'s acceptance still asks for the two honest caveats to be stated IN the item, so
+    they moved to the stamp that already names what this render is, where they cost no
+    picture. Both halves are asserted, exactly as before: the toggle is GONE, and the caveats
+    are really there.
+  */
+  await expect(pvw.getByRole('button', { name: /rehearsal does not prove/i })).toHaveCount(0);
+  const stamp = pvw.locator('[data-stage-illustration]');
+  await expect(stamp).toBeVisible();
+  const caveats = (await stamp.getAttribute('title')) ?? '';
+  expect(caveats).toMatch(/not pixel-identical/i);
+  expect(caveats).toMatch(/placeholder/i);
 });
 
 test('the header prints one word per verb BUTTON, so no word names the wrong glyph', async ({

@@ -7,6 +7,7 @@ import type { StackItemState } from '@cg/shared-schema';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
 import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * B-085 — the Inspector's `templates.get` is browser-local now and resolves offline. As a
@@ -48,12 +49,28 @@ async function renderWithGet(get: () => Promise<unknown>): Promise<HTMLDivElemen
   const stub = {
     // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
     // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
-    link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+    link: {
+      status: () => linkFor('both-up'),
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub('both-up'),
-    templates: { get: vi.fn(get), list: vi.fn(() => Promise.resolve([])) },
+    templates: {
+      get: vi.fn(get),
+      list: vi.fn(() => Promise.resolve([])),
+      onChanged: () => () => undefined,
+    },
+    // Phase 6 — the Inspector names the ROW (`useOperatorNames`), so it reads the bank too.
+    fixedLayers: {
+      config: () => Promise.resolve(null),
+      onConfigChanged: () => () => undefined,
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);

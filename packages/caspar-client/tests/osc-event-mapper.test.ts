@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { messageToEvent } from '../src/osc/event-mapper.js';
+import { messageToEvent, oscProducerKind } from '../src/osc/event-mapper.js';
 
 describe('messageToEvent', () => {
   it('maps /framerate to osc.framerate', () => {
@@ -29,19 +29,48 @@ describe('messageToEvent', () => {
     });
   });
 
-  it('maps /foreground/file/path', () => {
+  it('maps /foreground/file/path — the FACT of a file event, never its path (`PLAYOUT-SOURCES-01` §1.E)', () => {
+    /*
+      Contract v1.3 §3.3: the core sends every AMCP client the full state, input addresses WITH
+      CREDENTIALS included. The path is dropped at this one door, so it can be logged, stored,
+      published or shown nowhere downstream.
+    */
     expect(
       messageToEvent({
         kind: 'message',
         address: '/channel/1/stage/layer/10/foreground/file/path',
-        args: ['file:///x.html'],
+        args: ['rtsp://u:p@10.0.0.21/live'],
       }),
     ).toEqual({
       kind: 'osc.layer.foreground.file',
       channel: 1,
       layer: 10,
-      path: 'file:///x.html',
+      path: '',
     });
+    // Control: a malformed arg is still dropped entirely, as before.
+    expect(
+      messageToEvent({
+        kind: 'message',
+        address: '/channel/1/stage/layer/10/foreground/file/path',
+        args: [7],
+      }),
+    ).toBeNull();
+  });
+
+  it('`PLAYOUT-SOURCES-01` §1.E — a producer value reduces to its KIND, never where it reads from', () => {
+    const producer = (value: string): unknown =>
+      messageToEvent({
+        kind: 'message',
+        address: '/channel/1/stage/layer/10/foreground/producer',
+        args: [value],
+      });
+    expect(producer('rtsp://u:p@10.0.0.21/live')).toMatchObject({ producer: 'rtsp' });
+    expect(JSON.stringify(producer('ffmpeg[rtsp://u:p@10.0.0.21/live]'))).not.toContain('u:p');
+    // Control: the kind names CasparCG reports pass through unchanged — the fact still reaches.
+    for (const kind of ['html', 'ffmpeg', 'route', 'empty', 'decklink']) {
+      expect(producer(kind)).toMatchObject({ producer: kind });
+    }
+    expect(oscProducerKind('  html ')).toBe('html');
   });
 
   it('maps /foreground/paused with a boolean arg', () => {

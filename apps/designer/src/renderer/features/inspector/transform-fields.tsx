@@ -134,6 +134,13 @@ export interface FieldProps {
    * burst is ONE undo entry; single selection omits it (relies on coalescing).
    */
   onCommitBoundary?: (() => void) | undefined;
+  /**
+   * `DESIGNER-FIX-0905` — the field is WITHHELD for this element kind: rendered, disabled,
+   * and carrying the reason as its tooltip (see `withheldReason` in `field-registry.ts`).
+   * A Live Source's rotation and opacity are the first two: they used to vanish, and a
+   * control that vanishes teaches nothing about why it is unavailable.
+   */
+  withheld?: string | undefined;
 }
 
 /**
@@ -172,6 +179,7 @@ export function transformFieldProps(
  */
 function FieldBody(props: FieldProps): JSX.Element {
   const hasUnit = props.suffix !== undefined;
+  const withheld = props.withheld !== undefined;
   return (
     <>
       <span className={s.icon} aria-hidden>
@@ -189,6 +197,8 @@ function FieldBody(props: FieldProps): JSX.Element {
         onCommitBoundary={props.onCommitBoundary}
         className={cx(hasUnit ? s.inputUnit : s.input, hasUnit && 'cg-num-unit')}
         ariaLabel={props.ariaLabel}
+        disabled={withheld}
+        title={props.withheld}
       />
       {hasUnit && <span className="cg-unit">{props.suffix}</span>}
     </>
@@ -200,8 +210,13 @@ function FieldBody(props: FieldProps): JSX.Element {
  *  The multi editor sets a history boundary on commit via `onCommitBoundary`. */
 export function Seg(props: FieldProps): JSX.Element {
   const scrub = fieldScrub(props);
+  const withheld = props.withheld !== undefined;
   return (
-    <div className={cx('cg-seg', s.scrubSurface)} onPointerDown={scrub.onPointerDown}>
+    <div
+      className={cx('cg-seg', withheld ? s.withheld : s.scrubSurface)}
+      onPointerDown={scrub.onPointerDown}
+      title={props.withheld}
+    >
       <FieldBody {...props} />
       {props.point !== undefined && <span className={s.point}>{props.point}</span>}
     </div>
@@ -213,8 +228,14 @@ export function Seg(props: FieldProps): JSX.Element {
  *  edits live (D-053). */
 export function SingleField(props: FieldProps): JSX.Element {
   const scrub = fieldScrub(props);
+  const withheld = props.withheld !== undefined;
   return (
-    <div className={cx('cg-field', s.scrubSurface)} onPointerDown={scrub.onPointerDown}>
+    <div
+      className={cx('cg-field', withheld ? s.withheld : s.scrubSurface)}
+      onPointerDown={scrub.onPointerDown}
+      title={props.withheld}
+      data-withheld={withheld ? '' : undefined}
+    >
       <FieldBody {...props} />
       {props.point !== undefined && <span className={s.point}>{props.point}</span>}
     </div>

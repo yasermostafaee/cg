@@ -972,7 +972,7 @@ guards. Capability: `designer-playout-lifecycle`.
 **Notes:** Introduced by #320 (D-102 Phase 2 — per-element preview timing). UI display/input-conversion ONLY: the session override, the drivers and the schema keep milliseconds; only the two controls convert (ms ÷ 1000 to display, × 1000 on commit). Each preview row mirrors its inspector counterpart's rounding exactly — the countdown duration is INTEGER seconds (`step 1`), the sequence dwell allows FRACTIONAL seconds (`step 0.5`, `min 0.1`), as `StyleSection` does. The preview's per-scope HOLD control is deliberately NOT changed: the inspector's Playout section shows hold in milliseconds too, so it is already consistent — converting it would create the very mismatch this bug is about. No schema / session-shape / runtime / export / on-air change ⇒ no CasparCG hardware validation needed.
 **Regression test:** unit `preview-timing-rows.test.ts` (a 60000 ms countdown DISPLAYS `60`; a 5000 ms dwell DISPLAYS `5`; typing `6` writes `durationMs: 6000`; typing `0.8` writes `dwellMs: 800`); E2E `preview-timing-phase2.spec.ts` (drive the seconds inputs, assert the runtime's EFFECTIVE ms stamps `data-cg-countdown-ms` / `data-cg-sequence-dwell` are unchanged in ms).
 
-## [~] B-088 — a start-trimmed element ignores its in-point during play: the whole intro is ONE painted frame ⟨priority: high⟩ — code merged (#342, `62bbb44`) but DELIBERATELY still `[~]`: this fix changes playout TIMING and reaches the exported outputs, and NEITHER of its two verification gates has been discharged. See **Gates still OWED** below. Focused fix, no change dir
+## [~] B-088 — a start-trimmed element ignores its in-point during play: the whole intro is ONE painted frame ⟨priority: high⟩ — code merged (#342, `62bbb44`) but DELIBERATELY still `[~]`: this fix changes playout TIMING and reaches the exported outputs, and ONE of its two verification gates is still outstanding. **Gate 2 (Linux `pnpm gate:e2e`) is DISCHARGED 2026-08-11** — <https://github.com/yasermostafaee/cg/actions/runs/31414808016>, commit `bd88ede`, a later `dev` HEAD that CONTAINS `62bbb44`; run `conclusion: success` and the `E2E (Playwright)` job's own conclusion is `success` (it RAN). **Gate 1 (real-CasparCG hardware check, PREVIEW + EXPORTED OUTPUT) is still OWED and has never been performed** — that is the sole reason this item is not `[x]`, and no e2e run can substitute for it: the gate exists precisely because a green suite cannot settle elapsed-time behaviour on air. See **Gates still OWED** below. Focused fix, no change dir
 
 **Repro:**
 
@@ -997,10 +997,10 @@ guards. Capability: `designer-playout-lifecycle`.
 
 **On-air impact:** this changes playout TIMING — a composition that previously snapped through its intro instantly now sweeps it in real time whenever a trim boundary is crossed (which is the point: the trim needs elapsed time to be honoured). Warrants a real-CasparCG check before it is considered done.
 
-**Gates still OWED — this is why the item is `[~]` and not `[x]` (as of 2026-07-20).** The code is
-merged (#342, `62bbb44`); the VERIFICATION is not done. BOTH gates below are outstanding. Neither
-has been attempted, and neither may be inferred from the merge — a merged branch is not a discharged
-gate:
+**Gates still OWED — this is why the item is `[~]` and not `[x]` (updated 2026-08-11).** The code is
+merged (#342, `62bbb44`). **Gate 2 is now DISCHARGED; gate 1 is not, and it is the only thing holding
+this item open.** Gate 1 has never been attempted, and it may not be inferred from the merge nor from
+gate 2 — a merged branch is not a discharged gate, and a green suite is not an on-air observation:
 
 1. **Real-CasparCG hardware check (PREVIEW + EXPORTED OUTPUT) — OWED, never performed.** Required by
    this entry's own **On-air impact** line above: the fix changes playout TIMING, so an intro leg
@@ -1010,19 +1010,23 @@ gate:
    this reproduces "in the exported outputs" as well as in preview, and the export path renders
    through the same `PlayoutController` without the preview's driver, so one can hold while the
    other fails.
-2. **Linux `pnpm gate:e2e` — OWED, and demonstrably NOT RUN.** The fix is in
-   `packages/template-runtime` (a render-path change), which is exactly the class P-009's spec
-   (`docs/prd/platform.md`) says owes an E2E run, and a `win32` pass is explicitly
-   NON-AUTHORITATIVE there. CI did not supply it either: #342's own **E2E (Playwright)** check is
-   recorded `SKIPPED`, because GitHub Actions is billing-exhausted until ~2026-08-01. WSL is not
-   installed on this host, so no Linux run has been produced locally. This is a positive finding
-   from the check record, not an assumption.
+2. **Linux `pnpm gate:e2e` — ✅ DISCHARGED 2026-08-11.** The fix is in `packages/template-runtime`
+   (a render-path change), which is exactly the class P-009's spec (`docs/prd/platform.md`) says
+   owes an E2E run, and a `win32` pass is explicitly NON-AUTHORITATIVE there. That debt is now
+   settled by a COMPLETED, GREEN `e2e` job on `ubuntu-latest`:
+   <https://github.com/yasermostafaee/cg/actions/runs/31414808016> — commit `bd88ede`, a later
+   `dev` HEAD that CONTAINS `62bbb44` (verified with `git merge-base --is-ancestor`, not assumed
+   from dates). Checked by reading the job conclusions, not merely that a run exists: run
+   `status: completed` / `conclusion: success`, `E2E (Playwright)` job conclusion `success` with
+   its `E2E` step actually executing (~10 min), alongside
+   `Lint • Typecheck • Test • Build=success`. The job is not diff-scoped — it runs `pnpm test:e2e`,
+   the entire Playwright suite — so it verifies the TREE at that SHA, this fix included.
 
-   **UNBLOCKED 2026-08-08 (not yet discharged).** CI is running again and `pr.yml` triggers on
-   every push to `dev`, so the owed Linux run no longer needs WSL and no longer needs arranging —
-   it arrives with the next `dev` push that carries this code. The debt is still OPEN: discharge
-   it by citing a COMPLETED, GREEN `e2e` run URL for a commit containing the fix (CLAUDE.md, "E2E
-   coverage"). A cancelled run does not count.
+   **SUPERSEDED text, recorded so the change is legible:** this entry previously read "OWED, and
+   demonstrably NOT RUN", because #342's own `E2E (Playwright)` check was `SKIPPED` under the
+   Actions billing outage and WSL is not installed on this host. Both conditions are gone — CI is
+   restored and `pr.yml` runs on every push to `dev`. Do not go install WSL on the strength of the
+   old sentence; it no longer applies.
 
 **Same debt as [[B-089]], and for the same reason** — both change playout timing in the
 template-runtime render path. B-089's hardware gate has since been discharged by owner report
@@ -1030,7 +1034,7 @@ template-runtime render path. B-089's hardware gate has since been discharged by
 the two fixes touch different legs (B-088 is about how OFTEN the gate runs, B-089 about WHICH
 elements it covers) and were merged from different branches. B-088 needs its own observation.
 
-## [~] B-089 — nested-instance element lifespans are never gated at all ⟨priority: medium⟩ — code merged (#369, `7f9868f`) but DELIBERATELY still `[~]`: this fix changes playout TIMING, and ONE of its two verification gates is still outstanding. The real-CasparCG hardware check is DISCHARGED (owner report, 2026-07-20); the Linux `pnpm gate:e2e` is NOT RUN. See **Gates still OWED** below. Do not flip to `[x]` until that remaining gate is discharged
+## [x] B-089 — nested-instance element lifespans are never gated at all ⟨priority: medium⟩ — code merged (#369, `7f9868f`); BOTH verification gates are now discharged, so the item closes. (1) Real-CasparCG hardware check — DISCHARGED by owner report, 2026-07-20 (preview + single-file export). (2) Linux `pnpm gate:e2e` — DISCHARGED 2026-08-11 by a COMPLETED, GREEN `e2e` job on `ubuntu-latest`: <https://github.com/yasermostafaee/cg/actions/runs/31414808016>, commit `bd88ede`, a later `dev` HEAD that CONTAINS `7f9868f` (verified with `git merge-base --is-ancestor`). Run `conclusion: success`; the `E2E (Playwright)` job's own conclusion is `success` and its `E2E` step RAN for ~10 min — not `skipped`. The job is not diff-scoped: it runs `pnpm test:e2e`, the whole Playwright suite, so it verifies the TREE at that SHA including this fix. Focused fix, no change dir
 
 **Repro:**
 
@@ -1043,20 +1047,21 @@ elements it covers) and were merged from different branches. B-088 needs its own
 **Env:** Browser / Designer preview; also the exported outputs.
 **Notes:** `collectLifespanGates` (`packages/template-runtime/src/runtime.ts:1579`) walks only `scene.layers` and resolves ids against the ROOT `built.elementMap`; every composition instance owns its own `elementMap`, so nested elements are unreachable and never enter the gate list. The per-frame application is likewise root-only (`if (isGlobalRoot) applyLifespanGatesAtFrame(frame)`, `runtime.ts:969`). Its `el.type === 'container'` recursion branch is **effectively dead** as well: `container` is built by `buildPlaceholder`, which builds no children, so container children never enter any `elementMap` either. Distinct from B-088 (which is about how OFTEN the gate runs); this is about WHICH elements it covers. Do not fold the two — B-088's fix deliberately leaves nested scopes' collapse behaviour untouched.
 
-**Gates still OWED — this is why the item is `[~]` and not `[x]` (updated 2026-07-20).** The code is
-merged. ONE of the two gates below is now discharged and ONE is still outstanding; the item stays
-`[~]` until both are. Each must be independently confirmed, or carry an explicit owner attestation —
-never taken from a prompt or a hand-off note as if it were a measurement this session made:
+**Gates — BOTH DISCHARGED (closed 2026-08-11).** The code is merged and both verification gates
+below now carry independent evidence, so the item is `[x]`. Each was independently confirmed or
+carries an explicit owner attestation — neither was taken from a prompt or a hand-off note as if it
+were a measurement this session made:
 
-1. **Linux `pnpm gate:e2e` — NOT RUN.** WSL is not installed on the development host, so the Linux
-   E2E signal has never been produced for this change. A Windows Playwright run does not substitute:
-   per P-009's spec (`docs/prd/platform.md`), a `win32` `gate:e2e` pass is explicitly
-   NON-AUTHORITATIVE and leaves a Linux/WSL run owed. GitHub Actions is billing-exhausted until
-   ~2026-08-01, so CI cannot supply it either — the Linux run must be done locally.
-   **CORRECTION 2026-08-08: CI CAN supply it now.** Actions is restored and `pr.yml` runs on every
-   push to `dev`, so "the Linux run must be done locally" no longer holds — do not go install WSL
-   on the strength of that sentence. The debt is still OPEN and is discharged by a COMPLETED,
-   GREEN `e2e` run URL for a commit carrying this fix (CLAUDE.md, "E2E coverage").
+1. **Linux `pnpm gate:e2e` — ✅ DISCHARGED 2026-08-11.**
+   <https://github.com/yasermostafaee/cg/actions/runs/31414808016> — commit `bd88ede`, a later
+   `dev` HEAD that CONTAINS this fix's `7f9868f` (verified with `git merge-base --is-ancestor`).
+   Run `status: completed` / `conclusion: success`; the `E2E (Playwright)` job's OWN conclusion is
+   `success` and its `E2E` step actually executed (~10 min) — a `skipped` job would have proved
+   nothing (P-029). `pnpm test:e2e` runs the whole suite, so the run verifies the TREE at that SHA.
+   **SUPERSEDED text:** this entry previously read "NOT RUN … the Linux run must be done locally",
+   which was true only under the Actions billing outage and the absence of WSL on this host. CI is
+   restored and `pr.yml` runs on every push to `dev`; do not install WSL on the strength of the old
+   sentence.
 2. **Real-CasparCG hardware check (PREVIEW + SINGLE-FILE EXPORT) — DISCHARGED by OWNER REPORT,
    2026-07-20.** The owner ran the check on their own CasparCG hardware and reported it covering
    BOTH output paths — PREVIEW and SINGLE-FILE EXPORT. This project's definition of done is
@@ -1348,7 +1353,7 @@ this IS the out-of-box behavior — every freshly created sequence shows the def
 **Regression test:** template-runtime sequence test on the injected clock covering first-item
 entry under BOTH repeat modes.
 
-## [ ] B-104 — project assets (images, fonts) are GONE after save → Designer restart → load ⟨priority: high⟩
+## [x] B-104 — project assets (images, fonts) are GONE after save → Designer restart → load ⟨priority: high⟩ — FIXED by [[D-150]] (the project becomes a self-contained package): `openspec/changes/archive/2026-08-11-designer-project-package/`
 
 **Repro:**
 
@@ -1380,6 +1385,20 @@ panel listing), including the restart boundary.
 "Designer JSON save/import loses assets": the project is saved and re-imported, and the assets do
 not come back. Folded in here rather than filed as a new number because it is this defect — the
 same save → reload → assets-missing boundary — reported from the other side of the same seam.
+
+**⭐ DIAGNOSED 2026-08-11, and BOTH candidates turned out to be real** (`openspec/changes/archive/2026-08-11-designer-project-package/`, [[D-150]]). Candidate **(a)** is the primary one and needs no permission
+subtlety at all: `openDisk` / `openRecent` returned a scene WITHOUT calling
+`ProjectStore.#setActive`, and `activeChanged` is what relays into `assets.setActiveProject` —
+so opening a project from a real file left the asset store scoped to whatever came before, which
+at boot is `null`. The scene rendered; the panel was empty; every time. Candidate **(b)** is real
+too and explains the restart specificity: `restoreRememberedDirectory` calls `requestPermission()`,
+which **Chromium refuses outside a user gesture**, and `initWorkspace()` runs at boot where there
+is none — so after a restart the remembered folder ALWAYS fails to reopen and a bare `catch {}`
+substituted a different root in silence.
+
+The fix does not repair either link. It removes the reason a link is needed: the project carries
+its own assets. The paragraph below is kept as written, because it is the state of knowledge that
+produced the requirement to pin the mechanism, and that requirement was the right one.
 
 **The mechanism is STILL NOT DIAGNOSED, and this report does not change that.** It supplies the
 reproduction this entry has been asking for, not a cause. **Do not promote either candidate (a) or
@@ -1577,7 +1596,7 @@ Any fix must say what happens to those.
 **Related:** [[D-039]] is the feature that introduced image/logo separators. Source:
 `DEBT.md` sweep, external report (no `DEBT.md` line — reported directly by the owner).
 
-## [ ] B-129 — the Designer canvas background colour reaches the OUTPUT: air must stay transparent unless a real element was placed ⟨priority: high — reaches air⟩
+## [x] B-129 — the Designer canvas background colour reaches the OUTPUT: air must stay transparent unless a real element was placed ⟨priority: high — reaches air⟩ · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-designer-export-fidelity/`, `RELEASE-0110-01` §0.3)
 
 **What:** the canvas backdrop the author sees while editing is carried into the rendered output.
 Output must be **transparent** unless the author deliberately placed a large rectangle — which is
@@ -1587,7 +1606,42 @@ a real element, with a real entry in the scene, and behaves like one.
 broadcast overlay that is the difference between a lower-third and a full-frame card, and nothing
 in the Designer tells the author it will happen — the editor looks the same either way.
 
-**MECHANISM NOT DIAGNOSED.** The owner has confirmed the behaviour; no cause is recorded here.
+⭐ **MECHANISM DIAGNOSED 2026-08-11** (was: _"MECHANISM NOT DIAGNOSED"_) — in progress:
+`openspec/changes/designer-export-fidelity/`.
+
+- `BackgroundControl.tsx` is an _"always-on scene background picker"_ writing `scene.background`.
+- `scene-builder.ts:98` applied it to `.cg-stage` in **every** render mode, `output` included —
+  and `:278` / `:900` / `:1041` did the same for a nested composition.
+
+One field carried TWO facts — _"let me see my white text while I work"_ and _"this paints a
+background on air"_ — and the render path could not tell them apart.
+
+🔴 **AND A SECOND FINDING, which sharpens the item: the author never saw the backdrop ANYWAY.**
+The D-071 authoring pasteboard pins `.cg-stage { background-color: #3d4253 !important }` plus the
+broadcast checkerboard (`preview.ts:162-190`), and `!important` beats the runtime's inline style.
+So the control had NO effect on the surface the author was looking at and FULL effect on air —
+the exact reason _"nothing in the Designer tells the author it will happen"_. The fix is therefore
+a pure removal of harm, not a trade.
+
+**THE DECISION:** the backdrop MEANS the editor's affordance and nothing else. `background` is
+renamed `editorBackdrop` on `Scene` and `Composition` (the name is the contract), a legacy
+`background` key is normalized onto it **at parse time**, the renderer paints it **only in
+`author` mode**, and both exporters emit it transparent via ONE shared `withoutEditorBackdrop`
+helper. An authored background stays expressible as a real full-frame element, unchanged.
+
+⚠ **NOT a schema-version bump + registry migration, and the reason is a measured finding worth
+keeping:** `migrations.migrate()` has **ZERO production call sites**. Its docstring claims _"the
+loader in `@cg/vcg-format` walks the registry"_ — nothing outside `@cg/shared-schema` and its own
+tests imports `migrations`, and `schemaVersion: 1` is WRITTEN by `ProjectStore.ts:72` and
+`pack.ts:87` and never read back. A registered migration would have been a conversion that never
+runs. Parse-time normalization is the codebase's own precedent (`PlayoutSchema`) and executes on
+every load path, because every load path parses.
+
+**Fate of existing templates:** their EDITING appearance is unchanged (the legacy value survives
+onto `editorBackdrop`); their ON-AIR appearance changes, which IS the fix. **No shipped template
+is affected** — every `@cg/starter-templates` scene and composition already carried
+`'transparent'` (verified, not assumed). The change is announced rather than silent: the control
+now states it is editor-only and does not reach air.
 
 **On `DEBT.md:1190` — that entry is NOT wrong, but its scope is narrower than it reads, and this
 item must not be closed by citing it.** It states that two candidate causes for a separate defect
@@ -1682,3 +1736,2355 @@ that produces the next entry in this file.
 
 **Env:** Designer, build. Source: the repo-wide BOM sweep recorded by the `DEBT.md` sweep's closing
 session and left unfiled.
+
+## [x] B-133 — the editor backdrop control writes to a field nobody renders, so changing it does nothing ⟨priority: high⟩ — fixed in `openspec/changes/archive/2026-08-11-designer-project-package/` (same session; a B-129 rename ripple)
+
+**Repro:**
+
+1. Create a project (this lands you inside `comp1` — every new project does).
+2. Change the editor backdrop colour on the canvas header.
+
+**Expected:** the authoring canvas shows the chosen colour.
+**Actual:** nothing changes; the canvas stays as it was.
+**Env:** Designer canvas, any project. Reported by the owner 2026-08-11.
+
+**Mechanism — a stale STRING in a routing table.** `updateScene`
+(`renderer/state/slices/document.ts`) decides whether a patch lands on the ACTIVE COMPOSITION or on
+the scene ROOT by testing the key against a `docKeys` set of string literals. [[B-129]] renamed
+`background` → `editorBackdrop` across the schema, the renderer, the runtime and both exporters —
+and this literal stayed behind as `'background'`. So `editorBackdrop` was not recognised as a doc
+key, fell through to the ROOT patch, and was written to `scene.editorBackdrop`; meanwhile the canvas
+renders `editSceneOf`, which reads the ACTIVE COMPOSITION's `editorBackdrop`. **Written to one
+place, read from another.**
+
+⚠ **This also CORRECTS a conclusion recorded during B-129.** That change's `tasks.md` §5.4(a) said
+the author never sees the backdrop because the D-071 pasteboard pins
+`.cg-stage { background-color: #3d4253 !important }`. That is not the cause: in the pasteboard branch
+neither `background-color` nor `background-image` carries `!important`, and the runtime sets the
+`background` SHORTHAND inline — which beats both. The CSS was never the obstacle; the value simply
+never arrived.
+
+**Regression test:** `apps/designer/tests/editor-backdrop-routing.test.ts` — asserts the patch lands
+on the active composition and that `editSceneOf` (what the canvas is handed) sees it. The fix also
+adds a `satisfies` constraint so the next rename of a doc field is a BUILD ERROR at this table
+rather than a control that quietly stops working.
+
+## [x] B-134 — the editor backdrop paints in the Preview modal, which is a preview of AIR ⟨priority: medium⟩ — fixed in `openspec/changes/archive/2026-08-11-designer-project-package/` (same session)
+
+**Repro:**
+
+1. Set an editor backdrop colour.
+2. Open the Preview modal.
+
+**Expected:** the preview shows what air shows — no backdrop ([[B-129]]: the backdrop is an EDITOR
+affordance that never reaches air).
+**Actual:** the backdrop paints in the preview, so the preview disagrees with the export.
+**Env:** Designer Preview modal. Reported by the owner 2026-08-11, immediately after [[B-133]].
+
+**Mechanism.** B-129 gated the backdrop on `mode === 'author'`, and the Preview modal boots in
+`'author'` **deliberately** — it cannot show real live video either, so a Live Source must still
+paint its SMPTE bars there (D-137 §9). One flag was carrying two different questions, and the modal
+is the surface where their answers differ.
+
+**Fix.** A SECOND axis, `paintEditorBackdrop`, rather than a third `RenderMode`: the modal needs
+`'author'` and "no backdrop" **simultaneously**, which no single enum value can express. Threaded on
+`BuildCtx` for the same reason `mode` is — a nested composition inherits it by construction, so a
+composition three levels down cannot paint a backdrop the surface above it suppressed.
+
+**Regression test:** `packages/template-runtime/tests/editor-backdrop-surface.test.ts` — canvas
+paints, preview does not, output never does, and the axis defaults to ON so no existing caller
+changes meaning.
+
+## [x] B-136 — video is NEVER visible in PVW, though CasparCG, the HTML export and the Designer preview all render it ⟨priority: high — PVW is the operator's pre-air check⟩
+
+> **✅ FIXED — and the mechanism is now OBSERVED, not inferred.**
+> `openspec/changes/archive/2026-08-11-video-plays-in-preview-and-pvw`. `apps/runtime/index.html` gained
+> `media-src 'self' data:`; no other directive was touched.
+>
+> **The runtime confirmation this item asked for was obtained — programmatically, not by hand.**
+> A real-Chromium E2E (`apps/runtime/tests/e2e/pvw-video.spec.ts`) put a `data:video/webm` on the
+> PVW surface and recorded Chromium's own refusal, verbatim:
+>
+> > Loading media from `'data:video/webm;base64,…'` violates the following Content Security Policy
+> > directive: `"default-src 'self'"`. **Note that 'media-src' was not explicitly set, so
+> > 'default-src' is used as a fallback.** The action has been blocked.
+>
+> That is the exact line the item predicted DevTools would show. **Present ⇒ proved**, by this
+> item's own stated test. Pre-fix the `<video>` never left `readyState 0`; post-fix it decodes and
+> no violation is raised. The FINAL spec was re-run against a build with the directive removed, to
+> confirm it still fails there.
+>
+> **The `blob:` scheme was deliberately NOT admitted**, though the Designer's policy carries it:
+> nothing in `apps/runtime` creates an object URL (no `createObjectURL`, no `blob:` anywhere in
+> `apps/runtime/src`), and the exporter inlines video as `data:`. Narrowest policy that covers the
+> real need; the reasoning sits in a comment beside the directive.
+>
+> **The availability rider is CLOSED, and it gates [[D-150]]'s archive: a video asset DOES survive
+> a `.cgproj` save → reopen.** Established by test, not by claim —
+> `apps/designer/tests/project-package-restart.test.ts` now reopens a package into a workspace
+> holding NONE of the bytes and asserts the video is still listed, still `kind: 'video'`, under a
+> STABLE `assetId` (so a placed element still resolves), with byte-identical content and its D-128
+> `provenance` intact. The existing restart cases covered images and fonts only, which is why the
+> gap could sit open. **D-150 is therefore cleared as a cause of this bug on both axes** — it
+> changed neither resolution (established from diffs when filed) nor availability (established
+> here).
+>
+> The latent trap the rider pointed at is real and is filed separately as [[B-138]] — `preview.ts`'s
+> unresolved-asset branch has an `IMG` leg only, so a missing VIDEO is silently invisible. It is not
+> fixed here; see that item.
+>
+> **Linux `gate:e2e` DISCHARGED** — completed, green, `e2e` job actually RAN (not P-029-skipped), on
+> the commit that carries the change (`f3812408`):
+> https://github.com/yasermostafaee/cg/actions/runs/31537842955
+
+**Repro:**
+
+1. Import a video into a project and place it on a scene.
+2. Export / import the template into CG Control (the Runtime app) and put the row into REHEARSE.
+3. Look at the PVW (PREVIEW) panel. Press PLAY.
+
+**Expected:** PVW shows the video, because PVW's whole purpose is to show what air will show.
+**Actual:** the video is not visible in PVW. Everything else on the scene renders. CG Control's PVW
+does not show videos at all.
+**Env:** CG Control (Runtime SPA) PVW. Found in live testing by the owner on the `.cgproj` build.
+
+**🔴 THREE SURFACES RENDER IT AND ONE DOES NOT — that asymmetry IS the bug.** The same video plays
+correctly in the **CasparCG output**, in the **HTML export**, and in the **Designer's** own preview.
+Reported as UNCONDITIONAL: it holds for a small in-scene clip and for a full-frame background video,
+and in the scene configurations where [[B-137]] does not occur.
+
+**Why this is not cosmetic.** It does not reach air — but PVW is what an operator trusts BEFORE
+taking something to air, and [runtime.md](runtime.md):2059 already states the requirement it
+violates: "an operator must **never** be able to believe PVW is showing the real picture". A PVW
+that silently omits an element teaches the operator to trust a picture that is not the picture.
+
+**The Designer's PVW and CG Control's PVW are TWO separate implementations, not one shared surface**
+— established from code, and the reason this is filed as ONE bug against the Runtime:
+
+|           | Designer                                                                                                       | CG Control (Runtime)                                                                     |
+| --------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Surface   | canvas iframe + Preview modal (`CanvasArea.tsx:940`, `PreviewModal.tsx:402`)                                   | PVW panel (`PreviewPanel.tsx:144` → `RehearsalStage.tsx:446` → `RehearsalFrame.tsx:232`) |
+| Document  | generated at runtime by `apps/designer/src/platform/preview.ts`, importing the live ESM `@cg/template-runtime` | the **already-exported single-file page**, replayed verbatim from `LibraryStore.html()`  |
+| Video src | `blob:` object URLs (`assetUrlCache.ts:41`)                                                                    | a base64 `data:video/webm` URI inlined by `@cg/single-file-export`                       |
+
+The only shared layer is `@cg/template-runtime`'s scene builder. `frameEnvironment.ts:30-47` states
+outright that the Runtime SPA deliberately does not depend on it. **The Designer's preview is a
+different asset path under a different CSP, and it works — so the fix belongs to the Runtime.**
+
+**Mechanism — strongly supported by code, needs one runtime confirmation.** `apps/runtime/index.html:8`
+declares a CSP with `img-src 'self' data: blob:` and `font-src 'self' data:` but **no `media-src`**,
+so media falls back to `default-src 'self'` and a `data:` video is refused. `apps/designer/index.html:8`
+**does** carry `media-src 'self' blob: data:`. PVW's frame is an `<iframe srcDoc>`
+(`RehearsalFrame.tsx:232`), and a `srcdoc` document **inherits its embedder's CSP** — the exported
+page declares its own permissive `media-src data:` (`exporter-single-file.ts:409`), but an inherited
+policy is enforced IN ADDITION and the intersection wins. This predicts the reported asymmetry
+exactly, including why only video fails: images, fonts and inline scripts all survive the
+intersection because the Runtime CSP admits them, and **media is the only class it omits**.
+
+The repo already knows this failure mode. `openspec/changes/archive/2026-07-27-video-import-element/design.md:265-269`
+records it verbatim for the Designer: "the app CSP had no `media-src`, so `default-src 'self'`
+blocked every `blob:` `<video>` — stored WebMs were byte-perfect but undecodable… srcdoc documents
+INHERIT the embedding page's CSP".
+
+**⚠️ NOT A REGRESSION — established from git, not from a build.** `git log -S"media-src" -- apps/runtime/index.html`
+returns **zero commits**: that directive has never existed in the Runtime page, across all 8 commits
+that file has ever had. The same pickaxe on the Designer returns `aa0138a` (D-128 Phase 2), i.e. the
+Designer gained the directive at the exact moment it first needed to play video. **The Runtime was
+never given the equivalent when D-128 Phase 5 taught the exporter to inline video**, so this is an
+ORIGINAL GAP, not something recent work broke — there was never a working state to regress from.
+
+**The two named suspects were diffed and both CLEAR — established from git, no build and no
+worktree.** ⚠ **First, a correction to the premise:** `94be0efb` is NOT "the head prior to SESSION
+D" — it **is** one of that run's own commits, the B-129 fix (`fix(schema,runtime,export): B-129 —
+the canvas backdrop is an EDITOR fact…`, 2026-08-11 13:59). The true prior head is **`bd9dc57`**
+(2026-08-11 14:24, docs + one comment). The window below is therefore `94be0efb..HEAD`, which is the
+WIDEST honest window since it contains B-129 itself.
+
+- **D-150 / B-104 (`8cad898`) moved asset resolution into the `.cgproj` package — the PVW asset path
+  did NOT change.** That commit touches none of `preview.ts`, `assetUrlCache.ts`, `useAssets.ts`,
+  `CanvasArea.tsx`, `PreviewModal.tsx`, `scene-builder.ts`, `runtime.ts`, `video-driver.ts`,
+  `video-poster.ts`, or any `apps/runtime/.../monitors/` file. `AssetStore.ts`'s diff is two hunks,
+  both pure additions; every pre-existing method including `bytes()` is byte-identical, and
+  `assets.url` does not appear in the diff at all.
+- **B-129 / B-133 / B-134 — the render MODE PVW renders through did NOT change.** In `267cf3b`'s
+  `preview.ts` diff `mode: 'author'` is a **context line**, unchanged on both surfaces. B-134 added a
+  SECOND boolean axis (`paintEditorBackdrop`) read at exactly four sites that do nothing but set a
+  background colour. B-133 (`a3ed312`) is confined to a string table in `document.ts`.
+- **Last commit to touch the PVW render path:** `267cf3b` (2026-08-11 15:46, B-134) for the preview
+  host / scene builder / runtime boot; the Runtime's own PVW monitor files were last changed
+  behaviourally at `f075570` (2026-07-31). The video element renderer itself last changed at
+  `7379dad` (2026-07-25) and `VideoDriver` at `404558b` (2026-07-25) — all before this build.
+
+**⚠️ ONE RIDER — the single way D-150 could still be causal WITHOUT showing in a diff.** It did not
+change asset RESOLUTION, but it did change asset **AVAILABILITY** (`adoptFromPackage` replaces the
+asset index wholesale), and diffs cannot say whether the video asset survives a `.cgproj`
+save → reopen. That matters because of a **latent trap in unchanged code**: `preview.ts:414-448`'s
+unresolved branch has an `IMG` leg **only**, so an unresolved VIDEO assetId yields a `<video>` with
+no `src`, **no placeholder, no `data-cg-missing` marker and no console line** — silently invisible,
+which is exactly the reported symptom. That code dates to `cb5a3ad` (2026-07-26) and is unchanged.
+**One-glance runtime check: does the Project Assets panel still list the video after reopening the
+`.cgproj`?** If NO, D-150 is implicated via availability rather than resolution, and the silence is
+the missing VIDEO leg. Worth fixing regardless of this bug's outcome.
+
+**⚠️ WHICH SURFACE "PVW" NAMES is worth pinning with the owner.** The literal `PREVIEW (PVW)` panel
+is the **Runtime's**; the Designer's modal is titled `Preview · WxH`, not PVW. This item is filed
+against the Runtime PVW on that reading, which also matches "CG Control's PVW does not show videos
+at all". If the owner meant the Designer modal, the CSP mechanism does not apply (the Designer's CSP
+already admits media) and the availability rider above becomes the leading candidate instead.
+
+**A perception confound to rule out first, since it landed in the same build.** After `267cf3b`
+(B-134) the Preview modal no longer paints the scene's backdrop colour — a checkerboard now sits
+where a colour used to. That CANNOT make a video invisible, but "the video is not visible" and "the
+area behind the video looks different now" are easy to conflate in a live test.
+
+**Four candidates checked and dispositioned before filing** (none covers this):
+
+- **[[B-127]] — RULED OUT.** A test-flake item about one E2E spec on the **Designer editor canvas**,
+  a third surface again. That spec asserts `paused === true` — it pins an at-rest poster, never
+  playback. The "canvas-blank class" its fixture probes is a CLOSED root cause (the VP8 alpha-plane
+  keyframe misalignment, fixed by the poster ladder + GOP pinning — `video-poster.ts:9-13`).
+- **[[B-102]] — OVERLAPS AS A CLASS, DOES NOT SHARE THE SURFACE.** It is the standing example of a
+  preview/air parity break, so cite it — but its direction is INVERTED and its element kind differs:
+  B-102 is _Designer preview good / CasparCG hardware bad_ on **images**; this is _CasparCG + HTML
+  export good / Runtime PVW bad_ on **video**. B-102's failing surface is this bug's working one.
+- **`preview-blank-until-play` (the watch item inside [[B-095]], [bugs.md](bugs.md):722) — RULED
+  OUT.** It is a gate-contention flake watch about `cg-pending` never clearing, which blanks the
+  WHOLE stage, all element kinds, at preview boot. Here the rest of the scene renders.
+- **The PVW-white reproduction at `DEBT.md:1190` — SAME SURFACE, but NOT a re-open.** It did measure
+  this surface: `.cg-stage` reading `rgba(0,0,0,0)` inside the PVW rehearsal frame
+  (`RehearsalFrame.tsx:53-56`). But the defect it closed was an **opaque canvas that occluded
+  EVERYTHING** — `DEBT.md:1171`: "the composite was correct and invisible". Here the rest of the
+  scene is visible and only the video is missing, so the white-canvas mode has not returned. Its fix
+  (`color-scheme: light`) governs canvas opacity and says nothing about `<video>`. Recorded
+  explicitly so nobody closes this as "that white thing again".
+
+**⚠️ FILING HAZARD — do not close this as by-design.** There IS a recorded decision that something
+shows nothing in PVW: `openspec/changes/live-source-multibox/design.md:2029` — "v1 shows an EMPTY,
+TRANSPARENT region in PVW". That covers **Live Source** (SDI/NDI) ONLY. This bug is D-128 **file
+video**, which [designer.md](designer.md):3619 draws the line on explicitly. Discriminator: the HTML
+export also renders through `mode: 'output'` and paints zero pixels for a Live Source, so the fact
+that the HTML export SHOWS this element proves it is a real `video` element.
+
+**Ruled out as mechanisms, so nobody re-checks them:** PVW renders **LIVE DOM, not a snapshot** —
+zero hits for `toDataURL` / `html-to-image` / `drawImage` / `captureStream` in `apps/runtime/src`;
+a real `<video>` is genuinely in that DOM. Render mode is not it either: `buildVideo`
+(`scene-builder.ts:1209-1224`) has **no mode check at all** — no skip, no poster-only, no hide — and
+`withoutEditorBackdrop` strips only the backdrop field. Nor is it CSS: the frame is
+`background: transparent` with per-frame z-index from real layer order, none of it video-specific.
+
+**Fix size: ~1 line + tests.** Add `media-src 'self' data: blob:;` to `apps/runtime/index.html:8`,
+mirroring the Designer. **Why it was never caught:** `apps/runtime` has no test touching a real
+`video` element — its only "video" is `type: 'video-placeholder'` (`template-delivery.test.ts:471`)
+— and every CSP assertion tests the ARTIFACT's own CSP, never the embedding page's. The regression
+test must assert the embedder's CSP contains `media-src` with `data:`, plus a PVW E2E.
+
+**⚠️ NEEDS OWNER CONFIRMATION AT THE MACHINE — one minute, and it settles the mechanism.** Put a
+video template into REHEARSE, open DevTools, and look for:
+`Refused to load media from 'data:video/webm;base64,…' because it violates the following Content
+Security Policy directive: "default-src 'self'"`. **Present ⇒ proved. Absent ⇒ the CSP mechanism is
+wrong** and the next candidate is whether the `.vcg` packaged the video bytes at all (grep the
+retained page for `data:video/` — though its absence would also break CasparCG, which the report
+argues against). CSP inheritance into `srcdoc` is browser behaviour that cannot be executed from a
+code read; the repo RELIES on it and documents it, but this session could not run it.
+
+**Regression test:** an assertion that `apps/runtime/index.html`'s CSP admits `data:` media, plus a
+PVW E2E mirroring `apps/designer/tests/e2e/video-import.spec.ts`.
+
+## [x] B-137 — video stays PAUSED in the Designer preview after a scene rebuild, and reopening the preview is the only cure ⟨priority: high — the preview is the authoring feedback loop⟩
+
+> **✅ FIXED — and the code-derived mechanism is now OBSERVED.**
+> `openspec/changes/archive/2026-08-11-video-plays-in-preview-and-pvw`. Three changes, all in the fix shape this item
+> specified: the video handle re-resolves its node by `data-cg-element-id` when the captured one
+> reports `isConnected === false` (`runtime.ts`, host-agnostic, reusing `recover()`'s existing
+> re-pointing precedent); the Lottie map a preview is handed is SCENE-SCOPED (`getForScene`),
+> killing the stickiness at source; and a rejected `play()` is now reported once per element.
+>
+> **The mechanism reproduced exactly as diagnosed, on the first attempt.** In
+> `apps/designer/tests/e2e/video-preview-rebuild.spec.ts`, pre-fix: the video plays and advances,
+> then after the owner's own gesture (a ticker's `cycle seam` in the modal's session timing
+> controls) it sits at `paused === true`, frozen at the IDENTICAL `currentTime`, on the ATTACHED
+> node. Two independent code investigations had converged on this mechanism without ever running it;
+> it is now run.
+>
+> ⚠️ **One correction to the reproduction recipe, worth carrying:** a rebuild returns the preview to
+> its pending (blank, armed) state, because the modal is a BROADCAST surface that shows nothing
+> until play. So a video sitting paused AT THAT INSTANT is correct, not the bug. **The defect is
+> what happens on the NEXT play** — every other element starts and the video does not, which is
+> precisely the owner's "it plays again only after CLOSING the preview". The regression test asserts
+> after a second play for exactly this reason.
+>
+> **Linux `gate:e2e` DISCHARGED** — completed, green, `e2e` job actually RAN (not P-029-skipped), on
+> the commit that carries the change (`f3812408`):
+> https://github.com/yasermostafaee/cg/actions/runs/31537842955
+
+### 🔴 THE OPEN QUESTION IS CLOSED — reading (A) and reading (B) are BOTH DISSOLVED
+
+**The trigger is what forces a REBUILD.** Neither "any ANIMATING element" (A) nor "only a
+timeline/lifecycle DRIVER" (B) survives, and the third answer code review proposed is confirmed.
+
+**The evidence is experiment 2, and it is now a permanent test** — `EXPERIMENT 2` in
+`video-preview-rebuild.spec.ts`. A video **ALONE** on the scene: no ticker, no Lottie, no animated
+companion of ANY kind. It plays and advances; a preview TIMING knob then rebuilds the scene; on the
+next play it is frozen. Pre-fix that test fails on exactly that assertion, post-fix it passes.
+**With no animating companion anywhere on the scene, the companion cannot have been the variable.**
+
+Every ticker-specific and Lottie-specific detail in the original report is therefore a red herring
+about the TRIGGER — they force rebuilds, which is all they ever contributed. (The Lottie remains
+special in one respect, and only one: it is what made the freeze STICKY, via the module-level cache.
+That is a separate half of the bug and it is fixed separately.)
+
+⚠️ **The two hypotheses the filing session refuted STAY REFUTED — do not re-run them.** Autoplay
+policy is not the cause (it is why the failure was SILENT, which the new logging addresses), and a
+stepped/deterministic frame driver does not exist in this engine. Nothing found here re-opens
+either. Experiments 1, 3 and 4 in the list at the end are now MOOT: 3 was the decider and experiment
+2 settled the same question more directly, without needing a GIF or a second video.
+
+**Repro** (as reported by the owner):
+
+1. Put a video and a ticker on the scene. Open the preview.
+2. Toggle the ticker's `infinite` or `cycle seam` checkbox. **→ the video pauses.**
+3. It plays again only after CLOSING the preview and opening it anew.
+
+And the sticky variant:
+
+1. Put a video on the scene. Add a Lottie element beside it. Open the preview. **→ the video shows
+   paused.**
+2. REMOVE the Lottie. **→ the video is STILL paused.** The state does not come back on its own.
+
+**Expected:** the video keeps playing across an edit, as it does before the edit.
+**Actual:** it pauses, and in the Lottie case the pause is sticky — undoing the change that caused
+it does not undo it.
+**Env:** Designer preview. **Preview-only — the CasparCG output is CORRECT in both cases.** Found in
+live testing by the owner on the `.cgproj` build.
+
+**SCOPE — a full-frame background video has NO immunity.** Video is also used as the background of
+an ENTIRE template, full frame, and the same pausing occurs there. This is NOT a lower-third /
+ticker-backdrop defect and must not be worded as one. Confirmed from code: there is no
+background/full-frame video concept in the schema — a background is a real full-frame element — so
+every video goes through the same `buildVideo`, the same pooling and the same driver binding. A
+full-frame clip fails identically, and more visibly, because it is the whole frame.
+
+**KNOWN GOOD, and the exact limit of what it proves.** Video alone, or beside only shapes and
+live-source elements, plays correctly in the preview, the CasparCG output and the HTML export (video
+there is `loop` on, `driven hold = no`). ⚠ **But a "live source" in the Designer today is only a
+STATIC IMAGE PLACEHOLDER** — `buildLiveSource` (`scene-builder.ts:1426-1442`) paints SMPTE bars in
+author mode and nothing in output mode; real live playback has never been tested. So it is a static
+element and proves nothing about motion.
+
+**🔴 OPEN QUESTION — the evidence does not separate two readings, and this is filed UNRESOLVED.**
+Every known-good companion is STATIC and every known-bad companion is TIME-DRIVEN, so the
+observations are equally consistent with:
+
+- **(A) any ANIMATING element breaks it**, or
+- **(B) only a timeline/lifecycle DRIVER breaks it.**
+
+Do not resolve this by picking a reading. **Code review proposes a third answer that would dissolve
+both** — see the mechanism below: what matters may be neither animation nor driving, but simply
+**what forces a scene rebuild**. Experiment 3 in the list at the end is the one that decides it.
+
+**Mechanism — strongly supported by code, and it is NOT either hypothesis the session started with.**
+The preview iframe transplants the OLD `<video>` DOM node back over the freshly built one after
+every in-iframe rebuild, but nothing re-points the newly built `VideoDriver` at it. The driver ends
+up commanding a detached, src-less orphan; the node the operator can SEE is the one the previous
+driver explicitly paused during teardown, and no code path ever plays it again.
+
+1. An edit posts a rebuild into the already-open preview → `applyScene` (`preview.ts:531-599`).
+2. `preview.ts:552` `harvestVideos()` stores the live `<video>` into `videoPool`; `:553`
+   `runtime.remove()` tears the runtime down, which reaches `video-driver.ts:292-308` →
+   **`this.handle.pause()`**. The pooled node is now explicitly paused.
+3. `createRuntime` builds a FRESH `<video>` and `runtime.ts:999` — `let media = v.container` — closes
+   over it. Only `recover()` (`:1042`) ever re-points that variable, and only on a terminal
+   `media.error`.
+4. `preview.ts:401` `fresh.replaceWith(pooled)` — the DOM now shows the pooled, PAUSED node while the
+   driver holds the fresh one, now detached. Worse, the src walk at `:414` uses
+   `document.querySelectorAll`, so the detached node **never receives a `src` at all**.
+5. Play calls `handle.play()` on that orphan; the rejection is swallowed at `runtime.ts:1002-1007`.
+   No console trace, no evidence.
+
+**Why the stickiness.** `lottieAssetCache.getAll()` (`lottieAssetCache.ts:29-33`) returns the whole
+MODULE-LEVEL cache, never scene-scoped. Deleting the Lottie ELEMENT does not evict the parsed
+ASSET — only `clearAll()` on project change does (`:89-92`) — so the "are there Lottie assets?"
+test at `preview.ts:884` stays true and keeps forcing rebuilds for the rest of the session. **The
+stickiness lives in module state, not in the engine**, which is why removing the element cannot undo
+it and why reopening the preview can: a fresh document starts with an empty `videoPool`, so the
+transplant branch is not taken.
+
+**Both hypotheses this session was asked to test are REFUTED — recorded so they are not re-run:**
+
+- **Autoplay policy: refuted as the CAUSE.** The element is created `muted = true`
+  (`scene-builder.ts:1216`) with `playsinline`, no `autoplay` attribute and no `loop` attribute, and
+  the rebuild path re-asserts `fresh.muted = true` (`runtime.ts:1037-1040`) precisely because an
+  unmuted rebuilt element would be blocked. A muted, `playsinline` video in a same-origin `srcdoc`
+  iframe is allowed to autoplay without user activation. **But it is exactly why the real failure is
+  SILENT:** `play()` rejections are swallowed everywhere (`runtime.ts:1002-1007`,
+  `video-driver.ts:75` — documented as intentional).
+- **A stepped / deterministic frame driver: refuted — it does not exist.** There is no stepped or
+  hold-driver mode in `@cg/template-runtime`, and no code advances a `<video>` by writing
+  `currentTime` per frame. `video-driver.ts:10-28` states the inverse architecture outright: a
+  `<video>` **advances itself** and the driver only re-anchors it. The one state where a video
+  legitimately sits paused and positioned by `currentTime` is `holdBehavior: 'freeze'`, an authored
+  per-element property nothing about a ticker or a Lottie can flip. And the driver set is rebuilt
+  from scratch on every `createRuntime` — **not latched** — which is a second reason it cannot
+  explain the stickiness.
+- **The multiple-computation-sites concern was checked and is CLEAN today.** The driving-element set
+  is computed in six places (`scene.ts:470-511`, `runtime.ts:269-302`, the build-time collection at
+  `runtime.ts:952`/`:1070`, `playout-metadata.ts:44`, `PlayoutSection.tsx:630`,
+  `PreviewScopeTiming.tsx:112`). The prior `visible === false` finding appears fixed in both
+  predicates — they agree, with the opt-in/opt-out asymmetry spelled identically. **None of it is on
+  this bug's path.**
+
+**⚠️ NOT A REGRESSION — established from git, no build and no worktree.** Every file that could
+produce this is untouched across `94be0efb..HEAD` (the widest honest window — see [[B-136]] for why
+`94be0efb` is not the commit the report assumed): `video-driver.ts`, `ticker-driver.ts` (last
+changed **2026-06-26**, roughly seven weeks before this build), `playout-controller.ts`,
+`lottie-driver.ts`, `CanvasArea.tsx`, `PreviewModal.tsx`, `PreviewHost.tsx`, and the
+`videoPool` / `harvestVideos` / `reconcileVideos` block in `preview.ts` (unchanged since `cb5a3ad`,
+2026-07-26). D-150 / B-104 touches no preview file at all; B-133's only edit is a routing string
+table; B-134's only edit is a background-colour gate. **The structure that produces this dates to
+`c41bba8` (2026-07-23) and `cb5a3ad` (2026-07-26)** — it predates the `.cgproj` build the owner
+found it on. The build is where it was NOTICED, not where it was introduced.
+
+**Corroboration worth recording: two independent code investigations converged on the same
+mechanism**, from different starting points (one hypothesis-testing the preview, one reading diffs
+for a regression verdict), and neither was looking for the other's answer. That is why the mechanism
+below is stated with confidence despite no live observation — but it is still CODE-DERIVED, and the
+experiments at the end are what would make it OBSERVED.
+
+**Related, not duplicates.** [[B-091]] (`[x]`, merged) is the nearest mechanism precedent: the
+preview's `lottie-assets` handler did a full `applyScene` rebuild mid-playback with no `!playing`
+guard. Its fix covered the `lottie-assets` TRIGGER only; the edit-driven triggers here are a
+different entry point, and the "removing the Lottie does not restore it" stickiness is new
+information present in no existing item. [[B-027]] establishes that "any edit ⇒ full runtime
+rebuild" is a known standing cost; this is the first item to report that rebuild destroying media
+playback state.
+
+**Do these two bugs share a root? NO.** [[B-136]] is a Content-Security-Policy gap in a different
+application (`apps/runtime`), on a different asset scheme (`data:` vs `blob:`), on a surface that
+does not run this code at all — `videoPool` / `harvestVideos` / `reconcileVideos` exist ONLY in
+`apps/designer/src/platform/preview.ts`. They share a subsystem (video) and a symptom class ("video
+missing where it should be"), and nothing else. Fixing either does not touch the other.
+
+**Fix size: ~20 lines in one engine file + tests.** At `runtime.ts:999`, replace the captured
+`let media = v.container` with a resolver that re-queries the live node by
+`data-cg-element-id` when `media.isConnected === false` — the variable is already mutable, and
+`recover()` already does exactly this re-pointing on a different trigger. Host-agnostic, so it also
+covers any future harness that reparents nodes. Two cheap adjacent improvements worth doing in the
+same change: scope the posted Lottie map to the scene's own Lottie ids (killing the stickiness at
+source), and stop swallowing the `play()` rejection blind — logging it once per element would have
+surfaced this in minutes.
+
+**⚠️ Would `live-source-multibox` phases 5–6 make this WORSE? NO — answered explicitly.** A real live
+element would NOT join the timeline driver set and would NOT be ticked by the `<video>` path. A Live
+Source is a `<div>` hole by construction (`scene-builder.ts:1426-1442`), never a media element;
+CasparCG composites the real picture on a LOWER channel layer, so nothing enters the DOM to be
+pooled. Phases 5–6 are entirely bridge-side (`caspar-runtime.ts`, `command-builder.ts`) and mention
+neither `drivesHold` nor `VideoDriver`. The Designer preview will still show SMPTE bars after phase
+6 — `preview.ts:559-568` says so. **A fix here does not collide with phases 5–6**: no shared file,
+no shared predicate.
+
+### ⚠️ READY-TO-RUN EXPERIMENTS — for the owner, at the machine, in minutes
+
+These are what the code cannot settle. Run them in order; each says what its outcome means.
+
+1. **Does a plain SHAPE rebuild the preview, and does the video survive it?** With a video playing in
+   the preview, add and then remove a plain rectangle. **Video keeps playing ⇒ a shape edit does not
+   reach the rebuild path**, and rebuild-on-any-edit is not the trigger — narrowing which edits
+   matter. **Video pauses ⇒ the trigger is far broader than the report suggests**, and the item's
+   priority should rise.
+2. **The decisive one — change a preview TIMING knob with NO ticker and NO Lottie on the scene.**
+   Video alone; open the preview; change any knob in the preview's own timing panel (hold ms, mode,
+   scope dwell). **Video freezes ⇒ the mechanism above is confirmed**, and everything
+   ticker-specific and Lottie-specific in the report is a red herring — the trigger is simply "what
+   forces a rebuild". **Video keeps playing ⇒ the mechanism is incomplete** and something
+   ticker/Lottie-specific is really in play.
+3. **Separate "any animating element" from "timeline driver" — the open question above.** Add an
+   element that ANIMATES but does NOT drive the timeline. **All three are authorable today**, so
+   there is no excuse to skip this: a keyframe-animated shape, an **animated GIF** (`gif` is an
+   accepted image import — `asset-types.ts:26-27`), or a **second video**. Code review PREDICTS the
+   GIF and the animated shape will NOT reproduce the freeze (they force no rebuild), while a second
+   video WILL (it is pooled identically). **That predicted split kills reading (A) and reading (B)
+   together** and confirms the third answer. **If instead the GIF DOES freeze it, both the mechanism
+   above and reading (B) are wrong**, and reading (A) survives.
+4. **See the orphan directly.** With the freeze showing, in the preview iframe's console:
+   `document.querySelectorAll('video[data-cg-element-id]')`. **Two nodes, one detached with no
+   `src` ⇒ the transplant mechanism is visible in the DOM**, which is proof rather than inference.
+5. **Settle WHICH checkbox the report means** — this one changes the diagnosis if it goes the other
+   way. Code review assumes the `infinite` / `cycle seam` controls are the **preview modal's own**
+   per-ticker session controls (`PreviewTimingControls.tsx:296-317`), not the Inspector's. That
+   matters because the modal renders a SNAPSHOT of the scene, so an INSPECTOR edit cannot reach an
+   already-open modal at all. **If the owner is certain the toggle was in the Inspector, a second,
+   undiagnosed mechanism is in play** and this item needs re-opening at the diagnosis level.
+
+**Regression test (once the mechanism is confirmed):** a Preview-**modal** E2E — play, post a scene
+rebuild, play again, assert the VISIBLE `video[data-cg-element-id]` has `paused === false` and an
+advancing `currentTime`. The existing coverage misses exactly this: `video-import.spec.ts:229-259`
+pins the transplant, but against the **canvas** iframe, which never plays, and it asserts node
+identity and `currentTime` — never `!paused` after a rebuild.
+
+## [ ] B-138 — an unresolved VIDEO asset in the preview is SILENTLY invisible: no placeholder, no marker, no console line ⟨priority: medium — it makes a whole class of asset failure undiagnosable⟩
+
+**Repro (constructed — this is a latent trap, not a reported field failure):**
+
+1. Place a video element on a scene.
+2. Put the preview in a state where that `assetId` does not resolve to a URL — the asset is missing,
+   or simply not yet primed at the moment the preview walks the tree.
+3. Look at the preview, and at the console.
+
+**Expected:** the same treatment an unresolved IMAGE gets — a visible placeholder and a
+`data-cg-missing` marker — or, failing that, SOME evidence that an asset did not resolve.
+**Actual:** a `<video>` with no `src`. Nothing is painted, nothing is marked, nothing is logged. The
+element is indistinguishable from one that was never placed.
+
+**Mechanism — exact, and confined to one branch.** In `apps/designer/src/platform/preview.ts`, the
+asset walk in `applyAssetUrls()` ends:
+
+```js
+} else if (tag === 'IMG' && node.getAttribute('data-cg-missing') !== '1') {
+  node.src = MISSING_IMG;
+  node.setAttribute('data-cg-missing', '1');
+}
+```
+
+The unresolved leg tests `tag === 'IMG'`. The walk itself admits BOTH kinds a few lines above
+(`if (tag !== 'IMG' && tag !== 'VIDEO') return;`), so a VIDEO reaches this branch and falls straight
+out of it. The resolved leg handles VIDEO properly; only the UNRESOLVED leg is image-only. Dates to
+`cb5a3ad` (2026-07-26) and is unchanged since.
+
+**Why it is worth its own item.** It is a DIAGNOSABILITY defect, and its cost is paid by other bugs:
+"the video is not visible" is exactly what [[B-136]] reported, and this branch is the reason such a
+report cannot be told apart from a CSP refusal, a missing asset, or a packaging failure without
+attaching a debugger. [[B-136]] named it as the leading alternative candidate precisely because it
+produces an identical symptom through a completely different cause.
+
+**⚠️ It is NOT what caused [[B-136]], and that is now settled rather than assumed.** B-136's
+mechanism was proved directly (Chromium's own CSP refusal, captured verbatim), and the availability
+question that would have implicated this path — does a video survive a `.cgproj` reopen? — was
+answered YES by test. So this is a trap that has not yet sprung, filed before it does.
+
+**Why it was NOT fixed in the session that found it** (session I, which fixed B-136 and B-137), even
+though a fix was authorised if it stayed confined. It did not meet the bar, on two counts:
+
+- **It needs a product decision that is the owner's, not the implementer's:** what should a missing
+  VIDEO actually SHOW? `MISSING_IMG` is an image data URI and cannot be a `<video>`'s `src`. The
+  options — a poster frame, a CSS background, an overlaid box, or marker-and-log only with no visual
+  at all — are a design call. Shipping marker-and-log alone would half-close the item and make the
+  remaining half harder to see.
+- **Its test cannot be a unit test.** This code lives inside the generated `<script>` string that
+  `#buildHtml` emits, so covering it honestly means another Designer E2E — more than "confined to
+  that one branch, with its own test".
+
+**Fix shape when taken:** decide the visual treatment, then extend the unresolved leg to VIDEO —
+setting `data-cg-missing="1"` and logging once per element (the once-per-element discipline [[B-137]]
+established for `play()` rejections applies here for the same reason: this walk re-runs on DOM
+mutations). An E2E asserting the marker appears on a video whose assetId resolves to nothing.
+
+**Related:** [[B-136]] (the identical symptom from a different cause, and the item that surfaced
+this), [[B-137]] (the once-per-element logging precedent).
+
+## [ ] B-147 — three schema spellings of "make the text fit" and the runtime implements NONE; the Designer ships an `autoSqueeze` control that writes a field nothing reads ⟨priority: high — it is a control that silently does nothing, and the failure lands on air with the next long name⟩
+
+**What:** the schema offers **three** ways to say "shrink the text so it fits its box". The runtime
+honours **none** of them.
+
+| Spelling                                     | Where                                                                            | State                                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `fitMode: 'shrink-to-fit'`                   | `packages/shared-schema/src/elements.ts:188`                                     | **Not implemented** — the schema's own docstring says so: _"`shrink-to-fit` (font-shrink) is NOT yet implemented — it renders like `fixed` today"_ (`:185-187`)                                                                                                                                                                                                                                              |
+| `autoSqueeze: boolean`                       | `elements.ts:205`, documented as _"the runtime shrinks the font to fit the box"_ | 🔴 **The runtime never reads it.** `SEARCH:` `git grep -rn "autoSqueeze" -- packages/` → **one hit: the declaration itself.** The Designer's Inspector WRITES it (`apps/designer/src/renderer/features/inspector/TextStyleSection.tsx:67,120`), and `bindings.ts:130` carries a comment asserting _"the element's own auto-size / auto-squeeze then handles fit"_ — describing behaviour that does not exist |
+| `overflow: 'clip' \| 'ellipsis' \| 'shrink'` | `elements.ts:189`                                                                | **Never read.** `SEARCH:` `git grep -rn "\.overflow" -- packages/template-runtime/src` → every hit is a hardcoded `style.overflow = 'hidden'`/`'visible'`; the one `textOverflow = 'ellipsis'` (`scene-builder.ts:1660`) is the Live Source plate's **id label**, an author-mode affordance, not authored text                                                                                               |
+
+Only `fitMode: 'autosize'` is implemented (D-060) — and it does the **opposite** of what is wanted:
+it **hugs the content**, growing the box to the text, rather than shrinking the text to the box.
+
+**Repro:** author a text element, set the Inspector's squeeze control to "yes", give it a string
+longer than its box. Export or preview.
+**Expected:** the font shrinks to fit, as the control says it will.
+**Actual:** nothing happens. The text overflows or clips exactly as it did with the control off.
+**Env:** Designer + `@cg/template-runtime`, any build. Read from the code at `056ffdd5`.
+
+**Why it is filed at high priority.** Two reasons, and the second is the one that dates it:
+
+1. **A shipped control that writes a field nothing reads is the same class as [[B-146]]** — the
+   operator/author is told an action happened and it did not. Here it is worse in one way: the author
+   sets it, sees the Designer look correct at the length they typed, and ships.
+2. 🔴 **The multi-box arrangement switch makes it load-bearing.** A per-box TITLE must fit a wide
+   1-box cell **and** a narrow 4-box cell (`multibox-layout-switch` `design.md` §13.7.4). Without a
+   fit rule the first long Persian guest name overflows the narrow cell **on air**.
+
+⚠ **THE RULE THAT FIXES IT MUST MEASURE THE RENDERED BOX, AFTER SHAPING — not the string.** Persian
+shaping means glyph advances are not the sum of character advances: contextual forms and ligatures
+change the width, so a rule based on character COUNT works for Latin and fails for Persian.
+`@cg/text-shaping`'s `truncate()` is exactly that shape — code-unit based, and its own docstring
+admits _"Persian text with combining diacritics or ZWNJ-joined compounds may still split at
+inconvenient boundaries"_ (`packages/text-shaping/src/truncate.ts:1-10`). It is a **length cap, not a
+width fit**, and it cannot answer "does this fit the narrow cell". Measure `scrollWidth` /
+`getBoundingClientRect` after layout. **A rule that works for Latin and not for shaped Persian is not
+a rule** — it looks fine in the Designer and breaks on air with the next guest's name.
+
+**The three shapes, posed rather than chosen** (`design.md` §13.7.4 recommends (b) first):
+
+- **(a)** a per-arrangement font-size override on the text element — most control, most authoring
+- **(b)** a real shrink-to-fit measured after shaping — least authoring, one rule everywhere
+- **(c)** both, with (b) the default and (a) the escape
+
+🔴 **And whichever lands, the three spellings must become ONE.** Leaving two unimplemented synonyms
+beside a working one is how the next author picks the dead one.
+
+**Acceptance:**
+
+- WHEN a text element is set to shrink to fit and its content is too wide THEN the rendered font
+  shrinks until it fits, in the Designer preview AND in the export
+- WHEN that text is shaped Persian THEN the fit is decided from the RENDERED box, so ligatures and
+  contextual forms are accounted for
+- WHEN the schema is read by a new author THEN there is ONE spelling of "make the text fit", not
+  three, and no control writes a field the runtime ignores
+
+- **Cross-refs:** [[D-152]] (the arrangement authoring that needs this for per-box titles),
+  [[R-057]] (the operator half), [[B-146]] (the same class — a control that silently does nothing),
+  [[D-060]] (`fitMode: 'autosize'`, the one that IS implemented).
+
+## [ ] B-148 — instancing ONE box composition twice exports TWO declarations with the SAME `elementId` and `sourceId`: the boxes fight over one live layer, and nothing refuses it ⟨priority: high — a template that exports clean and cannot work⟩
+
+**What:** a multi-box template authored the obvious way — one `box` composition, instanced N times —
+produces N Live Source declarations that are **identical in both identity fields**. The bridge keys
+plate assignment on `(templateId, plateId)` where `plateId` IS the `sourceId`, so N boxes resolve to
+ONE live layer and fight over it. Export raises nothing.
+
+🔴 **The tree ALREADY REFUSES THIS EXACT HAZARD one door along, in these words:**
+
+> _"…every stamp would carry the same source id, so the copies would fight over one live layer."_
+> — `apps/designer/src/renderer/state/live-source-preflight.ts`, the `live-source-in-stamped-scope`
+> refusal (added for `repeater` / `sequence` stamps)
+
+A stamped scope is refused for it. **A composition instance is not, and produces the same
+collision.** One hazard, one reasoning, one refusal — currently applied to one of the two doors.
+
+### MEASURED, not read (2026-08-19, session AX)
+
+`collectLiveSources` over a scene with two root-level instances of one box composition emits:
+
+|            | `elementId` | `sourceId` | `rect`          |
+| ---------- | ----------- | ---------- | --------------- |
+| instance A | `plate`     | `guest-1`  | `0,0 960×540`   |
+| instance B | `plate`     | `guest-1`  | `960,0 960×540` |
+
+**The GEOMETRY is right and the IDENTITY collides.** The cause is one line: `collectLiveSources`
+emits `elementId: el.id` / `sourceId: el.routeKey` from the **authored** element, which is shared by
+every instance — while `FlatElement.key` (the composition-instance path + element id, _"UNIQUE per
+rendered copy, where the element id alone is not"_) is in the same loop, in hand, and unused.
+
+### ⚠ The binding route does NOT rescue it — established, because it decides the wording
+
+`live-source-id` bindings exist and D-025 gives each composition instance its own field namespace, so
+in principle one composition instanced N times could carry N different source ids. **It does not
+work today.** Re-measured with a `live-source-id` binding on the box composition: both declarations
+come back `dynamic: true` and **still carry the same `elementId` and `sourceId`**, and the
+declaration block has **no instance path at all** — so nothing downstream can tell the two apart, and
+the bridge is handed two records it cannot distinguish.
+
+⇒ **The item is therefore "instancing a box composition is REFUSED, full stop"**, not "refuse the
+unbound case only".
+
+### The fix, named but deliberately not taken here
+
+Two shapes, and they are not equivalent:
+
+1. **REFUSE** it in `live-source-preflight.ts`, in the stamped-scope refusal's own family and
+   wording — cheap, immediate, and it makes the author's next move obvious (author N box
+   compositions, each with its own `routeKey`).
+2. **CARRY the instance path** — emit `FlatElement.key` so N instances are N distinct plates. This
+   is the better end state and is a **carrier change** (`TemplateInfo.liveSources`), touching the
+   bridge's assignment keying and `boxRelativeRect`'s pairing. It is `multibox-layout-switch` work,
+   not a bug fix.
+
+⚠ **Refusing first does not foreclose carrying later** — a refusal removed when the carrier grows is
+an ordinary widening. Shipping the carrier change under a bug number is what would foreclose review.
+
+**Acceptance:**
+
+- WHEN a scene has two root-level instances of one composition containing a Live Source plate THEN
+  export is refused with a named error, in the same family and wording discipline as
+  `live-source-in-stamped-scope`
+- WHEN the refusal fires THEN it names both instances and says what to do instead — author one
+  composition per box, each with its own source id
+- WHEN a template has one instance of a box composition THEN nothing is refused
+- WHEN two DIFFERENT compositions each hold a plate with a distinct `routeKey` THEN nothing is
+  refused, because that is the correct authoring shape
+
+- **Cross-refs:** [[D-153]] (the surface's legibility gap, filed the same session — that one is a
+  missing EXPLANATION, this is a missing REFUSAL, which is why they are two items), [[D-152]] /
+  [[R-057]] (the arrangement feature this arises in), [[D-137]] (the Live Source element and its
+  `routeKey`), [[C-015]] (the `(templateId, plateId)` assignment keying this collides on), and the
+  `live-source-in-stamped-scope` refusal whose reasoning it shares.
+
+## [x] B-149 — the arrangement mask punched every hole at the CELL'S POSITION and the AUTHORED SIZE, opening the live layer where no box exists ⟨priority: high — on-air crosstalk, reintroduced by the feature built to prevent it⟩ — FIXED 2026-08-19 (session AY patch)
+
+**What:** `applyArrangementToNodes` writes all four geometry properties onto a box's node, but
+`liveArrangementView` — in the same file — read back only `left` and `top` and took width/height
+from the **authored** rect. So the mask was computed at the cell's POSITION with the AUTHORED SIZE.
+
+🔴 **This reached air, and it is the exact failure the multi-box feature exists to prevent.** A hole
+larger than its box opens the live layer BENEATH the template in places where no box is — §1's
+crosstalk, arriving from inside the feature itself rather than from a neighbouring template.
+
+**The owner photographed it:** in a 3-box arrangement a large transparent region covered most of the
+frame below the top two cells; only cell 3 looked right, because only cell 3's authored size was
+close to its cell.
+
+| box  | authored size     | 3-box cell              | hole actually punched                        |
+| ---- | ----------------- | ----------------------- | -------------------------------------------- |
+| box1 | 1851.58 × 1018.79 | 42, 0, **922 × 534**    | 42, 0, **1851.58 × 1018.79**                 |
+| box2 | 896.24 × 1020.19  | 1002, 16, **876 × 516** | 1002, 16, **896.24 × 1020.19**               |
+| box3 | 926.57 × 486.99   | 505, 568, 928 × 488     | ≈ the cell — hence the one that looked right |
+
+### 🔴 The mechanism was CLOBBERING, not omission — and that matters for the fix
+
+`liveArrangementView` seeds its map from `base.geometry`, which already holds the **correct** cell.
+With a cell that only RESIZED a box, the old readback added no entry and the correct value survived —
+so that case was never broken. The fault was that the readback **OVERWROTE** the correct base entry
+with `{cell position, authored size}` the moment it detected a MOVE.
+
+⚠ **That is why the fix is not "seed the base better".** It is why the test file keeps a size-only
+case even though it passed before: without it, a later change could repair the base and leave the
+clobber in place.
+
+### The fix
+
+Read `width` / `height` back the same way `left` / `top` are read, and widen the "only when it
+actually differs" guard to compare size as well as position (comparing position alone meant a
+size-only cell produced no override at all).
+
+⚠ **`scale` and `rotation` remain deliberately UNREAD, and that distinction is preserved in the
+comment rather than collapsed:** they are written into a CSS `transform` that the binding layer
+documents as OVERRIDING the baseline rather than composing with it, so a mask derived from one would
+be worse than a mask derived from none. `width`/`height` carry no such ambiguity — they are plain px,
+written by that same module.
+
+### 🔴 The test axis nobody had asserted
+
+`packages/template-runtime/tests/arrangement-hole-size.test.ts`. **C1's eleven-row UNIT B′ matrix
+asserted where the hole WAS, and every one of its cases moved a box without resizing it** — so a
+size-blind readback passed all eleven. The new file asserts position-only, size-only and both, plus a
+positive control and a restore.
+
+**Measured, red → green:** the position-and-size case punched `42,0 1851×1018` for a `922×534` cell
+before the fix and the cell exactly after. At app level the hole came back **320 px** wide — the
+plate scaled by the cell's 0.5 `preScale` — where the pre-fix value would have been the unscaled 640.
+
+- **Cross-refs:** [[D-154]] (the Designer control defect found in the same session — that one never
+  reached air, this one did), [[D-152]] / [[R-057]] (the arrangement feature), [[D-153]] (the
+  legibility item over the same surface), [[B-148]] (the other runtime-adjacent defect in this area).
+
+<!--
+  CROSS-REFERENCE, deliberately NOT a second item.
+
+  `apps/designer/src/renderer/features/shell/Splitter.tsx` carries the SAME defect as the Runtime's
+  `ShellDivider`, and it is filed ONCE, as [[B-140]] in `bugs-runtime.md`. One root cause with two
+  spellings must not get two fixes — that is the failure the item exists to close.
+
+  The Designer half is the MORE SEVERE of the two: its `pointermove` / `pointerup` listeners are
+  added inside `onPointerDown` (`Splitter.tsx:51-52`) and removed only in `onUp` (`:45-46`), so a
+  release that lands inside the canvas preview iframe (`features/canvas/CanvasArea.tsx:937`, and
+  `features/fields/PreviewModal.tsx:405`) leaves them attached PERMANENTLY — the panel then follows
+  every later pointer move with no button held. The Runtime's version leaks a stuck highlight and a
+  stuck body cursor; this one leaks a panel that never stops moving.
+
+  It is also AHEAD in two ways worth keeping when the fix lands: it is already on Pointer Events,
+  and it already separates the hit area from the visible line (`HIT = 10` around `LINE = 2`,
+  `Splitter.tsx:13-16`) — which is the pattern B-140 asks the Runtime to adopt.
+-->
+
+## [~] B-175 — `D-154` fixed the gizmo's DRAW and its WRITE and left the RESIZE MATH reading the authored transform, so a handle on an arranged box computes against a rect that is not where it is drawn ⟨priority: high — the author grabs a handle they can see and the box jumps⟩ — FIXED 2026-08-24 (`8507fcf7`), Linux e2e discharged
+
+<!--
+  🔴 STATUS CORRECTED 2026-08-25 — this sat at `[ ]` OPEN for a day after it was FIXED.
+
+  The fix landed in `8507fcf7` (the ONE read side, `renderedTransformAt`) and its tests are in
+  `apps/designer/tests/arrangement-gizmo-read.dom.test.ts`, proven red by reverting. The
+  checkbox was simply never flipped, which is the same false-record class this project has now
+  corrected four times — and the one the owner caught on `D-155` when a `[~]` claimed an
+  implementation that did not exist. A stale `[ ]` is the cheaper direction of that error
+  (someone re-does finished work rather than shipping nothing) but it is the same fault.
+
+  ⚠ LINUX E2E: `8507fcf7` got NO run of its own — a `B-132`/`P-029` dropped run. It is
+  discharged by the run for `22bb2768`, which CONTAINS it:
+  **https://github.com/yasermostafaee/cg/actions/runs/32754736681** — `e2e` job conclusion
+  `success`, and the `E2E` step RAN (7m53s) rather than being skipped. That is legitimate under
+  the discharge rule's "a later `dev` HEAD that contains the change is fine", and it holds
+  because the `e2e` job is whole-tree rather than diff-scoped.
+-->
+
+**Found by inspection while scoping [[D-155]] (the aspect lock), not by a bug report.** [[D-154]]'s
+own question — _"does the resize COMMIT land on the arrangement's CELL, or still on the authored
+transform?"_ — was asked and answered, and the answer turned out to be **"the commit is fine; the
+INPUT is not."**
+
+### What D-154 actually fixed, and the one place it did not reach
+
+D-154's argument is that the arranged rect has a READ side and a WRITE side and both must go through
+it. Both were done:
+
+| side                                | goes through the arranged rect?                                            |
+| ----------------------------------- | -------------------------------------------------------------------------- |
+| gizmo DRAWING                       | ✅ `Gizmo.tsx:151` — `arrangedTransform(element, effectiveTransformAt(…))` |
+| the overlay's hit rect              | ✅ `CanvasOverlay.tsx:362`                                                 |
+| the Transform panel's numbers       | ✅ `TransformSection.tsx:43`                                               |
+| every geometry COMMIT               | ✅ `timeline.ts:481` → `commitToActiveCell` — the one chokepoint           |
+| **the resize gesture's START rect** | ❌ `Gizmo.tsx:397` — `const t0 = effectiveTransformAt(element, …)`         |
+| **the rotate gesture's START rect** | ❌ `Gizmo.tsx:473` — same                                                  |
+
+`beginResize` takes `t0` from `effectiveTransformAt` — the **authored** transform — and everything
+the gesture is built on is derived from it: `rect0 = boxRect(t0)` (`:402`), the grabbed handle's
+scene position `grabScene = localToScene(t0, …)` (`:406-407`), the fixed corner
+`fixedScene = localToScene(t0, fc.x, fc.y)` (`geometry.ts:194`), and the ratios taken against
+`rect.w`/`rect.h` (`geometry.ts:204-205`).
+
+### 🔴 Why it is worse than "the numbers are slightly off"
+
+With an arrangement active the box RENDERS at its cell and the handles are DRAWN there, so:
+
+1. **`grabScene` is not where the handle is.** The gesture believes the author grabbed the authored
+   box's corner. The pointer delta is added to that wrong origin, so **the box jumps by the
+   authored→cell offset on the first pointer-move.**
+2. **The fixed corner is the AUTHORED box's corner**, so the corner that is supposed to stay put is
+   a corner the author cannot see — and the visible opposite corner moves instead.
+3. **The ratios are taken against the AUTHORED size**, so a cell half the authored width makes every
+   drag apply twice the intended scale factor.
+
+None of this is caught by D-154's acceptance, which asserts the gizmo is DRAWN in the right place
+and that edits REACH the cell. **Both are true. The gesture in between reads the wrong box**, and it
+is precisely the shape D-154's own comment warns about — _"the owner's handles did not touch what he
+could see"_ — surviving in the one code path that comment did not audit.
+
+**Repro:** activate an arrangement, select a box whose cell differs from its authored transform,
+drag any resize handle.
+**Expected:** the handle tracks the pointer from where it is drawn; the opposite corner stays put.
+**Actual:** the box jumps on the first move, and the corner that holds still is not the one on
+screen.
+**Env:** established by reading `Gizmo.tsx`, `geometry.ts`, `arrangements.ts` and `timeline.ts` on
+`dev` @ `f6d2033d`. **NOT reproduced in the running app** — the mechanism is a straight read of the
+data flow, and the visual consequence above is deduced from it, not observed. ⚠ Whoever picks this
+up should reproduce it first: if it does NOT reproduce, that is itself informative and means
+something else is normalising the two rects.
+
+### The fix is one line each, and that is a reason for suspicion rather than confidence
+
+`t0` in `beginResize` (`:397`) and `beginRotate` (`:473`) should be
+`arrangedTransform(element, effectiveTransformAt(element, currentFrame))` — the same expression the
+render path already uses at `:151`. ⚠ **But check `NO_CELL` before shipping it:** a box with no cell
+in the active arrangement gets the zero-sized sentinel (`arrangements.ts:327`, `NO_CELL`), and
+`computeRectResize` divides by `Math.max(rect.w, 1e-6)`. A zero-width start rect therefore yields a
+ratio of ~1e6 rather than an error. The write side already refuses that case (`isNoCell` →
+`commitToActiveCell` returns `true` having written nothing), so the gesture must refuse it too
+rather than rely on the commit swallowing it.
+
+**Regression test:** `apps/designer/tests/` — with an active arrangement whose cell differs from the
+authored transform, assert that a resize drag's FIRST emitted rect differs from the start rect by
+the pointer delta alone (no jump), and that the fixed corner's scene position is unchanged. A test
+that only asserts the final committed cell will pass against the current code.
+
+- **Cross-refs:** [[D-154]] (the item that fixed the read and write sides — this is the third side it
+  did not name), [[D-155]] (found while scoping it; the aspect lock lands on this same drag path, so
+  whichever ships second must not re-derive the other's decision), [[D-153]] (the legibility half of
+  the same surface), [[B-149]] (the other place a plate's rendered rect and its authored rect came
+  apart, that one on air).
+
+---
+
+## [x] B-180 — the Live Source overlap rule is violable INVISIBLY: a sub-ULP residue blocks the Export, the Inspector prints it as a clean integer, and no reachable drag removes it ⟨priority: high⟩ — fixed on `dev` (`openspec/changes/fix-overlap-float-residue`): the owner chose **(a) + a comparison-side guard**; a drag/resize now QUANTISES ITS POINTER to a whole scene pixel at EVERY zoom (`Alt` bypass preserved, Inspector-typed values free), and one ULP-relative `lessThanBeyondNoise` guards the inputs of all three predicate copies with the strict `<` unchanged. Inspector display deliberately left rounding — see the decision below. ⚠ This heading first said "commits whole scene pixels", which is stronger than what was built; corrected 2026-08-27 with the exceptions enumerated in the body
+
+**What:** two Live Source plates can overlap by an amount the author **cannot see, cannot read and
+cannot drag away** — and the export is blocked for it. Found while building [[D-157]] (which marks the
+offending box on the canvas): the mark would then point at two boxes that look perfectly fine and are
+perfectly fine to every surface the author has.
+
+**Why it is not theoretical:** the overlap predicate is a strict `<` with **no epsilon anywhere**, over
+**pure floating-point** rects, and three ordinary authoring actions manufacture residue the author
+never typed.
+
+### The three parts, each measured
+
+**1. The predicate fires on ANY positive area, including 1e-17 px.** All three copies use a strict
+inequality and none has a tolerance (`git grep` for `EPSILON` / `1e-6` / `tolerance` across the files
+returns nothing):
+
+```ts
+// live-source-preflight.ts:158 — "Do two AABBs share any area? Edge-touching is NOT an overlap"
+function overlaps(a: Aabb, b: Aabb): boolean {
+  return a.minX < b.maxX && b.minX < a.maxX && a.minY < b.maxY && b.minY < a.maxY;
+}
+// live-source-preflight.ts:545 — the same rule on LiveSourceRects
+```
+
+⚠ The strict `<` is **correct** and is not the defect: edge-touching must not be an overlap, or flush
+abutment would be unbuildable. The defect is that the numbers reaching it carry residue.
+
+**2. The rects are floats, and three generators produce residue from all-integer authored values.**
+`Vec2Schema` / `SizeSchema` are bare `z.number()` — unlike `ResolutionSchema`, which is `.int()`. The
+residue comes from ordinary division:
+
+- a composition instance's `preScale = size.w / comp.resolution.width`;
+- the arrangement flattener's `fitAffine` (`sx = to.width / from.width`);
+- the Inspector's scale field, `fromPercent = n / 100`.
+
+The class in one line: `0.1 + 0.2 === 0.30000000000000004`, so a box whose right edge is computed as a
+sum landing there **overlaps** a neighbour starting at `0.3` by `5.55e-17` px. That is 14 orders of
+magnitude below one pixel at 800 % zoom.
+
+**3. 🔴 Nothing the author can look at will show it, and nothing they can do will remove it.**
+
+- **The Inspector rounds it away.** `formatNumberDisplay` (`controls.tsx:449`) is
+  `Number.isInteger(v) ? String(v) : Number(v.toFixed(2)).toString()`, and `position.x/y` + `size.w/h`
+  use an identity `toDisplay`. A stored `124.00000000000001` is printed **`124`**. The only numeric
+  surface the author has agrees with them that the box is where they put it.
+- **The drag does not round.** `pixelSnapActive` (`geometry.ts:651`) gates whole-pixel snapping on
+  `pixelGridVisible(zoom)` — i.e. **800 % zoom and above**. At every ordinary zoom `commitAnimatable`
+  receives a raw float.
+- **And dragging cannot land on zero residue**, because drag positions are quantised in `1/scale`
+  steps: no reachable pointer position makes the difference exactly `0`.
+- **Every existing boundary test is blind to it.** Three tests pin "exactly touching is not an
+  overlap", and each runs on exactly-representable arithmetic — `preScale` 1, scale 1, anchor 0,
+  integer positions — so none can produce residue and none can see this class.
+
+### 🔴 NO TOLERANCE IS ADDED HERE, and that is deliberate
+
+An epsilon on a rule whose whole justification is _"two live sources over the same pixels and which one
+shows is a z-order accident"_ is a decision with on-air consequences, and it is the owner's. It also
+would not be a small decision: the same predicate governs whether two plates may sit **flush**, which is
+exactly the gesture [[B-181]] is about. Pick the wrong epsilon and flush abutment becomes an overlap, or
+a genuine 1-px collision stops being one.
+
+**The candidate fixes, none chosen here:**
+
+- **(a) QUANTISE AT THE SOURCE** — round committed geometry to whole scene pixels on every drag/resize,
+  not only at 800 % zoom. Removes the residue rather than tolerating it, and matches what the Inspector
+  already claims is stored. ⚠ Changes what every drag writes, for every element kind.
+- **(b) QUANTISE AT THE PREDICATE** — compare rounded rects inside the preflight only. Narrow and safe
+  for authoring, but leaves the scene carrying values the Inspector misreports, and the exported rect
+  still differs from what was shown.
+- **(c) AN EPSILON IN THE PREDICATE** — smallest change, and the one that most needs the owner's call,
+  because the number chosen IS the product decision about how close two holes may sit.
+
+### ⭐ THE OWNER'S DECISION (2026-08-26) — (a), **plus** a comparison-side guard
+
+The owner chose **(a)**; on being shown that (a) alone cannot work, he chose **(a) plus a guard at the
+comparison**. Both halves shipped in `openspec/changes/fix-overlap-float-residue`.
+
+**🔴 Why (a) alone was insufficient — the reason is recorded here so nobody re-derives it.** All three
+generators listed above are **DIVISIONS, not drags**, and two of them run every time the scene is
+READ, long after the author's value is stored:
+
+| generator                                                   | when it runs | reachable by rounding the drag? |
+| ----------------------------------------------------------- | ------------ | ------------------------------- |
+| `startPos + clientDelta / scale` (the drag commit)          | at commit    | **yes — (a) fixes this**        |
+| `preScale = size.w / comp.resolution.width` (the flattener) | every read   | no                              |
+| `fitAffine`'s `sx = to.width / from.width` (arrangements)   | every read   | no                              |
+
+A perfectly integer authored rect times `1234 / 1920` still carries residue. The number reaching the
+predicate is always the product of a division, so **no amount of upstream rounding cleans it.**
+
+**Half 1 — quantise at the source, at EVERY zoom.** The drag and resize gestures round their
+POINTER to a whole scene pixel regardless of zoom, superseding [[D-122]]'s 800 % threshold (its PRD
+entry is amended in place; its archived change directory is a dated record and was not rewritten).
+`Alt` is preserved as the momentary bypass on a drag and is the ONLY way to place sub-pixel by one;
+`Shift` is the resize gesture's bypass; Inspector-typed values are still stored exactly as typed.
+Only the axes a smart guide did NOT claim are quantised — a guide has landed the box on a real
+target, which inside a scaled instance is very often legitimately fractional.
+
+### ⚠ WHAT "WHOLE PIXELS" ACTUALLY GUARANTEES — corrected 2026-08-27 ([[B-181]] session)
+
+**The sentence this item shipped with — _"a drag/resize now commits whole scene pixels at EVERY
+zoom"_ — is too strong, and the owner caught it:** _"drag and resize at ordinary zoom produce far
+fewer decimals than with Alt, but sometimes it is still fractional."_
+
+**What was actually built is a quantised POINTER**, at every zoom. What the COMMIT then contains is
+whole pixels only where the geometry between the pointer and the commit is itself exact — and for
+several gestures it deliberately is not. **The fix itself is unaffected**: half 2's ULP guard is
+what stops residue reaching the overlap rule, and no fraction below is a defect in it.
+
+⚠ **Note first what the owner is NOT seeing.** `formatNumberDisplay` prints a non-integer through
+`toFixed(2)`, so a sub-ULP residue displays as a clean integer. **Every fraction he can read is
+≥ 0.005 — a real number, not dust.** That rules the whole sub-ULP class out of his report.
+
+**DELIBERATE — consequences of decisions already taken, and they stay:**
+
+| #   | path                                                               | why it must stay                                                                                                                                                                                                                                                      |
+| --- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **an axis a guide/snap CLAIMED** takes the target's value verbatim | 🔴 the load-bearing one. Quantising it would pull the box back off a real target and **destroy the exact flush abutment [[B-181]] exists to deliver.** Not a gap; the point.                                                                                          |
+| 2   | **the aspect LOCK's derived axis** (`lockExtents`)                 | the lock's entire purpose. A 16:9 lock on an integer width is almost never an integer height — measured, width `900` ⇒ height `506.25`. **This is the readable fraction the owner is most likely reading**, since he tests with live plates and the lock defaults ON. |
+| 3   | **a ROTATED element**                                              | a quantised pointer cannot yield integer position AND size; `Gizmo.tsx` already says so.                                                                                                                                                                              |
+| 4   | **`Alt` (drag) / `Shift` (resize)**                                | the bypasses, by design.                                                                                                                                                                                                                                              |
+| 5   | **a fraction inherited from the START transform**                  | [[B-175]]'s fixed-corner pin _guarantees_ it survives — a resize can never clean one.                                                                                                                                                                                 |
+
+**GAPS — real, and filed separately as [[B-182]] rather than grown into that session:** the element
+`scale ≠ 1` division inside the gesture; group-drag members other than the anchor; the pasteboard
+clamp running _after_ the quantise; the keyframed-path morph rect; `cfg.freeW`/`freeH` (element-local
+flags) gating a SCENE pointer axis under rotation; path anchor/handle drags, which were never in
+scope at all; the Inspector scrub; and `lockedCellEdit`'s division.
+
+🔴 **One shipped COMMENT was falsified and is corrected in the same commit.** `Gizmo.tsx` claimed
+_"for an unrotated element that also makes the committed size and position whole"_. It does not:
+`sizeNew.w = size.w * (wNew / rect.w)` is not an identity in IEEE754, so the plainest possible
+resize can commit e.g. `62.00000000000001`. Sub-ULP and invisible — but a future reader would have
+trusted the comment.
+
+**Half 2 — a NOISE GUARD, and in the owner's own terms it is NOT a product tolerance.** One
+`lessThanBeyondNoise` in `@cg/shared-schema` is used by all three copies of the predicate. It is
+expressed in **ULPs relative to the magnitudes being compared** — `EPSILON · 8 · max(1, |a|, |b|)` —
+and never as an absolute pixel figure. That is the whole point of the owner's choice: a ULP-scaled
+guard is provably a **noise filter, not a product tolerance**, so **no on-air decision about how close
+two holes may sit is being made here.** It says only that two numbers the arithmetic cannot
+distinguish are not evidence of a collision. **The strict `<` is unchanged** — exactly touching is
+still not an overlap, so flush abutment stays buildable; only the inputs are guarded. A genuine
+`0.01` px overlap is ten orders of magnitude above the floor and still fires, asserted by test.
+
+**The measured fixture, by value.** Two plates abutting at exactly `x = 350` in their composition's
+units, inside an instance 1234 px wide of a 1920-wide composition, flatten to
+`a.maxX = 224.94791666666669` against `b.minX = 224.94791666666666` — a **`2.842170943040401e-14` px**
+"overlap" nobody authored, 13 orders of magnitude below one pixel. Pinned by value in
+`packages/shared-schema/tests/overlap-residue.test.ts`, beside the flattener that produces it.
+
+**Each of the three copies is proved end to end by a test that was measured to FAIL with that copy's
+guard reverted to a bare `<`.** Two earlier fixtures in this change passed either way and proved
+nothing — the traps are recorded in the change's `design.md` §5.
+
+### The fourth acceptance bullet (the Inspector) — DECIDED: no change
+
+`formatNumberDisplay` keeps rounding to 2 dp. **Half 1 stops the display ever having to lie about a
+new drag** (a drag now commits an integer, which it prints exactly); **half 2 removes the consequence**
+for residue already stored in an older project, and this item's complaint was precisely that the
+display CONTRADICTED a refusal — with the refusal gone the rounded reading describes a box that
+behaves exactly as it reads. Making it honest would be a **regression in this item's own scenario**:
+printing `124.00000000000001` in a narrow cell, for a box that is correct and now exports fine, turns
+invisible dust into visible alarm.
+
+🔴 **Verified, not assumed:** a rounded display is only harmless while the rounded TEXT cannot become
+the value. It cannot — `onChange` (real typing) is the only path that commits from the buffer, `onBlur`
+merely resyncs it, and Arrow up/down computes from the true value. Pinned by
+`apps/designer/tests/inspector-residue-display.dom.test.ts`, including a focus-then-blur that must
+commit nothing. **Nothing was filed separately**, because with that round-trip ruled out there is no
+residual defect.
+
+**Acceptance:**
+
+- WHEN two plates are authored at values that produce sub-pixel residue THEN either the residue does not
+  reach the rect (a), or the rule does not fire on it (b/c) — by whichever the owner picks
+- WHEN two plates genuinely overlap by 1 px THEN the rule still fires — the fix must not blunt the real
+  case, which is [[D-137]]'s reason for the rule
+- WHEN two plates are authored exactly flush THEN there is still no overlap error
+- WHEN the Inspector prints a geometry value THEN it does not disagree with what is stored, or it is
+  honest that it is rounding
+
+### Notes
+
+- **Priority `high` because it BLOCKS the author with no way out.** The export is refused, the Issues
+  panel names two boxes that look correct, and [[D-157]]'s new canvas mark will now draw a red outline
+  around geometry the author cannot fault. A refusal nobody can act on is worse than a silent one.
+- ⚠ **Found by reading, not by an owner report** — the owner's report was "1 px triggers it", which is
+  the rule working as designed. This is the case one order of magnitude further down, where the rule
+  works as designed and the author cannot tell.
+- **Connected to [[B-181]]**: with the snap fixed to land on the box EDGE, an author who snaps two
+  plates flush gets an exactly-equal coordinate and no residue. So the snap fix makes the good path
+  reliable — it does not make this case unreachable, because free (unsnapped, or `Shift`-held)
+  placement still commits raw floats.
+  ⚠ **This paragraph was struck through on 2026-08-26 with a note that `B-181` DID NOT EXIST, and
+  that note is now itself out of date — restored 2026-08-27.** The reference was written forward to
+  a number an earlier brief said the next session would take; that session was queued behind two
+  others and skipped, so for one day the six `[[B-181]]` links on this page pointed at nothing. The
+  item is now filed at [B-181](#b-181) and every one of them resolves. **This fix still did not
+  depend on it:** the residue reaching the predicate comes from the flattener's divisions, which no
+  snapping change can remove, and half 2 is what handles them.
+- **Cross-refs:** [[D-157]] (the canvas mark that would point at it); [[D-137]] (the overlap rule and
+  why it is an error); [[B-181]] (the snap that makes exact abutment reachable); [[D-122]] (the
+  pixel-grid snapping whose 800 % gate is why the drag does not round).
+- The number was verified free by the heading sweep immediately before this heading was written:
+  highest `B-` heading was **`B-179`**; the duplicate audit printed exactly `B-056` and `B-080` and
+  nothing else; a whole-tree `git grep` for `B-180` returned only
+  [b-number-registry.md](b-number-registry.md)'s own "next free" pointers, never a heading; `B-181`
+  and `B-182` returned nothing at all.
+
+---
+
+## [x] B-181 — resize snapping is computed on the POINTER, not on the box edge, so under an aspect lock the box lands nowhere near the guide the canvas drew ⟨priority: high — it breaks the one gesture a multibox layout is built with⟩ — FIXED on `dev` (`openspec/changes/resize-snaps-the-edge`) · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-resize-snaps-the-edge/`, `RELEASE-0110-01` §0.3)
+
+**What:** one defect with two faces, both reported by the owner, both in the Designer canvas.
+
+> _"When a live box is aspect-locked and you grab an edge and drag, the mouse pointer drifts away
+> from the box, and it is the POINTER that reacts to the guides and the canvas corners and snaps —
+> not the box. With other shapes, and with a live box when it is NOT locked, the pointer and the
+> grabbed edge move together and nothing goes wrong."_
+
+> _"Making the boxes touch each other is very hard — you have to zoom in a lot so the edges do not
+> overlap or leave the frame."_
+
+**These are the same bug.** The aspect lock applies to exactly one thing — a `video-placeholder`
+with an `expectedAspect` ([[D-155]]) — so the broken path is the one an author uses to build a
+multibox layout, which is why "make two boxes touch" was the symptom that surfaced.
+
+### The cause, read from the code
+
+`apps/designer/src/renderer/features/canvas/Gizmo.tsx`, the resize `onMove` (**`:463`** — the brief
+that commissioned this said `~:461`, which is the `thr = SNAP_PX / scale` line one above). The order
+of operations was:
+
+```ts
+const pScene = { x: grabScene.x + (e.clientX - startX) / scale, ... };   // the POINTER, in scene units
+if (snapping && e.shiftKey !== true) {
+  if (cfg.freeW) { const sx = snapValue(pScene.x, targets.xs, thr); if (sx !== null) { pScene.x = sx; guideX = sx; } }
+  if (cfg.freeH) { const sy = snapValue(pScene.y, targets.ys, thr); if (sy !== null) { pScene.y = sy; guideY = sy; } }
+}
+const next = computeRectResize(t0, rect0, handle, pScene, lockRatio);    // the LOCK is applied HERE, AFTER
+```
+
+🔴 **`snapValue` is given `pScene` — the pointer — and the lock is applied afterwards.**
+
+### 🔴 WHY IT ONLY SHOWS UNDER THE LOCK — and, measured, only at CORNERS
+
+- **Unlocked** (`lockRatio === undefined`): `computeRectResize` puts the grabbed edge exactly at
+  `pScene`. The identity is exact and survives a non-uniform element scale, because
+  `rawW = |p.x − fixed.x| / scale.x` and the edge is `fixed.x + scale.x · rawW` — the scale divides
+  back out. So snapping the pointer **is** snapping the edge. This is why nobody saw it.
+- **Locked EDGE handle** (`r` / `l` / `t` / `b`): `lockExtents` takes its `freeW`-only branch and
+  passes the driven extent through unchanged (`lw = w`, `lh = w / lockRatio`), so **the driven edge
+  is still exactly at the pointer.** Measured, plate `(100, 100, 640, 360)` at 16:9, handle `r`,
+  pointer `x ∈ {900, 1000, 300}` ⇒ committed right edge **900, 1000, 300**. ⚠ **An aspect-locked
+  edge handle therefore CANNOT see this bug**, and it is the fixture anybody will reach for first.
+- **Locked CORNER handle**: `lockExtents` **projects `(rawW, rawH)` onto the locked diagonal**,
+  which separates pointer from corner by construction whenever the pointer is off that diagonal.
+  Same plate, handle `br`, pointer `(900, 300)` ⇒ the moving corner lands at
+  **`(793.18, 489.91)`** — **106.8 px away in `x`, 189.9 px in `y`.** The pointer lands on the
+  target; the box does not.
+
+⚠ **The owner's "the pointer drifts away from the box" is real for EDGE handles too**, and is a
+different thing: the DERIVED axis changes, which moves the handle's own midpoint out from under the
+cursor. That is inherent to the lock and is not a defect. What was a defect is the sentence after
+it — _"it is the POINTER that … snaps, not the box"_ — and that part is the corner case.
+
+### 🔴 The guide announced a snap that never happened
+
+`guideX` / `guideY` were set to the snapped **pointer** coordinate, so the canvas drew a line
+claiming a snap the geometry had refused. **The surface reported success for something that did not
+occur.**
+
+That is this repo's named pattern — **"the system knows something and does not say it"**
+([[B-141]], [[B-143]], [[B-144]]) — in its inverted form: the system saying something it does not
+know. Measured, with the old code and a ruler guide at `y = 600`: a single corner drag published
+guides on **both** axes (`x: [1000]`, `y: [600]`) while the box was on neither.
+
+### The fix
+
+Snapping is evaluated in **box-edge space**, on the rect that will actually be committed:
+
+1. solve from the raw pointer with the lock applied → a candidate rect;
+2. read that candidate's **moving edge** (`movingCornerScene`, beside the solver);
+3. test those coordinates against the existing `targets` at the existing `thr`;
+4. re-solve through the **same** `computeRectResize` via an inverse (`pointerForMovingEdge`) — never
+   by nudging the pointer and hoping;
+5. **draw the guide from the FINAL rect**, and only where the edge is genuinely ON a target.
+
+Step 5 is what makes the lie structurally impossible: the guide is a function of the committed
+geometry rather than of the intent, so it cannot outrun what the box did. `lockExtents`'s `MIN_SIZE`
+up-scale can still override a target, and only measuring can tell.
+
+### 🔴 The corner DECISION (a real design choice, not a spelling)
+
+Under a lock the two extents are tied, so satisfying one axis **forces** the other and a corner drag
+generally cannot land on two targets at once. **The rule adopted: the NEARER target wins; a tie goes
+to `x`.**
+
+- It is the same currency the threshold already uses. `thr` is `SNAP_PX / scale`, and both axes are
+  tested against that one value, so a scene-px distance is a screen-px distance times the same
+  constant on both axes — "nearest" means nearest **on screen**, which is what the author sees.
+- The alternative "the axis with the larger pointer delta drives" is actively wrong here, because
+  `lockExtents` projects a corner pointer onto the diagonal: the larger delta is then an artefact of
+  that projection rather than a statement of intent.
+- The tie-break is fixed rather than "keep whichever axis led last", so the same pointer position
+  always means the same thing. A stateful tie-break is how a box starts to feel like it is fighting
+  the author.
+- **The FORCED axis gets no guide** — it did not snap, it was derived. It gets one only if the
+  committed edge lands genuinely ON a target (within the floating-point noise floor, reusing
+  [[B-180]]'s `noiseFloor`), in which case both lines are true and both are drawn.
+
+**Acceptance:**
+
+- WHEN an aspect-locked plate's corner is dragged within the snap threshold of a neighbour's edge
+  THEN the committed rect's moving edge is EXACTLY on that target, not the pointer
+- WHEN a snap is taken THEN the guide is drawn at the committed edge's coordinate
+- WHEN no snap is taken THEN no guide is drawn, even if the pointer is near a target
+- WHEN a locked corner is in range of targets on both axes THEN the nearer one wins and the forced
+  axis is not given a guide it did not earn
+- WHEN the element is unlocked THEN the gesture is unchanged
+- WHEN `Shift` is held THEN nothing snaps and nothing is drawn
+
+### What was deliberately NOT changed
+
+Each verified against the tree before the work started, and each left alone:
+
+- **`SNAP_PX = 7`** (`Gizmo.tsx:47`) and **`thr = SNAP_PX / scale`** (`:461`) — the catch radius is
+  already a constant 7 SCREEN px at every zoom. ⚠ The gloss "the threshold is in screen pixels" is
+  worth stating precisely: the CONSTANT is screen px, `thr` is in SCENE units, and the division is
+  what makes the effective radius zoom-independent.
+- **`buildSnapTargets`** (`:373-398`) already returns canvas edges + centre, every other element's
+  edges + centre, and the ruler guides — so a neighbour's opposite edge was always a target and
+  flush abutment was always expressible. No new target set was needed.
+- **[[B-175]]'s rule inside it** — targets read from `renderedTransformAt`, i.e. where a box IS
+  DRAWN, never the authored rect.
+- **`lockRatio` resolved ONCE at press** (`:454-459`) — a lock toggled mid-drag would relocate the
+  box under a pointer that never moved.
+- **The `t0.rotation === 0` gate** (`:433`) on snapping.
+- **`Shift` as this gesture's bypass.**
+
+### Notes
+
+- **Priority `high` because it breaks the gesture the feature exists for.** [[D-155]] added the lock
+  so a Live Source keeps its shape while being resized; this defect means that as soon as the lock
+  is on, the author can no longer place the box accurately by hand.
+- **The second face needed no separate fix and no tolerance.** Once the edge is what snaps, an
+  aspect-locked plate abuts its neighbour exactly at 100 % zoom in a single drag — asserted in
+  `resize-edge-snap.dom.test.ts`, which mounts the gizmo at `scale: 1`. No epsilon, no new
+  threshold, no widened catch radius.
+- **Cross-refs:** [[D-155]] (the aspect lock, whose `lockExtents` projection is what exposes this);
+  [[D-122]] (the pixel-snap item — ⚠ **not** [[D-015]], which is the View-menu ruler/snapping
+  TOGGLES and is a different thing); [[B-180]] (the sub-ULP residue next door, whose `noiseFloor`
+  this reuses for the "is the edge genuinely on the target" test); [[D-157]] (the canvas mark for a
+  blocked Export — ⚠ `[~]`, in progress, not shipped); [[B-175]] (the ONE read side these targets
+  obey); [[D-137]] (the Live Source element, inside which the overlap rule lives).
+- The number was verified free immediately before this heading was written, by the registry's own
+  documented method: highest `B-` heading anywhere was **`B-180`**, across all seven refs
+  (`dev`, `origin/dev`, `main`, `origin/main`, `origin/HEAD`, `ai-stale`,
+  `design/live-source-multibox`), with `git stash list` empty and `git worktree list --porcelain`
+  showing this checkout only. `B-001` … `B-180` is contiguous; the duplicate audit printed exactly
+  `B-056` and `B-080` and nothing else. `B-181`'s only prior occurrences tree-wide were six prose
+  cross-references inside [[B-180]] — the registry's documented forward-reference false-positive
+  class, a mention and never a heading.
+
+---
+
+## [ ] B-182 — the whole-pixel commit has eight holes `B-180` did not cover: a division inside the gesture, the clamp that runs after the rounding, and three canvas paths never in scope ⟨priority: medium⟩
+
+**What:** [[B-180]] half 1 quantises the drag/resize POINTER at every zoom. Several paths between
+that pointer and the committed value still introduce a fraction the author did not type. Five of
+them are deliberate consequences and are enumerated as such in [[B-180]]; **these eight are not
+consequences of any stated decision — nobody decided them.**
+
+**Why it is filed rather than fixed:** found while auditing [[B-180]]'s guarantee during [[B-181]],
+after the owner reported _"drag and resize at ordinary zoom produce far fewer decimals than with
+Alt, but sometimes it is still fractional."_ Fixing them would have grown that session well past
+its brief, and several need a decision rather than a patch.
+
+⚠ **None of these is a defect in [[B-180]]'s actual fix.** The ULP guard at the overlap predicate is
+what keeps residue from blocking the Export, and it is unaffected. This item is about the OTHER
+half — the promise that what a gesture commits is a number the author can read back.
+
+### The eight, each measured
+
+| #   | path                                             | file:line                                           | what it does                                                                                                                                                                                                                                                                                                                                                                                            |
+| --- | ------------------------------------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **element `scale ≠ 1`**                          | `geometry.ts:294-295`                               | `vx = (pointerScene.x − fixedScene.x) / scale.x` — a DIVISION inside the very gesture [[B-180]] set out to clean, and its own named residue class. Measured: scale 1.25, anchor .5, `tl` ⇒ `pos=(132.4, 123.4) size=(171.2, 99.2)`.                                                                                                                                                                     |
+| 2   | **group-drag members**                           | `CanvasOverlay.tsx:1207-1213`                       | only the ANCHOR is quantised; every other member commits `m.x + fdx`. Measured: anchor start `100.4` ⇒ `fdx = 33.599999999999994`, so an untouched member at `12` lands on `45.599999999999994`.                                                                                                                                                                                                        |
+| 3   | **the pasteboard clamp runs AFTER the quantise** | `CanvasOverlay.tsx:1084-1092`, `:1203-1206`         | `B-027`'s clamp is applied to the rounded value. When it bites the result is `bounds.maxX − w`, and `w` is the SCALED width — measured `w = 173.5` ⇒ `nx = 6746.5`. The oversized branch (`geometry.ts:544-547`) is an explicit halving.                                                                                                                                                                |
+| 4   | **the ratio round-trip**                         | `geometry.ts:314-316`                               | `sizeNew.w = size.w * (wNew / rect.w)`; `w · (n / w)` is not an identity in IEEE754. Measured: unrotated, scale 1, integer start, `tl` at a whole-pixel pointer commits `size.h = 62.00000000000001`. Exact only when `size.w` is a power of two. 🔴 **This is the one that falsified a shipped comment** (`Gizmo.tsx`, corrected under [[B-181]]). Sub-ULP, so invisible behind `formatNumberDisplay`. |
+| 5   | **a SCENE axis gated on an ELEMENT-LOCAL flag**  | `Gizmo.tsx` (the `cfg.freeW`/`freeH` quantise gate) | those flags are element-local axes; `pointer.x`/`.y` are scene axes. Under rotation they do not correspond, so one scene component the size still depends on is left un-quantised. Measured at 30°, handle `t`: `h = 175.2855…` vs `175.4160…` if both axes were rounded. At rotation 0 they agree, which is why no test catches it.                                                                    |
+| 6   | **path anchor / handle drags**                   | `PathEditor.tsx:207-226`, `:228`, `:272`            | a whole canvas drag class that writes `transform.position` AND `transform.size` (through `normalizePathPoints`' Bézier bbox) with no quantisation and no `Alt`/`Shift` bypass. **Never in [[B-180]]'s scope at all.**                                                                                                                                                                                   |
+| 7   | **Inspector SCRUB**                              | `controls.tsx:65-78`                                | [[D-122]]'s carve-out says _"Inspector-TYPED values stay free"_, but the fields are also drag surfaces. Measured: **Shift** ⇒ `100 → 100.7`; a fractional start ⇒ `100.37 → 107.37`. The wording never contemplated the scrub.                                                                                                                                                                          |
+| 8   | **`lockedCellEdit`**                             | `arrangements.ts:527-543`                           | `height: round(value / aspect)` — a division on a `NumberField` that is itself a scrub-drag, and the cell rect IS the box's rendered position/size. Measured (16:9): width `641` ⇒ height `360.56`.                                                                                                                                                                                                     |
+
+### 🔴 The two to take first, and why
+
+- **#4**, because a shipped comment asserted the opposite and a future reader would have trusted it.
+  The comment is already corrected; the arithmetic is not. It is sub-ULP, so it is a correctness-of-
+  documentation problem more than a user-visible one — but it is also the reason the "unrotated ⇒
+  whole numbers" intuition is false, and that intuition will be reached for again.
+- **#6**, because it is an entire gesture class writing geometry with no rounding, no bypass and no
+  test, and nothing in [[B-180]] or [[D-122]] ever claimed to cover it.
+
+**Acceptance:**
+
+- WHEN a drag or resize commits at ordinary zoom THEN the enumerated paths either produce a value
+  the author can read back, or the item records WHY they cannot and that becomes the documented
+  guarantee
+- WHEN a group of elements is dragged THEN every member lands on the same lattice as the anchor, or
+  the item states why only the anchor can
+- WHEN a path anchor is dragged THEN the same rule as every other canvas drag applies, including the
+  bypass modifier
+- WHEN the whole-pixel guarantee is stated anywhere in the PRD THEN it names its own exceptions
+
+### Notes
+
+- **Not `high`:** none of these blocks anything. [[B-180]]'s Export refusal is fixed by half 2, and
+  [[B-181]] delivers exact flush abutment through the snap, which is the gesture that actually needs
+  exactness. These are honesty-and-polish debts on the commit path.
+- ⚠ **Do not "fix" the DELIBERATE five** listed in [[B-180]] while working here. In particular, an
+  axis a guide claimed must keep the target's value verbatim — quantising it would destroy exact
+  abutment, which is precisely what [[B-181]] was built to deliver.
+- **Cross-refs:** [[B-180]] (the quantise, and the enumeration this item is the other half of);
+  [[B-181]] (the edge-space snap, and the audit that produced this list); [[D-122]] (the original
+  pixel-snap decision and its Inspector carve-out); [[B-175]] (the fixed-corner pin, which is why #4
+  cannot be fixed by rounding the solver's output); [[B-027]] (the pasteboard clamp in #3).
+- The number was verified free immediately before this heading was written: highest `B-` heading
+  anywhere was `B-181` (this session's own, one heading above), `B-182` returned zero hits tree-wide
+  and on every ref, `git stash list` was empty and `git worktree list --porcelain` showed this
+  checkout only.
+
+---
+
+## [x] B-183 — a new Live Source plate is born pointing at `live-1`, a name the author never chose and nothing declares, so drawing a box creates a preflight error and blames the author for it ⟨priority: high⟩ — FIXED on `dev` (`openspec/changes/plate-source-unassigned`) · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-plate-source-unassigned/`, `RELEASE-0110-01` §0.3)
+
+**What:** the owner opened a template on the root composition and found a plate flagged
+`look-source-undeclared`: its `routeKey` was `live-1` while the group declared `l1` and `l2`.
+
+> _"I never used `live-1`. I declared `l1` and `l2`."_
+
+He is right, and the surface was not lying to him — **the tool was.** Two independent paths handed
+every new plate a `live-N`:
+
+| path                                               | value                               |
+| -------------------------------------------------- | ----------------------------------- |
+| `defaultLiveSource(id, x, y, routeKey = 'live-1')` | `live-1`                            |
+| `nextLiveSourceId(scene)`, from the canvas tool    | the first free `live-N`, scene-wide |
+
+🔴 **`live-N` is the PLACEHOLDER TEXT of the Looks panel's `+ Source` input** — the panel's
+suggested next name, a suggestion the author had not accepted. Nothing declared it. So drawing a box
+created a plate already referencing an undeclared source, and the group-scope preflight then
+reported the tool's own guess as the author's mistake.
+
+⭐ **The owner's decision, 2026-08-26: a new plate defaults to NO source.** His principle, stated in
+the same breath: **nothing lands unconfirmed.**
+
+**Rejected by the owner, with his reasons — recorded so they are not relitigated:**
+
+- **default to the first DECLARED source** — silently binds two plates to one input, and the error
+  is never seen;
+- **keep `live-N` and auto-declare it** — creating a box would edit the group's source list without
+  being asked.
+
+### 🔴 What was MEASURED first — and the half of the brief it killed
+
+The brief carried a second, independent hypothesis: that the Inspector's `source` control renders
+the group's DECLARED list and falls back to its first option, which is why it showed `l1` for an
+element holding `live-1`. Both were tested against one fixture — a plate holding `live-1` under a
+group declaring `l1`/`l2` — comparing the scene, the preflight and the Inspector **in the same
+test**.
+
+| hypothesis                                          | verdict                                                                                                   |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| the creation default is an undeclared `live-N`      | **CONFIRMED**                                                                                             |
+| the Inspector substitutes the first declared option | 🔴 **FALSE** — `select.value = "live-1"`; `options = ["live-1\|live-1 (undeclared)", "l1\|l1", "l2\|l2"]` |
+
+⚠ **The Inspector was already honest, and its own comment already said so** — _"A dangling legacy
+value is shown as itself, labeled undeclared, so the select never lies about the scene."_ **Nothing
+about that rendering is changed.** It is now pinned by test, because an honest control that nothing
+tests is one refactor from becoming a dishonest one.
+
+⚠ **So why did the owner read `l1` off the screen?** Not established, and not guessed at here. What
+is established is that the Inspector cannot produce that reading from an element holding `live-1`.
+The most likely remaining explanation is that the plate he had selected was not the plate the error
+named — see [[B-185]]'s neighbourhood and the note under "What was NOT reproduced" below.
+
+### What changed
+
+- **`routeKey` is OPTIONAL on the element** — and only there. `LookSource.routeKey` stays required:
+  a plate may not yet have a source, a DECLARATION always names one. Widening the shared
+  `LiveSourceIdSchema` instead would have let a group declare an empty source.
+- **`defaultLiveSource` drops the parameter entirely**, and **`nextLiveSourceId` is deleted** rather
+  than left unused, with its (expired) argument recorded where it stood.
+- **A new refusal, `live-source-unset`**, in DOCUMENT scope so it fires with or without a
+  group. It replaces two messages that were both false about this state: the device-id refusal
+  (_"is not symbolic (“undefined”)"_) and the undeclared one (_"references source “”"_, after a
+  `?? ''`). Both describe a plate that HAS a source and got it wrong.
+- **Both refusals name the remedy** — the panel, the row, and the choice — resolved once from
+  `scene.lookGroups`, because which row exists differs by template (`source` picker with a group,
+  free-text `source id` without). `look-source-undeclared` names BOTH legitimate remedies: fix the
+  plate, or declare the name.
+- **The Inspector gains the unassigned state** as its own selectable entry (`— no source —`), via a
+  `''` sentinel that cannot collide (`LiveSourceIdSchema` is `.min(1)`) and never reaches the store.
+- **The bars label reads `no source`** — which is what the old `live-1` default only pretended to
+  say.
+
+### 🔴 What is NOT changed
+
+- **The rule is not weakened.** No tolerance, no severity downgrade, no suppression in the root
+  scope. `look-source-undeclared` keeps its reasoning and its `error` severity.
+- **No one-click fix button.** The owner considered and declined it: it needs an undoable scene
+  mutation and is a separate item if ever wanted.
+- **Existing data is not repaired.** An undeclared `routeKey` is the author's to fix, and rendering
+  the Inspector performs no write — pinned by test.
+- **The check is not extended into look compositions.** Opened as its own composition a look has no
+  group in scope, so §B.1 never runs there; whether it should is a separate decision, noted and not
+  taken.
+
+### ⚠ What was NOT reproduced, and is therefore NOT filed
+
+The brief also asked for the canvas error mark to be filed as marking the wrong element — the dashed
+red rect wrapping the whole 1920×1080 frame rather than the offending nested plate. **It did not
+reproduce.** Measured with a plate at `(100,100,640,360)` nested inside an instanced look
+composition: `flattenElements(scene, 'document')` returns `inst-a` at the full frame **and**
+`nested-plate` at its own composed rect, the preflight carries `elementId: "nested-plate"`, and
+`ErrorMarkOverlay` therefore draws at `{x:100, y:100, width:640, height:360}` — the plate, correctly.
+
+No bug is filed for it, because filing one would reserve a number for a defect nobody has shown to
+exist. What would settle it is the owner's actual scene file; the likeliest innocent explanation is
+that the offending plate in his template genuinely is full-frame.
+
+- **Cross-refs:** [[B-184]] (the colour of the very refusal this item produces — same session, same
+  panel); [[B-186]] (why `tsc` did not catch the two stale call sites this change created);
+  [[D-137]] (the Live Source element and its creation path); [[B-141]] / [[B-143]] / [[B-144]] —
+  _"the system knows something and does not say it"_. ⭐ **This item is one step worse than that
+  family and is worth distinguishing from it:** the surface did not stay quiet, it **stated
+  something the author had not chosen and then blamed him for it.**
+- The number was verified free before this heading was written: highest `B-` heading across every
+  ref was `B-182`; `B-183` … `B-190` returned **zero** hits tree-wide (no forward references this
+  time); `git stash list` empty; `git worktree list --porcelain` showed this checkout only.
+- ✅ **Linux `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/33246214343>
+  on `9a6e0eff`, `completed` + `success`, **`E2E (Playwright)` CONFIRMED RAN** (not skipped). The
+  same run discharges [[B-184]] and, because `9a6e0eff` is a later `dev` HEAD containing
+  `aa01681c`, [[B-181]]'s long-owed debt as well.
+
+---
+
+## [x] B-184 — one fact, two colours: the Looks panel draws an EXPORT REFUSAL in amber while the status bar draws the same refusal in red ⟨priority: medium⟩ — FIXED on `dev` (`openspec/changes/plate-source-unassigned`) · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-plate-source-unassigned/`, `RELEASE-0110-01` §0.3)
+
+**What:** the right-hand Looks panel printed `1 ISSUE — EXPORT WILL REFUSE` with its issue rows in
+`colors.caution` (amber), while `StatusBar.tsx` printed `1 error` in red for the same preflight
+issues. **The owner's call: it must be red.** Amber for a hard export refusal understates it — the
+author cannot export at all.
+
+**Why this is not a taste question.** The theme's own tokens already decide it:
+
+- `caution` — _"a legitimate state the operator should NOTICE, but which is not an error"_;
+- `danger` — _"red is reserved for real errors"_.
+
+These rows are `severity: 'error'` issues that block the export. The amber was contradicting the
+token that carried it.
+
+**Checked before changing anything, as the brief required:** `danger` appears **nowhere** in
+`LooksSection.css.ts` (its only colours were `accent`, `border`, `caution`, `textMuted`), so the
+panel does not reserve red for something else. No new colour is introduced and no third state
+invented.
+
+⚠ The summary line gets its own `issueSummary` style rather than a recoloured `groupLabel`:
+`groupLabel` is the neutral heading for **every** group in this panel, and recolouring it would turn
+all of them red.
+
+⚠ Noted and not fixed: `StatusBar.tsx:71-72` hard-codes `#fda4af` / `#fcd34d` rather than using the
+`danger` / `caution` tokens. Out of scope here; it produces the right colours today.
+
+- **Cross-refs:** [[B-183]] (filed together; that item's refusal is what this panel prints);
+  [[D-157]] (the canvas error mark, whose own docstring reserves `danger` for real errors).
+
+---
+
+## [ ] B-185 — under an aspect lock the resize HANDLE slides out from under the pointer, by far more than the snap threshold; the owner has now objected twice and the anchoring is a decision he has not been offered ⟨priority: medium — a DECISION is wanted, not a patch⟩
+
+**What:** immediately after [[B-181]] shipped, the owner reported _"dragging the edges is not
+fixed."_ Three separate readings were measured against an aspect-locked plate before anything was
+touched, because the report and [[B-181]]'s own measurement could both be true about different
+things.
+
+### The three readings, each answered by value
+
+Fixture: plate `(100, 100, 640, 360)`, 16:9 lock, zoom 1 unless stated.
+
+**1. Does the grabbed edge land under the pointer? — YES, exactly. Not a defect.**
+
+| handle | pointer (driven axis) | committed edge   | error |
+| ------ | --------------------- | ---------------- | ----- |
+| `r`    | 900 / 1300 / 400      | 900 / 1300 / 400 | **0** |
+| `l`    | 300 / 40              | 300 / 40         | **0** |
+| `t`    | 40 / 300              | 40 / 300         | **0** |
+| `b`    | 700 / 300             | 700 / 300        | **0** |
+
+Held under stress too — element `scale` `1.5/0.8`, anchor `.5/.5`, and both together: error `0` to
+nine decimals on all four handles. [[B-181]] did its job.
+
+**3. Is abutting two boxes still hard? — NO. It is exact, at every zoom.**
+
+Dragging the plate's right edge to a neighbour's left edge at `x = 1000`: the target is taken for
+pointer x ∈ `[994, 1006]` and the committed right edge is **exactly `1000`**, gap `0`, guide drawn
+at `1000`. Repeated at zoom **0.25, 0.5, 1, 2 and 4** with the pointer ±3 SCREEN px off the target:
+**flush every time.** The other direction (the neighbour's `l` handle back to the plate's right edge
+at `740`) is flush for pointer x ∈ `[735, 745]`.
+
+⇒ The owner's original 2026-08-25 complaint — _"you have to zoom in a lot"_ — **is fixed.**
+
+**2. Where does the HANDLE's drawn midpoint end up? — THIS is what he is describing.**
+
+Under a lock the derived extent grows from a pinned corner, so the handle's midpoint slides along
+the cross axis even though the edge is exact:
+
+| handle → pointer | committed rect       | handle midpoint | cross-axis drift |
+| ---------------- | -------------------- | --------------- | ---------------- |
+| `r` → 900        | (100,100,800,450)    | (900, 325)      | **+45**          |
+| `r` → 1300       | (100,100,1200,675)   | (1300, 437.5)   | **+157.5**       |
+| `r` → 400        | (100,100,300,168.75) | (400, 184.375)  | **−95.6**        |
+| `t` → 300        | (100,300,284.4,160)  | (242.2, 300)    | **−177.8**       |
+| `b` → 700        | (100,100,1066.7,600) | (633.3, 700)    | **+213.3**       |
+
+🔴 **The drift EXCEEDS THE SNAP THRESHOLD in every case measured — by 2.4× to 30×.** `thr` is 7
+scene px at zoom 1; the smallest drift measured was 16.9 px. It crosses `thr` almost immediately:
+for `r`/`l` at 16:9 a width change of ~**25 px** is enough, and for `t`/`b` a height change of
+~**8 px**. By the commissioning brief's own criterion that makes this a **functional** matter, not a
+preference — which is why it is filed rather than closed.
+
+⚠ **Stated honestly, because it cuts the other way too:** the drift is **parallel to the driven
+edge**, never across it, so it can never make the edge take the wrong target — readings 1 and 3
+prove that. What it does do is put the handle graphic far from the cursor, and when SHRINKING it
+puts the cursor **off the box entirely** (`r` → 400: box bottom `268.75`, cursor `280`).
+
+### `B-175`'s pin contract for a locked EDGE handle — measured, since every option below touches it
+
+`RESIZE_CFG` pins a **CORNER**, not the opposite edge: `r`→`tl`, `l`→`tr`, `t`→`bl`, `b`→`tl`.
+Verified against the committed rects above — `r`→900 keeps `tl` at `(100,100)`; `l`→300 keeps `tr`
+at `(740,100)`; `t`→40 keeps `bl` at `(100,460)`; `b`→700 keeps `tl` at `(100,100)`. **That is
+exactly why the drift is `Δcross / 2`:** the cross axis is anchored at one end, so all of its growth
+happens in one direction and the midpoint moves by half of it.
+
+### The three anchorings, each with its cost
+
+1. **Keep the opposite corner pinned (today).** The handle slides away from the pointer by
+   `Δcross/2`. ⭐ **Its unstated virtue, which the other two lose:** in a top-aligned row of plates,
+   dragging any plate's `r` keeps the row's TOP alignment and makes only the bottom ragged.
+2. **Centre the derived extent on the grabbed handle's own midpoint.** The handle stays under the
+   pointer. **Cost:** the box grows BOTH ways on the cross axis, so a neighbour that was flush on
+   that axis is pushed — and `B-175`'s pin degrades from a corner to an edge. For a multibox layout
+   this is strictly worse than 1: it breaks alignment on both sides instead of one.
+3. **Anchor the derived extent to the nearest pinned corner.** 🔴 **Not a free compromise.** "Nearest"
+   flips as the cursor crosses the box's midline, so the box JUMPS mid-drag — the exact failure
+   `lockExtents`'s own docstring records as the reason `D-155` resolves the lock once at press
+   ("swapping which axis is preserved part-way through a drag changes the solution the box is
+   tracking, so the box relocates under a pointer that did not change direction").
+
+**Which I would pick, and why:** **1 — keep the geometry** — because it is the only one that
+preserves an alignment invariant a multibox layout depends on, and options 2 and 3 pay for cursor
+tracking with layout damage and a mid-drag jump respectively. ⚠ **But that does not close the
+complaint**, and there is a fourth lever the brief did not list: **draw the edge handle at the
+cursor's position ALONG the edge during an active drag.** That answers exactly what the owner sees —
+the square running away from his mouse — at zero geometric cost, since it changes only where a
+decoration is painted. **I would put 1 + the fourth lever to him together.**
+
+🔴 **Nothing is implemented.** The owner chooses on his return; a swap made on a naked-eye report is
+what this repo keeps paying for.
+
+- **Cross-refs:** [[B-181]] (the edge-space snap, which readings 1 and 3 confirm is working);
+  [[B-175]] (the fixed-corner pin, stated above); [[D-155]] (the aspect lock and `lockExtents`).
+- The number was verified free before this heading was written, in the same sweep as [[B-183]].
+
+---
+
+## [ ] B-186 — the Designer's tests are NEVER typechecked: `tsconfig.json` includes `src/**` only, so a call site with a removed argument compiles green ⟨priority: medium⟩
+
+**What:** `apps/designer/tsconfig.json` has `"include": ["src/**/*", "vite.config.ts"]`. The
+`tests/**` tree is not in it, so `pnpm typecheck` never looks at a single designer test.
+
+**How it was found — by a `git grep`, not by `tsc`.** [[B-183]] removed the 4th parameter from
+`defaultLiveSource`. Two call sites kept passing one:
+
+- `apps/designer/tests/live-source-inspector.dom.test.ts:132` — `defaultLiveSource('live-1', 100, 100, 'guest-1')`
+- `apps/designer/tests/live-source-preflight.test.ts:372` — `defaultLiveSource('el-1', 0, 0, 'guest-1')`
+
+`pnpm typecheck` reported **38 successful, 38 total**. At runtime JS discards the extra argument, so
+both elements silently became UNASSIGNED — the tests kept passing while asserting something other
+than what they say.
+
+⚠ **This is the MIRROR IMAGE of the notch CLAUDE.md already records** for `tools/caspar-bridge`
+(session BS: typecheck was widened to `tests/**` while turbo's `typecheck` inputs still hashed
+`src/**` only). Here the halves are swapped: turbo's `typecheck` inputs **do** hash `tests/**`, but
+the tsconfig does not INCLUDE them — so the cache key is honest about a check that never runs.
+
+**Why it is filed rather than fixed:** widening the `include` will surface whatever has accumulated
+across ~137 test files that have never been typechecked, and that is a change with its own diff and
+its own gate — not something to bolt onto a behaviour fix. ⚠ **Whoever takes it must widen the
+tsconfig and confirm turbo's `typecheck` inputs still cover every path the wider check now reads, in
+the SAME commit** (CLAUDE.md's rule: widen what a task READS and widen its `inputs` together).
+
+⚠ **Check the other apps and packages before assuming this is one file's problem** — the sweep that
+found it only looked at `apps/designer`.
+
+- **Cross-refs:** [[B-183]] (the change whose stale call sites exposed it).
+- The number was verified free before this heading was written, in the same sweep as [[B-183]].
+
+---
+
+## [ ] B-187 — a new Live Source plate starts UNASSIGNED even where a default could not be wrong, so a six-plate layout is six manual assignments ⟨priority: medium — the TWO-HALF rule COLLAPSED to one by [[B-188]]; still unimplemented⟩
+
+**What:** [[B-183]] stopped the tool inventing a source id. It stopped it in BOTH cases, and only one
+of them was the defect. The owner is now assigning every plate by hand.
+
+### 🔴 SUPERSEDED IN PART, 2026-08-29 — the two halves are now ONE, and the surviving rule is the GROUPLESS one
+
+**[[B-188]] shipped (`openspec/changes/derive-look-sources`): the multi-frame group no longer declares
+sources.** The source list is derived from the plates, and `look-source-undeclared` is deleted. So
+the entire distinction this item was built on — _"a declaration list EXISTS, so a guessed name can
+contradict it"_ — **no longer describes anything.** There is nothing anywhere for a guess to
+contradict.
+
+🔴 **THE RULE, restated as one:**
+
+> A new plate takes a **generated label** — the same rule with a group and without one, because
+> there is no declaration in either case. ⚠ The label must not COLLIDE with a key another plate
+> already uses IN THE SAME LOOK, because one source is one seat and
+> `look-source-duplicate` — which survives `B-188` untouched — would refuse it.
+
+**What that costs and what it buys, stated plainly.** The old GROUPED half claimed the six-plate
+layout for free by consuming the author's own declared names in order; a generated label cannot do
+that, so the owner's six plates get six generated ids he will still want to rename. 🔴 **But renaming
+is now N plate edits and nothing else** — `B-188` retired the no-rename policy along with the
+declaration, because nothing can be left dangling when the list IS the plates. That is the trade this
+item now faces, and it is a different trade from the one it was filed under.
+
+⚠ **Still UNIMPLEMENTED.** `defaultLiveSource` still produces no `routeKey`, and the open questions
+below still stand — except the collision one, which is now answerable: a generated label can only
+collide with another PLATE's key, never with a declaration that no longer exists.
+
+### ⚠ The original two-half rule, kept for its reasoning
+
+_The text below is what was filed on 2026-08-29 before `B-188` shipped. It is retained because the
+GROUPLESS half's argument survives intact and is now the whole rule; the GROUPED half's argument is
+what `B-188` dissolved._
+
+> **GROUPED** — a new plate takes the **next declared source not already used by another plate IN THE
+> SAME LOOK**, in declaration order. When all are taken, or none are declared → **unassigned**, and the
+> Export refuses exactly as it does today. 🔴 **Never invent a name here.**
+>
+> **GROUPLESS** — a **generated label is legitimate**, because there is no declaration to contradict.
+
+Both halves obeyed the owner's standing principle, **"nothing lands unconfirmed"**, by different
+routes, because the two situations differed in what a guess could be wrong ABOUT:
+
+- **Grouped** — a declaration list EXISTED, so a guessed name could contradict it. That contradiction
+  is precisely the orphan [[B-183]] fixed. But choosing an ALREADY-DECLARED source contradicted
+  nothing: the author declared it, and taking the next FREE one meant **two plates never landed on
+  one input**.
+- **Groupless** — there was **no declaration list at all** to contradict. Verified in the owner's own
+  export: `live1.vcg` carries `lookGroups: []` and `compositions: []` and the export SUCCEEDED. A
+  generated label there is not a claim about anything the author wrote.
+
+⭐ **And a groupless label commits nothing ON AIR — verified, not assumed.** `plateId` is documented as
+_"the template's DECLARED `sourceId`, read as the PLATE IDENTIFIER"_
+(`packages/shared-ipc/src/channels/sources.ts:370`), and `collectLiveSources` emits
+`sourceId: el.routeKey` (`packages/vcg-format/src/live-sources.ts:221`). So the label is a **mapping
+key the operator must still bind in CG Control** before anything reaches a producer. Nothing lands
+until they do.
+
+### ⚠ This is PARTLY A RE-SCOPE OF [[B-183]], and it should be read that way
+
+[[B-183]] deleted `nextLiveSourceId` **outright** — its own words: _"`nextLiveSourceId` is **deleted**
+rather than left unused"_, and `defaultLiveSource` _"drops the `routeKey` parameter entirely (not
+merely its default), so the next caller cannot reopen the door"_.
+
+**That removal is what the owner is now feeling, and the grouped/groupless split is the line that
+should have been drawn then.** `B-183`'s evidence was entirely about the GROUPED case — a plate holding
+`live-1` under a group declaring `l1`/`l2` — and the fix was applied to both. The groupless half of
+this item restores a capability `B-183` over-removed; the grouped half is genuinely new.
+
+⚠ **Do NOT implement the groupless half by reviving `nextLiveSourceId` as it was.** It swept
+`live-N` scene-wide with no notion of a group, so the moment a group is added it would start handing
+out undeclared names again — `B-183` by the back door. Whatever generates the label must know whether a
+group is in scope. (See the open question on collisions below.)
+
+### What was MEASURED first — all four, by value (Task A1)
+
+| #   | question                                                      | measured                                                                                                                                                  |
+| --- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | a new plate INSIDE a group                                    | `defaultLiveSource('p1',100,100).routeKey` ⇒ **`undefined`**                                                                                              |
+| 2   | a new plate with NO `lookGroups`                              | **identical** — the canvas tool calls the same factory with no 4th argument and **does not branch on whether a group exists**, so 1 and 2 have one answer |
+| 3   | does an UNSET `routeKey` block EXPORT with no group in scope? | **YES — the hole is not real**                                                                                                                            |
+| 4   | is a groupless plate's `routeKey` what the operator maps?     | **YES** (see the two anchors above)                                                                                                                       |
+
+**Q3 in full, because the brief asked for it to be ruled out or filed separately.** On a scene with
+`lookGroups: []` holding one unset plate, `Exporter.preflight` returns `["live-source-unset"]` at
+`severity: 'error'` — which is exactly the set `produce` filters and throws on
+(`Exporter.ts:370`) ⇒ **export IS BLOCKED**. `live-source-unset` is raised in DOCUMENT scope, before
+and independently of the group block, precisely so it does not depend on a group being present.
+
+⚠ **Control, and it reproduces the owner's own file exactly:** the same groupless scene with
+`routeKey: "l1"` yields `codes = []` — which is why `live1.vcg` exported. ⇒ **No sourceless plate is
+exporting quietly, and no separate item is filed.**
+
+### ⚠ Rejected, with reasons — recorded so they are not relitigated
+
+- **Always the first declared source** — silently binds two plates to one input, and the error is never
+  seen. (The same alternative [[B-183]] rejected, for the same reason.)
+- **Keeping `live-N` inside a group** — recreates the orphan [[B-183]] fixed.
+- **Restricting the grouped half to "exactly one free source"** — the owner's `livegroup.vcg` declares
+  `l1`/`l2`/`l3` across three looks holding 1, 2 and 3 plates; under that restriction **five of the six
+  plates would still be manual**, which is the complaint unfixed.
+
+### The owner's evidence, attributed
+
+⚠ Recorded as HIS reading, not as something re-derived here — **the two `.vcg` files were not available
+to this session**, so `livegroup.vcg`'s contents below are his report and the `live1.vcg` shape was
+reproduced from its stated fields rather than read from the ZIP:
+
+- `live1.vcg` — one plate, `routeKey: "l1"`, `lookGroups: []`, `compositions: []`, export SUCCEEDED.
+- `livegroup.vcg` — `group-1` declares `l1`, `l2`, `l3`; three looks holding 1, 2 and 3 plates; every
+  look consumed the declared sources **in declaration order**, all six assigned by hand. **The rule
+  above reproduces all six.**
+
+### Open questions — RECORDED, not answered
+
+- Is the auto-assignment **STAGED** like every other edit, or applied at creation? (⚠ [[R-059]] takes
+  the staged answer for the fit-mode override; whether a CREATION default is the same kind of act is a
+  separate question, not a corollary.)
+- What happens when a declared source is later **removed** — does the plate revert to unassigned, or
+  keep a now-undeclared value and go red under `look-source-undeclared`?
+- **Does the surface show that a value came from a DEFAULT rather than from the author?** ⚠ [[B-183]]
+  already made the control mark an INVALID value (`(undeclared)`); this is the adjacent question and it
+  is the [[B-141]] / [[B-143]] / [[B-144]] family — _"the system knows something and does not say it"_.
+  A default the author never typed, presented indistinguishably from one they did, is that pattern
+  exactly, and it is the reason `B-183` exists at all.
+- 🔴 **ANSWERED by [[B-188]]: it cannot.** The question was _"can a generated label collide with a
+  name a group later declares?"_ — a group declares nothing now, so a plate labelled `live-1` stays
+  valid whatever group is created later. What a generator must still avoid is another PLATE's key in
+  the same look, which `look-source-duplicate` refuses.
+- Does _"already used in this look"_ count plates in **nested compositions**, or only direct children?
+  (⚠ The look's plates ARE nested — a look is an instanced composition — so this is not academic.)
+
+- **Cross-refs:** [[B-188]] (SUPERSEDES the two-half rule — there is no declaration, so the grouped
+  half's premise is gone); [[B-183]] (the removal this partly re-scopes, and the orphan the grouped
+  half must not recreate); [[C-028]] / [[B-178]] (the per-look resolution precedent — the authored fit mode already
+  resolves PER LOOK, which is the same granularity the grouped half's "in the same look" reads at);
+  [[B-141]] / [[B-143]] / [[B-144]] (the family the third open question belongs to); [[R-059]] (the
+  staged-vs-live question, answered there for a different act); [[B-186]] (the Designer's tests are not
+  typechecked — relevant to whoever implements this).
+- **Number:** highest `B-` HEADING across **every** ref was `B-186`; `B-187` … `B-193` returned **no
+  headings anywhere** and no forward references (the only tree-wide hits for that range are this
+  registry's and `B-183`'s own prose about the range being clear). `git stash list` empty;
+  `git worktree list --porcelain` showed this checkout only. **Nothing is implemented by this item.**
+
+---
+
+## [x] B-188 — the group's source DECLARATION stores a fact the plates already carry, and `look-source-undeclared` is the cost of storing it twice ⟨priority: medium — ADOPTED and IMPLEMENTED; `openspec/changes/derive-look-sources`⟩ · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-derive-look-sources/`, `RELEASE-0110-01` §0.3)
+
+**The proposal, in the owner's words:**
+
+> _"Instead of declaring sources for a multi-box group in the Designer, we should just define a source
+> id for each frame, like a plain plate. The source isn't a fixed thing — the operator decides it in
+> CG Control."_
+
+### 🔴 IMPLEMENTED 2026-08-29 (`SOURCE-DECLARATION-DROP-02`) — the owner answered all three, and the change shipped
+
+`openspec/changes/derive-look-sources`. **The three conditions, with the owner's answers verbatim:**
+
+- **(a) [[B-179]] — its PREMISE IS REJECTED, so the blocking condition is discharged rather than
+  satisfied.** The owner: _"aspect and fit are per-plate right now and have nothing to do with the
+  source — which I think is correct."_ `expectedAspect` is the author's intention for the BOX, not
+  a claim about the feed; the real feed wins when known (`resolvePlateAspect`: source `format` —
+  source `aspect` — element `expectedAspect` — `assumed`), and [[C-028]] already settled fit per
+  element. 🔴 **So there was no per-source property to rehome, and `B-179` is FIXED by consequence
+  rather than deleted** — see its own entry, re-scoped, not silently dropped.
+- **(b) ORDER — document order of FIRST USE.** The scene's own layers, then each composition in
+  array order. **Stable under APPEND, not under deletion**, and pinned as a test in both directions.
+  Assignments survive either way: CG Control keys them on `{templateId, plateId}`, never on index.
+- **(c) THE TYPO TRADE — accepted, with the soft warning.** `live-source-near-miss`,
+  `severity: 'warning'`, in DOCUMENT scope. 🔴 **It must never be promoted to an error** — the
+  whole point is to keep the check's benefit without recreating a second copy of the truth. The rule
+  is one Damerau edit on the NORMALISED forms (lower-cased, `-`/`_` removed), MINUS a numbering
+  exclusion: `l1` vs `l2` share the skeleton `l#` and are silent, because a warning that shouts at
+  the owner's own convention is one authors learn to ignore.
+
+**What else the implementation settled, beyond the three answers:**
+
+- The Inspector's control is now the FREE-TEXT box in both cases, with the keys in use offered
+  through a datalist. A picker could only ever offer what other plates had already chosen, so under
+  a derived model there would be no way to create the first source at all. **Typing is how a source
+  comes into existence.**
+- `dynamic` is deleted with the declaration, and the ASYMMETRY §1 recorded went with it: the carrier
+  flag is computed from field bindings on BOTH paths now, not from bindings on one and a hardcoded
+  `false` on the other.
+- 🔴 **Section 1's open question about `live-look-bindings.ts` is ANSWERED, by reading it.**
+  `resolveLookBindings` iterates `carrier.sources` — the already-derived export — and dedupes
+  seats on `producerArg`, the WIRE argument. The declaration appears nowhere in that file, so two
+  looks sharing a key still resolve to ONE seat. Had that been false the change would have stopped.
+- ⚠ **A trap the deletion opened and closed in the same commit:** `look-source-duplicate` read
+  `routeKey ?? ''`, bucketing every UNASSIGNED plate under one empty key. That was harmless only
+  because the loop then required the key to be DECLARED, and `''` never was. Removing the
+  declaration removed the guard, so two unset plates would have been reported as a duplicate of an
+  EMPTY source id — [[B-183]]'s exact defect, through the door this change opened. Skipped now,
+  and pinned by a test.
+
+**Discrimination was proved by reverting**, and the result is reported as measured: 42 red across 6
+files, of which THREE are structural crashes rather than behavioural disagreements (the reverted
+preflight indexes a `sources` array the new fixtures no longer write). See the change's `tasks.md`
+4.9 — the honest count is there, not a rounded one.
+
+### 🔴 VERDICT: **ADOPT, WITH THREE CONDITIONS.** The declaration is not load-bearing downstream.
+
+The four readings support it, and one measurement decides it: **what the operator and the bridge
+already receive is the DERIVED set, not the declared one.** The declaration is authoring-side
+machinery whose only surviving downstream contribution is list ORDER.
+
+**The conditions are in `§ Conditions` below and are not optional** — one of them ([[B-179]]) must be
+answered first, because this proposal deletes the only place its answer could live.
+
+### Section 1 — the four readings, by value
+
+**1. `dynamic` has ONE reader, and it is a pass-through. The flag is INERT end to end.**
+
+| where           | what                                                                                                                                                                                                                                            |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| written         | `addLookSource` (`slices/looks.ts:110`) — hardcoded `{ routeKey, dynamic: false }`, always                                                                                                                                                      |
+| read            | **`packages/vcg-format/src/live-sources.ts:409`** — `dynamic: src.dynamic`, copied onto the exported carrier. **The only read in the tree.**                                                                                                    |
+| read downstream | 🔴 **NONE.** `grep -rn dynamic tools/caspar-bridge/src/` returns only layer-allocation prose ("dynamic ranges", "dynamic pool") — **the bridge never mentions the flag.** `apps/runtime/src` has one hit, a `MockRuntime` fixture _writing_ it. |
+
+⚠ And its docstring claims a consumer that does not exist: `live-source.ts:95-104` says _"**The bridge
+needs this** to know whether `sourceId` is the FINAL answer or merely the authored default"_. Nothing
+reads it.
+
+⚠ **A latent asymmetry, recorded because deleting the declaration would silently erase it:** the
+GROUPLESS path computes the flag from field bindings (`dynamic: roles?.has('fill') ?? false`,
+`live-sources.ts:228`) while the GROUP path hardcodes `false` (`:409` ← `addLookSource`). So a
+look-group template whose plate is retargeted by a field binding already exports `dynamic: false`.
+That is the same _"nothing writes this field"_ shape as [[B-178]] and [[B-179]], one field wider — and
+it **costs nothing today only because nothing reads it.** If a reader is ever added, it is a defect on
+arrival.
+
+**2. CG Control consumes the CARRIER, never the declaration.** `lookGroups` does not appear anywhere
+in `apps/runtime/src/` or `tools/caspar-bridge/src/` — verified, zero hits. The operator surface reads
+`info.liveSources.sources` (`LivePlatesSection.tsx:118`, `Inspector.tsx:453`,
+`useTemplatePicker.tsx:197`, `LooksBindingsSection.tsx:234/256`), i.e. `TemplateInfo.sources`, which is
+the EXPORTED `LiveSourceDeclaration[]`. ⇒ **the change is authoring-side; the operator surface and the
+bridge are already downstream of a derivation.**
+
+Fact 3 of the brief re-verified at both anchors: `sources.ts:370` does document `plateId` as _"the
+template's DECLARED `sourceId`, read as the PLATE IDENTIFIER"_, and `live-sources.ts:221` does emit
+`sourceId: el.routeKey`.
+
+**3. Everything that reads `lookGroups[].sources` — the complete set, five readers, four of them
+authoring-side:**
+
+| reader                                             | what it does                                                                  |
+| -------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `LooksSection.tsx:55` (`SourcesPart`)              | the `+ Source` list the author adds to / removes from                         |
+| `StyleSection.tsx:660`                             | the Inspector `source` picker's option list                                   |
+| `live-source-preflight.ts:493-497`                 | `look-source-undeclared`'s `declared` set **and** its message's declared list |
+| `LookGroupSchema.superRefine` (`looks.ts:139-152`) | refuses a source declared twice                                               |
+| `vcg-format/live-sources.ts:380-409`               | 🔴 the **only** one that reaches anything outside the Designer                |
+
+**4. 🔴 THE MEASUREMENT THAT DECIDES IT — the export already reduces the declaration to the used set.**
+`collectLookCarrier` on the owner's scene shape (3 looks using `l1` / `l1,l2` / `l1,l2,l3`):
+
+| declared            | carrier `sourceId`s                                              |
+| ------------------- | ---------------------------------------------------------------- |
+| `l1,l2,l3`          | `["l1","l2","l3"]`                                               |
+| `l1,l2,l3,`**`l9`** | `["l1","l2","l3"]` — 🔴 **`l9` is DROPPED**                      |
+| `l3,l9,l1,l2`       | `["l3","l1","l2"]` — order follows the DECLARATION, minus unused |
+
+The loop skips any declared source with no rect in any look (`if (rect === undefined) continue;`,
+`:388`), and `rectsByLook` is populated only for plates whose `routeKey` **is** declared (`:339`).
+Since the preflight refuses undeclared plates, `used ⊆ declared`, therefore
+**carrier ≡ used ≡ the derived set.**
+
+⇒ **The declaration contributes exactly ONE thing downstream: the ORDER of the operator's list.**
+Everything else about it is an authoring-time constraint on the Designer.
+
+### Section 2 — the questions, answered from the code
+
+- **Ordering.** Today the operator's list is in the author's DECLARATION order (measured above:
+  `l3,l9,l1,l2` ⇒ `l3,l1,l2`). Derived, it would need a defined order — document order of first use is
+  the obvious one. ⚠ **It is stable under APPEND and not under deletion**: removing the plate that
+  first used a key moves that key later. **Assignments survive regardless** — they key on
+  `{templateId, plateId}` (`sources.ts:715`), never on index — so the cost is the operator's list
+  visibly reordering, not a lost mapping. **This is condition (b).**
+- **A typo.** 🔴 **This is the one real loss, and it must be accepted deliberately rather than
+  discovered.** Today `cam1` for `cam-1` is `look-source-undeclared`, an exact, cheap, hard error that
+  names the plate. Derived, it silently becomes a fourth source the operator sees and must map — the
+  system knowing something (that this key is used by exactly one plate and resembles another) and not
+  saying it, which is the [[B-141]] / [[B-143]] / [[B-144]] family. **Arguing the other way:** the
+  declaration only catches a typo because it is a second copy of the same fact, and a second copy is
+  what golden rule 6 and [[B-100]] / [[B-101]] exist to warn about — the check and the defect class are
+  the same mechanism. A derived world can still warn (a key used by exactly one plate, near-matching
+  another), but that is a HEURISTIC where today's is EXACT. **Honest verdict: derivation is more
+  honest about what the data IS, and less helpful about one class of mistake. Condition (c).**
+- **Renaming — 🔴 THE BRIEF'S PREMISE IS WRONG, and it inverts this argument.** The brief says a rename
+  is _"one edit today, N plate edits after"_. **There is no rename today.** The store has only
+  `addLookSource` and `removeLookSource` (`slices/looks.ts:103,120`); no `renameLookSource` exists
+  anywhere; and `LooksSection.tsx:35` states it as policy — _"The routeKey is FIXED at declaration (no
+  in-place rename): a rename would have to rewrite every referencing plate in every look, and a missed
+  one is a dangling reference that surfaces only at export."_ So `l1` → `cam1` today is **N plate
+  edits PLUS two declaration edits, with a window in which the scene is red.** Derived it is N plate
+  edits. ⇒ **renaming is a cost the declaration ADDS.**
+- **Declared but unused.** Possible today, and **nothing downstream depends on it** — measured above,
+  it is dropped at export. It is purely an authoring affordance (declare the inputs up front, build
+  looks against them). Derivation removes that workflow; the item records it as a real, small loss.
+- **[[R-059]] is UNAFFECTED.** Its override key is `{templateId, plateId, sourceId, fitMode?}` and
+  `plateId` is the carrier's `sourceId` — which is already derived. Deriving the list changes no key
+  it uses.
+- **`.vcg` format.** Removing `lookGroups[].sources` is a scene-format change. Under `P-031`'s
+  compatibility floor no shim is owed before first delivery, and the precedent is in this very schema:
+  [[B-178]] deleted `fitMode` from `LookSourceSchema` on the reasoning that _"a stored scene carrying
+  the key simply has it stripped by zod at load"_. **What would break at the plant: nothing that is
+  already imported.** CG Control holds `TemplateInfo.sources` from import time; a template is only
+  re-derived when re-imported, and because carrier ≡ used the re-derived set is **identical in
+  content** — only possibly in ORDER. Assignments are keyed by `plateId`, so they survive the reorder.
+
+### Section 1 Q4 / the [[B-179]] collision — 🔴 THIS IS CONDITION (a), AND IT BLOCKS
+
+[[B-179]] exists because `LookSource.expectedAspect` is never written, so a look-group template exports
+no aspect and the take's mismatch refusal is disarmed. `looks.ts:92-94` states its two possible fixes:
+_"it needs **either a writer here or a hoist from the element** with a refusal when two looks' elements
+disagree."_
+
+**The declaration is the natural home for a per-FEED property** — an aspect is a property of the feed
+and cannot differ between looks, which is exactly why `looks.ts:35` keeps `expectedAspect` there and
+why [[B-178]] moved `fitMode` OUT (a fit is per-box, an aspect is not).
+
+⇒ **This proposal deletes the "writer here" option outright.** It does not merely interact with
+[[B-179]] — it decides it, in favour of the hoist. **[[B-179]] must therefore be decided FIRST, or
+adopted here as decided-by-consequence and said so out loud.** It is not decided in this item.
+
+### § Conditions
+
+- **(a)** [[B-179]] answered first — the hoist-from-element mechanism, with its refusal when two looks'
+  plates disagree about one feed's aspect. Without it, adopting this deletes the aspect's only home.
+- **(b)** A defined and documented ORDER for the derived list (document order of first use), with the
+  reorder-on-delete behaviour stated where the operator can find it.
+- **(c)** The typo trade accepted explicitly — either a replacement warning, or a recorded decision
+  that near-miss keys become the operator's problem. **Not left to be discovered.**
+
+### ⚠ Supersession
+
+**If adopted, this SUPERSEDES [[B-187]]'s two-half rule** (grouped = next free declared source in that
+look; groupless = a generated label), because grouped and groupless collapse into one case: there is no
+declaration to be contradicted anywhere, so the groupless answer becomes the only answer. `B-187` is
+filed at `docs/prd/bugs-designer.md` — **anchor verified**, and it remains correct as written **until**
+this item is adopted. ⚠ [[B-183]] is unaffected either way: a plate must still be pointed at something
+deliberately, and `live-source-unset` is document-scoped and needs no group.
+
+### Open questions — RECORDED, not answered
+
+- Does the Looks panel keep a source list at all afterwards — read-only, derived, as an overview? Or
+  does the section lose its first half entirely?
+- Does anything still need "declare before you author", and if so what replaces it?
+- The `dynamic` asymmetry above: delete the field with the declaration, or fix the group path's writer
+  first so the history is not lost? (Nothing reads it either way.)
+- Does the Looks panel's stated guarantee survive derivation — _"two looks referencing the same source
+  start on the same input"_? On the face of it yes: `l1` in look-1 and `l1` in look-3 are one key
+  whether or not a declaration lists it, and seats dedupe on the resolved WIRE ARGUMENT
+  (`live-look-bindings.ts`, per `looks.ts:31`), not on the declaration. **Read that file before
+  relying on this** — it was not opened for this item.
+
+- **Cross-refs:** [[B-179]] (condition (a) — this proposal deletes its only home and decides it by
+  consequence); [[B-183]] (unaffected — unset is document-scoped); [[B-187]] (superseded if adopted);
+  [[R-059]] (unaffected — its key is already derived); [[C-028]] / [[B-178]] (the precedent for moving
+  a field OFF the declaration, and for deleting one under the compatibility floor);
+  [[B-141]] / [[B-143]] / [[B-144]] (the family the typo trade belongs to).
+- **Number:** highest `B-` HEADING across every ref was `B-187`; `B-188` … `B-195` returned **no
+  headings anywhere** and no forward references (the only tree-wide hits are this registry's own prose
+  about the range being clear). `git stash list` empty; one worktree. **Nothing is implemented.**
+
+## [x] B-190 — every project package carries the WALL CLOCK in its first zip header, so "byte-identical re-export" is a guarantee that holds about 99 % of the time ⟨priority: medium — a determinism guarantee that fails at random, and the failure surfaces as an unrelated gate red⟩ — filed AND FIXED 2026-08-31 (`SKEW-HOLD-01`, found as a gate red)
+
+**Observed 2026-08-31** as a red `pnpm gate` on a commit that touched neither `@cg/vcg-format` nor
+anything it depends on: `packages/vcg-format/tests/project-package.test.ts` — _"re-packing the same
+input is byte-identical"_ — failed with two 2033-byte archives differing at **byte 10**, which is the
+DOS **last-modified time** field of the archive's FIRST local file header. It passed on the next run,
+and CI passed on the same tree, which is exactly the shape of the defect.
+
+**Mechanism, established from the code and reproduced.** `writeZip` (`packages/vcg-format/src/zip.ts`)
+pins `date: FIXED_DATE` on every entry it adds — and JSZip then materialises the intermediate
+DIRECTORIES of every asset path (`assets/`, `assets/image/`) as entries of its own, stamped with
+`new Date()`:
+
+```
+assets/            dir=true   date=<now>
+assets/image/      dir=true   date=<now>
+assets/image/x.png dir=false  date=2024-01-01T00:00:00.000Z
+```
+
+Those directory entries sort FIRST, so the wall clock sits at the top of the file. DOS time has
+**2-second** resolution, so two packs of identical input agree whenever they fall inside the same
+tick and differ whenever they straddle one — a probe that packed the same fixture 200 times found
+**189 of them** differing from the first, all at byte 10, the difference appearing at the moment the
+clock crossed an even second.
+
+🔴 **The product consequence is not the flaky test.** `docs/designer-guide/README.md` promises
+_"re-exporting the same scene produces a byte-identical archive"_ and `phase-4` names it a CI-verified
+property; a `.vcg` or `.cgproj` whose bytes change with the clock breaks content-hash dedupe, makes
+two exports of one scene look like two different files to any store keyed on the hash, and turns a
+signature over the archive bytes into something that depends on WHEN it was packed. Only the flake
+was ever visible, because nothing else compared two packs.
+
+**Fixed** by pinning after the fact rather than at each `file()` call — the loop reaches every entry
+the archive will actually contain, including the ones nobody asked for:
+
+```ts
+for (const entry of Object.values(zip.files)) entry.date = FIXED_DATE;
+```
+
+**Pinned** by a test that turns the coin-flip into a statement — `B-190` in `project-package.test.ts`
+fakes ONLY `Date` (never the timers JSZip's own async pipeline runs on), moves the clock four seconds
+between two packs, and asserts the bytes do not notice. Verified RED against the unfixed writer and
+green after, with the whole package suite run three times.
+
+- **Cross-refs:** [[B-104]] / `D-150` (the project package this guarantees), [[B-188]] (the previous
+  `@cg/vcg-format` item — unrelated mechanism, same file family).
+- **Number:** highest `B-` HEADING across every ref was `B-189`; the registry's dated pointer said
+  _"Next free after this session is `B-190`"_ — headings and pointer agreed, so `B-190` is taken here
+  and the next free becomes `B-191`.
+
+---
+
+## [~] B-217 — a canvas video went BLANK after look switches and undo, and a brand-new video rendered nothing; the reported blank is NOT reproduced, and three defects in the seam it went through are closed in code ⟨priority: high — the canvas misrepresents the composition and the owner's only cure is a reload⟩ — FILED 2026-09-04 from `DESIGNER-FIX-0902` §1; the three mechanisms CLOSED IN CODE the same day; the owner's specific blank still OPEN; Linux `gate:e2e` DISCHARGED for `48ef55ce` — <https://github.com/yasermostafaee/cg/actions/runs/33910015631> (`E2E (Playwright)` RAN, 601 s, `success`)
+
+**Repro (owner, 2026-08-30):** a LOOKS template with a video used as the background. Several look
+switches through the `Active look` picker, then some `Ctrl+Z`.
+
+**Expected:** the canvas keeps painting the video at the playhead's frame, through every switch and
+every undo; a video added afterwards paints too.
+
+**Actual:** the background video stopped rendering on the canvas. `Ctrl+Z` did not bring it back.
+Adding a brand-new video rendered nothing either. The Inspector's own thumbnail rendered the same
+asset correctly the whole time. Saving and reopening the project cured it. The element read healthy
+(`X 0 Y 0 W 1918 H 1080`, opacity 100 %, visible, full range, `duration 8.00 s`, `on hold: Loop`,
+`3721366285-preview.mp4` 898×506 conformed 29.97→50 fps).
+
+### What was already narrowed, and is not re-derived here
+
+Reopen cures ⇒ the document is intact: runtime VIEW state. The Inspector thumbnail is fine ⇒ file,
+decode and element data are fine: only the canvas layer is dead. A NEW video is blank too ⇒ the
+broken thing is SHARED, not per element. Undo does not restore it ⇒ it is not in undoable state.
+So the search is for something released across a composition unmount and never re-acquired.
+
+### 1. The WebGL hypothesis — dead by inspection, nothing to listen for
+
+The Designer canvas has **no WebGL context anywhere**: the only `getContext` calls in
+`apps/designer/src/renderer` and `packages/template-runtime/src` are `2d` (the snap-grid probe, the
+canvas ruler, the video converter's frame reader). The canvas is a DOM iframe rendering `<video>`
+elements through `@cg/template-runtime`. There is no `webglcontextlost` to fire, so the hypothesis
+is dropped on that evidence rather than on a listener that stayed quiet.
+
+### 2. MEASURED — a video inside a look PLAYS in the static canvas after one hide/show
+
+The instrument, `apps/designer/tests/e2e/video-looks-blank.spec.ts`, walks the report against the
+real canvas: a root background video, a multi-frame group, two looks with a plate each and a second
+video INSIDE look-1, four look switches, a scrub, a nudge + two undos, a second round trip, a new
+video — sampling the visible `<video>` at every stage (blob src, decoded, at the playhead's mapped
+time, paused, rate 1, and visible pixels when drawn). Pre-fix, three stages failed and all three
+were the same fact:
+
+| stage                                        | measured                                                  |
+| -------------------------------------------- | --------------------------------------------------------- |
+| in-look video after ONE hide → show          | `paused: false`, `currentTime` 3.38 s — **PLAYING**       |
+| after four more switches                     | still playing, looped (`currentTime` 0.455 s)             |
+| after a scrub to frame 150 (should be 3.0 s) | `currentTime` 1.086 s, playing — **the playhead lost it** |
+| after an undo (a rebuild)                    | paused at 2.0 s, renders — the rebuild "cures" it         |
+| root background video, every stage           | fine                                                      |
+| a brand-new video                            | fine                                                      |
+
+**Mechanism.** `B-150`'s `LookMediaPark` (`look-media.ts`, `e04760e0`, 2026-08-21) parks the
+content of a hidden look and, on the way back, calls `driver.resume()` on every member it recorded.
+It recorded every parked member **unconditionally**, and `VideoDriver.resume()` /
+`LottieDriver.resume()` are continue-OR-START: `if (destroyed || running || settledHold) return;
+running = true; handle.play()`. The ticker and sequence drivers refuse a resume when they were not
+running; the two media drivers do not. The Designer canvas never plays, so every driver there is
+idle — one look switch away and back was enough to set the clip playing, and `positionAt()` (the
+playhead's positioning, `D-135` §5) is a no-op for a running driver, so scrubbing no longer moved
+it until the next rebuild made a fresh, idle driver.
+
+**Fix.** `ParkableDriver` gains `isRunning()` (implemented on the video, Lottie, ticker and
+sequence drivers), and `#park` records a member as owing a resume **only when the pause actually
+stopped a running driver**. On air nothing changes: a running driver is still recorded and still
+resumed in place. RED-first: with the unconditional add restored, the new park test fails at
+_"still a paused frame after hide → show: expected false to be true"_.
+
+### 3. READ — the park's membership was asked of a node the preview's pool had detached
+
+The video registered its build-time `media` node with the park, and the park asks `contains()` of
+that node. The Designer preview pools every live `<video>` across a rebuild and transplants it over
+the freshly built one (`preview.ts` `reconcileVideos`, `D-128` Phase 3) — so from the first rebuild
+on, the registered node is detached, `contains()` is false for every root, and the member is never
+parked or silenced again. `B-137` gave the driver a `live()` resolver for exactly this swap; the
+park now registers `node: () => live()` and `audio: () => live()`, and `LookMediaMember` accepts a
+getter. Pinned by a transplant-in-miniature test: an UNMUTED replacement node inside the hidden look
+is silenced by the next reassert. Editor-only in consequence (the playout page never transplants),
+and it is what MASKED §2 after the first rebuild in the instrument's stage 6.
+
+### 4. READ — the pool re-adopted a node with a TERMINAL media error, forever
+
+`harvestVideos` pooled every `<video>` node and `reconcileVideos` transplanted it back whenever the
+element id and asset matched — **with no look at `media.error`**. A node whose media hit a terminal
+error (the seek-fragile decode class `video-poster.ts` documents, a revoked blob URL) is a corpse,
+and pooling it puts the corpse back on screen after EVERY rebuild: the transplanted node carries
+`data-cg-poster-armed="1"` so the asset walk never re-arms it, and nothing in the static canvas
+ever rebuilds it — the driver's `recover()` runs only while a driver is running, which the canvas
+never is. **That is the one shape in this seam that survives `Ctrl+Z` and is cured only by a
+reload** — the owner's signature for the EXISTING video. The pool now drops a dead node at harvest
+and refuses one at reconcile, so the fresh node takes over and gets a normal src + poster. Pinned
+on the generated preview source (`preview-video-pool-dead-node.test.ts`), the contract style
+`preview-video-poster-guard.test.ts` established; a real terminal error is not reproducible with
+the committed fixtures, and that limit is stated rather than papered over.
+
+### 5. Ruled out, with the reason
+
+- **A stuck rebuild** (`busy` never released, every later `scene-replace` coalesced away — which
+  would leave src-less fresh `<video>` nodes on screen and never draw a new element): the only
+  awaits between the harvest and the asset walk are `runtime.ready` (`document.fonts.ready`) and
+  `runtime.update()`, and `update()` contains no `await` at all.
+- **Revoked blob URLs held by the renderer's cache**: the bridge revokes every asset URL on
+  `projects.activeChanged`, and the renderer's `assetUrlCache` is cleared only while the Assets
+  panel is mounted — a real hole, but the handle-tier Save the owner uses never re-emits
+  `activeChanged`, and nothing in a look switch or an undo does either. Recorded here as a latent
+  gap (a project switch with the panel closed, same-content asset ids); not this defect's path.
+- **Duplicate element ids across look instances** (the pool is keyed by element id): each look is
+  its own fresh composition (`looks.ts` `addLook`), and paste re-ids, so ids do not repeat.
+
+### When it started
+
+§2 began with `e04760e0` (2026-08-21, `B-150`'s park). §4 dates from `D-128` Phase 3 (the pool,
+July). The single-clock reorder (`a7976e14`, 2026-09-01) landed AFTER the 2026-08-30 report and is
+not on this path; `C-028` (2026-08-25) touched the plate fit payload only; `B-188` (2026-08-29)
+touched look SOURCES only. The report cannot be blamed on either recent seam change.
+
+### What is NOT closed — and what would close it
+
+The instrument does not reproduce the owner's blank with the committed fixtures in headless
+Chromium: the root background rendered at every stage, and so did a brand-new video. §4 explains a
+persistent blank for the EXISTING video once a node dies; it does not, on its own, explain a NEW
+video rendering nothing — unless the new video's own poster load failed on the same asset, which a
+console line would have shown. **The owner's project (`livegroup`) is not in the repo and not on
+this host's disk**, so the walk was against fixtures. To close: open that project with the console
+visible, repeat the switches and undos, and report (a) whether the background video is INSIDE a
+look's composition or at the root, and (b) any `[cg-preview]` / `[cg]` console line. Until then
+this stays `[~]`: three defects closed in code, the reported blank filed and open.
+
+- **Regression tests:** `packages/template-runtime/tests/looks-media-park.test.ts` (three `B-217`
+  pins: never-started stays paused across a round trip; a running driver is still resumed; a
+  transplanted node is still silenced), `apps/designer/tests/preview-video-pool-dead-node.test.ts`,
+  and the instrument `apps/designer/tests/e2e/video-looks-blank.spec.ts` (fourteen stages, all
+  green post-fix; three RED pre-fix).
+- **Cross-refs:** [[B-150]] (the park), [[B-137]] (the `live()` resolver this reuses), `D-128`
+  Phase 3 (the pool), `D-135` §5 (the playhead owns the canvas frame), [[B-218]] (the sibling
+  Designer report of the same day).
+- **Number:** highest `B-` HEADING across the three bug files was `B-216`; the registry's dated
+  pointer said _"Next free after this session is `B-217`"_ — headings and pointer AGREE, so `B-217`
+  is taken here.
+
+---
+
+## [~] B-218 — "keep aspect / free" was ONE flag for every plate in every look: setting one box to FREE freed all of them ⟨priority: medium — a per-plate control that silently reaches every other plate⟩ — FILED AND CLOSED IN CODE 2026-09-04 (`DESIGNER-FIX-0902` §2; `openspec/changes/aspect-lock-live-source/` 3.5–3.7); Linux `gate:e2e` DISCHARGED for `48ef55ce` — <https://github.com/yasermostafaee/cg/actions/runs/33910015631> (`E2E (Playwright)` RAN, 601 s, `success`)
+
+**Repro (owner, 2026-08-30):** a two-box look. Select one box, press its `keep aspect` toggle to
+`FREE`.
+
+**Expected:** that box resizes freely; the other box keeps its aspect; boxes in other looks are
+untouched.
+
+**Actual:** every box in the look reads `FREE`, and so do the boxes in the other looks.
+
+**Evidence already measured:** in `livegroup.vcg`'s exported `template.json`, `aspectLock` has
+ZERO occurrences while `expectedAspect` sits on every plate — the lock state was not per element.
+
+### Which kind of defect it was — established before anything was fixed
+
+🔴 **Genuinely ONE app-level flag, by design, not a per-element value with a shared write path.**
+`store-core.ts:183` declared `aspectLockEnabled: boolean` with a docstring arguing for exactly
+this: _"Per author, not per plate. A per-plate session flag would be invisible state whose extent
+the author cannot see."_ — `D-155`'s third reason, spelled the same way in the in-flight change's
+`designer-live-source` delta, in `StyleSection.tsx`'s `AspectRow` (which read the one flag), in
+`Gizmo.tsx:457-460` (the lock condition `video-placeholder` + `expectedAspect` + the flag — the
+anchor the brief gave as `~:455` had drifted by two lines) and in `ArrangementsSection.tsx`, whose
+`CELLS` fields read the SAME flag as "one value, two surfaces". So the fix is the other design, not
+a plumbing repair: the report is the design's own argument measured the other way round — the
+shared flag was the invisible state, because an author freeing one box could not see that every
+other box changed with it, and the toggle beside the SELECTED plate showing that plate's own state
+is the visible extent.
+
+### The fix
+
+- `aspectLockOff: ReadonlySet<string>` replaces the boolean — the set of lock KEYS whose lock is
+  OFF; absent ⇒ locked, so the default and every plate after a reopen need no entry.
+- `isAspectLocked(state, key)` (`slices/view.ts`) is the ONE predicate the gizmo, the aspect row
+  and the `CELLS` fields ask; `setAspectLock(key, enabled)` takes the key.
+- A plate's key is its element id. The arrangement `CELLS` fields, which constrain a different
+  quantity (the box composition's resolution aspect, `lockedCellEdit`) and can no longer ride a
+  plate's toggle, get a toggle of their own beside the cells, keyed by the arrangement's id.
+- Still session-only. `D-155`'s two reasons for keeping it out of the scene stand.
+
+### ⚠ Should it PERSIST? — answered separately, and NOT done
+
+It does not survive an export today, and after this fix it still does not. Persisting the per-plate
+choice would be a **format change**: a schema field on `video-placeholder` in `@cg/shared-schema`,
+an export path in `@cg/vcg-format`, and a value the runtime never reads — `D-155`'s reason 2. It is
+therefore not made silently here. Recorded as the owner's open decision (tasks 3.7); the
+recommendation is to leave it session-only unless authors report re-freeing plates after every
+reopen.
+
+- **Regression tests:** `apps/designer/tests/aspect-lock-per-plate.test.ts` (five store pins:
+  default locked with no entry, freeing one leaves the rest locked, re-locking removes only its
+  own entry, no-op writes do not churn, scene/dirty/undo untouched);
+  `resize-edge-snap.dom.test.ts` now calls `setAspectLock('plate', …)`; scenario-level
+  `apps/designer/tests/e2e/aspect-lock-per-plate.spec.ts` (green on Windows, 2026-09-04).
+- **Not touched, deliberately:** [[D-155]] (the lock's justification — corrected in place, not
+  reopened), [[B-175]] (the fixed-corner pin), [[B-185]] (the handle drift — ACCEPTED and PARKED
+  by the owner; nothing here changes the resize solve).
+- **Cross-refs:** [[D-155]], [[D-147]] (the aspect declaration), [[B-217]] (the same day's other
+  Designer report).
+- **Number:** taken immediately after `B-217` in the same sweep; `git grep -n "B-218"` returned
+  nothing anywhere before this heading was written.
+
+## [~] B-219 — deleting a look leaves an ORPHAN composition the Looks panel does not mention, and the next `+ Look` is named `look-1` again ⟨priority: medium — two panels contradicting each other in one frame⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905` §5; `openspec/changes/inspector-state-over-prose/` 5.1–5.4); Linux `gate:e2e` DISCHARGED for `c305f9ad` — <https://github.com/yasermostafaee/cg/actions/runs/33921378832> (`E2E (Playwright)` RAN, 621 s, `success`)
+
+**Repro (owner, screenshot):** a multi-frame group with three looks. Remove all three from the Looks
+section.
+
+**Expected:** the two panels agree about what exists, and the author can get the authored looks
+back or knows how to be rid of their leftovers.
+
+**Actual:** the Compositions panel lists `comp1`, `look-1`, `look-2`, `look-3`; the Looks section
+reads **"No looks yet."** — in the same frame. Pressing `+ Look` creates a look named `look-1`,
+unrelated to the leftover `look-1`, so the orphans must be deleted by hand.
+
+### 🔴 Established BEFORE fixing — what a colliding default name actually did
+
+Three readings were possible, in rising order of harm: (1) a second entry appears — clutter; (2)
+the new look reuses the orphan's entry; (3) 🔴 the new look silently ADOPTS the orphan's content,
+arriving pre-populated with an old look's plates. The third had not been reported, which is why it
+was measured rather than assumed. **Measured on `e02215c5` by the first version of
+`apps/designer/tests/looks-orphan.test.ts`: case (1).** `addLook` built a fresh composition with a
+fresh id (`comp-N`, skipping existing ids) and no layers, named it `look-1` because `freshLookId`
+counted only `group.looks`, and left the orphans untouched. No reuse, no adoption — but in the
+Compositions panel a second `look-1` beside the first is indistinguishable from either.
+
+### Which model — private storage, or a reusable object?
+
+**A reusable object a look points at, by design.** `looks.ts` `removeLook`'s docstring and the trash
+button's title: _"its COMPOSITION stays in the project (the authored sub-scene is recoverable work,
+listed in the Compositions panel — deleting it is the author's separate, explicit act)"_. So the
+orphan is not the bug. **The bug is that nothing said so at the moment it mattered, and nothing let
+the author reuse it.**
+
+### The fix — in that model, with no cascade
+
+- `freshLookId` avoids every existing composition NAME and id as well as every look id: after
+  removing `look-1`…`look-3` the next look is `look-4`.
+- `addLookFromComposition(compId)` — the reuse door: instances an existing composition full-frame
+  in the group's home document and registers it, through the SAME `registerLook` path `addLook`
+  takes for a fresh one. A composition named `look-N` whose id is free comes back as `look-N` (the
+  id reaches the export). `detachedLookCompositions(scene)` is the list it is offered from: every
+  composition the size of the home document that is not the home, not already a look, and nestable
+  without a cycle (`compositionClosure`, the same reachability "Add to composition" uses; a
+  box-sized composition is not offered for a full-frame job).
+- The Looks section lists them under **Compositions that can become a look**, each with **Make it
+  a look**; `removeLook` raises a notice naming the composition that stays and both doors.
+- **No cascade.** Deleting a composition may take hours of authoring with it; it stays the author's
+  own act in the Compositions panel, one undo step like every other scene write. Removing a look is
+  undoable and never deletes a composition (pinned).
+
+- **Regression tests:** `apps/designer/tests/looks-orphan.test.ts` (eight store pins: the orphans
+  survive with their plates; the notice; `look-4`, empty, orphans untouched; the offered list
+  excludes the home and a box; restore = same id, same composition, plate back, no new
+  composition; a non-id-shaped name keeps its name; the refusals; undo), `looks-orphan.dom.test.ts`
+  (the panel says both things in one frame; the button registers through the store),
+  `e2e/look-orphan.spec.ts` (the walk).
+- **Cross-refs:** [[D-152]] (looks), [[D-159]] (the same prompt's prose-to-state work, which the
+  Looks section's wording rode in on), [[B-217]] (the look park — the other same-week Looks
+  defect).
+- **Number:** highest `B-` HEADING across the three bug files was `B-218`; `git grep -n "B-219"`
+  returned only the registry's own "Next free" pointer (the documented false positive). The dated
+  pointer reads `B-219` — headings and pointer AGREE.
+
+## [~] B-220 — eight Designer strings still describe the retired mask "hole" ⟨priority: low — five of them are in a section the Inspector never mounts⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905` §1; `openspec/changes/inspector-state-over-prose/` 1.1–1.4); Linux `gate:e2e` DISCHARGED for `c305f9ad` — <https://github.com/yasermostafaee/cg/actions/runs/33921378832> (`E2E (Playwright)` RAN, 621 s, `success`)
+
+`D-158` recorded six Designer strings that still described the hole the page no longer punches
+(`a7976e14`, `single-clock-look-switch`) and left them alone. The owner then photographed two of
+them in the Live Source / fit and Frame panels — _"the hole paints nothing on air, and the picture
+is composited on a layer behind it… the frame sits entirely outside the hole"_.
+
+### Verdict on every string, checked against the tree on 2026-09-05
+
+| where                                                            | verdict                                                                                                                                                                                                                                               |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ArrangementsSection.tsx` mode label `Fade — the mask dissolves` | STALE and never true in code: the arrangement transition modes are implemented nowhere in the runtime or the bridge, and the whole section is compiled but **not rendered** (`InspectorPanel.tsx:92` — disabled 2026-08-19). Rewritten.               |
+| `…` move hint _"drifts the picture off its hole"_                | ACCURATE IN SUBSTANCE (the CSS box and the CasparCG tween must share one curve) with the wrong noun — "away from its frame and title". Unreachable.                                                                                                   |
+| `…` callout _"declares no hole and punches none"_                | STALE: a plate in a stamped scope declares no box, so no picture is seated. Unreachable.                                                                                                                                                              |
+| `…` _"the hole is that fraction of whatever cell"_               | STALE: the picture is composited into that fraction. Unreachable.                                                                                                                                                                                     |
+| `…` _"the plate is a hole filled edge-to-edge"_                  | STALE, and only under `cover`: under `contain` the margin shows the page. Unreachable.                                                                                                                                                                |
+| `StyleSection.tsx` Live Source hint (the owner's #1)             | STALE: no hole, the page is composited BELOW the pictures, nothing on the page can reach one. Relocated to the panel's `i`, corrected; the constraints moved onto the withheld controls.                                                              |
+| `StyleSection.tsx` Frame hint (the owner's #2)                   | TRUE IN EFFECT, wrong mechanism: the frame IS painted by the template and never covers the picture — because it is painted on the page just outside the rect, below the picture. Relocated to the `i`; the width-0 state moved onto the colour field. |
+| ADDITIONAL — `live-source-preflight.ts` ×5                       | not in `D-158`'s list: the stamped-scope refusal ("declares no hole … punches none"), the animated refusal ("a moving hole would slide off the source behind it"), three overlap refusals ("overlapping holes"). All rewritten.                       |
+
+The owner's two are `D-158`'s #6 and #7 — among the six, not additional. Nothing described a hole
+the Designer still composes with: the Designer never composed with one; the mask was the
+runtime's, and the runtime is untouched by this fix (the authorisation boundary).
+
+- **Also:** the unset refusal read _'Live Source "Live Source" has no source'_ for a plate still
+  wearing the factory name — the kind repeated as a name. It reads _"The unnamed Live Source at
+  (x, y) has no source"_ now (`plateRef`, keyed on `DEFAULT_LIVE_SOURCE_NAME`). Not a collision with
+  `PLATE-SOURCE-01` / [[B-183]]: that was a VALUE the author had not accepted; this is a NAME the
+  factory gave.
+- **Regression tests:** `apps/designer/tests/live-source-inspector.dom.test.ts` asserts the panel
+  and the `i` carry no "hole" and describe the page below the pictures; `e2e/live-source.spec.ts`
+  the same at browser level.
+- **Cross-refs:** [[D-158]] (the list), [[B-195]] (the audit that established the reorder's answer),
+  [[B-197]] (rounded corners on a plate — adjacent, untouched), [[D-159]].
+- **Number:** taken immediately after `B-219` in the same sweep; `git grep -n "B-220"` returned
+  nothing anywhere before this heading was written.
+
+## [ ] B-249 — a per-composition export writes an `entryCompositionId` the package does not contain ⟨priority: low — nothing reads it today, which is exactly why it will be trusted by whatever reads it next⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B1.5`
+
+**What:** A Designer per-composition export flattens the chosen composition into the scene ROOT
+and carries the compositions it NESTS in `compositions` — but it copies the project's
+`entryCompositionId` through unchanged, and that id names the composition that was just
+flattened away. Measured on the plant's saved records (`~/.cg-runtime/bridge-templates/`,
+2026-09-15): `میان‌برنامه (روی آنتن)` carries `entryCompositionId: 'comp-irib'` while
+`compositions` holds only `comp-irib-t/g/b`; `آرم (روی آنتن)` carries `'comp-logo-bug'` with
+`compositions: []`.
+
+**Why it is worth a number even though nothing breaks today:** a dangling id is a lie that reads
+as data. `TIMING-WIRE-22`'s first resolver trusted it — `find(entryId) ?? comps[0]` — and the
+`??` turned "the id names nothing" into "answer with whichever panel is first", so the console
+published a clock panel's `static / timed` over a live crawler. That resolver has been fixed to
+read the ROOT (`DELTA B1`), but the bad id is still in every package.
+
+**Who reads it — established, 2026-09-15:**
+
+- **The runtime: nobody.** Swept across the render path with every pathspec proven non-empty
+  first — `template-runtime/src` (29 files), `shared-schema/src` (34), `single-file-export/src`
+  (6), `vcg-format/src` (11), `caspar-bridge/src` (24). The only hits are the schema's own
+  declaration and `templateTimingOf`. The runtime plays the ROOT.
+- **The Designer on re-open: not reachable.** `ensureCompositions` (`scene-doc.ts:247`) is the
+  one reader, and it opens PROJECT packages; the Designer has no path that unpacks a `.vcg`
+  export (`git grep 'unpack(' -- apps/designer/src` returns nothing). So a dangling id in an
+  export is never resolved by anything today.
+
+**Acceptance:**
+
+- WHEN a per-composition export is written THEN its `entryCompositionId` either names a
+  composition the package contains or is ABSENT — never a dangling id
+- WHEN a consumer resolves it THEN a miss is an explicit "not found", never a positional
+  fallback
+
+**Notes:** the safe fix is almost certainly to OMIT the field on a per-composition export (the
+root IS the entry there, so the pointer has nothing to say) rather than to rewrite it. ⚠ Do not
+"fix" this by making a consumer tolerate it — `DELTA B1` already had to delete one such
+tolerance, and it is what made the defect invisible.
+
+## [x] B-263 — The Designer's chrome renders Persian in Segoe UI, not Vazirmatn ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §2B · FIXED 2026-09-24 by `MULTI-CHANNEL-01` §2 K (`4858c84b`, `openspec/changes/archive/2026-09-26-multi-channel`)
+
+**Observed:** `apps/designer/src/renderer/index.css` sets the body stack to
+`'Exo 2', Inter, system-ui, …, 'Segoe UI', Vazirmatn`; on Windows `system-ui` has Arabic glyphs, so
+Persian chrome text never reaches Vazirmatn (measured: every Vazirmatn face `unloaded` after
+rendering Persian in the body stack). Authored content is unaffected — it names Vazirmatn itself.
+**Expected:** Persian chrome in the app's own Persian face. A visual change, so its own item.
+
+**Fixed (`MULTI-CHANNEL-01` §2 K, `4858c84b`) — in BOTH apps, since the Runtime's page stack had
+the same fault.** `'Vazirmatn Arabic'` — Vazirmatn's own Arabic files, each face limited by
+`unicode-range` to the Arabic ranges (`chromeFonts.css`, kept out of `fonts.css` because that is
+inlined into every export) — now leads the three chrome stacks: the Designer's `index.css` body and
+`App.css.ts` page, and the Runtime's `layout.ts` page. Persian comes from it; any other character
+matches none of its faces and falls through as before, so Latin keeps Exo 2 by construction. Every
+`font-family` in both apps was walked (`openspec/changes/archive/2026-09-26-multi-channel/design.md` §11). Measured with
+CDP `CSS.getPlatformFontsForNode` (`chrome-persian-font.spec.ts` in each app); red with the old
+stacks planted — the Runtime's Persian row name in `Segoe UI Semibold`, the Designer's probe in
+`Segoe UI, Exo 2`.
+
+## [~] B-319 — A dialog's buttons leave the dialog when their labels are long ⟨priority: medium — the owner's `Cancel` sat outside the clip dialog's left edge⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part B1 · `openspec/changes/dialog-footer-fit/`
+
+**Repro / Actual (the owner's `0.11.3`, picture 1):** CG Designer's "This clip is longer than the composition"
+dialog — `Cancel`, `Add as backdrop — follow the composition`, `Extend the composition` — puts `Cancel` outside
+the dialog, left of its edge, since the labels grew. The footer row does not wrap. **Expected:** the shared
+dialog footer keeps every button inside the dialog at every window size and text scale the app supports — it
+wraps, and stacks to a column when one row cannot hold it; fixed once in the shared footer, not per dialog; a
+label may be shortened with its long form in a `title`. **Acceptance:** measured in Chromium: every button's box
+lies inside the dialog's box, at the smallest supported window and at a large text scale, for every dialog of
+three or more buttons in both apps.

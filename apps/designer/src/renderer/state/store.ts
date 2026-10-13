@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   _resetCore,
   current,
+  hasUnsavedChanges,
   markHistoryBoundary,
   markSaved,
   redo,
@@ -14,6 +15,8 @@ import {
   type KeyframeRef,
 } from './store-core.js';
 import { editSceneOf, scopeSceneToComposition } from './scene-doc.js';
+import { arrangementsSlice } from './slices/arrangements.js';
+import { looksSlice } from './slices/looks.js';
 import { compositionSlice } from './slices/composition.js';
 import { documentSlice } from './slices/document.js';
 import { elementsSlice } from './slices/elements.js';
@@ -26,6 +29,8 @@ import { viewSlice } from './slices/view.js';
 // is byte-identical for every consumer (no import-path or symbol changes).
 export type { DesignerStoreState, DesignerTool, DesignerView, ElementFieldMetaPatch, KeyframeRef };
 export { editSceneOf, scopeSceneToComposition };
+// `D-162` — the ONE "would work be lost?" predicate (leave prompt, close guard, switch guard).
+export { hasUnsavedChanges };
 
 /**
  * Designer renderer state — small pub-sub store with a JSON-patch-ish
@@ -47,6 +52,15 @@ export const designerStore = {
   // Document lifecycle (setScene/setView/notice) + active-doc scene props
   // (duration / active region / lifecycle / playout).
   ...documentSlice,
+
+  // `multibox-layout-switch` C2 — arrangement authoring (the list, the per-count default,
+  // cell geometry, the entry transition, per-element visibility). 🔴 No action here takes a
+  // COUNT and no state here caches one: the count IS `cells.length`.
+  ...arrangementsSlice,
+
+  // LOOKS phase 2 (`design.md` §14) — the multi-frame group: sources declared once,
+  // looks as instanced sub-scene compositions, the session's active look.
+  ...looksSlice,
 
   // Undo/redo + the history boundary/save markers live in `store-core.ts` — the
   // history engine is welded to `set`'s coalescing and the `dirty` flag.

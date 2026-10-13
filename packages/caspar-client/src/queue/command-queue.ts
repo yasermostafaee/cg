@@ -68,10 +68,31 @@ interface Entry {
   timer: NodeJS.Timeout | null;
 }
 
+/**
+ * `FIELD-FIXES-01-A` — ONE AMCP command and what came back for it, as the bridge's AMCP log writes
+ * it. `reply` is the reply's HEADER line exactly as CasparCG sent it (`403 PLAY FAILED`); a data
+ * reply's body (INFO's XML) is not carried. `error` names why no reply settled the command.
+ */
+export interface AmcpExchange {
+  readonly line: string;
+  readonly reply?: string;
+  readonly error?: 'timeout' | 'disconnected' | 'aborted' | 'send-failed';
+  /** Wall-clock ms from the command leaving the queue to its settlement. */
+  readonly ms: number;
+  /** A reply that arrived AFTER the command had already been settled by its timeout. */
+  readonly late?: true;
+}
+
 export interface CommandQueueEvents {
   backpressure: [meta: { depth: number }];
   'failover-suggested': [meta: { depth: number }];
   error: [err: Error];
+  /**
+   * `FIELD-FIXES-01-A` — every command, once, when it settles (a reply, a timeout, a dropped
+   * socket), and again if a reply comes for a command its timeout already settled — so the log can
+   * say the late reply did come. Nothing in the queue depends on a listener.
+   */
+  exchange: [e: AmcpExchange];
 }
 
 /**
@@ -265,10 +286,13 @@ export class CommandQueue extends EventEmitter<CommandQueueEvents> {
       // Spurious response. Drop.
       return;
     }
+    const ms = this.now() - (head.startedAt ?? head.enqueuedAt);
     if (!head.settled) {
-      const ms = this.now() - (head.startedAt ?? head.enqueuedAt);
       const result: QueueResult = { seq: head.seq, line: head.line, response, ms };
       this.settle(head, result);
+    } else {
+      // A ghost: its timeout settled it, and now its reply came. Said, so the log shows it did.
+      this.emit('exchange', { line: head.line, reply: response.header, ms, late: true });
     }
     this.pump();
   };
@@ -315,6 +339,13 @@ export class CommandQueue extends EventEmitter<CommandQueueEvents> {
     } else {
       entry.resolve(value);
     }
+    this.emit('exchange', {
+      line: entry.line,
+      ms: this.now() - (entry.startedAt ?? entry.enqueuedAt),
+      ...(value instanceof Error
+        ? { error: exchangeError(value) }
+        : { reply: value.response.header }),
+    });
     this.checkBackpressureRelief();
   }
 
@@ -349,4 +380,12 @@ export class CommandQueue extends EventEmitter<CommandQueueEvents> {
 
 function noop(): void {
   /* baseline error listener */
+}
+
+/** Why no reply settled a command, in the log's four words. */
+function exchangeError(err: Error): NonNullable<AmcpExchange['error']> {
+  if (err instanceof AmcpTimeoutError) return 'timeout';
+  if (err instanceof AmcpDisconnectedError) return 'disconnected';
+  if (err instanceof AmcpAbortedError) return 'aborted';
+  return 'send-failed';
 }

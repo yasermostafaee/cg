@@ -1,34 +1,46 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, expect, it } from 'vitest';
 import { WebSocket as WsWebSocket } from 'ws';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
+import type { LayerPolicy } from '@cg/caspar-client';
 import { MemoryWorkspace } from '@cg/storage';
 import {
   parseWsFrame,
   serializeWsFrame,
   type ConnectionConfig,
+  type RestoreSkip,
+  type StackRestoreReport,
   type TemplateInfo,
 } from '@cg/shared-ipc';
-import type { StackItemState } from '@cg/shared-schema';
+import {
+  RetainedStackItemSchema,
+  StackItemStateSchema,
+  type StackItemState,
+} from '@cg/shared-schema';
 import type { BridgeLinkStatus } from '../src/shared/runtime-bridge.js';
 import {
   BridgeDisconnectedError,
+  TEMPLATE_REMOVE_NEEDS_BRIDGE,
   WebSocketRuntime,
   type WebSocketLike,
 } from '../src/platform/WebSocketRuntime.js';
 import { StackRetentionStore } from '../src/platform/stack/StackRetentionStore.js';
+import { currentBridgeCapabilities } from './support/currentBridge.js';
 
 /**
  * B-092 — the stack survives a restart of the BRIDGE process.
  *
- * The stack used to live ONLY in the bridge's in-memory Reconciler: kill the
- * bridge and every row vanished, because the restarted process boots empty and
- * `#resync` re-pulls that empty snapshot over the operator's stack. The browser
- * now retains the stack INTENT and re-delivers it on every (re)connect, BEFORE
- * the re-pull — the same shape B-085 gave the template library.
+ * The stack used to live ONLY in the bridge's in-memory Reconciler: kill the bridge and every
+ * row vanished. B-092's answer was that the BROWSER retained the stack intent and re-delivered
+ * it on every (re)connect. 🔴 `CENTRAL-BRIDGE-01` (`B-294`) moved that job to the bridge — it
+ * persists its stack and restores it at start — because with several consoles on one bridge a
+ * re-delivered copy is a claim on the truth, and a stale one could win. What this console keeps
+ * is a DISPLAY copy: the offline view below, never sent.
  *
- * (The broadcast-safety half — that restoring never CLEARs a live layer — is
- * asserted against real AMCP bytes in the bridge's
- * `stack-survives-bridge-restart.integration.test.ts`.)
+ * (The broadcast-safety half — that restoring never CLEARs a live layer — is asserted against
+ * real AMCP bytes in the bridge's `stack-survives-bridge-restart` and `own-stack` tests.)
  */
 
 const wsFactory = (url: string): WebSocketLike => new WsWebSocket(url) as unknown as WebSocketLike;
@@ -76,18 +88,48 @@ const TEMPLATE: TemplateInfo = {
   fields: [],
 };
 
+/**
+ * 🔴 `LAYER-BANDS-16` — **this suite loads through the DYNAMIC verb, so it states its ranges.**
+ *
+ * `stack.load` places a graphic by `templateType`, and the product ships NO ranges for that
+ * any more: the layer map cuts 50-99 into three role bands and leaves 1-49 to the playout
+ * server, so there is nowhere a type-keyed range may legally sit. A deployment that wants the
+ * verb declares its own, which is exactly what this does.
+ *
+ * 110+ keeps the fixture visibly outside the product's map and above the floor.
+ */
+const RETENTION_POLICY: LayerPolicy = { 'lower-third': [110, 119] };
+
 let handle: BridgeHandle | null = null;
 let runtime: WebSocketRuntime | null = null;
+let dir: string | null = null;
 
 afterEach(async () => {
   runtime?.dispose();
   runtime = null;
   await handle?.close();
   handle = null;
+  if (dir !== null) fs.rmSync(dir, { recursive: true, force: true });
+  dir = null;
 });
 
-it('THE BUG: stack items survive a REAL bridge restart instead of vanishing', async () => {
-  handle = await createBridge({ port: 0, connection: ephemeralConnection() });
+/** A station's two persistent paths, in a scratch dir (never the dev host's real records). */
+function stationPaths(): { stackPath: string; templatesDir: string } {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-stack-retention-'));
+  return {
+    stackPath: path.join(dir, 'bridge-stack.json'),
+    templatesDir: path.join(dir, 'templates'),
+  };
+}
+
+it('🔴 CENTRAL-BRIDGE-01 — the stack survives a REAL bridge restart from the BRIDGE’s own file, and the console’s rows follow it', async () => {
+  const paths = stationPaths();
+  handle = await createBridge({
+    port: 0,
+    connection: ephemeralConnection(),
+    layerPolicy: RETENTION_POLICY,
+    ...paths,
+  });
   const port = handle.port;
   const retention = new StackRetentionStore(new MemoryWorkspace());
   await retention.hydrate();
@@ -102,8 +144,6 @@ it('THE BUG: stack items survive a REAL bridge restart instead of vanishing', as
   await runtime.stack.load({ itemId: 'item1', templateId: 'lower-third', fields: { h: 'یک' } });
   await runtime.stack.load({ itemId: 'item2', templateId: 'lower-third', fields: { h: 'دو' } });
   expect((await runtime.stack.snapshot()).map((i) => i.itemId)).toEqual(['item1', 'item2']);
-  // The intent is now the BROWSER's, not just the bridge's.
-  expect(retention.items().map((i) => i.itemId)).toEqual(['item1', 'item2']);
 
   // The last stack pushed to subscribers — what the UI would be rendering.
   let lastPushed: readonly StackItemState[] = [];
@@ -116,51 +156,52 @@ it('THE BUG: stack items survive a REAL bridge restart instead of vanishing', as
   handle = null;
   await awaitStatus(runtime, 'disconnected');
 
-  // ── a fresh bridge starts on the same port, with an EMPTY stack ──
-  handle = await createBridge({ port, connection: ephemeralConnection() });
-  expect(handle.runtime.stackSnapshot()).toEqual([]);
-
-  await awaitStatus(runtime, 'live');
+  // ── a fresh bridge starts on the same port and the same files: the stack is ITS, at once ──
+  handle = await createBridge({
+    port,
+    connection: ephemeralConnection(),
+    layerPolicy: RETENTION_POLICY,
+    ...paths,
+  });
   const h = handle;
-  // The retained intent is restored INTO the fresh bridge…
-  await waitFor(() => h.runtime.stackSnapshot().length === 2);
   expect(h.runtime.stackSnapshot().map((i) => i.itemId)).toEqual(['item1', 'item2']);
-  // …with the operator's fields and layers intact.
+  // …with the operator's fields and layers intact, before any console has spoken.
   expect(h.runtime.stackSnapshot()[0]?.fields).toEqual({ h: 'یک' });
-  expect(h.runtime.stackSnapshot().map((i) => i.slot?.layer)).toEqual([10, 11]);
+  expect(h.runtime.stackSnapshot().map((i) => i.slot?.layer)).toEqual([110, 111]);
 
-  // …and the SPA never adopts an empty stack: the rows do NOT disappear.
+  // The console reconnects and SHOWS it — the rows do not disappear.
+  await awaitStatus(runtime, 'live');
   await waitFor(() => lastPushed.length === 2);
   expect(lastPushed.map((i) => i.itemId)).toEqual(['item1', 'item2']);
   expect((await runtime.stack.snapshot()).map((i) => i.itemId)).toEqual(['item1', 'item2']);
 }, 20_000);
 
-it('a removal is a removal: it prunes the retention and does NOT walk back in on reconnect', async () => {
-  handle = await createBridge({ port: 0, connection: ephemeralConnection() });
-  const port = handle.port;
-  const retention = new StackRetentionStore(new MemoryWorkspace());
-  await retention.hydrate();
-  runtime = new WebSocketRuntime(handle.url, {
-    createWebSocket: wsFactory,
-    stackRetention: retention,
+it('a removal is a removal: after a bridge restart the row is gone from the BRIDGE’s file — control: the kept row is back', async () => {
+  const paths = stationPaths();
+  handle = await createBridge({
+    port: 0,
+    connection: ephemeralConnection(),
+    layerPolicy: RETENTION_POLICY,
+    ...paths,
   });
+  const port = handle.port;
+  runtime = new WebSocketRuntime(handle.url, { createWebSocket: wsFactory });
   await runtime.whenReady();
 
   await runtime.templates.import({ template: TEMPLATE, html: '<html>v1</html>' });
   await runtime.stack.load({ itemId: 'keep', templateId: 'lower-third', fields: {} });
   await runtime.stack.load({ itemId: 'gone', templateId: 'lower-third', fields: {} });
   await runtime.stack.remove({ itemId: 'gone' });
-  await waitFor(() => retention.items().length === 1);
 
   await handle.close();
   handle = null;
-  await awaitStatus(runtime, 'disconnected');
-  handle = await createBridge({ port, connection: ephemeralConnection() });
-  await awaitStatus(runtime, 'live');
-
-  const h = handle;
-  await waitFor(() => h.runtime.stackSnapshot().length === 1);
-  expect(h.runtime.stackSnapshot().map((i) => i.itemId)).toEqual(['keep']);
+  handle = await createBridge({
+    port,
+    connection: ephemeralConnection(),
+    layerPolicy: RETENTION_POLICY,
+    ...paths,
+  });
+  expect(handle.runtime.stackSnapshot().map((i) => i.itemId)).toEqual(['keep']);
 }, 20_000);
 
 // ── deterministic ordering + failure isolation (scripted fake WebSocket) ──
@@ -238,31 +279,27 @@ const ON_AIR_ITEM: StackItemState = {
   slot: { channel: 1, layer: 10, server: 'primary' },
 };
 
-function respondLikeBridge(sock: FakeSocket, restoreFails: boolean): void {
-  // A faithful fake: a bridge that ACCEPTS a restore then reports those items in
-  // its snapshot. Anything else is a bridge contradicting itself, and testing
-  // against that would assert on a state no real bridge can produce.
-  let restored: StackItemState[] = [];
-  sock.respond = (channel, payload) => {
+/**
+ * A faithful fake bridge: it holds ITS OWN stack (it keeps and restores it itself) and its own
+ * restore report, and answers the reads a resync makes. It never needs anything from a console.
+ */
+function respondLikeBridge(
+  sock: FakeSocket,
+  bridgeStack: readonly StackItemState[] = [],
+  report: StackRestoreReport | null = null,
+): void {
+  sock.respond = (channel) => {
     switch (channel) {
       case 'templates.import':
         return { registered: true, templateId: 'lower-third' };
-      case 'stack.restore': {
-        if (restoreFails) throw new Error('restore rejected');
-        const req = payload as { items: { itemId: string; templateId: string; played: boolean }[] };
-        restored = req.items.map((i) => ({
-          itemId: i.itemId,
-          templateId: i.templateId,
-          fields: {},
-          status: i.played ? 'on-air' : 'loaded',
-          pending: false,
-        }));
-        return { restored: restored.length, skipped: 0 };
-      }
-      // After a FAILED restore this is the EMPTY snapshot of a freshly-booted
-      // bridge — the exact one that must never be allowed to erase the retention.
+      case 'stack.restore-report':
+        return report;
+      case 'station.strays':
+        return [];
+      case 'bridge.capabilities':
+        return currentBridgeCapabilities();
       case 'stack.snapshot':
-        return restored;
+        return bridgeStack;
       case 'connections.health':
         return HEALTH;
       case 'lock.state':
@@ -273,27 +310,31 @@ function respondLikeBridge(sock: FakeSocket, restoreFails: boolean): void {
   };
 }
 
-async function reconnectWith(restoreFails: boolean): Promise<{
+async function reconnectWith(
+  bridgeStack: readonly StackItemState[],
+  report: StackRestoreReport | null = null,
+): Promise<{
   retention: StackRetentionStore;
   resyncSock: FakeSocket | undefined;
-  onResyncError: ReturnType<typeof vi.fn>;
+  reportedSkips: RestoreSkip[][];
 }> {
   const sockets: FakeSocket[] = [];
   const retention = new StackRetentionStore(new MemoryWorkspace());
   await retention.hydrate();
   await retention.mirror([ON_AIR_ITEM]);
-  const onResyncError = vi.fn();
 
   runtime = new WebSocketRuntime('ws://fake', {
     createWebSocket: () => {
       const s = new FakeSocket();
-      respondLikeBridge(s, restoreFails);
+      respondLikeBridge(s, bridgeStack, report);
       sockets.push(s);
       return s;
     },
     stackRetention: retention,
-    onResyncError,
   });
+
+  const reportedSkips: RestoreSkip[][] = [];
+  runtime.stack.onRestoreSkips((r) => reportedSkips.push([...r]));
 
   sockets[0]?.open();
   await runtime.whenReady();
@@ -307,41 +348,30 @@ async function reconnectWith(restoreFails: boolean): Promise<{
   await waitFor(
     () => (resyncSock?.sent.filter((f) => f.channel === 'stack.snapshot').length ?? 0) >= 1,
   );
-  return { retention, resyncSock, onResyncError };
+  // The display copy is mirrored once the resync has finished with the re-pulled snapshot.
+  await waitFor(() => runtime?.link.resyncing() === false);
+  return { retention, resyncSock, reportedSkips };
 }
 
-it('resync delivers the retained stack AFTER the templates and BEFORE the snapshot re-pull', async () => {
-  const { resyncSock } = await reconnectWith(false);
+it('🔴 CENTRAL-BRIDGE-01 — a reconnect adopts the BRIDGE’s stack, and the display copy follows it: the console sends no restore', async () => {
+  const bridgeStack: StackItemState[] = [
+    { ...ON_AIR_ITEM, itemId: 'from-the-bridge', status: 'loaded' },
+  ];
+  const { retention, resyncSock } = await reconnectWith(bridgeStack);
   const channels = resyncSock?.sent.map((f) => f.channel) ?? [];
-
-  const restoreIdx = channels.indexOf('stack.restore');
-  const pullIdx = channels.indexOf('stack.snapshot');
-  expect(restoreIdx).toBeGreaterThanOrEqual(0);
-  // Templates first — a restored item must resolve against a populated registry.
-  expect(channels.indexOf('templates.import')).toBeLessThan(restoreIdx);
-  // …and the restore precedes the re-pull, which is what stops the SPA adopting
-  // the empty stack of a freshly-booted bridge.
-  expect(restoreIdx).toBeLessThan(pullIdx);
-
-  // The intent delivered is the retained INTENT — not reconciled state.
-  const payload = resyncSock?.sent[restoreIdx]?.payload as {
-    items: { itemId: string; played: boolean; slot?: { layer: number } }[];
-  };
-  expect(payload.items).toHaveLength(1);
-  expect(payload.items[0]).toMatchObject({ itemId: 'item1', played: true });
-  expect(payload.items[0]?.slot?.layer).toBe(10);
-});
-
-it('a FAILED restore is surfaced and preserves the retention — the empty snapshot never erases it', async () => {
-  const { retention, onResyncError } = await reconnectWith(true);
-
-  // The operator is told, and the intent is kept for the next connect. Without
-  // this the bug would erase its own fix: the empty snapshot that follows a
-  // failed restore would be mirrored straight over the retained stack, and the
-  // store is PERSISTENT — the loss would outlive the page.
-  expect(onResyncError).toHaveBeenCalledTimes(1);
-  expect(String(onResyncError.mock.calls[0]?.[0])).toContain('retained stack');
-  expect(retention.items().map((i) => i.itemId)).toEqual(['item1']);
+  // It READ (control: the resync ran to its re-pull)…
+  expect(channels).toContain('stack.snapshot');
+  // …and delivered nothing — though this console held a retained on-air row.
+  expect(channels).not.toContain('stack.restore');
+  expect(channels).not.toContain('templates.import');
+  // The display copy is the bridge's stack now, not the one this console held.
+  await waitFor(
+    () =>
+      retention
+        .items()
+        .map((i) => i.itemId)
+        .join() === 'from-the-bridge',
+  );
 });
 
 // ── StackRetentionStore in isolation ──
@@ -356,11 +386,29 @@ it('the retention store round-trips through storage and reduces state to INTENT'
   const reloaded = new StackRetentionStore(ws);
   await reloaded.hydrate();
   expect(reloaded.items().map((i) => i.itemId)).toEqual(['item1', 'item2']);
-  expect(reloaded.items()[0]).toMatchObject({ played: true, fields: { h: 'سلام' } });
-  expect(reloaded.items()[1]?.played).toBe(false);
+  expect(reloaded.items()[0]).toMatchObject({ state: 'on-air', fields: { h: 'سلام' } });
+  expect(reloaded.items()[1]?.state).toBe('loaded');
   // Reconciled-only noise is dropped; intent is kept.
   expect(reloaded.items()[0]).not.toHaveProperty('status');
   expect(reloaded.items()[0]).not.toHaveProperty('pending');
+  // B-107/B-109 — and the bit that used to carry ALL of this is gone, not merely
+  // supplemented. Two shapes of one fact is how they come to disagree.
+  expect(reloaded.items()[0]).not.toHaveProperty('played');
+});
+
+it('a record with no usable STATE is DROPPED, never given a comfortable default', async () => {
+  // B-107/B-109 — the whole point of the change is that a row's state is never
+  // guessed. A record written before the state field existed does not carry one, and
+  // inventing `loaded` for it would be this bug re-created inside its own fix. Under
+  // the compatibility-floor policy (P-031) it costs one stack rebuild, once.
+  const ws = new MemoryWorkspace();
+  await ws.writeJson('stack/retained.json', [
+    { itemId: 'legacy', templateId: 'lower-third', fields: {}, played: true },
+    { itemId: 'current', templateId: 'lower-third', fields: {}, state: 'cleared' },
+  ]);
+  const store = new StackRetentionStore(ws);
+  await store.hydrate();
+  expect(store.items().map((i) => i.itemId)).toEqual(['current']);
 });
 
 it('ambiguous statuses retain play evidence — the occupancy check, not the badge, decides', async () => {
@@ -380,12 +428,40 @@ it('ambiguous statuses retain play evidence — the occupancy check, not the bad
   ] as const;
   for (const s of maybeOnAir) {
     await store.mirror([{ ...ON_AIR_ITEM, status: s }]);
-    expect(store.items()[0]?.played, s).toBe(true);
+    expect(store.items()[0]?.state, s).toBe('on-air');
   }
-  for (const s of ['idle', 'loaded', 'error', 'disconnected'] as const) {
-    await store.mirror([{ ...ON_AIR_ITEM, status: s }]);
-    expect(store.items()[0]?.played, s).toBe(false);
-  }
+});
+
+it('⭐ B-107/B-109: a CLEARED row and an ERRORED row are each DISTINGUISHABLE from a loaded one', async () => {
+  // THE root defect, asserted directly. All three of these used to reduce to the
+  // identical retained record (`played: false`), which is why a bridge death showed
+  // an errored row as READY and a bridge restart re-ADDed a cleared graphic.
+  const store = new StackRetentionStore(new MemoryWorkspace());
+  await store.hydrate();
+
+  await store.mirror([
+    { ...ON_AIR_ITEM, itemId: 'pre-rolled', status: 'loaded' },
+    { ...ON_AIR_ITEM, itemId: 'cleared', status: 'idle' },
+    { ...ON_AIR_ITEM, itemId: 'failed', status: 'error', errorCode: 'no-layer' },
+  ]);
+
+  expect(store.items().map((i) => i.state)).toEqual(['loaded', 'cleared', 'error']);
+  expect(new Set(store.items().map((i) => i.state)).size).toBe(3);
+  // The failure keeps its CAUSE, so an offline row can still say why.
+  expect(store.items()[2]?.errorCode).toBe('no-layer');
+  // …and only an error state carries one: B-093's `osc-unverifiable` rides an
+  // `unverified` row and must never travel as if it were a failure this row suffered.
+  await store.mirror([{ ...ON_AIR_ITEM, status: 'unverified', errorCode: 'osc-unverifiable' }]);
+  expect(store.items()[0]).toMatchObject({ state: 'on-air' });
+  expect(store.items()[0]).not.toHaveProperty('errorCode');
+});
+
+it('a CLEARED row keeps its SLOT — an out is not a remove, and restore needs the layer', async () => {
+  const store = new StackRetentionStore(new MemoryWorkspace());
+  await store.hydrate();
+  await store.mirror([{ ...ON_AIR_ITEM, status: 'idle' }]);
+  expect(store.items()[0]).toMatchObject({ state: 'cleared' });
+  expect(store.items()[0]?.slot?.layer).toBe(10);
 });
 
 // ── the cold-boot gap: a hard refresh while the bridge is DOWN ──
@@ -408,9 +484,11 @@ async function coldBootOffline(): Promise<{
   const retention = new StackRetentionStore(new MemoryWorkspace());
   await retention.hydrate();
   const { slot: _slot, ...noSlot } = ON_AIR_ITEM;
-  await retention.mirror([ON_AIR_ITEM, { ...noSlot, itemId: 'item2', status: 'loaded' }]);
+  const rows: StackItemState[] = [ON_AIR_ITEM, { ...noSlot, itemId: 'item2', status: 'loaded' }];
+  await retention.mirror(rows);
   const sock = new FakeSocket();
-  respondLikeBridge(sock, false);
+  // The bridge, when it returns, holds the same two rows — its own stack, from its own file.
+  respondLikeBridge(sock, rows);
   // NEVER opened → the runtime sits in `disconnected`, exactly like a page
   // loaded while the bridge process is dead.
   const rt = new WebSocketRuntime('ws://fake', {
@@ -464,28 +542,258 @@ it('the offline view is replaced by authoritative truth once the bridge returns'
 
   sock.open();
   await rt.whenReady();
-  await waitFor(() => sock.sent.some((f) => f.channel === 'stack.restore'));
+  await waitFor(() => sock.sent.some((f) => f.channel === 'station.strays'));
 
   // The bridge is authoritative now, so its statuses win over the local
-  // projection: the restored row reads the real `on-air`, not the offline
+  // projection: the row reads the bridge's real `on-air`, not the offline
   // `unverified` placeholder.
   const live = await rt.stack.snapshot();
   expect(live.map((i) => i.itemId)).toEqual(['item1', 'item2']);
   expect(live[0]?.status).toBe('on-air');
-  // And the retention still holds both items — the projection round-trips, so
+  // And the display copy holds both items — the projection round-trips, so
   // being displayed offline corrupted nothing.
   expect(retention.items().map((i) => i.itemId)).toEqual(['item1', 'item2']);
-  expect(retention.items()[0]?.played).toBe(true);
+  expect(retention.items()[0]?.state).toBe('on-air');
 });
 
-it('offline template-remove counts the RETAINED rows as references (R-005 stays enforced)', async () => {
-  const { rt } = await coldBootOffline();
-  // The retained rows are visible and use 'lower-third'; removing it offline
-  // must be refused, exactly as it would be against a live bridge holding them.
-  await rt.templates.import({ template: TEMPLATE, html: '<html>v1</html>' });
+it('🔴 CENTRAL-BRIDGE-01 — an offline template removal is REFUSED: R-005 is decided by the bridge, which holds the true stack', async () => {
+  const { rt, sock } = await coldBootOffline();
   await rt.stack.snapshot(); // the operator is looking at the rows
-  expect(await rt.templates.remove({ templateId: 'lower-third' })).toMatchObject({
-    ok: false,
-    reason: 'in-use',
+  await expect(rt.templates.remove({ templateId: 'lower-third' })).rejects.toThrow(
+    TEMPLATE_REMOVE_NEEDS_BRIDGE,
+  );
+  expect(sock.sent).toHaveLength(0);
+});
+
+// ── B-107: the offline projection may never IMPROVE a status ──────────────────
+
+/**
+ * ⭐ THE B-107 REGRESSION SET.
+ *
+ * `#retainedProjection` used to read `i.played ? 'unverified' : 'loaded'`, and
+ * `useStack` opts into `pullWhileDisconnected` — so the instant the bridge PROCESS
+ * died, every ERROR row on the operator's stack flipped to `loaded`, which
+ * `airStateVisual` renders as the word READY. A load that never got a layer
+ * presented as pre-rolled and playable, on a link the SPA could no longer use in
+ * either direction.
+ *
+ * These drive the REAL runtime through a cold boot with the bridge down — the
+ * owner's exact reproduction, minus the bridge process.
+ */
+async function offlineWith(items: readonly StackItemState[]): Promise<WebSocketRuntime> {
+  const retention = new StackRetentionStore(new MemoryWorkspace());
+  await retention.hydrate();
+  await retention.mirror(items);
+  const sock = new FakeSocket();
+  respondLikeBridge(sock);
+  // NEVER opened → `disconnected`, exactly like a page loaded with the bridge dead.
+  const rt = new WebSocketRuntime('ws://fake', {
+    createWebSocket: () => sock,
+    stackRetention: retention,
   });
+  runtime = rt;
+  return rt;
+}
+
+it('B-107: an ERRORED row does NOT become READY when the bridge dies', async () => {
+  const rt = await offlineWith([
+    { ...ON_AIR_ITEM, itemId: 'failed', status: 'error', errorCode: 'no-layer' },
+  ]);
+  const [row] = await rt.stack.snapshot();
+
+  // THE bug, pinned: it used to be `loaded`, which the row renders as READY.
+  expect(row?.status).toBe('error');
+  expect(row?.status).not.toBe('loaded');
+  // …and it still says WHY, so the operator is not left guessing at a bare badge.
+  expect(row?.errorCode).toBe('no-layer');
+  expect(row?.pending).toBe(false);
+});
+
+it('B-107: the error code is trigger-INDEPENDENT — every failure survives, not just no-layer', async () => {
+  // The generality check B-107's own notes demand: `unknown-template` involves no
+  // layer at all and reaches the identical errored state through the same path.
+  for (const code of ['no-layer', 'no-layer-foreign-occupied', 'unknown-template', 'amcp-error']) {
+    const rt = await offlineWith([
+      { ...ON_AIR_ITEM, itemId: 'failed', status: 'error', errorCode: code },
+    ]);
+    const [row] = await rt.stack.snapshot();
+    expect(row?.status, code).toBe('error');
+    expect(row?.errorCode, code).toBe(code);
+    rt.dispose();
+  }
+});
+
+it('B-107: a CLEARED row does NOT become READY either — the milder lie is fixed too', async () => {
+  const rt = await offlineWith([{ ...ON_AIR_ITEM, itemId: 'cleared', status: 'idle' }]);
+  const [row] = await rt.stack.snapshot();
+  expect(row?.status).toBe('idle');
+  expect(row?.status).not.toBe('loaded');
+});
+
+it('B-107: the projection keeps THREE source statuses distinct — it can never collapse them', async () => {
+  const rt = await offlineWith([
+    { ...ON_AIR_ITEM, itemId: 'pre-rolled', status: 'loaded' },
+    { ...ON_AIR_ITEM, itemId: 'cleared', status: 'idle' },
+    { ...ON_AIR_ITEM, itemId: 'failed', status: 'error', errorCode: 'no-layer' },
+    { ...ON_AIR_ITEM, itemId: 'was-on-air', status: 'on-air' },
+  ]);
+  const statuses = (await rt.stack.snapshot()).map((i) => i.status);
+  expect(statuses).toEqual(['loaded', 'idle', 'error', 'unverified']);
+  expect(new Set(statuses).size).toBe(4);
+});
+
+it('B-107: the projection ROUND-TRIPS, so displaying offline can never corrupt the retention', async () => {
+  // Load-bearing: `stack.snapshot()` sets `#lastStack` from the projection, and a
+  // later mirror of a projected snapshot must not rewrite a row's state. Asserted
+  // rather than reasoned about, because a new status added to the projection would
+  // break it silently.
+  const retention = new StackRetentionStore(new MemoryWorkspace());
+  await retention.hydrate();
+  const source: StackItemState[] = [
+    { ...ON_AIR_ITEM, itemId: 'a', status: 'on-air' },
+    { ...ON_AIR_ITEM, itemId: 'b', status: 'loaded' },
+    { ...ON_AIR_ITEM, itemId: 'c', status: 'idle' },
+    { ...ON_AIR_ITEM, itemId: 'd', status: 'error', errorCode: 'no-layer' },
+  ];
+  await retention.mirror(source);
+  const before = retention.items().map((i) => i.state);
+
+  const sock = new FakeSocket();
+  respondLikeBridge(sock);
+  const rt = new WebSocketRuntime('ws://fake', {
+    createWebSocket: () => sock,
+    stackRetention: retention,
+  });
+  runtime = rt;
+  // Project it out, then mirror the projection straight back in.
+  await retention.mirror(await rt.stack.snapshot());
+  expect(retention.items().map((i) => i.state)).toEqual(before);
+  expect(retention.items()[3]?.errorCode).toBe('no-layer');
+});
+
+// ── B-108: what a restore could not bring back is REPORTED ────────────────────
+
+it('B-108: rows the BRIDGE’s restore could not re-seat are reported on this console, with their reason', async () => {
+  const skipped: RestoreSkip[] = [
+    { itemId: 'gone-template', reason: 'unknown-template' },
+    { itemId: 'no-room', reason: 'no-layer' },
+  ];
+  const { reportedSkips } = await reconnectWith([], {
+    at: new Date().toISOString(),
+    skipped,
+    migrated: [],
+  });
+  // The report is the bridge's standing state, read on connect — a console that connects after
+  // the restart still hears which rows did not come back, and why.
+  expect(reportedSkips.at(-1)).toEqual(skipped);
+});
+
+it('B-108: a bridge with nothing to report CLEARS the notice — an empty report is an answer', async () => {
+  const { reportedSkips } = await reconnectWith([], null);
+  // (The BENIGN skip — an item the live bridge already holds — is filtered on the bridge, in
+  // `CasparRuntime.#setRestoreReport`; a console cannot raise that false alarm at all.)
+  expect(reportedSkips.at(-1)).toEqual([]);
+});
+
+/**
+ * 🔴 **THE COPY LIST IS HAND-MAINTAINED, AND NOTHING ASSERTED IT WAS COMPLETE (session BM).**
+ *
+ * `retainedFromStackItem` (`@cg/shared-schema`, one copy for the bridge's stack file and this
+ * display copy — `CENTRAL-BRIDGE-01`) reduces a published row to intent by naming each carried field
+ * explicitly.
+ * That is the right shape — most of `StackItemState` is RECONCILED state which must not
+ * travel — but it means every new OPEN-AXIS field has to be added by hand, and forgetting is
+ * silent: the row restores, looks normal, and is missing one thing.
+ *
+ * That is the `B-107` / `B-109` class at its source, and it had FIVE fields riding on it with
+ * no test at all — `position`, `sourceOverride`, `plateVolumes`, `activeLookId`, and session
+ * BM's `lookSourceOverride`, which was in fact dropped here when it was added and caught only
+ * by reading the list.
+ *
+ * So this asserts the RULE rather than five values: **every field the retained schema accepts
+ * and the published schema also has must survive the round trip.** A sixth field added later
+ * fails here on the day it is added, which is the only moment the omission is cheap.
+ */
+it('🔴 every OPEN-AXIS field a published row carries survives retainedFromStackItem — derived, not listed', async () => {
+  const store = new StackRetentionStore(new MemoryWorkspace());
+
+  /*
+    The keys are derived from the two SCHEMAS rather than typed out, so this test cannot
+    itself go stale. `RetainedStackItemSchema` is the target shape; `StackItemStateSchema` is
+    the source. Their intersection is exactly "things a published row has that retention is
+    allowed to keep".
+  */
+  const retainedKeys = new Set(Object.keys(RetainedStackItemSchema.shape));
+  const publishedKeys = new Set(Object.keys(StackItemStateSchema.shape));
+  const carried = [...retainedKeys].filter((k) => publishedKeys.has(k));
+  expect(carried.length, 'the two schemas must actually overlap').toBeGreaterThan(4);
+
+  // A row with EVERY carriable field populated, so a dropped one is visible as an absence.
+  const populated: StackItemState = {
+    itemId: 'item-1',
+    templateId: 'debate',
+    fields: { title: 'x' },
+    status: 'on-air',
+    pending: null,
+    slot: { channel: 1, layer: 10, server: 'primary' },
+    position: { anchor: 'center', offset: { x: 3, y: 4 } },
+    sourceOverride: { 'l-1': 'studio-9' },
+    plateVolumes: { 'l-1': 1 },
+    activeLookId: 'solo',
+    lookSourceOverride: { solo: { 'l-1': 'studio-3' } },
+    frozenAssignment: { 'l-1': 'studio-1' },
+    // `TIMING-BUILD-21` §2(a) — the row's passes/delay override. Added here the day the field
+    // was added, because this guard refuses to run against a fixture that does not populate
+    // every carriable key: an unpopulated field would make the assertion below pass vacuously.
+    timingOverride: { repeat: 2, delayMs: 1500 },
+  } as unknown as StackItemState;
+
+  /*
+    🔴 **SESSION BP — THE HOLE IN THIS GUARD, CLOSED. The KEYS were derived; the FIXTURE was
+    not, and that is where a new field slipped past.**
+
+    `dropped` below only ever looks at fields `populated` actually sets. So a seventh field
+    added to both schemas and forgotten in `retainedFromStackItem` produced NO failure here — it was
+    `undefined` on the row, therefore never a candidate for having been dropped. The guard
+    read as complete and would have passed on the exact omission it exists to catch, which
+    is the `mock-bridge-parity` shape again: a check that answers a narrower question than
+    its name.
+
+    So the fixture's own completeness is now asserted from the same derived list. A field
+    added to both schemas reddens THIS line first, which forces the fixture up to date, which
+    is what makes `dropped` meaningful.
+
+    Two fields are named exceptions rather than filtered by a predicate, because a predicate
+    would silently absorb the next one:
+      - `status`  — retention carries `state`, DERIVED from it by `retainedStateFor`.
+      - `errorCode` — carried CONDITIONALLY (only an `error` row's own code travels, so
+        B-093's `osc-unverifiable` on an `unverified` row does not masquerade as a failure).
+        Populating it on this `on-air` row would assert the opposite of that rule; the
+        condition has its own test.
+  */
+  const fixtureExempt = new Set(['status', 'errorCode']);
+  const uncovered = carried.filter(
+    (k) =>
+      !fixtureExempt.has(k) && (populated as unknown as Record<string, unknown>)[k] === undefined,
+  );
+  expect(
+    uncovered,
+    'the fixture must populate every carriable field, or the assertion below passes vacuously',
+  ).toEqual([]);
+
+  await store.mirror([populated]);
+  const retained = store.items()[0];
+  expect(retained).toBeDefined();
+
+  const dropped = carried.filter(
+    (k) =>
+      (populated as unknown as Record<string, unknown>)[k] !== undefined &&
+      (retained as unknown as Record<string, unknown>)[k] === undefined,
+  );
+  /*
+    🔴 `status` is the one legitimate exception and it is named rather than filtered by a
+    predicate: retention carries `state`, which `retainedStateFor` DERIVES from `status`
+    (golden rule 6 — the map has one owner). Everything else present on the row must be here.
+  */
+  expect(dropped, 'these fields were published and did not survive retention').toEqual([]);
 });

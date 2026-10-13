@@ -1,4 +1,4 @@
-﻿# Tasks — surface-orphan-layers
+# Tasks — surface-orphan-layers
 
 ## 1. Artifacts
 

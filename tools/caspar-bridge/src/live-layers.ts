@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { redactUrlCredentials, type LiveLayerState } from '@cg/shared-ipc';
 import type { CommandSlot } from './command-builder.js';
 
 /**
@@ -57,8 +59,14 @@ export interface LiveLayerRecord {
   readonly sourceId: string;
   /**
    * Which half of a fill+key pair this layer carries. `'fill'` is every
-   * `route://` and media case; `'key'` exists only for a fill+key input pair,
-   * whose compositing is C-021's (hardware-blocked), not this change's.
+   * `route://` and media case; `'key'` exists only for a fill+key input pair.
+   *
+   * ⚠ **Nothing writes `'key'` yet.** The SEATING that would — two producers, one
+   * shared geometry, a decided outcome when half the pair fails — is **C-027**,
+   * blocked on whether this plant's DeckLink SDI 4K exposes a SECOND SDI input at
+   * all (`docs/recon/2026-08-25-decklink-model-walk.md` Q4). The hardware pass that
+   * verifies it is C-021 arm (c). The field is carried here rather than added later
+   * so the ledger is already shaped for the pair.
    */
   readonly role: 'fill' | 'key';
   /**
@@ -72,6 +80,103 @@ export interface LiveLayerRecord {
   readonly fill: NormalizedRect;
   /** The `MIXER … CLIP` mask emitted in the SAME batch as {@link fill}. */
   readonly clip: NormalizedRect;
+  /**
+   * C-015 phase 6 (6.5 / 6.9c) — **the volume this PLATE is intended to have.**
+   *
+   * `0` for every plate the bridge seats today: every producer it creates is
+   * created muted, and audio is raised only by an explicit recorded intent naming
+   * the layer (design.md §7).
+   *
+   * 🔴 **PER RECORD, AND NOT `INTENDED_VOLUME`.** The global constant answers "what
+   * volume does an OPERATOR ROW have", and a Live Source layer is not an operator
+   * row — `#reassertDeclaredVolumes` blankets the declared bank with `VOLUME 1` and
+   * consults nothing about what is on those layers, which is the second reason the
+   * band was carved OUTSIDE that bank (§7 consequence 3). Its own comment calls it
+   * _"the seam a future per-layer volume feature would replace"_; this is that
+   * feature, scoped to Live Sources.
+   *
+   * 🔴 **IT BELONGS TO THE PLATE, NOT TO THE PRODUCER INSTANCE (6.9c).** That is
+   * what makes an on-air swap safe: the new producer is born muted like every
+   * other, so a deliberately-raised plate would go silent at the exact moment the
+   * operator was fixing it unless the swap re-asserts this value. A swap that
+   * silently mutes a guest is its own on-air fault.
+   */
+  readonly intendedVolume: number;
+  /**
+   * `multibox-layout-switch` `tasks.md` 6.5 / §12.4 — **this producer is seated but the
+   * active LOOK does not show it**: muted, idle, and with no hole punched for it.
+   *
+   * 🔴 **SEAT AND PUNCH ARE SEPARATE MUTATIONS, ON SEPARATE MACHINES, AND THIS FIELD IS
+   * WHERE THAT SEPARATION BECOMES REPRESENTABLE.** Every other field here describes the
+   * layer — where its producer is and what geometry it was given. This one describes
+   * whether the PAGE is currently punching a hole in front of it. Collapsing the two
+   * (dropping the record when a look hides the plate, say) is what would force a look
+   * switch to re-`PLAY` on the way back — a fresh producer, a visible re-acquire, and the
+   * cut §12.4 chose B to avoid.
+   *
+   * OPTIONAL, and absent means NOT held: it is additive to the persisted form (B-145), so
+   * a ledger written before looks existed parses unchanged and reads as "on screen", which
+   * is what it was.
+   */
+  readonly held?: boolean | undefined;
+  /**
+   * 🔴 `PLAYOUT-SOURCES-01` §1.I — **where the seated source came from.** `input` is a Playout input
+   * (D10: NDI, stream): contract v1.3 rule 2 says it is seated silent and its volume only ever
+   * RISES by a ramp (`VOLUME <v> 25`), because the Playout may route the same input to the same
+   * channel and two copies add up. Recorded because a later raise (the operator's fader, a plate
+   * leaving HELD, the reconnect re-send) reaches the layer from the RECORD, with no catalogue in
+   * hand. Additive: absent is every plate seated before this field existed, and today's wire.
+   */
+  readonly origin?: 'input' | 'media' | undefined;
+  /**
+   * 🔴 `ROUTE-PLATES-01` / contract v1.3 rule 5 — **the Playout epoch this `route://H-L` was sent
+   * under**, for a Playout route only. The holder `(channel, layer)` behind a route is only
+   * meaningful inside the epoch that named it: after a core restart or a holder move, the same
+   * `route://9-12` may be a different input or nothing. So a held route whose epoch is not the
+   * current one is not shown again by a reveal — it is refused until a take seats it afresh.
+   * Additive: absent is every plate that is not a Playout route, and every plate before this field.
+   */
+  readonly epoch?: string | undefined;
+  /**
+   * 🔴 `MEDIA-PLATES-01` — **THIS LAYER CARRIES A MEDIA CLIP**, a producer with a timeline: present
+   * for every seat whose source is a `media` entry, absent for every live input. What it records is
+   * what was SENT, like the rest of the ledger:
+   *
+   * - `loop` — the clip was played with `LOOP` (or a `CALL … LOOP 1` landed since);
+   * - `paused` — WHO paused it: `hidden` when a look hid a `pause` clip (a look showing it again
+   *   `RESUME`s it), `operator` when the operator pressed Pause (it stays paused until they press
+   *   Play or Restart, whatever the looks do). Absent = playing, or frozen on its last frame.
+   *
+   * Additive: absent is every plate seated before this field, and every live-input plate.
+   *
+   * ⚠ Named `transport`, never `clip`: {@link clip} is the `MIXER CLIP` mask above.
+   */
+  readonly transport?:
+    | {
+        readonly loop: boolean;
+        readonly paused?: 'hidden' | 'operator' | undefined;
+      }
+    | undefined;
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` C (`R-075`, the Playout's rule 3) — **this seat shows the Playout's PLAYLIST
+   * OUTPUT, so its volume is 0 and stays 0.** The route carries the programme sound again (≈ +6 dB with no
+   * normalisation); `intendedVolume` is written 0 for it, every raise is refused, and the send seam refuses
+   * a `VOLUME` above 0 on its layer. Persisted, so a reconnect's re-send and a restart's adoption keep it.
+   * Additive: absent is every other seat.
+   */
+  readonly audioLocked?: true | undefined;
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **server B was sent NOTHING for this clip**: its own Playout lists
+   * no copy of it (by fingerprint), gave none, is older than `2.9.1`, or has not been read. The primary airs
+   * it; the row says `Backup has no copy of <name>; this box stays empty on the backup`; a transport verb
+   * to it reaches the primary only. `name` is the clip's name as the take resolved it. Additive.
+   */
+  readonly backupRefused?:
+    | {
+        readonly reason: 'no-fingerprint' | 'no-copy' | 'backup-old' | 'backup-unread';
+        readonly name: string;
+      }
+    | undefined;
 }
 
 /**
@@ -82,3 +187,205 @@ export interface LiveLayerRecord {
  * fold every coordinate in here into its `owned` set in one pass.
  */
 export type LiveLayerLedger = Map<string, LiveLayerRecord[]>;
+
+// ─────────────────────────── B-145 — SURVIVING A RESTART ───────────────────────────
+
+/**
+ * B-145 — the persisted form of {@link LiveLayerLedger}.
+ *
+ * A `Map` is not JSON, so the wire form is an array of `[itemId, records]` pairs. It is
+ * validated on the way IN because a hand-edited or half-written file must not become the
+ * bridge's belief about what is on air.
+ */
+const NormalizedRectSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
+
+const LiveLayerRecordSchema = z.object({
+  slot: z.object({ channel: z.number().int().positive(), layer: z.number().int().nonnegative() }),
+  sourceId: z.string().min(1),
+  role: z.enum(['fill', 'key']),
+  producer: z.string(),
+  fill: NormalizedRectSchema,
+  clip: NormalizedRectSchema,
+  intendedVolume: z.number(),
+  // Additive — see {@link LiveLayerRecord.held}. Absent parses as "not held", so a ledger
+  // persisted before looks existed comes back describing exactly what it described then.
+  held: z.boolean().optional(),
+  // Additive — see {@link LiveLayerRecord.origin}. Absent is today's plate.
+  origin: z.enum(['input', 'media']).optional(),
+  // Additive — see {@link LiveLayerRecord.epoch}. A decimal string, never a number (64-bit).
+  epoch: z.string().optional(),
+  // Additive — see {@link LiveLayerRecord.transport}. Absent is every live input, and today's plate.
+  transport: z
+    .object({ loop: z.boolean(), paused: z.enum(['hidden', 'operator']).optional() })
+    .optional(),
+  // Additive — see {@link LiveLayerRecord.audioLocked}. Absent is every seat but a playlist box.
+  audioLocked: z.literal(true).optional(),
+  // Additive — see {@link LiveLayerRecord.backupRefused}. Absent: server B got this seat's line.
+  backupRefused: z
+    .object({
+      reason: z.enum(['no-fingerprint', 'no-copy', 'backup-old', 'backup-unread']),
+      name: z.string().min(1),
+    })
+    .optional(),
+});
+
+export const PersistedLiveLayersSchema = z.array(
+  z.tuple([z.string().min(1), z.array(LiveLayerRecordSchema)]),
+);
+export type PersistedLiveLayers = z.infer<typeof PersistedLiveLayersSchema>;
+
+/** The ledger as it persists. */
+export function toPersistedLiveLayers(ledger: LiveLayerLedger): PersistedLiveLayers {
+  return [...ledger].map(([itemId, records]) => [itemId, [...records]]);
+}
+
+/** The ledger as it comes back. */
+export function fromPersistedLiveLayers(persisted: PersistedLiveLayers): LiveLayerLedger {
+  return new Map(persisted.map(([itemId, records]) => [itemId, [...records]]));
+}
+
+/**
+ * What the SERVER says about one layer, at adopt time.
+ *
+ * Deliberately the same three-valued shape as `fixed-layers-store.ts`'s `SlotOccupancy`,
+ * and for the same reason: `unknown` is a THIRD answer, not a synonym for `empty`.
+ */
+export type LiveLayerOccupancy = 'occupied' | 'empty' | 'unknown';
+
+/** One record the boot reconcile did not adopt, and why. */
+export interface DroppedLiveLayer {
+  readonly itemId: string;
+  readonly record: LiveLayerRecord;
+  readonly reason: 'server-says-empty';
+}
+
+export interface LiveLayerAdoption {
+  /** 🔴 THE ONE AUTHORITY. Neither the file nor the server is consulted again after this. */
+  readonly adopted: LiveLayerLedger;
+  /** Records the server contradicted — dropped, and reported rather than silently lost. */
+  readonly dropped: readonly DroppedLiveLayer[];
+  /** Records adopted WITHOUT confirmation, because occupancy was not knowable. */
+  readonly unverified: readonly LiveLayerRecord[];
+}
+
+/**
+ * 🔴 **B-145 — rebuild the ledger from the persisted CLAIM, corrected by the server's
+ * EVIDENCE.**
+ *
+ * ── WHY BOTH INPUTS, AND WHY THAT IS STILL *ONE* AUTHORITY ──────────────────
+ *
+ * `INFO <channel>` was measured on the plant (2.5.0 `69e8ad5`, 2026-08-18) to report every
+ * occupied layer, its producer kind and that producer's own parameters — and to DROP a
+ * layer from the reply as soon as it is cleared, which is the control that makes it usable
+ * as evidence in both directions. What it cannot report is anything the server was never
+ * told: **the `itemId`, the symbolic `sourceId` (`guest-1`), and the fill/key `role`.**
+ * Those are this bridge's own naming, so no amount of server reading re-derives them.
+ *
+ * So neither input is sufficient alone — the file knows the NAMES, the server knows the
+ * TRUTH — and the reconciliation of the two is what becomes the ledger. **That resolved
+ * result is the single authority**; the file is an input to it, never a second answer
+ * consulted later. A design that kept consulting both would be the two-spellings failure
+ * this repo keeps paying for.
+ *
+ * ── THE THREE-VALUED RULE, AND WHY `unknown` ADOPTS ─────────────────────────
+ *
+ * - `occupied` → adopt. The claim is confirmed.
+ * - `empty`    → **DROP**. The server is the authority on what is on it; a producer that
+ *                went away while the bridge was down must not come back as a belief.
+ * - `unknown`  → **adopt, and mark it unverified.** Absence of knowledge is not knowledge
+ *                of absence (R-015, and the B-101 lesson about reading silence on one
+ *                channel as death on another). Dropping an unverifiable record would
+ *                strand exactly the producer this item exists to stop stranding — it is
+ *                the failure mode, arrived at from the other side.
+ */
+export function reconcileLiveLayers(input: {
+  readonly persisted: LiveLayerLedger;
+  readonly observe: (slot: CommandSlot) => LiveLayerOccupancy;
+}): LiveLayerAdoption {
+  const adopted: LiveLayerLedger = new Map();
+  const dropped: DroppedLiveLayer[] = [];
+  const unverified: LiveLayerRecord[] = [];
+
+  for (const [itemId, records] of input.persisted) {
+    const keep: LiveLayerRecord[] = [];
+    for (const record of records) {
+      const seen = input.observe(record.slot);
+      if (seen === 'empty') {
+        dropped.push({ itemId, record, reason: 'server-says-empty' });
+        continue;
+      }
+      if (seen === 'unknown') unverified.push(record);
+      keep.push(record);
+    }
+    // An item whose every layer the server contradicted owns nothing — and an empty
+    // entry is bookkeeping to drop, exactly as `registerLiveLayers` treats it.
+    if (keep.length > 0) adopted.set(itemId, keep);
+  }
+  return { adopted, dropped, unverified };
+}
+
+// ───────────────── B-145 acceptance 1 (display half) — THE WIRE PROJECTION ─────────────────
+
+/**
+ * 🔴 **THE ONE PROJECTION of the ledger onto the wire** (`tasks.md` 2.8).
+ *
+ * Both directions the ledger reaches a browser go through this function — the PULL
+ * (`CasparRuntime.liveLayersState()`, behind `liveLayers.state`) and the PUSH (the
+ * `liveLayersChanged` subscription in `bridge.ts`). They are two callers of one
+ * spelling rather than two flattenings, deliberately: a pull and a push that
+ * disagreed about the shape of a record would make the list flicker between two
+ * truths on every seat, and the operator would have no way to tell which one is on
+ * air. Golden rule 6, applied to a projection rather than to a predicate.
+ *
+ * ── WHY FLAT, AND WHY SORTED HERE ───────────────────────────────────────────
+ *
+ * The ledger is keyed by `itemId` because every VERB that reaches a live layer is
+ * item-scoped. The surface that reads it is a LAYER LIST, whose question is
+ * ordered by coordinate. Flattening at the seam — rather than in the renderer —
+ * keeps the ordering a property of the payload: two browsers, and the same browser
+ * across a push and a pull, then show the same list in the same order. A renderer
+ * that sorted for itself would be one more place for that order to drift.
+ *
+ * ⚠ **`isUnverified` is INJECTED rather than read here**, mirroring `reconcileLiveLayers`’s
+ * own `observe`: the ledger module owns the SHAPE of a row, while which records are still
+ * unconfirmed is runtime state belonging to `CasparRuntime`. Keeping it a parameter is
+ * what lets the rule be unit-tested without a runtime, and stops this module growing a
+ * second opinion about what "confirmed" means.
+ *
+ * ⚠ **`held` is RESOLVED here, not forwarded.** The record's field is optional
+ * because it is additive to the persisted form (a ledger written before looks
+ * existed parses unchanged and means "on screen"). That is a persistence concern,
+ * and it is answered exactly once — here — so no consumer re-decides what an
+ * absent flag meant.
+ *
+ * 🔴 `PLAYOUT-SOURCES-01` §1.E — **`producer` is REDACTED here, and only here.** It is the
+ * argument actually sent, and a D10 stream's is its URL, credentials included. The persisted
+ * ledger keeps the real value (boot adoption compares it byte for byte against what the mapping
+ * would send now); the wire — the only road to a browser — carries `scheme://***@`.
+ */
+export function projectLiveLayers(
+  ledger: ReadonlyMap<string, readonly LiveLayerRecord[]>,
+  isUnverified: (itemId: string, record: LiveLayerRecord) => boolean,
+): LiveLayerState[] {
+  const rows: LiveLayerState[] = [];
+  for (const [itemId, records] of ledger) {
+    for (const record of records) {
+      rows.push({
+        channel: record.slot.channel,
+        layer: record.slot.layer,
+        itemId,
+        sourceId: record.sourceId,
+        role: record.role,
+        producer: redactUrlCredentials(record.producer),
+        held: record.held === true,
+        unverified: isUnverified(itemId, record),
+      });
+    }
+  }
+  return rows.sort((a, b) => a.channel - b.channel || a.layer - b.layer);
+}

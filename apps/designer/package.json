@@ -1,6 +1,6 @@
 {
   "name": "@cg/designer",
-  "version": "0.0.0",
+  "version": "0.11.6",
   "private": true,
   "description": "Visual editor for broadcast HTML graphics (.vcg) — browser SPA.",
   "type": "module",
@@ -11,10 +11,12 @@
     "typecheck": "tsc --noEmit --tsBuildInfoFile typecheck.tsbuildinfo",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "tauri": "tauri",
     "lint": "eslint .",
     "clean": "rimraf --glob dist .vite coverage playwright-report test-results *.tsbuildinfo"
   },
   "dependencies": {
+    "@cg/gesture": "workspace:*",
     "@cg/lottie-bridge": "workspace:*",
     "@cg/shared-ipc": "workspace:*",
     "@cg/shared-schema": "workspace:*",
@@ -38,6 +40,7 @@
   "devDependencies": {
     "@cg/eslint-config": "workspace:*",
     "@playwright/test": "1.60.0",
+    "@tauri-apps/cli": "2.11.5",
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

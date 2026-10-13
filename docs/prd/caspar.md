@@ -68,7 +68,7 @@ playlist channel over a `route://`, so the plant's air path is untouched ([[C-02
 **recommended in principle and NOT adopted** — gated on §12.5's four measurements and one owner
 question (is a second channel acceptable in the production config at all, and who changes it).
 
-## [ ] C-003 — On-air per-child timing override ⟨priority: medium⟩
+## [~] C-003 — On-air per-child timing override ⟨priority: medium⟩ — PARTIALLY DELIVERED 2026-09-15 by `openspec/changes/timing-pass-control/`
 
 **What:** Expose the runtime's per-scope playout overrides (mode / holdMs / repeat,
 keyed by nested-instance path) as a LIVE on-air control, not just a preview session.
@@ -77,6 +77,26 @@ to retime nested instances live during a show.
 **Acceptance to be detailed when scheduled.**
 **Notes:** the runtime seam exists (`RuntimeBootOptions.scopeOverrides`); this is the
 control-app surface for it. Depends on C-002 + D-026.
+
+⚠ **PARTIALLY DELIVERED, and which half matters.** `openspec/changes/timing-pass-control/`
+shipped a LIVE on-air timing override with a console surface, a wire member, a bridge verb
+and a restore — the whole road this item asked for. What it did NOT ship is this item's
+KEYING: C-003 asks for an override keyed by nested-instance PATH, and what exists is a
+**per-ROW** override that the page fans out to every scope which actually loops.
+
+That was deliberate (see the change's `design.md` §1): an operator selects a ROW and asks
+for "two more passes", and a console that made them pick a scope would ask a question the
+template's author already answered. The fan-out is filtered, not blanket — the page's
+appliers no-op on a controller that is not cyclic.
+
+**So what stays open under this number:** per-scope keying, for the case where one template
+has more than one looping scope. Re-measured 2026-09-15 with the corrected resolver: still
+**zero** such templates in the corpus, so it is a stated limit rather than a live defect.
+What "2 passes" should mean on such a template is the owner's call.
+
+⚠ Per-ELEMENT content timing (crawl passes, cycle seam, rotator dwell) is a different
+question and is not this item — it is established, unbuilt, and sized in the change's
+`tasks.md` §5.
 
 ## [ ] C-004 — Sports core: match-state model ⟨priority: medium⟩
 
@@ -281,7 +301,7 @@ untouched. CLEAR's behaviour is unchanged — STOP is purely additive.
 content-timing policy that finishes the current pass before letting natural completion close the
 hold, on the existing override seam. Once this verb exists, C-008 has a command to end with.
 
-## [ ] C-013 — an item whose content has FINISHED should stop itself instead of staying ON AIR: the template signals completion to the bridge ⟨priority: medium⟩
+## [~] C-013 — an item whose content has FINISHED should stop itself instead of staying ON AIR: the template signals completion to the bridge ⟨priority: medium⟩ — building in `openspec/changes/template-signals-completion/` (SELF-STOP-24, 2026-09-15)
 
 **What:** When a playing item's content finishes, the item ends itself gracefully — via the
 now-shipped STOP path ([[C-012]]): outro runs, the producer stays resident — instead of claiming
@@ -390,6 +410,21 @@ the id is DYNAMIC/field-bound). When an item whose template declares Live Source
 BRIDGE places each plate's ASSIGNED source on its own CasparCG layer BELOW the template's layer,
 geometrically behind the hole.
 
+> **Pointer — "could the sources go ABOVE the template instead?" is [[B-194]], in
+> `bugs-runtime.md`.** Asked on 2026-09-01 after the owner rejected all three outcomes of the
+> page/mixer skew, studied to a verdict, and **REJECTED**: the architecture renders correctly (a
+> clipped producer above a CEF page was measured leaving every other pixel to the page), but the
+> template must still be able to paint OVER a live picture, which costs a second CEF layer per row —
+> and three extra CEF pages cost this channel 36 % of its frames in one recording out of ten. The one
+> thing that would reopen it is retiring that requirement; the item says so in full.
+
+> **Pointer — the aspect-mismatch consent is [[R-053]], in `runtime.md`.** The refusal
+> (`live-source-aspect-mismatch`), the `ASPECT_MATCH_TOLERANCE` and the whole fit chain live here,
+> in `tools/caspar-bridge/src/live-plate-fit.ts` — but the WORK is Runtime: the consent affordance
+> on the row, the persistent "cropped by consent" indicator, and the retention behaviour on
+> `RetainedStackItem`. Filed under `R-` for the same reason [[R-048]] is, whose mechanism is
+> likewise `swapLiveSource` in this bridge. Do not file a second item here.
+
 ⭐ **RESHAPED 2026-08-10 (owner, `live-source-multibox` design.md §2z / §2d).** The installation
 builds its list of lives **INDEPENDENTLY**, with no reference to any template: each entry carries a
 human NAME ("Studio A", "Baku", "Skype 1") beside its producer — a DECKLINK input, another
@@ -412,7 +447,8 @@ plate to a concrete source is an INSTALLATION concern configured in the Runtime.
   NDI note below). The list is built with NO reference to any template
 - WHEN a template with live plates is selected THEN the Inspector offers, per plate, a picker over
   those named sources; the assignment is TEMPLATE-LEVEL (shared by every row carrying that template)
-  and the surface SAYS SO where it is made
+  and the surface SAYS SO where it is made — ⚠ amended 2026-09-28 (`R-072`, `CHANNEL-SOURCES-01`):
+  template-level ON ONE CHANNEL, shared by every row carrying that template there
 - WHEN a source that plates are assigned to is REMOVED THEN the removal is allowed, the assignments
   it orphans are dropped in the same operation, and the surface names at that moment which templates
   referenced it — an assignment that dangles until air is the failure this feature exists to prevent
@@ -455,8 +491,9 @@ plate to a concrete source is an INSTALLATION concern configured in the Runtime.
 - WHEN a template declaring N Live Sources is configured THEN CG Control can assign **each plate
   individually** to one of the installation's named sources, persisted bridge-side (a SECOND store
   beside the template registry, because the bridge is what resolves a plate at take)
-- WHEN the two-box `route://` demo is run THEN it works on the plant's real CasparCG **2.3.2** —
-  which needs no capture card
+- WHEN the two-box `route://` demo is run THEN it works on the plant's real CasparCG — the
+  production **2.5.0** (corrected 2026-08-22; this said 2.3.2, which is retired and must never be
+  probed) — which needs no capture card
 
 **NARROWED 2026-08-08 (owner, `live-source-multibox` design.md §12.1).** The two bullets above
 REPLACE the original _"WHEN DECKLINK / ROUTE / media sources are used THEN behavior is verified on
@@ -465,12 +502,19 @@ NDI producer exists on the client's 2.3.2 build at all"_. The reasoning is the o
 structural, not a concession: **the Designer never names a concrete device.** A template declares
 SYMBOLIC ids only, and binding an id to a producer is an INSTALLATION act performed in CG Control —
 so this item's done-condition is about ASSIGNMENT, which is fully testable here, not about capture
-hardware, which is not. The DECKLINK and NDI arms are **parse-verified only** on this installation
-and **fill+key cannot be validated here at all** (no Decklink card; fill+key reaches air over
-NewTek iVGA into a TriCaster, [[C-020]]); all three moved to **[[C-021]]**, `[!]` blocked on
-hardware. With that split, `live-source-multibox` phases 1–6 carry **no undischargeable hardware
-debt** — the two mixer facts the geometry rests on (`FILL`'s per-axis normalization and `CLIP`'s
-masking semantics) are already confirmed on 2.3.2.
+hardware, which is not. All three arms moved to **[[C-021]]**. With that split,
+`live-source-multibox` phases 1–6 carry **no undischargeable hardware debt** — the two mixer facts
+the geometry rests on (`FILL`'s per-axis normalization and `CLIP`'s masking semantics) are already
+confirmed.
+
+⭐ **CORRECTED 2026-08-24 — this paragraph used to say "no Decklink card" and file all three arms
+as blocked on hardware.** The plant HAS a **DeckLink SDI 4K** (index `1`, persistent ID
+`23487013`), and `PLAY 1-10 DECKLINK DEVICE 1` initialises with real signal on the production
+2.5.0, so the DECKLINK arm is **no longer parse-verified only** — see [[C-021]]'s corrected block
+for exactly which half of it is now measured and which is not. The NARROWING above is unaffected
+and stands on its own reasoning: the Designer never names a concrete device, whether or not a card
+is in the building. NDI is still parse-verified only, and fill+key still cannot be validated here
+until a second SDI input is confirmed.
 
 **Notes:** **THE structural risk, flag it loudly:** "non-html OSC producer kind" is the PRIMARY
 foreign/owned discriminator ([[R-015]], [[C-014]]). **CORRECTED 2026-08-03: this said "SOLE" and
@@ -502,7 +546,101 @@ tracked `.vcg` archives were byte-scanned; none contains it). The conclusion sti
 scene-builder plus union membership (`packages/shared-schema/src/elements.ts:1121, 1142, 1188`) —
 only its evidence needed correcting.
 
-## [ ] C-016 — operator PGM confidence view: periodic program-channel grabs served over the bridge's HTTP server ⟨priority: medium⟩
+🔴 **THE BACKDROP PUNCH FAILED ON HARDWARE, 2026-08-15 — and this changes HOW the multi-box gets
+built, not whether.** Run by the owner at the plant with `tools/live-source-punch-probe/`; the
+filled form is that kit's README, the reading is `live-source-multibox` task 1.5b, and the design
+consequence is its `design.md` §9a.
+
+**What was measured.** A multi-box layout normally carries a designed OPAQUE BACKDROP behind its
+boxes, and the whole HTML page is ONE CasparCG layer — so a plate must ERASE what the template
+painted beneath it, not merely paint nothing. Two CSS mechanisms were carried to the plant and
+**both failed**: `mix-blend-mode: destination-out` erased inside the page but produced **opaque
+black rather than alpha 0**, which CasparCG composited over the live layer; masking the backdrop had
+**no visible effect at all** (recorded as an AMBIGUOUS failure — that signature cannot distinguish
+"the mask does not reach page alpha" from "the mask never applied"). Both alternative explanations
+for the first were eliminated rather than assumed.
+
+**The consequence, stated at the level this item cares about: `design.md` §9b — the multi-box on a
+CHANNEL OF ITS OWN — moves from fallback to the LIVE OPTION.** It is **not adopted**; adoption stays
+gated on §12.5's four measurements plus one owner question, which have now moved onto the critical
+path. Deferring them now defers the feature rather than a contingency.
+
+⚠ **ONE GAP THIS OPENS AND DOES NOT CLOSE, recorded here because it is a client-facing limit rather
+than a design detail: a SINGLE-CHANNEL installation has no dedicated channel to fall back to.** The
+punch was the answer for that case and there is now no answer for it at all. §9b serves a plant that
+can spare a channel; if this plant cannot, the multi-box story needs a different one.
+
+**Two findings from the same run that are worth keeping:**
+
+- ⭐ **The scoping WORKS.** An erase confined to an inner fill node did NOT eat the outer frame or
+  shadow (criterion 2 passed). Whatever replaces the punch, paint beside an erase can survive it.
+- 🔴 **PRODUCTION IS CasparCG 2.5.0 (`69e8ad5`, Chromium 142). 2.3.2 IS RETIRED — owner's decision,
+  2026-08-15.** So the punch answer above is a PRODUCTION answer, not one taken elsewhere that
+  happens to generalise. **Every "measure on 2.3.2 / CEF 71" instruction in `live-source-multibox`
+  (~two dozen of them) is now stale text to correct** — a warning that has outlived its truth. A
+  stale 2.3.2 install still sits at `D:\programs\CasparCG`; no probe may be pointed at it, or CEF-71
+  answers get recorded as production. Not new to the repo: `docs/prd/bugs-runtime.md` records the
+  same build from 2026-07-07 onward. **Record the build string beside every hardware answer** — the
+  next upgrade makes today's answers historical.
+- ⭐ **A consequence that reaches beyond this item: the project's CEF 71 / Chromium 71 BASELINE may
+  now be false**, and `B-066` (a `tsconfig` setting that passed every local check and threw
+  `SyntaxError` on CEF 71, on air) is its standing citation. Enumerating where that baseline is
+  encoded — build targets, polyfills, design-doc refusals — is recon owed; raising it is a
+  behaviour change that ships silently and belongs on its own session with its own `gate:e2e`.
+
+## [x] C-016 — operator PGM confidence view: the programme return, from the Playout's own `pgm` feed, relayed by the bridge ⟨priority: medium⟩ — DONE 2026-09-24 (`PGM-RETURN-01`), archived 2026-09-26 (`openspec/changes/archive/2026-09-26-pgm-return`)
+
+**🔴 BUILT 2026-09-24 — `openspec/changes/archive/2026-09-26-pgm-return` (`PGM-RETURN-01` v2). Read this block first;
+the text below it is the item's history.** Title until 2026-09-23: _"periodic program-channel
+grabs served over the bridge's HTTP server"_.
+
+**The mechanism changed — OWNER DECISION 2026-09-23:** build PROGRAM from the Playout's own `pgm`
+feed, not from grabs. The Playout team specified the feed from their core's source and measured it
+on 2.8.54 (`docs/integration/playout/PLAYOUT-CG-RESPONSE-PGM-FEED-v1.md`): channel _n_ is HTTP
+MJPEG on `9250 + n − 1`, on by default for every programme channel, ~25 fps of 640×360. That
+answers this item's recon question without a grab verb — the recon kit below was never needed.
+
+**What is built.**
+
+- **The bridge reads; the console displays.** `tools/caspar-bridge/src/pgm-return.ts`: one
+  upstream per WATCHED channel, to the Playout's host (the C6-pinned IPv4, or server A's host with
+  no Playout configured), on `pgmPort(n)` — the ONE place the number is written, never the `935x`
+  preview. It re-serves the JPEG bytes untouched, same-origin, at `GET /pgm/<n>` on the console's
+  origin (`127.0.0.1:5174`), loopback peers only.
+- **Pulled only when watched.** The PROGRAM pane's `<img>` IS the demand, and it exists only while
+  the pane renders; monitors are hidden by default, so a console that never shows them pulls
+  nothing. The upstream closes 1.5 s after the last viewer leaves; two consoles on a channel share
+  one upstream.
+- **Honest status.** `pgmReturn.status` / `.status-changed` carry each watched channel's state. The
+  pane shows the picture only while `live`; otherwise **"No return signal"** (connecting,
+  unreachable, unavailable) or **"Return feed stalled"** (no frame for 2 s). Never a frozen frame.
+- **A well-behaved client, because the feed's server is not hardened and an error on its thread
+  stops the whole core:** the exact request `GET / HTTP/1.1\r\nHost: <host>\r\n\r\n` and nothing
+  after it; parts read by `Content-Length`; a silent connection closed at 8 s; reconnects at
+  1-2-4-8-10 s; at most one connection per channel.
+
+**Limits.** Picture only — the audio (`GET /audio.wav`, SAME port, never `935x`) is named, not
+built. The primary Playout only; a backup Playout's return is not built. Channels ≥ 21 lie outside
+the Playout's firewall rule (9250–9269): not dialled, "No return signal", the reason in the log. The
+feed is readable by the whole LAN at the Playout (their rule, not ours). The Playout's PGM settings
+are never touched — changing them needs a Playout reset, which cuts air on every channel. A console
+served by anything but the bridge's console server (a Vite dev server) has no relay and reads "No
+return signal".
+
+**Cost, measured on this dev host** (i5-10400, 12 threads; 25 fps of 13 KB frames; two runs of
+30 s and 60 s per phase): the bridge process at 0.13–0.41 % of one core hidden (its own baseline —
+the relay holds nothing then) and 0.21–1.12 % shown, so the relay costs at most ~1 % of one core
+and 1–2 MB; 24.9 fps in, 24.9 relayed, 321 KB/s. Table: `docs/integration/playout/PGM-FEED-AS-USED.md`.
+
+**Finding for [[C-023]].** The feed is per CHANNEL (every programme channel and every preview
+channel has one). A live SOURCE is not a channel, so a per-source thumbnail cannot ride this relay
+as built — that is this item's finding, as the note below asks, and C-023 needs its own answer.
+
+**Acceptance as delivered** (the four bullets below are the grab-era wording; the first and third
+are superseded by the owner's decision): the panel shows the programme channel **live, not at
+~1 s**; a feed that stops shows a legible stalled state, never a frozen frame; the mechanism's cost
+was measured by the Playout team on 2.8.54 (per-reader cost below their measurement's resolution)
+before it was fixed; hidden or off pulls nothing, and the panel is OFF by default and toggleable.
 
 **What:** Operators need to SEE the on-air output inside the Runtime (Cinegy parity). CasparCG
 has no browser-native video return, so v1 is a CONFIDENCE MONITOR: the bridge periodically
@@ -526,7 +664,7 @@ preview can never show the live video the template composites over.
 - WHEN a capture fails THEN the panel shows a legible stale/error state — never a frozen frame
   masquerading as live
 - WHEN the capture mechanism is chosen THEN its cost on the playout machine has been measured
-  on real 2.3.2 BEFORE the mechanism is fixed (RECON-FIRST — verify the exact grab command this
+  on the production 2.5.0 BEFORE the mechanism is fixed (RECON-FIRST — verify the exact grab command this
   build supports and whether grabbing hitches channel output)
 - WHEN the panel is hidden or off THEN its polling stops; the panel is OFF by default and
   toggleable
@@ -536,7 +674,44 @@ Later-phase full-motion options recorded here so they are not re-derived: STREAM
 local relay transcode → browser — latency and encode load on the playout box are the recorded
 trade-offs. Cross-ref [[C-015]] (a Live-Source-heavy composite raises the value of a PGM view).
 
-## [ ] C-017 — auto-clear a layer when a finite template run completes: the served template pings its own origin, the bridge CLEARs ⟨priority: medium⟩
+**⭐ THE RECON KIT EXISTS (session BN, 2026-08-22). The item stays `[ ]` — nothing is implemented,
+no mechanism is chosen, and no `design.md` was written.** What exists is the instrument this item's
+third acceptance bullet demands, and the form to fill in at the box:
+
+- **The kit** — `tools/caspar-amcp-probe/bin/confidence-probe.mjs` (source `src/confidence-probe.ts`,
+  README section at the end of that package's README, written for an installer at ANOTHER station).
+  It drives a real CasparCG over AMCP, prints a human summary and writes machine-readable JSON.
+- **The runbook** — `docs/recon/2026-08-22-confidence-grab-measurement.md`, a FORM with empty tables:
+  §A this item, §B the 2× discriminator, §C the AMCP probes the repo already owes.
+
+**What it will answer:** which grab verb this build actually has (discovered from the server's own
+enumeration — it refuses to guess one); the latency of one grab at rest and under load; whether the
+channel's own counters move during a grab; whether that cost is flat over a ≥5-minute 1 Hz run (the
+measurement that decides whether the "~1 s" bar is affordable at all); whether the path generalises
+beyond the programme channel ([[C-023]]'s whole ride, both candidate paths distinguished); and what
+the produced artifact is.
+
+🔴 **TWO FINDINGS ALREADY, both read from the code rather than measured, and both are design work
+for this item's session rather than defects:**
+
+1. **The bridge's HTTP server has NO filesystem root.** `tools/caspar-bridge/src/template-http-server.ts`
+   serves exactly one route — `/template/<id>` — out of an in-memory map, and 404s everything else.
+   So "served over the bridge's HTTP server" needs a route that **does not exist yet**, wherever the
+   grab lands on disk.
+2. **`Add / ChannelSnapshot` in `docs/recon/ciab-client-tools.json` is NOT evidence of a server
+   verb.** That file is the CIAB **client's** tool list; its own README says the `Add` folder holds
+   that product's own tools and that a client tool must never be read as a server capability. It is
+   a hint about where to look, and the kit will not accept it in place of the server's own answer.
+
+⚠ **The owner constraint that frames the whole design, recorded 2026-08-21:** _"This product is not
+only for one particular network. It may be sold to different networks, each of which has different
+facilities."_ So this item may not be scoped, justified or dropped by reference to THIS plant's
+facilities — a station with a monitor wall and a station with none are both targets, and
+**"the operator can already see it on the multiviewer" is not an argument available to this
+design.** That is why the acceptance bullet about being OFF by default and toggleable stops being a
+nicety: it is the mechanism by which one product serves both. Do not quietly design it away.
+
+## [ ] C-017 — auto-clear a layer when a finite template run completes: the served template pings its own origin, the bridge CLEARs ⟨priority: medium⟩ — ⚠ TERMINAL VERB SUPERSEDED 2026-09-15 (owner): the verb is [[C-012]] STOP, not CLEAR. The same-origin PING half STANDS and is being built once for both items in `openspec/changes/template-signals-completion/` ([[C-013]]). This item is annotated, not rewritten: what it got right is the transport.
 
 **What:** A finite graphic (e.g. a ticker with a set repeat count) should leave air by itself:
 after content completes AND the outro has played, the layer should CLEAR without operator
@@ -582,9 +757,12 @@ semantics unchanged — this adds a TRIGGER, not a verb).
 **What:** Move the project's target server from **2.3.3 LTS to 2.5.0 Stable** (released
 2025-12-10) and validate it on the real Windows playout machine — screen consumer first, then a
 pass over the plant's REAL air path before anything on-air depends on it. That path is **NewTek
-iVGA into a TriCaster, not Decklink** (this plant has no Decklink card at all), and 2.5.0 has
-removed the iVGA consumer — see [[C-020]], which now owns that pass and BLOCKS this item's
-cutover. OWNER DECISION, 2026-07-28. The owner
+iVGA into a TriCaster, not Decklink** (corrected 2026-08-24: this said "this plant has no Decklink
+card at all", which is false — a **DeckLink SDI 4K** is fitted and drives output on 2.5.0. What is
+true is that the AIR PATH is iVGA; whether a Decklink consumer should replace it is [[C-020]]'s
+open question, and the card's presence makes that a live option rather than a hypothetical), and
+2.5.0 has removed the iVGA consumer — see [[C-020]], which now owns that pass and BLOCKS this
+item's cutover. OWNER DECISION, 2026-07-28. The owner
 installs 2.5.0 **side-by-side** with 2.3.3 so rollback is preserved, and rebuilds the config
 from the 2.5 defaults (1080i5000 channel, AMCP 5250, OSC predefined-client) rather than
 copying the 2.3 config forward — a copied config is how a defaults change becomes an
@@ -730,8 +908,12 @@ including the two conclusions this pass corrects.
     property of the server build; containing it is a matter of where the box's default device
     goes. Carry this into the cutover runbook.
 - **The "Decklink pass" this item originally asked for does not apply to this plant** and has
-  been rewritten in **What** above. There is no Decklink card here; the air path is NewTek
-  iVGA into a TriCaster, and 2.5.0 has removed the iVGA consumer. That pass — and the cutover
+  been rewritten in **What** above — because the AIR PATH is NewTek iVGA into a TriCaster and
+  2.5.0 has removed that consumer. ⭐ **CORRECTED 2026-08-24: this bullet also said "There is no
+  Decklink card here", and that is false** — a **DeckLink SDI 4K** is fitted, and on 2026-08-24 a
+  `<decklink>` consumer with `<device>23487013</device>` reached `Initialized.` on it. The pass is
+  still not what this item needs (it needs the path that actually reaches the TriCaster), but the
+  reason is the DESTINATION, not the absence of a card. That pass — and the cutover
   blocker it turned into — is now [[C-020]]. The OWNER CHECKLIST wording in the #425 block
   above still says "Decklink pass"; it is left as written, and this bullet is its correction.
 
@@ -833,8 +1015,24 @@ depended on is not shipped, so the failure at cutover is total output loss, disc
   landed in 2.4.0 and 2.5.0 inherits it — the plant skipped the release that would have
   warned it.
 - The production install's config `D:\programs\CasparCG\casparcg.config:15-19` declares
-  consumers `<system-audio />` + `<newtek-ivga />` + `<screen />`. **There is no Decklink in
-  this plant.** Fill+key reaches air over NewTek iVGA, into a TriCaster.
+  consumers `<system-audio />` + `<newtek-ivga />` + `<screen />` — so no Decklink CONSUMER is
+  declared, and today's air path is NewTek iVGA into a TriCaster. That much still stands and
+  is what BLOCKS the cutover.
+
+  🔴 **CORRECTED 2026-08-24 — this bullet used to conclude "There is no Decklink in this
+  plant", and that conclusion was FALSE.** It read a config's consumer list as an inventory of
+  the box's hardware, which it is not: a card can be fitted and simply not declared as a
+  consumer. The plant's own 2.5.0 startup log enumerates
+  `DeckLink SDI 4K [1] (23487013)`, and on 2026-08-24 the owner drove it in BOTH directions —
+  `PLAY 1-10 DECKLINK DEVICE 1` initialised with real signal on the INPUT, and a `<decklink>`
+  consumer with `<device>23487013</device>` reached `Initialized.` on the OUTPUT
+  (`DeckLink SDI 4K [1-23487013|1080p5000]`), both at once on the same card. The false
+  inference propagated into [[C-021]]'s block, `command-builder.ts` and the
+  `live-source-multibox` design; all are corrected. **What this does NOT settle** is whether a
+  Decklink consumer is the right REPLACEMENT for `<newtek-ivga />` — that is still this item's
+  work, and it is now a question about the destination rather than about whether a card exists.
+  Full sheet: [../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md).
+
 - `Processing.AirSend.x64.dll` — the library iVGA requires (`CHANGELOG.md:1007` and
   `:1062-1066`) — is **absent** from the 2.5.0 install directory.
 - The 2.5.0 config's shipped-defaults comment documents consumers `decklink` / `screen` /
@@ -855,7 +1053,15 @@ Until then [[C-018]] stays open and **nothing on air depends on 2.5.0**: the pla
 running 2.3.2, the 2.5.0 install is side-by-side, and no config is cut over. The cost of the
 delay is only that [[C-019]] stays blocked.
 
-## [!] C-021 — DECKLINK, NDI and fill+key for Live Sources: the arms this installation cannot validate ⟨priority: high⟩ — BLOCKED: no capture card, and fill+key rides [[C-020]]
+## [!] C-021 — DECKLINK, NDI and fill+key for Live Sources: the arms this installation cannot validate ⟨priority: high⟩ — walk-run 2026-08-25: arm (a) DECKLINK **UNBLOCKED, both producer spellings proven**; arm (b) NDI **still BLOCKED**; arm (c) fill+key **PARKED — no second SDI input exists on this card**
+
+⭐ **ANNOTATED 2026-09-27 by `PLAYOUT-SOURCES-01` §1.D — arm (b)'s SPELLING is now the Playout
+core's, and still unmeasured on a signal.** The bridge sent `NDI NAME "<source>"`, which our record
+called parse-verified only. The Playout team's answer (`PLAYOUT-CG-RESPONSE-INPUTS-MEDIA-v1` §1.2,
+citing `newtek_ndi_producer.cpp:289-292`) says that is the CONSUMER syntax on their core and builds
+no producer; the producer is `PLAY <ch>-<L> [NDI] "<source>"`, and that is what the bridge sends now
+(`command-builder.ts` `producerArgument`, pinned byte for byte). Arm (b) stays open: nobody has
+yet seated an NDI input on air here.
 
 **What:** the three Live Source producer arms that [[C-015]] cannot discharge on this plant, split
 out so C-015 can close on what it CAN prove. Verify, on hardware: (a) the **DECKLINK** producer form
@@ -881,7 +1087,11 @@ building rather than on anything anyone can code.
 **Acceptance:**
 
 - WHEN a Decklink card is present THEN a Live Source mapped to a `DECKLINK DEVICE <n>` producer
-  plays behind the hole, its `MIXER FILL` + `CLIP` geometry correct, verified on real CasparCG 2.3.2
+  plays behind the hole, its `MIXER FILL` + `CLIP` geometry correct, verified on the production
+  **2.5.0** (corrected 2026-08-24; this said 2.3.2, which is retired and must never be probed).
+  ⭐ The card is present as of 2026-08-24 and `PLAY 1-10 DECKLINK DEVICE 1` initialises with real
+  signal — so this bullet's PRECONDITION is met and only its subject (a plate behind the hole,
+  geometry correct, seen on air) is still owed
 - WHEN NDI is attempted THEN the FIRST step is verifying the NDI producer exists on the client's
   build at all — record the finding either way, including a negative
 - WHEN a MAPPING names a fill/key DEVICE PAIR THEN fill and key are composited as a pair and alpha
@@ -893,13 +1103,114 @@ building rather than on anything anyone can code.
 - WHEN any arm is verified THEN the exact AMCP producer form it was verified with is recorded here
   verbatim — a form that was reasoned about is not a form that was verified
 
-**Notes — why this is `[!]` and not `[ ]`.** The block is physical. `D:\programs\CasparCG\casparcg.config:15-19`
-declares consumers `<system-audio />` + `<newtek-ivga />` + `<screen />`: **there is no Decklink in
-this plant**, and fill+key reaches air over NewTek iVGA into a TriCaster, which is exactly the path
-[[C-020]] is deferred on. So the DECKLINK arm can only be parse-verified here, and fill+key cannot
-be validated here at all — running it against a guessed destination would produce evidence about the
-guess. **Ordering:** this item is downstream of [[C-015]]'s phases 1–6 (`live-source-multibox`
-`tasks.md` §10, phase 7) and does not block any of them; its own unblocking rides [[C-020]]'s
+🔴 **CORRECTED 2026-08-24 — the premise this item was filed on is GONE. This plant HAS a Decklink
+card.** CasparCG's own startup log on the production 2.5.0 (`69e8ad5`) enumerates
+`DeckLink SDI 4K [1] (23487013)`, and the owner drove it in BOTH directions in one sitting:
+
+- **INPUT — arm (a) is no longer "cannot validate".** `PLAY 1-10 DECKLINK DEVICE 1` returned
+  `Initialized` repeatedly with real signal. That is the INDEX form, and it is now MEASURED.
+- **OUTPUT.** A `<decklink>` consumer with `<device>23487013</device>` logged
+  `Enabled embedded-audio.` then `Initialized.`, and named the card
+  `DeckLink SDI 4K [1-23487013|1080p5000]` — so the **persistent ID is accepted in the CONSUMER's
+  `<device>` element**. Both directions ran at once on the same card.
+- ⚠ **NOT proven: the persistent ID as a PRODUCER argument** (`DECKLINK DEVICE 23487013`). The
+  consumer and the producer are different parsers, and this has not been tried.
+  ✅ **ANSWERED 2026-08-25 — YES, it works. This bullet is superseded; see the walk block below.**
+- ⚠ Incidentals from the same run, recorded so they are not re-discovered as defects: the input
+  auto-detected `1080i5000` against a `1080p5000` channel and produced an `in-sync`/`out-sync`
+  drift flood (fix: match the channel to the incoming signal); `Failed to enable external keyer.`
+  fires on every start, is **non-fatal**, and `<keyer>default</keyer>` does not silence it on
+  2.5.0; `Reference signal: not detected` — no genlock on this card today.
+
+**Where the old claim came from, so it is not re-derived.** [[C-020]]'s evidence block read the
+production config's CONSUMER list (`<system-audio />` + `<newtek-ivga />` + `<screen />`) as an
+inventory of the box's hardware. It is not one — a card can be fitted and not declared. That single
+inference is what put "no capture card" into this heading, `command-builder.ts` and
+`live-source-multibox` design.md; all three are corrected.
+
+## ⭐ THE WALK WAS RUN — 2026-08-25. Q1 and Q2 land on this item.
+
+[../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md), owner-run
+on the plant. Host `192.168.21.114`, install `D:\casparcg-server-v2.5.0-stable-windows`,
+`VERSION SERVER` → `2.5.0 69e8ad5 Stable`. Q3 went to [[C-028]] and Q4 to [[C-027]]; **Q1 and Q2
+are this item's, and this is the "recorded here verbatim" the last acceptance bullet asks for.**
+
+### ✅ Q1 — arm (a): the PERSISTENT ID works as a PRODUCER argument
+
+```
+PLAY 1-10 DECKLINK DEVICE 23487013
+DeckLink SDI 4K [23487013|1080p5000] Initialized
+#202 PLAY OK
+DeckLink SDI 4K [23487013|1080p5000] Input format changed from 1080p5000 to 1080i5000
+```
+
+The known-good `DECKLINK DEVICE 1` was run first and gave the same shape. 🔴 **The
+`Input format changed` line is what makes this a PASS and not a `202` over a dead producer** —
+only an open card reports the incoming raster changing under it. The log names the device by its
+**ID**, so the server resolved the argument AS an ID rather than coincidentally matching an index.
+
+⇒ **`DECKLINK DEVICE <n>` accepts EITHER handle**, and `SourceProducerSchema`'s
+`z.number().int().positive()` already admitted both — **no schema change was needed**. Prefer the
+persistent ID where the operator has one: an index moves when the PCIe order changes or a second
+card is fitted. Corrected in `command-builder.ts`, its test, the amcp-mock classifier and
+`live-source-multibox` `tasks.md` 6.1.
+
+### ❌ Q2 — nothing enumerates the devices. No picker is possible.
+
+All four commands were **actually typed** — that is the value of the record:
+
+| command tried    | reply                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------ |
+| `INFO SYSTEM`    | `#200 INFO OK` + `1 1080p5000 PLAYING` — 2.5.0 **IGNORES the `SYSTEM` token** and answers plain `INFO` |
+| `INFO`           | the same channel line; no device information of any kind                                               |
+| `INFO CONFIG`    | `#201 INFO CONFIG OK` + the configuration XML                                                          |
+| `VERSION SERVER` | `#201 VERSION OK` + `2.5.0 69e8ad5 Stable`                                                             |
+
+🔴 **`INFO SYSTEM` degrading silently to `INFO` is the trap.** It answers `#200 INFO OK`, so a
+caller checking only the response CODE would record it as a supported query that found no devices.
+
+⭐ **One partial, and it is NOT an enumeration.** `INFO CONFIG` does return
+`<decklink><device>23487013</device>` — but that is **what the operator wrote into
+`casparcg.config`**, not what the card reports. It cannot list a device nobody configured, carries
+no name or index, and goes stale exactly when config and hardware disagree, which is the case a
+picker exists to catch. A _hint_, never a picker.
+
+⇒ **No picker item is filed, and that is a decision rather than an omission.** The device list
+exists only in the startup log, and the bridge does not read the server's disk and must not start.
+The modal keeps its bare numeric input; Q1's YES softens the cost, because the number typed there
+can be an ID that does not move.
+
+**Notes — why this is STILL `[!]` and not `[ ]`, and why it is not `[~]` either.** Arms (b) and (c)
+remain blocked, so `[ ]` (queued, nothing in the way) would be false; nothing has been implemented
+against this item, so `[~]` (in progress) would be false too. The PRD legend has no shape for
+_"one arm unblocked but unstarted"_, and rather than round the checkbox up, the split is stated
+here and in the heading:
+
+- **(a) DECKLINK — UNBLOCKED, NOT DELIVERED.** The card is present and BOTH producer spellings are
+  proven at the AMCP level (2026-08-24 index, 2026-08-25 persistent ID). What this item still owes
+  for (a) is the acceptance bullet's own subject: a Live Source mapped to that producer, playing
+  **behind the hole** with its `MIXER FILL` + `CLIP` geometry correct, seen on air. An
+  `Initialized` on layer 10 is not that.
+  ⚠ **And a new obstacle sits in front of it: [[B-177]].** One physical input admits ONE producer,
+  and `CLEAR` answers `202` before the old one is destroyed — so the seating path's own
+  `CLEAR`-then-`PLAY` can lose that race on this hardware. Arm (a)'s on-air pass will meet it.
+- **(b) NDI — STILL BLOCKED.** No NDI source exists on this plant and the module is gated. Neither
+  the 2026-08-24 nor the 2026-08-25 run touched this.
+- **(c) fill+key — PARKED, NOT MERELY BLOCKED. Q4 answered NO.** The 2026-08-25 startup
+  enumeration lists **exactly one device** (`DeckLink SDI 4K [1] (23487013)`) and a DeckLink SDI 4K
+  is a **single-channel card**: there is no second SDI input for a pair. So this arm is not waiting
+  on a measurement any more — **it is unverifiable on this plant**, and it stays that way until the
+  hardware changes. It is NOT cancelled: the concept is real, the schema carries it, and a plant
+  with two inputs would make it live again. The SEATING code it would verify is [[C-027]], parked
+  for the same reason.
+  ⚠ **Do not read this as "fill+key was rejected".** Nothing about it was judged; a measurement
+  came back and the hardware cannot host the test. **[[C-021]]'s `MIXER CHROMA` alternative below
+  becomes materially more interesting because of this**, and is still unevaluated.
+
+**What the walk did NOT settle for this item:** arm (b) entirely, and arm (a)'s on-air pass.
+
+**Ordering:** this item is downstream of [[C-015]]'s phases 1–6 (`live-source-multibox`
+`tasks.md` §10, phase 7) and does not block any of them; arm (c)'s unblocking rides [[C-020]]'s
 integration with the company's playout software. **Parse-verification is still worth doing before
 the hardware arrives** and is not this item's acceptance: it proves the command is well-formed, not
 that a picture appeared.
@@ -1029,3 +1340,1586 @@ completely different things: R-049 needs no frame grabs, no consumer-less channe
 it reads the assignment the Runtime already holds — while this item needs all three. A thumbnail that
 does not say which plate it belongs to, and a plate label that does not say whether the feed arrived,
 are each half an answer.
+
+## [~] C-024 — the bridge advertises a HARDCODED LAN address, and only an uncommitted hack makes testing possible ⟨priority: high⟩ — the CURE that [[P-035]] merely NETS — **CLI half LANDED 2026-08-23 by [[B-162]]; PERSISTED + PANEL half LANDED 2026-08-24 (`serve-host-from-app`); HACK DELETED + never-stage entry DROPPED + warning sentence completed 2026-09-04 (`LAN-DEV-ACCESS-01`) — every Acceptance bullet now met; awaiting archive of `serve-host-from-app`**
+
+⭐ **STATUS UPDATE 2026-09-04 — THE HACK IS GONE, AND THE NET WITH IT (`LAN-DEV-ACCESS-01`).**
+The prompt that authorised acting on the uncommitted edit first IDENTIFIED it: `git diff` showed
+ONE added line in `guessLanHost()`, `// return '192.168.21.93';` — the pin already commented out
+by the owner, not a live return. The committed tree had carried no live pin since `56c0799f`.
+So it was one artifact, not two, and the three named pieces went in ONE commit as the standing
+instruction required: the comment line deleted (the file now matches `d6b6a952`'s version byte
+for byte except for the sentence below), the `tools/caspar-bridge/src/template-http-server.ts`
+entry dropped from `.claude/never-stage` (the list is now EMPTY and says why; the guard stays
+wired, and `never-stage-decision.test.ts` now asserts the entry is ABSENT rather than present),
+and `templateServeUnreachableWarning` now ends by naming BOTH fixes — the flag and the Runtime's
+Server settings panel. `serve-host-config.ts`'s header no longer claims the file is off-limits.
+⚠ `tools/caspar-amcp-probe/bin/beacon-probe-lib.mjs:49` still carries `DEFAULT_LAN_HOST =
+'192.168.21.93'` as a throwaway harness default — recorded under [[P-041]], not edited (outside
+that prompt's boundary).
+
+⭐ **STATUS UPDATE 2026-08-23 — `--template-serve-host` EXISTS.** [[B-162]] needed the same seam
+(its §1c) and wired it: `bin/caspar-bridge.mjs` now passes `templateServe` to `createBridge`, so
+`--template-serve-host` and `--template-serve-port` set `TemplateServeOverride` from the command
+line, a flag given without a value is a hard boot error (the `--reserved-layers` doctrine), and the
+boot line names the advertised host **and where it came from**. Four of the five Acceptance bullets
+below are therefore met. **What is NOT met, and why this stays `[~]`:**
+
+- ~~**No persisted-file layer.**~~ ✅ **CLOSED 2026-08-24** — see the status update below.
+- ~~**The hack is still in the owner's working tree** and `.claude/never-stage` still lists
+  `template-http-server.ts`.~~ ✅ **CLOSED 2026-09-04** — see the status update above. It could be
+  dropped in favour of `--template-serve-host 192.168.21.93`, but that was the owner's action on
+  their own machine, not something a commit could perform — so the entry stayed until a prompt
+  authorised it, because removing the net while the hack is still present is strictly worse than
+  leaving it.
+
+⭐ **STATUS UPDATE 2026-08-24 — THE MIDDLE LAYER AND THE PANEL EXIST (`serve-host-from-app`).** The
+precedence is now the full three every other bridge store has — **explicit flag > persisted
+connection config > built-in derivation** — resolved in ONE place
+(`tools/caspar-bridge/src/serve-host-config.ts`, called from construction and from `#applyConfig`)
+rather than at each derivation point.
+
+- **The store is the CONNECTION config, not a file of its own.** `ConnectionConfig` gained
+  `templateServeHost` / `templateServePort`, so the address is persisted by the same
+  `~/.cg-runtime/bridge-connection.json` that already names the servers it is a fact ABOUT. A
+  separate `bridge-template-serve.json` was considered and rejected: it would have been a second
+  file to keep in step with the one it depends on.
+- **The panel is the surface**, beside the server hosts rather than in a section of its own, and
+  Apply puts the value in force on the RUNNING bridge through `connections.set-config` (which
+  already tore down and rebuilt template serving). 🔴 **Nothing starts, stops or restarts the
+  bridge, by explicit instruction** — its lifetime stays outside the console.
+- **A flag still WINS, and the panel SAYS SO on the field it masks** — naming the flag, showing the
+  value in effect, striking the stored one through and labelling it _not in force_, while keeping
+  the control editable and never grey (grey reads as disabled, and the stored value is exactly what
+  takes over at the next boot without the flag).
+- **The detected interfaces are offered as CANDIDATES**, stated as candidates and not a verdict.
+  That wording is load-bearing: picking the wrong interface is precisely `guessLanHost()`'s
+  failure, and a list presented as an answer would reproduce it with more confidence.
+
+~~⚠ **THE `never-stage` ENTRY CANNOT BE DROPPED YET, and the reason is not the panel.**~~ ✅
+**DROPPED 2026-09-04, in the same commit that deleted the hack — exactly as the paragraph below
+required.** Kept as written for the record. The entry
+exists because the HACK exists in the owner's working tree, where `git add <directory>` can sweep it
+up (that is how `dev` briefly carried the hardcoded IP on 2026-08-17). This change removes the
+REASON for the hack — the address is now configurable and persisted, so the early
+`return '192.168.21.93';` buys nothing the panel does not — but it cannot remove the hack itself,
+which is uncommitted and the owner's to delete by hand. **Drop the `never-stage` line in the same
+commit that removes the hack, never before**: removing the net while the hack is still present is
+strictly worse than leaving it, and that is the whole distinction [[P-035]] records.
+
+~~⚠ **One sentence is still flag-only, and it is in the file this change may not touch.**~~ ✅
+**COMPLETED 2026-09-04.** `templateServeUnreachableWarning` (`template-http-server.ts:147`) used to
+end _"Set --template-serve-host …"_, with no mention of the panel — correct but incomplete advice,
+left for the commit that removed the hack because the file was the `never-stage` one. That commit
+landed, and the sentence now names the flag AND the Runtime's Server settings panel; the boot
+line and the panel's own message already did.
+
+Read the original item below unchanged; it is still the specification of the remaining half.
+
+**What:** the template HTTP server's advertised host must be resolvable from CONFIGURATION, with a
+documented default — so that no machine-specific address appears in the source and the owner no
+longer needs an uncommitted local edit to test against the plant.
+
+**Why:** `guessLanHost()` (`tools/caspar-bridge/src/template-http-server.ts`) picks the first
+non-internal IPv4 it finds, and on the owner's machine that is not the interface the plant can reach.
+The working fix has therefore been an uncommitted early `return '192.168.21.93';` at the top of the
+function. **It must not survive to a release: every install would advertise ONE machine's address,
+so the `CG ADD` URL would be wrong everywhere except that box** — and the failure is a template that
+never loads, on air, with CasparCG reporting nothing wrong.
+
+🔴 **It has already cost two incidents IN ONE DAY (2026-08-17), and they are different failures:**
+
+1. **It blocked a push** — `pnpm gate`'s `format:check` failed on a file the session had not
+   touched, so a green gate could not be reported at all (recorded in
+   `docs/handoff/2026-08-17-session-aq.md`, "The gate").
+2. **It reached `dev`** — a `git add tools/caspar-bridge`, staging a DIRECTORY to pick up bridge
+   work, swept the hack along with it. `dev` briefly carried the hardcoded IP; caught in
+   post-push verification and corrected in `56c0799f`, at the cost of a second push on a day the
+   owner was near their CI minute limit.
+
+⚠ **[[P-035]] is a NET, not the cure — and the distinction is the whole reason this item exists.**
+The never-stage guard stops the hack REACHING `dev`; it does nothing about the hack having to exist.
+Every day the seam is missing is another day of an uncommitted edit in a permanently-dirty checkout,
+which is a hazard P-035 can only ever catch, never remove. **P-035's own notes say this in as many
+words and flag that the refactor has no ID** — this item is that ID, and the cross-reference runs
+both ways.
+
+**The seam ALREADY EXISTS in the library, and that is why this is small:**
+`deriveServeOptions(casparHosts, override)` (a LIST since [[B-162]]) already honours `override.serveHost`
+(`template-http-server.ts`), and `BridgeOptions.templateServe` already carries a
+`TemplateServeOverride`. **What is missing is a CLI flag that sets it** — `bin/caspar-bridge.mjs`
+passes no `templateServe` at all, so the ONLY way to change the advertised host today is to edit the
+source. The hack is not a workaround for a hard problem; it is a workaround for an unwired flag.
+
+**Acceptance:**
+
+- WHEN the bridge starts THEN the advertised host is resolved from CONFIGURATION — a CLI flag, with
+  the same explicit-flag > persisted-file > derived-default precedence every other bridge store uses
+- WHEN no configuration is supplied THEN the DOCUMENTED default applies (today's derivation:
+  loopback for a local CasparCG, an auto-detected LAN IPv4 for a remote one) and the boot line SAYS
+  which host it is advertising and WHERE that came from — the same provenance rule the fixed bank
+  and the source catalog already follow, because a value alone cannot answer "why this one?"
+- WHEN the source is searched for a machine-specific address THEN there is none
+- WHEN the owner tests against the plant THEN no uncommitted edit is required, and
+  `.claude/never-stage` can drop its `template-http-server.ts` entry
+- WHEN the advertised host is wrong for the plant THEN the failure is DIAGNOSABLE from the bridge's
+  own output rather than from a template that silently never loads
+
+**Notes:**
+
+- ⚠ **Do NOT resolve this by "improving" `guessLanHost()`'s heuristic.** A better guess is still a
+  guess, and the failure it produces — a served URL the plant cannot fetch — is silent on the
+  CasparCG side. The point of the item is that the operator can SAY the answer; the derivation stays
+  as the default for the ordinary case.
+- **Where the flag's shape comes from:** `--audit-log-path`, `--source-assignments-path` and
+  `--reserved-layers` are the precedent. This item follows it rather than inventing a convention.
+- 🔴 **The prompt that filed this pointed at `cg_session_handoff.md` for existing design work; NO
+  file of that name exists in the repo** (searched at the repo root, the parent directory and across
+  the tracked tree). The design context that DOES exist is
+  `docs/handoff/2026-08-17-session-aq.md` (the hack's effect on the gate) and [[P-035]]'s notes
+  (its two incidents, and the "net, not cure" framing). Recorded rather than quietly substituted, in
+  case the owner is holding a file the repo has never seen.
+- **FILED ONLY — no implementation.** The number was verified free by a heading sweep immediately
+  before this heading was written (highest `C-` heading was `C-023`; `git grep -n "C-024"` returned
+  no occurrence anywhere in the tree).
+- **Cross-refs:** [[P-035]] (the net this is the cure for), [[B-038]] (the template HTTP server this
+  advertises for), [[C-001]] (the bridge whose probe `guessLanHost()` mirrors).
+
+## [x] C-025 — a `stream` producer arm: the catalog can SAY a live is a URL ⟨priority: high⟩ — ⭐ CLIENT REQUIREMENT; the owner proved the command on the plant by hand — DONE + archived: `openspec/changes/archive/2026-08-22-stream-producer-arm/`; e2e discharged by https://github.com/yasermostafaee/cg/actions/runs/32575013749 (the `E2E (Playwright)` job RAN and passed on `fef781cb`)
+
+**What:** a FIFTH arm in `SourceProducerSchema` — `{ kind: 'stream', url }` — so an internet stream
+is a first-class live source: labelled as a stream in the Runtime's Sources modal, refused at the
+config boundary when its URL's scheme is outside the client's allowlist, and emitted by the bridge
+as `PLAY <ch>-<layer> "<url>"` — the command the owner proved by hand on the plant.
+
+**Why — the finding, and its exact shape: THE GAP IS EXPRESSION, NOT CAPABILITY.** The mechanism
+already works end to end, unlabelled. The `media` arm is `file: z.string().min(1)`;
+`producerArgument` (`tools/caspar-bridge/src/command-builder.ts`) emits `quote(producer.file)`; and
+`quote()` (`packages/caspar-client/src/amcp/escape.ts`) is the IDENTITY for every character except
+`\`, `"`, LF and CR — none of which appear in a URL. So typing a URL into today's "Media file"
+field already produces exactly the command the owner proved. There is NO PLANT RISK in the
+mechanism — which is why the real work of this item is labelling, validation and refusal, not wire
+plumbing:
+
+1. **The label lies.** `SourcesModal.tsx`'s `PRODUCER_KINDS` and `KIND_LABEL` are hand-written
+   four-entry consts (`route` / `decklink` / `ndi` / `media`); the field reads "Media file"; the
+   placeholder is `AMB`. Nobody discovers the workaround, and a second operator reading the config
+   cannot tell a clip from a feed — a distinction that matters exactly when the feed drops.
+2. **Nothing validates the URL.** `SOURCES_SET_CONFIG_REASONS` carries `duplicate-id`,
+   `duplicate-name`, `overlaps-fixed-bank`, `overlaps-reserved` — nothing about a URL. A mistyped
+   URL is therefore refused BY CASPARCG, AT TAKE, ON AIR — the exact failure
+   `SourceProducerSchema`'s own docstring says the union exists to prevent: _"an unreachable
+   producer form is a parse error at the boundary rather than an AMCP `400` at take time."_
+
+**Already sound — recorded so nobody proposes the work:**
+
+- `producerArgument` is an EXHAUSTIVE no-default switch with a declared `: string` return, so a new
+  `kind` fails COMPILATION until every site handles it (session BS §3 audited exactly this and
+  called it sound by construction — `docs/handoff/2026-08-22-session-bs.md`). Adding the arm is
+  compiler-guided, not a grep.
+- `sourceArgument()` exists so the ledger records _"the concrete producer argument actually SENT"_
+  by asking the same function `playSource` asks; and the ledger's `producer: z.string()`
+  (`tools/caspar-bridge/src/live-layers.ts`) is a ledger record, not a catalog schema — both carry
+  a URL with no change. Verified against source at filing.
+
+**The three decisions — TAKEN BY THE OWNER; do not re-open them:**
+
+1. **A NEW `stream` arm, NOT an extension of `media`.** `media`'s own docstring is _"the one
+   producer that needs no signal"_, and a stream is its opposite — it needs a signal and can drop.
+   One arm covering both would leave the schema unable to say which failure modes a source even
+   has.
+2. **A SCHEME ALLOWLIST, and it is the CLIENT'S OWN REQUIREMENT.** Exactly these nine: `http`
+   `https` `rtmp` `rtmps` `rtsp` `srt` `udp` `rtp` `mms`. A URL whose scheme is outside the set is
+   REFUSED at the config boundary, with its own new refusal code added to
+   `SOURCES_SET_CONFIG_REASONS`. 🔴 **How the arm's docstring must frame the list — load-bearing:**
+   it states WHAT THE CLIENT REQUIRES THE PRODUCT TO ACCEPT. It must NOT be written as a claim
+   about what CasparCG or its linked ffmpeg supports — no source of truth for that is available,
+   and a hand-written list posing as one is precisely the guard failure session BS spent a session
+   auditing and repairing. Write the honest sentence.
+3. **v1 SCOPE = "type a URL and it plays."** Reconnect, stall detection and stream health are OUT
+   OF SCOPE — named here so their absence reads as a decision, not an oversight. The known limit
+   that goes with them: a stream can be ALIVE-BUT-STALLED, and nothing in the bridge models that
+   today — every existing arm either works or the link to CasparCG is down (the [[B-086]] model).
+
+**A consequence, not a task:** a stream usually states no `format`, so `sourceAspect()` falls
+through to the explicit `aspect` and then to `null` — the same branch `AUTO` lands on. v1 adds NO
+required aspect field.
+
+**Acceptance:**
+
+- WHEN the operator defines a source of kind `stream` with a URL whose scheme is one of the nine
+  THEN the catalog accepts it, and the Sources modal labels the kind as a stream with a URL field —
+  never "Media file" / `AMB`
+- WHEN a catalog is set containing a `stream` URL whose scheme is outside the nine THEN
+  `sources.set-config` refuses it at the boundary with the new refusal code, naming the offending
+  scheme, and nothing is persisted or reaches the wire
+- WHEN a plate assigned to a `stream` source is taken THEN the bridge emits
+  `PLAY <ch>-<layer> "<url>"` — built by `producerArgument`'s new arm through `quote()` exactly
+  once, per the command-builder's contract
+- WHEN a `stream` producer is seated THEN the ledger's `producer` field records the concrete URL
+  argument as sent, via `sourceArgument` — asserted for the new arm, not assumed from the old ones
+- WHEN the shared validator refuses a scheme THEN the mock refuses IDENTICALLY — the allowlist
+  lives beside `SOURCES_SET_CONFIG_REASONS` in `@cg/shared-ipc`'s shared validator
+  (`validateSourceCatalog`), one implementation for bridge and mock, per that function's own rule
+- WHEN a `stream` source states no `format` THEN fit falls through to the explicit `aspect` and
+  then to `null`, and no new required field exists
+
+**Explicitly OUT of scope (decision 3):** reconnect, stall detection, stream health or any
+modelling of alive-but-stalled; any required aspect field; DECKLINK/NDI/fill+key hardware
+validation ([[C-021]]'s, unchanged).
+
+**Notes:**
+
+- Filed in `caspar.md` by the nearest-sibling rule: [[C-021]] is an item entirely about producer
+  ARMS of this same union, and [[C-015]] built the union, the catalog and the Sources modal's
+  producer editor under a `C-` number. The Runtime modal work here is the thin surface half of the
+  same one change, so no twin item is filed in `runtime.md`.
+- Unlike [[C-021]]'s arms, this one is VALIDATABLE ON THIS PLANT — the owner already validated the
+  command by hand; the item is not hardware-blocked.
+- [[C-022]]'s read-only catalog endpoint serves id / name / format and needs no change for a new
+  producer kind.
+- **FILED ONLY — no implementation.** The number was verified free by the heading sweep
+  immediately before this heading was written (highest `C-` heading was `C-024`;
+  `git grep -n "C-025"` returned only "next free" pointers, none a heading) — recorded in
+  [b-number-registry.md](b-number-registry.md).
+- **Cross-refs:** [[C-015]] (the union and catalog), [[C-021]] (the sibling arms), [[B-086]] (the
+  works-or-link-down model the stalled limit is stated against).
+
+## [~] C-026 — multi-box audio: per-box control now, monitor / master / VU metering after the plant is measured ⟨priority: high⟩ — in progress: `openspec/changes/add-multibox-audio/`
+
+**What:** Make a multi-box graphic's audio CONTROLLABLE and VISIBLE per box. Four operator verbs
+— fader, ON/OFF, SOLO and PANIC ("silence all boxes") — all expressed as writes to ONE map of
+plate volumes, shown on a strip beside every seated plate rather than behind a dialog. And, gated
+on a plant measurement, three things this installation has never been able to answer: a MONITOR /
+PFL channel, per-box audio for a `<video>` inside the template, and a VU meter per input.
+
+**Why:** Audio is the one property of a graphic an operator cannot see. `plateVolumes` has been
+published on the wire since C-015 phase 6 and the ONLY surface that read it was a modal opened
+from one row's action menu — so the console's answer to _"is this guest audible?"_ was **open a
+dialog and look**, one row at a time. The two gestures a director asks for by name under
+pressure — "just this one" and "silence everything" — did not exist at all.
+
+**Acceptance:**
+
+- WHEN the operator applies a MAP of plate volumes for a row THEN it reaches the bridge as ONE
+  call, holding that row's live-seat lock, and reports a PER-PLATE outcome so a partial failure
+  names the guest who did not move
+- WHEN any audio verb is used on a row that does not own live seats THEN the intent is recorded
+  and NOTHING is sent — no `PLAY`, no `MIXER VOLUME`, no fill, no un-hold (golden rule 10)
+- WHEN any audio verb touches a HELD plate THEN its intent is recorded and no wire command is
+  sent, and the surface reads "armed, not audible — hidden by this look" without greying it
+- WHEN SOLO is pressed THEN exactly one `MIXER … VOLUME 1` and N−1 `… VOLUME 0` reach the wire,
+  the same values land in `plateVolumes`, and nothing offers to restore the previous levels
+- WHEN OFF then ON is pressed THEN the plate returns to 100 %, NOT to its previous fader value,
+  and the surface says so in words
+- WHEN PANIC is pressed THEN every plate of every ON-AIR row is set to 0 and the console reports
+  how many plates it silenced; an empty scope reports that nothing was on air rather than success
+- WHEN the Live plates tab is open THEN every seated plate shows a state pill, a fader, ON/OFF,
+  SOLO and a % readout without any dialog being opened, and the layer row carries a compact
+  READ-ONLY summary outside its six-column verb block
+- WHEN any of this is rendered THEN no indicator is a bar, a needle or a meter — an INTENT pill
+  and a LEVEL meter are different claims and only the first is knowable today
+
+**Notes:**
+
+- **SHIPPED half rests on `MIXER … VOLUME`, already proven on this plant.** No new AMCP verb, no
+  new CasparCG channel, no new resolution level, no meter.
+- **GATED half is spec-only until `docs/recon/2026-08-23-audio-paths-walk.md` is run** on the
+  production 2.5.0 (`69e8ad5`) — W1/W2/W5/W6 for the monitor channel, W3 for template-internal
+  box audio, W4 for `MASTERVOLUME`, W7/W8 for metering. **W8 is load-bearing:** if a monitor
+  channel's peak does not track its one routed input, per-input VU for Live Source plates does
+  not exist at any price and only the in-template `AnalyserNode` path survives.
+- 🔴 **The metering ceiling is MEASURED, not assumed.** `audio_mixer.cpp` publishes
+  `state_["volume"]` as peaks **per AUDIO channel (L/R), maximum across ALL mixed layers** —
+  there is no per-layer variant, and 2.3 removed the older `…/audio/{n}/dBFS` addresses. A
+  per-input meter therefore cannot come from the programme channel's OSC.
+- **The MON channel array IS the metering array** — specified as one feature so an installation
+  is never asked to provision one set of channels for monitoring and another for metering.
+- **Per-plate, not per-look** (recorded so it is not re-litigated): plate resolution is already
+  four levels deep and audio does not need a fifth. A held plate is already silenced by the hold.
+- Filed in `caspar.md` by the nearest-sibling rule: it is about what AMCP verbs and CasparCG
+  channels this plant has, which is [[C-015]] / [[C-021]]'s territory. The Runtime surface is the
+  thin half of the same one change, so no twin item is filed in `runtime.md`.
+- The number was verified free by the heading sweep immediately before this heading was written
+  (highest `C-` heading was `C-025`; `git grep -n "C-026"` returned only the registry's own "next
+  free" pointer, not a heading) — recorded in [b-number-registry.md](b-number-registry.md).
+- **Cross-refs:** [[C-015]] (the plate model, the mute-on-create rule and `plateVolumes`),
+  [[C-019]] (audio authored INSIDE a template — the asset/packaging half, a different item from
+  this one's per-box GAIN), [[C-018]] / [[C-020]] (the 2.5.0 cutover the monitor channel assumes),
+  [[B-161]] (golden rule 10, the gate every verb here satisfies first).
+
+## [!] C-027 — fill/key SEATING for a `decklink` source: the modal stores a key device that nothing sends ⟨priority: medium⟩ — **PARKED 2026-08-25: this card has NO second SDI input, so the work is UNVERIFIABLE on this plant** ([../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md) Q4)
+
+**What:** actually SEAT a fill/key pair when a `decklink` source's mapping names one. Today
+`SourceProducerSchema`'s `decklink` arm carries an optional `keyDevice`, CG Control's Sources modal
+offers a **Key device (optional)** field and persists it, and `producerArgument`
+(`command-builder.ts`) emits `DECKLINK DEVICE <device>` and nothing else — so the value is stored,
+round-trips the bridge, and **never reaches the wire**. This item is the code that makes it mean
+something: the second `PLAY`, the layer it lands on, the `MIXER` geometry it shares with its fill,
+and what the ledger's existing `role: 'fill' | 'key'` records for the pair.
+
+**Why:** a fill/key pair is a real concept carried over from the plant's previous automation
+(MASTER + SLAVE on one entry), and the schema was deliberately shaped for it. What was missing is
+the seating, and the gap was **invisible to the operator**: the modal's summary line used to read
+`DECKLINK DEVICE 1 + KEY 2`, describing a wire the system does not send. That surface half is FIXED
+(2026-08-25, `DECKLINK-MODEL-01`): the summary now describes the fill alone and a stored `keyDevice`
+is reported in the modal as _"stored but not yet sent to CasparCG"_. **The honesty is shipped; the
+capability is this item.** The surface half's Linux `e2e` debt is DISCHARGED by
+https://github.com/yasermostafaee/cg/actions/runs/32840461445 — the `E2E (Playwright)` job **RAN**
+(not skipped) and passed on `a1b5f5d5`, the commit that carries the change. It is filed rather than folded into [[C-021]] because it is CODE to be
+written, while C-021 arm (c) is the hardware pass that would VERIFY it — and neither can be the
+other's acceptance.
+
+**Acceptance:**
+
+- WHEN a `decklink` mapping names both `device` and `keyDevice` THEN **two** producers are seated —
+  the fill and the key — at layers derived from the declared Live Source band, and the ledger
+  records the pair with `role: 'fill'` and `role: 'key'` respectively
+- WHEN the pair is seated THEN both layers receive the **same** `MIXER FILL` + `CLIP` geometry from
+  **one** computation (golden rule 7's shape: one geometry, emitted once, never two call sites that
+  must agree)
+- WHEN **half** the pair fails to seat THEN the outcome is DECIDED and stated — not left to
+  whichever `PLAY` returned first. A key on air without its fill, or a fill without its key, is a
+  wrong picture rather than a missing one, so the decision must be recorded here before it is coded
+- WHEN the pair is released THEN **both** layers are cleared and both ledger records removed — a
+  half-released pair leaves a live producer nothing owns
+- WHEN a `decklink` mapping names NO `keyDevice` THEN the behaviour is **byte-identical to today's**
+  — one `PLAY`, one ledger record, `role: 'fill'`. This is the regression bullet and it is not
+  optional
+- WHEN the pair is verified on hardware THEN alpha is confirmed **by looking at the switcher**,
+  never inferred from the format's specification ([[B-066]] class: verify, never assume) — that pass
+  is [[C-021]] arm (c)'s, and this item hands it something to look at
+
+🔴 **PARKED 2026-08-25 — Q4 came back NO, and this item's own Notes said what to do in that case.**
+
+The startup enumeration on the production 2.5.0, same day, lists **exactly one device**:
+
+```
+Decklink devices found:
+ - DeckLink SDI 4K [1] (23487013)
+```
+
+A **DeckLink SDI 4K is a single-channel card**. There is no second SDI input, so a fill/key pair
+cannot exist on this plant — and two-layer seating whose second layer can never carry a real signal
+is **a mechanism nobody can check**. Building it would produce code that passes its own tests and
+has never met a signal.
+
+⚠ **DISCLOSED: the `PLAY 1-11 DECKLINK DEVICE 2` probe never executed.** The plant console
+concatenated the pasted lines into `CLEAR 1-10PLAY 1-11 DECKLINK DEVICE 2` and ran only the
+`CLEAR`. **Do not cite a `DEVICE 2` failure — there isn't one.** The enumeration is the evidence
+this park rests on, and it is same-day and same-boot: a device the server did not enumerate is not
+a device a `PLAY` could have opened.
+
+**What PARKED means here, precisely:**
+
+- **NOT cancelled and NOT wrong.** The concept is real (the plant's previous automation ran
+  MASTER + SLAVE on one entry), the schema carries it, the acceptance bullets above stand as
+  written. A plant with two inputs makes this item live again with no rework of its scope.
+- **NOT started, and must not be.** Nothing here may be built "ready for later" — see the harm
+  above.
+- **Unparks on hardware, not on a decision.** The trigger is a second SDI input existing: a
+  different card, a second card, or a different plant. `INFO CONFIG`-style enumeration will not
+  produce one (Q2 — nothing enumerates devices at all), so the signal is physical.
+- ⚠ **The `keyDevice` field, the schema arm and the modal's honesty notice are UNCHANGED.** An
+  operator may already have configured a pair; the field keeps it, and the modal already says in
+  plain words that it is stored and not sent. Parking the seating does not park the honesty.
+
+⭐ **This raises the stakes on [[C-021]]'s `MIXER CHROMA` alternative**, which needs neither a
+fill/key path nor a second input. It remains unevaluated, and it is now the only route to a
+transparent live plate that this hardware could actually carry.
+
+**Notes — the original block, why `[!]`, and what blocked it.** A fill/key pair is **two physical
+SDI inputs**. The plant's card is a **DeckLink SDI 4K** (index `1`, persistent ID `23487013`,
+measured 2026-08-24), and whether it exposes a **second** input for the pair at all was **not
+known** — question **Q4** of
+[../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md), one look
+at the back of the box. _"If the answer is no, this item does not become wrong, it becomes
+**unverifiable on this plant** and should be re-scoped or parked rather than built blind."_ **The
+answer was no, and that instruction is what the block above carries out.**
+
+**Deliberately NOT in scope:** removing the `keyDevice` field or refusing it at the config boundary.
+The operator may already have written a pair, and dropping the field would lose that configuration.
+The field stays, the schema stays, and the modal says plainly what does and does not reach the wire.
+
+- The number was verified free by the heading sweep immediately before this heading was written:
+  the highest `C-` heading was `C-026` (`git grep -hoE "^## \[.\] C-[0-9]{3}" -- 'docs/prd/*.md'
+':!docs/prd/README.md'` sorted on the NUMBER), the `C-` duplicate audit printed nothing, and
+  `git grep -n "C-027"` returned exactly ONE hit — [b-number-registry.md](b-number-registry.md)'s
+  own "next free" line, a forward-reference POINTER rather than a heading. `C-028` returned nothing
+  at all. Recorded in [b-number-registry.md](b-number-registry.md).
+- **Cross-refs:** [[C-021]] (arm (c) — the hardware pass this item feeds), [[C-015]] (the Live
+  Source model, the mapping store and the ledger this seats into), [[C-020]] (the air path fill+key
+  ultimately reaches).
+
+## [x] C-028 — live-plate FIT MODE: `contain` by default, so the picture is never cut and the margin shows the TEMPLATE, never black ⟨priority: high⟩ — the client's 2026-08-23 decision; premise MEASURED 2026-08-25; **CONFIRMED ON AIR by the owner 2026-08-25**; archived `openspec/changes/archive/2026-08-26-live-plate-fit-mode/`
+
+### ⭐ CLOSED — the owner's on-air confirmation, 2026-08-25, in THREE parts
+
+All three are recorded because **the third is the client's actual acceptance criterion and the first
+two do not imply it.** A picture can be correctly fitted and still put black in the margin — that is
+precisely the failure `B-149`'s coupling produces — so "the crop is right" and "the margin is right"
+are two observations, not one.
+
+1. a **`cover`** plate rendered **the middle of the picture, cropped left and right, at full height** —
+   roughly the middle half of the frame for a `938.4 × 1049.04` box on a 16:9 source;
+2. a **`contain`** plate rendered **the whole picture**, uncropped;
+3. 🔴 with a template that paints a visible background, the `contain` **margin showed the TEMPLATE'S
+   BACKGROUND, not black** — the client's requirement of 2026-08-23 verbatim (_"the leftover margin
+   shows the template's own background, never black"_), and the whole reason the mask hole had to
+   shrink to the FITTED rect rather than stay at the box.
+
+**Linux `gate:e2e` discharged** — <https://github.com/yasermostafaee/cg/actions/runs/32870092879>
+(commit `6b343333`, `E2E (Playwright)` RAN 8m52s, `success`) for the `C-028` work, and
+<https://github.com/yasermostafaee/cg/actions/runs/32889767678> (commit `45291fc8`, RAN 8m36s,
+`success`) for [[B-178]]'s correction to it.
+
+⚠ **This closes `C-028` ONLY.** [[B-178]] (the fit control was inert under a look group) is `[~]`
+FIXED; [[B-179]] (`expectedAspect` dropped the same way, disarming the mismatch refusal) is **`[ ]`
+OPEN** and is not closed by this archive.
+
+**What:** a live plate's picture is fitted into its box by a **selectable mode**:
+
+- **`contain`** — the NEW DEFAULT. The whole picture, its own aspect intact, centred on both axes.
+  Nothing is cropped; the leftover margin on the short axis shows **the template's own background**.
+- **`cover`** — today's behaviour, kept: scale to cover the box and centre-crop the overflow.
+
+🔴 **ONE function computes the fitted rect, and BOTH consumers read it** — the bridge's
+`MIXER FILL` + `MIXER CLIP` **and** the template's mask-hole rect. Not two implementations that
+must agree; golden rule 7's shape, for the same reason `mixerFit` already emits `FILL` and `CLIP`
+as one pair from one computation.
+
+**Why:** the **client's decision, 2026-08-23, relayed by the owner** — the picture must not be cut,
+and the leftover margin must show **the template's own background, never black**. The owner
+accepted the consequence in advance: a stroke or frame authored tight around a box **will no longer
+hug the picture** when the source aspect differs from the box, because the picture is then smaller
+than the box on one axis. That is a trade the client made, not a defect to be engineered away.
+
+### 🔴 The measured premise — CasparCG STRETCHES; there is no double-count
+
+Measured on the plant 2026-08-25, production 2.5.0 `69e8ad5`
+([../recon/2026-08-25-decklink-model-walk.md](../recon/2026-08-25-decklink-model-walk.md) **Q3**).
+A `1080i5000` (16:9) input into a channel set to `SET 1 MODE PAL` (720×576, 4:3), with
+`MIXER 1-10 FILL 0.25 0.25 0.5 0.5`:
+
+```
+picture rect as a fraction of the channel frame
+   x  0.2500 .. 0.7500      width  0.5000
+   y  0.2497 .. 0.7503      height 0.5006
+MIXER FILL 0.25 0.25 0.5 0.5 expects exactly 0.2500..0.7500 on both axes
+```
+
+The picture filled the `FILL` box **edge to edge on both axes**. Had the producer letterboxed
+first, it would have occupied 405/576 = **70.31 %** of the box height — **291 px** against a
+measured **415 px**. The two hypotheses are 124 px apart; this is not a close call. A red probe
+layer beneath showed in the margin OUTSIDE the box, confirming the plate does not paint outside its
+own rect.
+
+⇒ **CasparCG applies NO aspect correction of its own.** The source-aspect correction in
+`MIXER FILL` is therefore **REQUIRED**, and computing the fitted rect from the source aspect does
+**NOT** double-count. This was the blocking unknown; it is now a measurement.
+
+### 🔴 The MASK-HOLE consequence — the half that reaches air
+
+The hole is a **CSS luminance mask** on the backdrop: `MaskHole[]` + `liveSourceMask`
+(`packages/shared-schema/src/scene.ts`), built by `sceneMaskHoles`
+(`packages/shared-schema/src/scene-flatten.ts`) and applied by
+`packages/template-runtime/src/live-source-punch.ts`.
+
+**If the hole stays at the BOX rect while the picture covers only part of it under `contain`, the
+margin is a TRANSPARENT HOLE with no picture behind it — and what shows through is the channel
+behind the CG layer: BLACK. Exactly what the client rejected.** The feature would deliver the
+opposite of its own requirement.
+
+**Punching the hole at the FITTED rect instead makes the template's own background fill the margin
+for free** — no new compositing, no second layer, no extra command. That is why the fitted rect
+must come from one function both consumers read.
+
+⚠ **Hole ≠ picture has reached air here before: [[B-149]]** — the arrangement mask punched every
+hole at the cell's POSITION and the AUTHORED SIZE, opening the live layer where no box existed
+(`[x]` FIXED 2026-08-19, on-air crosstalk). This item re-opens the exact coupling B-149 closed, so
+it must be built with that failure in view.
+
+⚠ **Do not go looking for `designer-box-geometry` "defect 1"** — that name has now been handed to
+sessions twice and **no such change exists** anywhere in the tree;
+[b-number-registry.md](b-number-registry.md) already records it as a false lead. The real precedent
+is [[B-149]].
+
+### 🔴 The REFUSAL consequence — `LIVE_PLATE_ASPECT_MISMATCH` must become mode-conditional
+
+`tools/caspar-bridge/src/live-plate-fit.ts` refuses a take with `LIVE_PLATE_ASPECT_MISMATCH` when
+the author's `expectedAspect` and the source's real aspect differ by more than
+`ASPECT_MATCH_TOLERANCE` (1 %). Its own message states the justification:
+
+> _"Cropping it would cut a part of the picture the author never saw — re-assign the plate, or
+> correct the source's format."_
+
+**Under `contain` NOTHING IS CROPPED, so the harm that refusal guards cannot occur.** A refusal
+whose stated reason is impossible is a take blocked on air for nothing.
+
+- Under **`cover`** — the refusal STANDS, unchanged. The harm is real there.
+- Under **`contain`** — at most a **non-blocking warning** (the picture will be smaller than the box
+  and the author may want to know); never a refused take.
+
+🔴 **It must NOT be deleted.** The `cover` path still needs it, and deleting a refusal is how the
+harm it guarded returns without anyone noticing.
+
+### Deliberately NOT in scope, and why
+
+- **`resolvePlateAspect`'s chain is UNCHANGED** — source `format` → source `aspect` → element
+  `expectedAspect` → nothing (`assumed: true`). The [[D-147]] decision that **the SOURCE outranks
+  the AUTHOR** stands on its own reasoning (the author cannot see the feed, so their guess is about
+  what they designed for, not about what arrives) and is untouched by this item.
+- **The "nobody stated an aspect" case is UNCHANGED** — no aspect means no fit and no refusal, and
+  the picture fills the box exactly as it does today. `contain` changes what happens when an aspect
+  IS known; it does not invent one. This is also why the default flip is safe for every existing
+  scene whose sources are undescribed.
+- **Fill/key, NDI and device enumeration** — [[C-021]] / [[C-027]] / the walk's Q2. Nothing here
+  depends on them.
+
+**Acceptance** — each bullet is written to become one OpenSpec `#### Scenario`:
+
+- WHEN a plate's fit mode is `contain` and the source aspect is WIDER than the box THEN the picture
+  is scaled to the box's WIDTH, centred vertically, and the whole picture is visible — no crop on
+  either axis
+- WHEN a plate's fit mode is `contain` and the source aspect is TALLER than the box THEN the picture
+  is scaled to the box's HEIGHT, centred horizontally, and the whole picture is visible
+- WHEN a plate is fitted under `contain` THEN the template's mask hole is punched at the **FITTED**
+  rect, not the box rect, so the margin shows the template's own background and **never the channel
+  behind the CG layer**
+- WHEN the fitted rect is computed THEN the bridge's `MIXER FILL` / `MIXER CLIP` and the template's
+  mask hole are derived from **the same single computation** — a test asserts the two agree for the
+  same plate, in the same units
+- WHEN a plate's fit mode is `cover` THEN the behaviour is **byte-identical to today's**: scale to
+  cover, centre-crop, hole at the box rect, refusal on aspect mismatch. **This is the regression
+  bullet and it is not optional**
+- WHEN a plate's fit mode is `contain` and `expectedAspect` disagrees with the source beyond
+  `ASPECT_MATCH_TOLERANCE` THEN the take is **NOT refused** — at most a non-blocking warning is
+  reported, because nothing is cropped
+- WHEN a plate's fit mode is `cover` and the same disagreement exists THEN the take is **still
+  refused** with `LIVE_PLATE_ASPECT_MISMATCH` and the same message
+- WHEN **no** aspect is known for a plate (`resolvePlateAspect` returns `assumed: true`) THEN there
+  is no fit in either mode, no refusal, and the picture fills the box exactly as today
+- WHEN a plate's aspect MATCHES its box within tolerance THEN `contain` and `cover` produce the
+  **same** rect, and it is byte-identical to today's
+
+**Notes.**
+
+- ⭐ **Where the mode LIVES — DECIDED 2026-08-25 (session `FIT-MODE-01`), and implemented.** This
+  was recorded as OPEN rather than guessed at. It is settled from the client's own recorded words —
+  the mode is _"choosable in the Designer and overridable by the operator"_:
+  - **Authored per ELEMENT** (`VideoPlaceholderElementSchema.fitMode`). **NOT per catalog SOURCE:**
+    one source seated in a 16:9 box and a 3:4 box needs different fits, so a per-source field would
+    have to be wrong in one of them. The mode is a property of the PAIRING of a picture with a box,
+    and the element is where that pairing is authored.
+  - 🔴 **CORRECTED BY [[B-178]] (2026-08-25).** This bullet originally continued _"on the group's
+    declared source for a LOOKS template, where the carrier is source-keyed and `expectedAspect`
+    already lives for the same reason"_ — and that half was **a defect, not a decision.**
+    `LookSource.fitMode` had no writer anywhere in the product, so for **every look-group template
+    ever exported** the author's choice was dropped and every plate reached air on the `contain`
+    default. It is now carried **PER LOOK**, beside the rects (`TemplateLookCarrier.fits`), read off
+    the plate element serving that `routeKey` in that look; `LookSource.fitMode` is deleted. The
+    per-element decision above is unchanged — `B-178` applies its own argument one level in, since a
+    `routeKey` appears in every look in a differently-shaped box. ⚠ `expectedAspect` does NOT follow
+    it and is dead in the same way — [[B-179]].
+  - **Overridable per ASSIGNMENT** at run time (`TemplateSourceAssignment.fitMode`) — the operator
+    half, on the record that already answers "how does this plate get its input".
+  - **Resolution order: assignment override → element → `contain`** (`resolvePlateFitMode`).
+  - 🔴 **It runs the OPPOSITE way round from [[D-147]]'s aspect chain, and that is the decision
+    rather than an inconsistency.** The ASPECT is a measurable property of the feed, so the
+    installation outranks the author (the author cannot see the feed). The MODE is a presentation
+    choice about that feed: the author states what the design wants, and the operator — who is
+    looking at the picture on the day — is the only party who can say it is wrong for this shot.
+    Two chains, opposite orders, resolved by two functions so nobody later "aligns" them.
+- **The default FLIPS to `contain`**, which changes what existing scenes put on air — but only for
+  plates whose source aspect is both KNOWN and DIFFERENT from the box. Where nothing is known, or
+  where the two already agree, nothing changes (the last two acceptance bullets). That is the blast
+  radius and it belongs in the change's proposal.
+- ⚠ **`liveSourceFit`'s docstring currently argues AGAINST this**
+  (`packages/shared-schema/src/live-geometry.ts`): it records that pillarbox was _"weighed and
+  REJECTED"_ because _"black bars inside a frame the designer drew do not read as 'the source is
+  4:3', they read as a fault on air"_, and its `Math.max` carries the comment _"`max`, never `min`:
+  `min` is pillarbox"_. **That reasoning is not wrong — it is ANSWERED**: the margin under this
+  item is not black, it is the template's own background, which removes the objection's premise.
+  The docstring must be rewritten in the same change rather than left contradicting the code
+  around it.
+- The number was verified free by the heading sweep immediately before this heading was written:
+  the highest `C-` heading was `C-027`; the `C-` duplicate audit printed nothing; a whole-tree
+  `git grep` for `C-028` returned only forward-reference POINTERS (the registry's "next free" line
+  and [[C-027]]'s provenance note), never a heading; and the same grep for `C-029` returned nothing
+  at all. Recorded in [b-number-registry.md](b-number-registry.md).
+- **Cross-refs:** [[C-015]] (the Live Source model and the fit chain), [[D-147]] (the aspect chain
+  and the `expectedAspect` decision), [[B-149]] (the on-air precedent for hole ≠ picture),
+  [[B-143]] (`resolvePlateAspect`'s `assumed` flag has no readers — the honesty half that a
+  `contain` default makes more visible).
+
+---
+
+## [~] C-029 — program output is GONE and nothing says so: the declared-versus-running output check, its banner, and a bounded off-by-default re-creation ⟨priority: high — the station had no SDI output for days and every pill read HEALTHY⟩ — IMPLEMENTED 2026-09-04, `openspec/changes/pgm-output-alarm/`; Linux `gate:e2e` DISCHARGED for `d4ffe68f` — <https://github.com/yasermostafaee/cg/actions/runs/33822182671> (`E2E (Playwright)` RAN, 10m02s, `success`); ⚠ CORRECTED 2026-09-05 by [[B-223]] (`TICKER-JUDDER-01` §B): severity by air-criticality — a missing `screen` / `system-audio` raises NOTHING for the operator, the banner is one line, the engineering detail moved to Server connection ▸ Outputs; its Linux `gate:e2e` DISCHARGED for `3b431f67` — <https://github.com/yasermostafaee/cg/actions/runs/33969010294> (`E2E (Playwright)` RAN 621 s, `success`); ⚠ the re-creation RETIRED 2026-09-28 by `FOLLOWUPS-01` A (the owner's decision) — see "Retired" below
+
+**What the plant did, 2026-09-01.** The DeckLink card was replaced. `casparcg.config` kept the old
+card's persistent ID (`<decklink><device>23487013</device>`), the consumer failed at boot and never
+appeared in `INFO`. AMCP answered, OSC ticked, `BRIDGE LIVE` and `PRIMARY A HEALTHY` sat in the bar,
+and the station had **no program output**. The absence was discoverable only by reading `INFO 1`'s
+XML and noticing that `<output>` listed `port_500` (system-audio) and `port_600` (screen) and nothing
+else. Verified at the wire from this dev host on 2026-09-04 (`192.168.21.114:5250`,
+`2.5.0 69e8ad5 Stable`), and the config is deliberately still broken — it is the fixture.
+
+**What:** the bridge reads, over AMCP, what each channel DECLARES (`INFO CONFIG`, once per
+connection) and what it RUNS (the `<output>` block of the `INFO <channel>` reply the [[R-030]] mode
+read already sends; re-read every 60 s and after a reconnect), publishes per channel the declared
+set, the running set and every declared kind with fewer running instances than declared, and keeps
+that verdict across a disconnect. The Runtime renders a full-width `role="alert"` strip — the
+`ConnectionBanner` / `RasterMismatchBanner` language, not `FailoverBanner`'s slab ([[B-172]]) — that
+names the channel, `decklink (device 23487013)`, what is running, and the next action; when the bridge
+loses CasparCG after a `missing` verdict the strip stays and reads UNVERIFIED instead of vanishing.
+`outputVerdictOf` in `@cg/shared-ipc` is the one authority for every arm.
+
+**"Auto-detect" — the honest limit, stated for the operator.** Nothing enumerates DeckLink devices
+over AMCP (Q2 of the 2026-08-25 walk, re-confirmed: `INFO SYSTEM` degrades to `INFO`; `INFO CONFIG`
+echoes what the operator wrote; the device list lives only in the startup log the bridge does not
+read). So it cannot mean discovery or a picker. It means: **the operator names the device in
+`casparcg.config`; the bridge verifies the declared consumer is running and complains when it is
+not, naming the device the config named.** Probing with `ADD` is not a substitute (below).
+
+**Measured 2026-09-04 — `ADD` with an unknown device, on the plant (card gone, drivers present) and
+the dev host's 2.5.0 (no drivers), the plant in a state where a glitch cost nothing (no program
+output; an orphan html producer on 1-96; screen + system audio the only outputs):**
+
+| command                                           | reply                                   | log                                                                           |
+| ------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------- |
+| `ADD 1 DECKLINK 99` (plant)                       | `403 ADD FAILED`, 6 ms                  | " Check syntax." — a `user_error` from `get_device`                           |
+| `ADD 1 DECKLINK 99` (dev host)                    | `403 ADD FAILED`, 2 ms                  | " Check syntax."                                                              |
+| `ADD 1 DECKLINK DEVICE 99` (the brief's spelling) | `404 ADD FAILED`, 50 ms                 | `invalid stoll argument` — `DEVICE` is not in the grammar; " File not found." |
+| `ADD 1 FOOBAR`                                    | `404 ADD FAILED`                        | " File not found."                                                            |
+| `INFO 1` before/after every failed `ADD`          | byte-identical (1620 / 1095 chars)      | no consumer re-initialised                                                    |
+| `ADD 1 SCREEN 1` → `REMOVE 1-601`                 | `202` / `202`; gone from `INFO` at once | "Uninitialized." **13–16 ms AFTER** the `202`                                 |
+| `ADD 1 SCREEN` (600 already running)              | `202 ADD OK`                            | new "Initialized." +1 ms, OLD "Uninitialized." **+28 ms** — REPLACED          |
+
+⇒ (a) the reply for a missing device is `403` with no text and a lying log line; (b) a failed
+`ADD` at a free index does not disturb the channel, an `ADD` at a running index replaces the
+consumer; (c) `REMOVE` is reversible and `INFO` reflects it immediately, but the receipt precedes
+the destroy exactly like `CLEAR`'s ([[B-177]]); (d) **probing is NOT a substitute for enumeration**
+— a failure cannot tell a missing device from missing drivers or an unsupported format, and a
+success puts a card ON AIR. Both lying errors filed as [[B-208]].
+
+**The flag — `--create-missing-consumers`, OFF by default. 🔴 RETIRED 2026-09-28 (below).** On,
+the bridge sent ONE `ADD` per connection per channel for a declared DeckLink the check found
+missing, built from the declaration's OWN tokens (`ADD 1 DECKLINK 23487013 EMBEDDED_AUDIO` for
+this plant's config), recorded CasparCG's answer in the health snapshot, and verified a `202` by
+re-reading `INFO`. It never named a device the config did not (the owner's boundary: the config
+stays the boot-time baseline; no silent substitution on a multi-card box).
+
+**Retired — `FOLLOWUPS-01` A, the owner's decision of 2026-09-28.** A consumer `ADD` on a programme
+channel is one of the Playout's C5 commands this station never sends (contract v1.3 rule 3; our
+acceptance in `CG-CONTROL-REPLY-V13-STATE` §3), and since `ROUTE-PLATES-01` the send seam refused it
+anyway (`amcp-guard.ts`), so the flag could only record "not attempted". The flag, its resolver, its
+once-per-connection `ADD` (`#createMissingConsumer`), its boot line and the check's `creation` record
+(IPC field and the Outputs section's sentence) are removed. **The check itself is unchanged**: a
+missing output is still read, published, alarmed and kept across a disconnect. A start script that
+still passes the flag boots, and the bridge says once that the flag is retired and ignored.
+`missingConsumerAddCommand` survives for one caller, the lab instrument `@cg/skew-harness`
+([[C-033]]), which re-creates a consumer its own `SET MODE` took down; the bridge never sends it.
+Tests: `output-check.integration.test.ts` (no `ADD` for a missing output, against a server that
+would accept one), `output-policy.test.ts` (the retired flag boots, bare or with a value).
+
+**Acceptance:**
+
+- WHEN `casparcg.config` declares a consumer for a channel and `INFO <channel>` does not list a
+  running consumer of that kind THEN the Runtime shows a full-width alarm naming the channel, the
+  kind and its device, what is running, and the next action — with every reachability pill still
+  green
+- WHEN a later read (60 s, or a reconnect after a config fix) finds the consumer running THEN the
+  alarm clears on its own
+- WHEN the bridge cannot reach CasparCG after a `missing` verdict THEN the alarm stays, re-labelled
+  UNVERIFIED, saying when the output was last seen missing
+- WHEN the declaration cannot be read, or nothing has been checked yet, or the browser→bridge link
+  is down THEN nothing lights from this alarm
+- WHEN a declared consumer is missing THEN no `ADD` is ever sent for it, whatever flag the bridge
+  was started with (`FOLLOWUPS-01` A — superseding "with the flag, at most one `ADD` per connection
+  per channel")
+
+**What this does NOT see, stated in the operator guide:** a consumer that is present but unhappy
+(lost reference, dropped frames) — `INFO` reports existence and configuration, never health; that
+lives in the server log. A channel that ticked and STOPPED remains [[R-058]]'s chip.
+
+- **Cross-refs:** [[R-058]] (the OSC-axis sibling; its "cannot read casparcg.config" sentence is
+  superseded — addendum there), [[R-030]] (the `INFO <channel>` read this rides), [[B-177]] (the
+  producer-side disguise), [[B-208]] (the consumer-side one), [[B-172]] (why a strip, not the slab),
+  [[C-021]] (Q2: nothing enumerates), [[B-141]]/[[B-143]]/[[B-144]] (the family).
+- **Number:** the highest `C-` heading was `C-028`; `git grep -n "C-029"` returned only the
+  registry's forward pointer and [[C-028]]'s provenance note, never a heading. Recorded in
+  [b-number-registry.md](b-number-registry.md).
+
+---
+
+## [~] C-030 — how the output card is ADDRESSED: `<device>` takes a slot index or a persistent ID through one field, the alarm says which, and the operator is told where the number comes from ⟨priority: high — the owner's "auto-detect" is achievable by addressing, not discovery, and the choice has a failure mode either way⟩ — IMPLEMENTED 2026-09-04 (the alarm half), `openspec/changes/output-card-addressing/`; the config edit is the OWNER's and is HELD; Linux `gate:e2e` DISCHARGED for `ca3cc1e6` — <https://github.com/yasermostafaee/cg/actions/runs/33826394983> (`E2E (Playwright)` RAN, 11m20s, `success`)
+
+**What:** [[C-029]] tells the operator to _"read the CasparCG log on the playout machine"_. This item
+makes that concrete and answers the question under the owner's wish for auto-detection: **why type a
+number at all?** Discovery over AMCP is impossible and settled (Q2 of the 2026-08-25 walk, [[C-021]];
+probing is not a substitute, [[B-208]]). Addressing is the other route.
+
+**Where the number comes from — the recipe (Section 1, the deliverable that stands alone).**
+CasparCG prints its DeckLink cards once per start, in its own log, nowhere else (`decklink.cpp`
+`init`: `Decklink devices found:` then ` - <model> [n] (id)` per card — printed **only when a card
+was found**, so an absence means no card or no driver). The plant's line, observed 2026-08-25:
+` - DeckLink SDI 4K [1] (23487013)` — `[1]` is the **slot index**, `(23487013)` the **persistent
+hardware ID**. Three lines, in the operator guide: the file
+(`D:\casparcg-server-v2.5.0-stable-windows\log\caspar_<date>.log` on the playout machine); the search,
+typed as ONE line in a **PowerShell window on the playout machine** (not the CasparCG console, not the
+AMCP console): `Select-String -Path 'D:\casparcg-server-v2.5.0-stable-windows\log\caspar_*.log' -Pattern 'Decklink devices found' -Context 0,4 | Select-Object -Last 1`;
+and what to copy into `<device>` in a text editor, followed by a CasparCG restart. ⚠ Read from
+SOURCE, not observed on the dev host, which has had no DeckLink driver since 2026-08-24 (0 enumeration
+lines in 15 logs); the shape matches the plant's observed line exactly.
+
+**Does `<device>` accept an index? Yes — both forms, ONE field, and CasparCG does not tell them
+apart (Section 2).** `decklink/consumer/config.h:34`: `int64_t device_index = 1; // Either an index,
+or a persistent id`. `config.cpp:39` reads the element as one integer, `:134-135` defaults an absent
+element to index 1. `util.h:222-245` `get_device`: for each card in enumeration order, **match the
+slot ordinal FIRST, the persistent ID SECOND** — no threshold, no separate element, no marker on the
+number. A value equal to some card's ordinal IS that slot whatever else it might be. 🔴 That is the
+"distinguishes by guessing" case; it is harmless only because persistent IDs are long and slots are
+single digits, a property of the numbers and not of the parser. (`key-device` defaults to
+`device_index + 1` — arithmetic that only makes sense on an index.) The prediction held in substance
+and failed in one word: CasparCG never DECIDES which form it was handed; it tries both. The bridge
+passes the value through untouched at both emit sites (`command-builder.ts:460`, `output-check.ts`).
+On the wire, on the dev host with nothing on air, `ADD 1 DECKLINK 1` and `ADD 1 DECKLINK 23487013`
+both answer `403` in 2–3 ms with `INFO 1` byte-identical before and after — the driver fails before
+any comparison, so this host cannot separate the forms; on the plant the index form would SUCCEED
+(its card is slot 1) and put the channel on the SDI output, an intervention and not a probe, and was
+NOT run. The exact console lines for the owner are in the change's `design.md` §2.
+
+**Recommendation for THIS plant (Section 3) — a recommendation, not a decision:**
+`<device>1</device>`. Failure under each scheme: with a persistent ID a swapped card gives **no output
+and the red [[C-029]] banner** (the last five days); with a slot index a same-slot swap gives **output
+with no edit**, and on a multi-card box a card that moves slots gives **the wrong card's output with
+no alarm** — the worst class this product knows. In general the ID's failure is the safer one:
+fail-closed and loud beats silently wrong. For THIS plant the index's is, because the general risk
+needs a second card and this box has one (`DeckLink SDI 4K [1]`, 2026-08-25, not re-verified from
+here): `1` cannot address a card other than the one installed, a substitution would need someone to
+physically fit a different card, and an empty slot still fails closed with the banner. Condition: the
+day a second DeckLink is fitted, the declaration goes back to the persistent ID. Prepared, not
+applied — the owner edits the config in a text editor and restarts CasparCG: index →
+`<device>1</device>`; ID → `<device>NNNNNNNN</device>` with the number in `( )` on the new card's log
+line.
+
+**The alarm names the form (Section 4) — closed in code, red-first.** `describeDeviceAddressing`
+(`@cg/shared-ipc`): digits `1…64` ⇒ slot index, `≥ 1000` ⇒ hardware persistent ID, else unknown — a
+READING for the operator, so `DEVICE_ADDRESSING_RULE` (slot first, ID second, no marker) travels with
+it; `DEVICE_NUMBER_RECIPE` is the recipe in one sentence. The banner adds "the decklink is declared as
+hardware persistent ID 23487013 (a slot index would be a small number such as 1)" plus the rule and
+the recipe; the bridge's stderr line carries the same. Nothing widened: the banner still says nothing
+about a consumer's health (asserted).
+
+**Acceptance:**
+
+- WHEN the alarm names a missing DeckLink declared as `23487013` THEN it calls that a hardware
+  persistent ID and says a slot index would be a small number such as 1
+- WHEN the declaration is `1` THEN it calls that a slot index
+- WHEN the alarm shows THEN it states the slot-first / ID-second rule, names the startup log, the
+  search string `Decklink devices found` and the brackets `[slot] (persistent ID)`, and says that no
+  such line means no card or no driver
+- WHEN the alarm shows THEN it does not mention a reference signal, dropped frames or an unhappy
+  consumer
+
+- **Cross-refs:** [[C-029]] (the alarm this extends), [[C-021]] (Q2: nothing enumerates), [[B-208]]
+  (why probing is not a picker), [[B-177]] (the producer-side twin), [[R-058]].
+- **Number:** the highest `C-` heading was `C-029`; `git grep -n "C-030"` returned only the registry's
+  forward pointer, never a heading; the registry's dated sentence reads "Next free … `C-030`" —
+  headings and pointer AGREE. Recorded in [b-number-registry.md](b-number-registry.md).
+
+---
+
+## [x] C-031 — the bridge's boot line says how many templates it loaded, and how many persisted files it skipped ⟨priority: medium — the one number every take depends on was the one the boot line did not print⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` — <https://github.com/yasermostafaee/cg/actions/runs/33880494176> (`E2E (Playwright)` RAN, 10m26s, `success`) · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-take-refusal-surfaces/`, `RELEASE-0110-01` §0.3)
+
+**What:** beside `candidate layers`, `live sources`, `plate assignments`, `live layer ledger`, the
+mixer hold and the missing-consumer setting, the boot line prints
+`templates: 3 loaded from <dir> - 1 skipped as unusable (see the warnings above)` — or, at zero,
+that nothing can go to air until a `.vcg` is imported. `TemplateRegistry.loadPersisted()` already
+returned the counts; the constructor discarded them. They are kept as
+`CasparRuntime.templateProvenance` and exposed on the `BridgeHandle` as `templates`.
+
+**Why:** on 2026-09-04 every take was refused and the first question — does the bridge hold the
+templates at all? — had no line on screen to answer it. On this station that line reads
+`3 loaded … 1 skipped` today; the skipped file is `delimiters.json`, which [[B-116]] already
+records as living in the templates directory by construction. The count says at a glance that
+there is a warning above to scroll to.
+
+**Acceptance:**
+
+- WHEN the templates directory holds two records and one unusable file THEN the handle reports
+  `{ loaded: 2, skipped: 1, dir }` and the boot line says so
+- WHEN the directory does not exist yet THEN `{ loaded: 0, skipped: 0 }` and the line says nothing
+  can go to air until a `.vcg` is imported
+- WHEN no directory is configured (an embedder) THEN `dir: null`
+
+**Regression-test note:** `tools/caspar-bridge/tests/templates-boot.integration.test.ts` 3/3.
+
+- **Cross-refs:** [[B-116]] (the skipped file), [[B-214]] (the incident), [[R-028]] (the registry).
+- **Number:** the highest `C-` heading was `C-030`; `git grep -n "C-031"` returned only the registry's
+  forward pointer, never a heading; the registry's dated sentence reads "Next free … `C-031`" —
+  headings and pointer AGREE. Recorded in [b-number-registry.md](b-number-registry.md).
+
+---
+
+## [ ] C-032 — the template serve port is EPHEMERAL by default, so every bridge restart invalidates every URL CasparCG was given and no stable firewall rule can exist ⟨priority: medium — a recommendation, not a change: the default should become a pinned port⟩ — FILED 2026-09-04 from `RUNTIME-FIX-0904` §6b
+
+**What is true today:** `--template-serve-port` defaults to `0` (`template-http-server.ts:58`,
+`bin/caspar-bridge.mjs:20`); the bridge on `192.168.21.93` was serving on `55277` in July and on
+`64373` this afternoon. Every `CG ADD` carries the port of the moment. The server-connection
+dialog already says _"Empty = ephemeral (today's default). Pin it to make a firewall rule
+possible."_
+
+**What it costs:** (1) a producer created by an earlier bridge run holds a URL nothing serves any
+more — the plant's orphan html layer at 96 on a stale URL is the likely instance; (2) no
+inbound firewall rule can name the port, so the only rule that works is per-executable
+(node.exe, which is what this host has); (3) the audit's recorded command ([[B-209]]) now shows
+the port, which is how a reader will learn it changed.
+
+**Recommendation (the brief asked whether the default should change — yes):** make the default a
+fixed port (the CLI's own example is `7911`), with `0` still accepted explicitly for a
+never-collide dev boot, and keep the bind failure loud (`apply-failed` already names it). A fixed
+default is what a station operator expects of a server and what a firewall needs; the cost is one
+possible collision at boot, which is already a loud failure rather than a silent one. Not changed
+this session: the default is the owner's to move, and a changed port on the plant is a firewall
+change on the plant.
+
+**Acceptance (for the session that takes it):**
+
+- WHEN the flag and the config are both absent THEN the bridge binds the fixed default and says
+  `default` as the port's source on the boot line
+- WHEN `0` is given explicitly THEN it is ephemeral, and the boot line says so
+- WHEN the default port is taken THEN the boot fails loudly naming the port and the flag
+
+- **Cross-refs:** [[B-162]] / [[C-024]] (the serve host half of the same address), [[B-209]] (the
+  port is now on the record), [[B-214]].
+- **Number:** taken with [[C-031]]; see the registry entry.
+
+## [~] C-033 — the skew harness borrows a live channel: it now captures and restores the channel's CONSUMERS as well as its mode, and says loudly what it is about to change when a live output consumer is attached ⟨priority: medium — a measurement instrument that could leave a channel in its original mode with one fewer output than it found, and say nothing⟩ — CLOSED IN CODE 2026-09-04 by `UPDATE-INFORCE-02` §5
+
+**Hardening on its own merits, not an incident response.** `tools/skew-harness` measures on a real
+CasparCG channel: it sets the channel's video mode for the run and restores it, attaches and
+detaches a `FILE` consumer per run, and `CLEAR`s the channel at the end. The MODE was always put
+back; the channel's CONSUMERS were never read. A `SET <ch> MODE` re-initialises every consumer on
+that channel, and a consumer that cannot run the measurement mode does not come back — so the
+instrument could hand a channel back in its original mode with a consumer missing, and its report
+would not say so. A channel has two facts, and the harness restored one of them.
+
+**What:** `tools/skew-harness/src/consumers.ts`, wired into `measureSkew` (`run.ts`):
+
+- **Capture first.** Before the first command the harness reads the channel's RUNNING consumers
+  (`INFO <channel>`'s `<output>`) and DECLARED consumers (`INFO CONFIG`) through the SAME
+  extractions the bridge's [[C-029]] alarm uses (`parseRunningConsumersFromInfo`,
+  `parseDeclaredConsumersFromConfig` in `@cg/shared-ipc`) — no second parser.
+- **Say so, loudly, before anything changes.** If any running consumer carries the channel off the
+  machine (`isAirOutputKind`: DeckLink, NDI, …) it prints a notice naming every such consumer and
+  every change in the order it will make them — the `SET MODE` that re-initialises every consumer,
+  the `ADD`/`REMOVE FILE` cycles, the final `CLEAR`, the mode restore and re-`ADD` — and waits
+  five seconds. It speaks even when the mode is unchanged (the file consumer and the `CLEAR` are
+  changes too); it is silent when only `screen` / `system-audio` are running.
+- **Restore both facts.** After the mode restore it re-reads the running set, compares by port AND
+  kind, and re-`ADD`s what did not survive — from a MEASURED grammar only: a DeckLink from its own
+  declaration's tokens via the bridge's `missingConsumerAddCommand` (one `ADD` speller, not two),
+  and a `SCREEN`. Anything else (`system-audio`, `ndi`, an undeclared DeckLink, an unreadable
+  `INFO CONFIG`) is REPORTED as missing with the reason, never guessed at — an `ADD` at a running
+  index REPLACES the consumer and a guessed device token on a multi-card box could put a
+  different card on air ([[B-208]]). A consumer that survived is never touched. Each `ADD` is
+  verified by re-reading `INFO`, and the final reading — not the intent — is what the report says.
+- **The reading lands twice:** on stderr, one line per fact (found / now / re-created and
+  verified / not re-created and why / STILL MISSING, with "A LIVE OUTPUT IS DOWN" when it is one),
+  and in `report.json` under `consumers` (`before`, `after`, `restored`, `unrestorable`,
+  `stillMissing`). A restore that itself fails is printed and does not hide the measurement.
+
+**Acceptance:**
+
+- WHEN the harness connects to a channel whose running set includes an air-output consumer THEN a
+  notice naming it and every change about to be made is printed before the first command, and the
+  run waits five seconds
+- WHEN the running set has no air-output consumer THEN no notice is printed
+- WHEN, after the mode is restored, a captured consumer is no longer running THEN the harness
+  re-`ADD`s it from a measured grammar (a declared DeckLink's own tokens; `SCREEN`) and verifies
+  by re-reading `INFO`
+- WHEN a missing consumer's grammar is unmeasured, or its DeckLink is undeclared THEN it is
+  reported as missing with the reason and no `ADD` is sent
+- WHEN a captured consumer is still running THEN no `ADD` is sent for it
+- WHEN the run ends THEN `report.json` carries the before/after consumer readings and every restore
+  outcome
+
+**Tests:** `tools/skew-harness/tests/consumers.test.ts` (13) — the two readings against the plant's
+own `INFO 1` / `INFO CONFIG` shapes of 2026-09-04, the notice's content and silence, the plan's
+four refusals, and the report's verified/still-missing readings.
+
+**Not verified on the plant this session:** the harness was not run against `192.168.21.114`
+(its DeckLink is on air and a `SET MODE` is exactly the change this item exists to announce); the
+decisions are pure functions of two `INFO` readings and are pinned without a server. The first
+real run will print the notice for `decklink@301`.
+
+- **Cross-refs:** [[C-029]] (the parsers and the one `ADD` builder this reuses), [[B-208]] (why
+  re-creation is attempted only for what is missing), [[B-174]] (what the harness measures).
+- **Number:** taken from the headings (highest `C-032`) and cross-checked against the registry's
+  dated pointer — they agree; see the registry entry.
+
+## [ ] C-034 — after an upgrade the station RE-DERIVES every template's page and metadata from what it retained, and says so in one line ⟨priority: high — every page-runtime fix so far has carried an unannounced manual step, and until it is done an old page silently ignores the new controls⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B · R4`
+
+**What:** On an app or bridge upgrade, the station rebuilds each registered template's served
+HTML and its `TemplateInfo` from the record it already keeps, without the operator finding and
+re-importing every `.vcg`. It states in ONE line that it did, and how many. It never touches a
+row that is on air mid-take.
+
+**Why:** A template's page is BAKED AT IMPORT — `produceTemplateDelivery` derives the metadata
+and renders the HTML in one call, from one unpacked scene, using the app's OWN bundled runtime
+(the `cg.js` inside a `.vcg` is never served — [[B-232]]'s neighbourhood,
+`bugs-runtime.md:8325`). So a fix to `@cg/template-runtime` reaches nothing already imported.
+
+**This is not hypothetical and it is not rare — 2026-09-15 alone produced three:**
+
+1. `92711fcf` (`DELTA B1`) — `TemplateInfo.playout` gained a derivation version. A record
+   without it is WRONG, not old, so the console refuses to state its facts and shows a
+   re-import sentence.
+2. `0f54e00d` (`DELTA B6`) — the page's `play(data)` never lifted `__cg.timing`, so an
+   operator's pass count was silently dropped on the take. Measured on the plant: «روی تعداد
+   هم فرقی نداره».
+3. `SELF-STOP-24` will add a third.
+
+Each cost the owner a full manual re-import of every template, discovered only because the
+session said so out loud. **A station that upgrades without reading a commit message gets an
+old page that ignores the new controls, with nothing on any surface saying why.**
+
+**⚠ THE CRUX, ESTABLISHED AND MEASURED (2026-09-15), so this item is sized rather than
+guessed:** the `.vcg` bytes are kept NOWHERE — not by the bridge (`TemplateRegistry` persists
+exactly `{info, html, importedAt}`), not by the browser (`LibraryStore` keeps
+`{template, html}`), and `importVcgFile` drops the bytes on return. **But the retained `html`
+is sufficient.** Every input the exporter needs is inlined in it:
+
+| Exporter input                                 | At re-derive time                                                               | Verdict                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `scene`                                        | `var scene = {…}` in the boot script; already parsed back by two existing tests | **RECOVERABLE**, verbatim                                               |
+| image / video bytes                            | `assetUrls` as `data:<mime>;base64,…` keyed by `assetId`                        | **RECOVERABLE**                                                         |
+| Lottie animation data                          | `lottieAssets` baked as a JS literal                                            | **RECOVERABLE**                                                         |
+| operator `asset-*` fonts                       | `@font-face{font-family:"asset-<id>"; src:url(data:font/woff2…)}`               | **RECOVERABLE** (parse the first `<style>`)                             |
+| `cgJsIife` / `cgCss` / app fonts               | the NEW build — which is the whole point                                        | **RECOVERABLE**                                                         |
+| `manifest.id`, `sourceFileName`                | `info`                                                                          | **RECOVERABLE**                                                         |
+| `AssetMeta.filename`                           | only its MIME survives, and the mime map is invertible                          | **functionally recoverable**                                            |
+| `manifest.compatibility.minRuntimeVersion`     | nowhere in `TemplateInfo`                                                       | 🔴 **LOST** — the [[B-196]] shortfall gate cannot be re-run             |
+| `manifest.integrity` / `signing` / `authoring` | nowhere                                                                         | 🔴 **LOST** — a re-derived page is UNSIGNED and cannot be re-`verify`'d |
+
+**So the honest shape of this item is: a re-derive produces a page that is byte-equivalent in
+CONTENT and carries no publisher attestation.** That is a real trade and it must be decided, not
+slipped in — see the open question.
+
+**Acceptance:**
+
+- WHEN the app or the bridge starts with a build whose template-runtime differs from the one a
+  record was produced with THEN every such template is re-derived from its retained `html` +
+  `info`, and the served page and `TemplateInfo` are replaced atomically
+- WHEN the re-derive runs THEN the operator is told in ONE line — how many templates, and that
+  it happened — and never with a per-template list or a progress dialog
+- WHEN a row is ON AIR or mid-take THEN its served page is NOT swapped underneath it; the
+  re-derive defers that template until the row is off air, and says which are deferred
+- WHEN a template cannot be re-derived (an unparseable stored page, a scene the current schema
+  rejects) THEN it is left exactly as it was, the operator is told WHICH ones and that they need
+  a `.vcg` re-import, and no other template is affected
+- WHEN a re-derived template is inspected THEN the console states its timing facts from the
+  CURRENT derivation version — i.e. the re-import sentence is gone for it
+- AND the re-derive is IDEMPOTENT: running it twice produces the same page and the same
+  `TemplateInfo`
+
+**Open question the owner must answer before this is built:** a re-derived page carries no
+`manifest.integrity`, no signature and no `minRuntimeVersion`. Three options — (a) accept it and
+mark the record `re-derived`, dropping the ability to re-verify; (b) persist the `.vcg` bytes
+instead, which is [[C-011]]'s approach and makes this item unnecessary; (c) persist just the
+manifest beside `{info, html}`, which is small and keeps the gate. **(b) and this item are
+genuine alternatives and only one should be built.**
+
+**Notes:**
+
+- ⚠ **Not a duplicate of [[C-011]], and the two must be read together.** C-011 persists the
+  template registry and its Placement note already contemplates _"the delivered
+  `{ template, html }` or the raw `.vcg` bytes"_. Keeping the archive (C-011's (b)) and
+  rebuilding from what is kept (this item) are OPPOSITE answers to the same problem.
+- C-011's Placement note is also why this is a `C-` item: it ruled that the renderer/Library
+  face of a template-persistence item belongs inside the C- item and is _"not a separate R-
+  entry"_. The re-derive has the same shape — the exporter runs browser-side, the record lives
+  bridge-side.
+- The RE-DELIVERY that exists today is not this: `WebSocketRuntime` re-sends the
+  already-produced `html` on reconnect. No exporter runs, so an old page stays an old page.
+- **Cross-refs:** [[C-011]] (persist the registry — the alternative), [[B-196]] (the
+  `minRuntimeVersion` gate this would lose), [[R-063]] (a row says whether a change is declared,
+  applied or unconfirmed — the deferred-while-on-air half).
+- **Number:** `C-034`. Verified free at the moment of commit, not of planning, per the
+  registry's standing warning: `git grep -n --untracked -E "^## \[.\] C-034" -- docs` returned
+  nothing, against a positive control on the same regex for `C-033` which returned
+  `caspar.md:2105`. The `C-` space is contiguous `C-001 … C-033` (33 headings, max 33) and the
+  registry's dated pointer independently reads `C-034`.
+
+## [ ] C-035 — the completion channel reports each PASS boundary, so `Passes remaining` shows a live count instead of what was sent ⟨priority: low⟩ — FILED 2026-09-15 by `SELF-STOP-24`
+
+**What:** The page→bridge channel built by [[C-013]] carries one message today: "this take has
+finished". The same channel could report each PASS boundary as it is crossed. The bridge would
+then hold a live remaining-count per row, and the Inspector's pass control could state
+`Passes remaining: 2` as an OBSERVATION rather than `Sent 3 more` as a record of what was asked
+for.
+
+**Why:** `R-063`'s DECLARED / APPLIED / UNCONFIRMED doctrine says a row must be honest about
+which of the three a value is in. A pass count set on air is DECLARED and, once the page has
+taken it, APPLIED — but the number the console shows is still the one it SENT, and it does not
+move as the passes play. An operator watching a logo run its last pass has no way to see that it
+is the last one. The count is the one timing value that CHANGES while the graphic is on air, so
+it is the one where "what was sent" and "what is true" diverge by design.
+
+**Acceptance:**
+
+- WHEN a page crosses a pass boundary THEN it reports the boundary on the SAME channel the
+  completion report uses, naming the take
+- WHEN the bridge holds a live count for a row THEN the console states it as an observation, in
+  the operator's words, distinct from a value that was merely sent
+- WHEN no boundary report arrives (an older page, a lost message) THEN the console states what
+  was SENT, exactly as today — the live count is additive and never a new way to show a wrong
+  number
+- WHEN the row is not on air THEN there is no live count and the pre-take reading is unchanged
+
+**Notes:** NOT BUILT by `SELF-STOP-24`, deliberately: that session's authorisation was one
+message and one verb, and a per-boundary report is a different traffic profile (a message per
+pass, on every looping row, for the life of the run) that wants its own decision about rate,
+coalescing and what happens when a row loops forever. — DEPENDS ON [[C-013]]'s transport, the
+take token and the `connect-src 'self'` relaxation, all of which ship with it. — Cross-refs
+[[R-063]] (the doctrine), [[B-248]] (a timing set is in flight and the row says nothing — the
+same honesty gap one step earlier), [[C-003]] (on-air per-child timing override).
+
+- **Number:** `C-035`. Verified free at the moment of commit, not of planning, per the
+  registry's standing warning: `git grep -n --untracked -E "^## \[.\] C-035" -- docs` returned
+  nothing, against a positive control on the same regex for `C-034` which returned
+  `caspar.md:2189`. The registry's dated pointer independently reads `C-035`.
+
+## [ ] C-036 — a pass count set on a looping graphic would also re-time a loop NESTED inside it; no template has that shape today ⟨priority: low — latent, and unreachable by any template in the tree or on the plant⟩ — FILED 2026-09-16 by `PASSES-CYCLE-ONLY-26` §A1.4
+
+**What:** `applyPassTiming` (`packages/template-runtime/src/runtime.ts`) walks the whole scope
+tree and calls `setRemainingPasses` on every controller. `setRemainingPasses` returns early for a
+non-cyclic scope, so today the count reaches exactly the cyclic ones. Where the ROOT is
+`loop-cycle` AND a nested instance is also `loop-cycle`, the operator's count would be applied to
+BOTH — the graphic's own passes and an inner decoration's — when only the root's is the number
+the console named.
+
+**Why it is filed and not fixed:** §A1.4 authorised the page-side fix only if such a template
+exists. **None does.** Measured 2026-09-16:
+
+- the five bundled starters, scoped to EVERY one of their compositions through the real export
+  path (`scopeSceneToComposition`): the only scopes that resolve to `loop-cycle` are
+  `comp-logo-mark` and `comp-ticker-pulse`, and each has `compositions: []` after scoping — no
+  nested instance at all;
+- the six records stored on the plant (`~/.cg-runtime/bridge-templates/`): the one `loop-cycle`
+  root is `آرم (روی آنتن)` (`1280f613`), decoded to `layers: 1, comps: 0`.
+
+A page-runtime change would force a re-import of every template ([[C-034]]), which is a real cost
+to pay for a shape nothing has.
+
+**Acceptance:**
+
+- WHEN a template exists whose root is `loop-cycle` and which nests a `loop-cycle` instance THEN
+  `applyPassTiming` applies the operator's count to the ROOT's loop only
+- WHEN that fix lands THEN it is flagged as forcing a re-import, in the commit and to the owner
+
+**Notes:** The complement of [[R-064]], which removed the controls from templates whose only loop
+is a nested decoration — the two together say "the count belongs to the graphic the console
+names". — The reach is `applyPassTiming`'s `visit(rootNode)` recursion; a fix would stop at the
+root rather than descend, and would need to keep `setDelayMs`'s reach honest in the same breath
+(the gap has the identical shape). — WHY NOT JUST DO IT: a page-runtime change is only delivered
+by re-importing every template, and until [[C-034]] is built that is a manual step the owner pays
+per template. — Cross-refs [[R-064]], [[C-034]], [[C-035]].
+
+- **Number:** `C-036`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] C-036" -- docs` returned nothing, against a positive
+  control on the same regex for `C-035` which returned `caspar.md:2282`. The registry's dated
+  pointer independently reads `C-036`.
+
+## [~] C-037 — bridge authentication: a Playout-issued JWT establishes the socket's principal ⟨priority: high⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+
+<!-- change: openspec/changes/playout-auth-signin/ -->
+
+**What:** Give the control WebSocket a principal. A socket sends an `auth` frame carrying a
+Playout-issued JWT; the bridge verifies it OFFLINE (ES256 against the Playout's JWKS) and holds
+the resulting principal for that socket. An authorisation gate sits at `handleMessage`, beside the
+`B-229` lock gate, at the one chokepoint every request passes. Auth is a MODE: OFF is today, byte
+for byte.
+
+**Why:** The control socket has no authentication at all. `packages/shared-ipc/src/ws-frame.ts`
+says so in as many words — `actor` is _"SELF-DECLARED and UNVERIFIED … the control socket is
+unauthenticated loopback"_ — and `wss.on('connection', …)` in `tools/caspar-bridge/src/bridge.ts`
+serves every socket that arrives. The plant is adopting the Apasai Playout, which already holds
+the operator directory and (since its build 2.8.43) per-channel grants, so identity can be
+federated rather than invented. `actor-context.ts` has been waiting for exactly this: _"the day
+identity becomes provable, this function is the only thing that changes."_
+
+**Acceptance:**
+
+- [x] WHEN auth is ON and a socket sends no `auth` frame THEN only `bridge.capabilities` and the
+      `auth.*` channels answer; everything else is refused with the one sentence and nothing is sent
+      to CasparCG
+- [x] WHEN a valid ES256 token arrives (its `kid` in the cached JWKS, `iss` byte-equal to config,
+      `aud` containing `cg-control`, within ±60 s) THEN the principal is set, `operatorActor()` yields
+      the token's `name`, the audit record carries `sub` beside it, and two browsers with two tokens
+      interleave without crossing (the ALS seam)
+- [x] WHEN the `kid` is unknown THEN the JWKS is re-fetched at most once per 60 s before refusing
+- [x] WHEN the token expires mid-session THEN intents are refused with the sentence, `read` keeps
+      answering, the socket stays open, nothing on air changes; and a fresh `auth` frame on the SAME
+      socket restores every control with no reload
+- [x] WHEN the Playout is unreachable THEN already-verified tokens keep working to expiry and a new
+      sign-in fails with a sentence naming the Playout
+- [x] WHEN a `jti` appears on `GET /api/cg/revoked` (D9, live) THEN within 60 s NEW intents from that
+      token are refused with the sentence, reads keep answering, and an unreachable Playout leaves the
+      bridge holding the last list it saw
+- [x] WHEN auth is OFF THEN behaviour is byte-identical to today — every existing integration test
+      green and unchanged — and `bridge.capabilities` says so
+- [x] WHEN the bridge binds a non-loopback host with auth OFF THEN the existing warning prints (owner
+      default; see ADR 0010 rule 11)
+- [x] WHEN the template HTTP server's route set is listed THEN it carries no `auth`, identity or
+      control route — only the template files and `POST /complete` (ADR 0010 rule 13, pinned by
+      `tools/caspar-bridge/tests/template-server-route-set.test.ts`)
+
+**Notes:** `auth` is a FOURTH frame type in `ws-frame.ts`, which today is a three-member
+discriminated union (`request` / `response` / `publish`). — The refusal string lives in
+`@cg/shared-ipc` beside `LOCK_ENGAGED_REFUSAL`, under the `R-017` one-string discipline. —
+`jose` (or equivalent) becomes a NEW dependency of `tools/caspar-bridge`, so `pnpm-lock.yaml`
+moves: flag it as shared config when it lands. — Config keys `playout.issuer`, `playout.jwksUrl`,
+`playout.tokenUrl`, `playout.refreshUrl`, `playout.channelsUrl`, `playout.revokedUrl`,
+`playout.audience`, persisted bridge-side under `R-010`'s precedence (CLI flags > file > default).
+— `bridge.capabilities` gains `auth: 'off' | 'playout'`, the sign-in address and the contract
+version, for `B-153`'s reason: it is asked at connect, before the operator can press anything. —
+The contract is `docs/integration/playout/`. — 🔴 This changes NO refusal CONDITION on the air
+path, nothing about the lock, and nothing about PANIC. — Cross-refs [[C-038]] (the per-channel
+half), [[R-066]] (the console surface), [[R-010]], [[B-141]], [[B-153]], [[B-229]].
+
+- **Number:** `C-037`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] C-037" -- docs` returned nothing, against a positive
+  control on the same regex for `C-036` which returned `caspar.md:2321`. The registry's dated
+  pointer independently reads `C-037`.
+
+## [~] C-038 — per-channel authorisation at the one chokepoint ⟨priority: high⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+
+**What:** Every route carries a permission class — `read` / `operator` / `station-admin` — as a
+REQUIRED argument of `route(…)`, exactly as `lock` is today, and the gate at `handleMessage`
+checks the request's channels against the principal's `cg_channels`.
+
+**Why:** A principal without a permission model is a login, not authorisation. The shape is
+already proven here: `B-229` made `lock` the third and REQUIRED argument of `route(…)` precisely
+so _"a new channel cannot be routed without classifying it"_, and a census test walks every route
+rather than sampling. The permission class is the same rule on a second axis, and putting it
+anywhere but that one chokepoint is how the site nobody looked at gets missed.
+
+**Acceptance:**
+
+- WHEN a route is registered THEN it carries a permission class (`read` / `operator` /
+  `station-admin`) as a REQUIRED argument beside `lock`, and a census test walks every route
+- WHEN roles are evaluated THEN they are hierarchical (`station-admin ⊇ operator ⊇ viewer`), so
+  `["station-admin","operator","viewer"]` and `["station-admin"]` grant the same
+- WHEN an intent touches a channel outside `cg_channels` THEN it is refused with the one sentence
+  naming the channel, nothing is sent, and the audit records the refusal with the verified actor
+- WHEN a bulk verb (`removeAll`, `clearAll`, `stopAll`, `snapshot`) is called THEN it requires
+  every channel it touches and is refused all-or-nothing
+- WHEN `silenceAllLivePlates` is called THEN it requires `operator` and stays UNSCOPED (owner
+  answer A16)
+- WHEN a `viewer` (`cg_channels: []`) is connected THEN every `read` route answers and every
+  intent, PANIC included, is refused with the sentence
+- WHEN [[R-062]]'s discovery call lands THEN the permission check reads the same channel set
+  (golden rule 6 — one predicate, not two that agree)
+
+🔴 **2026-09-23 — THE BANK HALF IS CLOSED, by `CHANNEL-AUTHORITY-01` commit 1 (`9d114657`).**
+This item authorises a PRINCIPAL; nothing asked whether THIS STATION operates the channel a request
+names, and with a grant for a channel the station does not declare, the permission gate passed it
+to the wire — `CLEAR 1-20` and `CLEAR 1-60` on a channel-2 station, measured (`B-261`). A station
+fence now sits before this gate (after sign-in) and refuses any channel `#declaredChannels()` does
+not contain, auth OFF included. The grant check below is unchanged.
+
+**Status 2026-09-22 —** implemented in `openspec/changes/playout-authz-channels`. ⚠ Two notes
+below were overtaken by the census and are corrected here rather than edited in place: the per-item
+resolver is NOT `item.slot.channel` alone — `slot` is OPTIONAL and a live plate can sit on a
+coordinate the template does not, so it unions `#slots` and `#liveLayers` (`design.md` §3); and
+`snapshot` is a `read`, so it takes no channel check. `[~]` until the Linux `e2e` discharges.
+
+**Notes:** The per-item channel resolver is `item.slot.channel` (`StackItemStateSchema.slot`,
+`{ channel, layer, server }`), which is already globally unique per operator row. — The
+`station-admin` set covers `connections.set-config`, the fixed bank, sources, delimiters and
+channel settings; the EXACT set is decided in the change's design with the route census in front
+of it, not guessed here. — The UI mirrors refusals in the operator's words (golden rule 11) and
+hides nothing that is merely refused. — A `viewer` token carries `cg_channels: []`
+unconditionally (Playout clarification C8), so "viewer = every read, no command" holds by
+construction. — 🔴 Golden rule 10's gate does not move, and no refusal CONDITION on the air path
+changes. — Depends on [[C-037]]. Cross-refs [[R-062]], [[R-066]], [[B-229]], [[B-074]].
+
+- **Number:** `C-038`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] C-038" -- docs` returned nothing, against a positive
+  control on the same regex for `C-036` which returned `caspar.md:2321`.
+
+## [x] C-039 — the Playout's channel catalogue as the FIRST channel-discovery source ⟨priority: medium⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md) · IMPLEMENTED by `CHANNEL-AUTHORITY-01` · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-channel-authority`)
+
+**What:** Feed [[R-062]]'s channel-discovery call from the Playout's `GET /api/cg/channels`
+(`{id, name, casparHost, casparChannel}`) first, keeping the two sources the renderer unions
+today — `fixedLayers.config.channel` and `channelSettings.settings[].channel` — as fallbacks.
+
+**Why:** [[R-062]] gap 2 is _"there is no channel-discovery call on the contract"_, and its own
+note says `features/channels/channelList.ts` is _"the one function a discovery call would feed"_.
+The Playout now publishes exactly that list, with the operator-facing NAMES the console should be
+showing, and `casparHost` + `casparChannel` is the join key [[C-038]] needs against `cg_channels`.
+D4 is live on the test Playout today.
+
+**Acceptance:**
+
+- WHEN `playout.channelsUrl` is configured and answers THEN the discovery call returns the
+  Playout's channels (id, name, `casparHost`, `casparChannel`) FIRST, the bank and channel
+  settings as fallbacks, and the strip shows the Playout's NAMES
+- WHEN the Playout does not answer THEN the list is the two existing sources and no alarm is
+  raised
+- WHEN the catalogue changes THEN the list updates without a bridge restart (polled at most every
+  30 s, with `ETag` — 5 s since `UI-POLISH-01` G, 2026-09-27)
+- WHEN a channel index is not in the catalogue — a preview channel `N+1..2N` — THEN the bridge
+  never addresses or probes it
+
+**Notes:** `casparHost` must be spelled exactly as the bridge's `servers.A.host`
+(`192.168.21.111` on the test box) or the join with `cg_channels` silently matches nothing. — A
+snapshot of the live D4 response is `docs/integration/playout/handoff/2026-09-16/channels.json`;
+the endpoint itself is `http://192.168.21.111:8080/api/cg/channels`. — 🔴 Every read from the
+Playout degrades to ABSENT and never gates a verb (ADR 0010 rule 8). — Depends on [[C-037]] and
+[[R-062]]. Cross-refs [[C-038]], [[R-066]].
+
+- **Number:** `C-039`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] C-039" -- docs` returned nothing, against a positive
+  control on the same regex for `C-036` which returned `caspar.md:2321`.
+
+**Status 2026-09-23 — implemented by `CHANNEL-AUTHORITY-01` commit 2**, behind that change's
+commit 1 (`9d114657`), which made the declared bank the ONLY thing that decides what the bridge
+writes to — so a catalogue row names a channel and can never make one writable. The bridge reads
+D4 at most every 30 s (5 s since `UI-POLISH-01` G) with `ETag`, with a bearer checked AT USE (never expired, never revoked,
+released on sign-out), and fails to ABSENT; `channels.list` returns each channel's `named` /
+`declared` / `permitted` kept apart; the strip lists the DECLARED channels under the catalogue's
+name. **`[x]` 2026-09-23** — the Linux `e2e` discharged on every commit (the run URLs are in the
+archived change's `tasks.md`) and the change is archived. ⚠ Two readings of the
+acceptance above, recorded rather than silently taken: "the strip shows the Playout's NAMES" is
+read as the names of the channels THIS STATION operates — the Playout's programme channel is
+returned by the call with `declared: false` and is not on the operating strip; and the note's
+`servers.A.host` join is the host SET (`configuredCasparHosts`), `C-038`'s rule.
+
+## [~] C-040 — validate the bridge against apasai-core on the test Playout ⟨priority: high — the AMCP half is MEASURED; the sign-in half remains⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+
+**What:** Point a bridge at apasai-core on the test Playout and re-run the recon this repo already
+owns, recording the result in the same shape as `docs/recon/2026-07-28-casparcg-250-validation.md`.
+Then run the contract's §8 checklist from the bridge host with the five test users.
+
+**Why:** Every validation this repo holds was measured against stock `2.5.0 69e8ad5 Stable`.
+apasai-core reports `2.5.0 6b29237 Dev` and is a fork — the Playout team states nothing we use
+changed (Q2) and we believe them, but a statement is not a measurement, and this repo has never
+seen that build. Nothing else on the Playout link can be trusted until the wire underneath it has
+been read here.
+
+**Acceptance:**
+
+- [x] WHEN the Playout team has added the TCP 5250 allow rule for `192.168.21.93`, and that host
+      allows inbound UDP 6250, THEN a bridge on it reaches `192.168.21.111:5250`, `VERSION` answers
+      `2.5.0 6b29237 Dev`, OSC ticks arrive, and health reads `healthy` — not `degraded`
+      — **MEASURED 2026-09-22**: `VERSION` verbatim, all four channel indices ticking, `healthy`
+      with `amcpAxisOk: true` ([record](../recon/2026-09-22-apasai-core-validation.md) §1, §6)
+- [x] WHEN the recon scripts of `docs/recon/2026-07-28-casparcg-250-validation.md`
+      (`tools/caspar-amcp-probe`, the b1/b2 captures) are re-run against apasai-core THEN the result
+      is recorded as `docs/recon/<date>-apasai-core-validation.md` in the same shape, including the
+      additive verbs observed (`MIXER … AUDIOMAP`, the `pgm` consumer, `webrtc`) and the Flash-off fact
+      — **MEASURED**: verb matrix, subset sweep and lifecycle all identical to stock 2.5.0;
+      `AUDIOMAP` answers `201 MIXER OK`; `pgm` read from the live config; `flash` disabled
+      (§3–§5, §8, §2). ⚠ `webrtc` was NOT exercised — their own §9 measures it as unbound
+- [x] WHEN a template is `CG ADD`ed from the bridge's own HTTP server (7911) THEN apasai-core's HTML
+      module renders it (Flash being disabled is irrelevant — every template we serve is HTML)
+      — **MEASURED**: load → take → update → remove all accepted, and the fetch hop is proven on
+      our own socket table rather than inferred from an html producer (§7)
+- [ ] WHEN the five test users sign in from the console origin THEN `cg-op1` is refused on channel 2
+      with the sentence, `cg-op2` operates 1 and 2, `cg-admin` operates everything, `cg-view` reads
+      only (`cg_channels: []`), and `cg-noch` is refused at sign-in with `403 no_cg_access`
+      — **OPEN**: needs the console sign-in path, not a bridge. [[C-037]] / [[C-038]] / [[R-066]]
+- [ ] WHEN `cg-op1` is revoked through the Playout's manual endpoint THEN within 60 s its next command
+      is refused with the sentence while its console still shows the stack
+      — **OPEN**: same half. [[C-037]] / [[C-038]] / [[R-066]]
+
+**Notes:** The engine is on build **2.8.48** for this run — moved from the pinned 2.8.45, which
+was self-blocking (it recreates its blanket firewall block on every start and could not hold the
+allow rule). Name **2.8.48** in the recon record or the result is not attributable. — 🔴 No service credential
+exists: apasai-core's AMCP is unauthenticated (Q1), so the "credential seam" this item was
+originally expected to carry is DROPPED. The gate is the firewall rule, and it is a deployment
+prerequisite rather than a code task. — Plant-command hygiene applies even though this is a TEST
+Playout: one line at a time, in the named window, and remember that connecting a bridge re-asserts
+mixer volumes. — The test fixtures (`cg-op1`, `cg-op2`, `cg-admin`, `cg-view`, `cg-noch`, channel
+`cg-test2`) are temporary and we say when they are released. — The Playout team's allow rule, which
+this item depended on and which needed an administrator on their side, is **APPLIED as of
+2026-09-21** and was exercised on 2026-09-22; see the note below and the recon record. — Cross-refs
+[[C-037]], [[C-038]], [[C-039]], [[R-066]], [[C-018]], [[C-020]].
+
+✅ **THE MEASURABLE HALF IS DONE, 2026-09-22 (`APASAI-CORE-RECON-01 v2`). The record is
+[`docs/recon/2026-09-22-apasai-core-validation.md`](../recon/2026-09-22-apasai-core-validation.md)**
+— read that, not a summary here. In one line: every AMCP behaviour this repo has measured against
+stock 2.5.0 reproduces on apasai-core field-for-field, OSC reaches a non-loopback AMCP client so
+the bridge reads `healthy`, and a template was served from our own HTTP server, fetched by their
+CEF, rendered, updated and removed. Engine **2.8.48**, core `2.5.0 6b29237 Dev`, authorised in
+writing by
+[`PLAYOUT-CG-RESPONSE-E-v1-revised.md`](../integration/playout/PLAYOUT-CG-RESPONSE-E-v1-revised.md).
+
+**This item stays `[~]` because the SIGN-IN half has not run** — the five test users and the D9
+revocation round trip need the console, not a bridge, and belong to [[C-037]] / [[C-038]] /
+[[R-066]].
+
+⭐ **The tunnel lesson, kept in one line because it is the instrument and not the network:** a
+reachability reading taken through a TUN proxy is VOID — a bare `connect()` answered for a port
+nothing serves — so every such claim needs the dead-port control beside it and the tunnel fully
+exited (`Get-Process v2rayN, xray` empty; toggling TUN off is not enough). The v2 run passed that
+control: 8080 `True` from source `192.168.21.93`, 9999 `False`.
+
+⭐ **And its sharper sibling, learned twice in one run: a probe's WAIT WINDOW is part of the
+instrument.** Both of this run's apparent regressions — the verb matrix's `cg-add+cg-update` row
+and the lifecycle's final `CLEAR` — were probe timeouts tuned on LOOPBACK in July meeting a LAN
+round trip. Re-run with longer windows, both matched stock exactly. A difference that appears on a
+new PATH, in the first candidate to run, is a latency hypothesis before it is a finding about the
+server.
+
+⚠ **Three things the run turned up that outlive it**, each argued in the record:
+
+- 🔴 **`stack.remove-all` is NOT "channel 2 only by construction" on a bridge holding rows on
+  another channel**, and the plan that said so was wrong. On connecting the bridge held six stack
+  items on the Playout's programme channel 1 (layers 59, 95–99); `removeAll` iterates the whole
+  snapshot, so it would have cleared six of THEIR layers. The trap is the name: `removeExempt:
+true` reads as "protected" and means exempt from the on-air REFUSAL — i.e. removable without
+  being refused. Use the per-item `stack.remove` on a visited box (record §9).
+  🔴 **CORRECTED by `CHANNEL-RESOLUTION-01`: those six were not "adopted foreign producers", they
+  were OURS** — this bridge created them on their channel 1 and cleared them at 12:49:21 (record
+  §9.1). The bullet's advice is unchanged and the refusal was still right; what was wrong is the
+  picture of whose graphics were at risk.
+- ⚠ ~~**The bridge has no audit-path flag**~~ **— FALSE, corrected 2026-09-22.**
+  `--audit-log-path` exists and has since `B-141`. The run wrote five `actor: recon` entries into
+  the owner's real `~/.cg-runtime/bridge-audit.ndjson` because it did not pass the flag, not
+  because there was none to pass. Everything else under `~/.cg-runtime/` was byte-identical
+  afterwards (record §9). **Do not add a flag that is already there.**
+- ⚠ **The source-address question is OPEN.** They report their plant NIC down and predict they
+  present `172.27.36.46`; every TCP connection they made to our template server arrived from
+  `192.168.21.111`. Our three inbound rules admit both, so the run was correct either way — but
+  which address they present decides whether the widening can ever be narrowed (record §0.5).
+
+**And the unprompted-on-connect list, verified from source before the connection and then
+observed** (`§1`'s safety check, and it passed): with the channel-2 bank the bridge emits
+**30 × `MIXER VOLUME 2-<L> 1`** on layers **50–59 and 80–99** — `#reassertDeclaredVolumes`
+(`caspar-runtime.ts:3805`, `R-022`/`B-204`) walks `fixedBankSlots`, which is BOTH halves of the
+bank — plus `INFO CONFIG` read once per connection (`C-029`). Consumer creation is off unless
+`--create-missing-consumers` is passed (`=== true`, absent is OFF). The Playout team was told
+beforehand (Reply C §3, Reply D §4).
+
+🔴 **THE LIST WAS INCOMPLETE, AND THAT IS THE LESSON — not the channel.** It ended "**Nothing
+below layer 50, nothing on channel 1, and no `CLEAR`**", and the run did **not** behave as
+announced: it also sent six `MIXER 1-L VOLUME 0` and six `CG 1-L ADD` to the Playout's channel 1,
+and six `CLEAR`s later (`CHANNEL-RESOLUTION-01`, record §9.1). The verification was real — it read
+`#reassertDeclaredVolumes` at the source and quoted it correctly — and it was still wrong, because
+it enumerated **one** unprompted emitter and there are **four**. `#sendAdd` is the single `CG ADD`
+chokepoint and its own docstring names all four callers: `#loadOnto`, `setPosition`'s re-ADD,
+`take()`'s `B-039` pre-roll, and **`#decidePendingRestores`** — the boot/reconnect path that fired
+here. ⭐ **An "unprompted on connect" list is only as good as its enumeration of EMITTERS; a list
+built by reading the one emitter you already had in mind will always come back clean.** Start from
+the chokepoint and its caller list, not from the behaviour you expect.
+
+- **Number:** `C-040`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] C-040" -- docs` returned nothing, against a positive
+  control on the same regex for `C-036` which returned `caspar.md:2321`.
+
+## [ ] C-041 — the bridge has no audit-path flag, so a recon or test run writes into the OPERATIONAL record ⟨priority: low — nothing is lost and nothing is wrong on air, but the forensic record gains rows no operator produced and no filter can separate⟩ — FILED 2026-09-22 by `MODAL-TRUTH-01` §6, NOT worked
+
+**Found 2026-09-22**, during the recon run that produced [[C-040]]: five `actor: recon` lines
+are now interleaved with operational entries in `~/.cg-runtime/bridge-audit.ndjson` on the dev
+host, which is also the bridge host. The bridge takes `--audit-log-path` at boot, so a
+DIFFERENT path is reachable by starting a second bridge — which is exactly what the dev host
+must not do against a live plant, so in practice the flag does not help the case that needs it.
+
+**Why it matters at all.** The audit log is the surface an operator reads when something went
+wrong at a take, and [[B-141]] spent a whole item making it honest about what it does and does
+not know. A record that silently mixes test traffic with operational traffic is a smaller
+version of the same problem: the rows are true individually and the FILE no longer answers the
+question it exists to answer.
+
+**Acceptance (sketch):**
+
+- WHEN a run is not operational THEN its entries are distinguishable from operational ones —
+  by a separate path, or by a field the reader can filter on
+- AND the audit panel can express that filter, or can state that it cannot
+- ⚠ NOT answered by telling recon sessions to remember: this is the third time a
+  remember-to-do-it rule has been the thing that failed in this repo
+
+**Notes:** `actor` is already on every entry and the panel already filters by it, so the
+cheapest honest shape may be a declared NON-OPERATIONAL actor prefix rather than a second file
+— to be decided when it is worked, not here. Cross-refs [[C-040]] (the recon run that found
+it), [[B-141]] (the audit panel's honesty rules), [[B-253]] (the other finding from the same
+run).
+
+## [x] C-042 — AMCP auto-trust lapses after 7 days without a station-admin sign-in from the bridge machine ⟨priority: low — a KNOWN LIMIT, not a fix; nothing to do while `cg-admin` is the only account⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01-B` · ⚠ WITHDRAWN 2026-09-23 by `DESKTOP-APPS-01-C`: the Playout team's REVISED 2.8.54 rule has no expiry — a machine stays allowed until its administrator rejects it. Kept, annotated, not rewritten; the limits that replace it are [[C-043]]
+
+**A known limit, recorded, not a fix.** A Playout 2.8.54 opens AMCP to the CG Control machine
+from a server-side `station-admin` read and drops it after 7 days unseen
+([the 2.8.54 facts](../integration/playout/PLAYOUT-2.8.54-CG-FACTS-2026-09-23.md)). Once the station
+has accounts that are not `station-admin`, a `station-admin` must sign in from the bridge machine
+at least once every 7 days, or AMCP is refused until one does. Today only `cg-admin` exists, and it
+is used daily. **Acceptance (sketch):** WHEN the station has accounts that are not `station-admin`
+THEN the lapse is either impossible or announced before it happens.
+
+## [ ] C-043 — the Playout's AMCP allow list: three known limits ⟨priority: low — KNOWN LIMITS, recorded, not fixes⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01-C`, replacing [[C-042]]
+
+Under the Playout team's revised 2.8.54 rule
+([the 2.8.54 facts](../integration/playout/PLAYOUT-2.8.54-CG-FACTS-2026-09-23.md)) only a
+server-side `station-admin` D9 read introduces a machine; the first is let in once automatically,
+and every later one waits for the administrator's approval in the Playout's app.
+
+- **(a) The bridge machine needs a STATIC IP.** After an IP change the machine is a new one to the
+  Playout: AMCP waits for the administrator's approval (CG Control's check names this machine's
+  IPv4 and where to approve it).
+- **(b) A BACKUP Playout keeps its own list.** The lists are not mirrored, so a mirrored pair needs
+  the bridge approved on each Playout.
+- **(c) On a fresh install, whoever introduces a machine first wins the automatic slot** — an
+  operator's first contact or a loopback bridge seals it too. CG Control lets only a
+  `station-admin` reach the Playout before its issuer is adopted (`-01-C` C5), and the operator
+  guide says to install CG Control right after the Playout and sign in first as `cg-admin`.
+
+**Acceptance (sketch):** WHEN any of these bites THEN CG Control's own check says which, in the
+operator's words, and names the in-app approval.
+
+## [x] C-044 — Sources from the Playout (D10/D11, v1.2) ⟨priority: high⟩ — FILED 2026-09-27 by `PLAYOUT-SOURCES-01` (v5) · openspec change `playout-sources` · archived 2026-09-27 (`openspec/changes/archive/2026-09-27-playout-sources`)
+
+**What.** The station's live sources come from the Playout, not from a hand-made catalogue. D10
+(`GET /api/cg/inputs`) gives the Playout's inputs (NDI, stream, and from v1.3 `route`s to its
+holder channel); D11 (`GET /api/cg/media`) its media library, searched on the Playout's side. The
+bridge reads both with the signed-in operator's bearer, keeps the LAST GOOD input list and the
+media this station BOUND on disk, and builds the one catalogue every plate resolves against. The
+console binds a plate through ONE picker (Inputs · Media) at the three places a plate is bound,
+names a bound source one way everywhere (`SourceLabel`), and Station setup lists the Playout's
+inputs read-only beside the plate band. The contract and the Playout's answers are in
+[`docs/integration/playout/`](../integration/playout/README.md).
+
+**Why.** The Playout owns the cables and the library; a second hand-kept list drifted from it and
+could name an input the Playout had already given to air (their answer §1.1: the exclusive
+inputs are not listed at all, because a second producer on them blacks the Playout's own air).
+
+**Acceptance.**
+
+- WHEN the bridge reads D10 THEN it reads at sign-in, at most every 30 s with `If-None-Match`, and
+  when a picker opens and the last read is older than 5 s; a failed read or a `304` changes
+  nothing, and the last good list is persisted and stays in force through an outage and a restart.
+- WHEN an input leaves the list, or a bound media item leaves the library, THEN its entry is kept
+  and marked unavailable, every binding to it is kept, and a take that would seat it is refused
+  before any AMCP with `source-unavailable` and one sentence naming the row, the plate and the
+  source. Nothing is ever deleted because of a Playout read.
+- WHEN a media `PLAY` is answered 404 THEN the bridge reads that item once by `ids=` (1.5 s bound)
+  and retries the `PLAY` once with a changed `clip`; otherwise the take fails all-or-nothing.
+- WHEN a plate plays a Playout NDI input THEN the wire is `PLAY <ch>-<L> [NDI] "<source>"` (the
+  core's producer spelling, [[C-021]]); every other producer's line is byte-identical to a
+  hand-made entry's.
+- WHEN a plate's source is a Playout input THEN its `VOLUME 0` is committed before its `PLAY` on
+  every seating, nothing automatic raises it, and an operator's raise ramps (`VOLUME <v> 25`).
+- WHEN a stream URL carries credentials THEN the console never shows the URL, and the AMCP log and
+  the audit write `scheme://***@`.
+- WHEN a v1.3 `route` input is listed THEN it is shown and cannot be bound or seated
+  ("Not supported yet."), until `ROUTE-PLATES-01`. — ✅ Lifted 2026-09-28 by [[C-045]]: a route
+  with a layer is bindable and is seated by contract v1.3's rules.
+- WHEN auth is off THEN the lists come from a test-only local provider behind the same interface,
+  and that provider is not in the installer.
+
+**Filed alongside:** [[B-286]] (a backup server is sent the primary's paths).
+
+## [~] C-045 — Contract v1.3 — route plates from the holder channel ⟨priority: high⟩ — FILED 2026-09-28 by `ROUTE-PLATES-01` (v3) · openspec change `route-plates`
+
+**What.** Under contract v1.3 every exclusive input reaches CG Control as a D10 `route` to the
+Playout's holder channel (`route://H-L`). A plate bound to one is now seated, by the Playout's
+rules as their V13-STATE answer completed them (C1–C5): hidden and silent first, `LOADBG` then the
+bare `PLAY` 40–200 ms later, shown by `OPACITY` in one `MIXER <ch> COMMIT`; only on a channel the
+input names; never from a stale or unconfirmed `epoch`; never on a backup server; and nothing the
+contract forbids ever leaves the bridge. `PLAYOUT-SOURCES-01`'s `Not supported yet` gate is gone.
+The Playout keeps `CgControl.RouteInputs` off until we confirm in writing.
+
+**Why.** A cold route can put one black, silent frame on air, a preloaded one holds a stale frame,
+`BEGIN…COMMIT` is not same-frame on their core, mixer state belongs to the layer number, and a
+route to a holder number of another epoch connects without an error to whatever holds it now. Each
+rule closes one of those, and the seam's guard keeps a stray command off the Playout's channels.
+
+**Acceptance.**
+
+- WHEN a route plate is seated (take, look switch, swap, restore) THEN its layer is hidden and
+  muted in one committed `MIXER <ch> COMMIT` before anything else; `LOADBG <ch>-<L> "route://H-L"`
+  follows; the bare `PLAY` goes at least 40 ms and at most 200 ms after it (else one fresh
+  `LOADBG`); and the reveal is `OPACITY 1` in one `COMMIT`, one or two ticks later. Never
+  `BEGIN…COMMIT`, never a transition.
+- WHEN a look holds a route plate THEN it stays playing at `OPACITY 0`, muted, never `PAUSE`d;
+  showing it again is the reveal alone, and is refused while its input is not available.
+- WHEN the row's channel is not in the input's `compatibleChannels` THEN the action is refused
+  before any AMCP: `Bed 59 · Plate 1: “ورودی ۴” can't be shown on CH 2.`
+- WHEN the AMCP connection comes back, the epoch changes, or a route plate is to be restored THEN
+  D10 is re-read within 1.5 s, and no route of another or unknown epoch is sent: the plate stays
+  empty and its row says `Bed 59 · Plate 1: waiting for the Playout's input list.`
+- WHEN a line targets a channel this station does not declare, or is a command contract v1.3
+  forbids (C5) THEN the send seam refuses it and nothing is sent.
+- WHEN a backup server is declared THEN no route line reaches it — mirrored, journaled or after a
+  failover — the row says `Backup: live boxes not mirrored.`, and every other plate mirrors as
+  before.
+- WHEN D10 carries a 64-bit `epoch` THEN it is kept digit for digit.
+
+**Filed alongside:** [[B-287]] (`SendOptions.target` is read by nothing) — closed 2026-09-28 by
+`FOLLOWUPS-01` C, deleted.
+
+**The owner's decisions on this item's open questions (`FOLLOWUPS-01`, 2026-09-28):** [[C-029]]'s
+consumer `ADD` is retired (A); no console or IPC path can ask for a `CLEAR` below 50 — both clear
+doors take a layer from 50 up and the Station layers tab offers none there, with no new reason word
+([[R-028]], B); `B-287` deleted (C). Recorded with no code change (D): `takeStrayOffAir` keeps its
+narrow seam exemption — our own stray, on an operator's request; a holder moved while the core runs
+leaves the row saying it waits, until a re-take. Detail: `openspec/changes/route-plates/design.md`,
+last section.
+
+## [x] C-046 — OSC by `OSC SUBSCRIBE` on the bridge's own port, never `6250` ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rule 7 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`) · owed: the `.111` run (whether the Playout's apasai-core fork keeps the command)
+
+**What.** On the Playout machine UDP `6250` belongs to the engine — it takes the core's OSC on
+`127.0.0.1:6250` for its audio meters, genlock and no-picture detection — so a bridge that shares the machine cannot
+take the core's default OSC stream there (the Playout team, `PLAYOUT-CG-RESPONSE-BRIDGE-HOST-v1.md` §4; the
+prompt's rule 7). The bridge now binds its own loopback port — server A the
+configured OSC port, default `6251`; server B that port plus one — and asks every core for OSC with
+`OSC SUBSCRIBE <port>` on every AMCP connection it opens, inside the handshake, so the subscription is
+renewed with every reconnect (it ends with its connection). `6250` is refused by the connection schema, the
+CLI, the bridge and the console's OSC fields, with a sentence that names the engine. OSC for a channel the
+station does not declare is dropped at the transport; the occupancy of an undeclared channel (Change
+channel…) is read with `INFO <ch>`. A core that refuses the subscribe is said in one log line and the
+session goes on. **Upstream (`v2.5.0-stable`, commit `69e8ad5`):** `AMCPCommandsImpl.cpp` registers
+`OSC SUBSCRIBE` / `OSC UNSUBSCRIBE` at lines 1794–1795; `osc_subscribe_command` (1684–1701) subscribes
+`<the connection's remote IPv4>:<port>`, keeps it on the connection under `osc-sub-<port>` and answers
+`202 OSC SUBSCRIBE OK` (`403 OSC SUBSCRIBE BAD PORT` for a port that is not a number); the core's default
+per-client subscription (`server.cpp` `setup_osc`, 306–342) is what sent to `<client>:6250`. Detail:
+`openspec/changes/archive/2026-09-30-central-bridge/design.md` §0.8. **Filed alongside:** [[B-295]] (a port the session
+could not bind kept AMCP down). **Acceptance:** WHEN another process holds the core's default OSC port
+THEN the bridge binds its own, subscribes, and hears the core (control: the holder still receives);
+WHEN the core drops the connection THEN a second `OSC SUBSCRIBE` is sent on the new one; WHEN a config,
+flag or field names `6250` THEN it is refused with the sentence and nothing binds `6250`; WHEN OSC reports
+a channel the station does not declare THEN no tap sees it (control: a declared channel's report arrives).
+
+## [x] C-047 — A core restart, and the ledger checked against CasparCG at start ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rules 2 and 3 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
+
+**What.** On the Playout machine the core accepts AMCP 2–6 s after the engine starts, and **every core
+restart clears every layer, 50–99 included** — a crash, «ریستِ پلی‌اوت», or a restart or upgrade of the
+engine service (the Playout team, `PLAYOUT-CG-RESPONSE-BRIDGE-HOST-v1.md` §1). CG Bridge (a service,
+[[R-067]]) therefore (1) tolerates refused connections on `5250` at start and after every restart and
+reconnects on its own — no service dependency on `ApasaiEngine`; (2) re-sends its `OSC SUBSCRIBE`
+([[C-046]]) on every new connection; (3) follows the owner's standing decision for our layers, **detect and
+say** ([[B-225]], `RESTART-NOTICE-01`): the restart notice with PUT BACK ON AIR, nothing back on air by
+itself. The Playout restores only its own on-air item. ⚠ The Playout's letter says the bridge "must put its
+layers back"; the owner's decision stands and the Playout team is told so (`docs/integration/playout/
+CG-BRIDGE-FOR-PLAYOUT.md`). **(4) At start, the ledger is checked against CasparCG with `INFO <ch>`**
+([[B-292]]'s reader; 2.5 answers the whole channel): an entry whose layer is empty leaves ON AIR with the
+notice, nothing re-sent; an occupied layer in 50–99 that no entry holds goes to the strip. **Found (§0):**
+a comment at `caspar-runtime.ts` said the ledger was "already resolved against the server's `INFO` at boot"
+— it was not; the ledger was adopted `unknown` and corrected only from OSC at the first reconnect, and only
+if OSC was heard. **Acceptance:** WHEN the mock drops every layer and the connection THEN the bridge
+reconnects, re-subscribes and shows the restart notice, and nothing is re-sent without PUT BACK ON AIR;
+WHEN the bridge restarts with a ledger entry whose layer the core has since emptied THEN the entry is off
+air with the notice (control: an entry whose layer still plays stays ON AIR).
+
+## [x] C-048 — A take on an unlicensed channel is refused, with the reason ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rule 11 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
+
+**What.** A channel whose D4 `playlist` is `unlicensed` is **cleared entirely every 60 s by the Playout**
+(`V13-INSTALL`; the backup channel, numbered highest, is the first to become unlicensed). The console
+already says so on the channel (`Unlicensed in the Playout — this channel is cleared every minute.`,
+`channelAir.ts`), but the bridge took on it all the same: `unlicensed` had no reader in the bridge. Now a
+take on such a channel is refused before any AMCP, with the reason in words, and the console shows the
+state on the channel. Removals and clears still work there. **Acceptance:** WHEN a take is asked on a
+channel whose D4 `playlist` is `unlicensed` THEN it is refused with the reason and nothing is sent; control:
+a licensed channel takes.

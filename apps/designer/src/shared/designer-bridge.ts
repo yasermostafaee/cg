@@ -40,8 +40,65 @@ export interface AppInfo {
 
 export type Unsubscribe = () => void;
 
+/** D-150 — which storage root the Designer is using, and why. */
+export interface StorageState {
+  kind: 'directory' | 'opfs' | 'memory';
+  /** Human-meaningful label for the backing store (folder name, `opfs:designer`, `memory`). */
+  label: string;
+  /**
+   * The NAMED reason, not a bare boolean: `folder-permission-lost` and
+   * `folder-restore-failed` are different conditions with different remedies, and a
+   * single `catch` could not tell them apart — which is how both stayed invisible.
+   */
+  reason:
+    | 'connected-folder'
+    | 'opfs'
+    | 'folder-permission-lost'
+    | 'folder-restore-failed'
+    | 'opfs-unavailable'
+    | 'forced-memory'
+    | 'e2e';
+  /** True when this is NOT the root the author configured, or will not survive the tab. */
+  degraded: boolean;
+  /** True when nothing written to the workspace survives the tab closing. */
+  sessionOnly: boolean;
+  /** True when a folder can be connected at all (File System Access / Chromium). */
+  canConnectFolder: boolean;
+  /** The remembered folder's name, when one was remembered — so a notice can name it. */
+  folderName?: string;
+  /** An error message, when a leg failed with one. Never swallowed. */
+  detail?: string;
+}
+
 export interface DesignerBridge {
   getAppInfo(): Promise<AppInfo>;
+
+  /**
+   * `TEXT-DIGITS-01` — the keyboard language the window types in, from CG Designer's shell (its one
+   * read-only command, `keyboard_language`). Where no shell can say — a browser —
+   * `reportsLanguage()` is false and the one detector (`@cg/gesture`) reads the letters typed.
+   */
+  keyboard: {
+    reportsLanguage(): boolean;
+    /** `persian`, `arabic`, `latin` or `unknown` — the shell's reply, checked by the detector. */
+    language(): Promise<unknown>;
+  };
+
+  /**
+   * 🔴 `D-162` — the window's close, where a shell holds it. A Tauri window runs no
+   * `beforeunload` when it is closed, so CG Designer's shell holds every close it can intercept
+   * and asks the page instead (`src-tauri/src/close_window.rs`; the JS half is `@cg/gesture`'s
+   * `closeGuardDoor`). A browser has no shell: `held()` is false, and the tab's `beforeunload`
+   * is the warning.
+   */
+  closeGuard: {
+    /** Is a shell holding this window's closes? */
+    held(): boolean;
+    /** Every close the shell intercepts calls `onRequest` instead of closing. Returns the release. */
+    hold(onRequest: () => void): Unsubscribe;
+    /** Close the window now, asking nothing more (nothing to close in a browser). */
+    closeNow(): Promise<void>;
+  };
 
   projects: {
     create(
@@ -108,6 +165,26 @@ export interface DesignerBridge {
     onActiveChanged(
       handler: (info: { scene: Scene | null; path: string | null }) => void,
     ): Unsubscribe;
+  };
+
+  /**
+   * D-150 / B-104 — the persistence ROOT, and the one action that can repair it.
+   *
+   * Workspace initialization used to swallow both of its failure legs in bare
+   * `catch {}`s, so an author whose connected folder could not be reopened was moved
+   * to a different storage root without a word — and every asset path then resolved
+   * somewhere else. That silence is half of B-104. This namespace is how the renderer
+   * can say which root is live and why.
+   */
+  storage: {
+    state(): Promise<StorageState>;
+    /**
+     * Re-grant the connected folder. MUST be called from a user GESTURE — Chromium
+     * refuses `requestPermission()` without one, and app startup has none. That is
+     * exactly why a lost folder cannot be repaired at boot and has to surface as an
+     * action the author takes.
+     */
+    reconnectFolder(): Promise<{ ok: boolean; label: string }>;
   };
 
   assets: {

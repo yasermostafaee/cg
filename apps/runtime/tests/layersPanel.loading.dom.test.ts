@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { StrictMode, createElement } from 'react';
+import { fillBridgeStub } from './support/authStub.js';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -47,7 +48,13 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-const BANK: FixedLayerBank = { channel: 1, start: 70, count: 2, visible: [70, 71], aliases: {} };
+const BANK: FixedLayerBank = {
+  channel: 1,
+  low: { start: 50, count: 9 },
+  start: 70,
+  count: 2,
+  aliases: {},
+};
 const SLOTS: FixedSlotState[] = [
   { channel: 1, layer: 70, observed: { kind: 'empty' }, binding: null },
   { channel: 1, layer: 71, observed: { kind: 'empty' }, binding: null },
@@ -86,6 +93,8 @@ function stubBridge(link: 'live' | 'disconnected' = 'live'): {
         listeners.add(h);
         return () => listeners.delete(h);
       },
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
     },
     connections: connectionsStub('both-up'),
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
@@ -101,6 +110,12 @@ function stubBridge(link: 'live' | 'disconnected' = 'live'): {
       clear: () => Promise.resolve({ ok: true }),
       onStateChanged: () => () => undefined,
     },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+      // `B-247` — the release reason. Never fired here; the subscription must exist.
+      onPlateReleased: () => () => undefined,
+    },
     stack: {
       snapshot: () => Promise.resolve([]),
       onStateChanged: () => () => undefined,
@@ -110,9 +125,13 @@ function stubBridge(link: 'live' | 'disconnected' = 'live'): {
       update: () => Promise.resolve({ accepted: true }),
       out: () => Promise.resolve({ accepted: true }),
       remove: () => Promise.resolve({ accepted: true }),
+      // B-108 — the restore-skip report. A healthy session reports NOTHING,
+      // which is what this panel renders for every spec not about that surface.
+      onRestoreSkips: () => () => undefined,
+      onRestoreMigrations: () => () => undefined,
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   return {
     config,
     state,
@@ -140,10 +159,14 @@ async function renderPanel(): Promise<HTMLDivElement> {
             inspectorPx: 320,
             focus: 'none' as const,
             narrow: false,
+            monitorPx: 220,
             setInspectorPx: () => undefined,
+            setMonitorPx: () => undefined,
             setFocus: () => undefined,
             reset: () => undefined,
             customized: false,
+            monitorsShown: true,
+            setMonitorsShown: () => undefined,
           },
           inspectorOpen: false,
           onToggleInspector: () => undefined,
@@ -167,9 +190,10 @@ describe('§3 — an unready list can never render as an empty list', () => {
     // ── inside the window ──────────────────────────────────────────────────
     expect(loading(el), 'the panel must say it is waiting').not.toBeNull();
     expect(loading(el)?.getAttribute('role')).toBe('status');
-    // …and it must not be mistakable for either flavour of "nothing here".
+    // …and it must not be mistakable for either flavour of "nothing here": its title says so.
     expect(el.textContent).not.toContain('No candidate layers are declared');
-    expect(el.textContent).toContain('not an empty list');
+    // `R-093` — the title alone: no explanation under it, pinned as an absence by equality.
+    expect(loading(el)?.textContent).toBe('Loading the layer list…');
     expect(rows(el)).toHaveLength(0);
 
     // A HALF-ARRIVAL is still an unready list: a ready bank over unready slots

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { FixedLayerBank, Rehearsal } from '@cg/shared-ipc';
 import { bankPosition, defaultLayerAlias } from '@cg/shared-ipc';
 import {
+  frameBox,
   frameZIndex,
+  overlayZIndex,
   rehearsalCaption,
   rowNameFor,
   stackedByLayer,
@@ -19,7 +21,7 @@ import {
  * rather than on rendered output alone.
  */
 
-const BANK: FixedLayerBank = { channel: 1, start: 70, count: 30 };
+const BANK: FixedLayerBank = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 30 };
 
 function subject(over: Partial<RehearsalSubject> & { layer: number }): RehearsalSubject {
   return {
@@ -28,6 +30,25 @@ function subject(over: Partial<RehearsalSubject> & { layer: number }): Rehearsal
     rowName: `row-${String(over.layer)}`,
     position: undefined,
     fields: {},
+    liveSources: undefined,
+    activeLookId: undefined,
+    timing: undefined,
+    /*
+      SESSION BQ — the subject carries the RESOLUTION INPUTS now, not a pre-joined
+      plate-keyed name map. See `PlateSourceLookup` for why the old shape WAS the defect.
+
+      ⚠ This fixture kept the removed `plateSourceNames` and omitted the new required field
+      for a while and NOTHING caught it: `apps/runtime/tsconfig.json` includes the SRC GLOB
+      only, so the runtime's `typecheck` never sees `tests/`, and vitest transpiles without
+      checking. Turning that on is its own piece of work — 113 pre-existing errors, measured
+      — and is filed rather than smuggled in here (see `B-157`).
+    */
+    plateSources: {
+      templateId: 'tpl-1',
+      assignments: { assignments: [] },
+      channel: 1,
+      nameOf: () => null,
+    },
     ...over,
   };
 }
@@ -136,21 +157,65 @@ describe('rehearsalCaption — the panel says what it is showing, always', () =>
   });
 });
 
-describe('rowNameFor — the row’s own name, never the raw layer dressed as an alias', () => {
+describe('rowNameFor — the row’s own name: its alias, else the bank’s default', () => {
   it('prefers the configured alias', () => {
     expect(rowNameFor(BANK, 99, 'CLOCK')).toBe('CLOCK');
   });
 
-  it('falls back to the bank’s default alias, which is NOT the layer number', () => {
+  it('falls back to the bank’s default alias, which carries the REAL layer (D3h)', () => {
     expect(rowNameFor(BANK, 99, undefined)).toBe(defaultLayerAlias(BANK, 99));
-    expect(rowNameFor(BANK, 99, undefined)).toBe('Layer 1');
-    // The defect this closes: the panel used to print `Layer ${rehearsal.layer}`,
-    // which reads as the alias format while carrying the real layer number — so
-    // layer 99 announced itself as "Layer 99" beside a row called "Layer 1".
-    expect(rowNameFor(BANK, 99, undefined)).not.toBe('Layer 99');
+    expect(rowNameFor(BANK, 99, undefined)).toBe('Layer 99');
+    // The row and the frame now say the SAME name, and it is the layer CasparCG obeys.
   });
 
   it('with no bank declared, says the layer number and does not invent a position', () => {
     expect(rowNameFor(null, 99, undefined)).toBe('Layer 99');
   });
+});
+
+/**
+ * R-049 — THE ONE FIT TRANSFORM, and the band the overlay occupies.
+ *
+ * `frameBox` exists so that the iframes and the live-plate overlay cannot express
+ * the fit differently. The test asserts they are the SAME OBJECT SHAPE from one
+ * call rather than comparing two literals, because two literals that agree today
+ * are exactly the arrangement that drifts.
+ */
+describe('frameBox — the raster-sized box and the single FIT transform', () => {
+  const RASTER = { width: 1440, height: 1080 };
+
+  it('sizes to the RASTER, not to the panel — that is what the pages measure', () => {
+    const box = frameBox(RASTER, 0.25);
+    expect(box.width).toBe('1440px');
+    expect(box.height).toBe('1080px');
+  });
+
+  it('composes the fit with the centring translate, about the centre', () => {
+    expect(frameBox(RASTER, 0.25).transform).toBe('translate(-50%, -50%) scale(0.25)');
+    expect(frameBox(RASTER, 0.25).transformOrigin).toBe('center center');
+  });
+
+  it('a fit of 1 still emits the scale — one code path, no special case', () => {
+    // Deliberately NOT optimised away. The overlay counter-scales by 1/fit, so a
+    // box that sometimes carries a scale and sometimes does not is a second
+    // shape for the label maths to disagree with.
+    expect(frameBox(RASTER, 1).transform).toBe('translate(-50%, -50%) scale(1)');
+  });
+});
+
+describe('overlayZIndex — the marker is above every frame', () => {
+  it('sits above the TOP frame, whatever the frame count', () => {
+    // There is no cap on rehearsing rows, so a constant would be overtaken. A
+    // placeholder that ends up under a graphic is worse than none: it would show
+    // for one row and vanish for another with nothing to say why.
+    for (const count of [1, 2, 3, 12]) {
+      expect(overlayZIndex(count)).toBeGreaterThan(frameZIndex(count - 1));
+    }
+  });
+
+  /*
+    ⚠ The sibling assertion about the CAVEATS z-index went with the caveats themselves (owner,
+    2026-09-12). It is not weakened coverage: the thing it protected no longer renders, and a
+    test for a deleted surface is a test that passes forever while proving nothing.
+  */
 });

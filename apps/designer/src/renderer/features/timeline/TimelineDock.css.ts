@@ -253,6 +253,41 @@ export const groupChevron = style({
   textAlign: 'center',
 });
 
+/**
+ * D-133 — THE HOLD LOOP RANGE, `[content start → out point]`, drawn across the WHOLE
+ * timeline body rather than inside the scene lane.
+ *
+ * Three pieces, and the split is the requirement: the draggable GRIPS stay in the scene
+ * lane (`phaseMarkerIn` / `phaseMarkerOut` below — a grip needs a row to live on), while
+ * their INDICATOR LINES span the full timeline height so the operator can line an
+ * element's keyframes up against the loop boundaries without eyeballing across rows.
+ * The band in between makes the range readable at a glance.
+ *
+ * `left` / `width` are applied inline (they are frame positions). The band sits at
+ * z-index 1 — under the dimmed inactive tail (2) and the pinned scene lane (3), so it
+ * tints the lanes without washing out the row it would otherwise sit on top of; the two
+ * lines sit at 5, above the sticky scene lane, exactly like the playhead one layer up.
+ */
+export const loopRangeBand = style({
+  position: 'absolute',
+  top: 0,
+  bottom: 0,
+  background: colors.markerInSurface,
+  pointerEvents: 'none',
+  zIndex: 1,
+});
+
+// `left` and the per-end colour/dash are applied inline.
+export const loopRangeLine = style({
+  position: 'absolute',
+  top: 0,
+  bottom: 0,
+  width: 0,
+  pointerEvents: 'none',
+  opacity: 0.55,
+  zIndex: 5,
+});
+
 // D-020 — the single draggable `outPoint` marker inside the scene lane (amber):
 // where the intro ends, the hold sits, and the exit begins (Loopic-style).
 // The colour is the `markerOut` TOKEN, shared with the Inspector's "Add out point"

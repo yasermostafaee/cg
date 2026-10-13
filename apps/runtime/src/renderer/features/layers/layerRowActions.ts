@@ -4,12 +4,14 @@ import {
   Download,
   MonitorPlay,
   Play,
+  Radio,
+  Volume2,
   RefreshCw,
   Trash2,
   XSquare,
 } from 'lucide-react';
-import type { FixedSlotState } from '@cg/shared-ipc';
-import type { StackItemState } from '@cg/shared-schema';
+import { TAKE_ON_AIR_CODE, type FixedSlotState } from '@cg/shared-ipc';
+import { ownsLiveSeats, type StackItemState } from '@cg/shared-schema';
 import type { RowAction } from '../../ui/rowAction.js';
 import type { AsyncResult } from '../../ui/asyncButtonController.js';
 import {
@@ -17,7 +19,9 @@ import {
   casparRefusalReason,
   type CasparReach,
 } from '../../ui/reachWording.js';
+import { reportCommandSuccess } from '../status/commandFeedback.js';
 import { isOnAir } from '../stack/onAir.js';
+import { removeIsRefused } from './removeGate.js';
 import type { RowBinding } from './rowState.js';
 
 /**
@@ -58,7 +62,7 @@ import type { RowBinding } from './rowState.js';
  * control that can only reject — because a disabled control invites nothing.
  *
  * (The playout rows are the one place this rule does NOT apply: they carry no
- * verbs at all, not disabled ones. See `PlayoutPanel` — that is a safety
+ * verbs at all, not disabled ones. See `StationLayersPanel` — that is a safety
  * decision, not a layout one.)
  *
  * The list is pure and React-free so the verb split is unit-testable without a
@@ -94,8 +98,54 @@ export const MISSING_TEMPLATE_REASON =
  * answers" — because it is the same PROMISE: a bounded wait that ends on the data,
  * never on a timer, and never on the operator doing anything.
  */
+/**
+ * R-021 stage 4 — why the AIR verbs are held on a `restore-blocked` row.
+ *
+ * Exported for the same reason `MISSING_TEMPLATE_REASON` is: the fact belongs on
+ * the ROW as well as on the control, and the two surfaces must read the same
+ * string by construction rather than by two people writing the same sentence.
+ *
+ * It names the way OUT, because every held verb here has one and it is short.
+ */
+export const RESTORE_BLOCKED_REASON =
+  'This row’s layer is held by a producer that is not ours, so the item is not on it. Sending this would command somebody else’s graphic. CLEAR the layer first, then PLAY.';
+
 export const AWAITING_ROW_REASON =
   'Connecting… this row’s contents have not arrived from the bridge yet, so its actions are held. They return as soon as it answers.';
+
+/**
+ * 🔴 `R-017` — WHY REMOVE IS HELD WHILE THE ROW IS ON AIR.
+ *
+ * REMOVE clears the layer AND drops the item, and neither half can be undone: the row's
+ * fields, its position override and its per-look composition go with it. It was the only
+ * verb on the row with no state condition whatsoever — and the only irreversible one.
+ *
+ * ⚠ **A confirm was already there and was never the gap.** `LayerRow` has attached an
+ * on-air-aware dialog to this verb, on both surfaces, since before R-017 was re-verified.
+ * A confirmation asks; a refusal declines. R-017 is the refusal.
+ *
+ * It names the way OUT, like {@link RESTORE_BLOCKED_REASON}, because the remedy is two
+ * short presses and an operator told only "no" concludes the console is broken. STOP is
+ * named first: it is the graceful half and leaves the template loaded, so the row can be
+ * taken again without a re-pick.
+ *
+ * ⭐ **Exported so the row's tooltip and the toast that answers the bridge's refusal are
+ * ONE string from ONE place** — `tasks.md` 1.10's requirement, and the reason it is a
+ * requirement is that two sentences which match today drift apart on the day one of them
+ * is edited.
+ */
+export const REMOVE_ON_AIR_REASON =
+  'This row is on air, and REMOVE cannot be undone — it clears the layer and drops the item, with its fields and overrides. Take it off air first: STOP runs the template’s outro and keeps it loaded, CLEAR cuts it immediately.';
+
+/**
+ * 🔴 `FIELD-FIXES-01-A` Decision 2 — the ONE sentence for a take the bridge refuses because the
+ * row is already on air (or its previous take has not resolved): on PLAY's disabled title, and on
+ * the refusal a race or another console's snapshot reaches. `design.md` §29 grammar — the row in
+ * the operator's words (`operatorRowName`, passed in as `rowName`), what is true, the way out.
+ */
+export function takeOnAirReason(rowName: string): string {
+  return `${rowName} is already on air — take it out first.`;
+}
 
 export interface LayerRowActionDeps {
   /**
@@ -115,6 +165,14 @@ export interface LayerRowActionDeps {
    * availability CAN be derived from one.
    */
   binding: RowBinding;
+  /**
+   * DELTA 8 — the row in the OPERATOR words, for the toast each verb raises when it lands.
+   * Passed rather than composed here: operatorRowName is the one canonical composition
+   * (golden rule 11) and this file must not grow a second one.
+   */
+  rowName: string;
+  /** The real CasparCG layer, for the one sentence that needs it. */
+  layerName: string;
   /**
    * What the WIRE observes on this row's layer, independent of whether we have
    * an item bound to it. Load reads this, not just `item`: an unbound row can
@@ -152,6 +210,30 @@ export interface LayerRowActionDeps {
    * would make rehearse "a preview pane we hope nobody plays from".
    */
   rehearsing: boolean;
+  /**
+   * `FIELD-FIXES-01-A` Decision 2 — does the bridge's published live-layers ledger hold a seat for
+   * this row's item? The second half of `ownsLiveSeats`, the question the bridge asks before it
+   * takes: a row whose plates are seated (`B-145` adopted them at boot while its status did not
+   * come back) is on the channel, and the bridge refuses its take.
+   *
+   * Resolved by the PANEL from the one ledger snapshot, for `rehearsing`'s reason. Optional, and
+   * absent means no seat — the bridge still refuses whatever this says; this only keeps PLAY from
+   * offering a take the bridge will not do.
+   */
+  holdsLiveSeats?: boolean;
+  /**
+   * R-021 stage 4 — the bridge's restore for this row PARKED: a producer that is
+   * not ours holds the layer, so our item is NOT on it (`binding.restoreBlocked`).
+   *
+   * It holds every verb that would COMMAND that layer, and only those. CLEAR and
+   * REMOVE stay available deliberately — CLEAR is the documented way out of the
+   * state (d1's "Clear, then take"), and holding the escape hatch on a row whose
+   * whole problem is a producer in the way would be fail-STUCK rather than
+   * fail-safe. This is a courtesy gate: the bridge sends nothing on its own while
+   * blocked, and a blocked row's PLAY would be an ordinary take that the bridge
+   * has no reason to refuse — which is precisely why the console must not offer it.
+   */
+  restoreBlocked: boolean;
   /** Enter or leave rehearse — one toggle in a fixed slot, like LOAD/REMOVE. */
   toggleRehearse: (itemId: string) => Promise<AsyncResult>;
   /**
@@ -196,7 +278,51 @@ export interface LayerRowActionDeps {
    */
   clearLayer: () => Promise<AsyncResult>;
   remove: (itemId: string) => Promise<AsyncResult>;
+  /**
+   * R-048 (6.9 / 6.9e) — does this row carry a template with LIVE PLATES?
+   *
+   * The verb is OFFERED only where it means something. A row whose template has
+   * no plates has nothing to repoint, and a permanently-disabled entry in every
+   * row menu is thirty pieces of furniture that teach the operator to stop
+   * reading the menu.
+   */
+  hasLivePlates: boolean;
+  /**
+   * R-048 (6.9e) — open the per-plate source picker for THIS row.
+   *
+   * MENU-PLACED, not a button: seven verbs across thirty rows is already 210
+   * controls, and this one is reached in an emergency the operator is looking
+   * straight at rather than scanned for. Two actions total (open, choose), which
+   * is what 6.9e asks for.
+   */
+  swapSource: () => Promise<AsyncResult>;
+  /**
+   * C-015 phase 6 (6.5f) — open this row's per-plate AUDIO panel.
+   *
+   * Beside {@link swapSource} by owner decision: under pressure, on air, "which
+   * source" and "how loud" are one decision made in one place, and 6.9c already
+   * settled that the audio intent belongs to the PLATE rather than to the producer
+   * instance — so it belongs where the plate's other per-run property is.
+   *
+   * Gated on `hasLivePlates` for the same reason SOURCE is, and on the SAME
+   * reachability, because raising a plate emits a `MIXER … VOLUME` on a live layer.
+   */
+  plateAudio: () => Promise<AsyncResult>;
   onError: (message: string) => void;
+  /**
+   * 🔴 `C-038` / `R-066` bullet 4 — **MAY THIS PRINCIPAL ACT ON THIS CHANNEL AT ALL?**
+   *
+   * `false` makes every verb ABSENT — an empty list, not a disabled one. Golden rule 13: a
+   * greyed-out TAKE tells the operator the row is not ready, when the truth is that this
+   * console is not theirs to press. The fact is stated ONCE, in the status bar and on the
+   * channel strip; the controls simply do not exist.
+   *
+   * ⚠ **It is the LAST gate, applied after every other availability question, and never one
+   * of them.** The per-verb rules answer "can this row do this"; this answers "may this
+   * person". Folding it into `binding` or `linkDown` would put an identity fact inside a
+   * state machine that has an on-air failure behind each of its branches.
+   */
+  canOperate: boolean;
 }
 
 /**
@@ -211,6 +337,21 @@ export interface LayerRowActionDeps {
  */
 export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
   const { binding, linkDown, onError } = deps;
+  /*
+    🔴 `C-038` — **FIRST, AND IT RETURNS RATHER THAN FILTERS.**
+
+    Written at the top so no verb below can be reached by a principal who may not press it,
+    including one added later by an author who never read this file. A filter at the bottom
+    would be one `return` statement away from being bypassed.
+
+    The verb BLOCK still renders — `VERBS_GRID` is one grid child of a fixed width and the
+    sticky header's words sit on that same geometry. Emptying the list rather than removing
+    the element is what keeps `VERB_COUNT` and `gridTemplateColumns` true, which is the
+    invariant with a recorded on-air failure behind it. The cost is a blank gutter on a
+    read-only console, and that is the deliberate trade: a correct empty space beats a
+    resized table nobody measured in a browser (golden rule 12c).
+  */
+  if (!deps.canOperate) return [];
   /**
    * ── THE THREE-WAY FACT, UNPACKED ONCE ─────────────────────────────────────
    *
@@ -295,11 +436,25 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
    * answer, and every consumer below decides for itself which way to fail. The
    * one thing none of them may do is treat silence as a fact (B-101).
    */
+  /**
+   * R-021 stage 4 — this row's layer is not ours to command right now.
+   *
+   * Read off the BINDING and never re-derived from `observed`: "a non-html
+   * producer under a binding" also describes a BLIND tap's honest ignorance, and
+   * only the bridge knows which of the two actually happened.
+   */
+  const blocked = deps.restoreBlocked;
   const onAir = item !== null && isOnAir(item);
-  // PLAY's own gate is narrower than `isOnAir`: an item already playing has
-  // nothing to take. Kept as the stack row had it so the two never disagree
-  // about what "already on air" means for THIS verb.
+  // The engaged fill: PLAY wears the air colour only while the row IS on air — never on a guess.
   const playing = item?.status === 'on-air' || item?.status === 'playing';
+  /*
+    🔴 `FIELD-FIXES-01-A` DECISION 2 — PLAY'S GATE IS THE BRIDGE'S OWN REFUSAL, not a narrower
+    local reading of it: `ownsLiveSeats`, the function its `#ownsLiveSeats` calls. The row is on
+    air OR UNSETTLED (`isOnAirStatus`: a take in flight, an overdue one reading `unconfirmed`, an
+    update or a stop still in flight), or the ledger holds its seats. This read `playing` alone, so
+    a slow reply that left the row `unconfirmed` gave PLAY back on a graphic that was up.
+  */
+  const takeRefused = ownsLiveSeats(item, deps.holdsLiveSeats === true);
 
   /**
    * The bound template is not in THIS browser's library.
@@ -359,6 +514,73 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
    * output". Declaring it once keeps button and menu in agreement by construction,
    * which is the whole reason this list exists.
    */
+  /**
+   * 🔴 `CONSOLE-LOOK-06` DELTA 8, second half — **WHAT EACH ROW VERB SAYS WHEN IT LANDS.**
+   *
+   * ONE catalogue at the ONE chokepoint. Every row verb is built by `act()` below, so a
+   * sentence written per call site would be eight strings that drift; this is one table that
+   * cannot.
+   *
+   * The rules are DELTA 8 §2's, unchanged from the audio half: the row named in the operator's
+   * words, the RESULTING STATE rather than the verb pressed, one line, and one clause where
+   * there is a consequence the operator cannot see or cannot undo.
+   *
+   * 🔴🔴 GOLDEN RULE 10 IS THE ONE THAT WILL GO WRONG HERE, so it is spelled out per verb:
+   * a CONFIGURATION verb is never a playout verb, and its sentence must not sound like one.
+   *
+   *   PLAYOUT        `play` · `stop` · `next` · `rehearse` (ON PVW) · `clear`
+   *   CONFIGURATION  `update` · `load-remove`
+   *
+   * ⚠ `rehearse` is the verb most likely to be misread under pressure, so its sentence says
+   * outright that nothing was sent. ⚠ `stop` and `clear` are different acts and their words
+   * are not interchangeable: one runs an outro and stays loaded, the other cuts and destroys
+   * the producer. ⚠ `update` has TWO truths and the recorded decision behind them is the
+   * owner's: the button reads UPDATE ON AIR only while the row is on air, so off air it saved a
+   * configuration and on air it saved one AND changed what is on the output.
+   */
+  const landed = (key: string): string | null => {
+    const who = deps.rowName;
+    const layer = deps.layerName;
+    switch (key) {
+      case 'play':
+        return `${who} is on air.`;
+      case 'stop':
+        return `${who} stopped. It stays loaded, so it can be taken again.`;
+      case 'next':
+        return `${who} advanced to its next step.`;
+      case 'rehearse':
+        return deps.rehearsing
+          ? `${who} left PVW.`
+          : `${who} is on PVW — a local preview. Nothing was sent to air.`;
+      case 'update':
+        return onAir
+          ? `${who} updated. The change is on air now.`
+          : `${who} saved. Nothing was sent to air — the next take seats it.`;
+      case 'load-remove':
+        /*
+          🔴 THE LOAD HALF IS ANNOUNCED BY ITS OWN HANDLER, NOT HERE, and the reason is that
+          this catalogue cannot name what landed.
+
+          These actions are built from the render BEFORE the press, so at this point the row is
+          still empty and `deps` knows nothing about the template the operator is about to
+          choose. A sentence written here could only say "loaded" — and a load's sentence has to
+          NAME what arrived, because it may follow an import whose own confirmation it replaces.
+          `LayerRow`'s `load` holds the chosen template, so it announces there.
+
+          ⚠ An earlier cut made the load silent outright, on the reasoning that the import's
+          toast already spoke. That was wrong twice: it left a load that followed NO import
+          saying nothing at all, and it made one message depend on another still being visible.
+        */
+        return empty
+          ? null
+          : `${who} emptied. The template is off the row; layer ${layer} is untouched.`;
+      default:
+        // `swap-source`, `plate-audio` and `menu` open something rather than completing an
+        // act; the thing they open announces its own result. Silence here is correct.
+        return null;
+    }
+  };
+
   const act = (
     key: string,
     label: string,
@@ -390,7 +612,20 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       : rowRefusalReason !== undefined
         ? { title: rowRefusalReason }
         : {}),
-    run,
+    /*
+      🔴 THE ANNOUNCEMENT IS WRAPPED AROUND THE VERB'S OWN RUN, so it fires on the CONFIRMED
+      result and only there (§4e). A cancelled confirm gate is the operator's own "no" and is
+      not an outcome; a refusal keeps its persistent surface (DELTA R) and never becomes a
+      toast (§4d).
+    */
+    run: async () => {
+      const res = await run();
+      if (res.accepted && res.cancelled !== true) {
+        const said = landed(key);
+        if (said !== null) reportCommandSuccess(said);
+      }
+      return res;
+    },
     onError,
     ...(icon !== undefined ? { icon } : {}),
     ...(surface !== undefined ? { surface } : {}),
@@ -461,11 +696,41 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
           ...act(
             'load-remove',
             'REMOVE',
-            false,
+            /*
+              🔴 `R-017` — THE STATE CONDITION THIS VERB NEVER HAD, and it goes HERE, in the
+              ONE `RowAction` this toggle's REMOVE half is declared as. `buttonActions` and
+              `toMenuItems` are two projections of the same array, so the button and the
+              context-menu item inherit the gate structurally — there is no second place to
+              remember, which is the whole reason the shape rule exists.
+
+              🔴 `B-228` — `removeIsRefused`, THE ONE RENDERER-SIDE DECISION, and it replaced
+              `isOnAirStatus(item) && !blocked` here. That spelling was right about the
+              predicate and incomplete about the ANSWER: the bridge's `#removeRefusal` is the
+              predicate plus TWO exemptions, this carried one of them (`blocked`, off the
+              binding), and REMOVE ALL carried neither — so the bulk button withheld a press
+              the bridge would have accepted. Both surfaces now read the same function, which
+              reads the bridge's published `removeExempt` rather than recomputing the rule.
+
+              ⚠ It reads the item's own `status` and NOT the row's DISPLAY badge — `LayerRow`
+              masks an unbacked air claim to `unverified` for the operator's benefit, and a
+              gate computed from the mask would diverge from the bridge on exactly the states
+              the mask exists for.
+
+              ⚠ `blocked` is deliberately NOT consulted here any more. It is the binding's
+              restore-blocked fact, which is only ONE of the two exemptions; `removeExempt` is
+              the bridge's answer to both. The other verbs below still read `blocked`, and
+              correctly — they are gating on "this layer is not ours to command", which is a
+              different question from "may this row be removed".
+            */
+            item !== null && removeIsRefused(item),
             () => (item === null ? noop() : deps.remove(item.itemId)),
             Trash2,
             undefined,
-            templateMissing ? MISSING_TEMPLATE_REASON : undefined,
+            templateMissing
+              ? MISSING_TEMPLATE_REASON
+              : item !== null && removeIsRefused(item)
+                ? REMOVE_ON_AIR_REASON
+                : undefined,
           ),
           // The two halves of ONE slot, and the reason `tone` is its own field:
           // they share a key, so only an explicit declaration can give them
@@ -500,11 +765,29 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         // reason rehearse is a mode rather than a pane. This disabled state is the
         // courtesy; the bridge's own refusal (`errorCode: 'rehearsing'`) is the
         // guarantee, and it is what holds when a second browser's snapshot is stale.
-        empty || playing || deps.rehearsing || needsCaspar,
-        () => (item === null ? noop() : deps.play(item.itemId)),
+        // `blocked` is the load-bearing one here: a take on a blocked row issues
+        // `CG ADD` + PLAY onto a layer carrying somebody else's producer, which
+        // replaces it — the destructive act d1 says may only ever happen through
+        // the operator's own explicit CLEAR.
+        empty || takeRefused || deps.rehearsing || blocked || needsCaspar,
+        async () => {
+          if (item === null) return noop();
+          const res = await deps.play(item.itemId);
+          // A refusal the bridge answered for a row this render did not yet see on air (a race,
+          // or another console's take) — said in the row's own name, like the disabled title.
+          return res.errorCode === TAKE_ON_AIR_CODE
+            ? { ...res, message: takeOnAirReason(deps.rowName) }
+            : res;
+        },
         Play,
       ),
-      ...(needsCaspar || awaiting ? { title: casparVerbReason } : {}),
+      ...(blocked
+        ? { title: RESTORE_BLOCKED_REASON }
+        : needsCaspar || awaiting
+          ? { title: casparVerbReason }
+          : takeRefused
+            ? { title: takeOnAirReason(deps.rowName) }
+            : {}),
       tone: 'play',
       // ENGAGED = the state this verb produces is already true, which for PLAY is
       // ON AIR. It is disabled in exactly that case, so the fill lands on a
@@ -557,7 +840,11 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         // feature are R-022's rehearse, and renaming the identity to match a
         // label would be renaming the thing to match its caption.
         deps.rehearsing ? 'OFF PVW' : 'ON PVW',
-        empty || (!deps.rehearsing && onAir),
+        // Blocked holds ENTRY only: rehearse MUTES the layer, and muting a layer
+        // that is carrying another system's live feed is the same trespass PLAY
+        // would be. Leaving is never held — it is the only way back to a playable
+        // row, and it commands nothing.
+        empty || (!deps.rehearsing && (onAir || blocked)),
         () => (item === null ? noop() : deps.toggleRehearse(item.itemId)),
         MonitorPlay,
       ),
@@ -566,17 +853,65 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
   ];
 
   actions.push(
+    /*
+      R-048 (6.9 / 6.9e) — SOURCE: repoint one plate of this row, on air.
+
+      Present only on a row whose template DECLARES plates, and gated on the same
+      reachability every AMCP verb is: the swap emits a `PLAY` on a live layer.
+      Deliberately NOT gated on `onAir` — patching around a dead feed on an on-air
+      graphic is the entire use of it, and a row that is merely loaded may be
+      repointed before the take, which is the same act done early.
+    */
+    ...(deps.hasLivePlates
+      ? [
+          act(
+            'swap-source',
+            'SOURCE',
+            empty || blocked || needsCaspar,
+            () => deps.swapSource(),
+            Radio,
+            'menu',
+            blocked ? RESTORE_BLOCKED_REASON : undefined,
+          ),
+        ]
+      : []),
+    /*
+      C-015 (6.5f) — AUDIO: raise or mute this row's plates.
+
+      Beside SOURCE, and offered under the same condition. Every live plate starts
+      SILENT — the audio rule creates every producer muted — so without this verb
+      the raise half of that rule has no surface at all and a guest can never be
+      heard. NOT gated on `onAir`: arming a plate's audio BEFORE the take is the
+      point, since the alternative is chasing it once the graphic is already up.
+    */
+    ...(deps.hasLivePlates
+      ? [
+          act(
+            'plate-audio',
+            'AUDIO',
+            empty || blocked || needsCaspar,
+            () => deps.plateAudio(),
+            Volume2,
+            'menu',
+            blocked ? RESTORE_BLOCKED_REASON : undefined,
+          ),
+        ]
+      : []),
     // NEXT — ALWAYS present (the shape never changes), enabled only when the
     // template actually has a step to advance to and the item is on air.
     {
       ...act(
         'next',
         'NEXT',
-        empty || !onAir || !deps.hasNext || needsCaspar,
+        empty || !onAir || !deps.hasNext || blocked || needsCaspar,
         () => (item === null ? noop() : deps.next(item.itemId)),
         ArrowRightFromLine,
       ),
-      ...(needsCaspar || awaiting ? { title: casparVerbReason } : {}),
+      ...(blocked
+        ? { title: RESTORE_BLOCKED_REASON }
+        : needsCaspar || awaiting
+          ? { title: casparVerbReason }
+          : {}),
       tone: 'next',
     },
     // UPDATE pushes staged field edits to a LIVE producer. Its primary surface
@@ -585,23 +920,31 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
     act(
       'update',
       'UPDATE',
-      empty || !onAir || !deps.dirty || needsCaspar,
+      empty || !onAir || !deps.dirty || blocked || needsCaspar,
       () => (item === null ? noop() : deps.update(item.itemId)),
       RefreshCw,
       'menu',
       // UPDATE reaches air: on a row with a resident producer it sends
       // `CG UPDATE` (measured). So it carries the same reason as the rest.
-      needsCaspar ? casparVerbReason : undefined,
+      blocked ? RESTORE_BLOCKED_REASON : needsCaspar ? casparVerbReason : undefined,
     ),
     {
       ...act(
         'stop',
         'STOP',
-        empty || !onAir || needsCaspar,
+        // R-021 4.3 — the graceful STOP is offered only where a producer of OURS
+        // is resident. A blocked row's observation is emphatically not `html`, so
+        // `CG STOP` there would be addressed to another system's producer, and
+        // what 2.3.2 does with it is not something to find out on air.
+        empty || !onAir || blocked || needsCaspar,
         () => (item === null ? noop() : deps.stop(item.itemId)),
         CircleArrowOutDownRight,
       ),
-      ...(needsCaspar || awaiting ? { title: casparVerbReason } : {}),
+      ...(blocked
+        ? { title: RESTORE_BLOCKED_REASON }
+        : needsCaspar || awaiting
+          ? { title: casparVerbReason }
+          : {}),
       tone: 'stop',
     },
     /**

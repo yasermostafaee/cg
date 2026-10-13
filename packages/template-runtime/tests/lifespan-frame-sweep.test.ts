@@ -141,7 +141,7 @@ function scene(children: Element[], outPoint: number): Scene {
     frameRange: { in: 0, out: 100 },
     activeRange: { in: 0, out: 100 },
     lifecycle: { outPoint },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: 'pl', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],

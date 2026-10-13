@@ -7,12 +7,20 @@ describe('repeater editor columns (D-030)', () => {
     const fields: DynamicField[] = [
       { id: 'name', label: 'Team name', required: true, type: 'text', default: '' },
       { id: 'score', label: '', required: false, type: 'number', default: 0 },
-      { id: 'note', label: 'Note', required: false, type: 'multiline', default: '' },
+      {
+        id: 'note',
+        label: 'Note',
+        required: false,
+        type: 'multiline',
+        default: '',
+        digits: 'persian',
+      },
     ];
+    // TEXT-DIGITS-01 — a text column carries its child field's Digits (absent reads Keyboard).
     expect(columnsForFields(fields)).toEqual([
-      { key: 'name', label: 'Team name' },
+      { key: 'name', label: 'Team name', digits: 'as-typed' },
       { key: 'score', label: 'score', kind: 'number' },
-      { key: 'note', label: 'Note' },
+      { key: 'note', label: 'Note', digits: 'persian' },
     ]);
   });
 

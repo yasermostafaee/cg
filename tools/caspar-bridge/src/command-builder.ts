@@ -1,10 +1,29 @@
 import { quote } from '@cg/caspar-client';
-import type { FieldValues } from '@cg/shared-schema';
+import { redactUrlCredentials, type SourceProducer } from '@cg/shared-ipc';
+import {
+  withCgControl,
+  type CgControl,
+  type CgPassTiming,
+  type FieldValues,
+} from '@cg/shared-schema';
+import type { NormalizedRect } from './live-layers.js';
 
 /** A CasparCG `(channel, layer)` coordinate. */
 export interface CommandSlot {
   readonly channel: number;
   readonly layer: number;
+}
+
+/**
+ * 🔴 `LOGO-LOOP-01` — the control a TAKE hands its page, on either route into air: the take
+ * token always, the row's look and its recorded pass timing when it has them. Built ONCE by the
+ * bridge's take-control helper; `load` carries it in the `CG ADD` payload and
+ * {@link CommandBuilder.updateTake} in the resident route's `CG UPDATE`.
+ */
+export interface TakeControl {
+  readonly take: string;
+  readonly look?: string;
+  readonly timing?: CgPassTiming;
 }
 
 /**
@@ -51,6 +70,58 @@ const FLASH_LAYER = 0;
  * `JSON.parse`. See `packages/caspar-client/src/amcp/escape.ts` for the rule and
  * its provenance. A raw value never reaches the wire unquoted.
  */
+/** The longest `command` an audit entry carries (`AuditEntrySchema.command` caps at 256). */
+export const WIRE_LINE_SUMMARY_MAX = 200;
+
+/**
+ * `B-209` — an AMCP line as the audit record keeps it: the verb, the target and the
+ * first quoted argument intact, every LATER quoted argument elided, the whole thing
+ * capped.
+ *
+ * The first quoted argument is kept because for `CG ADD` it is the template URL —
+ * the host and the PORT CasparCG was told to fetch from, which is exactly what a
+ * reader of a refused take needs (an ephemeral port changes on every bridge
+ * restart, `C-032`). The data payload after it is the operator's field values, which
+ * the stack snapshot already holds; eliding it keeps a Persian ticker's worth of text
+ * out of a column whose job is to name a command. `CG UPDATE`'s single argument IS
+ * the payload and is kept up to the cap, because there the payload is the command.
+ *
+ * ⚠ Pure and total: any line, any length, never throws. A summariser that could throw
+ * would turn a refused command into a lost audit row, which is the outcome this
+ * exists to prevent.
+ */
+export function summarizeWireLine(line: string, max = WIRE_LINE_SUMMARY_MAX): string {
+  // `PLAYOUT-SOURCES-01` §1.E — a stream URL's credentials never reach the audit or a take refusal:
+  // every summary is written with `scheme://***@`. Redacted FIRST, so the cap can never cut a
+  // credential in half and leave the start of it.
+  const redacted = redactUrlCredentials(line);
+  const open = redacted.indexOf('"');
+  let summary = redacted;
+  if (open !== -1) {
+    const close = closingQuote(redacted, open);
+    if (close !== -1) {
+      const head = redacted.slice(0, close + 1);
+      // Every further quoted argument (escaped quotes included) becomes an ellipsis.
+      const rest = redacted.slice(close + 1).replace(/"(?:[^"\\]|\\.)*"/g, '"…"');
+      summary = head + rest;
+    }
+  }
+  return summary.length > max ? `${summary.slice(0, max - 1)}…` : summary;
+}
+
+/** The index of the quote that closes the one at `open`, honouring `\"`, or -1. */
+function closingQuote(line: string, open: number): number {
+  for (let i = open + 1; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (ch === '"') return i;
+  }
+  return -1;
+}
+
 export class CommandBuilder {
   /** Load a template onto a slot — `CG ADD` with play-on-load OFF (loaded, NOT playing). */
   load(slot: CommandSlot, template: string, fields: FieldValues): string {
@@ -65,6 +136,108 @@ export class CommandBuilder {
   /** Push updated field values to the playing template on a slot. */
   update(slot: CommandSlot, fields: FieldValues): string {
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(serialize(fields))}`;
+  }
+
+  /**
+   * `multibox-layout-switch` `tasks.md` 6.7 — **tell the PAGE which LOOK is active.**
+   *
+   * The same `CG UPDATE` verb and the same escape chain as {@link update}; the look id rides
+   * the payload under the reserved key (`withCgControl`), which the page lifts off before the
+   * field machinery sees it. Deliberately NOT a new verb: `CG UPDATE` is the one form proven
+   * on 2.3.2 to deliver a JSON payload to `window.update` intact, and inventing a second
+   * transport would mean re-earning that proof (the `CALL` / `CG INVOKE` alternatives were
+   * measured and disproven — see this class's header).
+   *
+   * `fields` is normally EMPTY: a look switch changes no author value. It is a parameter
+   * rather than hard-coded because the payload merges page-side, and a caller that has fields
+   * to send anyway must be able to send both in ONE command rather than two — a second command
+   * is a second chance for the two to land apart.
+   *
+   * ⭐ `C-028` — `plates` rides the SAME payload for exactly that reason. A switch can change
+   * a plate's fit (two looks may bind one input to different boxes and assert different shapes
+   * for it), so the id and the facts must land together or the page punches the new look's
+   * holes at the old look's aspects. Absent — a non-`C-028` caller, or a template with no
+   * plates — leaves the payload byte-for-byte what it was.
+   */
+  updateLook(slot: CommandSlot, lookId: string, fields: FieldValues = {}): string {
+    /*
+      🔴 **`single-clock-look-switch` — the `plates` and `from` arguments are GONE.**
+
+      `plates` (`C-028`) sent each plate's resolved aspect and mode so the PAGE could compute
+      the same fit; `from` (`SKEW-INTERSECT-01`) named the look being left so the page could
+      narrow its holes to `outgoing ∩ entering`. Both existed to steer a MASK, and a
+      plate-bearing page now sits BELOW its plates and punches nothing. The fit that reaches
+      air is the bridge's own `MIXER FILL` / `CLIP`, from the same facts, on the side that
+      owns the picture.
+
+      ⚠ What SURVIVES is the look id, and the reason it survives is unchanged: the page still
+      flips its own per-look decoration, and it still has to be told which look that is.
+    */
+    const control: CgControl = { look: lookId };
+    return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
+      serialize(withCgControl(fields, control)),
+    )}`;
+  }
+
+  /**
+   * 🔴 `TIMING-WIRE-22` (c) — **tell the PAGE its new pass timing.**
+   *
+   * The same `CG UPDATE` verb, the same escape chain and the same reserved key as
+   * {@link updateLook}, for the same reason: `CG UPDATE` is the one form proven on 2.3.2 to
+   * deliver a JSON payload to `window.update` intact, and the pass loop it is steering runs in
+   * the page's own JS inside CEF where no AMCP verb can reach it.
+   *
+   * `fields` is normally EMPTY — changing a count changes no author value — but it is a
+   * parameter for the same reason `updateLook`'s is: a caller with fields to send anyway must
+   * be able to send both in ONE command, because a second command is a second chance for the
+   * two to land apart.
+   *
+   * ⚠ This is a CONFIGURATION verb (golden rule 10). It sends no `PLAY`, seats nothing, and
+   * puts nothing on air that was not already there; it changes what the graphic already on the
+   * channel will do next.
+   */
+  updatePassTiming(slot: CommandSlot, timing: CgPassTiming, fields: FieldValues = {}): string {
+    const control: CgControl = { timing };
+    return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
+      serialize(withCgControl(fields, control)),
+    )}`;
+  }
+
+  /**
+   * 🔴 `SELF-STOP-24` / `C-013` — **tell a RESIDENT page which take it is now running.**
+   *
+   * The third member of this family, and it exists for the one route into air that carries no
+   * payload of its own: a take of a producer that is still resident sends a bare `CG PLAY` and
+   * no `CG ADD` (`C-012`'s resume, which is the whole point of STOP leaving the producer). The
+   * page is therefore the SAME page, still holding the PREVIOUS run's token — and a report from
+   * the run that finished would stop the run that has just started.
+   *
+   * ⚠ **The look rides along rather than being sent separately.** `B-191` already tells a
+   * resident page its look at this exact moment, and two commands is two chances for them to
+   * land apart. When the row has no look — a template with none — this sends the token alone,
+   * which is the case the look tell could never cover because it was gated on having one.
+   *
+   * ⚠ A CONFIGURATION verb (golden rule 10): no `PLAY`, nothing seated, nothing un-muted. It
+   * changes what the graphic about to be played will REPORT, not what is on air.
+   *
+   * 🔴 `LOGO-LOOP-01` (`B-322`) — **AND THE ROW'S RECORDED PASS TIMING RIDES IT, for the reason
+   * the look does.** A count set while the row was stopped is only RECORDED (golden rule 10), on
+   * the promise that the next take carries it — and this is the next take on the resident route.
+   * Without it the page plays the last count it was told while every surface says otherwise.
+   * The members come from the bridge's one control helper, which `#sendAdd` uses too.
+   *
+   * ⚠ **THE KEY ORDER IS `take`, `look`, `timing`, and it is not cosmetic.** A row without an
+   * override must put exactly the bytes on the wire it put there before `timing` existed here.
+   */
+  updateTake(slot: CommandSlot, control: TakeControl, fields: FieldValues = {}): string {
+    const ordered: CgControl = {
+      take: control.take,
+      ...(control.look !== undefined && { look: control.look }),
+      ...(control.timing !== undefined && { timing: control.timing }),
+    };
+    return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
+      serialize(withCgControl(fields, ordered)),
+    )}`;
   }
 
   /**
@@ -103,6 +276,21 @@ export class CommandBuilder {
     return `CG ${target(slot)} NEXT ${String(FLASH_LAYER)}`;
   }
 
+  /**
+   * 🔴 `BRIDGE-TRUTH-01` §3 — `INFO <channel>`, and it takes a CHANNEL, never a slot.
+   *
+   * `INFO <ch>-<layer>` is accepted and the layer is silently IGNORED — `info_channel_command`
+   * never reads it; the Playout team measured both forms at 1173 bytes, identical content. A
+   * reader that addressed one layer would get the whole channel back and could not tell. So the
+   * only spelling this builder can produce is the channel form, and the type is what keeps it so.
+   *
+   * ⚠ And `INFO`'s `<volume>` nodes are the output bus's meters, not layer volumes: a layer's
+   * volume is read with `MIXER <ch>-<layer> VOLUME` (`@cg/caspar-client`'s `readBandVolumes`).
+   */
+  info(channel: number): string {
+    return `INFO ${String(channel)}`;
+  }
+
   /** Hard-out: clear the slot. DESTROYS the producer — contrast `stop()`. */
   out(slot: CommandSlot): string {
     return `CLEAR ${target(slot)}`;
@@ -137,8 +325,418 @@ export class CommandBuilder {
    * and the 2.3.2 plant is the reference, but this verb has not been exercised on
    * it by this project — recorded in `DEBT.md`.
    */
-  mixerVolume(slot: CommandSlot, volume: number): string {
-    return `MIXER ${target(slot)} VOLUME ${String(volume)}`;
+  mixerVolume(slot: CommandSlot, volume: number, frames?: number): string {
+    /*
+      `PLAYOUT-SOURCES-01` §1.I — a raise of a plate from a D10 input RAMPS (`VOLUME <v> 25`): a bare
+      `VOLUME 1` is a jump, and even `VOLUME 1 4` reaches 0.25 in its first block (their answer,
+      V13-STATE §3.1). Absent frames is today's line, byte for byte.
+    */
+    return frames === undefined
+      ? `MIXER ${target(slot)} VOLUME ${String(volume)}`
+      : `MIXER ${target(slot)} VOLUME ${String(volume)} ${String(frames)}`;
+  }
+
+  /**
+   * 🔴 `LOOK-SWITCH-01` — **`MIXER <ch>-<layer> OPACITY <v>`: HOW A PLATE IS SEATED HIDDEN AND
+   * SHOWN.**
+   *
+   * Mixer state is the LAYER's, and a producer newly `PLAY`ed on a layer inherits whatever
+   * transform the layer holds (2.5.0 `stage.cpp` keeps `tweens_` apart from `layers_`). A fresh
+   * layer is full frame, opaque and at full volume, so a `PLAY` there is on air at full frame
+   * until its geometry lands. The Playout's core team's pattern (`PLAYOUT-CG-RESPONSE-V13-STATE`
+   * §3.2): `OPACITY 0` + `VOLUME 0` + the fit, as `DEFER`, and one `MIXER <ch> COMMIT` BEFORE the
+   * `PLAY`; the reveal (`OPACITY 1`) rides the action's one commit. **Showing is `OPACITY`, not
+   * `PLAY`.** Below 0.001 the kernel draws nothing (`image_kernel.cpp`).
+   *
+   * One value, like {@link mixerVolume}: the seat sends `0` and the reveal `1`, never a tween.
+   */
+  mixerOpacity(slot: CommandSlot, opacity: number): string {
+    return `MIXER ${target(slot)} OPACITY ${String(opacity)}`;
+  }
+
+  /**
+   * C-015 phase 6 (6.1) — **seat a LIVE SOURCE producer on a layer.**
+   *
+   * The eighth verb, and the first thing this builder has ever emitted that is not
+   * a `CG …` on an html producer. `take()` is `CG … PLAY 0` — it plays a template
+   * INSIDE an already-ADDed html producer and cannot start any other kind — so
+   * before this there was no way for the bridge to put a route, a card or a clip on
+   * a layer at all. (A broadcast-safety test had to open its own raw TCP socket to
+   * do it, documented there as "deliberately NOT the bridge"; that test was itself
+   * the evidence of this gap.)
+   *
+   * 🔴 **THE ARGUMENT IS BUILT FROM A PARSED SHAPE, NEVER FROM A STRING.**
+   * `SourceProducer` is a discriminated union on `kind`, so an unreachable producer
+   * form is a parse error at the config boundary rather than an AMCP `400` at take
+   * time — with a guest's box black and nothing on screen saying why. This method
+   * is the only place that union becomes wire text.
+   *
+   * The five spellings, and how much each is worth:
+   *
+   *   `route`    — `route://<channel>[-<layer>]`. MEASURED on the plant's 2.3.2
+   *                (design.md §0b): the form is accepted and does not run away. The
+   *                optional `-<layer>` tail is a SAFETY term and not merely grammar —
+   *                on a single-channel install, `route://<channel>` pointed at its own
+   *                channel is a feedback loop, so the studio plate can only be
+   *                addressed with the layer form (§9a.2).
+   *   `media`    — a bare file name, quoted. What CasparCG assumes for an
+   *                argument carrying no scheme and no keyword.
+   *   `decklink` — `DECKLINK DEVICE <n>`. ⭐ **MEASURED on the plant's 2.5.0
+   *                (`69e8ad5`) in BOTH forms — the index AND the persistent ID.**
+   *                The card is a **DeckLink SDI 4K**, enumeration index **1**,
+   *                persistent ID **23487013**.
+   *                  - 2026-08-24: `PLAY 1-10 DECKLINK DEVICE 1` → `Initialized`,
+   *                    repeatedly, with real signal.
+   *                  - 2026-08-25: `PLAY 1-10 DECKLINK DEVICE 23487013` →
+   *                    `DeckLink SDI 4K [23487013|1080p5000] Initialized`, `202`,
+   *                    then `Input format changed from 1080p5000 to 1080i5000` —
+   *                    and THAT last line is what makes it a pass rather than a
+   *                    `202` over a dead producer, because only an open card can
+   *                    report the incoming raster changing under it. The log names
+   *                    the device by its ID, so the server resolved the argument AS
+   *                    an ID rather than coincidentally matching an index.
+   *                ⇒ **`n` may be EITHER an enumeration index or a persistent ID**,
+   *                and the schema (`z.number().int().positive()`) already admits
+   *                both, so this method needs no discrimination between them.
+   *                ⭐ Prefer the persistent ID where an operator has one: an index
+   *                moves when the PCIe order changes or a second card is fitted.
+   *                Evidence: `docs/recon/2026-08-25-decklink-model-walk.md` Q1.
+   *                ⚠ **What is NOT settled is CONTENTION, not spelling** — one
+   *                physical input admits ONE producer, and a `CLEAR` answers `202`
+   *                before the old producer is destroyed. See **B-177**; it bites
+   *                the caller that sequences these, never this formatter.
+   *   `ndi`      — `[NDI] "<source>"`. 🔴 **The spelling is the PLAYOUT'S CORE's, from
+   *                their answer** (`PLAYOUT-SOURCES-01`, `docs/integration/playout/
+   *                PLAYOUT-CG-RESPONSE-INPUTS-MEDIA-v1.md` §1.2, citing
+   *                `newtek_ndi_producer.cpp:289-292`): `NDI NAME "…"`, what this arm
+   *                sent until then, is the CONSUMER syntax there and plays nothing. ⚠ Still
+   *                never put on air by this project — no NDI source exists on this
+   *                plant; that debt is **C-021's**.
+   *   `stream`   — the URL alone, quoted, exactly as `media` is (C-025). Its
+   *                standing is stated honestly: the owner ran
+   *                `PLAY 1-<layer> "<url>"` BY HAND on the plant and it PLAYED —
+   *                one manual run, not a suite, and more than `ndi` has ever had
+   *                here. The scheme allowlist is `validateSourceCatalog`'s (the
+   *                config boundary); by the time a URL reaches this method it has
+   *                already been accepted there.
+   *
+   * `keyDevice` is deliberately NOT read here. A fill+key pair is TWO layers, so it
+   * is a decision about how many producers to seat and where — the caller's, from
+   * the ledger's `role` — not a spelling this method can make. Reading it here would
+   * put a key signal on the fill layer.
+   *
+   * ⚠ **That silence is a REAL GAP, and it has an item: C-027.** Nothing seats the
+   * key, so a mapping carrying `keyDevice` yields the fill alone. The operator is
+   * told this in CG Control's Sources modal rather than left to infer it from a
+   * missing picture — the modal's summary describes only what THIS method emits, and
+   * a stored `keyDevice` is reported there as not yet sent. If that sentence and this
+   * method ever disagree again, `apps/runtime/tests/decklinkKeyDeviceHonesty.dom.test.ts`
+   * is the test that fails: it asserts BOTH halves against the SAME value.
+   */
+  playSource(
+    slot: CommandSlot,
+    producer: SourceProducer,
+    /**
+     * 🔴 `MEDIA-PLATES-01` §1.B — a CLIP whose Loop setting is on is played with `LOOP`, a bare
+     * flag (2.5.0's `ffmpeg_producer.cpp` tests for the word; `LOOP 0` would loop too, so a value is
+     * never written). Asked of a `media` producer only; every other form, and a clip without it, is
+     * today's line byte for byte. The ARGUMENT is unchanged either way — {@link sourceArgument} is
+     * what the ledger records, and a seat's identity does not depend on whether it loops.
+     */
+    options: { readonly loop?: boolean } = {},
+  ): string {
+    const loop = producer.kind === 'media' && options.loop === true ? ' LOOP' : '';
+    return `PLAY ${target(slot)} ${this.sourceArgument(producer)}${loop}`;
+  }
+
+  /**
+   * `MEDIA-PLATES-01` — hold a clip's frame: `PAUSE <ch>-<layer>`. A FILE only: the Playout's "never
+   * `PAUSE`" rule (contract v1.3) is for a route, and nothing calls this for one. Layer-scoped.
+   */
+  pause(slot: CommandSlot): string {
+    return `PAUSE ${target(slot)}`;
+  }
+
+  /** `MEDIA-PLATES-01` — continue a paused clip from the frame it holds: `RESUME <ch>-<layer>`. */
+  resume(slot: CommandSlot): string {
+    return `RESUME ${target(slot)}`;
+  }
+
+  /**
+   * `MEDIA-PLATES-01` — move a clip to a FRAME: `CALL <ch>-<layer> SEEK <frame>`, in the channel's
+   * field rate (2.5.0 `ffmpeg_producer.cpp`). `0` is its beginning — the Restart; it works on a clip
+   * frozen at its end too (measured: `201 CALL OK`, then it plays again).
+   */
+  seekFrame(slot: CommandSlot, frame: number): string {
+    return `CALL ${target(slot)} SEEK ${String(frame)}`;
+  }
+
+  /**
+   * `MEDIA-PLATES-01` §1.A — switch looping on a clip that is ALREADY playing: `CALL <ch>-<layer>
+   * LOOP 1|0` (2.5.0 `ffmpeg_producer.cpp`: `LOOP` with a value sets it). Measured on the owner's
+   * core: `201 CALL OK`, and a looping clip seeked past its end was then at `0.70/4.00`.
+   */
+  setLoop(slot: CommandSlot, loop: boolean): string {
+    return `CALL ${target(slot)} LOOP ${loop ? '1' : '0'}`;
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` — contract v1.3 rule 4's first half: `LOADBG <ch>-<L> "route://H-L"`. The
+   * producer goes to the layer's BACKGROUND and nothing on air changes; {@link playLoaded} promotes
+   * it. The argument is {@link sourceArgument}'s, so the ledger's `producer` and this line cannot
+   * spell one route two ways. Layer-scoped, like every seating line.
+   */
+  loadBackground(slot: CommandSlot, producer: SourceProducer): string {
+    return `LOADBG ${target(slot)} ${this.sourceArgument(producer)}`;
+  }
+
+  /**
+   * `ROUTE-PLATES-01` — rule 4's second half: the bare `PLAY <ch>-<L>`, which plays what
+   * {@link loadBackground} loaded. A CUT: no transition word is ever appended (phase A is CUT only).
+   */
+  playLoaded(slot: CommandSlot): string {
+    return `PLAY ${target(slot)}`;
+  }
+
+  /**
+   * C-015 phase 6 (task 6.0) — the producer ARGUMENT alone, without the `PLAY`.
+   *
+   * Exposed for exactly one caller: the ledger records _"the concrete producer
+   * argument actually SENT"_ (`live-layers.ts`), and the only way to record that
+   * honestly is to ask the same function {@link playSource} asks. Formatting the
+   * argument a second time at the ledger's call site would be a second spelling
+   * of the wire text — and the failure it produces is a ledger that CLAIMS a
+   * layer carries `route://1-2` while the layer carries something else, which no
+   * test comparing the ledger against itself can see.
+   *
+   * It is deliberately NOT a way to hand-build a `PLAY`: every seating path goes
+   * through {@link playSource}, so the layer-scoped `target()` cannot be skipped.
+   */
+  sourceArgument(producer: SourceProducer): string {
+    return producerArgument(producer);
+  }
+
+  /**
+   * C-015 phase 6 (6.1) — **the placement of a live layer: `FILL` AND `CLIP`, as ONE
+   * PAIR from ONE computation.**
+   *
+   * 🔴 **THIS RETURNS TWO COMMANDS ON PURPOSE, AND IT MUST NEVER BE SPLIT INTO
+   * `mixerFill` + `mixerClip`.** The reason is measured, not stylistic
+   * (design.md §3, on 2.5.0 and re-confirmed on the plant's 2.3.2): `CLIP` masks in
+   * the SAME channel-normalized space as `FILL` and does **not travel with it**. A
+   * fill box that moves out from under its clip window renders **NOTHING AT ALL** —
+   * on air, a black hole where a guest's face should be, with a `202` on the wire
+   * and no error anywhere.
+   *
+   * The measurement that proves it is the last row of §3's table:
+   * `MIXER 1-2 FILL 0.5 0.5 0.5 0.5` puts the box bottom-right, and
+   * `MIXER 1-2 CLIP 0 0 0.5 0.5` then makes it vanish entirely rather than clipping
+   * it — had `CLIP` been source-relative or travelled with the fill, some box would
+   * have survived.
+   *
+   * Two builder methods would make that a CALLER mistake — one someone makes once,
+   * at 2 a.m., by updating a fit and forgetting the mask. One method makes it
+   * **unrepresentable**. This is golden rule 7's shape exactly: one condition
+   * governing two commands is evaluated once, and here one geometry emitting two
+   * commands is emitted once.
+   *
+   * ORDER: `FILL` then `CLIP`. ⭐ **`B-198` — and they now land on the SAME FRAME**, because
+   * every `MIXER` line of a seating batch is sent with `DEFER` and one {@link mixerCommit}
+   * applies the lot. See {@link deferMixer} for the measurement that settled the open question
+   * this comment used to record.
+   */
+  mixerFit(slot: CommandSlot, fit: { fill: NormalizedRect; clip: NormalizedRect }): string[] {
+    return [
+      `MIXER ${target(slot)} FILL ${rect(fit.fill)}`,
+      `MIXER ${target(slot)} CLIP ${rect(fit.clip)}`,
+    ];
+  }
+
+  /**
+   * C-015 phase 6 (6.6) — reset a layer's mixer geometry: `MIXER <ch>-<layer> CLEAR`.
+   *
+   * **NOT optional tidiness.** Mixer state belongs to the CHANNEL'S MIXER, not to
+   * the producer, so it survives both a `CLEAR` of the layer and a `CG REMOVE` —
+   * the same fact `mixerVolume` above is built on, and measured on hardware. A Live
+   * Source teardown that omits this leaves a `FILL` **and a `CLIP`** on the layer for
+   * the next, entirely unrelated graphic to inherit.
+   *
+   * Of the two, the inherited `CLIP` is the worse: a stale `FILL` puts a graphic in
+   * the wrong PLACE, which someone sees and reports, while a stale `CLIP` makes an
+   * otherwise-correct graphic **invisible**, with nothing on the wire explaining why.
+   *
+   * ⚠ **It resets the WHOLE transform, `VOLUME` included** — opacity, fill, clip, rotation,
+   * blend, volume and the audio routing. `mixer_clear_command` → `stage::clear_transforms`
+   * → `tweens_.erase(index)`. MEASURED by the Playout team on a 2.5.0-based core with
+   * `stage.cpp` unmodified from upstream (their Response O): `VOLUME 0` → `CLEAR` → still `0`
+   * → `MIXER CLEAR` → `1`. So a plate teardown resets that plate layer's volume to unity.
+   *
+   * 🔴 This line used to say the verb left `VOLUME` alone "by the mock's model of this verb
+   * and by the real one". Nothing measured the second half — the commit that wrote it
+   * measured `FILL`/`CLIP` and cited nothing for volume — and it was the one wrong. An
+   * unsourced premise in a docstring is the shape `reserve()`'s "the coordinate came from
+   * this allocator" had before the 2026-09-22 incident; it is gone, not reworded.
+   *
+   * Word order: `MIXER <ch>-<layer> CLEAR`. `MIXER CLEAR <ch>-<layer>` answers `400 ERROR`.
+   * Safe on an empty layer — `tweens_.erase` of an absent key removes nothing.
+   */
+  mixerClear(slot: CommandSlot): string {
+    return `MIXER ${target(slot)} CLEAR`;
+  }
+
+  /**
+   * 🔴 **`B-198` — STAGE a `MIXER` line instead of applying it.**
+   *
+   * ── WHAT THE DEFECT WAS ─────────────────────────────────────────────────────
+   *
+   * A look switch sends one `MIXER … FILL` + `CLIP` pair per plate, and `#applyLivePlates`
+   * awaits each line's ACK before writing the next — so the pair for plate 2 is separated from
+   * plate 1's by a full command/ACK round trip. When a channel tick fell inside that gap the
+   * fills landed a frame apart and the departing box drew over the arriving plate for 40 ms.
+   * Measured at 1 recording in 50; forced on demand it reproduces at 22.68 % of the frame,
+   * which is that box's own area to the last digit.
+   *
+   * ── WHAT THIS BUILD ACTUALLY OFFERS, MEASURED ON THE WIRE ───────────────────
+   *
+   * `MIXER 1-30 FILL … DEFER` answers `202 MIXER OK` and the getter still reports the OLD
+   * value; `MIXER 1 COMMIT` answers `202` and the getter then reports the new one. **The
+   * control that makes those readings mean something:** a bogus trailing token
+   * (`… FILL 0 0 1 1 BANANAS`) answers **`501 MIXER FILL FAILED`** and `MIXER 1 BANANAS`
+   * answers **`400 ERROR`** — this parser does NOT silently swallow words it does not know, so
+   * a `202` on `DEFER` is a `202` on a verb it understood.
+   *
+   * ⚠ **THE SCOPE, ALSO MEASURED, AND IT IS WIDER THAN THE VERB LOOKS.** `MIXER 1-30 COMMIT`
+   * applied a change staged on 1-31 as well: the layer token is accepted and IGNORED, so there
+   * is no per-layer commit — a commit is CHANNEL-WIDE. And the staging area is shared BETWEEN
+   * CONNECTIONS: a change deferred on one socket was applied by a `COMMIT` issued on another.
+   * A deferred change nobody commits hangs indefinitely (1500 ms with no commit left it
+   * unapplied), and a DROPPED CONNECTION does not clear it either — `B-199` measured a change
+   * staged on a destroyed socket being applied by a commit from a new one. That is what
+   * {@link CasparRuntime}'s abort guard (`B-199`, a throw) and its reconnect flush (`B-221`, a
+   * dead link) exist for. From the server's own source (2.5.0 `AMCPCommandsImpl.cpp`,
+   * `transforms_applier`): the staging area is ONE process-wide `static` vector per channel
+   * index, appended by `DEFER`, applied-then-cleared by `COMMIT`, and touched by nothing else —
+   * no `CLEAR`, no `MIXER CLEAR`, no disconnect, no discard verb of any kind.
+   *
+   * ── 🔴 THE CROSS-CONNECTION EXPOSURE: REAL IN DESIGN, DORMANT IN PRACTICE ──────────────
+   *
+   * Because that vector is shared by every connection, a `COMMIT` of ours applies whatever
+   * anyone staged and a `COMMIT` of anyone's applies ours — measured, not assumed (`B-198`, on
+   * the plant's 2.5.0). That half cannot be fixed from here; it is an OPERATING CONSTRAINT and
+   * is written where an installer meets it (`docs/operator-guide/README.md`, "Air-critical
+   * contracts").
+   *
+   * **As of 2026-09-05 it is DORMANT.** Over every retained CasparCG log on the plant's playout
+   * machine, exactly TWO senders have ever issued an AMCP command: this bridge's own host, and the
+   * server's own `Console`. No second client has ever connected, so no
+   * foreign `DEFER` or `COMMIT` has ever existed on that server. ⚠ Retained logs, not the
+   * machine's whole history — strong evidence of current practice, not proof about the past.
+   * The enumeration, run by the owner and to be re-run in a PowerShell window ON the playout
+   * machine (one line):
+   *
+   *   Select-String -Path 'D:\casparcg-server-v2.5.0-stable-windows\log\caspar_*.log' -Pattern 'Received message from ([^:]+):' | ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique
+   *
+   * **What wakes it:** ANY second AMCP client on that CasparCG — first among them the owner's
+   * playout system, which is why `reservedLayers` exists. A third line in that output is the
+   * signal; when it appears, the question becomes whether that client uses `DEFER`, and if it
+   * does this pair needs a different answer (`B-198` records the pipelining fallback, costed).
+   * The half that needs no second client — our own commit failing to ARRIVE — is `B-221`.
+   */
+  deferMixer(line: string): string {
+    // Only a `MIXER` line can be deferred. Everything else — `PLAY`, `CG …` — is returned
+    // untouched, so the ONE call site can hand it every line of a batch without sorting them
+    // and a `MIXER` added to that batch later is deferred by construction rather than by
+    // somebody remembering. That is the same "make it unrepresentable" move `mixerFit` makes
+    // for the FILL/CLIP pair, one level up.
+    return line.startsWith('MIXER ') ? `${line} DEFER` : line;
+  }
+
+  /**
+   * `B-198` — apply everything staged on the channel, on ONE frame.
+   *
+   * ⚠ **CHANNEL-SCOPED because that is the only scope this build has** (see
+   * {@link deferMixer}): `MIXER <ch>-<layer> COMMIT` was measured to commit the whole channel
+   * anyway, so spelling a layer here would be a promise the server does not keep.
+   */
+  mixerCommit(channel: number): string {
+    return `MIXER ${String(channel)} COMMIT`;
+  }
+}
+
+/**
+ * One `MIXER` rect as four space-separated numbers, in the order AMCP takes them:
+ * `x y width height`, each a fraction of the channel raster ON ITS OWN AXIS.
+ *
+ * PER-AXIS is the measured basis (design.md §0b fact 1) and is the thing most
+ * likely to be "corrected" by someone who expects a uniform fraction. It is also
+ * why the page and the wire can disagree: the page scales UNIFORMLY and
+ * letterboxes, so the two agree only on a 16:9 raster — which is exactly why the
+ * contract test pinning them together requires a non-16:9 case.
+ *
+ * ⚠ **PRECISION IS NOT MEASURED.** §6 emits computed fractions rather than round
+ * numbers, and what rounding the server accepts for these four arguments has never
+ * been recorded (tasks.md 6.3a(b)). `numberArg` therefore emits at most 6 decimals,
+ * matching what the page's `css()` uses for the same geometry — chosen so the two
+ * sides round identically rather than because AMCP is known to want it. If a probe
+ * ever shows the server wants fewer, this is the one place to change.
+ */
+function rect(r: NormalizedRect): string {
+  return [r.x, r.y, r.width, r.height].map(numberArg).join(' ');
+}
+
+/**
+ * A number as an AMCP argument: at most 6 decimals, trailing zeros trimmed.
+ *
+ * Never exponential notation, which `String(1e-7)` would produce and which no AMCP
+ * parser is known to accept: `toFixed` first, then `Number` to trim, and a magnitude
+ * below the precision floor lands on a clean `0` rather than on `1e-7`.
+ */
+function numberArg(n: number): string {
+  return String(Number(n.toFixed(6)));
+}
+
+/**
+ * ONE producer union arm → its AMCP argument text.
+ *
+ * Every user-supplied value goes through `quote()` EXACTLY ONCE, per this module's
+ * contract. Note which values are quoted and which are not, because it is not
+ * uniform and the difference is the server's, not ours: a route address, a media
+ * file name, a stream URL and an NDI source NAME are single arguments and are
+ * quoted; the `DECKLINK` / `DEVICE` / `NAME` keywords and the device INDEX are
+ * AMCP syntax and would be refused if quoted. For a URL, `quote()` is the
+ * IDENTITY wrap: its escape set (`\`, `"`, LF, CR) contains no character a URL
+ * carries, which is why the media-field workaround produced the proven command.
+ *
+ * The device index is emitted through `String()` on a value the schema has already
+ * constrained to a positive integer — there is no path by which an operator string
+ * reaches the wire unquoted.
+ */
+function producerArgument(producer: SourceProducer): string {
+  switch (producer.kind) {
+    case 'route': {
+      // The layer tail is appended only when present. `layer` is
+      // `nonnegative()`, so **layer 0 is a real, addressable layer** and the test
+      // must be `!== undefined` — a truthiness check here would silently drop it
+      // and route the whole channel instead of one layer, which on a
+      // single-channel install is the feedback loop §9a.2 exists to avoid.
+      const tail = producer.layer === undefined ? '' : `-${String(producer.layer)}`;
+      return quote(`route://${String(producer.channel)}${tail}`);
+    }
+    case 'decklink':
+      // Keywords and the index are AMCP syntax, not values: unquoted.
+      return `DECKLINK DEVICE ${String(producer.device)}`;
+    case 'ndi':
+      /*
+        🔴 `PLAYOUT-SOURCES-01` §1.D — THE ONE SANCTIONED WIRE CHANGE. This arm sent `NDI NAME "…"`,
+        which on the Playout's core is the CONSUMER syntax and plays nothing (their answer §1.2,
+        citing `newtek_ndi_producer.cpp:289-292`). The producer is the bracketed token `[NDI]`
+        followed by the quoted source; `C-021` had recorded this arm as parse-verified only.
+      */
+      return `[NDI] ${quote(producer.source)}`;
+    case 'media':
+      return quote(producer.file);
+    case 'stream':
+      return quote(producer.url);
   }
 }
 

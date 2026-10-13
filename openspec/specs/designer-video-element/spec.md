@@ -337,3 +337,187 @@ report the same condition as a warning naming the element.
 - **THEN** preflight reports an ERROR-severity `missing-asset` issue naming the element, and
   producing a `.vcg` fails with that issue instead of packing a template that renders a black
   hole on air
+
+### Requirement: A playing video survives a preview scene rebuild
+
+An edit that rebuilds the preview's scene SHALL NOT leave a video permanently unable to play. The
+preview may legitimately pool a live `<video>` across a rebuild and transplant it back over the
+freshly built one, so that a transform-only edit never re-fetches the media; when it does, the
+lifecycle driver SHALL command the node that is actually in the document, not the node it captured
+when the scene was built.
+
+The binding SHALL be re-resolved by the element's `data-cg-element-id` whenever the captured node
+reports that it is no longer connected to a document, and SHALL be HOST-AGNOSTIC — it SHALL NOT
+depend on knowing which host performed the reparenting, so any harness that reparents nodes is
+covered. A node that is merely MOVED within the document SHALL NOT be re-resolved.
+
+A rejected `play()` SHALL be reported rather than swallowed, naming the element, and SHALL be
+reported at most ONCE per element so a per-tick retry cannot become a per-frame log.
+
+#### Scenario: The video keeps playing after an edit rebuilds the preview
+
+- **WHEN** a video is playing in the preview and an edit posts a scene rebuild, and the operator
+  plays again
+- **THEN** the `<video>` visible in the preview document is not paused and its `currentTime`
+  advances
+
+#### Scenario: The trigger is the rebuild, not the companion element
+
+- **WHEN** a scene carrying a video and NO other animated or timeline-driving element has its
+  preview rebuilt by a session timing change, and the operator plays again
+- **THEN** the video is not paused and its `currentTime` advances — the freeze is a property of the
+  rebuild, not of any companion element on the scene
+
+#### Scenario: A rejected play is reported once, naming the element
+
+- **WHEN** a video element's `play()` is rejected and further play attempts follow
+- **THEN** the rejection is logged once for that element, identifying it, and is not repeated per
+  attempt
+
+### Requirement: The Lottie map handed to a preview is scoped to that scene
+
+The parsed-Lottie map posted to a preview SHALL contain only the assets the scene being previewed
+actually references, not every asset parsed since the project opened. The preview forces a scene
+rebuild whenever it receives a non-empty Lottie map, so a whole-cache map keeps forcing rebuilds
+after the Lottie element is gone — which is what made a rebuild-induced freeze STICKY, unable to be
+undone by undoing its cause.
+
+Removing the last Lottie element from a scene SHALL therefore make that scene's posted map empty,
+even though the parsed asset legitimately remains cached for re-use.
+
+#### Scenario: Deleting the Lottie stops forcing rebuilds
+
+- **WHEN** the last Lottie element is removed from a scene whose asset is still in the module cache
+- **THEN** the map posted for that scene is empty, so the preview's rebuild-forcing condition is
+  false
+
+### Requirement: Adding content longer than its host raises the duration guard at ONE chokepoint
+
+The Designer SHALL raise a confirm dialog BEFORE anything is inserted WHEN content is ADDED to a
+scene or composition and its intrinsic duration exceeds the host's duration, naming BOTH
+durations concretely (e.g. "this clip is 5.0 s; the composition is 2.0 s"). The comparison SHALL
+use one derivation per kind, from stored facts: a video's `durationMs` (captured at conversion);
+a Lottie's clip length `(op − ip) / fr` at the CREATION default speed 1× (the element does not
+exist yet, so an authored speed cannot apply); a nested composition's own active-range length at
+the project frame rate. The host's duration SHALL be its active-range length (`activeRangeOf` —
+the existing authority, reused, never re-derived).
+
+The guard SHALL sit at ONE chokepoint that EVERY add door passes through — the assets-panel place
+actions, the canvas drag-drop, and the composition insert alike — never one guard per door.
+Duplicating or pasting an element already in the scene is NOT an add in this sense and SHALL NOT
+raise the dialog: the item's trigger is adding content, not copying content already accepted.
+
+The trigger is ADD-TO-SCENE, explicitly NOT asset-import time: importing an asset into the
+library fires nothing, regardless of its duration.
+
+#### Scenario: A longer clip raises the dialog naming both durations
+
+- **WHEN** a 5 s video (or Lottie) is added to a 2 s composition by any add door
+- **THEN** the dialog appears before anything is inserted, naming the content's and the host's
+  durations concretely
+
+#### Scenario: A fitting add is silent
+
+- **WHEN** a 1 s video is added to a 2 s composition
+- **THEN** no dialog appears and the element is added exactly as today
+
+#### Scenario: Import to the library never fires the guard
+
+- **WHEN** an asset of any duration is imported into the library
+- **THEN** no dialog appears — the guard's moment is add-to-scene, where a host exists to be
+  measured against
+
+#### Scenario: Every add door passes through the guard
+
+- **WHEN** the same oversized asset is added via the assets panel place action and via canvas
+  drag-drop (and, for a composition, via the compositions panel insert)
+- **THEN** every door raises the same dialog through the same chokepoint — a door that bypasses
+  the guard is the on-air-discovered bug this item exists to prevent
+
+### Requirement: The dialog offers the owner's settled choice split — three for media, two for a composition
+
+For VIDEO and LOTTIE content the dialog SHALL offer exactly three choices:
+
+1. **Extend the composition** — the host's duration grows to EXACTLY fit the content (ceil to
+   whole frames at the composition's frame rate), THEN the element is added. The extension SHALL
+   go through the SAME store action the timeline's duration field uses (so the timeline and undo
+   agree), and extend + add SHALL be ONE undo step.
+2. **Add as backdrop — follow the composition** — the element is added with
+   `phases.source: 'composition'` (the `media-phases-follow-composition` mode, claim-least
+   slots), the host's duration untouched. `holdAt` is NOT asked for in the dialog — the operator
+   tunes it in the Inspector, which seeds it from the shared midpoint helper. One dialog, three
+   buttons, no nested configuration.
+3. **Cancel** — the element is NOT added; the scene is left EXACTLY as it was (byte-identical).
+
+For a COMPOSITION-INTO-COMPOSITION insert the dialog SHALL offer TWO choices — Extend / Cancel —
+because an instance has no `phases` and cannot follow: the owner's settled answer (sharpened
+Candidate A) covers media; comp-insert keeps the item's firm decline-means-not-added form.
+
+The backdrop choice SHALL be offered even when the host has no lifecycle/out-point — a control
+that appears and disappears by host state is harder to learn than one that explains itself; the
+added follower behaves marker-less until an out-point exists and the Inspector's existing
+explanation says why. The dialog SHALL follow the shared `Modal` pattern (role `dialog`,
+`aria-modal`, focus trap — the semantics are part of this requirement, not the styling).
+
+#### Scenario: Extend grows the host to exactly fit, as one undo step
+
+- **WHEN** the operator chooses Extend for a 5 s clip in a 2 s composition at 25 fps
+- **THEN** the host's duration becomes exactly 125 frames (ceil to whole frames), the element is
+  added, and ONE undo restores both the duration and the absence of the element together
+
+#### Scenario: Backdrop adds a follower and touches nothing else
+
+- **WHEN** the operator chooses "Add as backdrop — follow the composition"
+- **THEN** the element is added with `phases.source: 'composition'`, the host's duration is
+  untouched, and the Inspector shows the follow state already on
+
+#### Scenario: Cancel leaves the scene byte-identical
+
+- **WHEN** the operator cancels the dialog
+- **THEN** the element is not added and the stored scene is byte-identical to before the add
+
+#### Scenario: Lottie parity
+
+- **WHEN** an oversized Lottie is added by any door
+- **THEN** the same three-choice dialog and the same three outcomes apply, with the intrinsic
+  duration derived at 1× speed
+
+#### Scenario: A composition insert offers the two-choice form
+
+- **WHEN** a composition longer than its would-be host is inserted into another composition
+- **THEN** the dialog offers Extend and Cancel only — no backdrop button — and both behave as
+  specified above
+
+#### Scenario: The backdrop choice survives a host with no out-point
+
+- **WHEN** the host composition has no lifecycle when an oversized clip is added
+- **THEN** the backdrop choice is still offered, the added follower behaves marker-less until an
+  out-point exists, and the Inspector's existing no-anchors explanation says why
+
+### Requirement: A follower with no out point is a state with a remedy
+
+The Inspector SHALL show, for a video or Lottie element that follows the composition while the
+composition has no out point, a one-line state — "Following nothing yet — no out point" — with
+the remedy ("set one in Playout") inline and the mechanism (why there are no anchors to derive
+from) behind an `i`.
+
+#### Scenario: a video following a composition without an out point
+
+- **WHEN** a video with `phases.source = 'composition'` sits in a composition with no lifecycle
+- **THEN** the panel shows the follow state line with its remedy, and no derived window
+
+### Requirement: `drives hold` is withheld until an out point exists
+
+The video Inspector's `drives hold` select SHALL be disabled, with the reason as its tooltip, while
+the composition has no out point — a composition with no out point holds nothing a driver could
+end. It SHALL be enabled once an out point exists, whatever the mode.
+
+#### Scenario: no out point
+
+- **WHEN** a video sits in a composition with no out point
+- **THEN** `drives hold` is disabled and its tooltip says to add an out point in Playout
+
+#### Scenario: an out point exists
+
+- **WHEN** the composition has an out point, in any mode
+- **THEN** `drives hold` is enabled

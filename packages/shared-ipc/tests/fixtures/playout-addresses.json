@@ -1,0 +1,62 @@
+{
+  "_": "RELEASE-0111-01 Part A - ONE table, read by BOTH rules: @cg/shared-ipc's normalisePlayoutAddress and splitHostPort (playout-address-fixture.test.ts) and CG Setup's Rust port (tools/setup-ui/src/address.rs). A row the two answered differently would be a page that refuses what the engine accepts, or accepts what it refuses. 'stricter' lists what the PAGE refuses although the engine accepts it, each with the reason; nothing else may differ.",
+  "playout": [
+    { "typed": "192.0.2.10", "address": "http://192.0.2.10:8080" },
+    { "typed": "  192.0.2.10  ", "address": "http://192.0.2.10:8080" },
+    { "typed": "192.0.2.10:8081", "address": "http://192.0.2.10:8081" },
+    { "typed": "192.0.2.10:80", "address": "http://192.0.2.10:80" },
+    { "typed": "192.0.2.10:", "address": "http://192.0.2.10:8080" },
+    { "typed": "http://192.0.2.10", "address": "http://192.0.2.10:8080" },
+    { "typed": "http://192.0.2.10/", "address": "http://192.0.2.10:8080" },
+    { "typed": "http://192.0.2.10:8080//", "address": "http://192.0.2.10:8080" },
+    { "typed": "http://192.0.2.10/playout", "address": "http://192.0.2.10:8080/playout" },
+    { "typed": "https://playout.example", "address": "https://playout.example" },
+    { "typed": "https://playout.example:8443", "address": "https://playout.example:8443" },
+    { "typed": "playout.example", "address": "http://playout.example:8080" },
+    { "typed": "PLAYOUT-1", "address": "http://PLAYOUT-1:8080" },
+    { "typed": "http://[2001:db8::10]", "address": "http://[2001:db8::10]:8080" },
+    { "typed": "[2001:db8::10]:8081", "address": "http://[2001:db8::10]:8081" },
+    { "typed": "", "address": null },
+    { "typed": "   ", "address": null },
+    { "typed": "ftp://192.0.2.10", "address": null },
+    { "typed": "ws://192.0.2.10:8080", "address": null },
+    { "typed": "http://", "address": null },
+    { "typed": "192.0.2.10:99999", "address": null },
+    { "typed": "192.0.2.10:80a", "address": null },
+    { "typed": "192.0.2.300", "address": null },
+    { "typed": "http://play out", "address": null },
+    { "typed": "http://a<b", "address": null }
+  ],
+  "host": [
+    { "typed": "192.0.2.10", "host": "192.0.2.10" },
+    { "typed": " 192.0.2.20 ", "host": "192.0.2.20" },
+    { "typed": "playout.example", "host": "playout.example" },
+    { "typed": "PLAYOUT-1", "host": "PLAYOUT-1" },
+    { "typed": "", "host": null },
+    { "typed": "192.0.2.10:5250", "host": null },
+    { "typed": "http://192.0.2.10", "host": null },
+    { "typed": "192.0.2.10/x", "host": null },
+    { "typed": "user@192.0.2.10", "host": null },
+    { "typed": "192.0.2 .10", "host": null },
+    { "typed": "192.0.2.300", "host": null }
+  ],
+  "stricter": [
+    {
+      "typed": "http:///x",
+      "rule": "playout",
+      "why": "it names no host - the engine makes it http://:8080/x, which the service refuses at start"
+    },
+    { "typed": "1.2.3", "rule": "playout", "why": "an IPv4 address is four numbers" },
+    { "typed": "999", "rule": "playout", "why": "an IPv4 address is four numbers" },
+    {
+      "typed": "http://192.0.2.10/a b",
+      "rule": "playout",
+      "why": "the engine's command line ends a value at a space"
+    },
+    {
+      "typed": "[2001:db8::10]",
+      "rule": "host",
+      "why": "CasparCG and CG Bridge are reached over IPv4"
+    }
+  ]
+}

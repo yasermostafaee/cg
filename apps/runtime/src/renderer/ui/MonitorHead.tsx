@@ -1,0 +1,149 @@
+import type { ReactNode } from 'react';
+import type { ChannelOutput } from '@cg/shared-ipc';
+import { Tag } from './Tag.js';
+/**
+ * 🔴 `CONSOLE-MATCH-03` §1 — THE MONITOR HEAD, AND WHY IT IS ONE COMPOSITION.
+ *
+ * The reference draws both panes' heads to the same rule — an `h2` naming the output with the
+ * CHANNEL in a nested span, a spacer, one right-hand fact, and the expand control — and it
+ * accents them differently (PVW purple, PGM mint) so a glance tells the two apart before a word
+ * is read. Measured in Chromium at 1280 × 800 on `04-playout-layers.html` (never off the
+ * stylesheet — four waves, last one paints, `PROMPT.md` §0):
+ *
+ *   `.monitor-head`   626 × 32   `padding: 3px 9px`, `gap: 8px`, ground `rgb(32 43 58)`
+ *   `.pvw-label`      11 px / 650 / `letter-spacing: .825px`, `rgb(195 172 255)`
+ *   `.pgm-label`      the same box in `rgb(133 228 182)`
+ *   `.pvw-count`      11 px / 400
+ *
+ * ⚠ ONE composition and not two, for the reason golden rule 11 gives about naming: two heads
+ * that must look alike and are written twice are two heads that will stop looking alike. What
+ * DIFFERS between them is passed in — the word, the accent, the right-hand fact — and what is
+ * shared cannot drift.
+ *
+ * The channel rides INSIDE the label because that is what it qualifies: this is PREVIEW *of
+ * channel 1*, not PREVIEW beside an unrelated number.
+ */
+export function MonitorHead({
+  word,
+  channel,
+  tone,
+  output,
+  tags = [],
+}: {
+  /** `PREVIEW` / `PROGRAM` — the output, in the operator's word. */
+  word: string;
+  /** The channel this pane is showing. `null` before the bank has answered. */
+  channel: number | null;
+  tone: 'pvw' | 'pgm';
+  /**
+   * 🔴 `UI-POLISH-01` G — PROGRAM only: the Playout's `output` for this channel. The label is the air
+   * green WHILE `on-air` and the bar's own ink otherwise; a head that is green without knowing
+   * claims air nobody confirmed. It was green whatever happened (`CONSOLE-LOOK-06`'s mint).
+   */
+  output?: ChannelOutput | undefined;
+  /** Neutral facts after the label — `Output unknown`, the playlist's state. Never a colour. */
+  tags?: readonly string[];
+}): JSX.Element {
+  /*
+    ONE group, not a fragment: the head bar is `space-between`, and a fragment's children would be
+    spread across it — the tag landed mid-bar, apart from the word it qualifies (`UI-POLISH-01` G).
+  */
+  return (
+    <span className="cg-monitor-head">
+      <span
+        className={`cg-monitor-label cg-monitor-label--${tone}`}
+        {...(output !== undefined ? { 'data-output': output } : {})}
+      >
+        {word}
+        {channel !== null && <span className="cg-monitor-ch">CH {channel}</span>}
+      </span>
+      {tags.map((tag) => (
+        <Tag key={tag} className="cg-setup-tag cg-monitor-tag" data-testid="monitor-head-tag">
+          {tag}
+        </Tag>
+      ))}
+    </span>
+  );
+}
+
+/**
+ * The right-hand fact in a monitor head — a count, or a standing label.
+ *
+ * `title` is where the DETAIL goes (golden rule 11's relocation): the head says `2 layers on
+ * PVW` and the hover names the rows, because the sentence the operator reads under pressure
+ * is the count and the names are what he asks for second.
+ */
+export function MonitorHeadFact({
+  children,
+  title,
+  testId,
+  tone,
+}: {
+  children: ReactNode;
+  title?: string | undefined;
+  testId?: string | undefined;
+  /** `pvw` wears the pane's own accent; omitted stays neutral. See `controls.css`. */
+  tone?: 'pvw' | undefined;
+}): JSX.Element {
+  return (
+    <span
+      className={`cg-monitor-fact${tone === undefined ? '' : ` cg-monitor-fact--${tone}`}`}
+      {...(title !== undefined ? { title } : {})}
+      {...(testId !== undefined ? { [testId]: '' } : {})}
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * 🔴 `CONSOLE-MATCH-03` §1 — THE PGM SIGNAL STRIP: what the return signal is doing, and how many
+ * rows this console believes are on air.
+ *
+ * The reference's `.pgm-strip` is the same 31 px `monitor-controls` row the PVW transport
+ * sits in, carrying a signal dot, its state in words, a spacer, and the air count. The two
+ * facts are DELIBERATELY on one line and DELIBERATELY not merged: the left is about the
+ * RETURN FEED (`C-016`'s relay of the Playout's `pgm` feed) and the right is about AIR, and
+ * an operator who reads "no signal" must not conclude "nothing is on air". That is exactly
+ * what the reference's own `Playout may still be active.` says on the stage below it.
+ *
+ * `tone` lights the lamp: the muted gold of "no signal" (not a fault), the healthy mint while
+ * the return is live, the caution amber while it is stalled.
+ */
+export function MonitorSignalStrip({
+  signal,
+  tone,
+  fact,
+  reading,
+  action,
+}: {
+  signal: string;
+  tone: 'none' | 'live' | 'stalled';
+  fact: ReactNode;
+  /** `PLAYOUT-FEATURES-01` E — a reading before the air count (the programme's loudness). */
+  reading?: ReactNode;
+  /** `PLAYOUT-FEATURES-01` E — the trailing toggle (the programme's sound), as PVW's strip ends in its own. */
+  action?: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="cg-monitor-strip" data-monitor-pgm-strip="" data-pgm-signal={tone}>
+      <span className="cg-monitor-signal">
+        {/*
+          🔴 A LAMP, NOT AN ICON — see `.cg-monitor-signal__lamp`. A 7 px lucide `Circle` is an
+          outline, which at that size is a ring of hairlines rather than a light. The reference
+          draws a filled 6 px disc, and a filled disc is a SHAPE with no glyph behind it, so
+          there is nothing here for `Icon` to route.
+        */}
+        <span
+          className={`cg-monitor-signal__lamp${tone === 'none' ? '' : ` cg-monitor-signal__lamp--${tone}`}`}
+          aria-hidden="true"
+        />
+        {signal}
+      </span>
+      <span className="cg-monitor-strip__spacer" />
+      {reading}
+      {fact}
+      {action}
+    </div>
+  );
+}

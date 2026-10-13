@@ -1,23 +1,44 @@
 import {
   activeRangeOf,
+  followsComposition,
+  followWindowMs,
+  videoFollowClipFacts,
   listBoundSequenceIds,
   migrateScenePaths,
   playoutOf,
   sequenceItemInstanceId,
   sequenceItemTextFieldIds,
   type ClockTarget,
+  type DynamicField,
+  type FollowAnchors,
   type FrameRange,
   type ListItem,
   type NestedFieldValues,
   type Playout,
   type Scene,
+  type ArrangementView,
+  defaultLookOf,
+  elementDigitsOf,
+  lookGroupOf,
+  readCgControl,
+  stripCgControl,
+  type Look,
 } from '@cg/shared-schema';
+import { writeFieldDigits } from '@cg/text-shaping';
+import { itemsInDigits } from './typed-digits.js';
 import {
   applyAnimationAtFrame,
   entranceSettleFrame,
   type AnimatedElement,
 } from './animation-applier.js';
-import { applyScopedFieldValues, isNamespace, type FieldDocLite } from './bindings.js';
+import {
+  applyScopedFieldValues,
+  fieldValueText,
+  isNamespace,
+  type FieldDocLite,
+} from './bindings.js';
+import { applyArrangementToNodes } from './arrangement-view.js';
+import { LookMediaPark } from './look-media.js';
 
 /**
  * Deep-merge a nested field-value patch into the current values. Plain objects
@@ -69,13 +90,20 @@ import { ensureZoneCss } from './zone-css.js';
 import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { PlayoutController } from './playout-controller.js';
+import { mergePlayoutOverride } from './playout-merge.js';
 import {
   buildRepeaterRows,
   buildScene,
   buildSequenceCompositionItem,
   repeaterItemValues,
 } from './scene-builder.js';
-import { createLottiePlayer, lottieClipMeta, lottieTiming } from '@cg/lottie-bridge';
+import {
+  createLottiePlayer,
+  lottieClipMeta,
+  lottieClipMidpoint,
+  lottieFollowWindow,
+  lottieTiming,
+} from '@cg/lottie-bridge';
 import { registerLottiePlayer } from './lottie-registry.js';
 import { ClockDriver, parseTimeOfDay } from './clock-driver.js';
 import { LottieDriver } from './lottie-driver.js';
@@ -414,6 +442,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // zone compiler and the builder). Absent ⇒ `'output'`: a forgotten boot site
   // paints nothing, which is the safe direction on air. See `RenderMode`.
   const mode = options.mode ?? 'output';
+  // B-134 — the editor backdrop paints on the editing CANVAS only. A second axis
+  // rather than a third `RenderMode`, because the Preview modal wants `'author'` for
+  // Live Sources and `false` here at the same time. Absent ⇒ true, which is a no-op
+  // in `'output'` (the backdrop is never painted there anyway).
+  const paintEditorBackdrop = options.paintEditorBackdrop ?? true;
 
   const zoneCss = ensureZoneCss(scene, doc, mode);
   for (const warning of zoneCss.warnings) {
@@ -422,8 +455,164 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     console.warn(`[cg] zone stylesheet: ${warning}`);
   }
 
-  const built = buildScene(scene, doc, mode);
+  const built = buildScene(scene, doc, mode, paintEditorBackdrop);
   root.appendChild(built.container);
+
+  /**
+   * ⭐ **`multibox-layout-switch` `tasks.md` 4.3 — UNIT B′'s re-punch pass.**
+   *
+   * The mask used to be computed ONCE, at build, and nothing recomputed it — which is the
+   * whole of UNIT B′: every mutator in `design.md` §6b's table moves or removes a plate, and
+   * the hole stayed where the plate used to be. A hole with no plate behind it is not a
+   * cosmetic defect; it is the backdrop punched through to nothing, i.e. BLACK on air, in
+   * the shape of a box that has gone.
+   *
+   * It reassigns the mask properties on the nodes that are already there (§6: the mask is
+   * inline CSS on a live node), so nothing the page is holding — a playing animation, a
+   * `<video>`'s decode position, a sequence's dwell, the operator's field values — is lost
+   * to keeping the mask honest.
+   */
+  /**
+   * 🔴 **NO DEFAULT PARAMETER — and that is a fix, not a style choice.**
+   *
+   * This read `(view = arrangementView)`, which meant `repunch(undefined)` — exactly what
+   * `setArrangementView(undefined)` does for the Designer's "As authored" — fell into the
+   * default and RE-APPLIED the previous arrangement instead of clearing it. Switching back to
+   * "As authored" left every box parked at the last arrangement's cells. `undefined` is a
+   * MEANINGFUL value here ("no arrangement"), so it must never be a stand-in for "not passed".
+   */
+  const repunch = (view: ArrangementView | undefined): void => {
+    // 🔴 MOVE THE BOXES FIRST, then re-punch. Both halves are needed and the order is
+    // load-bearing: `liveArrangementView` reads the page's CURRENT layout back, so the mask
+    // is computed against where the nodes now ARE rather than where the view said to put
+    // them — one source of truth for the geometry, which is the same rule that keeps the
+    // hole the page punches and the hole the bridge fills a single computation.
+    applyArrangementToNodes(scene, built.elementMap, view, arrangementView);
+    arrangementView = view;
+    /*
+      🔴 **`single-clock-look-switch` — THE RE-PUNCH IS GONE, and `liveArrangementView` with
+      it.** The page no longer cuts holes in itself: a plate-bearing package is composited
+      BELOW its plates, so there is nothing of the page in front of a picture to remove. What
+      REMAINS in this function is everything else it always did — the arrangement geometry is
+      still applied to the nodes above, and `B-150`'s media park still follows from the same
+      `view` below, which is why the function itself survives rather than being deleted with
+      the punch it used to end in.
+    */
+    /*
+      🔴 `B-150` — THE MEDIA PARK IS DERIVED FROM THE SAME `view`, HERE, and not at
+      `applyLook`. Both statements of visibility flow through this one function — the look
+      flip and the A′ `setArrangementView` — so deriving the park anywhere else would give it
+      a second, narrower idea of what is on screen than the mask has. The case that proves
+      it: `setArrangementView(undefined)` un-hides every look instance (its own header calls
+      that out), and a park updated only by `applyLook` would go on holding those instances'
+      media frozen while they were visible on the canvas.
+
+      One derivation, one `view`. A member is hidden exactly when this view says its look
+      instance is — never `!== true`, because an ABSENT entry means "this view does not speak
+      about it" and must leave the member live, which is what makes the `undefined` view
+      revive everything by construction rather than by a special case.
+
+      Late-bound on purpose (`lookGroup` / `lookMediaPark` are declared below): this closure
+      runs long after wiring, the same shape `arrangementView` above already relies on.
+    */
+    if (lookGroup !== undefined) {
+      lookMediaPark.setHiddenRoots(
+        lookGroup.looks
+          .filter((l) => view?.visibility?.[l.instanceId] === false)
+          .map((l) => built.elementMap.get(l.instanceId))
+          .filter((n): n is HTMLElement => n !== undefined),
+      );
+    }
+  };
+  let arrangementView: ArrangementView | undefined;
+
+  /*
+    🔴 **`single-clock-look-switch` — `plateFits` and `applyPlateFits` ARE GONE.**
+
+    `C-028` had the bridge send each plate's resolved aspect and mode so the PAGE could
+    compute the same fit its holes had to be cut at. The page has no holes now, and the only
+    `fitPictureToBox` that reaches air is the one behind the bridge's `MIXER FILL` / `CLIP`.
+    The rule the payload existed to serve — the hole and the fill are ONE computation — is
+    kept by there being one computation left, rather than by two that agree.
+  */
+
+  // ── LOOKS (`design.md` §14, phase 1D) — the look-state driver ─────────────────────────
+  //
+  // Exactly ONE look's instance is visible; a switch is a VISIBILITY FLIP plus a re-punch,
+  // and deliberately nothing else — no geometry override machinery, because under LOOKS the
+  // geometry is authored inside each look's own sub-scene (that is the whole point of the
+  // model). The flip rides the same `repunch` seam as the A′ view during the one-session
+  // coexistence window: the derived view carries ONLY `visibility`, the ancestry check in
+  // `sceneMaskHoles` suppresses the hidden instances' punches, and phase 2 re-plumbs the
+  // internals when the A′ machinery is deleted — the PUBLIC seam (`setActiveLook`) does not
+  // change then. ⚠ Consequence of the shared seam, accepted for the window: a later
+  // `setArrangementView(undefined)` clears the look state too. No template authors both.
+  const lookGroup = lookGroupOf(scene);
+  let currentLookId: string | undefined;
+  /**
+   * `B-150` — content inside a look that is not on screen is PARKED. See `look-media.ts`
+   * for the whole argument; what belongs here is the wiring: the park learns which look
+   * instances are hidden from the same `visibility` map the punch is computed from, so the
+   * boxes that go dark and the drivers that go quiet can never be decided from two facts.
+   */
+  const lookMediaPark = new LookMediaPark();
+  /**
+   * The visibility map for ONE look — "this instance, and no other". The one place a look id
+   * becomes a visibility statement, so the entering look and (during a switch) the outgoing
+   * look are spelled the same way.
+   */
+  const visibilityOfLook = (lookId: string): Record<string, boolean> => {
+    const visibility: Record<string, boolean> = {};
+    for (const l of lookGroup?.looks ?? []) visibility[l.instanceId] = l.id === lookId;
+    return visibility;
+  };
+  const applyLook = (look: Look): void => {
+    if (lookGroup === undefined) return;
+    currentLookId = look.id;
+    /*
+      🔴 `SKEW-INTERSECT-01` — **`from` NARROWS THE MASK; it does not change which look is
+      active.** `currentLookId` is set above, the look's own subtree is what becomes visible,
+      and the media park follows the entering look exactly as before — the outgoing look is
+      hidden and parked at this instant, as it always was. The ONLY thing `from` changes is
+      which holes are punched through everything below: `outgoing ∩ entering` instead of
+      `entering`, for this one punch.
+
+      A `from` naming the look being entered, or one this template does not have, states no
+      second geometry and is dropped — the mask is then the entering look's own, which is
+      what "no transition" means.
+    */
+    // The park follows from INSIDE `repunch`, off this same `visibility` map — see the note
+    // there for why it cannot be done at this line without acquiring a second answer.
+    repunch({ visibility: visibilityOfLook(look.id) });
+  };
+  /**
+   * `tasks.md` 6.7 — ENTER A LOOK BY ID. **The one implementation, two entry points.**
+   *
+   * The public `setActiveLook` (the Designer preview's caller since phase 1) and the
+   * `CG UPDATE` control payload (the bridge's caller, on air) both come through here, so the
+   * page cannot grow a second answer to "which look is active" — the same one-predicate-two-
+   * doors shape the bridge's own exclusivity refusal uses. Returns whether the id named a
+   * real look, so a caller can tell "switched" from "there is no such look".
+   *
+   * An id equal to the current look is a NO-OP by way of `applyLook` being idempotent: it
+   * recomputes the same visibility map and re-punches the same holes. Deliberately not
+   * short-circuited — a re-punch is how the page RECOVERS if a previous one was lost, and the
+   * bridge re-asserts the look on a re-take for exactly that reason.
+   */
+  const enterLook = (lookId: string): boolean => {
+    if (lookGroup === undefined) return false;
+    const look = lookGroup.looks.find((l) => l.id === lookId);
+    if (look === undefined) return false;
+    applyLook(look);
+    return true;
+  };
+  {
+    // A fresh build enters the DEFAULT look — "exactly one active" holds from the first
+    // frame, whatever the instances' authored `visible` says. Synchronous with the build,
+    // so no other state is ever painted.
+    const entry = lookGroup === undefined ? undefined : defaultLookOf(lookGroup);
+    if (entry !== undefined) applyLook(entry);
+  }
 
   // D-062 — wire image `src` from a host-supplied assetId→URL map. The scene
   // builder emits `<img data-cg-asset-id>` with no `src`; exporters pass the
@@ -461,8 +650,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // when present here; unbound items stay static. Element ids are globally unique, so one
   // merged map serves every scope (each sequence reads its own entry by element id).
   const seqItemTextFields = sequenceItemTextFieldIds(scene);
+  // FIELD-DIGITS-01 — and the fields of the doc that owns each such sequence, so a bound item
+  // is written in its field's digits exactly as a bound text element is.
+  const seqItemDocFields = new Map<string, readonly DynamicField[]>();
+  for (const elId of seqItemTextFields.keys()) seqItemDocFields.set(elId, scene.fields);
   for (const c of scene.compositions ?? []) {
-    for (const [elId, m] of sequenceItemTextFieldIds(c)) seqItemTextFields.set(elId, m);
+    for (const [elId, m] of sequenceItemTextFieldIds(c)) {
+      seqItemTextFields.set(elId, m);
+      seqItemDocFields.set(elId, c.fields ?? []);
+    }
   }
 
   // B-029 — per-element lifespan visibility, evaluated at a given frame, for EVERY scope
@@ -485,12 +681,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const effectivePlayoutFor = (scope: FieldScope, path: string): Playout => {
     const b = playoutOf(scope.source);
     const o = overrides[path];
-    const merged: Playout = {
-      mode: o?.mode ?? b.mode,
-      holdSource: o?.holdSource ?? b.holdSource,
-      holdMs: o?.holdMs ?? b.holdMs,
-      repeat: o?.repeat ?? b.repeat,
-    };
+    // 🔴 `TIMING-BUILD-21` §2(b) — the merge is `mergePlayoutOverride`, which SPREADS the base
+    // instead of re-listing its keys. See that function for why an exhaustive literal here was
+    // a silent drop site on the path to air.
+    const merged: Playout = mergePlayoutOverride(b, o);
     // B-032 — a content-driven hold with NO effective content drivers (own + nested, drivesHold-aware)
     // is a zero-length, meaningless hold: resolve it to TIMED so the authored `holdMs` is honored and
     // export + on-air agree. The static `@cg/shared-schema` `hasEffectiveHoldDrivers` does the same on
@@ -514,6 +708,23 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     doc.body.classList.add('cg-pending');
     bus.emit('stop.end');
   };
+
+  /*
+    🔴 `SELF-STOP-24` / `C-013` — **WHICH TAKE THIS PAGE IS RUNNING, as last told.**
+
+    Lifted from `__cg.take` on BOTH delivery doors and carried on the `self-end` event so a
+    report names the RUN that ended. `undefined` until something tells us, and `undefined` is a
+    real answer: a Designer preview and a single-file artifact over `file://` never receive one,
+    and the reporter opens no connection without it.
+
+    ⚠ **LAST WRITER WINS, and that is the re-take contract.** A take of a still-resident producer
+    sends no `CG ADD` — the page is the SAME page — so the bridge refreshes the token with a
+    pre-PLAY update. Overwriting is how run 2 stops naming run 1.
+
+    ⚠ It survives `play()`, deliberately. The bridge's refresh arrives BEFORE the play on the
+    resident path, and clearing it here would throw away the value that take just seated.
+  */
+  let takeToken: string | undefined;
 
   const noop = (): void => undefined;
   // Assigned once the wiring exists (the closure below fires long after). The
@@ -618,14 +829,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // host-resolved `url` from `assetUrls` so the driver can set `src` on the nodes it
           // FEEDS (the one-time applyAssetUrls walk can't reach driver-created nodes). The node
           // also carries data-cg-asset-id/-source for a host re-walk when no url is known yet.
+          // `TEXT-DIGITS-01` — a text separator and the authored items in the ticker's Digits
+          // choice; a bound list's items arrive through `setItems` in the list field's.
           separator:
-            t.element.separator === undefined || typeof t.element.separator === 'string'
-              ? t.element.separator
-              : ({
-                  ...t.element.separator,
-                  url: options.assetUrls?.[t.element.separator.assetId],
-                } satisfies TickerSeparatorImage),
-          items: t.element.items,
+            t.element.separator === undefined
+              ? undefined
+              : typeof t.element.separator === 'string'
+                ? writeFieldDigits(t.element.separator, elementDigitsOf(t.element))
+                : ({
+                    ...t.element.separator,
+                    url: options.assetUrls?.[t.element.separator.assetId],
+                  } satisfies TickerSeparatorImage),
+          items: itemsInDigits(t.element.items, elementDigitsOf(t.element)),
           repeat: effRepeat,
           cycleBoundary: effBoundary,
           clock: options.clock,
@@ -639,6 +854,22 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // D-105 — mark the content root so the coordinated exit (out/stop) can fade/hide it.
         t.band.dataset['cgContent'] = 'ticker';
         tickers.push(driver);
+        /*
+          `B-150` — a crawl still crawling in a hidden look is the same defect in a different
+          hat: the treadmill runs, the transform is recomputed every tick, and nobody sees it.
+
+          🔴 The `parkable` test INVERTS here, and the inversion is the whole reason this is
+          not a copy of the video line: a ticker's `drivesHold` is OPT-OUT (absent ⇒ it DOES
+          gate the hold), so most crawls are NOT parkable and are only silenced — which for a
+          soundless kind means nothing happens at all. Parking one that gates the hold would
+          keep the graphic on air forever (see `look-media.ts`). Read `!== false` here and
+          `!== true` there, exactly as the hold arrays do.
+        */
+        lookMediaPark.register({
+          node: t.band,
+          driver,
+          parkable: t.element.drivesHold === false,
+        });
         // B-034 — a HIDDEN content element (`visible: false`) is fully inert: it NEVER drives the
         // hold (its own or a parent's, regardless of `drivesHold` / `holdOverrides`), so it is
         // excluded from BOTH the own-hold array AND `contentDrivers` (no override can force it in).
@@ -738,6 +969,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             { depth: s.depth, visited: s.visited },
             doc,
             mode,
+            paintEditorBackdrop,
           );
           if (built === null) {
             // Missing / over-deep / cyclic reference ⇒ an empty grid-cell box.
@@ -801,7 +1033,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         const driver = new SequenceDriver({
           host: s.host,
           direction: s.element.direction,
-          items: s.element.items,
+          // `TEXT-DIGITS-01` — the authored text items in the sequence's Digits choice; a bound
+          // item takes its field's (`textValueFor`), a bound list its list field's (`setItems`).
+          items: itemsInDigits(s.element.items, elementDigitsOf(s.element)),
           defaultDwellMs: s.element.defaultDwellMs,
           dwellOverrideMs: effDwellMs,
           advance: s.element.advance,
@@ -822,11 +1056,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             if (listBoundSeqIds.has(s.element.id)) return undefined;
             const itemFieldIds = seqItemTextFields.get(s.element.id);
             if (itemFieldIds === undefined || itemFieldIds.size === 0) return undefined;
+            const docFields = seqItemDocFields.get(s.element.id) ?? [];
             return (itemId: string): string | undefined => {
               const fieldId = itemFieldIds.get(itemId);
               if (fieldId === undefined) return undefined;
               const v = resolveScopeValues(currentValues, path)[fieldId];
-              return typeof v === 'string' ? v : undefined;
+              if (typeof v !== 'string') return undefined;
+              return fieldValueText(
+                v,
+                docFields.find((f) => f.id === fieldId),
+              );
             };
           })(),
           clock: options.clock,
@@ -839,6 +1078,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         s.host.dataset['cgSequenceRepeat'] = String(effSeqRepeat);
         s.host.dataset['cgSequenceDwell'] = String(effDwellMs ?? s.element.defaultDwellMs);
         sequences.push(driver);
+        // `B-150` — a sequence rotating inside a hidden look is worse than wasted ticks: it
+        // advances past items nobody saw, so the operator returns to the look and finds it on
+        // item 7 instead of item 3. Same OPT-OUT hold rule as the ticker above.
+        lookMediaPark.register({
+          node: s.host,
+          driver,
+          parkable: s.element.drivesHold === false,
+        });
         // B-034 — a HIDDEN sequence is fully inert (never drives the hold, own or via an override).
         if (s.element.visible !== false) {
           // D-107 — joins the hold wait unless explicitly excluded.
@@ -876,8 +1123,60 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
        * frames OFFSET from `active.in` (the frame the Lottie's intro starts — `play()` resets +
        * starts every Lottie, see the play path). Fed to `entranceSettleFrame` below so the
        * furniture's intro derives the scope's entrance settle exactly like keyframe tracks do.
+       *
+       * media-phases-follow-composition — computed as a PRE-PASS (it used to live inside the
+       * driver loop) because a FOLLOW-source element's window needs the EFFECTIVE content
+       * start at driver construction, and that value aggregates every settle first. A
+       * follower is fed the marker-less shape (`phases: undefined`) ON PURPOSE — it derives
+       * FROM the effective content start, so it must not vote on it. That is EXACTLY the
+       * existing marker-less null rule ("the ABSENCE of information, not an authored claim"),
+       * reused rather than re-derived: no new branch in the aggregation.
        */
       const lottieSettleOffsets: number[] = [];
+      for (const l of scope.lotties) {
+        const data = options.lottieAssets?.[l.element.assetId];
+        // Mirrors the driver loop's gates below: an unresolved asset builds no driver, and a
+        // HIDDEN Lottie is fully inert (B-034) — neither contributes a settle.
+        if (data === undefined || l.element.visible === false) continue;
+        const timing = lottieTiming({
+          data,
+          speed: l.element.speed,
+          phases: followsComposition(l.element.phases) ? undefined : l.element.phases,
+          compositionFps: scene.frameRate,
+        });
+        if (timing.settleOffset !== null) lottieSettleOffsets.push(timing.settleOffset);
+      }
+      // D-104 follow-up — the frame where content starts: the designer's EXPLICIT
+      // content-start marker (`lifecycle.contentStart`) when placed, else the
+      // `entranceSettleFrame()` heuristic (entrance completion). The marker is the
+      // deterministic source of truth; the heuristic is only its default. Clamp to
+      // [active.in, outPoint] defensively (the schema already constrains it).
+      // (Hoisted above the media driver loops for media-phases-follow-composition: a
+      // follower's window is derived FROM these anchors at driver construction. ONE
+      // computation — the hold-entry wiring below reads these same consts.)
+      const activeRange = activeRangeOf(scope.source);
+      const outPoint = scope.source.lifecycle?.outPoint ?? activeRange.out;
+      const marker = scope.source.lifecycle?.contentStart;
+      // D-125 Phase 3a — the Lottie-derived settles in ABSOLUTE composition frames (the
+      // offsets above ride `active.in`, where their intros start).
+      const lottieSettles = lottieSettleOffsets.map((o) => activeRange.in + o);
+      const holdEntry =
+        marker !== undefined
+          ? Math.max(activeRange.in, Math.min(outPoint, marker))
+          : entranceSettleFrame(scope.animated, activeRange.in, outPoint, lottieSettles);
+      // media-phases-follow-composition — the comp-side anchors a FOLLOW-source element
+      // derives its window from. `null` when the composition has no lifecycle: there is
+      // nothing to follow, and the follower behaves as marker-less (the Inspector says why).
+      const followAnchors: FollowAnchors | null =
+        scope.source.lifecycle !== undefined
+          ? {
+              activeIn: activeRange.in,
+              contentStart: holdEntry,
+              outPoint,
+              activeOut: activeRange.out,
+              fps: scene.frameRate,
+            }
+          : null;
       for (const l of scope.lotties) {
         const data = options.lottieAssets?.[l.element.assetId];
         if (data === undefined) continue;
@@ -889,34 +1188,75 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // D-125 Phase 3c — expose the mounted player to the binding path, so a
         // `lottie-override` field routes to this animation (mirrors tickerDriverFor).
         registerLottiePlayer(l.container, handle);
+        // media-phases-follow-composition — resolve the phase WINDOW. Three shapes:
+        //  - markers/manual: the shipped mapping (the window is the clip's own [ip, op]);
+        //  - follow + lifecycle: the DERIVED window (`lottieFollowWindow` — the one
+        //    derivation, anchored at the hold time H);
+        //  - follow + NO lifecycle: nothing to follow — marker-less behaviour exactly
+        //    (a follower's stored numbers are ignored either way; the Inspector says why).
+        const follows = followsComposition(l.element.phases);
+        // Session Y — the adapter now takes the WHOLE phases block: authored
+        // `introEnd`/`outroStart` (real markers, or manual values) WIN, the attach seed
+        // signature derives as if absent, and the outro is the clip's own ending.
+        const fw =
+          follows && followAnchors !== null
+            ? lottieFollowWindow(meta, l.element.speed, followAnchors, l.element.phases)
+            : null;
+        const phasesEff = follows ? undefined : l.element.phases;
         // Resolve the phase frames onto the animation's frame space: absent `phases`
         // ⇒ the whole clip is the intro, held (frozen) at `op`. The idle segment
-        // defaults to the hold window `[introEnd, outroStart]` (§D2.2).
-        const introEnd = l.element.phases?.introEnd ?? meta.op;
-        const idleIn = l.element.phases?.idle?.[0] ?? introEnd;
-        const idleOut = l.element.phases?.idle?.[1] ?? l.element.phases?.outroStart ?? meta.op;
-        // §D1 — the OUT phase maps to `[outroStart → op]` in ANIMATION frames, BY PHASE
-        // (never rescaled onto the composition's `outPoint`): the element owns its own
-        // outro timing at the authored speed. Absent `phases` ⇒ `outroStart = op` ⇒ a
-        // DEGENERATE outro, which `playOutro()` resolves immediately (§D6.4.1).
-        const outroStart = l.element.phases?.outroStart ?? meta.op;
-        const hasOutro = outroStart < meta.op;
+        // defaults to the hold window `[introEnd, outroStart]` (§D2.2) — except under
+        // follow, where an AUTHORED idle range composes with H and an ABSENT one means
+        // FREEZE (a zero span, the driver's own fallback): the derived hold is H's look,
+        // and the stored [introEnd, outroStart] must not smuggle a loop range back in.
+        const introStart = fw?.introStartFrame;
+        const introEnd = fw !== null ? fw.holdFrame : (phasesEff?.introEnd ?? meta.op);
+        const idleIn =
+          fw !== null
+            ? (l.element.phases?.idle?.[0] ?? fw.holdFrame)
+            : (phasesEff?.idle?.[0] ?? introEnd);
+        const idleOut =
+          fw !== null
+            ? (l.element.phases?.idle?.[1] ?? fw.holdFrame)
+            : (phasesEff?.idle?.[1] ?? phasesEff?.outroStart ?? meta.op);
+        // §D1 — the OUT phase maps to `[outroStart → outroEnd]` in ANIMATION frames, BY
+        // PHASE (never rescaled onto the composition's `outPoint`): the element owns its
+        // own outro timing at the authored speed. Absent `phases` ⇒ `outroStart = op` ⇒ a
+        // DEGENERATE outro, which `playOutro()` resolves immediately (§D6.4.1). Under
+        // follow (session Y) the outro is THE CLIP'S OWN ENDING — authored
+        // `[outroStart → op]`, or end-anchored `[op − outSpan → op]` — never the
+        // hold-anchored static middle the superseded rule played.
+        const outroStart = fw !== null ? fw.outroStartFrame : (phasesEff?.outroStart ?? meta.op);
+        const outroEnd = fw?.outroEndFrame;
+        const hasOutro = fw !== null ? fw.window.hasOutro : outroStart < meta.op;
         // D-125 — the STATIC canvas poster frame. When phase markers define the hold
         // start (`introEnd`, fully ON) park there. ABSENT markers `introEnd` fell back to
         // `op` (the LAST frame): for a real AE furniture clip that animates OFF in its
         // outro, `op` is the outro-END (invisible), so parking there leaves the editor
         // canvas EMPTY (the bug). The clip MIDPOINT sits in the held/visible region, so it
         // is the representative "settled" look; never `op`. Only the poster frame — the
-        // always-revealed canvas — changes; play() still resets()→`ip`.
-        const posterFrame = l.element.phases?.introEnd ?? Math.round((meta.ip + meta.op) / 2);
+        // always-revealed canvas — changes; play() still resets()→the window start.
+        // D-135 — the midpoint comes from `@cg/lottie-bridge`, which is also where the
+        // Designer's manual-phase SEED reads it. One definition: if the two drifted,
+        // converting a marker-less clip to manual phases would move its picture.
+        // Under follow the poster IS the derived H — the held look, by definition.
+        const posterFrame =
+          fw !== null ? fw.holdFrame : (phasesEff?.introEnd ?? lottieClipMidpoint(meta));
         const driver = new LottieDriver({
           handle,
           fr: meta.fr,
           ip: meta.ip,
           op: meta.op,
           speed: l.element.speed,
+          introStart,
+          introDelayMs: fw?.introDelayMs,
           introEnd,
           outroStart,
+          outroEnd,
+          // D-135 — the SAME `hasOutro` the `cgOutro` guard and the scope's outro ledger
+          // read, computed once above. The driver needs it to know that a degenerate
+          // outro takes the INTRO mapping past the composition's out-point.
+          hasOutro,
           idleIn,
           idleOut,
           holdBehavior: l.element.holdBehavior,
@@ -932,6 +1272,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         driver.poster();
         scopeLotties.push(driver);
         lotties.push(driver);
+        // `B-150` — a Lottie is a DRIVEN-FRAME renderer: hidden, it goes on computing a
+        // frame per tick and pushing `goToAndStop` into a node nobody can see. No audio, so
+        // no `audio` member — the silence half has nothing to act on here. `drivesHold` is
+        // OPT-IN for this kind too (D-125 §D2.1).
+        lookMediaPark.register({
+          node: l.container,
+          driver,
+          parkable: l.element.drivesHold !== true,
+        });
         // D-105 — mark the content root so the coordinated exit can select it.
         l.container.dataset['cgContent'] = 'lottie';
         // §D6.2 — a Lottie that OWNS an outro animates ITSELF off; guard it from the
@@ -951,18 +1300,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // one-liner; do not "normalize" it to match the other content kinds.
           const drivesHold = l.element.drivesHold === true;
           if (drivesHold) holdLotties.push(driver);
-          // D-125 Phase 3a — contribute this Lottie's intro to the scope's entrance settle.
-          // Inside the B-034 visible gate ON PURPOSE: a HIDDEN Lottie is fully inert and must
-          // not delay content for furniture nobody can see. A MARKER-LESS clip yields `null`
-          // (see `lottieTiming` — the `introEnd = op` fallback is missing information, not an
-          // authored intro), so it contributes nothing and pre-D-125 scenes are unchanged.
-          const timing = lottieTiming({
-            data,
-            speed: l.element.speed,
-            phases: l.element.phases,
-            compositionFps: scene.frameRate,
-          });
-          if (timing.settleOffset !== null) lottieSettleOffsets.push(timing.settleOffset);
+          // D-125 Phase 3a — this Lottie's settle contribution now happens in the PRE-PASS
+          // above (media-phases-follow-composition hoisted it: a follower's window needs the
+          // aggregated result at construction time). Same gates, same `lottieTiming`.
           // D-112 — exposed UNFILTERED so a parent instance override can re-filter it.
           contentDrivers.push({
             id: l.element.id,
@@ -979,40 +1319,158 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const v of scope.videos) {
         const el = v.element;
         const durationMs = el.durationMs;
-        const hasPhases = el.phases !== undefined;
+        // media-phases-follow-composition — resolve the phase WINDOW, mirroring the Lottie
+        // block above. Video is the ms-native kind, so it consumes the comp-side core
+        // (`followWindowMs`) directly — no unit adapter. Follow without a lifecycle behaves
+        // as absent phases (nothing to follow).
+        const followsV = followsComposition(el.phases);
+        // Session Y — the corrected rule: a follower's outro is the CLIP'S OWN ENDING.
+        // AUTHORED introEnd/outroStart win (the seed-signature shim `videoFollowClipFacts`
+        // keeps attach-written seeds from masquerading as intent); absent, the outro is
+        // END-anchored `[clipEnd − outSpan → clipEnd]` and the intro is unchanged.
+        const vw =
+          followsV && followAnchors !== null
+            ? followWindowMs(followAnchors, {
+                durationMs,
+                holdAtMs: el.phases?.holdAt,
+                ...videoFollowClipFacts(el.phases, durationMs),
+              })
+            : null;
+        const phasesEffV = followsV ? undefined : el.phases;
+        const hasPhases = phasesEffV !== undefined;
         // Absent phases (decision (b)): the whole clip is the intro, the hold loops
         // the whole clip, and there is NO outro (outroStart = duration ⇒ degenerate).
-        const introEndMs = el.phases?.introEnd ?? durationMs;
-        const outroStartMs = el.phases?.outroStart ?? durationMs;
-        const idle = el.phases?.idle;
-        const loopStartMs = idle ? idle.start : hasPhases ? introEndMs : 0;
-        const loopEndMs = idle ? idle.end : hasPhases ? outroStartMs : durationMs;
-        const hasOutro = outroStartMs < durationMs;
+        const introStartMs = vw?.introStartMs;
+        const introDelayMs = vw?.introDelayMs;
+        const introEndMs = vw !== null ? vw.holdMs : (phasesEffV?.introEnd ?? durationMs);
+        const outroStartMs = vw !== null ? vw.outroStartMs : (phasesEffV?.outroStart ?? durationMs);
+        const outroEndMs = vw?.outroEndMs;
+        // Under follow, an AUTHORED idle range composes with H; ABSENT idle means the hold
+        // FREEZES at H even for `holdBehavior: 'loop'` — looping the whole clip would
+        // abandon the held look, which is the one thing follow promises to keep (design
+        // §2). The STORED holdBehavior is untouched; only the resolved hold reads this
+        // way, and the Playout checklist's `infinite` mirror says the same.
+        const idle = vw !== null ? el.phases?.idle : phasesEffV?.idle;
+        const loopStartMs =
+          vw !== null
+            ? idle
+              ? idle.start
+              : vw.holdMs
+            : idle
+              ? idle.start
+              : hasPhases
+                ? introEndMs
+                : 0;
+        const loopEndMs =
+          vw !== null
+            ? idle
+              ? idle.end
+              : vw.holdMs
+            : idle
+              ? idle.end
+              : hasPhases
+                ? outroStartMs
+                : durationMs;
+        const holdBehaviorEff = vw !== null && idle === undefined ? 'freeze' : el.holdBehavior;
+        const hasOutro = vw !== null ? vw.hasOutro : outroStartMs < durationMs;
         // MUTABLE: `recover()` rebuilds the element in place (a terminal decode
-        // error kills the NODE, not the driver) and re-points every handle member.
+        // error kills the NODE, not the driver) and re-points every handle member,
+        // and B-137's `live()` below re-points it when a HOST reparents the node.
         let media = v.container;
+        /**
+         * B-137 — THE NODE THE DRIVER COMMANDS MUST BE THE NODE THE VIEWER SEES.
+         *
+         * A host may legitimately REPARENT a `<video>` across a rebuild rather than
+         * let it reload: the Designer preview pools the live element and transplants
+         * it back over the freshly built one (`preview.ts` `reconcileVideos`), so
+         * that a transform-only edit never re-fetches the media. Nothing told the
+         * NEW driver about that swap, so it went on commanding the node it captured
+         * at build time — by then detached, and never given a `src` (the host's src
+         * walk uses `document.querySelectorAll`, which cannot see a detached node).
+         * Meanwhile the node actually on screen was the one the OUTGOING driver
+         * paused during teardown, and no code path ever played it again. That is
+         * the whole of B-137: a frozen picture with a healthy driver behind it,
+         * commanding an orphan.
+         *
+         * Re-resolving by `data-cg-element-id` fixes it at the binding rather than
+         * at the host, so it is HOST-AGNOSTIC — any future harness that reparents
+         * nodes is covered without knowing this driver exists.
+         *
+         * `isConnected === false` is the trigger, and it is precise: it is true
+         * ONLY when this node has left the document, which is exactly the swap.
+         * A node that is merely moved WITHIN the document stays connected and is
+         * never re-resolved, so the normal path costs one boolean read. The scan
+         * (rather than a selector) avoids escaping an arbitrary author-supplied id
+         * — and a scene's video count is small, on a path taken only after a swap.
+         *
+         * This is the same re-pointing `recover()` already performs on a different
+         * trigger (a terminal decode error), deliberately reusing that precedent
+         * instead of inventing a second mechanism.
+         */
+        const live = (): HTMLVideoElement => {
+          if (media.isConnected) return media;
+          const nodes = media.ownerDocument.querySelectorAll<HTMLVideoElement>(
+            'video[data-cg-element-id]',
+          );
+          for (const node of nodes) {
+            if (node.dataset['cgElementId'] === el.id) {
+              media = node;
+              return media;
+            }
+          }
+          // No replacement in the document — keep the last known node. The driver
+          // then commands a detached element harmlessly, exactly as before.
+          return media;
+        };
+        /**
+         * B-137 — `play()` REJECTIONS ARE REPORTED, ONCE PER ELEMENT.
+         *
+         * Every rejection here was swallowed blind, which is why a video commanding
+         * an orphan looked like nothing at all for weeks: no console line, no
+         * evidence, a frozen picture and a driver reporting success. The silence was
+         * load-bearing to the bug's invisibility, so the logging is part of the fix.
+         *
+         * ONCE per element, latched — this sits on a path that can be re-entered every
+         * tick, and a per-frame log would be its own defect. Rejections remain
+         * NON-FATAL (a src-less node during export wiring, an autoplay refusal, jsdom
+         * with no media stack): the driver carries on exactly as it did.
+         */
+        let playFailureReported = false;
+        const reportPlayFailure = (reason: unknown): void => {
+          if (playFailureReported) return;
+          playFailureReported = true;
+          console.warn(`[cg] video "${el.id}": play() was rejected`, reason);
+        };
         const handle: VideoHandle = {
           play: () => {
+            const node = live();
             try {
-              const p = media.play();
-              if (p !== undefined && typeof p.catch === 'function') void p.catch(() => undefined);
-            } catch {
-              /* no src (Phase-5 export wiring) / autoplay policy / jsdom — non-fatal */
+              const p = node.play();
+              if (p !== undefined && typeof p.catch === 'function') {
+                void p.catch((reason: unknown) => {
+                  reportPlayFailure(reason);
+                });
+              }
+            } catch (reason) {
+              reportPlayFailure(reason);
             }
           },
-          pause: () => media.pause(),
+          pause: () => live().pause(),
           seek: (sec) => {
-            media.currentTime = sec;
+            live().currentTime = sec;
           },
-          currentTime: () => media.currentTime,
+          currentTime: () => live().currentTime,
           // D-128 sync fix — a corrective seek must never stack on one still settling
           // (`media.seeking`): that seek-storm wedged the decoder and painted half-decoded
           // frames. jsdom has no real seek, so `seeking` is simply false there.
-          seeking: () => media.seeking,
+          seeking: () => live().seeking,
           // D-128 seek-fragility recovery — `media.error` is TERMINAL: no seek or
           // play on the dead node ever paints again (the pause/resume freeze the
           // owner hit on a pre-alignment asset). jsdom has no MediaError: null ⇒ alive.
-          dead: () => media.error !== null && media.error !== undefined,
+          dead: () => {
+            const node = live();
+            return node.error !== null && node.error !== undefined;
+          },
           // Rebuild the element IN PLACE: fresh node, same attributes (src, class,
           // style, playsinline, preload, every data-* — so the Designer preview's
           // video pool re-adopts it by `data-cg-element-id`), positioned where the
@@ -1020,7 +1478,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // no-remount-on-drag guard: a transform change never sets `media.error`,
           // so recovery can only fire on a genuinely dead decoder — never on a drag.
           recover: () => {
-            const old = media;
+            // Rebuild the node that is ON SCREEN — recovering an orphan would
+            // replace a node nobody can see and leave the frozen one in place.
+            const old = live();
             const wasPlaying = !old.paused && !old.ended;
             const at = Number.isFinite(old.currentTime) ? old.currentTime : 0;
             const fresh = old.ownerDocument.createElement('video');
@@ -1045,15 +1505,41 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         const driver = new VideoDriver({
           handle,
           durationMs,
+          introStartMs,
+          introDelayMs,
           introEndMs,
           outroStartMs,
+          outroEndMs,
           loopStartMs,
           loopEndMs,
-          holdBehavior: el.holdBehavior,
+          holdBehavior: holdBehaviorEff,
           clock: options.clock,
         });
         scopeVideos.push(driver);
         videos.push(driver);
+        /*
+          `B-150` — the video joins the look park. The ONE kind with sound, so it is the one
+          that passes an `audio` element; `media` is both the node whose look membership is
+          asked and the thing to silence, which is what makes the two answers impossible to
+          split. Registered UNCONDITIONALLY, including a `visible: false` video: a member
+          outside every look instance is never parked, so this costs an authored-hidden
+          element nothing, while one hidden INSIDE a hidden look is parked correctly.
+        */
+        lookMediaPark.register({
+          // `B-217` — through `live()`, not the build-time node: the Designer preview
+          // transplants a pooled `<video>` over this one on every rebuild, and a member
+          // registered by the detached node is never inside any look root again.
+          node: () => live(),
+          driver,
+          // OPT-IN, matching the hold arrays below. A video that gates the hold is silenced
+          // but never paused — a paused driver never completes (see `look-media.ts`).
+          parkable: el.drivesHold !== true,
+          audio: () => live(),
+        });
+        // media-phases-follow-composition — the at-rest poster shows the derived H (the held
+        // look). The scene-builder wrote `holdAt ?? midpoint` (it has no comp anchors); the
+        // runtime REFINES it here, before the host's poster seek reads the dataset.
+        if (vw !== null) media.dataset['cgPosterMs'] = String(Math.round(vw.holdMs));
         // D-105 — content root so the coordinated exit can select it (data-cg-content='video').
         media.dataset['cgContent'] = 'video';
         // §D6.2 — a video that OWNS an outro animates itself off; guard it from the
@@ -1102,6 +1588,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           s.reset();
           s.start();
         }
+        // `B-150` — CONTENT-START CALLER 1 of 3. This just started every time-driven driver
+        // in the scope regardless of which look it sits in, so the park has to be re-asserted
+        // or a hidden look's crawl would run from here to the end of the graphic.
+        lookMediaPark.reassert();
       };
       const ownContentWait = (): Promise<void> | null =>
         holdTickers.length > 0 ||
@@ -1189,21 +1679,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         child.visible = c.visible !== false;
         return child;
       });
-      const activeRange = activeRangeOf(scope.source);
-      // D-104 follow-up — the frame where content starts: the designer's EXPLICIT
-      // content-start marker (`lifecycle.contentStart`) when placed, else the
-      // `entranceSettleFrame()` heuristic (entrance completion). The marker is the
-      // deterministic source of truth; the heuristic is only its default. Clamp to
-      // [active.in, outPoint] defensively (the schema already constrains it).
-      const outPoint = scope.source.lifecycle?.outPoint ?? activeRange.out;
-      const marker = scope.source.lifecycle?.contentStart;
-      // D-125 Phase 3a — the Lottie-derived settles in ABSOLUTE composition frames (the
-      // offsets above ride `active.in`, where their intros start).
-      const lottieSettles = lottieSettleOffsets.map((o) => activeRange.in + o);
-      const holdEntry =
-        marker !== undefined
-          ? Math.max(activeRange.in, Math.min(outPoint, marker))
-          : entranceSettleFrame(scope.animated, activeRange.in, outPoint, lottieSettles);
+      // D-104 follow-up — `activeRange` / `outPoint` / `holdEntry` are computed ONCE, above
+      // the media driver loops (media-phases-follow-composition hoisted them: a follower's
+      // window derives from these anchors at driver construction). The wiring below reads
+      // those same consts — a second computation here is exactly the two-reads trap
+      // golden rule 7 exists to prevent.
       // D-104 follow-up (content-start VISIBILITY) — a content host must show its static
       // initial content (a clock's frozen time, a sequence's item 1, a ticker's band) only
       // FROM the content-start frame, matching the ticker's empty-until-crawl behaviour;
@@ -1300,6 +1780,21 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           applyContentGateAtFrame(frame);
         },
         onExitStart: isGlobalRoot ? rootOnExitStart : noop,
+        /*
+          🔴 `SELF-STOP-24` — THE GLOBAL ROOT ONLY.
+
+          A nested composition instance completing its own lifecycle is not the template
+          finishing: its parent is still on air, and the existing cascade already takes every
+          nested scope off with the root when the root does end. Wiring this per scope would
+          report a run as over while its graphic was still on screen.
+        */
+        ...(isGlobalRoot
+          ? {
+              onSelfEnd: (): void => {
+                bus.emit('self-end', { ...(takeToken !== undefined && { take: takeToken }) });
+              },
+            }
+          : {}),
         onSettle: isGlobalRoot
           ? (): void => {
               onRootSettled();
@@ -1369,6 +1864,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             v.reset();
             v.start();
           }
+          // `B-150` — CONTENT-START CALLER 2 of 3: a loop-cycle boundary re-arms this scope's
+          // own media, which un-pauses whatever the park had frozen.
+          lookMediaPark.reassert();
         },
         clock: options.clock,
       });
@@ -1410,6 +1908,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             { depth: entry.depth, visited: entry.visited },
             doc,
             mode,
+            paintEditorBackdrop,
           );
           return rows.map((row, i) => {
             // D-102 Phase 2 — a repeater row is a STAMPED subtree: every row is built from the SAME
@@ -1494,6 +1993,45 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const rootSub = wireScopeSubtree(built.scopeTree, '', true);
   const rootNode = rootSub.node;
 
+  /**
+   * 🔴 `TIMING-WIRE-22` — THE ONE PLACE a live pass-timing change is applied.
+   *
+   * Two callers reach it and they must never diverge: the public `setPassTiming` (the Designer
+   * preview, tests) and `update()`'s `__cg.timing` member (the console, through `CG UPDATE` —
+   * the only road to a loop running inside CEF). A second copy is how the wire and the API come
+   * to disagree about what a count means (golden rule 6).
+   *
+   * ⚠ DELAY BEFORE PASSES, and the order is not arbitrary. `setRemainingPasses(0)` during a gap
+   * settles the graphic; doing that first would leave a delay write landing on a controller that
+   * has just finished, which is a write nobody can observe. Setting the gap first means the
+   * value is in place for whatever the count then decides.
+   *
+   * 🔴 **IT GOES TO EVERY SCOPE THAT ACTUALLY LOOPS, NOT TO THE ROOT.** An earlier spelling of
+   * this said "root only — pushing a count into every nested instance would silently re-time
+   * furniture the operator never addressed". That was a guess, and it was wrong in the way that
+   * makes a feature dead rather than dangerous.
+   *
+   * Measured across all five starter templates: every one has `layers: []` and a set
+   * `entryCompositionId`, so the ROOT scope resolves to `static` — and a static controller is
+   * not cyclic, so `setRemainingPasses` early-returned and the whole road from the console
+   * delivered nothing. The `loop-cycle` is on the entry composition, or a level below it again
+   * (`logo-bug`'s entry is `manual`; its `comp-logo-mark` child is the infinite loop).
+   *
+   * ⚠ The "re-timing furniture" worry the old note raised is answered by the FILTER, not by the
+   * scope: `setRemainingPasses` and `setDelayMs` are no-ops on a controller that is not cyclic,
+   * so this reaches exactly the loops and nothing else. A template with no loop takes no effect
+   * at all, which is the same outcome the old rule gave for the wrong reason.
+   */
+  const applyPassTiming = (timing: { passes?: number | 'infinite'; delayMs?: number }): void => {
+    if (machine.state === 'removed') return;
+    const visit = (node: ScopeNode): void => {
+      if (timing.delayMs !== undefined) node.controller.setDelayMs(timing.delayMs);
+      if (timing.passes !== undefined) node.controller.setRemainingPasses(timing.passes);
+      for (const child of node.children) visit(child);
+    };
+    visit(rootNode);
+  };
+
   applyScopedFieldValues(scene, scene, {}, built.scopeTree);
 
   // D-026 — every scope (the root scene + each nested instance) owns its animated
@@ -1502,6 +2040,24 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // scope's own controller animates only its own list along its own timeline.
   const allAnimated: AnimatedElement[] = [];
   collectScopeAnimated(built.scopeTree, allAnimated);
+
+  // D-135 — the COMPOSITION→CLIP anchor the scrubber positions frame-mapped media by.
+  //
+  // A Lottie's intro starts at `play()`, which on the timeline is the composition's
+  // ACTIVE IN (`activeRangeOf`), and its OUT phase starts at the lifecycle's out-point
+  // (IN = `[active.in, outPoint]`, HOLD = the held `outPoint`, OUT =
+  // `[outPoint, active.out]`). Both are converted to elapsed TIME here, because the clip
+  // plays at its own authored `fr × speed` and is never rescaled onto the composition's
+  // markers (§D1.1) — the driver owns the frame mapping, this owns only the anchor.
+  //
+  // The ROOT scene's range and lifecycle anchor EVERY scope, including nested instances:
+  // `tick()` paints ONE shared frame across the whole tree (see `allAnimated` above and
+  // the lifespan-gate note below), and a Lottie inside a nested instance is started by
+  // the same `play()` as the root's own. Anchoring it anywhere else would make the
+  // canvas disagree with what goes on air.
+  const scrubActiveIn = activeRangeOf(scene).in;
+  const scrubOutPoint = scene.lifecycle?.outPoint;
+  const scrubMsPerFrame = scene.frameRate > 0 ? 1000 / scene.frameRate : 0;
 
   // Per-element lifespan gates — only elements with an explicit
   // `lifespan` are tracked here; the rest stay visible for every
@@ -1658,6 +2214,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   let pendingExitOutro = false;
   const exitSetTimeout =
     options.clock?.setTimeout ?? ((cb: () => void, ms: number): unknown => setTimeout(cb, ms));
+  const exitClearTimeout =
+    options.clock?.clearTimeout ??
+    ((h: unknown): void => {
+      clearTimeout(h as never);
+    });
   const contentRoots = (): HTMLElement[] =>
     Array.from(built.container.querySelectorAll<HTMLElement>('[data-cg-content]'));
   /**
@@ -1745,7 +2306,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           promise: Promise.resolve(),
           done: false,
         };
-        rec.promise = d.playOutro().then(() => {
+        rec.promise = boundedOutro(d.playOutro()).then(() => {
           rec.done = true;
         });
         outroLedger.set(d, rec);
@@ -1755,6 +2316,36 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     }
     if (waits.length === 0) return null;
     return Promise.all(waits).then(() => undefined);
+  };
+  /**
+   * Session Z — THE LEDGER'S OWN BACKSTOP, and the reason it is LOUD. Every driver bounds
+   * its own outro (§D6.4.1), so this must never fire. If it does, some driver's
+   * never-strand invariant is broken, and the consequence is severe AND silent: the
+   * background outro is never reached, so the graphic cannot come off air and the
+   * operator's stop/out appear to do nothing with nothing logged anywhere. Continuing the
+   * exit without the stranded element is strictly better than a graphic stuck on air;
+   * SAYING SO is what makes the next occurrence diagnosable instead of another "sometimes
+   * the button is dead". The bound is deliberately far longer than any real outro.
+   *
+   * Armed ONCE, around the LEDGER ENTRY — not around each caller's await. Both awaiting
+   * sites (this runtime's `stop()`/`out()`, and every controller's `beforeOutro` gate)
+   * subscribe to that one promise, so one bound covers both and a strand cannot be paid
+   * for twice; per-caller watchdogs would each wait the full window in turn.
+   */
+  const EXIT_OUTRO_WATCHDOG_MS = 30_000;
+  const boundedOutro = async (outro: Promise<void>): Promise<void> => {
+    let timer: unknown = null;
+    const expiry = new Promise<'timeout'>((res) => {
+      timer = exitSetTimeout(() => res('timeout'), EXIT_OUTRO_WATCHDOG_MS);
+    });
+    const outcome = await Promise.race([outro.then(() => 'settled' as const), expiry]);
+    if (timer !== null) exitClearTimeout(timer);
+    if (outcome === 'timeout') {
+      bus.emit('error', {
+        code: 'exit.outro-timeout',
+        message: `an element outro did not settle within ${String(EXIT_OUTRO_WATCHDOG_MS)} ms; the exit continued without it`,
+      });
+    }
   };
   const saveExitStyles = (n: HTMLElement): void => {
     if (n.dataset['cgExit'] !== undefined) return;
@@ -1803,11 +2394,35 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         throw new Error('Runtime removed; play() unavailable');
       }
       await ready;
+      /*
+        `tasks.md` 6.7 — THE CONTROL PAYLOAD IS LIFTED HERE TOO, and both halves of that
+        were missing rather than merely tidy.
+
+        The bridge attaches the active look to the `CG ADD` data payload (its `#sendAdd`
+        chokepoint), and CasparCG hands a template's load-time data to the page through
+        whichever global it uses — so this path can and does receive it. Without the two lines
+        below:
+
+        - the reserved key was MERGED INTO `currentValues`, where `isFieldNamespace` reads
+          `{look: …}` as a nested-composition namespace. It matched no scope so nothing
+          visibly broke, but it persisted in the value map and was re-walked on every later
+          apply — control data living permanently in the field state, which is exactly what
+          `CG_CONTROL_KEY`'s strip rule exists to prevent;
+        - and the LOOK ITSELF WAS DROPPED. 6.7's re-take fix depends on the ADD payload being
+          honoured: a row switched to a solo look and then re-taken rebuilds the page, which
+          enters the AUTHORED DEFAULT, and only this payload can move it to the look the
+          bridge actually seated. Read on `update()` alone, that fix was inert on any host
+          that delivers load data through `play`.
+      */
+      const control = readCgControl(data);
       // Merge (don't replace) so a `CG PLAY` with no data preserves whatever a
       // prior `CG ADD`/`UPDATE` already set — the CasparCG flow updates first,
       // then plays with no args. play(data) still applies its data. Order no
       // longer matters (D-018/D-019 acceptance).
-      currentValues = mergeNestedValues(currentValues, data as NestedFieldValues);
+      currentValues = mergeNestedValues(
+        currentValues,
+        stripCgControl(data as Record<string, unknown>) as NestedFieldValues,
+      );
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
       reapplySequenceItemFields();
       reapplyClockTargets();
@@ -1864,6 +2479,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           v.reset();
           v.start();
         }
+      /*
+        `B-150` — CONTENT-START CALLER 3 of 3, and the one that matters most: a run's `play()`
+        resets and starts EVERY driver in EVERY subtree, in every look, because the lifecycle
+        knows nothing about looks. Without this line the whole park would be undone at the
+        moment the graphic goes to air — which is precisely when it is worth having.
+      */
+      lookMediaPark.reassert();
       // Play the IN once and hold (no full-range loop, no auto-outro by default);
       // the mode orchestration (auto-out / loop-cycle / content-driven) then runs.
       // Absent lifecycle: the whole timeline is the entrance and the hold is its
@@ -1876,23 +2498,164 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         for (const child of n.children) rearmSettled(child);
       };
       rearmSettled(rootNode);
+      /*
+        🔴 **`DELTA B6` — THE OPERATOR'S PASS TIMING IS SEATED HERE, BEFORE THE CASCADE.**
+
+        `play()` has lifted the control payload since the look fix, and that fix's own note says
+        why: the bridge attaches control data to the `CG ADD` payload, and CasparCG hands a
+        template's LOAD-TIME data to the page through whichever global it uses — for many hosts
+        that is `play(data)`, not `update(data)`. "Read on `update()` alone, that fix was inert
+        on any host that delivers load data through `play`."
+
+        `control.timing` was never added beside `control.look`, so on that delivery path the
+        count was read and then DROPPED. Measured on the plant (owner, 2026-09-15): «روی تعداد
+        هم فرقی نداره هر تعدادی باشه» — whatever count is set, the take ignores it. `DELTA B0`
+        made `play()` HONOUR a count seated before it; this is the half that seats it.
+
+        ⚠ **THE POSITION IS LOAD-BEARING AND IT IS THE OPPOSITE OF THE LOOK'S.** The look is
+        entered LAST because `restoreContent()` would otherwise un-hide what it hid. The timing
+        must be applied BEFORE the cascade, because `PlayoutController.play()` SNAPSHOTS the
+        count into `cyclesLeft` — applied afterwards it would be read as a live edit to a loop
+        that has already chosen its total, which is a different quantity entirely (`DELTA A1`:
+        the running count is "remaining FROM NOW", the pre-take one is a TOTAL).
+
+        ⚠ ABSENT MEANS UNCHANGED, exactly as on `update()`: an ordinary take carries no
+        `timing` and must leave the authored `repeat` alone, so this is guarded on the member's
+        presence and never called with defaults.
+      */
+      if (control?.timing !== undefined) applyPassTiming(control.timing);
+      /*
+        🔴 `SELF-STOP-24` — THE TAKE TOKEN, LIFTED ON THIS DOOR TOO.
+
+        `0f54e00d` is the whole reason this line exists rather than only its twin in `update()`:
+        the bridge attaches control data to the `CG ADD` payload, and CasparCG hands a
+        template's LOAD-TIME data to the page through whichever global it uses — for many hosts
+        that is `play(data)`. A token read on `update()` alone would be dropped on exactly the
+        delivery path a fresh take uses, and the feature would silently do nothing.
+
+        ⚠ ABSENT MEANS UNCHANGED, like every other member: an ordinary take of a page that was
+        already told keeps the token it has.
+      */
+      if (control?.take !== undefined) takeToken = control.take;
       cascade(rootNode, (c) => c.play());
+      // Session Z — THE TRIPWIRE. Everything above put a graphic ON AIR. If the machine
+      // did not follow, the two have diverged, and the consequence is SILENT and total:
+      // `stop()`/`out()` return at their `on-air`/`playing` guard for the life of this
+      // runtime, so both operator buttons go dead with nothing logged anywhere (that is
+      // exactly how the dead-Preview-buttons bug reached the owner). Every legal entry —
+      // including superseding an in-flight exit — is in the transition table, so reaching
+      // here in any other state is an invariant break, not an expected refusal. Say so.
+      if (machine.state !== 'on-air') {
+        bus.emit('error', {
+          code: 'lifecycle.play-not-on-air',
+          message: `play() left the lifecycle machine in '${machine.state}'; stop()/out() will silently no-op until this runtime is rebuilt`,
+        });
+      }
+      /*
+        THE LOOK IS ENTERED LAST, and the position is load-bearing: `restoreContent()` above
+        clears exit styling by writing `display` back onto content nodes, so a look applied
+        earlier in this method would have its hidden instances un-hidden again by it. Entered
+        here, the final visibility state of the frame is the look's.
+
+        Through the SAME `enterLook` as `setActiveLook` and the update path — one
+        implementation, three entry points, so the page cannot grow a second answer to "which
+        look is active".
+      */
+      if (control?.look !== undefined) enterLook(control.look);
       bus.emit('play.end');
+    },
+
+    setArrangementView(view: ArrangementView | undefined): void {
+      if (machine.state === 'removed') return;
+      repunch(view);
+    },
+
+    /**
+     * 🔴 `TIMING-BUILD-21` §6 / §7 — see the doc on `TemplateRuntime.setPassTiming`.
+     *
+     * ⚠ It MUTATES the root scope's live playout object rather than rebuilding the scene, and
+     * that is the entire point. Every other route to a playout knob goes through
+     * `scene-replace` → `remove()` + `createRuntime()`, which on air is a black frame.
+     *
+     * ⚠ ROOT ONLY — deliberately not cascaded. `markFinalCycle` cascades because a parent's
+     * exit must end its children's; a TIMING configuration is the row's own, and pushing a
+     * count into every nested instance would silently re-time furniture the operator never
+     * addressed.
+     */
+    setPassTiming(timing: { passes?: number | 'infinite'; delayMs?: number }): void {
+      applyPassTiming(timing);
+    },
+
+    setActiveLook(lookId: string): boolean {
+      if (machine.state === 'removed') return false;
+      return enterLook(lookId);
+    },
+
+    activeLookId(): string | undefined {
+      return currentLookId;
     },
 
     async update(data, opts: UpdateOptions = {}): Promise<void> {
       if (machine.state === 'removed') {
         throw new Error('Runtime removed; update() unavailable');
       }
+      /*
+        `tasks.md` 6.7 — THE BRIDGE→PAGE CONTROL PAYLOAD, lifted off BEFORE anything treats
+        this as field values.
+
+        Stripping first is half of the reserved key's collision proof (see `CG_CONTROL_KEY`):
+        control data can never reach `applyScopedFieldValues`, so it can never be written into
+        a field and a field can never be silently fed a look id — true even for a hand-edited
+        scene the export preflight never saw.
+      */
+      const control = readCgControl(data);
+      const values = stripCgControl(data as Record<string, unknown>);
       const mode = opts.mode ?? 'merge';
       if (mode === 'replace') {
-        currentValues = { ...(data as NestedFieldValues) };
+        currentValues = { ...(values as NestedFieldValues) };
       } else {
-        currentValues = mergeNestedValues(currentValues, data as NestedFieldValues);
+        currentValues = mergeNestedValues(currentValues, values as NestedFieldValues);
       }
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
       reapplySequenceItemFields();
       reapplyClockTargets();
+      /*
+        🔴 THE LOOK IS APPLIED INSTEAD OF the ordinary re-punch, never in addition to it.
+
+        `enterLook` re-punches with the NEW look's visibility, so re-punching the OUTGOING
+        view first would paint the old holes for one pass and then the new ones — work that
+        can only be seen if it goes wrong. When the payload names no look, or names one this
+        template does not have, the ordinary re-punch is what happens, exactly as before.
+      */
+      if (control?.look === undefined || !enterLook(control.look)) {
+        repunch(arrangementView);
+      }
+      /*
+        🔴 `TIMING-WIRE-22` (b) — THE ROW'S LIVE PASS TIMING, applied to the RUNNING controller.
+
+        This is the far end of the only road from the console to a running loop: the pass loop
+        lives in this page's own JS inside CEF, and no AMCP verb carries timing, so a `CG UPDATE`
+        with a `__cg.timing` member is the whole mechanism.
+
+        ⚠ AFTER the field values and AFTER the look, deliberately. A timing change is a
+        CONFIGURATION verb (golden rule 10): it must not race the content the same payload
+        carries, and applying it last means the graphic the new count applies to is the graphic
+        this update just produced.
+
+        ⚠ ABSENT MEANS UNCHANGED. An ordinary field update carries no `timing` and must leave a
+        running count exactly where it is — `setPassTiming` is not called at all in that case,
+        rather than called with defaults, because "no opinion" and "reset to the template's
+        value" are different instructions and only one of them was given.
+      */
+      if (control?.timing !== undefined) applyPassTiming(control.timing);
+      /*
+        🔴 `SELF-STOP-24` — THE TAKE TOKEN ON THE UPDATE DOOR.
+
+        This is the door the RE-TAKE refresh arrives on. A take of a still-resident producer
+        sends no `CG ADD`, so the bridge tells the page its new token with a pre-PLAY
+        `CG UPDATE` — the same seam `B-191` already uses to tell a resident page its look.
+      */
+      if (control?.take !== undefined) takeToken = control.take;
       bus.emit('update');
     },
 
@@ -2037,9 +2800,42 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           for (const row of r.stampedRows) row.applyFrame(frame);
         }
       }
+      // D-135 — position every LOTTIE at the playhead's frame. Until this landed the
+      // canvas painted keyframed properties, stamped rows and lifespan gates only, so a
+      // Lottie sat on its poster frame while the composition moved underneath it — the
+      // canvas silently misrepresenting the composition during the one operation the
+      // operator uses to judge it.
+      //
+      // EVERY Lottie, regardless of `drivesHold` (design §9.4 (a)). The two flags are
+      // ORTHOGONAL: `drivesHold` answers "does this element gate the HOLD"; whether the
+      // canvas shows its frame under the playhead is a different question. Furniture that
+      // deliberately does not gate the hold is exactly what would sit frozen otherwise.
+      //
+      // `subtrees` (not the boot-time `lotties` union) because a repeater re-stamps fresh
+      // row scopes at every play and on `setItems` — the same reason the lifespan gates
+      // below iterate the live tree.
+      //
+      // The CARVE-OUT holds here by construction: ticker / sequence / clock drivers are
+      // NOT in this loop and must never join it. They are functions of REAL time, not of
+      // composition frame — there is no frame N of a crawl to show, and an invented
+      // mapping would disagree with what goes on air.
+      const introElapsedMs = (frame - scrubActiveIn) * scrubMsPerFrame;
+      const outroElapsedMs =
+        scrubOutPoint !== undefined && frame >= scrubOutPoint
+          ? (frame - scrubOutPoint) * scrubMsPerFrame
+          : null;
+      for (const sub of subtrees) {
+        for (const l of sub.lotties) l.positionAt(introElapsedMs, outroElapsedMs);
+        // D-135 §5 (§9.5 answered (a), 2026-08-13) — and every VIDEO, through the same
+        // elapsed pair and the same rule set: §9.4 (a) (regardless of `drivesHold`), no
+        // direction special case (§9.3 (a)), the driver's own `expectedClipMs` as the one
+        // mapping, `live()` inside the handle for every node access (B-137). The driver's
+        // positionAt seeks a PAUSED element and skips while a seek is in flight — the
+        // nearest-decodable-frame contract of §5.2–§5.3.
+        for (const v of sub.videos) v.positionAt(introElapsedMs, outroElapsedMs);
+      }
       applyLifespanGatesAtFrame(frame);
     },
-
     on(event, listener) {
       return bus.on(event, listener);
     },

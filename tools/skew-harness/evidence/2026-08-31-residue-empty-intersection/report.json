@@ -1,0 +1,153 @@
+{
+  "mode": "1080i5000",
+  "channelFramePeriodMs": 40,
+  "reportedFramerate": 50,
+  "fieldsPerChannelFrame": 2,
+  "probePlacement": [],
+  "scene": {
+    "looks": 2,
+    "background": "flat"
+  },
+  "runs": [
+    {
+      "index": 0,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-08-31-residue-empty-intersection\\empty-00.mkv",
+      "frames": 78,
+      "expectedFrames": 77,
+      "windowMs": 1535,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-empty\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.998958 0.998148 0.001042 0.001852",
+        "MIXER 1-30 CLIP 0.998958 0.998148 0.001042 0.001852",
+        "MIXER 1-31 FILL 0.997917 0.998148 0.001042 0.001852",
+        "MIXER 1-31 CLIP 0.997917 0.998148 0.001042 0.001852"
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the empty look punches nothing — this run is a FRAME capture",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": [],
+      "artefactFrames": [
+        "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-08-31-residue-empty-intersection\\empty-00-before.png",
+        "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-08-31-residue-empty-intersection\\empty-00.png",
+        "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-08-31-residue-empty-intersection\\empty-00-after.png"
+      ]
+    },
+    {
+      "index": 1,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-08-31-residue-empty-intersection\\empty-01.mkv",
+      "frames": 78,
+      "expectedFrames": 77,
+      "windowMs": 1530,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-empty\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.998958 0.998148 0.001042 0.001852",
+        "MIXER 1-30 CLIP 0.998958 0.998148 0.001042 0.001852",
+        "MIXER 1-31 FILL 0.997917 0.998148 0.001042 0.001852",
+        "MIXER 1-31 CLIP 0.997917 0.998148 0.001042 0.001852"
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the empty look punches nothing — this run is a FRAME capture",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": [],
+      "artefactFrames": [
+        "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-08-31-residue-empty-intersection\\empty-01-before.png",
+        "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-08-31-residue-empty-intersection\\empty-01.png",
+        "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-08-31-residue-empty-intersection\\empty-01-after.png"
+      ]
+    },
+    {
+      "index": 2,
+      "file": "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-08-31-residue-empty-intersection\\empty-02.mkv",
+      "frames": 76,
+      "expectedFrames": 76,
+      "windowMs": 1523,
+      "recordedPeriodMs": 20,
+      "frameRate": "50/1",
+      "commands": [
+        "CG 1-60 UPDATE 0 \"{\\\"__cg\\\":{\\\"look\\\":\\\"look-empty\\\",\\\"plates\\\":{\\\"guest-1\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"},\\\"guest-2\\\":{\\\"aspect\\\":null,\\\"mode\\\":\\\"cover\\\"}}}}\"",
+        "MIXER 1-30 FILL 0.998958 0.998148 0.001042 0.001852",
+        "MIXER 1-30 CLIP 0.998958 0.998148 0.001042 0.001852",
+        "MIXER 1-31 FILL 0.997917 0.998148 0.001042 0.001852",
+        "MIXER 1-31 CLIP 0.997917 0.998148 0.001042 0.001852"
+      ],
+      "containedPlay": false,
+      "kRecorded": null,
+      "kChannel": null,
+      "kMs": null,
+      "reason": "the empty look punches nothing — this run is a FRAME capture",
+      "probeA": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeB": {
+        "index": null,
+        "threshold": 0,
+        "noiseFloor": 0,
+        "magnitude": 0,
+        "series": []
+      },
+      "probeAEvents": [],
+      "probeBEvents": [],
+      "artefactFrames": [
+        "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-08-31-residue-empty-intersection\\empty-02-before.png",
+        "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-08-31-residue-empty-intersection\\empty-02.png",
+        "D:\\work\\projects\\claude-projects\\cg-broadcast\\cg\\tools\\skew-harness\\evidence\\2026-08-31-residue-empty-intersection\\empty-02-after.png"
+      ]
+    }
+  ],
+  "kChannelFrames": {
+    "n": 0,
+    "min": null,
+    "median": null,
+    "max": null,
+    "values": []
+  },
+  "kMilliseconds": {
+    "n": 0,
+    "min": null,
+    "median": null,
+    "max": null,
+    "values": []
+  }
+}

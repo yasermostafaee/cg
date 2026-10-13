@@ -314,7 +314,7 @@ export const logoBugScene: Scene = {
   frameRate: FPS,
   safeAreas: { title: 10, action: 5 },
   frameRange: { in: 0, out: 132 },
-  background: 'transparent',
+  editorBackdrop: 'transparent',
   layers: [],
   compositions: [
     {
@@ -324,7 +324,7 @@ export const logoBugScene: Scene = {
       frameRange: { in: 0, out: 132 },
       lifecycle: { outPoint: 70 },
       playout: { mode: 'manual' },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         layer('L-full', 'Frame', [
           // The bug at its on-frame home (top-right, action-safe). The
@@ -355,7 +355,7 @@ export const logoBugScene: Scene = {
       frameRange: { in: 0, out: 120 },
       lifecycle: { outPoint: 70 },
       playout: { mode: 'loop-cycle', holdSource: 'timed', holdMs: 8000, repeat: 'infinite' },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [layer('L-mark', 'Mark', markChildren)],
     },
   ],

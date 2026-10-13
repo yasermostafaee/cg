@@ -19,6 +19,7 @@ import {
   currentSourceAssignments,
   initSources,
 } from '../src/renderer/features/sources/sourceStore.js';
+import { clearRefusal, getRefusal } from '../src/renderer/features/status/refusalStore.js';
 
 /**
  * D-137 / C-015 (A8) — the plate picker STAGES, through the Inspector's own
@@ -126,6 +127,68 @@ describe('an unapplied plate edit stays off the wire', () => {
     expect(isItemDirty('item-1', item().fields, new Map([['guest-1', 'src-aaa']]))).toBe(false);
   });
 
+  /**
+   * B-139 — THE THREE TRANSITIONS, against a REAL baseline.
+   *
+   * These are the reproduction, and two of them were RED before the fix. The row
+   * used to omit `isItemDirty`'s plate baseline, so every plate was compared
+   * against `''` and the predicate degenerated to `staged !== ''`: re-picking the
+   * saved source read dirty, and staging _not assigned_ read clean.
+   *
+   * The baseline here is what `appliedPlateSources` returns for a plate whose
+   * saved assignment is `src-aaa` — the same map both surfaces now receive, which
+   * is the point: one question, one answer, both surfaces.
+   */
+  describe('B-139 — the three transitions agree, whatever the order', () => {
+    const SAVED_A: ReadonlyMap<string, string | null> = new Map([['guest-1', 'src-aaa']]);
+
+    const toDifferentSource = (): void => stagePlateSource('item-1', 'guest-1', 'src-bbb');
+    const backToSaved = (): void => stagePlateSource('item-1', 'guest-1', 'src-aaa');
+    const toUnassigned = (): void => stagePlateSource('item-1', 'guest-1', '');
+
+    it('a DIFFERENT source is dirty', () => {
+      toDifferentSource();
+      expect(isItemDirty('item-1', item().fields, SAVED_A)).toBe(true);
+      expect(isPlateDirty('item-1', 'guest-1', 'src-aaa')).toBe(true);
+    });
+
+    it('back to the SAVED source is CLEAN — the false positive', () => {
+      backToSaved();
+      expect(isItemDirty('item-1', item().fields, SAVED_A)).toBe(false);
+      expect(isPlateDirty('item-1', 'guest-1', 'src-aaa')).toBe(false);
+    });
+
+    it('NOT ASSIGNED is DIRTY — the false negative, and the one that disabled UPDATE', () => {
+      toUnassigned();
+      expect(isItemDirty('item-1', item().fields, SAVED_A)).toBe(true);
+      expect(isPlateDirty('item-1', 'guest-1', 'src-aaa')).toBe(true);
+    });
+
+    /*
+      Order-independence is a PROPERTY of the fix, not a fourth case: dirtiness is
+      a comparison against the applied value, so it cannot depend on how the
+      operator arrived at the staged one. Every permutation is driven here rather
+      than asserting the claim once, because "the order makes no difference" was
+      part of the original report.
+    */
+    const STEPS = [
+      ['toDifferentSource', toDifferentSource, true],
+      ['backToSaved', backToSaved, false],
+      ['toUnassigned', toUnassigned, true],
+    ] as const;
+
+    for (const [firstName, first] of STEPS) {
+      for (const [lastName, last, expected] of STEPS) {
+        if (firstName === lastName) continue;
+        it(`${firstName} then ${lastName} ⇒ ${String(expected)}, the same as ${lastName} alone`, () => {
+          first();
+          last();
+          expect(isItemDirty('item-1', item().fields, SAVED_A)).toBe(expected);
+        });
+      }
+    }
+  });
+
   it('un-assigning is an EDIT, not an absence', () => {
     // `''` has to be a staged value in its own right: otherwise clearing a plate
     // that has a source would be indistinguishable from never touching it.
@@ -188,6 +251,7 @@ describe('Update writes it, through the same apply the fields use', () => {
   });
 
   it('a REFUSED assignment keeps its draft and reports the apply as not accepted', async () => {
+    clearRefusal();
     assignmentRefusal = { reason: 'unknown-source', message: 'no such source' };
     stagePlateSource('item-1', 'guest-1', 'src-aaa');
 
@@ -196,6 +260,14 @@ describe('Update writes it, through the same apply the fields use', () => {
     // Staged, exactly as a rejected field update keeps its drafts — there is no
     // other copy of this edit anywhere.
     expect(snapshotPlateDraft('item-1').get('guest-1')).toBe('src-aaa');
+    /*
+      `DELTA-MULTI-CHANNEL-01-A` A5 — the banner reads the RULE, one line: the bridge's own
+      sentence used to be glued onto it (`${text} ${detail}`) and is the record's, not this line's.
+    */
+    // `PLAYOUT-SOURCES-01` — the rule's words changed with the sources' owner: the Playout.
+    expect(getRefusal()?.message).toBe(
+      'That source is not one the Playout offers — choose another.',
+    );
   });
 
   it('an item with NO plate draft never calls the assignments channel', async () => {

@@ -1,6 +1,7 @@
 import { mismatchedChannels, rasterVerdict } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
+import { inScope } from '../channels/channelSignals.js';
 
 /**
  * R-030 — the LOUD half of the configured-vs-real raster check.
@@ -24,6 +25,16 @@ import { useChannelSettings } from '../../hooks/useChannelSettings.js';
  * is one this build cannot map) from `mismatch`, and only the latter is an
  * alarm — an unreadable mode is a gap in the check, not evidence of a fault, and
  * treating the two alike would train the operator to dismiss the banner.
+ *
+ * ⭐ `B-236` — SINCE ADOPTION SHIPPED, A VISIBLE BANNER MEANS SOMETHING NARROWER
+ * than it used to, and the copy had to say which. The bridge now adopts the
+ * server's raster as soon as it reads one that contradicts config, so the
+ * ordinary wrong-default case corrects itself and never reaches a browser. What
+ * is left, and all that is left, is a mismatch adoption DECLINED: something is on
+ * air, so correcting it would re-point live plate geometry under a template that
+ * already carries the old raster. That is why the remedy line below names air
+ * rather than a file — telling the operator to hand-edit `channel-settings.json`
+ * would name a remedy adoption is about to overwrite.
  */
 
 /** Matches `ConnectionBanner`'s strip geometry — loud is the colour, not the height. */
@@ -36,8 +47,8 @@ const styles = {
     fontSize: '0.8rem',
     fontWeight: 700,
     letterSpacing: '0.04em',
-    color: '#FFFFFF',
-    background: colors.error,
+    color: cssVars['--r-ink-on-fill'],
+    background: colors.alarmFill,
     flexShrink: 0,
   },
   text: { flex: 1, minWidth: 0, lineHeight: 1.35 },
@@ -50,9 +61,17 @@ const styles = {
   },
 } as const;
 
-export function RasterMismatchBanner(): JSX.Element | null {
+export function RasterMismatchBanner({
+  scope = null,
+}: {
+  /**
+   * 🔴 `MULTI-CHANNEL-01` §2 L — the channel on screen, or `null` (one channel: all). Another
+   * channel's mismatch is the red mark on its strip tab, from the same `mismatchedChannels`.
+   */
+  scope?: number | null;
+}): JSX.Element | null {
   const state = useChannelSettings();
-  const mismatched = mismatchedChannels(state);
+  const mismatched = inScope(mismatchedChannels(state), (entry) => entry.channel, scope);
   if (mismatched.length === 0) return null;
 
   // One line per offending channel, naming BOTH rasters. "Raster mismatch on
@@ -76,9 +95,25 @@ export function RasterMismatchBanner(): JSX.Element | null {
             {line}
           </span>
         ))}
+        {/*
+          🔴 `STATION-CHROME-01` §4 — THIS SENTENCE HAD TO CHANGE WITH THE CONTROL, and the
+          rule-9 sweep is what caught it: it told the operator to "correct the channel raster
+          in settings", and settings no longer lets him. A remedy that cannot be performed is
+          worse than none — he goes looking, finds a read-only value, and concludes the
+          console is broken.
+
+          🔴 `B-236` — AND IT HAD TO CHANGE AGAIN WITH THE WRITER, for exactly the same
+          reason one step along. The replacement named `channel-settings.json` on the bridge,
+          which was true while nothing wrote that file; adoption writes it now, so a hand-edit
+          is a remedy the console would silently overwrite on its next read. The line names
+          the ONE thing that is both true and actionable: the banner is up because adoption
+          was declined, and what declines it is AIR.
+        */}
         <span style={styles.detail}>
-          Correct the channel raster in settings, or the channel’s video mode in casparcg.config —
-          they must agree before placement can be trusted.
+          The server owns this value — the console adopts the channel’s real raster when it reads
+          one, but never while anything is on air, because that would move a live graphic. This
+          clears once air is empty and the bridge reads the channel again. If the SERVER is the one
+          that is wrong, fix the channel’s video mode in casparcg.config.
         </span>
       </span>
     </div>

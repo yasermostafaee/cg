@@ -1,6 +1,6 @@
 {
   "name": "@cg/caspar-bridge",
-  "version": "0.0.0",
+  "version": "0.11.6",
   "private": true,
   "description": "Local CasparCG bridge (C-001): a localhost WebSocket server speaking the @cg/shared-ipc contract, backed by the real @cg/caspar-client stack (ServerSession + CommandQueue + OSC pipeline + Reconciler + LayerManager) in its native Node tier.",
   "type": "module",
@@ -22,15 +22,17 @@
   "scripts": {
     "build": "tsc -b",
     "clean": "rimraf --glob dist *.tsbuildinfo",
-    "typecheck": "tsc --noEmit -p tsconfig.json --tsBuildInfoFile typecheck.tsbuildinfo",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json --tsBuildInfoFile typecheck.tsbuildinfo",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run --coverage",
     "start": "node ./bin/caspar-bridge.mjs"
   },
   "dependencies": {
+    "@cg/audit": "workspace:*",
     "@cg/caspar-client": "workspace:*",
     "@cg/shared-ipc": "workspace:*",
     "@cg/shared-schema": "workspace:*",
+    "jose": "^6.2.12",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
@@ -40,6 +42,7 @@
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",
     "@vitest/coverage-v8": "^2.1.8",
+    "esbuild": "^0.24.2",
     "eslint": "^9.17.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.6.3",

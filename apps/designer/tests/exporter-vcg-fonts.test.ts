@@ -75,7 +75,7 @@ function tickerScene(family: string, opts: { declareFont?: boolean } = {}): Scen
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 100 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'L1',
@@ -299,7 +299,7 @@ function contentDrivenCrawlScene(): Scene {
     // The hold lasts until the crawl completes its pass — the duration that goes
     // wrong when the font is missing and fallback glyphs are measured.
     playout: { mode: 'auto-out', holdSource: 'content-driven' },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'L1',
@@ -446,7 +446,7 @@ function latinCrawlScene(): Scene {
     frameRange: { in: 0, out: 60 },
     lifecycle: { outPoint: 30 },
     playout: { mode: 'auto-out', holdSource: 'content-driven' },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'L1',

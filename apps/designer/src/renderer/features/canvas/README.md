@@ -66,9 +66,40 @@ Three spaces; the conversions are the crux of every interaction:
   `inverseToLocal` (hit-test) inverts it (undo scale, then rotation about the anchor
   pivot) so hit-testing and drilling reason in the element's own frame.
 
-Everything hit-tests at the **visually-effective transform for the current frame**
-(`effectiveTransformAt`), so animated elements are picked where the operator sees
-them, not at their static base.
+### 🔴 ONE READ SIDE — `renderedTransformAt` (`B-175`)
+
+Everything that asks a **geometric** question about an element of the active document —
+the gizmo's drawing, the hit-test, the resize / rotate / move gestures, the snap targets,
+the multi-selection boxes, and the Inspector's Transform panel — reads
+**`renderedTransformAt(element, frame)`** (`state/slices/arrangements.ts`). It composes the
+two halves that must never be applied separately: the **visually-effective transform for the
+current frame** (`effectiveTransformAt`, so an animated element is picked where the operator
+sees it) and, when an arrangement owns this box, its **CELL** (`arrangedTransform`).
+
+**Why it is a function and not a convention.** `D-154` fixed the WRITE side at its one
+chokepoint (`commitAnimatable` → `commitToActiveCell`) and the READ side by editing the three
+call sites it was looking at. The write side could not drift; the read side drifted
+immediately. The sites it missed all **computed** rather than drew, so the gizmo was rendered
+at the cell while the gesture underneath solved against the authored rect — the handle the
+author grabbed was not the handle the math thought they had grabbed (`B-175`).
+
+So the rule is not "remember to call `arrangedTransform`". It is: **nothing asks
+`effectiveTransformAt` a geometric question about an element of the active document.** That
+function answers "what did the author write, interpolated to this frame" — a real question
+with real callers (the timeline, the keyframe indicators, a composition's interior), and
+never the one a canvas gesture is asking.
+
+Two consequences worth knowing:
+
+- **`collectGroupMoveTargets` takes the resolver as a REQUIRED parameter** rather than
+  importing it, because that module is documented pure and the one read side reads the store.
+  It is deliberately not defaulted — a default is how a new caller silently gets the authored
+  rect back.
+- **A box the active arrangement gives NO CELL refuses every gesture at the door**
+  (`hasNoActiveCell`, the same `activeCellFor` + `isNoCell` pair the write side refuses with).
+  `NO_CELL` is zero-sized and `computeRectResize` divides by `Math.max(rect.w, 1e-6)`; the
+  zeros happen to cancel today, so this is defence in depth rather than the only thing
+  standing between that box and a four-million-times resize.
 
 **Gizmo on a content-sized box (D-060).** An auto-sized text element
 (`fitMode: 'autosize'`) is sized by the runtime from its content, so
@@ -311,7 +342,8 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
 - **Move** — `beginDrag` streams a single element's `position.x/y` via
   `commitAnimatable` (keyframe-aware). For a multi-selection, `beginGroupDrag`
   applies the SAME delta to every movable member (visible & unlocked —
-  `collectGroupMoveTargets` in `group-move.ts`) via the SAME **keyframe-aware**
+  `collectGroupMoveTargets` in `group-move.ts`, which takes `renderedTransformAt` as its
+  required resolver — see ONE READ SIDE above) via the SAME **keyframe-aware**
   `commitAnimatable` (D-054 — a member with a track on the moved axis keyframes at
   the playhead, others write their static base; `m.x/m.y` are evaluated-at-playhead
   so the keyframe holds start+delta, B-005-safe), snapping the grabbed anchor only;
@@ -322,6 +354,25 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
   element's edges + centre, and the operator's ruler guides**, within ~6–7 screen px
   (converted to scene px by `/zoom`). Snapping is suppressed while rotated (H/V snap
   is undefined) and while Shift is held; matched snaps draw a guide line.
+- **Resize snapping is decided in EDGE space, not pointer space (B-181)** — and the
+  distinction only matters under an aspect lock, which is why it went unseen. `beginResize`
+  solves a candidate rect from the raw pointer with the lock applied, asks
+  `movingCornerScene` where that rect's moving edge LANDED, tests THAT against the targets,
+  and realises a hit by re-solving through the same `computeRectResize` via the inverse
+  `pointerForMovingEdge` ("which pointer would have produced the rect I want"). **There is no
+  second solver**: the snap is expressed as a choice of INPUT, so the `B-175` fixed-corner pin,
+  the `MIN_SIZE` clamp and the `D-155` lock all keep working untouched.
+  Unlocked, `movingEdge.x ≡ pointer.x` identically — the element's own `scale` cancels — so
+  that path is byte-identical to before. Locked, an EDGE handle also still lands on the pointer
+  (`lockExtents` passes its driven extent through), but a locked CORNER is projected onto the
+  locked diagonal and separates the two by construction: measured, a `br` drag to `(900, 300)`
+  puts the corner at `(793.18, 489.91)`.
+  🔴 **The guide is a function of the COMMITTED rect** — emitted only where the final edge is
+  within `noiseFloor` (B-180's) of a target, never from the snap's intent. Before this, `guideX`
+  was the snapped POINTER, so the canvas drew lines announcing snaps the geometry had refused.
+  Where the lock ties two extents and a corner is in range on both axes, `chooseEdgeSnap` picks
+  the **nearer** target (tie → `x`) and the FORCED axis gets a guide only if it lands genuinely
+  on one. Root: `openspec/changes/resize-snaps-the-edge`.
 - **Pixel snap at grid zoom (D-122)** — when the pixel grid is visible
   (`pixelGridVisible(zoom)`, zoom ≥ 800%), the Snapping preference is on, and **Alt**
   is not held, a MOVE lands on WHOLE scene pixels so a moved element's edges sit on the
@@ -335,12 +386,30 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
   guide); the anchor is snapped for a group so relative offsets are preserved. The
   arrow-key nudge (`nudgeSelection` in `state/slices/elements.ts`, driven by the App.tsx
   window keydown) snaps the anchor's active axis. **Alt** bypasses all snapping (free
-  sub-pixel move); below the threshold nothing snaps; Inspector-typed values are always
-  free. The nudge path has no direct access to the CanvasArea-local zoom, so it reads a
-  `canvasZoom` MIRROR the store keeps (`view.setCanvasZoom`, published by a CanvasArea
-  effect); the drag path already has the zoom as its `scale`. Resize-handle snapping is a
-  deliberate follow-up (out of scope). Root: `openspec/specs/designer-canvas-view`
-  (D-122 delta).
+  sub-pixel move); Inspector-typed values are always free. The nudge path has no direct
+  access to the CanvasArea-local zoom, so it reads a `canvasZoom` MIRROR the store keeps
+  (`view.setCanvasZoom`, published by a CanvasArea effect); the drag path already has the
+  zoom as its `scale`. Root: `openspec/specs/designer-canvas-view` (D-122 delta).
+- **Drag/resize commit quantise at EVERY zoom (B-180)** — the threshold above governs
+  the LIVE pixel-grid snap and the nudge; it no longer governs what a drag COMMITS. A free
+  drag computes `startPos + clientDelta / scale`, so below the threshold every drag wrote a
+  fractional coordinate the Inspector then rounded away — `B-180`'s first residue generator,
+  and it blocked the Live Source Export over geometry the author could not see. A second
+  gate, `quantiseDragCommit(alt)`, rounds the COMMIT in `beginDrag` / `beginGroupDrag` and
+  in the Gizmo's resize (which is why resize snapping is no longer a follow-up; **Shift** is
+  that gesture's bypass, as it already was for its other snapping). 🔴 In the resize the
+  quantise is applied to the POINTER before `computeRectResize`, never to the rect it returns:
+  the solver pins the corner opposite the grabbed handle (`B-175`) for any pointer position, and
+  rounding its `position` / `size` separately walks that pin off by up to half a pixel under
+  rotation, a non-uniform scale or a centred anchor.
+  🔴 **It is a separate gate, not a widened `pixelSnapActive`, and that is deliberate:**
+  `pixelSnapActive` sits in an `else if` chain where it SUPERSEDES the smart-guide branch,
+  so relaxing it to all zooms would delete guide snapping from the Designer with every unit
+  test of that function still green — and it also gates the nudge's first-snap, which
+  `D-122` deliberately kept relative below the threshold. The quantise therefore runs AFTER
+  `snapAxis` and applies only to the axes NO guide claimed: a guide has landed the box on a
+  real target, which inside a scaled composition instance is very often legitimately
+  fractional. Root: `openspec/changes/fix-overlap-float-residue`.
 
 ## Tools system
 

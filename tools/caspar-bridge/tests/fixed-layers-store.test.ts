@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_LAYER_POLICY, LayerManager, type LayerSlot } from '@cg/caspar-client';
+import { LayerManager, type LayerPolicy, type LayerSlot } from '@cg/caspar-client';
 import {
   FIXED_LAYERS_SET_CONFIG_REASONS,
   defaultFixedLayerBank,
@@ -39,17 +39,40 @@ void _validatorCoversWire;
  * connection-store documented in the module header.
  */
 
-const POLICY = DEFAULT_LAYER_POLICY;
+/**
+ * 🔴 `LAYER-BANDS-16` — the DEPLOYMENT policy these refusals are validated against.
+ *
+ * `DEFAULT_LAYER_POLICY` is empty since the owner retired type-keyed dynamic allocation, and
+ * an empty policy makes `overlaps-policy` vacuous — so the tests for that refusal have to
+ * bring ranges of their own or they would assert nothing while staying green, which is the
+ * worst outcome available here.
+ */
+const POLICY = {
+  'logo-bug': [40, 49],
+  'lower-third': [10, 19],
+  ticker: [20, 29],
+  'breaking-news': [30, 39],
+  // ⚠ NO `fullscreen: [50, 59]. That range is the graphics-BED band now, and a policy
+  // carrying it would collide with this file's own bed rows — the exact conflict that
+  // retired the shipped policy in the first place.
+  custom: [60, 69],
+} as unknown as LayerPolicy;
 
 function bank(overrides: Partial<FixedLayerBank> = {}): FixedLayerBank {
-  return { channel: 1, start: 70, count: 10, ...overrides };
+  return { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 10, ...overrides };
 }
 
-function codeOf(fn: () => unknown): { code: string; message: string } {
+function codeOf(fn: () => unknown): { code: string; message: string; layer?: number } {
   try {
     fn();
   } catch (err) {
-    if (err instanceof FixedLayersConfigError) return { code: err.code, message: err.message };
+    if (err instanceof FixedLayersConfigError) {
+      return {
+        code: err.code,
+        message: err.message,
+        ...(err.layer !== undefined ? { layer: err.layer } : {}),
+      };
+    }
     throw err;
   }
   throw new Error('expected FixedLayersConfigError');
@@ -58,9 +81,16 @@ function codeOf(fn: () => unknown): { code: string; message: string } {
 describe('validateFixedBank', () => {
   it('accepts the default bank (70–79) against the default policy and returns its slots', () => {
     const slots = validateFixedBank(bank(), { policy: POLICY, reservedLayers: [] });
-    expect(slots).toHaveLength(10);
+    // TEN operator rows FIRST, then the nine BED rows (`single-clock-look-switch`): the
+    // validator returns the UNION, because the LayerManager fences every slot it yields
+    // and both halves must be fenced. Operator rows keep their positions, which is why
+    // the index reads below are unchanged.
+    expect(slots).toHaveLength(19);
     expect(slots[0]).toEqual({ channel: 1, layer: 70 });
     expect(slots[9]).toEqual({ channel: 1, layer: 79 });
+    expect(slots.slice(10)).toEqual(
+      Array.from({ length: 9 }, (_, i) => ({ channel: 1, layer: i + 50 })),
+    );
   });
 
   it('T8 — overlap with a policy range is refused, naming BOTH ranges', () => {
@@ -100,7 +130,7 @@ describe('validateFixedBank', () => {
     expect(message).toContain('95–104');
   });
 
-  it('T10b — the FULL 70–99 bank is accepted, and every dynamic range stays disjoint', () => {
+  it('T10b — the FULL 80–99 bank is accepted, and every dynamic range stays disjoint', () => {
     /*
       The two constants had to move together, and this is the assertion that keeps them
       that way. Raising the ceiling alone would leave a bank the validator accepts here
@@ -111,21 +141,21 @@ describe('validateFixedBank', () => {
       destruction the disjointness rules exist to prevent.
     */
     const slots = validateFixedBank(
-      { channel: 1, start: 70, count: 30 },
+      { channel: 1, low: { start: 50, count: 9 }, start: 80, count: 20 },
       {
-        policy: DEFAULT_LAYER_POLICY,
+        policy: POLICY,
         reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69],
       },
     );
-    expect(slots).toHaveLength(30);
-    expect(slots[0]).toEqual({ channel: 1, layer: 70 });
-    expect(slots[29]).toEqual({ channel: 1, layer: 99 });
+    expect(slots).toHaveLength(29); // 20 operator rows + 9 bed rows
+    expect(slots[0]).toEqual({ channel: 1, layer: 80 });
+    expect(slots[19]).toEqual({ channel: 1, layer: 99 });
     // Stated independently of the bank, so a future range edit that collides is caught
     // here rather than by a bridge that will not start.
-    for (const [type, [low, high]] of Object.entries(DEFAULT_LAYER_POLICY)) {
+    for (const [type, [low, high]] of Object.entries(POLICY)) {
       expect(
-        high < 70 || low > 99,
-        `'${type}' ${String(low)}–${String(high)} must not overlap 70–99`,
+        high < 80 || low > 99,
+        `'${type}' ${String(low)}–${String(high)} must not overlap 80–99`,
       ).toBe(true);
     }
   });
@@ -136,12 +166,14 @@ describe('validateFixedBank', () => {
     // gets this, so a policy or ceiling edit that made it unbootable would
     // brick every unconfigured station — including the plant server.
     const slots = validateFixedBank(defaultFixedLayerBank(), {
-      policy: DEFAULT_LAYER_POLICY,
+      policy: POLICY,
       reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69],
     });
+    // THIRTY: the default declares the whole template band (twenty) AND the whole bed
+    // band (ten). The fixtures above deviate to nine bed rows; the default does not.
     expect(slots).toHaveLength(30);
-    expect(slots[0]).toEqual({ channel: 1, layer: 70 });
-    expect(slots[29]).toEqual({ channel: 1, layer: 99 });
+    expect(slots[0]).toEqual({ channel: 1, layer: 80 });
+    expect(slots[19]).toEqual({ channel: 1, layer: 99 });
   });
 
   it('T11 — an alias key outside the bank is refused, naming the key', () => {
@@ -165,7 +197,7 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
       bank({ aliases: { '71': 'ساعت' }, visibility: { '72': false } }),
       { policy: POLICY, reservedLayers: [], slotOccupancy: ALL_EMPTY },
     );
-    expect(slots).toHaveLength(10);
+    expect(slots).toHaveLength(19); // 10 operator rows + 9 bed rows
   });
 
   it('R-028 (2.1) — grow AND shrink are BOTH refused mid-session: the ceiling is fixed at install', () => {
@@ -206,8 +238,31 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
     ).toBe('channel-change-refused');
   });
 
+  /*
+    `DESKTOP-APPS-01-D` e — the channel may be REPLACED while nothing of ours holds air on the
+    current one; asked through `channelHoldsOurAir`, and absent (above) still refuses, fail closed.
+  */
+  it('DESKTOP-APPS-01-D e — a channel change is allowed when nothing of ours holds air, refused in one sentence when something does', () => {
+    const options = (holds: boolean) => ({
+      policy: POLICY,
+      reservedLayers: [],
+      slotOccupancy: ALL_EMPTY,
+      channelHoldsOurAir: (channel: number) => holds && channel === bank().channel,
+    });
+    expect(() =>
+      validateFixedBankChange(bank(), bank({ channel: 2 }), options(false)),
+    ).not.toThrow();
+    const refused = codeOf(() =>
+      validateFixedBankChange(bank(), bank({ channel: 2 }), options(true)),
+    );
+    expect(refused.code).toBe('channel-change-refused');
+    expect(refused.message).toBe(
+      `Something of ours is still on air on channel ${String(bank().channel)} — take it off air first.`,
+    );
+  });
+
   it('R-028 (2.3) — unticking an OCCUPIED layer is refused, naming the layer and the remedy', () => {
-    const { code, message } = codeOf(() =>
+    const { code, message, layer } = codeOf(() =>
       validateFixedBankChange(bank(), bank({ visibility: { '74': false } }), {
         policy: POLICY,
         reservedLayers: [],
@@ -215,13 +270,15 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
       }),
     );
     expect(code).toBe('untick-occupied');
+    // `DELTA-MULTI-CHANNEL-01-A` A5 — the layer rides as DATA, for the console's own sentence.
+    expect(layer).toBe(74);
     expect(message).toContain('74');
     expect(message).toContain('OCCUPIED');
     expect(message).toContain('remove its template first');
   });
 
   it('R-028 (2.3) — unticking with UNKNOWN occupancy is refused too (fail closed), distinguishably', () => {
-    const { code, message } = codeOf(() =>
+    const { code, message, layer } = codeOf(() =>
       validateFixedBankChange(bank(), bank({ visibility: { '74': false } }), {
         policy: POLICY,
         reservedLayers: [],
@@ -229,12 +286,74 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
       }),
     );
     expect(code).toBe('untick-unknown');
+    expect(layer).toBe(74);
     expect(message).toContain('74');
     expect(message).toContain('UNKNOWN');
     expect(message).toContain('never treated as empty');
     // The two refusals must be DISTINGUISHABLE (2.6) — different code, and a
     // message that names the missing evidence rather than claiming occupancy.
     expect(message).not.toContain('OCCUPIED (');
+  });
+
+  /*
+    🔴 `B-205` — THE GATE MEETS BOTH HALVES.
+
+    The untick loop walked `next.start … next.start+count`, the operator half, so a
+    change that hid a BED row was never adjudicated at all: an occupied bed could be
+    slipped out of sight, and — the half that fails closed for a reason — a bed whose
+    occupancy could not be verified could be hidden while nothing could say whether
+    anything was on it. The panel's honesty override retains a bound or observably
+    occupied row whatever its tick, which covers `untick-occupied`; it does NOT retain
+    an unverifiable row, so `untick-unknown` on a bed was a hole with no backstop.
+
+    The beds here are 51–55, not the whole default band, and the layer named in each refusal is
+    asserted, so a gate that widened its range by hand to `1 … 9` — the tenth
+    restatement — fails as loudly as the one that never looked. Removing the bed half
+    from the walk reddens all three.
+  */
+  it('🔴 B-205 — unticking an OCCUPIED bed row is refused like an operator row, naming the layer', () => {
+    const current = bank({ low: { start: 51, count: 5 } });
+    const next = bank({ low: { start: 51, count: 5, visibility: { '53': false } } });
+    const { code, message, layer } = codeOf(() =>
+      validateFixedBankChange(current, next, {
+        policy: POLICY,
+        reservedLayers: [],
+        slotOccupancy: (slot: LayerSlot) => (slot.layer === 53 ? 'occupied' : 'empty'),
+      }),
+    );
+    expect(code).toBe('untick-occupied');
+    expect(layer).toBe(53);
+    expect(message).toContain('layer 53');
+    expect(message).toContain('OCCUPIED');
+  });
+
+  it('🔴 B-205 — unticking a bed row with UNKNOWN occupancy fails closed, like an operator row', () => {
+    const current = bank({ low: { start: 51, count: 5 } });
+    const next = bank({ low: { start: 51, count: 5, visibility: { '55': false } } });
+    const { code, message, layer } = codeOf(() =>
+      validateFixedBankChange(current, next, {
+        policy: POLICY,
+        reservedLayers: [],
+        slotOccupancy: () => 'unknown',
+      }),
+    );
+    expect(code).toBe('untick-unknown');
+    expect(layer).toBe(55);
+    expect(message).toContain('layer 55');
+    expect(message).toContain('UNKNOWN');
+    expect(message).not.toContain('OCCUPIED (');
+  });
+
+  it('B-205 — a bed row that is ALREADY hidden is not re-adjudicated either', () => {
+    // Symmetric with the operator-half case below: the tick is not CHANGING, so
+    // an occupancy callback that refuses everything must not be consulted.
+    const hidden = bank({ low: { start: 51, count: 5, visibility: { '53': false } } });
+    const slots = validateFixedBankChange(hidden, hidden, {
+      policy: POLICY,
+      reservedLayers: [],
+      slotOccupancy: () => 'unknown',
+    });
+    expect(slots.length).toBe(hidden.count + hidden.low.count);
   });
 
   it('a layer that is ALREADY hidden stays hidden without re-adjudication', () => {
@@ -250,7 +369,7 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
         slotOccupancy: () => 'unknown',
       },
     );
-    expect(slots).toHaveLength(10);
+    expect(slots).toHaveLength(19); // 10 operator rows + 9 bed rows
   });
 
   it('R-028 (2.5) — reserved-range overlap is refused AT CHANGE too, naming both ranges', () => {
@@ -288,7 +407,7 @@ describe('R-028 — visibility shape validation', () => {
     // The whole ceiling is returned — the LayerManager fences every slot the
     // validator yields, so an unticked layer can never re-enter the
     // allocatable pool (visibility is display-only by construction).
-    expect(slots).toHaveLength(10);
+    expect(slots).toHaveLength(19); // 10 operator rows + 9 bed rows
     expect(slots.map((s) => s.layer)).toContain(72);
     expect(slots.map((s) => s.layer)).toContain(73);
   });
@@ -344,7 +463,7 @@ describe('persistence (T15)', () => {
 
   it('save/load round-trip', () => {
     const file = tmpFile('bank.json');
-    const b = bank({ aliases: { '72': 'ساعت' } });
+    const b = bank({ start: 80, aliases: { '82': 'ساعت' } });
     saveFixedLayerBank(file, b);
     expect(loadFixedLayerBank(file)).toEqual(b);
   });

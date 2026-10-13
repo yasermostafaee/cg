@@ -22,12 +22,12 @@ alone. A template whose fields live only inside a nested composition (the D-119 
 shape: a graphic composition nested in a full-frame positioning composition) SHALL
 therefore present those fields to the operator, not an empty form.
 
-Registration SHALL be a **local, browser-side** operation that does NOT require the
-SPA↔bridge link. Verify, unpack, single-file HTML export, and registering the template in
-the browser-local library are all local work; none of them commands CasparCG. Import
-SHALL therefore succeed with the bridge process fully unreachable — the imported template
-SHALL appear in the Library and be listed by `templates.list` immediately, and the
-operator SHALL NOT see a "Bridge disconnected — command rejected" refusal for an import.
+Verify, unpack and the single-file HTML export are local work in the browser; none of them
+commands CasparCG. **Registration is CG Bridge's** (`CENTRAL-BRIDGE-01`, `B-294`): the bridge
+keeps the library for every console, so an import SHALL reach it or not happen. With CG Bridge
+unreachable the import SHALL be refused with a sentence that says nothing was imported and to
+import it again once CG Bridge is back — never registered in this console alone to be delivered
+later.
 
 #### Scenario: A verified `.vcg` is registered
 
@@ -57,13 +57,11 @@ operator SHALL NOT see a "Bridge disconnected — command rejected" refusal for 
   as a NESTED value object keyed by the composition instance's stable name, and the
   `stack.load` / `stack.update` payload carries that same nested shape unchanged
 
-#### Scenario: Import succeeds while the bridge is unreachable
+#### Scenario: An import while CG Bridge is unreachable is refused
 
 - **WHEN** the operator imports a valid `.vcg` while the SPA↔bridge WebSocket is down
-  **THEN** the template is verified, unpacked, exported, and registered in the
-  browser-local library, appears in the Library and in `templates.list`, and NO
-  "Bridge disconnected — command rejected" error is shown — nothing was sent to CasparCG
-  because a local registration sends nothing to CasparCG
+  **THEN** the import is refused with a sentence that says nothing was imported, the Library
+  is unchanged, and nothing is queued for later
 
 ### Requirement: The operator Inspector edits structured list fields without coercion
 
@@ -287,104 +285,6 @@ it by joining `templateId` against the registry.
   the registry lookup, and the served template URL all still key on `templateId` — the label
   reaches no AMCP command argument and no lookup key
 
-### Requirement: The template library is browser-local and survives disconnect and reload
-
-The Runtime template library SHALL be owned by **browser-local, file-based storage**
-(`@cg/storage`), not by the bridge process, for the live backend. `templates.list`,
-`templates.get`, `templates.import`, and `templates.remove` SHALL be served from this
-local store and SHALL NOT be refused because the SPA↔bridge WebSocket is down — none of
-these operations commands CasparCG.
-
-The local library SHALL **persist** each registered template's metadata (`TemplateInfo`)
-and its produced self-contained HTML, keyed by `templateId`, so the library survives a
-page reload: a template imported in a previous session SHALL still be listed, displayed,
-inspectable, and removable after reload, with the bridge fully down.
-
-The library SHALL **survive a mid-session disconnect** without emptying: a disconnect
-SHALL NOT clear the displayed library, and the library SHALL NOT require the link to
-repopulate.
-
-The transport guard that refuses commands while the link is down SHALL continue to refuse
-the on-air channels (`stack.take` / `update` / `out` / `setPosition` / `load` /
-`clearAll` / `removeAll`) — the narrowing applies ONLY to the library/registry channels,
-which no longer round-trip the bridge to succeed.
-
-#### Scenario: The library survives a mid-session disconnect
-
-- **WHEN** the SPA↔bridge WebSocket drops while the Library holds templates **THEN** the
-  Library keeps showing them, and `templates.list` keeps returning them
-
-#### Scenario: The library survives a page reload
-
-- **WHEN** the operator reloads the page after importing templates **THEN** the Library
-  re-displays those templates from local storage, even with the bridge process down
-
-#### Scenario: Registry channels are not refused while the link is down
-
-- **WHEN** the link is `disconnected` and the operator lists, inspects, imports, or removes
-  a template **THEN** the operation is served from local state and is NOT rejected, while an
-  on-air command (Take / Update / Out) issued in the same state is STILL refused
-
-### Requirement: The bridge is reconciled to the local library on connect
-
-On every (re)connection of the SPA↔bridge WebSocket, the Runtime SHALL deliver the
-browser-local library's templates (each template's metadata + produced HTML) to the bridge
-so the bridge can serve them to CasparCG when an on-air command later needs them. This
-reconciliation SHALL generalize the existing reconnect re-delivery: the local library is
-the retention set, and its entries are delivered BEFORE the stack/health/lock snapshot
-re-pull (single-socket FIFO ordering), so a load issued right after reconnect resolves
-against a populated bridge registry.
-
-The conflict policy SHALL be **local-wins**: the browser library is the source of truth, so
-reconciliation makes the bridge reflect it (delivering/overwriting the bridge's copies with
-the local ones). A template registered locally while disconnected SHALL be delivered to the
-bridge on the next connect without any operator action.
-
-A confirmed **removal** SHALL NOT be undone by reconciliation (the removed template is no
-longer in the local library, so it is not delivered); a **refused** removal SHALL leave the
-template in the local library and therefore still delivered on reconnect.
-
-#### Scenario: A template imported offline is delivered on reconnect
-
-- **WHEN** a template is imported while the bridge is down and the link later comes up
-  **THEN** the runtime delivers that template (metadata + HTML) to the bridge without
-  operator action, so a subsequent on-air load of it resolves against a populated registry
-
-#### Scenario: Re-delivery precedes the snapshot re-pull
-
-- **WHEN** the link reconnects with a non-empty local library **THEN** every template
-  re-delivery frame is sent before the stack / health / lock snapshot pulls
-
-#### Scenario: A confirmed removal is not resurrected by reconcile
-
-- **WHEN** a template is removed (confirmed) and the link later reconnects **THEN** the
-  removed template is NOT re-delivered to the bridge, while every remaining template is
-
-### Requirement: Removing a template is a local operation, refused only while referenced
-
-Removing a template from the library SHALL be served from the browser-local store and SHALL
-NOT be refused because the SPA↔bridge WebSocket is down. The **refuse-while-referenced**
-invariant (R-005) SHALL be preserved: a template SHALL NOT be removable while any stack item
-references it, regardless of that item's status.
-
-While the link is **live**, the bridge SHALL remain authoritative for the refusal (it holds
-the true stack); a confirmed removal SHALL also drop the template from the local store. While
-the link is **disconnected**, the refusal SHALL be evaluated against the last-known stack
-snapshot — which is exact, because the bridge is the sole mutator of the stack and cannot
-change it while unreachable — and an unreferenced template SHALL be removable offline.
-
-#### Scenario: An unreferenced template is removed offline
-
-- **WHEN** the operator removes a template that no stack item references while the bridge is
-  down **THEN** it disappears from the Library and from `templates.list`, with no
-  "Bridge disconnected" refusal
-
-#### Scenario: A referenced template is still refused offline
-
-- **WHEN** the operator removes a template that a (last-known) stack item references while the
-  bridge is down **THEN** the removal is refused with the referenced-count message and the
-  template stays in the library
-
 ### Requirement: Offline library reads degrade gracefully in the operator UI
 
 The operator UI readers of the template registry SHALL read local state and SHALL NOT empty,
@@ -481,3 +381,129 @@ identically with and without a live bridge.
 
 - **WHEN** a removal is refused and the client subsequently reconnects **THEN** the
   template is still re-delivered and remains loadable — a refusal removes nothing
+
+### Requirement: Each channel has its own template list
+
+The Runtime SHALL keep one template list PER CASPARCG CHANNEL, over one shared store of template
+versions (`CHANNEL-TEMPLATES-01`, the owner, 2026-09-28). Each channel is its own programme with its
+own operator, who holds only that channel; a template may be listed on several channels, each at the
+version that channel imported.
+
+- **The picker** SHALL list the templates of the channel of the row it was opened from, and no other
+  channel's. `Import a .vcg` and a `.vcg` dropped on the picker SHALL add the template to that channel
+  only.
+- **A re-import** (the same template id, new content) SHALL move that channel's list to the new version
+  only; every other channel SHALL keep the version it lists until it re-imports. Rows on that channel
+  follow the re-import as before (their next take serves the new version); rows on other channels do
+  not.
+- **The row's delete icon** SHALL remove the template from that channel's list only. Its accessible name
+  SHALL read `Remove <name> from CH n`, and its confirm SHALL name the channel. It SHALL be refused while
+  a row ON THAT CHANNEL holds the template (the in-use gate, per channel); a row on another channel does
+  not refuse it.
+- **Storage** SHALL hold one stored file per template version however many channels list it; importing
+  the same package on a second channel SHALL reuse it. A version's file SHALL be removed only when no
+  channel lists it and no row holds it — a row holds the version its page was last served from.
+- **A page on air** SHALL never be touched by a list change: its version's file and its serve path SHALL
+  keep serving the same bytes.
+- **Permissions**: an import, a re-import and a removal SHALL each be judged by the station fence, the
+  channel grant and a channel-scoped lock on the current channel only; nothing on one channel SHALL
+  need another. A request that names no channel SHALL be judged on every channel it changes.
+- **Source defaults** SHALL NOT be written by a template action: a re-import keeps the channel's
+  defaults for every plate that still exists, and a default for a plate the new version no longer
+  declares is ignored, never deleted; a removal leaves them in place.
+- **The upgrade** SHALL list every template in the station's existing library on every declared
+  channel, once, at the version it had, on the first load that has a channel to copy to; a second load
+  SHALL copy nothing. A channel declared after that SHALL start with an empty list.
+
+#### Scenario: Each channel's picker shows its own list
+
+- **WHEN** the picker is opened from a row on CH 1 and then from a row on CH 2 **THEN** each lists that
+  channel's templates only
+
+#### Scenario: An import on CH 2 adds to CH 2 only
+
+- **WHEN** a `.vcg` is imported from CH 2's picker **THEN** CH 2 lists it and CH 1's list is unchanged
+
+#### Scenario: A re-import on CH 2 moves CH 2 alone, and both versions are served
+
+- **WHEN** a template both channels list is re-imported on CH 2 **THEN** CH 2 lists the new version, CH 1
+  keeps the old one, and each is served at its own path
+
+#### Scenario: The same package on two channels is one stored file
+
+- **WHEN** the same `.vcg` is imported on CH 1 and on CH 2 **THEN** one file is stored
+
+#### Scenario: Removing from one channel keeps the file while another lists it
+
+- **WHEN** a template is removed from CH 2 while CH 1 lists it **THEN** its file stays stored, and **WHEN**
+  it is then removed from CH 1 with no row holding it **THEN** its file is deleted
+
+#### Scenario: A row on the channel refuses its removal there
+
+- **WHEN** a row on CH 2 holds a template and it is removed from CH 2 **THEN** the removal is refused
+  `in-use`, naming that row, and nothing changes
+
+#### Scenario: An operator holding CH 2 only needs nothing else
+
+- **WHEN** an operator whose grant holds CH 2 only imports, re-imports and removes a template on CH 2
+  **THEN** none of it is refused, and CH 1's list, rows, Source defaults and on-air page are unchanged —
+  while the same acts on CH 1 are refused with the channel grant's sentence
+
+#### Scenario: A page on air survives every act on another channel
+
+- **WHEN** a page is on air on CH 1 and CH 2 imports, re-imports and removes the same template **THEN**
+  the page's serve path returns the same bytes before and after
+
+#### Scenario: Nothing disappears at the upgrade
+
+- **WHEN** a station's existing library is loaded for the first time **THEN** every declared channel lists
+  every template once, served where it always was; a second load copies nothing, and a channel declared
+  later starts with an empty list
+
+#### Scenario: A re-import keeps the channel's defaults and ignores a gone plate's
+
+- **WHEN** a template is re-imported on a channel **THEN** no Source defaults are written: the channel's
+  defaults for plates that still exist stay in force, and a default for a plate the new version no longer
+  declares is kept and read by nothing
+
+#### Scenario: The delete icon names its channel
+
+- **WHEN** the picker is opened from a row on CH n **THEN** each row's delete icon's accessible name is
+  `Remove <name> from CH n`, and its confirm is titled `Remove “<name>” from CH n?`
+
+### Requirement: A console's template library is a display copy, and an import or a removal needs CG Bridge
+
+The template library SHALL be CG Bridge's: one persisted library per bridge, the same for every
+console connected to it (`CENTRAL-BRIDGE-01`, `B-294`). A console SHALL keep a DISPLAY copy in its
+own browser-local, file-based storage (`@cg/storage`), written only after the bridge accepted an
+import or a removal, so the Library, `templates.list`, `templates.get` and the offline stack's
+template names keep answering while CG Bridge cannot be reached and across a page reload. The
+display copy SHALL NEVER be sent to the bridge: no re-delivery on connect, no replay after a
+reconnect.
+
+An import and a removal SHALL need CG Bridge. With it unreachable the console SHALL refuse each
+with a sentence that says nothing was changed and what to do, and SHALL change neither the
+display copy nor anything queued — there is nothing queued. While live, the bridge's answer SHALL
+stand: a `templates.get` the bridge answers `null` is `null`, whatever the display copy holds. The
+on-air channels stay refused while the link is down, as before.
+
+#### Scenario: The Library stays visible while CG Bridge is down
+
+- **WHEN** the link drops, or the page reloads with CG Bridge down, while the Library holds
+  templates **THEN** the Library keeps showing them and `templates.list` keeps returning them, and
+  nothing is sent
+
+#### Scenario: An import or a removal while CG Bridge is down is refused
+
+- **WHEN** the operator imports or removes a template while CG Bridge cannot be reached **THEN**
+  the console refuses it with a sentence saying nothing was changed, and the Library is as it was
+
+#### Scenario: A connect delivers nothing
+
+- **WHEN** the console connects or reconnects holding templates in its display copy **THEN** it
+  sends no `templates.import` — control: the resync ran (it read the bridge's state)
+
+#### Scenario: A bridge restart keeps the library from the bridge's own store
+
+- **WHEN** CG Bridge restarts on its own files **THEN** every template is back before any console
+  connects — control: a bridge on an empty store gets nothing from a reconnecting console

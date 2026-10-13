@@ -230,7 +230,7 @@ function childComp(): Composition {
     resolution: { width: 400, height: 200 },
     frameRange: { in: 0, out: 100 },
     lifecycle: { outPoint: 90 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'cl',
@@ -268,7 +268,7 @@ function scene(opts: {
         ? { outPoint, contentStart: opts.contentStart }
         : { outPoint },
     playout: { mode: 'manual' } as unknown as Playout,
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'pl',

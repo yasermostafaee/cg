@@ -1,7 +1,24 @@
 import { useCallback, useState, useSyncExternalStore } from 'react';
-import { ChevronDown, ChevronRight, Maximize, Square } from 'lucide-react';
-import { lottieTiming } from '@cg/lottie-bridge';
+import { ChevronDown, ChevronRight, Crop, Maximize, Scan, Square } from 'lucide-react';
+import { lottieClipMidpoint, lottieFollowWindow, lottieTiming } from '@cg/lottie-bridge';
 import type { LottieTiming } from '@cg/lottie-bridge';
+import {
+  DEFAULT_LIVE_FIT_MODE,
+  LIVE_FIT_MODES,
+  elementDigitsOf,
+  FieldDigitsSchema,
+  fieldDigitsOf,
+  followWindowMs,
+  followsComposition,
+  NumberFieldDigitsSchema,
+} from '@cg/shared-schema';
+import type {
+  DynamicField,
+  FieldDigits,
+  FollowAnchors,
+  FollowWindow,
+  LiveFitMode,
+} from '@cg/shared-schema';
 import type {
   AnimatableProperty,
   ClockElement,
@@ -45,7 +62,13 @@ import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
 import { TickerSeparatorControl } from './TickerSeparatorControl.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
-import { activeDocOf, activeFieldData } from '../../state/scene-doc.js';
+import { elementDataField, typedTextDigits } from '../../state/slices/fields.js';
+import { isAspectLocked } from '../../state/slices/view.js';
+import { DigitsField } from './DigitsField.js';
+import { activeDocOf, activeFieldData, activeLayersOf } from '../../state/scene-doc.js';
+import { lottieFollowAttachPhases, videoFollowAttachPhases } from '../../state/follow-attach.js';
+import { deriveLookSources, videoFollowClipFacts } from '@cg/shared-schema';
+import { contentStartDefaultFrom } from './content-start-default.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import { useAssetUrl, useAssets } from '../assets/useAssets.js';
 import { VideoPoster } from '../assets/VideoPoster.js';
@@ -58,6 +81,9 @@ import {
 import { KeyframeDot } from './keyframe-diamond.js';
 import { applyFillModeChange } from './fill-commit.js';
 import { CollapseSection } from './CollapseSection.js';
+import { InfoTip, StateLine } from './InfoTip.js';
+import { withheldReason } from './field-registry.js';
+import * as prose from './prose.css.js';
 import {
   ColorField,
   NumberField,
@@ -81,6 +107,32 @@ import * as fieldCss from './controls.css.js';
 interface Props {
   element: Element;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
+}
+
+/**
+ * `DESIGNER-FIX-0905` — the three content-driven kinds each carried a "Time-driven: … scrubbing
+ * the timeline doesn't move it" caption. One TEACHING, said once, behind one shared `i`; the
+ * inline line reduces to the state.
+ */
+function TimeDrivenTip({ kind }: { kind: 'ticker' | 'clock' | 'sequence' }): JSX.Element {
+  const what =
+    kind === 'ticker'
+      ? 'the crawl runs during playback, and its pass length comes from the measured content width divided by the speed'
+      : kind === 'clock'
+        ? 'the clock repaints once per second during playback'
+        : 'items advance on their dwell, or on Next, during playback';
+  return (
+    <InfoTip title="Time-driven content">
+      <p>
+        This element runs on its own clock, not on the composition’s frames: {what}. Scrubbing the
+        timeline does not move it, and it keeps running across every repeat of a hold loop.
+      </p>
+      <p>
+        Only its box <em>style</em> — colour, background, shadow, padding — animates on the
+        timeline. Press play, or open the Preview, to see it run.
+      </p>
+    </InfoTip>
+  );
 }
 
 /**
@@ -594,8 +646,27 @@ function ImageSections({
  * consumer only in phase 6, where the bridge refuses a take whose mapped source
  * disagrees with it.
  */
+/**
+ * `B-183` — the UI-only sentinel for "this plate has no source".
+ *
+ * The scene stores absence as `routeKey: undefined`; the control needs a string. `''` is safe
+ * as that string because {@link LiveSourceIdSchema} is `.min(1)` — no real id can ever equal
+ * it — and it is converted back at the single commit point, so it never reaches the store.
+ * Kept beside the control that uses it rather than exported: a second reader would be a second
+ * place the sentinel's meaning lives.
+ *
+ * ⚠ `B-188` retired its companion `UNASSIGNED_LABEL` (“— no source —”). That text existed to
+ * NAME the empty option of a `<select>`; the control is a text box now, where the unassigned
+ * state is simply an empty field and a label inside it would be a value the author had to
+ * delete before typing.
+ */
+const UNASSIGNED = '';
+
 function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): JSX.Element {
   const id = element.id;
+  // The scene ref is stable between edits, so deriving the group in the render body
+  // avoids the fresh-object useSyncExternalStore trap (the C2 lesson).
+  const sceneForPicker = useDesignerSelector((st) => st.scene);
   // Bumped on a REFUSED id, and folded into each input's key: an uncontrolled input
   // that committed a bad value keeps the bad text on screen otherwise (the committed
   // value did not change, so nothing re-mounts it), leaving the author looking at a
@@ -604,6 +675,17 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
   const [rejectSeq, setRejectSeq] = useState(0);
   const commitId = (raw: string): void => {
     const value = raw.trim();
+    /*
+      `B-183` — CLEARING THE FIELD UNASSIGNS, it does not fail validation.
+
+      Without this the author has a control that can reach every state except the one a plate
+      now starts in, and emptying the box would be met with "“” is not a Live Source id" —
+      a refusal aimed at a typo, for a deliberate act.
+    */
+    if (value === UNASSIGNED) {
+      designerStore.updateElement(id, { routeKey: undefined } as Partial<Element>);
+      return;
+    }
     if (!LiveSourceIdSchema.safeParse(value).success) {
       designerStore.showNotice(
         `“${value}” is not a Live Source id. Use letters, digits, “_” and “-”, starting ` +
@@ -615,34 +697,266 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
     }
     designerStore.updateElement(id, { routeKey: value } as Partial<Element>);
   };
+  /*
+    🔴 `B-188` — **ONE CONTROL NOW, AND IT IS THE FREE-TEXT ONE.**
+
+    There were two: a `<select>` over the group's DECLARED sources when the project had a
+    multi-frame group, and a free-text box when it did not. The group declares nothing any more
+    — the source list is derived from the plates — so a picker would be a control that can only
+    ever offer what other plates already chose, and there would be no way to create the first
+    source, or the next one, at all. **Typing a new key IS how a source comes into existence.**
+
+    The existing keys are still OFFERED, through the field's datalist: the common act is
+    pointing this plate at a source the template already uses, and that must stay one click.
+    They are a suggestion, never a constraint — which is the whole difference from the picker
+    this replaces, and the reason `look-source-undeclared` no longer exists to punish the gap.
+  */
+  const suggestions =
+    sceneForPicker === null
+      ? []
+      : deriveLookSources(sceneForPicker).filter((k) => k !== element.routeKey);
+  /*
+    ⭐ `B-183` — THE UNASSIGNED STATE IS REPRESENTABLE IN THE CONTROL, because it is now
+    representable in the scene.
+
+    The empty string is the sentinel and it CANNOT collide: `LiveSourceIdSchema` is
+    `.min(1)`, so no real source id is ever `''`. It never reaches the scene — the commit
+    below turns it back into `undefined`, which is what the schema stores.
+
+    🔴 **The select shows what the element HOLDS, in all three states**, and substitutes
+    nothing: a declared id plain, a dangling id as itself labeled `(undeclared)` (which
+    predates this change and was verified still true before it), and no source at all as
+    its own option. Falling back to the first declared entry would silently bind the plate
+    to an input the author never chose — the owner's rejected alternative, and the reason
+    that option is named in the schema's docstring rather than left to be rediscovered.
+  */
+  const holds = element.routeKey ?? UNASSIGNED;
   return (
     <>
       <CollapseSection title="Live Source" defaultExpanded>
         <TextField
           label="source id"
           ariaLabel="Live Source source id"
-          value={element.routeKey}
+          value={holds}
           resetKey={`${id}-${String(rejectSeq)}`}
           onCommit={commitId}
+          suggestions={suggestions}
+          datalistId={`live-source-ids-${id}`}
         />
         <AspectRow element={element} />
+        <FitModeRow element={element} />
         {/*
-          D-137 — ONE line, said once, instead of a row of disabled controls saying
-          it repeatedly and forever.
-
-          It is here because the author would otherwise learn it at EXPORT, from a
-          preflight error — the wrong end of the process. Every removal above it
-          (keyframes, rotation, opacity, filters) has the same single cause, so it
-          gets a single sentence rather than four tooltips.
+          ⭐ `DESIGNER-FIX-0905` — the paragraph that stood here is gone, and its sentences
+          went three ways. Its CONSTRAINTS ("rotating would slide the picture out", "opacity
+          and filters are withheld") now sit ON the controls they explain: the Transform
+          section renders rotation and opacity disabled with the registry's reason as their
+          tooltip, and the Filter section below is a withheld header with the same. Its
+          MECHANISM — why a plate is static, what it paints, where the frame sits — is
+          behind the `i`, at reading size, corrected for the reorder: no hole is punched any
+          more (`single-clock-look-switch`), the page sits BELOW the pictures. What stays
+          inline is the one-line STATE: a plate is static, and its withheld controls say why.
         */}
-        <p className={dds.hint}>
-          A plate is <strong>static and axis-aligned</strong>: its rect is sent to CasparCG once, as
-          a fixed box, so rotating or animating it — or a parent — would slide the live picture out
-          from behind the frame on air. Filters and opacity paint nothing on air either: the plate
-          is a hole, and the picture is composited behind it.
-        </p>
+        <StateLine testId="live-source-state" tip={<LivePlateTip />}>
+          A plate is <strong>static and axis-aligned</strong> — rotation, opacity, filters and
+          keyframes are withheld, and each says why on itself.
+        </StateLine>
       </CollapseSection>
+      <LiveSourceFrameRow element={element} />
+      {/*
+        The Filter section, WITHHELD rather than absent (`DESIGNER-FIX-0905`): the header
+        stays, dimmed, carrying the registry's reason. It used to be simply missing, and a
+        section that vanishes teaches nothing about why it is unavailable.
+      */}
+      <CollapseSection title="Filter" withheld={withheldReason(element, 'filter')} />
     </>
+  );
+}
+
+/**
+ * `DESIGNER-FIX-0905` §1 — **what a live plate does on air, said once, and said against the
+ * code as it is NOW.** Six Designer strings still described the retired mask (`D-158`'s
+ * table); the two the owner photographed were the ones this panel carried. The mechanism
+ * under the reorder (`single-clock-look-switch`, `a7976e14`): the page that carries the
+ * plates is composited BELOW them, CasparCG draws each picture into exactly the plate's
+ * declared rect, and the plate paints nothing — there is no hole, because nothing on the
+ * page is ever in front of a picture. The knowledge is load-bearing (it is why rotation,
+ * opacity and filters are withheld, and it sits beside `B-197`'s open question about a
+ * rounded frame), so it is relocated and corrected here, not deleted.
+ */
+function LivePlateTip(): JSX.Element {
+  return (
+    <InfoTip title="Live plates on air">
+      <p>
+        A plate is <strong>static and axis-aligned</strong>. Its rect is sent to CasparCG once, as a
+        fixed box, and the live picture is composited into exactly that box. Rotating or animating
+        the plate — or a parent — would move the frame and title you drew while the picture stayed
+        put, so rotation and every keyframe are withheld.
+      </p>
+      <p>
+        On air the plate <strong>paints nothing</strong>. The page that carries the plates is
+        composited <strong>below</strong> the live pictures, so nothing you draw in this template
+        can appear over a picture, and nothing on the page can fade or filter one. That is why
+        opacity and the Filter section are withheld: they would act on pixels the plate does not
+        have. On the canvas the bars and the source label stand in for the picture.
+      </p>
+      <p>
+        The <strong>frame</strong> is the one thing a plate draws. It is painted on the page, just
+        outside the plate’s rect, so the picture never covers it and it never covers the picture —
+        and it does not change the rect CasparCG is given. Rounded corners have no home on a plate
+        yet.
+      </p>
+      <p>
+        Under <strong>Fit whole picture</strong> a source of a different shape shows the page’s own
+        background in the margin, never black. Artwork that must appear <em>over</em> a picture is
+        its own template, on its own bank row above the live band.
+      </p>
+    </InfoTip>
+  );
+}
+
+/**
+ * ⭐ §9a.1 — the plate's FRAME: colour + width, over the shared `stroke`.
+ *
+ * **The write path is `updateElement`, deliberately, and NOT `commitAnimatable`.**
+ * Checked rather than assumed, because "extend the list, forget the mutator" is how
+ * this repo has shipped an inert control before (B-051 — the D-109 path was left out
+ * of `writeStaticAnimatable`'s box-kind guard, so every Path Style stroke edit
+ * silently no-oped): `writeStaticAnimatable`'s `stroke.*` arms are gated on
+ * `boxKind = shape | text | path`, so routing this through them would write nothing
+ * at all unless that guard were widened. It is NOT widened, because the property is
+ * not keyframe-able here (below) and a static write through a keyframe router buys
+ * only the guard it would have to be exempted from.
+ *
+ * **Not keyframe-able, and not in `FIELD_REGISTRY`.** `LIVE_SOURCE_STATIC` (1.8b)
+ * removed every diamond from this kind under ONE rule; a stroke track would put two
+ * rows back on the timeline-left for a property whose interaction with the
+ * not-yet-chosen punch mechanism (1.5b/1.5c) is undecided. Withholding it now is a
+ * subtraction that can be widened later without touching a stored scene; shipping it
+ * and retracting it is not. `routeKey` / `expectedAspect` / a clock's `align` take
+ * the same non-keyframed `updateElement` route.
+ *
+ * **`width: 0` keeps the stroke OBJECT and remembers the colour.** Zero is the "no
+ * frame" state, not the "unset" state — it renders identically to an absent stroke,
+ * and the colour survives a round trip through 0 so an author who dials the frame off
+ * and back on does not lose it. Nothing here may read the zero as falsy-absent and
+ * substitute a default (the trap this repo has met twice).
+ *
+ * ⚠ `updateElement` is SHALLOW (`locate` walks only a layer's direct children), so a
+ * plate nested inside a container takes no edit from this row — nor from the source-id
+ * or aspect rows above it, which share the route. That is a pre-existing gap
+ * (`design.md` §9A.2), not one this control introduces, and it is recorded rather
+ * than worked around here: a second, deeper write path used by one row would be the
+ * two-spellings shape that gap already is.
+ */
+function LiveSourceFrameRow({ element }: { element: VideoPlaceholderElement }): JSX.Element {
+  const id = element.id;
+  // The DISPLAYED colour is also the one a first width edit writes, so the swatch
+  // never disagrees with what the plate gets. White rather than the `#000000` used
+  // elsewhere: a frame is drawn around a guest box on a designed backdrop, and a
+  // black frame that lands invisibly reads as a control that did nothing.
+  const color = element.stroke?.color ?? '#ffffff';
+  const width = element.stroke?.width ?? 0;
+  const commit = (next: Stroke): void => {
+    designerStore.updateElement(id, { stroke: next } as Partial<Element>);
+  };
+  /*
+    ⭐ `DESIGNER-FIX-0905` — "a width of 0 means no frame; the colour is kept" was a sentence
+    under the fields. It is now the COLOUR FIELD'S OWN STATE: at width 0 the swatch and hex
+    stay visible (the colour IS kept — that is the point of showing it) but disabled, with
+    the reason as their tooltip. The mechanism the rest of that sentence carried ("painted
+    by the template, outside the hole") went to the Live Source `i`, corrected: there is no
+    hole; the frame is painted on the page just outside the rect, below the picture.
+  */
+  const off = width <= 0;
+  return (
+    <CollapseSection title="Frame" defaultExpanded>
+      <ColorField
+        label="stroke"
+        value={color}
+        withheld={
+          off ? 'No frame at width 0. The colour is kept — set a width to paint it.' : undefined
+        }
+        onCommit={(next) => {
+          commit({ ...(element.stroke ?? { width }), color: next });
+        }}
+      />
+      <NumberField
+        label="stroke width"
+        value={width}
+        step={1}
+        min={0}
+        suffix="px"
+        onCommit={(next) => {
+          commit({ ...(element.stroke ?? { color }), width: Math.max(0, next) });
+        }}
+      />
+    </CollapseSection>
+  );
+}
+
+/**
+ * ⭐ `C-028` — **the FIT MODE: how the picture is placed in this plate's box.**
+ *
+ * ── WHAT THE AUTHOR IS ACTUALLY CHOOSING ────────────────────────────────────
+ *
+ * The client's decision (2026-08-23, via the owner): **the picture must not be cut.** A
+ * live input keeps its own aspect, is centred on both axes, and the leftover margin shows
+ * **the template's own background** — never black, because the mask hole is punched at
+ * the FITTED rect rather than at the box. `cover` keeps the old centre-crop for the shots
+ * where losing the edges is the accepted cost.
+ *
+ * 🔴 **The label says what happens to the PICTURE, not to the BOX**, because the natural
+ * misreading is that the box changes shape. It does not: the box is exactly where the
+ * author drew it, and only the picture inside it moves. The owner accepted the visible
+ * consequence in advance — a stroke or frame authored tight around a box **no longer hugs
+ * the picture** when the source aspect differs.
+ *
+ * ── WHY THIS IS PER ELEMENT AND NOT PER SOURCE ──────────────────────────────
+ *
+ * The same catalog source seated in a 16:9 box and a 3:4 box needs DIFFERENT fits, so a
+ * per-source field would have to be wrong in one of them. The mode is a property of the
+ * PAIRING of a picture with a box, and this is where that pairing is authored.
+ *
+ * ⚠ **The operator can override it per assignment, and that is not a bug in this
+ * control.** The author states what the design wants; the operator, who is looking at the
+ * picture on the day, may revise it. Note the direction is the OPPOSITE of `D-147`'s
+ * aspect chain, where the installation outranks the author — that one resolves a
+ * measurable property of the feed, this one a presentation choice about it.
+ */
+function FitModeRow({ element }: { element: VideoPlaceholderElement }): JSX.Element {
+  const id = element.id;
+  // Absent means `contain` — the shipped default. Read through the shared constant rather
+  // than a literal, so the control and the runtime cannot come to disagree about what an
+  // unset field means.
+  const mode: LiveFitMode = element.fitMode ?? DEFAULT_LIVE_FIT_MODE;
+  const options: readonly LiveFitMode[] = LIVE_FIT_MODES;
+  return (
+    <SelectField
+      label="fit"
+      value={mode}
+      options={options}
+      labels={options.map((m) => (m === 'contain' ? 'Fit whole picture' : 'Fill box (crop edges)'))}
+      onCommit={(value) => {
+        designerStore.updateElement(id, { fitMode: value } as Partial<Element>);
+      }}
+      trailing={
+        <span
+          className={dds.hint}
+          title={
+            mode === 'contain'
+              ? 'The WHOLE picture is shown, centred, at the source’s own aspect. Where the ' +
+                'source is a different shape from this box, the margin shows the template’s ' +
+                'own background — not black. Nothing is cropped, so a frame drawn tight ' +
+                'around this box will not hug the picture.'
+              : 'The picture is scaled until it FILLS the box and the overflow is cropped ' +
+                'evenly from both edges. The box is filled corner to corner, at the cost of ' +
+                'the edges of the source frame.'
+          }
+        >
+          <Icon icon={mode === 'contain' ? Scan : Crop} />
+        </span>
+      }
+    />
   );
 }
 
@@ -688,6 +1002,14 @@ function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Eleme
   const frameH = useDesignerSelector((s) =>
     s.scene === null ? 0 : activeDocOf(s.scene).resolution.height,
   );
+  /**
+   * `D-155` / `B-218` — THIS PLATE's lock, read from the session store rather than from the
+   * element. Session state, never the scene: a `.vcg` that resizes differently for two people
+   * is the failure that decision avoids, and the runtime could never read it anyway. But it is
+   * keyed by the plate — `B-218` was ONE flag for every plate in every look, so setting one
+   * box FREE freed all of them. See `aspectLockOff` in `store-core.ts`.
+   */
+  const locked = useDesignerSelector((s) => isAspectLocked(s, id));
 
   const options = [...ASPECT_PRESETS.map((p) => p.key), ASPECT_CUSTOM, ASPECT_UNSPECIFIED] as const;
 
@@ -723,16 +1045,37 @@ function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Eleme
       : fitToAspect(element.transform, stored, { width: frameW, height: frameH });
   const already = stored !== undefined && matchesAspect(element.transform, stored);
   const fitDisabled = stored === undefined || already || fit === null;
+  /*
+    🔴 `D-155` task 3.4 — FIT IS A REPAIR NOW, AND THE WORDING SAYS SO.
+
+    With the lock on, a plate cannot be deformed by dragging, so this button is no longer the
+    normal path — it is for a plate authored BEFORE the lock, or one deformed with the lock
+    OFF. Leaving it worded as the ordinary way to reach an aspect would keep teaching a
+    workflow the feature exists to remove.
+
+    ⚠ And the already-matches state READS AS SATISFIED rather than as an action that happens
+    to be unavailable. "The plate already renders at this aspect" is a report, not a refusal;
+    with the lock on it is the state a plate is normally IN, so a sentence that sounded like a
+    disabled control would make the ordinary case look broken.
+  */
   const fitTitle =
     stored === undefined
       ? 'Pick an aspect first — “not specified” asserts nothing to fit to.'
       : already
-        ? 'The plate already renders at this aspect.'
+        ? // ⚠ Both spellings keep the word "already" — `D-155`'s own spec says the satisfied
+          // state reads "this plate already matches", and `D-147`'s test has asserted that
+          // word since the button existed. Re-wording FIT as a repair is a change to the
+          // ACTION's description, not a licence to drop the vocabulary the state is named in.
+          locked
+          ? '✓ This plate already matches its aspect, and the lock keeps it there while you resize.'
+          : '✓ This plate already renders at this aspect. Nothing to repair.'
         : fit === null
           ? 'This plate’s scale cannot be fitted (a zero or negative scale).'
           : fit.preserved === 'width'
-            ? 'Resize the plate to this aspect — keeps X, Y and W, solves for H.'
-            : 'Resize the plate to this aspect — keeps X, Y and H, solves for W ' +
+            ? 'REPAIR a plate that does not match its aspect — keeps X, Y and W, solves for H. ' +
+              'With the lock on, dragging cannot deform it, so this is only needed for a plate ' +
+              'authored before the lock or resized with it off.'
+            : 'REPAIR a plate that does not match its aspect — keeps X, Y and H, solves for W ' +
               '(solving for H would push the plate past the bottom of the frame).';
 
   function onFit(): void {
@@ -764,6 +1107,45 @@ function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Eleme
           }
         />
       )}
+      {/*
+        🔴 `D-155` task 3.1/3.3 — THE LOCK, beside the aspect it locks to.
+
+        ON by default whenever an aspect is set: the complaint that produced this item is that
+        the deformation happens BY ACCIDENT, and a lock the author has to find first does not
+        answer that.
+
+        ⚠ **NO KEYBOARD OVERRIDE, and the tooltip says why rather than leaving it a mystery.**
+        Both plausible modifiers are already spent on ONE job — bypass snapping — and spelled
+        differently per gesture: `Shift` in resize/rotate (`Gizmo.tsx`), `Alt` in the move
+        gestures (`CanvasOverlay.tsx`, `D-122`'s free placement). Overloading either would put
+        two meanings on one key in one canvas, and inventing a third chord for a feature that
+        has a visible toggle is worse than having no keyboard path. (That `Shift` and `Alt`
+        mean the same thing in different gestures is real, and is `D-156` — not this item's.)
+      */}
+      {stored !== undefined && (
+        <div className={fieldCss.row}>
+          <span className={fieldCss.label}>keep aspect</span>
+          <Button
+            variant="secondary"
+            // `selected`, not `active` — this app's Button primitive spells the engaged state
+            // that way (the Runtime's spells it `active`; they are different design systems).
+            selected={locked}
+            aria-pressed={locked}
+            data-aspect-lock={locked ? 'on' : 'off'}
+            onClick={() => designerStore.setAspectLock(id, !locked)}
+            title={
+              locked
+                ? 'ON — dragging a handle keeps this plate at its aspect. Turn it off to resize ' +
+                  'freely. There is no keyboard override: Shift and Alt already bypass snapping.'
+                : 'OFF — dragging a handle can deform this plate. Turn it on to keep its aspect ' +
+                  'while you resize.'
+            }
+            aria-label="Keep aspect while resizing"
+          >
+            {locked ? 'LOCKED' : 'FREE'}
+          </Button>
+        </div>
+      )}
       <div className={fieldCss.row}>
         <span className={fieldCss.label} />
         <Button
@@ -773,7 +1155,7 @@ function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Eleme
           title={fitTitle}
           aria-label="Fit plate to aspect"
         >
-          Fit plate to aspect
+          {already ? '✓ Matches its aspect' : 'Repair to aspect'}
         </Button>
       </div>
     </>
@@ -907,6 +1289,280 @@ function LottieTimingPanel({
 }
 
 /**
+ * media-phases-follow-composition — the comp-side anchors the follow panels derive from.
+ * Selected as PRIMITIVES (a selector snapshot is compared by identity, so an object
+ * assembled inside the selector would re-render forever); the object is built in render.
+ * `null` when the active document has no lifecycle — nothing to follow — or no scene.
+ *
+ * The effective content start is the marker when placed, else the SAME keyframes-only
+ * default the Playout section's pin uses (`contentStartDefaultFrom` — extracted, not
+ * copied). The runtime's richer heuristic additionally folds in other Lotties' settles;
+ * see the extraction's own note for why that pre-existing display gap is not widened here.
+ */
+function useFollowAnchors(): FollowAnchors | null {
+  const fps = useDesignerSelector((s) => s.scene?.frameRate ?? 0);
+  const activeIn = useDesignerSelector((s) => {
+    const scene = s.scene;
+    if (scene === null) return 0;
+    const doc = activeDocOf(scene);
+    return doc.activeRange?.in ?? doc.frameRange.in;
+  });
+  const activeOut = useDesignerSelector((s) => {
+    const scene = s.scene;
+    if (scene === null) return 0;
+    const doc = activeDocOf(scene);
+    return doc.activeRange?.out ?? doc.frameRange.out;
+  });
+  const outPoint = useDesignerSelector((s) => {
+    const scene = s.scene;
+    if (scene === null) return null;
+    return activeDocOf(scene).lifecycle?.outPoint ?? null;
+  });
+  const contentStart = useDesignerSelector((s) => {
+    const scene = s.scene;
+    if (scene === null) return null;
+    const doc = activeDocOf(scene);
+    if (doc.lifecycle === undefined) return null;
+    const rIn = doc.activeRange?.in ?? doc.frameRange.in;
+    return (
+      doc.lifecycle.contentStart ??
+      contentStartDefaultFrom(activeLayersOf(scene), rIn, doc.lifecycle.outPoint)
+    );
+  });
+  if (outPoint === null || contentStart === null || fps <= 0) return null;
+  return { activeIn, contentStart, outPoint, activeOut, fps };
+}
+
+/**
+ * The §9.1 rule, settled twice now: an inert control that does not explain itself is a
+ * defect. A follow-source element in a composition with NO lifecycle derives nothing —
+ * this says WHY, instead of silently doing nothing (the option is never silently
+ * disabled). Shared by both media kinds.
+ *
+ * `DESIGNER-FIX-0905` — the paragraph held three kinds of sentence. The STATE ("following
+ * nothing — no out point") and its REMEDY ("set one in Playout") stay inline; the MECHANISM
+ * ("no lifecycle anchors to derive the window from, so the clip behaves as if it had no
+ * phase markers") is read once, behind the `i`.
+ */
+function FollowNoAnchors(): JSX.Element {
+  return (
+    <StateLine testId="follow-no-anchors" tone="text" tip={<FollowTip />}>
+      <span className={prose.tagCaution}>inert</span>
+      Following nothing yet — this composition has no out point. Set one in Playout to activate
+      follow.
+    </StateLine>
+  );
+}
+
+/** What "follow the composition" derives from, said once. */
+function FollowTip(): JSX.Element {
+  return (
+    <InfoTip title="Following the composition">
+      <p>
+        A clip that follows the composition takes its intro, hold and outro from the composition’s
+        own anchors: the entrance (from the active in to the content start), the hold (until the out
+        point) and the exit (from the out point to the active out). Its window is derived from those
+        three, never authored on the clip.
+      </p>
+      <p>
+        With no out point there are no anchors to derive from, so the clip behaves as if it had no
+        phase markers: the whole clip plays as the intro and it holds its last frame. Adding an out
+        point in the Playout section is what activates follow.
+      </p>
+    </InfoTip>
+  );
+}
+
+/** The derived window's clamp warnings — the EXISTING hint styling, no second warning surface. */
+function FollowClampHints({
+  clamps,
+  seam,
+}: {
+  clamps: FollowWindow['clamps'];
+  /** The hold and outro-start clip times, formatted by the calling panel's own formatter. */
+  seam?: { hold: string; outroStart: string };
+}): JSX.Element | null {
+  if (
+    !clamps.introShort &&
+    !clamps.holdPastEnd &&
+    !clamps.noOutSegment &&
+    !clamps.wholeClipOutro &&
+    !clamps.outroCutByRemoval &&
+    !clamps.lateSettle &&
+    !clamps.holdJump
+  ) {
+    return null;
+  }
+  return (
+    <div data-testid="follow-clamps">
+      {clamps.holdPastEnd ? (
+        <p className={lt.warn}>
+          the hold time sits past the clip end — clamped to the end (a stale value after an asset
+          swap?).
+        </p>
+      ) : null}
+      {clamps.introShort ? (
+        <p className={lt.warn}>
+          the clip is shorter than the entrance from its head to the hold — it will freeze early.
+        </p>
+      ) : null}
+      {clamps.noOutSegment ? (
+        <p className={lt.warn}>
+          the composition has no OUT segment — the out point sits at the end of the active range, so
+          this clip has NO outro and holds its look through the exit. Drag the out point earlier, or
+          extend the active range past it.
+        </p>
+      ) : null}
+      {clamps.wholeClipOutro ? (
+        <p className={lt.warn}>
+          the OUT segment is longer than the whole clip — the outro plays the clip from its start.
+        </p>
+      ) : null}
+      {clamps.outroCutByRemoval ? (
+        <p className={lt.warn}>
+          the clip's authored outro is longer than the OUT segment — the timeline removes the
+          element mid-outro (on air the exit waits for it instead). It is never rescaled.
+        </p>
+      ) : null}
+      {clamps.lateSettle ? (
+        <p className={lt.warn}>
+          the clip's authored intro is longer than the entrance — it starts at the composition's in
+          and settles late.
+        </p>
+      ) : null}
+      {clamps.holdJump && seam !== undefined ? (
+        <p className={lt.warn}>
+          on exit the clip jumps from its held look ({seam.hold}) to its outro start (
+          {seam.outroStart}) — invisible for a clip that is static in its middle; check it if this
+          clip is not.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * media-phases-follow-composition — the Lottie follow panel: the derived window READ-ONLY
+ * (clip seconds + comp frames — the numbers the runtime derives, through the SAME
+ * `lottieFollowWindow`), ONE editable input (`hold at`, seeded from the shared
+ * poster/midpoint helper), and Detach.
+ *
+ * Detach bakes the derived HOLD into the manual model: `introEnd = outroStart = H`. The
+ * offset intro and bounded outro are FOLLOW-ONLY capabilities the manual model cannot
+ * express — leaving follow returns to `[ip → introEnd]` / `[outroStart → op]` — so the
+ * hold (the load-bearing look) is what lands. `holdAt` is kept: re-attaching restores the
+ * same hold time.
+ */
+function LottieFollowPanel({
+  element,
+  timing,
+  anchors,
+}: {
+  element: LottieElement;
+  timing: LottieTiming | null;
+  anchors: FollowAnchors | null;
+}): JSX.Element | null {
+  const id = element.id;
+  const phases = element.phases;
+  if (phases === undefined) return null;
+  if (anchors === null) return <FollowNoAnchors />;
+  if (timing === null) return null;
+  const fw = lottieFollowWindow(timing.meta, element.speed, anchors, phases);
+  const rate = timing.meta.fr * (element.speed > 0 ? element.speed : 1);
+  const sec = (f: number): string => secs(rate > 0 ? (f - timing.meta.ip) / rate : 0);
+  const entranceFrames = Math.round(anchors.contentStart - anchors.activeIn);
+  const outFrames = Math.round(anchors.activeOut - anchors.outPoint);
+  return (
+    <div className={lt.panel} data-testid="follow-window">
+      <p className={lt.muted}>
+        intro: clip [{sec(fw.introStartFrame)} → {sec(fw.holdFrame)}] over the entrance (
+        {entranceFrames} comp frames)
+      </p>
+      <p className={lt.muted}>
+        hold: clip {sec(fw.holdFrame)} (frame {fw.holdFrame})
+        {phases.idle !== undefined && element.holdBehavior === 'idle-loop'
+          ? ' · loops the idle range'
+          : ' · freezes'}
+      </p>
+      <p className={lt.muted}>
+        outro: clip [{sec(fw.outroStartFrame)} → {sec(fw.outroEndFrame)}] — the clip’s own ending,
+        through the OUT ({outFrames} comp frames)
+      </p>
+      {fw.window.authored ? (
+        <p className={dds.hint} data-testid="follow-hold-authored">
+          hold frame: the clip’s own intro end (frame {fw.holdFrame}) — authored phases govern the
+          window; `hold at` does not apply.
+        </p>
+      ) : phases.holdAt === undefined ? (
+        <>
+          <p className={dds.hint}>
+            hold at: the frame the entrance reaches (the clip plays from its head) — set one to hold
+            a specific look.
+          </p>
+          <Button
+            variant="secondary"
+            onClick={() =>
+              // The seed is the SHARED poster/midpoint helper — the project's definition of
+              // "the representative settled look" — never a second `(ip + op) / 2`.
+              designerStore.updateElement(id, {
+                phases: { ...phases, holdAt: lottieClipMidpoint(timing.meta) },
+              } as Partial<Element>)
+            }
+          >
+            Set hold frame
+          </Button>
+        </>
+      ) : (
+        <>
+          <NumberField
+            label="hold at"
+            value={phases.holdAt}
+            step={1}
+            min={0}
+            suffix="f"
+            onCommit={(v) =>
+              designerStore.updateElement(id, {
+                phases: { ...phases, holdAt: Math.max(0, v) },
+              } as Partial<Element>)
+            }
+          />
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const { holdAt: _holdAt, ...rest } = phases;
+              designerStore.updateElement(id, { phases: rest } as Partial<Element>);
+            }}
+          >
+            Clear hold frame
+          </Button>
+        </>
+      )}
+      <FollowClampHints
+        clamps={fw.window.clamps}
+        seam={{ hold: sec(fw.holdFrame), outroStart: sec(fw.outroStartFrame) }}
+      />
+      <Button
+        variant="secondary"
+        onClick={() =>
+          designerStore.updateElement(id, {
+            // Session Y — Detach bakes the derived window: hold frame + the clip's own outro
+            // start. Truthful by construction.
+            phases: {
+              ...phases,
+              introEnd: fw.holdFrame,
+              outroStart: fw.outroStartFrame,
+              source: 'manual',
+            },
+          } as Partial<Element>)
+        }
+      >
+        Detach — edit as manual
+      </Button>
+    </div>
+  );
+}
+
+/**
  * D-125 Phase 1 — the Lottie inspector: playback speed, hold behaviour, and a
  * READ-ONLY view of the phase mapping (intro-end / outro-start). Marker-derived
  * phases are shown as text; a manually-marked mapping exposes editable frame
@@ -937,13 +1593,17 @@ function LottieSections({
     return doc.lifecycle?.outPoint ?? doc.activeRange?.out ?? doc.frameRange.out ?? null;
   });
   const animation = useLottieAnimation(element.assetId);
+  const anchors = useFollowAnchors();
   const timing =
     animation === undefined
       ? null
       : lottieTiming({
           data: animation,
           speed: element.speed,
-          phases: phases,
+          // A FOLLOW-source element is fed the marker-less shape: its stored numbers are
+          // IGNORED data, and `lottieTiming` reading them would show a settle/breakdown the
+          // runtime does not derive (the follow panel shows the derived window instead).
+          phases: followsComposition(phases) ? undefined : phases,
           compositionFps: frameRate,
         });
   return (
@@ -969,12 +1629,81 @@ function LottieSections({
           }
         />
         {phases === undefined ? (
-          <p className={dds.hint}>No phase markers — plays once then freezes.</p>
+          // §4.5 (A) — a marker-less clip freezes on `op`, which for a furniture clip is the
+          // frame it has animated OFF to: it plays once and goes blank, on the canvas AND on
+          // air, and until now the Inspector only EXPLAINED that. A hint that names a problem
+          // and offers no way out teaches nothing (the same rule the owner settled for §9.1),
+          // so the hint is now an affordance.
+          //
+          // The seed is deliberately the two values that claim the LEAST:
+          //  - `introEnd` = the clip MIDPOINT, the same frame the canvas poster already
+          //    picks for a marker-less clip, through the same `lottieClipMidpoint` — so
+          //    converting a clip never MOVES its picture;
+          //  - `outroStart` = `op`, i.e. DEGENERATE — "no outro claimed". We cannot detect
+          //    where a clip animates off, and a seeded outro would invent an authorial claim,
+          //    which is exactly what §4.5 rejects. A degenerate outro now holds the settled
+          //    frame correctly (§4.4), so this seed is well-defined rather than a placeholder.
+          //
+          // Both land in the editable inputs below, where the operator SEES and corrects
+          // them. That visibility is the whole justification for seeding over guessing in the
+          // runtime: a seed the operator cannot see would forfeit it.
+          <>
+            <p className={dds.hint}>No phase markers — plays once then freezes.</p>
+            <Button
+              variant="secondary"
+              disabled={timing === null}
+              onClick={() => {
+                if (timing === null) return;
+                designerStore.updateElement(id, {
+                  phases: {
+                    introEnd: lottieClipMidpoint(timing.meta),
+                    outroStart: timing.meta.op,
+                    source: 'manual',
+                  },
+                } as Partial<Element>);
+              }}
+            >
+              Add phase markers
+            </Button>
+            {/* media-phases-follow-composition — the third source. The slots carry the same
+                claim-least seed as Add (midpoint / op); under follow they are IGNORED, kept
+                only so a later Detach has somewhere to land. The seed is SHARED with the
+                add-time duration guard's backdrop commit (`follow-attach.ts`) — one rule. */}
+            <Button
+              variant="secondary"
+              disabled={timing === null}
+              onClick={() => {
+                if (timing === null) return;
+                designerStore.updateElement(id, {
+                  phases: lottieFollowAttachPhases(),
+                } as Partial<Element>);
+              }}
+            >
+              Follow composition
+            </Button>
+          </>
+        ) : phases.source === 'composition' ? (
+          <LottieFollowPanel element={element} timing={timing} anchors={anchors} />
         ) : phases.source === 'markers' ? (
-          <div className={fieldCss.row}>
-            <span className={fieldCss.label}>phases</span>
-            <span>from markers</span>
-          </div>
+          <>
+            <div className={fieldCss.row}>
+              <span className={fieldCss.label}>phases</span>
+              <span>from markers</span>
+            </div>
+            {/* Attaching KEEPS the marker values in the slots — they are ignored under
+                follow, and a Detach bakes over them (one-way by design: the markers were a
+                claim about the clip; the bake is a claim about this composition). */}
+            <Button
+              variant="secondary"
+              onClick={() =>
+                designerStore.updateElement(id, {
+                  phases: { ...phases, source: 'composition' },
+                } as Partial<Element>)
+              }
+            >
+              Follow composition
+            </Button>
+          </>
         ) : (
           // MANUAL phases are necessarily authored in the ANIMATION's frame space, so each
           // input carries a live comp-frame equivalent — the designer sees what they are
@@ -982,7 +1711,7 @@ function LottieSections({
           <>
             <NumberField
               label="intro end"
-              value={phases.introEnd}
+              value={phases.introEnd ?? (timing !== null ? lottieClipMidpoint(timing.meta) : 0)}
               step={1}
               min={0}
               suffix="f"
@@ -997,7 +1726,7 @@ function LottieSections({
             ) : null}
             <NumberField
               label="outro start"
-              value={phases.outroStart}
+              value={phases.outroStart ?? timing?.meta.op ?? 0}
               step={1}
               min={0}
               suffix="f"
@@ -1012,9 +1741,21 @@ function LottieSections({
                 = {timing.outro.compFrames} comp frames of outro after OUT
               </span>
             ) : null}
+            <Button
+              variant="secondary"
+              onClick={() =>
+                designerStore.updateElement(id, {
+                  phases: { ...phases, source: 'composition' },
+                } as Partial<Element>)
+              }
+            >
+              Follow composition
+            </Button>
           </>
         )}
-        {timing === null ? null : (
+        {/* Under follow the FOLLOW panel carries the comp-space answers (derived values);
+            the standard breakdown would read the IGNORED stored numbers. */}
+        {timing === null || phases?.source === 'composition' ? null : (
           <LottieTimingPanel
             timing={timing}
             holdBehavior={element.holdBehavior}
@@ -1036,6 +1777,125 @@ function LottieSections({
 // ────────────────────────────────────────────────────────────────────────
 
 /**
+ * media-phases-follow-composition — the VIDEO follow panel: the same affordances as the
+ * Lottie's, in the clip's own MS (video is the ms-native kind, so it consumes the shared
+ * `followWindowMs` core directly — the Lottie is the kind that needs a unit adapter).
+ * Detach bakes the derived hold exactly as the Lottie panel does (`introEnd = outroStart
+ * = H`, `holdAt` kept, `source: 'manual'`).
+ */
+function VideoFollowPanel({
+  element,
+  anchors,
+}: {
+  element: VideoElement;
+  anchors: FollowAnchors | null;
+}): JSX.Element | null {
+  const id = element.id;
+  const phases = element.phases;
+  if (phases === undefined) return null;
+  if (anchors === null) return <FollowNoAnchors />;
+  const duration = element.durationMs;
+  const w = followWindowMs(anchors, {
+    durationMs: duration,
+    holdAtMs: phases.holdAt,
+    ...videoFollowClipFacts(phases, duration),
+  });
+  const s = (ms: number): string => `${(ms / 1000).toFixed(2)} s`;
+  const entranceFrames = Math.round(anchors.contentStart - anchors.activeIn);
+  const outFrames = Math.round(anchors.activeOut - anchors.outPoint);
+  return (
+    <div className={lt.panel} data-testid="follow-window">
+      <p className={lt.muted}>
+        intro: clip [{s(w.introStartMs)} → {s(w.holdMs)}] over the entrance ({entranceFrames} comp
+        frames)
+      </p>
+      <p className={lt.muted}>
+        hold: clip {s(w.holdMs)}
+        {phases.idle !== undefined && element.holdBehavior === 'loop'
+          ? ' · loops the idle range'
+          : ' · freezes'}
+      </p>
+      <p className={lt.muted}>
+        outro: clip [{s(w.outroStartMs)} → {s(w.outroEndMs)}] — the clip’s own ending, through the
+        OUT ({outFrames} comp frames)
+      </p>
+      {w.authored ? (
+        <p className={dds.hint} data-testid="follow-hold-authored">
+          hold frame: the clip’s own intro end ({s(w.holdMs)}) — authored phases govern the window;
+          `hold at` does not apply.
+        </p>
+      ) : phases.holdAt === undefined ? (
+        <>
+          <p className={dds.hint}>
+            hold at: the time the entrance reaches (the clip plays from its head) — set one to hold
+            a specific look.
+          </p>
+          <Button
+            variant="secondary"
+            onClick={() =>
+              // The seed is the SHARED poster helper's midpoint — the same "representative
+              // settled look" the canvas poster and the import thumbnail already use.
+              designerStore.updateElement(id, {
+                phases: { ...phases, holdAt: posterTimeMs(duration) },
+              } as Partial<Element>)
+            }
+          >
+            Set hold time
+          </Button>
+        </>
+      ) : (
+        <>
+          <NumberField
+            label="hold at"
+            value={phases.holdAt}
+            step={100}
+            min={0}
+            max={duration}
+            suffix="ms"
+            onCommit={(v) =>
+              designerStore.updateElement(id, {
+                phases: { ...phases, holdAt: Math.min(Math.max(0, Math.round(v)), duration) },
+              } as Partial<Element>)
+            }
+          />
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const { holdAt: _holdAt, ...rest } = phases;
+              designerStore.updateElement(id, { phases: rest } as Partial<Element>);
+            }}
+          >
+            Clear hold time
+          </Button>
+        </>
+      )}
+      <FollowClampHints
+        clamps={w.clamps}
+        seam={{ hold: s(w.holdMs), outroStart: s(w.outroStartMs) }}
+      />
+      <Button
+        variant="secondary"
+        onClick={() =>
+          designerStore.updateElement(id, {
+            // Session Y — Detach bakes the CURRENTLY-DERIVED window: the hold point and the
+            // clip's own outro start. Truthful by construction — manual then plays the same
+            // phases follow was playing.
+            phases: {
+              ...phases,
+              introEnd: Math.round(w.holdMs),
+              outroStart: Math.round(w.outroStartMs),
+              source: 'manual',
+            },
+          } as Partial<Element>)
+        }
+      >
+        Detach — edit as manual
+      </Button>
+    </div>
+  );
+}
+
+/**
  * D-128 Phase 3 — the imported-clip inspector (decision (d)). Exposes the poster
  * frame (mid-clip, following the In point), the MANUAL phase marks in the clip's
  * OWN time space (ms), hold behaviour (default loop), and `drivesHold` (default
@@ -1054,14 +1914,27 @@ function VideoSections({
   const provenance = useAssets().find((a) => a.assetId === element.assetId)?.provenance;
   const phases = element.phases;
   const duration = element.durationMs;
-  const posterMs = posterTimeMs(duration, phases?.introEnd);
+  const anchors = useFollowAnchors();
+  const follows = followsComposition(phases);
+  // `DESIGNER-FIX-0905` — `drives hold` is WITHHELD while the composition has no out point:
+  // with none it is `static`, every hold source is ignored, and the flag can change nothing
+  // until an out point exists. Disabled with the reason on the control, never hidden — the
+  // author must still see that the flag exists and what unlocks it.
+  const hasOutPoint = useDesignerSelector((s) => {
+    const scene = s.scene;
+    return scene !== null && activeDocOf(scene).lifecycle !== undefined;
+  });
+  // A follower's stored `introEnd` is IGNORED data — the poster anchor is `holdAt` (the
+  // held look), mirroring the scene-builder's `videoPosterMs` rule; the runtime refines
+  // the canvas dataset to the exact derived H.
+  const posterMs = posterTimeMs(duration, follows ? phases?.holdAt : phases?.introEnd);
 
   /** Commit a phase-mark edit, clamped to [0, duration] and keeping introEnd ≤ outroStart. */
   function commitPhase(next: { introEnd?: number; outroStart?: number }): void {
     if (phases === undefined) return;
     const clamp = (v: number): number => Math.min(Math.max(0, Math.round(v)), duration);
-    let introEnd = clamp(next.introEnd ?? phases.introEnd);
-    let outroStart = clamp(next.outroStart ?? phases.outroStart);
+    let introEnd = clamp(next.introEnd ?? phases.introEnd ?? Math.round(duration / 2));
+    let outroStart = clamp(next.outroStart ?? phases.outroStart ?? duration);
     // keep the invariant: whichever mark the operator moved wins, the other yields.
     if (introEnd > outroStart) {
       if (next.introEnd !== undefined) outroStart = introEnd;
@@ -1110,16 +1983,42 @@ function VideoSections({
           value={element.drivesHold === true ? 'on' : 'off'}
           options={['off', 'on'] as const}
           labels={['No', 'Yes']}
-          onCommit={(v) =>
-            designerStore.updateElement(id, { drivesHold: v === 'on' } as Partial<Element>)
+          withheld={
+            hasOutPoint
+              ? undefined
+              : 'Inert: this composition has no out point, so it has no hold for a clip to ' +
+                'drive. Add an out point in the Playout section first.'
           }
+          // Q — the flag has exactly ONE writer, and it is the deep-reaching one.
+          // `updateElement` is shallow (it goes through `locate`, which searches a layer's
+          // DIRECT children only), so this control could not write a grouped element's flag;
+          // `setElementDrivesHold` recurses containers and is the same action the Playout
+          // checklist's row calls. Two writers with different reach is how the two surfaces
+          // come to disagree about one flag.
+          onCommit={(v) => designerStore.setElementDrivesHold(id, v === 'on')}
         />
         {phases === undefined ? (
           <>
-            <p className={dds.hint}>
-              No phase marks — the whole clip is the intro, the hold loops the whole clip, and there
-              is no outro. The poster uses the clip midpoint.
-            </p>
+            {/* `DESIGNER-FIX-0905` — the STATE inline (no marks: the whole clip is the intro);
+                what that means for the hold, the outro and the poster is behind the `i`. */}
+            <StateLine
+              tip={
+                <InfoTip title="Phase marks">
+                  <p>
+                    Without phase marks the whole clip is the intro: the hold loops the whole clip
+                    and there is no outro. The poster frame is the clip midpoint.
+                  </p>
+                  <p>
+                    <strong>Add phase marks</strong> splits the clip into intro, hold and outro at
+                    times you set in the clip’s own milliseconds.{' '}
+                    <strong>Follow composition</strong> derives them from the composition’s out
+                    point instead.
+                  </p>
+                </InfoTip>
+              }
+            >
+              No phase marks — the whole clip plays as the intro.
+            </StateLine>
             <Button
               variant="secondary"
               onClick={() =>
@@ -1130,12 +2029,28 @@ function VideoSections({
             >
               Add phase marks
             </Button>
+            {/* media-phases-follow-composition — the third source, presented exactly as the
+                Lottie's. The slots carry the claim-least seed (poster midpoint / duration);
+                IGNORED under follow, kept as the Detach landing. Shared with the add-time
+                duration guard's backdrop commit (`follow-attach.ts`) — one rule. */}
+            <Button
+              variant="secondary"
+              onClick={() =>
+                designerStore.updateElement(id, {
+                  phases: videoFollowAttachPhases(),
+                } as Partial<Element>)
+              }
+            >
+              Follow composition
+            </Button>
           </>
+        ) : follows ? (
+          <VideoFollowPanel element={element} anchors={anchors} />
         ) : (
           <>
             <NumberField
               label="in point"
-              value={phases.introEnd}
+              value={phases.introEnd ?? Math.round(duration / 2)}
               step={100}
               min={0}
               max={duration}
@@ -1144,7 +2059,7 @@ function VideoSections({
             />
             <NumberField
               label="out point"
-              value={phases.outroStart}
+              value={phases.outroStart ?? duration}
               step={100}
               min={0}
               max={duration}
@@ -1162,20 +2077,54 @@ function VideoSections({
             >
               Clear phase marks
             </Button>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                designerStore.updateElement(id, {
+                  phases: { ...phases, source: 'composition' },
+                } as Partial<Element>)
+              }
+            >
+              Follow composition
+            </Button>
           </>
         )}
+        {/*
+          `DESIGNER-FIX-0905` — the provenance is FACTS, so it is FIELDS, like `duration`
+          above: one labelled row per fact instead of one sentence carrying four. Read-only
+          (decision (e)); the `data-testid` wraps the group so the facts stay assertable.
+        */}
         {provenance !== undefined && (
-          <p className={dds.hint} data-testid="video-provenance">
-            From “{provenance.sourceFilename}” ({String(provenance.sourceWidth)}×
-            {String(provenance.sourceHeight)}
-            {provenance.sourceFps !== provenance.targetFps
-              ? `, conformed ${String(provenance.sourceFps)}→${String(provenance.targetFps)} fps`
-              : ''}
-            {provenance.crop !== undefined
-              ? `, cropped to ${String(provenance.crop.width)}×${String(provenance.crop.height)}`
-              : ''}
-            ).
-          </p>
+          <div data-testid="video-provenance">
+            <div className={fieldCss.row}>
+              <span className={fieldCss.label}>source</span>
+              <span className={fieldCss.readout} title={provenance.sourceFilename}>
+                {provenance.sourceFilename}
+              </span>
+            </div>
+            <div className={fieldCss.row}>
+              <span className={fieldCss.label}>source size</span>
+              <span className={fieldCss.readout}>
+                {String(provenance.sourceWidth)}×{String(provenance.sourceHeight)}
+              </span>
+            </div>
+            {provenance.sourceFps !== provenance.targetFps && (
+              <div className={fieldCss.row}>
+                <span className={fieldCss.label}>conformed</span>
+                <span className={fieldCss.readout}>
+                  {String(provenance.sourceFps)}→{String(provenance.targetFps)} fps
+                </span>
+              </div>
+            )}
+            {provenance.crop !== undefined && (
+              <div className={fieldCss.row}>
+                <span className={fieldCss.label}>cropped to</span>
+                <span className={fieldCss.readout}>
+                  {String(provenance.crop.width)}×{String(provenance.crop.height)}
+                </span>
+              </div>
+            )}
+          </div>
         )}
       </CollapseSection>
       <FilterSection
@@ -1204,6 +2153,11 @@ function TickerSections({
   selectedKeyframe,
 }: SectionProps<TickerElement>): JSX.Element {
   const id = element.id;
+  // TEXT-DIGITS-01 — the digits typed items are written in (a bound list's, else the ticker's own).
+  const itemDigits = useDesignerSelector((st) => typedTextDigits(st.scene, element));
+  const dataBound = useDesignerSelector(
+    (st) => st.scene !== null && elementDataField(st.scene, id) !== undefined,
+  );
   return (
     <>
       <CollapseSection title="Ticker" pinned>
@@ -1215,6 +2169,15 @@ function TickerSections({
             designerStore.updateElement(id, { direction } as Partial<Element>)
           }
         />
+        {/* TEXT-DIGITS-01 — the ticker's own Digits, for its authored items and separator; while a
+            Data key binds it the list field's control (Dynamic / Data) is the one shown. */}
+        {!dataBound && (
+          <DigitsField
+            value={elementDigitsOf(element)}
+            options={FieldDigitsSchema.options}
+            onCommit={(digits) => designerStore.updateElement(id, { digits } as Partial<Element>)}
+          />
+        )}
         <NumberField
           label="speed"
           value={element.speed}
@@ -1236,7 +2199,7 @@ function TickerSections({
           }
         />
         {/* D-039ext — separator is a text glyph OR an image/logo (project or shared). */}
-        <TickerSeparatorControl element={element} />
+        <TickerSeparatorControl element={element} digits={elementDigitsOf(element)} />
         {/* D-028 — the ticker's INNER repeat loop. A fresh ticker is infinite
             by design; finite passes complete cleanly (the last item fully
             exits) and signal the composition's content-driven hold. */}
@@ -1271,16 +2234,16 @@ function TickerSections({
             designerStore.updateElement(id, { cycleBoundary } as Partial<Element>)
           }
         />
-        <p className={dds.hint}>
-          Time-driven: the crawl runs during playback (its pass length comes from the measured
-          content width ÷ speed) — scrubbing the timeline doesn’t move it.
-        </p>
+        <StateLine tip={<TimeDrivenTip kind="ticker" />}>
+          Time-driven — scrubbing does not move it.
+        </StateLine>
       </CollapseSection>
 
       <CollapseSection title="Items" defaultExpanded>
         <ListItemsEditor
           items={element.items}
           label={element.name || 'Ticker'}
+          digits={itemDigits}
           onChange={(items) => designerStore.setTickerItems(id, items)}
         />
       </CollapseSection>
@@ -1432,10 +2395,10 @@ function ClockSections({
           Tokens: HH H hh h mm m ss s A a — other characters render literally; the largest unit
           absorbs the overflow (mm:ss shows 90:00 for a 90-minute count).
         </p>
-        <SelectField
-          label="digits"
+        {/* TEXT-DIGITS-01 — the one Digits control (the clock's own, now with the owner's words). */}
+        <DigitsField
           value={element.digits}
-          options={['persian', 'latin', 'arabic-indic'] as const}
+          options={NumberFieldDigitsSchema.options}
           onCommit={(digits) => designerStore.updateElement(id, { digits } as Partial<Element>)}
         />
         {/* D-084 — wall mode can render a chosen IANA zone; 'Local' clears it. The
@@ -1528,10 +2491,9 @@ function ClockSections({
             )}
           </>
         )}
-        <p className={dds.hint}>
-          Time-driven: the clock repaints once per second during playback — scrubbing the timeline
-          doesn’t move it.
-        </p>
+        <StateLine tip={<TimeDrivenTip kind="clock" />}>
+          Time-driven — scrubbing does not move it.
+        </StateLine>
       </CollapseSection>
 
       {/* Style parity with the ticker text section: family/weight/size, colour
@@ -1675,9 +2637,27 @@ function SequenceSections({
     );
     return b?.fieldId ?? '';
   };
+  // TEXT-DIGITS-01 — a bound item's text is its field's value, so it is typed in its field's
+  // Digits; an unbound item in the sequence's own (or a bound list's).
+  const docFields = scene !== null ? activeFieldData(scene).fields : [];
+  const itemDigits = (itemId: string): FieldDigits | undefined => {
+    const key = itemDataKey(itemId);
+    const field = key === '' ? undefined : docFields.find((f) => f.id === key);
+    return field === undefined ? undefined : fieldDigitsOf(field);
+  };
+  const dataBound = scene !== null && elementDataField(scene, id) !== undefined;
   return (
     <>
       <CollapseSection title="Sequence" pinned>
+        {/* TEXT-DIGITS-01 — the sequence's own Digits, for its authored text items; while a Data
+            key binds its items the list field's control (Dynamic / Data) is the one shown. */}
+        {!dataBound && (
+          <DigitsField
+            value={elementDigitsOf(element)}
+            options={FieldDigitsSchema.options}
+            onCommit={(digits) => designerStore.updateElement(id, { digits } as Partial<Element>)}
+          />
+        )}
         <SelectField
           label="transition"
           value={presetKey}
@@ -1776,28 +2756,48 @@ function SequenceSections({
             designerStore.updateElement(id, { direction } as Partial<Element>)
           }
         />
-        <p className={dds.hint}>
-          Time-driven: items advance on their dwell / on Next during playback — scrubbing the
-          timeline doesn’t move the sequence.
-        </p>
+        <StateLine tip={<TimeDrivenTip kind="sequence" />}>
+          Time-driven — scrubbing does not move it.
+        </StateLine>
       </CollapseSection>
 
-      <CollapseSection title="Items" defaultExpanded>
+      <CollapseSection
+        title="Items"
+        defaultExpanded
+        trailing={
+          // `DESIGNER-FIX-0905` — the paragraph under the list held one TEACHING sentence (what
+          // a composition item is) and one that DUPLICATED the per-item data-key field's own
+          // placeholder ("data key — bind for operator editing (optional)"). The duplicate is
+          // deleted; the teaching is read once, here.
+          <InfoTip title="Sequence items">
+            <p>
+              A <strong>text</strong> item is one line of the rotation. Give it a data key to make
+              it operator-editable; without one it is static design-time text.
+            </p>
+            <p>
+              A <strong>composition</strong> item rotates a one-element clock or logo, or a composed
+              layout, through the sequence’s transitions; its live content — a clock — keeps ticking
+              while it is shown.
+            </p>
+          </InfoTip>
+        }
+      >
         <ListItemsEditor
           items={element.items}
           label={element.name || 'Sequence'}
           dir={element.direction}
           showDwell
           compositions={compChoicesAll}
+          digits={typedTextDigits(scene, element)}
           onChange={(items) => designerStore.setSequenceItems(id, items)}
           itemDataKey={itemDataKey}
           onItemDataKey={(itemId, key) => designerStore.setSequenceItemDataKey(id, itemId, key)}
+          itemDigits={itemDigits}
+          onItemDigits={(itemId, digits) => {
+            const key = itemDataKey(itemId);
+            if (key !== '') designerStore.updateField(key, { digits } as Partial<DynamicField>);
+          }}
         />
-        <p className={dds.hint}>
-          A composition item rotates a one-element clock/logo or a composed layout through the
-          sequence’s transitions; its live content (a clock) keeps ticking. Give a text item a data
-          key to make it operator-editable; without one it’s static design-time text.
-        </p>
       </CollapseSection>
 
       {/* Style parity with the ticker/clock text sections. D-052 — colour /
@@ -1956,21 +2956,37 @@ function RepeaterSections({
             designerStore.updateElement(id, { gap: Math.max(0, gap) } as Partial<Element>)
           }
         />
+        {/* `DESIGNER-FIX-0905` — "0 max items = unlimited" is the FIELD's own state now: the
+            unit slot reads `unlimited` at 0. The stamping mechanism is behind the `i`. */}
         <NumberField
           label="max items"
           value={element.maxItems ?? 0}
           step={1}
           min={0}
+          suffix={element.maxItems === undefined ? 'unlimited' : undefined}
           onCommit={(n) =>
             designerStore.updateElement(id, {
               maxItems: n >= 1 ? Math.round(n) : undefined,
             } as Partial<Element>)
           }
         />
-        <p className={dds.hint}>
-          Rows stamp one “{child?.name ?? element.compositionId}” per item. Values update live on
-          air; the row count is stamped at each play (0 max items = unlimited).
-        </p>
+        <StateLine
+          tip={
+            <InfoTip title="How a repeater stamps rows">
+              <p>
+                A repeater stamps one instance of “{child?.name ?? element.compositionId}” per item
+                in its list, laid out by the direction and gap above.
+              </p>
+              <p>
+                Values inside the rows update live on air. The <em>number</em> of rows is stamped
+                once at each play — adding or removing items takes effect on the next take. A max
+                items of 0 means no limit.
+              </p>
+            </InfoTip>
+          }
+        >
+          One “{child?.name ?? element.compositionId}” per item.
+        </StateLine>
       </CollapseSection>
 
       <CollapseSection title="Rows" defaultExpanded>

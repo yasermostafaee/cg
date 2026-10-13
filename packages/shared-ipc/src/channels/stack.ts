@@ -2,12 +2,17 @@ import { z } from 'zod';
 import {
   FieldValuesSchema,
   IdSchema,
+  LayerSlotSchema,
+  LiveSourceLookOverrideSchema,
   PositionSchema,
-  RetainedStackItemSchema,
   StackItemStateSchema,
 } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
+// B-122 — Clear-All's refusals speak the ONE canonical reason list, never an
+// inline literal, so a reason added at the `layers.clear` door (as `live-source`
+// was) cannot exist on the wire and be unrepresentable here.
+import { LAYER_CLEAR_REASONS } from './layers.js';
 
 /**
  * Stack channels (Phase 7 §3 / Phase 5 §8). The Reconciler in Main owns
@@ -39,7 +44,34 @@ export const StackTakeChannel = defineChannel(
     itemId: IdSchema,
     mode: z.enum(['direct', 'pvw-pgm']).optional(),
   }),
-  z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
+  z.object({
+    accepted: z.boolean(),
+    errorCode: z.string().optional(),
+    /**
+     * C-015 phase 6 (6.0) — the refusal's OWN sentence, when it has one that a
+     * code cannot carry.
+     *
+     * A take can now be refused by a Live Source plate, and those refusals are
+     * required to NAME THE PLATE (`live-plate-assignment.ts`, `live-plate-fit.ts`):
+     * _"Plate 1 and Plate 3 have no live source assigned"_ (`B-308`) is what
+     * makes the refusal actionable, and a code is a fixed string that cannot say
+     * which of a template's plates is the problem. Without this the operator got
+     * a generic sentence and the specific one stopped at the bridge's stderr.
+     *
+     * OPTIONAL and ADDITIVE: every existing refusal keeps answering with its code
+     * alone, and `errorCodeMessage` keeps supplying the wording for those. When
+     * both are present the message wins — it is the more specific of the two.
+     */
+    message: z.string().optional(),
+    /**
+     * 🔴 `FIELD-FIXES-01` B — the refusal is CARRIED ON THE ROW: the take reached the wire, was
+     * refused, and the bridge recorded it as the item's `takeRefusal`, which the row and its
+     * Inspector say in one line. So no other surface repeats it — no banner. ABSENT for every
+     * refusal that never reached the wire (on air, rehearsing, disconnected, an unassigned plate),
+     * which keep their own surfaces.
+     */
+    refusalOnRow: z.literal(true).optional(),
+  }),
 );
 
 /**
@@ -55,8 +87,29 @@ export const StackUpdateChannel = defineChannel(
     itemId: IdSchema,
     fields: FieldValuesSchema,
     mergeMode: z.enum(['merge', 'replace']),
+    /**
+     * 🔴 **Session BM-2 — the row's COMPLETE per-look input map, carried by the SAME call as
+     * the fields so ONE press of UPDATE is ONE atomic operator action.**
+     *
+     * The operator changes a frame's input and fixes its caption together. Two verbs cannot
+     * promise those land together: whichever went second could be refused, leaving a caption
+     * describing a feed that never moved. The bridge applies the bindings, reconciles the
+     * fills, and only then tells the page — BD's order — so a refused binding refuses the
+     * whole update rather than half of it.
+     *
+     * ⚠ **COMPLETE, not a delta.** It replaces the item's map, like `sources.set-assignments`
+     * does, so "remove this binding" is expressible at all — a merge-only payload can add and
+     * change but never clear. ABSENT means "not part of this update": a field-only update from
+     * any other surface must not silently drop a row's composition.
+     */
+    lookBindings: LiveSourceLookOverrideSchema.optional(),
   }),
-  z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
+  z.object({
+    accepted: z.boolean(),
+    errorCode: z.string().optional(),
+    /** The refusal's own sentence, when it has one the operator can act on. */
+    message: z.string().optional(),
+  }),
 );
 
 /**
@@ -103,10 +156,58 @@ export const StackOutChannel = defineChannel(
   z.object({ accepted: z.boolean() }),
 );
 
+/**
+ * 🔴 `R-017` — the ONE refusal code both REMOVE verbs answer with, declared beside the
+ * channels that carry it so the bridge, the mock and the renderer's message table all read
+ * the same literal instead of three matching strings.
+ *
+ * `stack.remove` and `stack.remove-all` have DIFFERENT response shapes and deliberately keep
+ * them; what they share is this vocabulary.
+ */
+export const REMOVE_ON_AIR_CODE = 'on-air';
+
+/**
+ * 🔴 `FIELD-FIXES-01-A` Decision 2 — the code a TAKE answers when the row is already on air, or its
+ * previous take has not resolved: the bridge refuses it for every console, with nothing sent. The
+ * console words it with the row's own name (`errorCodeMessage`); declared beside
+ * {@link REMOVE_ON_AIR_CODE} for that constant's reason — one literal, every reader.
+ */
+export const TAKE_ON_AIR_CODE = 'already-on-air';
+
+/**
+ * 🔴 `R-017` — REMOVE ONE, and it can now be REFUSED.
+ *
+ * It answered a bare `{ accepted }` with no implementation that ever declined, so the
+ * shape had nowhere to put a reason and the picker's own comment recorded the cost —
+ * _"there is no code to quote"_. It follows `B-070`'s `errorCode` precedent (the shape
+ * `stack.next` and `stack.take` already use) rather than inventing a third vocabulary.
+ *
+ * The one code it adds is `on-air`: the item is on air or unsettled, so clearing its layer
+ * and dropping the row is refused. ⚠ The refusal is scoped to items the console can act on
+ * ANOTHER way — see `caspar-runtime.ts`'s `#removeImpl`, where an item on no declared
+ * operator row is deliberately exempt, because for that one REMOVE is the only remedy
+ * (`B-212`).
+ */
 export const StackRemoveChannel = defineChannel(
   'stack.remove',
   z.object({ itemId: IdSchema }),
-  z.object({ accepted: z.boolean() }),
+  z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
+);
+
+/**
+ * 🔴 `B-301` (`CONSOLE-POLISH-01` §2) — **DISMISS A ROW'S ERROR.** The Layers badge lists the rows in
+ * `error`; each can be dismissed, for every console: the error ack is dropped and the row reads the
+ * status it settled to. Nothing is sent to CasparCG. Refused `not-in-error` for an item that is not
+ * in `error` (already dismissed elsewhere, or fixed), and `unknown-item` for one the bridge does not
+ * hold. Judged as a removal of that row is judged (an operator verb, on the item's channel).
+ */
+export const StackDismissErrorChannel = defineChannel(
+  'stack.dismiss-error',
+  z.object({ itemId: IdSchema }),
+  z.object({
+    accepted: z.boolean(),
+    errorCode: z.enum(['not-in-error', 'unknown-item']).optional(),
+  }),
 );
 
 /**
@@ -128,14 +229,384 @@ export const StackSetPositionChannel = defineChannel(
 );
 
 /**
- * R-010 — clear EVERYTHING in one operation: every stack item is OUTed and
- * REMOVEd (per-item CLEAR-destroys semantics, in sequence), clearing air and
- * emptying the list. The sanctioned path to unblock a server reconfiguration.
+ * R-048 / C-015 phase 6 (6.9) — **point ONE plate of ONE row at a different live
+ * source, WHILE the template is on air.**
+ *
+ * Modelled on `stack.set-position` deliberately: it is the same KIND of thing — a
+ * per-item operator override the bridge holds, which never writes back to the
+ * configuration it overrides. The differences are that this one names a PLATE as
+ * well as an item, and that it is usable while the graphic is on air, which is the
+ * entire point of it (`set-position` refuses `on-air` because moving a live graphic
+ * mid-shot is a different act from patching around a dead feed).
+ *
+ * `sourceId: null` CLEARS the override and puts the plate back on its template
+ * assignment. An emergency patch the operator cannot undo is its own trap.
+ *
+ * The reasons are open (`z.string()`) rather than an enum because two of them are
+ * refusals produced deeper in — the plate-resolution and aspect refusals a take
+ * uses (`live-source-unassigned`, `live-source-aspect-mismatch`) — and re-listing
+ * them here would be a second copy of a vocabulary that already has an owner. The
+ * `message` is what the operator reads; the reason is for logs and tests.
+ */
+export const StackSwapLiveSourceChannel = defineChannel(
+  'stack.swap-live-source',
+  z.object({
+    itemId: IdSchema,
+    /** The SCENE's handle for the hole (`guest-1`), never a catalog id. */
+    plateId: z.string().min(1),
+    /** A catalog entry's id, or `null` to revert to the template's assignment. */
+    sourceId: z.string().min(1).nullable(),
+    /**
+     * Session BM — **WHICH LOOK this binding is for. Absent means EVERY look.**
+     *
+     * 🔴 **The two meanings are different verbs wearing one channel, and the absent case is
+     * the older and more urgent of them.** Absent is `R-048`'s emergency substitution: an
+     * input is DEAD, and it is dead in every look, so the patch applies to all of them and
+     * outranks any per-look composition — a preset naming a dead feed must not come back on
+     * the next switch. Present is the deliberate composition the operator does while
+     * building a rundown: _"solo will show studio-3, 2-box keeps studio-1."_
+     *
+     * One channel rather than two because it is one question — which input does this frame
+     * show — asked at two scopes, and because a second verb would be a second path into the
+     * same reconcile. The bridge resolves both through one function
+     * (`live-look-bindings.ts`).
+     */
+    lookId: z.string().min(1).optional(),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.string().optional(),
+    message: z.string().optional(),
+  }),
+);
+
+/**
+ * `multibox-layout-switch` §14 (LOOKS) Stage E — **SWITCH ONE ROW TO ANOTHER LOOK.**
+ *
+ * The operator picks a look on the row and this is what that click sends. It drives the
+ * ONE shipped seam and adds nothing beside it: the bridge records the look, runs
+ * `reconcileLivePlates` to move the FILLS, then tells the page on the `CG UPDATE`
+ * payload so it moves the HOLES — both halves driven off the same look id, which is why
+ * they cannot disagree about which look is on air (`design.md` §6/§12.2).
+ *
+ * ⚠ **The switch is a CUT.** v1 parks every other transition mode (§14.4), so there is no
+ * mode to choose and none to escape from: the command the operator sends IS the immediate
+ * one. Taking the row OFF air remains the STOP/CLEAR verbs’ job, unchanged.
+ *
+ * `reason` is an OPEN string for `swapLiveSource`’s reason: the refusals compose from the
+ * item, the look, reachability and whatever AMCP says, and re-listing them here would be a
+ * second copy of a vocabulary that already has an owner. The `message` is what the operator
+ * reads; the reason is for logs, tests and the fallback wording.
+ */
+/**
+ * 🔴 `TIMING-WIRE-22` (c) — **SET ONE ROW'S PASS TIMING: how many more passes, and the gap
+ * between them.**
+ *
+ * A CONFIGURATION verb (golden rule 10), and the payload says so: it names an `itemId` and the
+ * values, and it carries no Take. It sends no `PLAY`, seats nothing and un-mutes nothing — it
+ * changes what the graphic already on the channel will do NEXT. Gated by `#ownsLiveSeats` like
+ * every other per-row configuration verb, so an off-air row records the intent and an on-air row
+ * also carries it to the page.
+ *
+ * 🔴 **`passes` IS REMAINING-FROM-NOW WHILE THE ROW IS ON AIR**, not a total, and the pass on
+ * screen is not one of them: `2` means that one finishes and two more play. `0` is a legal
+ * INSTRUCTION — "out after this pass" — which is why the floor is 0 here and 1 on the template's
+ * authored `repeat`. They are different quantities that share a name.
+ *
+ * ⚠ **A REFUSED SET RECORDS NOTHING**, exactly as `set-active-look` and `swap-live-source`
+ * settled it: an intent left behind by a failed send is not inert — it is what the next reconcile
+ * and the next take read, so a refusal would arm a later action to apply a count nobody agreed
+ * to. The console then keeps displaying what air is actually doing.
+ */
+export const StackSetPassTimingChannel = defineChannel(
+  'stack.set-pass-timing',
+  z.object({
+    itemId: IdSchema,
+    /**
+     * Passes REMAINING FROM NOW (`0` = out after the current pass) or forever. Absent means
+     * "this call says nothing about the count" — never "reset it".
+     */
+    passes: z.union([z.number().int().min(0), z.literal('infinite')]).optional(),
+    /** The gap BETWEEN passes in ms (`0` = no gap). Absent means "unchanged". */
+    delayMs: z.number().min(0).optional(),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.string().optional(),
+    message: z.string().optional(),
+  }),
+);
+
+export const StackSetActiveLookChannel = defineChannel(
+  'stack.set-active-look',
+  z.object({
+    itemId: IdSchema,
+    /** A look id the template AUTHORS. The bridge refuses `unknown-look` otherwise. */
+    lookId: z.string().min(1),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.string().optional(),
+    message: z.string().optional(),
+    /**
+     * 🔴 `LOOK-SWITCH-01` / `B-273` — the switch was refused because CasparCG refused a PLATE its
+     * look needs, and the bridge recorded it as the item's `takeRefusal` — `FIELD-FIXES-01`'s one
+     * line, which the row and its Inspector say, in that channel's view only. So no other surface
+     * repeats it: no banner. The same field, and the same rule, as `stack.take`'s. ABSENT for
+     * every refusal that names no plate (the look, the link, the page), which keeps its own
+     * surface.
+     */
+    refusalOnRow: z.literal(true).optional(),
+  }),
+);
+
+/**
+ * C-015 phase 6 (6.5f) — **RAISE (or mute) ONE PLATE's audio: the EXPLICIT
+ * RECORDED INTENT the mute rule defers to.**
+ *
+ * Every producer the bridge creates is created MUTED, and audio is raised only by
+ * an explicit intent NAMING THE LAYER. This is that intent, and it is the only
+ * thing that may raise a Live Source plate.
+ *
+ * ⚠ **`volume: 0` IS A REAL REQUEST — "mute this plate" — and is recorded like any
+ * other.** It is NOT the same as never having called this, which is what every
+ * plate starts as. The distinction is the whole reason the bridge stores a map
+ * rather than a set of raised plates: only one of the two states was CHOSEN, and a
+ * console that folds them together cannot tell the operator which.
+ *
+ * Bounded to `[0, 1]` at the boundary rather than at the wire: AMCP takes a
+ * gain, and a mistyped 100 would be a request to amplify a guest's microphone by
+ * forty decibels. A parse error here beats an AMCP the server accepts.
+ *
+ * It is usable on a row that is NOT on air — nothing is sent, the intent stands,
+ * and the next take carries it. That is what lets an operator ARM a plate's audio
+ * ahead of the take instead of chasing it afterwards.
+ */
+export const StackSetPlateVolumeChannel = defineChannel(
+  'stack.set-plate-volume',
+  z.object({
+    itemId: IdSchema,
+    /** The SCENE's handle for the hole (`guest-1`), never a catalog id. */
+    plateId: z.string().min(1),
+    /** `0` = silent, `1` = the layer's full gain. */
+    volume: z.number().min(0).max(1),
+  }),
+  z.object({ ok: z.boolean(), reason: z.string().optional() }),
+);
+
+/** `MEDIA-PLATES-01` — the operator's transport for a media plate on air. */
+export const MEDIA_PLATE_TRANSPORT_ACTIONS = ['play', 'pause', 'restart'] as const;
+export type MediaPlateTransportAction = (typeof MEDIA_PLATE_TRANSPORT_ACTIONS)[number];
+
+/** `MEDIA-PLATES-01` — why a transport press did nothing (nothing was sent). */
+export const MEDIA_PLATE_TRANSPORT_REFUSALS = [
+  'not-media',
+  'not-seated',
+  'not-on-air',
+  'amcp-error',
+] as const;
+
+/**
+ * 🔴 `MEDIA-PLATES-01` §1.D — **PLAY/PAUSE AND RESTART FOR ONE MEDIA PLATE OF AN ON-AIR ROW.**
+ * `play` resumes the clip (`RESUME`), `pause` holds its frame (`PAUSE`), `restart` plays it again
+ * from the beginning (`CALL <ch>-<L> SEEK 0`, then `RESUME` — 2.5.0 seeks an ended clip too).
+ * Operator class, channel-scoped by the row, behind the lock gate, audited. Refused with NOTHING
+ * sent for a plate whose source is not media, a plate that is not seated, or a row not on air.
+ */
+export const StackMediaPlateTransportChannel = defineChannel(
+  'stack.media-plate-transport',
+  z.object({
+    itemId: IdSchema,
+    /** The SCENE's handle for the hole (`guest-1`), never a catalog id. */
+    plateId: z.string().min(1),
+    action: z.enum(MEDIA_PLATE_TRANSPORT_ACTIONS),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.enum(MEDIA_PLATE_TRANSPORT_REFUSALS).optional(),
+    message: z.string().optional(),
+  }),
+);
+
+/**
+ * `add-multibox-audio` — **A MAP OF PLATE VOLUMES FOR ONE ROW, APPLIED AS ONE ACTION.**
+ *
+ * ── WHY A MAP VERB EXISTS BESIDE THE SINGLE-PLATE ONE ──────────────────────
+ *
+ * Two of the four operator gestures are **CROSS-PLATE STATEMENTS** rather than per-plate
+ * ones. SOLO says _"this plate and NONE of its siblings"_; PANIC says _"none of them"_.
+ * Sent as a sequence of single-plate calls those become several actions the caller has to
+ * keep in order, and a look switch landing between two of them leaves the row in a state
+ * neither the operator nor the ledger ever asked for — two plates audible after a SOLO,
+ * with nothing anywhere saying so. The bridge holds the item's live-seat lock for the whole
+ * map, which is the only way that window closes.
+ *
+ * 🔴 **IT IS NOT A SECOND WRITER.** The bridge applies each entry through the SAME
+ * `setLivePlateVolume` that this channel's single-plate sibling calls. A second spelling of
+ * _"what volume should this layer have"_ is the `B-100` / `P-012` failure this project has
+ * now paid for five times, and audio is the one property of a graphic an operator cannot
+ * see — so a divergence here would be invisible until air.
+ *
+ * ── ⚠ PER-PLATE OUTCOMES, NEVER ONE AVERAGED BOOLEAN ───────────────────────
+ *
+ * A SOLO across four plates can land three and be refused on the fourth (its layer's send
+ * failed, or the plate is not declared). One `ok: false` would say the action failed while
+ * three plates had in fact moved, and one `ok: true` would hide the plate that did not.
+ * `results` carries one verdict per plate so the console can say exactly which guest is not
+ * where the operator put them. `ok` is true only when EVERY entry landed.
+ *
+ * ⚠ **`volume: 0` IS A REAL REQUEST** — "mute this plate" — recorded like any other, and
+ * NOT the same as the key being absent from the map, which means "leave this plate alone".
+ * SOLO depends on that distinction: it names every sibling explicitly rather than relying on
+ * omission to mean silence.
+ *
+ * Bounded to `[0, 1]` **at the boundary**, exactly as the single-plate channel is and for
+ * the same reason: a mistyped `100` is a request to amplify a guest's microphone by forty
+ * decibels, and a parse error here beats an AMCP the server accepts. The bridge verb ALSO
+ * refuses a bad value per plate — that is defence in depth for its internal callers, not a
+ * relaxation of this bound.
+ */
+/**
+ * 🔴 **PANIC — SILENCE EVERY LIVE PLATE THE BRIDGE HOLDS A SEAT FOR.**
+ *
+ * The audio sibling of {@link StackClearAllChannel}, and it takes NO arguments on purpose:
+ * **the scope is not the caller's to choose.**
+ *
+ * ⭐ **`B-122`, one verb along.** PANIC's first cut resolved its scope in the BROWSER, from the
+ * console's on-air predicate — so a row in the boot-adoption window (`B-145`: plates seated and
+ * potentially audible, status not on air; the record first misnamed it the `exitRehearse`
+ * window — rehearse seats nothing, `B-216`) was never reached by the panic button, and a browser
+ * whose ledger snapshot had not yet ARRIVED would have addressed nothing and reported success
+ * for it. That is precisely the shape `B-122` describes: an emergency control gated on the
+ * bookkeeping whose failure is the emergency.
+ *
+ * The bridge answers it from its own LEDGER — every plate it seated, whatever any status says —
+ * which is a structural fact and cannot be wrong the way a status can.
+ *
+ * ⚠ **IT DOES NOT WEAKEN GOLDEN RULE 10.** Rule 10 stops a configuration verb putting content
+ * ON AIR: *"no `PLAY`, no un-mute and no fill"*. This lowers a volume on layers that already
+ * exist — it seats nothing, un-holds nothing, fills nothing, and cannot put a frame or a sample
+ * on air that was not already there.
+ *
+ * The report distinguishes what LANDED on the wire (`silenced`) from what was merely RECORDED
+ * (`recorded` — a HELD plate is already silent, so its intent is written and nothing is sent),
+ * and NAMES the rows it addressed, so no shape of no-op can come back as a success.
+ */
+export const StackSilenceAllLivePlatesChannel = defineChannel(
+  'stack.silence-all-live-plates',
+  z.void(),
+  z.object({
+    /** True only when something was owed AND all of it landed. */
+    ok: z.boolean(),
+    /** Plates whose `MIXER … VOLUME 0` actually reached the wire. */
+    silenced: z.number().int().nonnegative(),
+    /** Plates whose intent was set to `0`, including the HELD ones nothing was sent for. */
+    recorded: z.number().int().nonnegative(),
+    /** Which rows were addressed — under a ledger scope, possibly ones nobody predicted. */
+    rows: z.array(z.object({ itemId: IdSchema, plates: z.number().int().positive() })),
+    failed: z.array(z.object({ itemId: IdSchema, plateId: z.string().min(1), reason: z.string() })),
+  }),
+);
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 C — **PANIC FOR ONE CHANNEL: silence every live plate the bridge holds
+ * a seat for ON THAT CHANNEL.** A NEW verb beside {@link StackSilenceAllLivePlatesChannel}, never a
+ * parameter on it — `R-062`, verbatim: *"if the owner wants a per-channel silence it is a NEW verb
+ * beside PANIC, never a parameter on it."*
+ *
+ * The owner's decision (2026-09-23, A16's follow-up): when the operator presses PANIC, only the
+ * channel on screen goes silent; a separate, explicit control silences every channel. This is the
+ * first; `stack.silence-all-live-plates` — unchanged, unscoped, `z.void()` — is the second.
+ *
+ * Everything else is PANIC's own rule, inherited rather than restated: the scope is the LEDGER,
+ * and status is never asked (`B-122`); it only ever LOWERS a volume, so golden rule 10 is intact;
+ * a HELD plate's intent is recorded and nothing is sent for it. The one difference is the scope:
+ * the rows wholly on `channel`.
+ *
+ * `operator` class and CHANNEL-SCOPED like any other verb that names one: the station must
+ * declare the channel (the fence), the principal must hold it (`C-038`), and a lock covering it
+ * refuses the press (`B-257`).
+ */
+export const StackSilenceChannelLivePlatesChannel = defineChannel(
+  'stack.silence-channel-live-plates',
+  z.object({ channel: z.number().int().positive() }),
+  StackSilenceAllLivePlatesChannel.response,
+);
+
+export const StackSetPlateVolumesChannel = defineChannel(
+  'stack.set-plate-volumes',
+  z.object({
+    itemId: IdSchema,
+    /**
+     * `plateId → gain`. The SCENE's handles for the holes (`guest-1`), never catalog ids.
+     *
+     * A plate ABSENT from this map is left exactly as it was — the map is a set of
+     * statements, not a complete picture of the row.
+     */
+    volumes: z.record(z.string().min(1), z.number().min(0).max(1)),
+  }),
+  z.object({
+    /** True only when EVERY entry landed. A partial application is never `ok`. */
+    ok: z.boolean(),
+    results: z.array(
+      z.object({
+        plateId: z.string().min(1),
+        ok: z.boolean(),
+        reason: z.string().optional(),
+      }),
+    ),
+  }),
+);
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 B (`R-062` gap 1) — **THE FOUR HOUSEKEEPING VERBS TAKE AN OPTIONAL
+ * CHANNEL.** `stack.remove-all`, `stack.clear-all`, `stack.stop-all` and `stack.snapshot`.
+ *
+ *   - **BARE** (`undefined`) — every item the bridge knows about, exactly as before: a bare call
+ *     keeps its meaning byte for byte, and so does its wire output.
+ *   - **`{ channel }`** — the items on that channel and nothing else: every channel the item
+ *     touches (its template's slot, its seated plates) is that one. An item with no layer touches
+ *     none, so it is in every channel's scope, as it is in every channel's view.
+ *
+ * With a channel the request NAMES it, so the station fence, `C-038`'s all-or-nothing permission
+ * check and a covered-set lock all judge THAT channel alone. The console passes the channel on
+ * screen.
+ *
+ * ⚠ **NOT `stack.silence-all-live-plates`.** PANIC stays `z.void()`: its scope is not the caller's
+ * to choose (owner answer A16). The per-channel silence is a NEW verb beside it
+ * (`stack.silence-channel-live-plates`), never a parameter on it.
+ */
+export const HousekeepingScopeSchema = z
+  .object({ channel: z.number().int().positive() })
+  .optional();
+
+/**
+ * Clear EVERYTHING in one operation: every stack item is OUTed and REMOVEd (per-item
+ * CLEAR-destroys semantics, in sequence), clearing air and emptying the list.
+ *
+ * 🔴 `R-017` — REFUSED WHILE ANYTHING IS ON AIR, and this is no longer R-010's unblock
+ * path. `stack.clear-all` is: Apply gates on the on-air COUNT rather than on an empty
+ * list, so taking everything off air is the whole remedy and emptying the stack was
+ * always more than R-010 asked for. Naming this one there would have named a control
+ * disabled by exactly the condition being reported.
+ *
+ * ⚠ **A DIFFERENT SHAPE FROM `stack.remove`, DELIBERATELY.** That one answers
+ * `{ accepted, errorCode? }`; this one answers `{ ok, removed, errorCode? }` because its
+ * caller needs the COUNT. Two shapes, ONE refusal vocabulary — do not unify them as a
+ * side effect of adding the refusal, and do not add `removed: 0` semantics to the other.
+ *
+ * ⚠ **All-or-nothing.** A refusal removes NOTHING (`removed: 0`). Removing the idle rows
+ * and skipping the live ones would break the action's own name and leave the operator
+ * believing the stack is empty while a graphic is live.
  */
 export const StackRemoveAllChannel = defineChannel(
   'stack.remove-all',
-  z.void(),
-  z.object({ ok: z.boolean(), removed: z.number().int().nonnegative() }),
+  HousekeepingScopeSchema,
+  z.object({
+    ok: z.boolean(),
+    removed: z.number().int().nonnegative(),
+    errorCode: z.string().optional(),
+  }),
 );
 
 /**
@@ -146,23 +617,56 @@ export const StackRemoveAllChannel = defineChannel(
  * recovering means re-importing/reloading and re-typing every field. Clear-All leaves the
  * rows exactly where they were, idle and re-takeable.
  *
- * NO new AMCP verb. It iterates the items that are actually on air and issues the SAME
+ * NO new AMCP verb. It iterates the items that hold a layer of ours and issues the SAME
  * per-item `out()` the row's Clear button sends — a `CLEAR <ch>-<layer>` on the urgent
  * (air-safety) lane, with the same B-039 CLEAR-destroys bookkeeping, so a later take re-ADDs.
- * The predicate matches the row's Clear gating exactly: everything that is not `idle` or
- * `loaded`. Clear-All IS "press Clear on every row where Clear is enabled".
+ *
+ * ⭐ **B-122 — IT DOES NOT ASK THE STATUS, AND MUST NEVER BE MADE TO AGAIN.**
+ *
+ * It used to filter its candidates on `status` (everything not `idle`/`loaded`), which made
+ * the emergency control depend on **precisely the values that may be wrong in the emergency**.
+ * With every item wrongly reading `idle` it sent nothing and returned a SUCCESS with a cleared
+ * count of zero — an operator told the escape hatch worked while the graphic was still on air,
+ * which is worse than a disabled button, because a disabled button tells the truth.
+ *
+ * The owner's decision (2026-08-12) is therefore: **a clear is sent for EVERY item holding a
+ * bound slot, regardless of believed status — including rows the model believes are merely
+ * `loaded` and not yet on air.** Losing a cued row is the ACCEPTED COST. The only question
+ * this verb may ask about an item is the structural one — does it hold a layer of ours —
+ * never what it believes is on that layer. ⚠ Do not reintroduce a status predicate here under
+ * another name.
+ *
+ * **THE REPORT COUNTS WHAT ACTUALLY WENT.** `attempted` is how many clears were sent,
+ * `cleared` how many CasparCG accepted, and `refused` names the items deliberately not
+ * addressed. `ok` is true only when something was owed AND all of it landed, so a no-op can
+ * never come back dressed as a success.
+ *
+ * **`refused` — C-015 phase 5's third ownership class.** A bound slot that is in the bridge's
+ * Live Source ledger is NOT cleared: broadening this verb must not let it reach a layer that
+ * was just fenced off, and cutting a guest's face off air from a button that never named it
+ * is exactly that hazard. The reason comes from {@link LAYER_CLEAR_REASONS}, the one canonical
+ * list, so a reason added later cannot be silently missed here.
  *
  * **BROADCAST SAFETY — per-LAYER, never per-channel.** It clears only the layers this app
- * itself allocated, one `CLEAR <ch>-<layer>` per on-air item. It MUST NEVER emit a
- * channel-level `CLEAR <channel>`: that wipes the entire channel, including the
- * program/background signal this app does not manage and must never touch. Taking our
- * graphics off air has to leave the program feed ON AIR. An item holding no slot holds no
- * layer of ours, so nothing is sent for it.
+ * itself allocated, one `CLEAR <ch>-<layer>` per item. It MUST NEVER emit a channel-level
+ * `CLEAR <channel>`: that wipes the entire channel, including the program/background signal
+ * this app does not manage and must never touch. Taking our graphics off air has to leave the
+ * program feed ON AIR. An item holding no slot holds no layer of ours, so nothing is sent for
+ * it — that is a statement about OWNERSHIP, not about status, and it is the one filter that
+ * belongs here.
  */
 export const StackClearAllChannel = defineChannel(
   'stack.clear-all',
-  z.void(),
-  z.object({ ok: z.boolean(), cleared: z.number().int().nonnegative() }),
+  HousekeepingScopeSchema,
+  z.object({
+    ok: z.boolean(),
+    /** Clears CasparCG ACCEPTED — what actually went. Never a candidate count. */
+    cleared: z.number().int().nonnegative(),
+    /** Clears SENT (`cleared` + those the server rejected). */
+    attempted: z.number().int().nonnegative(),
+    /** Bound-slot items deliberately not addressed, and why. */
+    refused: z.array(z.object({ itemId: IdSchema, reason: z.enum(LAYER_CLEAR_REASONS) })),
+  }),
 );
 
 /**
@@ -182,37 +686,226 @@ export const StackClearAllChannel = defineChannel(
  */
 export const StackStopAllChannel = defineChannel(
   'stack.stop-all',
-  z.void(),
+  HousekeepingScopeSchema,
   z.object({ ok: z.boolean(), stopped: z.number().int().nonnegative() }),
 );
 
 export const StackSnapshotChannel = defineChannel(
   'stack.snapshot',
-  z.void(),
+  HousekeepingScopeSchema,
   z.array(StackItemStateSchema),
 );
 
 /**
- * B-092 — re-deliver the browser's RETAINED stack intent to the bridge, so the
- * stack survives a restart of the bridge process (it otherwise lives only in
- * the bridge's in-memory Reconciler). Issued on every (re)connect, right after
- * the retained templates and BEFORE the snapshot re-pull, so the snapshot the
- * SPA adopts is the RESTORED stack instead of a fresh bridge's empty one.
+ * B-108 — WHY an intent was declined. The three reasons are not interchangeable,
+ * and the split that matters is BENIGN vs LOST:
  *
- * The bridge REBUILDS state from these intents and publishes immediately, but
- * sends NOTHING to CasparCG at that moment: the adopt-vs-re-ADD decision waits
- * until real OSC occupancy is knowable, so a restore can never CLEAR a live
- * layer. `skipped` counts intents the bridge declined (an item it already
- * holds, an unregistered template, no free layer) — a partial restore is
- * normal, never an error.
+ *   `already-held`     — the live bridge already has this item (a page reload
+ *                        against a healthy bridge). Nothing is lost, the row is
+ *                        still there, and surfacing it would be a false alarm.
+ *   `unknown-template` — the bridge restores its own library before its stack
+ *                        (`CENTRAL-BRIDGE-01`), so this means the template is
+ *                        genuinely gone. The row is LOST.
+ *   `no-layer`         — the range is exhausted. The row is LOST.
+ *   `fixed-slot-taken` — R-021 stage 4. The row's retained coordinate is a
+ *                        DECLARED operator row that another restored item had
+ *                        already bound. The row is LOST, and it is deliberately
+ *                        NOT `no-layer`: nothing is exhausted and freeing a
+ *                        dynamic layer would not help, so the two need opposite
+ *                        instructions. A declared row may never be re-homed onto
+ *                        a dynamic layer (that is the whole of R-021), so the
+ *                        only honest outcome is to say so and skip.
  */
-export const StackRestoreChannel = defineChannel(
-  'stack.restore',
-  z.object({ items: z.array(RetainedStackItemSchema) }),
+export const RestoreSkipReasonSchema = z.enum([
+  'already-held',
+  'unknown-template',
+  'no-layer',
+  'fixed-slot-taken',
+  /**
+   * `multibox-layout-switch` §12.6 — exactly ONE multi-box template may be on air per
+   * channel, and this restore would have made a second.
+   *
+   * Restore is the door with no other cover: it never passes through `take()` and adopts
+   * every retained on-air item with no cap, so without a refusal here a reconnect
+   * re-seats the very pair a take refuses — silently, on a link that just came back.
+   */
+  'multibox-already-on-air',
+  /**
+   * `multibox-layout-switch` §14.5 — the template’s look group authors NO looks, so no
+   * plate has geometry and the row would come back as the background alone behind holes
+   * that never fill.
+   *
+   * 🔴 **HERE AS WELL AS AT THE TAKE, because a restore is the door with no other cover.**
+   * The take refuses this, so the obvious reading is that a zero-look row can never BE
+   * retained on air — but the template can CHANGE underneath a retained row: the operator
+   * takes a template that has looks, re-imports it with the group emptied, and a reconnect
+   * then restores an on-air row against the new, broken definition. One predicate, two
+   * sites — the same rule `multibox-already-on-air` above is here for.
+   */
+  'looks-none-authored',
+  /**
+   * `single-clock-look-switch` — the retained row is a graphics BED whose old operator-row
+   * coordinate is no longer a legal home for it, and **every bed row is already taken**, so
+   * there was nowhere to migrate it to.
+   *
+   * Distinct from `no-layer` because the remedies are opposite: nothing is exhausted in the
+   * dynamic sense and freeing a dynamic layer would not help — the operator has to clear a
+   * bed row. Distinct from `fixed-slot-taken` because that names ONE row the operator can go
+   * and look at, while this one says the whole low group is full.
+   */
+  'no-bed-row',
+  /**
+   * 🔴 `LAYER-BANDS-16` — the retained coordinate is NOT a declared row, and there is no
+   * longer any dynamic layer to fall back to.
+   *
+   * The 2026-09-14 re-cut retired the type-keyed dynamic ranges: every one of them lay in
+   * 1-49, the span now left to the playout server, so re-homing this row would have meant
+   * putting a graphic on somebody else's output. The row therefore does not come back, and
+   * the remedy is for the operator to DECLARE a row for it and load it there.
+   *
+   * ⚠ **Deliberately NOT `no-layer`, and the distinction is the whole reason this exists.**
+   * `no-layer` says the range is exhausted and tells the operator to free something up —
+   * which would now be a lie twice over: nothing is exhausted, and freeing a row would not
+   * help, because the coordinate this row remembers is not a row at all. The owner's
+   * condition on retiring dynamic allocation was that this skip be VISIBLE and say what to
+   * do; a reason that sent the operator to clear an unrelated row would satisfy the letter
+   * of that and none of the point.
+   */
+  'not-declared',
+]);
+export type RestoreSkipReason = z.infer<typeof RestoreSkipReasonSchema>;
+
+/**
+ * 🔴 `single-clock-look-switch` — **ONE ROW THAT CAME BACK SOMEWHERE ELSE.**
+ *
+ * A retained graphics bed held against an operator row (a retention file written before the
+ * bed bank existed) is re-homed onto a bed row rather than restored where it would render its
+ * background OVER its own plates. That is a change the operator did not ask for and cannot
+ * see the reason for, so it is REPORTED — `B-108`'s rule that every skip carries its reason,
+ * applied to a move, which is a skip's near relative.
+ *
+ * It is a SEPARATE list from `skipped` and not a new skip reason: the row DID come back, and
+ * putting it in a list the surface introduces with "did not come back" would be a plainer lie
+ * than saying nothing.
+ */
+export const RestoreMigrationSchema = z.object({
+  itemId: IdSchema,
+  /** The retained coordinate — where the operator last saw the row. */
+  from: z.object({ channel: z.number().int().positive(), layer: z.number().int().nonnegative() }),
+  /** The bed row it came back on. */
+  to: z.object({ channel: z.number().int().positive(), layer: z.number().int().nonnegative() }),
+  /**
+   * True when the row's retained state claimed AIR and the migration could not carry that
+   * claim across (it always can, today — see `#migrateRetainedBed`). The operator needs this
+   * because it is the half that changes what they must DO: a demoted row is present and idle,
+   * and whatever was on the old row before the upgrade may still be on air there.
+   */
+  demoted: z.boolean(),
+});
+export type RestoreMigration = z.infer<typeof RestoreMigrationSchema>;
+
+export const RestoreSkipSchema = z.object({
+  itemId: IdSchema,
+  reason: RestoreSkipReasonSchema,
+  /**
+   * The refusal's OWN sentence, when it has one a fixed code cannot carry.
+   *
+   * The same shape, and the same rule, as `stack.take`'s `message`: OPTIONAL and ADDITIVE,
+   * every existing skip keeps answering with its code alone, and when both are present the
+   * detail WINS because it is the more specific of the two. `multibox-already-on-air` needs
+   * it — the code says a rule was broken, and only a sentence can say WHICH template is
+   * already on air, which is the half that makes the refusal actionable.
+   */
+  detail: z.string().optional(),
+  /**
+   * 🔴 `B-233` — **WHAT THE OPERATOR CALLS THE ROW THAT DID NOT COME BACK.**
+   *
+   * The strip said `item-e602d912-… — its template is no longer registered`. Golden rule 11
+   * forbids that: an operator-facing sentence names things in the operator's words, and the
+   * two words he uses for this row are its NAME («لوگوی اصلی») and its template's.
+   *
+   * ── WHY THE WIRE HAD TO WIDEN, WHICH WAS NOT OBVIOUS ────────────────────────
+   *
+   * The sibling `RestoreMigration` needed no such change: a MIGRATED row came back, so it is
+   * on the stack and `LayersPanel` joins its `itemId` against `items` to reach a
+   * `templateId`. A SKIPPED row did not come back — it is by definition absent from the
+   * stack, absent from the snapshot, and absent from every map the renderer holds. There is
+   * nothing on that side to join against, so the naming has to travel with the report or
+   * not exist.
+   *
+   * ⭐ The producer pays nothing for it. `CasparRuntime.restore()` has the whole
+   * `RetainedStackItem` in scope at every one of its five skip sites, and that item already
+   * carries both fields — this is the bridge forwarding what it is holding, not computing
+   * anything new.
+   *
+   * ⚠ **OPTIONAL and ADDITIVE, exactly like `detail` above.** A bridge that predates this
+   * still validates, and its skips still render: `operatorRowName` falls back to a shortened
+   * id, which is the documented last resort rather than a blank. Nothing about `reason` or
+   * `detail` moves.
+   */
+  templateId: IdSchema.optional(),
+  /**
+   * The coordinate the row was RETAINED on — where the operator last saw it, which is the
+   * row he will go and look at. `LayerSlotSchema` and not a bare number: `placeName` needs
+   * the channel to tell a bank row from a layer that is not a row at all.
+   */
+  slot: LayerSlotSchema.optional(),
+});
+export type RestoreSkip = z.infer<typeof RestoreSkipSchema>;
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **WHAT THE BRIDGE'S OWN RESTORE DID NOT BRING BACK AS IT WAS.**
+ *
+ * There is no `stack.restore` any more. One bridge serves every console, so the stack is the
+ * bridge's: it persists it and restores it itself at start, before any console connects, and no
+ * console re-delivers a stack or a template (`B-092`'s re-delivery was a fight once two consoles
+ * held two copies). What survives of that call is its REPORT, and the report is now standing
+ * bridge state like the restart notice (`air.emptied`): held by the bridge, pulled on connect,
+ * pushed on change, dismissed for every console at once.
+ *
+ * ⭐ **`B-108` — every row that did not come back is NAMED, with its reason** (`skipped`, a list,
+ * never a count), and every row that came back on a different row is reported apart
+ * (`migrated`) — the surface introduces the first with "did not come back" and the second must
+ * not be read that way. `null` when there is nothing to say: no restore, a clean one, or both
+ * halves dismissed.
+ */
+export const StackRestoreReportSchema = z.object({
+  /** When the bridge restored its stack (ISO) — its start. */
+  at: z.string().datetime(),
+  skipped: z.array(RestoreSkipSchema),
+  migrated: z.array(RestoreMigrationSchema),
+});
+export type StackRestoreReport = z.infer<typeof StackRestoreReportSchema>;
+
+/** Pull the standing report (initial state on client connect). */
+export const StackRestoreReportChannel = defineChannel(
+  'stack.restore-report',
+  z.void(),
+  StackRestoreReportSchema.nullable(),
+);
+
+/** Pushed when the report is raised (a restore at start) or narrowed by a dismissal. */
+export const StackRestoreReportChangedChannel = definePublishChannel(
+  'stack.restore-report-changed',
+  StackRestoreReportSchema.nullable(),
+);
+
+/**
+ * Dismiss one half of the report. Bridge-side for the reason `air.dismiss-emptied` is: two
+ * operators on two consoles must not disagree about whether the station is still reporting it.
+ * The two halves are dismissed apart, as the console shows them apart. Changes nothing on air.
+ *
+ * With a `channel`, only that channel's rows go (a skip by its retained slot, a migration by the
+ * row it came from) — the console shows one channel's rows, and an operator on channel 1 must not
+ * clear what channel 2's operator has not read. Rows naming no channel go with any dismissal.
+ */
+export const StackRestoreReportDismissChannel = defineChannel(
+  'stack.dismiss-restore-report',
   z.object({
-    restored: z.number().int().nonnegative(),
-    skipped: z.number().int().nonnegative(),
+    part: z.enum(['skipped', 'migrated']),
+    channel: z.number().int().positive().optional(),
   }),
+  z.object({ ok: z.boolean() }),
 );
 
 /**

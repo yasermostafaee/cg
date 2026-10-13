@@ -33,6 +33,14 @@ describe('dateEn', () => {
   it('throws on invalid input', () => {
     expect(() => dateEn('not-a-date')).toThrow();
   });
+  it('reads a date typed in any digit set as the same date (TEXT-DIGITS-01)', () => {
+    // Noon LOCAL (no offset), so the day holds in every timezone.
+    expect(dateEn('۲۰۲۶-۰۵-۱۹T۱۲:۰۰')).toBe('2026-05-19');
+    expect(dateEn('٢٠٢٦-٠٥-١٩T١٢:٠٠')).toBe('2026-05-19');
+    expect(dateEn('2026-05-19T12:00')).toBe('2026-05-19'); // the control
+    // A Persian non-date still throws: reading digits is not guessing at text.
+    expect(() => dateEn('۱۲ مرداد')).toThrow();
+  });
 });
 
 describe('dateFa', () => {
@@ -41,5 +49,8 @@ describe('dateFa', () => {
   });
   it('zero-pads single-digit Jalali month/day', () => {
     expect(dateFa(new Date(2024, 2, 20))).toBe('۱۴۰۳/۰۱/۰۱'); // Nowruz
+  });
+  it('reads a Persian-digit date instead of throwing (TEXT-DIGITS-01)', () => {
+    expect(dateFa('۲۰۲۶-۰۵-۱۹T۱۲:۰۰')).toBe('۱۴۰۵/۰۲/۲۹');
   });
 });

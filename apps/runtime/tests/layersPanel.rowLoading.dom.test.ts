@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { StrictMode, createElement } from 'react';
+import { fillBridgeStub } from './support/authStub.js';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -58,7 +59,13 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-const BANK: FixedLayerBank = { channel: 1, start: 70, count: 2, visible: [70, 71], aliases: {} };
+const BANK: FixedLayerBank = {
+  channel: 1,
+  low: { start: 50, count: 9 },
+  start: 70,
+  count: 2,
+  aliases: {},
+};
 
 /** Layer 70 is BOUND to an item; layer 71 genuinely carries nothing. */
 const SLOTS: FixedSlotState[] = [
@@ -109,7 +116,12 @@ function stubBridge(): {
   const stack = deferred<StackItemState[]>();
   const stackListeners = new Set<(items: StackItemState[]) => void>();
   const stub = {
-    link: { status: () => 'live', onStatusChanged: () => () => undefined },
+    link: {
+      status: () => 'live',
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub('both-up'),
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
     fixedLayers: {
@@ -124,6 +136,12 @@ function stubBridge(): {
       clear: () => Promise.resolve({ ok: true }),
       onStateChanged: () => () => undefined,
     },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+      // `B-247` — the release reason. Never fired here; the subscription must exist.
+      onPlateReleased: () => () => undefined,
+    },
     stack: {
       snapshot: () => stack.promise,
       onStateChanged: (h: (items: StackItemState[]) => void) => {
@@ -136,9 +154,13 @@ function stubBridge(): {
       update: () => Promise.resolve({ accepted: true }),
       out: () => Promise.resolve({ accepted: true }),
       remove: () => Promise.resolve({ accepted: true }),
+      // B-108 — the restore-skip report. A healthy session reports NOTHING,
+      // which is what this panel renders for every spec not about that surface.
+      onRestoreSkips: () => () => undefined,
+      onRestoreMigrations: () => () => undefined,
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   return {
     stack,
     push: (items) => {
@@ -164,10 +186,14 @@ async function renderPanel(): Promise<HTMLDivElement> {
             inspectorPx: 320,
             focus: 'none' as const,
             narrow: false,
+            monitorPx: 220,
             setInspectorPx: () => undefined,
+            setMonitorPx: () => undefined,
             setFocus: () => undefined,
             reset: () => undefined,
             customized: false,
+            monitorsShown: true,
+            setMonitorsShown: () => undefined,
           },
           inspectorOpen: false,
           onToggleInspector: () => undefined,

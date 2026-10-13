@@ -39,7 +39,8 @@ test('the picker seeds from the manifest default, applies one override, and lock
     };
   });
   await picker.getByRole('button', { name: 'Anchor top-left' }).click();
-  await picker.getByRole('button', { name: 'Apply position' }).click();
+  // `INSPECTOR-DELTA` — the commit is the row's ONE Update now (owner, 2026-09-14).
+  await app.applyEdits();
   await expect
     .poll(() =>
       page.evaluate(
@@ -58,7 +59,14 @@ test('the picker seeds from the manifest default, applies one override, and lock
   const row = app.stackRow(templateId).last();
   await row.getByRole('button', { name: 'PLAY' }).click();
   await expect(row.getByText('ON AIR')).toBeVisible({ timeout: 3000 });
-  await expect(picker.getByRole('button', { name: 'Apply position' })).toBeDisabled();
+  /*
+    The lock's observable moved with the commit: `Apply position` is gone, so what must be
+    refused is the section's own CONTROLS. Asserting the boxes is not weaker — it is the half
+    that actually refuses a drag (`position-lock-refuses-drag.spec.ts`), and UPDATE stays
+    enabled on purpose because it still has the row's TEXT to send.
+  */
+  await expect(picker.getByLabel('Position offset X')).toBeDisabled();
+  await expect(picker.getByLabel('Position offset Y')).toBeDisabled();
   await expect(picker.getByText('locked while on air')).toBeVisible();
 
   // OUT settles the item off air → editable again.
@@ -76,7 +84,7 @@ test('the picker seeds from the manifest default, applies one override, and lock
   // false precision). The difference between them still exists and is carried in the
   // state cell's tooltip, which is what stops a slow take reading as a bug.
   await expect(row.getByText('READY')).toBeVisible({ timeout: 3000 });
-  await expect(picker.getByRole('button', { name: 'Apply position' })).toBeEnabled();
+  await expect(picker.getByLabel('Position offset X')).toBeEnabled();
 });
 
 /**
@@ -129,7 +137,8 @@ test('B-072: an applied override survives deselect → reselect, and re-Apply do
   await picker.getByRole('button', { name: 'Anchor top-left' }).click();
   await picker.getByLabel('Position offset X').fill('42');
   await picker.getByLabel('Position offset Y').fill('7');
-  await picker.getByRole('button', { name: 'Apply position' }).click();
+  // `INSPECTOR-DELTA` — the commit is the row's ONE Update now (owner, 2026-09-14).
+  await app.applyEdits();
 
   // DESELECT (switch to item B) — B has no override, so it still shows the
   // template's manifest default. This is the per-item proof.
@@ -150,9 +159,20 @@ test('B-072: an applied override survives deselect → reselect, and re-Apply do
   await expect(picker.getByLabel('Position offset X')).toHaveValue('42');
   await expect(picker.getByLabel('Position offset Y')).toHaveValue('7');
 
-  // BLAST-RADIUS GUARD: re-Apply without editing anything must send the
-  // OVERRIDE, never the manifest default — this used to silently revert a
-  // correct on-air position.
+  /*
+    🔴 BLAST-RADIUS GUARD — the claim got STRONGER when the commit moved, and the guard is
+    re-pointed rather than relaxed.
+
+    It read: re-Apply without editing must send the OVERRIDE, never the manifest default —
+    `B-072` was a re-press silently reverting a correct on-air position. With the placement
+    folded into the row's one UPDATE (owner, 2026-09-14), a press with NOTHING STAGED sends
+    no `stack.setPosition` at all, so there is no value for it to revert TO. "Never the
+    default" is now guaranteed by there being no send.
+
+    ⚠ Both halves are asserted below — the untouched press sends nothing, AND the boxes still
+    read the override afterwards. The first alone would pass against a position path that had
+    stopped working entirely.
+  */
   await page.evaluate(() => {
     const w = window as unknown as {
       __setPositionCalls: unknown[];
@@ -165,7 +185,26 @@ test('B-072: an applied override survives deselect → reselect, and re-Apply do
       return orig(req);
     };
   });
-  await picker.getByRole('button', { name: 'Apply position' }).click();
+  // `INSPECTOR-DELTA` — the commit is the row's ONE Update now (owner, 2026-09-14).
+  await app.applyEdits();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { __setPositionCalls: unknown[] }).__setPositionCalls,
+      ),
+    )
+    .toEqual([]);
+  // …and the override is still what the boxes hold — nothing reverted it.
+  await expect(picker.getByLabel('Position offset X')).toHaveValue('42');
+  await expect(picker.getByLabel('Position offset Y')).toHaveValue('7');
+
+  /*
+    THE POSITIVE CONTROL: a REAL edit still reaches the wire from that same press. Without
+    it, the empty array above would pass against a position path that had stopped sending
+    altogether — which is a far worse defect than the one this guard was written for.
+  */
+  await picker.getByRole('button', { name: 'Anchor bottom-right' }).click();
+  await app.applyEdits();
   await expect
     .poll(() =>
       page.evaluate(
@@ -175,7 +214,7 @@ test('B-072: an applied override survives deselect → reselect, and re-Apply do
     .toEqual([
       {
         itemId: expect.any(String) as unknown,
-        position: { anchor: 'top-left', offset: { x: 42, y: 7 } },
+        position: { anchor: 'bottom-right', offset: { x: 42, y: 7 } },
       },
     ]);
 });

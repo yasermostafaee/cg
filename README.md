@@ -55,13 +55,32 @@ pnpm build     # build all @cg/* workspace packages so the apps can import them
 Run an app — each is a Vite dev server in the browser:
 
 ```bash
-pnpm --filter @cg/designer dev   # visual editor  → http://127.0.0.1:4000
-pnpm --filter @cg/runtime  dev   # playout controller → http://127.0.0.1:5174
+pnpm --filter @cg/designer dev   # visual editor  → http://<this machine>:4000
+pnpm --filter @cg/runtime  dev   # playout controller → http://<this machine>:5174
 ```
+
+Both dev servers listen on **every interface by default** (P-041), so a second machine on
+the plant network can open them at this machine's LAN address — Vite prints each
+`Network:` URL at start. Set `HOST=127.0.0.1` to restrict a dev server back to loopback.
+`vite preview` and the built app are unaffected and stay loopback unless `HOST` says
+otherwise.
 
 > The Designer's persistent "open a real folder" mode uses the File System
 > Access API (Chromium: Chrome/Edge/Brave). Other browsers fall back to OPFS
 > (sandboxed real files). See the storage ADR for details.
+
+The Designer's dev server runs beside an installed CG Designer: the installed one opens no port and
+keeps its storage under its own origin (`http://tauri.localhost`). Open the dev one at
+`http://127.0.0.1:4000` — a LAN address is not a secure context, so its folder store would be
+session-only there.
+
+### Checking a change in the browser
+
+`pnpm dev:station` builds, then runs the current source as CG Control does — same ports, its own state in `%LOCALAPPDATA%\CG Control Dev`, the bridge's output kept in `bridge.log` there.
+The console opens at **http://127.0.0.1:5174** (`--playout <url>` changes the Playout).
+`--fake` runs a whole station on loopback — a fake Playout, CasparCG's stand-in serving channels 1 and 2, and their programme feeds — fresh every run, the last one kept as `fake.previous`.
+`--fake --pair` adds a backup engine beside it — a second fake Playout with its own password and its own CasparCG stand-in on 5251, the bridge's server B — and prints both passwords; its state is `fake-pair`.
+Close CG Control first — the launcher offers to, and asks before it does.
 
 ### The CasparCG bridge
 
@@ -73,8 +92,11 @@ pnpm build                                    # REQUIRED after any source change
 node tools/caspar-bridge/bin/caspar-bridge.mjs
 ```
 
-Then start the Runtime SPA (`pnpm --filter @cg/runtime dev`); it connects to
-`ws://127.0.0.1:5280` on its own.
+Then start the Runtime SPA (`pnpm --filter @cg/runtime dev`); it connects to the bridge
+on its own at **the host the page was served from**, port `5280` — `ws://127.0.0.1:5280`
+when you open it locally, `ws://<this machine>:5280` when a second machine opens it
+(P-041). For that second case the bridge must also be told to listen on the LAN
+(`--host 0.0.0.0`; it binds loopback by default and that default is deliberate).
 
 **It runs from `dist/`, not from `src/`.** The launcher imports the compiled
 `tools/caspar-bridge/dist/index.js`, so editing a `.ts` file and restarting runs
@@ -87,18 +109,42 @@ bank in force and where that bank came from**:
 
 ```
 [caspar-bridge] WS listening on ws://127.0.0.1:5280 → CasparCG via @cg/caspar-client
-[caspar-bridge] candidate layers: channel 1, layers 70-99 (30 declared, 5 shown) - from built-in default (no file at C:\Users\you\.cg-runtime\bridge-fixed-layers.json)
+[caspar-bridge] candidate layers: channel 1, layers 80-99 (20 declared, 5 shown) - from built-in default (no file at C:\Users\you\.cg-runtime\bridge-fixed-layers.json)
 ```
 
 #### What a new machine needs
 
 **For the candidate layers, nothing.** A machine with no config comes up on
-channel 1, layers 70–99, thirty rows declared with the top five (99, 98, 97, 96, 95) shown. `~/.cg-runtime/bridge-fixed-layers.json` records a _deviation_ from
+channel 1, layers 80–99, twenty rows declared with the top five (99, 98, 97, 96, 95) shown. `~/.cg-runtime/bridge-fixed-layers.json` records a _deviation_ from
 that default — it does not supply it, and a machine that never deviates never
 needs the file. **A machine that already has one keeps whatever it says**, which
 is the one thing to check when standing up a machine that has been used before:
 read the `candidate layers:` line above, and if the bank is not the one you want,
-delete the file and restart. Nothing overwrites it for you.
+move the file aside and restart. Nothing overwrites it for you.
+
+##### The layer map, and why 1–49 is left alone
+
+The channel is cut into three bands by ROLE, and the order is a requirement
+rather than a convention — a higher CasparCG layer renders **above** a lower
+one, and a graphics bed is composited **under** the live plates it declares:
+
+| Layers    | Role                                                                         |
+| --------- | ---------------------------------------------------------------------------- |
+| **1–49**  | **FREE — not ours.** The playout server's, and anything else on the channel. |
+| **50–59** | Graphics beds — the multi-box frame itself                                   |
+| **60–79** | Live plates — the frame's inputs / live sources                              |
+| **80–99** | Templates — the operator's candidate layer bank                              |
+
+🔴 **Nothing this product allocates goes below layer 50.** The beds used to sit
+at 1–9, which is exactly where a playout server is likely to be working: a
+graphic of ours landing on a playout layer is indistinguishable from theirs on
+the wire (OSC reports producer _kind_, not identity), so the collision is found
+on air or not at all. 1–49 is not spare capacity — it is someone else's.
+
+**A fixed-layers file written under the old map is REFUSED at boot**, by name,
+saying both maps and what to do: move the file aside (rename it — do not delete
+it), let the built-in default apply, and re-enter the aliases and ticks against
+the new rows. The two maps are never mixed.
 
 **Nothing else, either, if CasparCG is on the same box** — the built-in
 connection is a single server at `127.0.0.1:5250` (AMCP) / `6250` (OSC). If it

@@ -1,0 +1,17 @@
+{
+  // The TYPECHECK view of this package: src + tests + the vitest config, no emit.
+  // It exists as a second config because tsconfig.json is the BUILD config
+  // (`tsc -b`, rootDir ./src) and cannot include tests/ — see the note there.
+  // Same shape as apps/runtime's tests-included typecheck (session BR), at the
+  // only seam a tsc-built package allows.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src/**/*", "tests/**/*", "vitest.config.ts"],
+  "exclude": ["dist", "node_modules"]
+}

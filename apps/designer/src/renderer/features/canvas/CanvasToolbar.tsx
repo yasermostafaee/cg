@@ -4,6 +4,7 @@ import {
   Circle,
   Clock,
   Hand,
+  LayoutGrid,
   MousePointer2,
   MoveHorizontal,
   PenTool,
@@ -14,7 +15,8 @@ import {
   Video,
   type LucideIcon,
 } from 'lucide-react';
-import { designerStore, type DesignerTool } from '../../state/store.js';
+import { designerStore, useDesignerSelector, type DesignerTool } from '../../state/store.js';
+import { projectLookGroup } from '../../state/slices/looks.js';
 import { cx } from '../../cx.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
@@ -73,6 +75,9 @@ const TOOLS: readonly ToolEntry[] = [
  */
 export function CanvasToolbar({ tool }: Props): JSX.Element {
   const [hovered, setHovered] = useState<DesignerTool | null>(null);
+  // A primitive, so the useSyncExternalStore selector never returns a fresh object
+  // (the C2 infinite-re-render lesson).
+  const hasGroup = useDesignerSelector((st) => projectLookGroup(st.scene) !== undefined);
   return (
     <div className={s.group} role="toolbar" aria-label="Canvas tools">
       {TOOLS.map((t) => {
@@ -97,6 +102,23 @@ export function CanvasToolbar({ tool }: Props): JSX.Element {
           </Control>
         );
       })}
+      {/* LOOKS phase 2 (§14) — a DIRECT ACTION, not a placement tool: a multi-frame
+          group is a property of the composition, so there is nothing to click onto the
+          canvas. Disabled once the template has its group — v1 is ONE per template. */}
+      <Control
+        variant="bare"
+        className={s.button}
+        onClick={() => designerStore.createLookGroup()}
+        disabled={hasGroup}
+        title={
+          hasGroup
+            ? 'This template already has its multi-frame group (v1: exactly one)'
+            : 'Add a multi-frame group — looks authored as sub-scenes, sources declared once'
+        }
+        aria-label="Add multi-frame group"
+      >
+        <Icon icon={LayoutGrid} size={18} />
+      </Control>
     </div>
   );
 }

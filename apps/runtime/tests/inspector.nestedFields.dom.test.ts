@@ -12,6 +12,7 @@ import {
   valueAt,
 } from '../src/renderer/features/inspector/draftStore.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * B-067 — the operator-visible half. A D-119 starter's fields live in a NESTED
@@ -34,8 +35,8 @@ const NESTED_TEMPLATE: TemplateInfo = {
       compositionId: 'comp-title-card',
       aggregate: {
         fields: [
-          { id: 'name', type: 'text', label: 'Name', default: 'نام' },
-          { id: 'role', type: 'text', label: 'Role', default: 'سمت' },
+          { id: 'name', type: 'text', label: 'Name', required: false, default: 'نام' },
+          { id: 'role', type: 'text', label: 'Role', required: false, default: 'سمت' },
         ],
         groups: [],
       },
@@ -70,15 +71,28 @@ async function render(info: TemplateInfo): Promise<HTMLDivElement> {
   const stub = {
     // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
     // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
-    link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+    link: {
+      status: () => linkFor('both-up'),
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub('both-up'),
     templates: {
       get: vi.fn(() => Promise.resolve(info)),
       list: vi.fn(() => Promise.resolve([info])),
+      onChanged: () => () => undefined,
+    },
+    // Phase 6 — the Inspector names the ROW (`useOperatorNames`), so it reads the bank too.
+    fixedLayers: {
+      config: () => Promise.resolve(null),
+      onConfigChanged: () => () => undefined,
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
     },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 
   container = document.createElement('div');
   document.body.appendChild(container);

@@ -3,12 +3,25 @@ import {
   CompositionFieldGroupSchema,
   DynamicFieldSchema,
   IdSchema,
+  LiveSourceArrangementSchema,
+  LiveFitModeSchema,
   LiveSourceDeclarationSchema,
+  LiveSourceRectSchema,
+  LookTransitionSchema,
   PositionSchema,
   ResolutionSchema,
 } from '@cg/shared-schema';
+import type { LiveFitMode, LiveSourceRect } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
+import {
+  bankInSet,
+  bankSetSize,
+  defaultLayerAlias,
+  isFixedBankLayer,
+  layerAlias,
+  type BankSet,
+} from './fixedLayers.js';
 
 /**
  * Templates channels (Phase 7 §3 / Phase 8 M7.2). The Runtime's
@@ -61,6 +74,32 @@ import { definePublishChannel } from '../publish.js';
  *
  * Absent is NOT "no live sources" — see {@link liveSourceCarrierState}.
  */
+/** One LOOK as the bridge sees it: identity, how it is entered, and its desired rects. */
+export const TemplateLookSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Cut-only in v1 (`design.md` §14.4 parks the other modes with the animated phase). */
+  entered: LookTransitionSchema,
+  /** routeKey → scene-px rect while this look is active. No entry = not in this look. */
+  rects: z.record(z.string(), LiveSourceRectSchema),
+  /**
+   * ⭐ `B-178` — routeKey → the AUTHOR's fit mode while this look is active, from the plate
+   * ELEMENT that serves that routeKey here.
+   *
+   * **No entry means the author stated nothing** — a third state, distinct from an authored
+   * `contain`, which is exactly the distinction `B-178` exists to restore. The default is
+   * applied at the ONE place that resolves the mode, never here.
+   *
+   * ⚠ **OPTIONAL, and that is a compatibility decision rather than an oversight.** Zod STRIPS
+   * unknown keys, so a template packaged before this change carries no `fits` at all; making it
+   * required would refuse every such record at the IPC boundary and again at boot
+   * (`template-registry.ts`), taking a working installation off air over a field whose absence
+   * simply means "authored nothing".
+   */
+  fits: z.record(z.string(), LiveFitModeSchema).optional(),
+});
+export type TemplateLook = z.infer<typeof TemplateLookSchema>;
+
 export const TemplateLiveSourcesSchema = z.object({
   /** The scene's own pixel raster — the space `sources[].rect` is expressed in. */
   resolution: ResolutionSchema,
@@ -72,8 +111,126 @@ export const TemplateLiveSourcesSchema = z.object({
    * array and an absent block is the whole point of the block.
    */
   sources: z.array(LiveSourceDeclarationSchema),
+  /**
+   * `multibox-layout-switch` `tasks.md` 5.2 — the template's ARRANGEMENTS, derived once at
+   * import beside {@link sources}.
+   *
+   * OPTIONAL, and absent is not "none": a template imported before this field existed cannot
+   * say whether it has arrangements, exactly as {@link TemplateInfo.liveSources} itself
+   * cannot say whether a pre-carrier template has holes. An EMPTY array is the positive
+   * statement "this template has no arrangements" — which is what every template a current
+   * build imports will carry, since a scene with no arrangements produces one.
+   */
+  arrangements: z.array(LiveSourceArrangementSchema).optional(),
+  /**
+   * `multibox-layout-switch` §14 (LOOKS, adopted 2026-08-19) — the template's LOOKS,
+   * derived once at import beside {@link sources}.
+   *
+   * When PRESENT, {@link sources} is SOURCE-KEYED — one declaration per declared source,
+   * deduped by routeKey — and each look's `rects` maps routeKey → the plate's scene-px
+   * rect when that look is active (root-level plates outside every look appear in EVERY
+   * look's map). 🔴 A source ABSENT from a look has NO entry for that look — never a
+   * zero-area rect, which the bridge refuses outright. The EMPTY look is valid and carries
+   * an empty map: background alone. OPTIONAL with the same absent-vs-empty contract as
+   * {@link arrangements}: absent = imported before LOOKS existed; `[]` = positively none.
+   */
+  looks: z.array(TemplateLookSchema).optional(),
+  /** Which look a fresh take enters. Present exactly when `looks` is non-empty. */
+  defaultLookId: z.string().min(1).optional(),
 });
 export type TemplateLiveSources = z.infer<typeof TemplateLiveSourcesSchema>;
+
+/**
+ * 🔴 **`B-151` — THE ONE RESOLUTION of "which look is this row showing", for every consumer
+ * that has the carrier and an id.**
+ *
+ * It lives beside the carrier rather than inside any one consumer because there are now
+ * THREE surfaces that must agree about it — the bridge (which seats the producers), the
+ * served page (which punches the holes) and the Runtime's PVW overlay (which draws the
+ * placeholders) — and the third one got it wrong precisely by not having this to call.
+ *
+ * ⚠ **The fallback chain is not defensive noise; each link answers a real state.**
+ * `activeLookId` absent means "nobody has switched this row", which resolves to the AUTHORED
+ * default — not to array order, because that is what a fresh take enters and what the
+ * operator expects to see. A recorded id that names nothing is STALE (the template was
+ * re-imported with different looks) and falls back to the authored default in turn; a
+ * carrier whose `defaultLookId` names nothing is a broken import, and showing the first look
+ * is a better answer than showing none.
+ */
+export function activeLookOf(
+  live: TemplateLiveSources,
+  activeLookId: string | undefined,
+): TemplateLook | undefined {
+  const looks = live.looks;
+  if (looks === undefined || looks.length === 0) return undefined;
+  const wanted = activeLookId ?? live.defaultLookId;
+  return (
+    looks.find((l) => l.id === wanted) ?? looks.find((l) => l.id === live.defaultLookId) ?? looks[0]
+  );
+}
+
+/**
+ * 🔴 **THE ONE ANSWER to "which rect does each of this template's plates have RIGHT NOW".**
+ *
+ * Two carriers, one shape. A LOOKS template answers from the active look's `rects`; a
+ * pre-LOOKS one answers from the declarations, whose `rect` is the only geometry it has.
+ * Every consumer downstream sees exactly one kind of input and none of them has to learn
+ * which carrier it is looking at.
+ *
+ * ⚠ **A source ABSENT from the returned map is absent from the look — that absence is the
+ * whole contract**, and `B-151` is what it costs to ignore it. PVW's placeholder overlay
+ * drew one box per entry in `sources`, which under LOOKS is the UNION of every look's
+ * members, each at its DEFAULT-look rect. So a template with a 1-box look and a 2-box look
+ * drew all of them at once, overlapping — while air, which resolves through this rule, drew
+ * one. The operator's preview and their output disagreed about what was on screen.
+ *
+ * 🔴 It is a FUNCTION OF THE CARRIER, not a method on any runtime, so the bridge cannot
+ * drift from the console: both call this. Do not add a local spelling of it — that is
+ * exactly how PVW came to have its own idea of the layout.
+ */
+export function lookPlateRects(
+  live: TemplateLiveSources,
+  activeLookId: string | undefined,
+): Record<string, LiveSourceRect> {
+  const look = activeLookOf(live, activeLookId);
+  if (look !== undefined) return { ...look.rects };
+  return Object.fromEntries(live.sources.map((s) => [s.sourceId, s.rect] as const));
+}
+
+/**
+ * ⭐ `B-178` — **`routeKey → the AUTHOR's fit mode`, resolved for the ACTIVE LOOK.** The exact
+ * sibling of {@link lookPlateRects}, and deliberately built in its image.
+ *
+ * ── WHY IT IS A SIBLING AND NOT A BRANCH AT THE CALL SITE ───────────────────────
+ *
+ * `lookPlateRects`'s own header states the rule this follows: it is *"a FUNCTION OF THE CARRIER,
+ * not a method on any runtime, so the bridge cannot drift from the console: both call this. Do
+ * not add a local spelling of it."* The mode has exactly the same two carriers and exactly the
+ * same fallback, so it gets the same treatment — one function, both shapes, no caller learning
+ * which kind of template it is holding.
+ *
+ * - **With a look group** the answer is the ACTIVE look's own `fits` map, because the mode
+ *   describes how a picture sits in a BOX and a look is precisely a change of box.
+ * - **Without one** it falls through to each declaration's `fitMode`, which `collectLiveSources`
+ *   copies straight off the plate element — the pre-`B-178` path, unchanged.
+ *
+ * ⚠ **An ABSENT entry means the author stated nothing, and callers must preserve that.** It is
+ * NOT `contain`: telling "nobody said" apart from "the author chose `contain`" is half of what
+ * `B-178` is for, and a `?? 'contain'` here would erase the distinction for every reader at
+ * once. A look with no `fits` at all (a package built before this change) yields an empty map,
+ * which reads as "nothing authored" — the honest answer for a record that could not carry one.
+ */
+export function lookPlateFits(
+  live: TemplateLiveSources,
+  activeLookId: string | undefined,
+): Record<string, LiveFitMode> {
+  const look = activeLookOf(live, activeLookId);
+  if (look !== undefined) return { ...look.fits };
+  const stated = live.sources.filter(
+    (s): s is typeof s & { fitMode: LiveFitMode } => s.fitMode !== undefined,
+  );
+  return Object.fromEntries(stated.map((s) => [s.sourceId, s.fitMode] as const));
+}
 
 export const TemplateInfoSchema = z.object({
   templateId: IdSchema,
@@ -132,6 +289,66 @@ export const TemplateInfoSchema = z.object({
    */
   hasNext: z.boolean().optional(),
   /**
+   * 🔴 `TIMING-WIRE-22` §4 — **WHAT THIS TEMPLATE'S TIMING IS, so the console can STATE it.**
+   *
+   * Derived at import from the unpacked scene by the canonical `playoutOf`, exactly as
+   * `hasNext` above is — and for the identical reason, which `templateDelivery.ts` states
+   * plainly: that is the one moment the app holds the scene, no `.vcg` ever reaches the bridge,
+   * and a fact not captured there is not recoverable later.
+   *
+   * It is what makes the console's timing section possible at all, in two ways:
+   *
+   *  - `mode` and `holdSource` are the FACTS the section states (ADR 0009 — designer-owned,
+   *    read-only on every surface but the Designer's own inspector). Without them the console
+   *    would have nothing to say.
+   *  - `repeat` and `delayMs` are the AUTHORED DEFAULTS an operator override inherits from, so
+   *    a row with no override can show `Default (∞)` / `Default (2 s)` and NAME the value. A
+   *    console that guessed the default would be confidently wrong on every template that
+   *    authored one — the worst class of defect this product has.
+   *
+   * ⚠ ABSENT means a template imported by a build that predates this field. The section then
+   * states nothing rather than guessing: re-import to get it. Degradation, not a second rule.
+   */
+  playout: z
+    .object({
+      /**
+       * 🔴 `DELTA B1.4` — WHICH DERIVATION PRODUCED THIS BLOCK. An IPC-visible schema change,
+       * and deliberately so: a record derived by an older resolver is WRONG, not merely old.
+       *
+       * Before `v: 2` this block was derived from the ENTRY composition with a `comps[0]`
+       * fallback, so a per-composition export — whose `entryCompositionId` names a composition
+       * the package does not contain — published the timing of whichever panel happened to be
+       * listed first. The plant's `میان‌برنامه (روی آنتن)` read `static / timed` (a clock
+       * panel's) over a crawler that is `auto-out / content-driven`.
+       *
+       * ⚠ ABSENT or older than `TEMPLATE_TIMING_VERSION` ⇒ the console states NOTHING and asks
+       * for a re-import. Showing the block's facts would be confidently wrong.
+       */
+      v: z.number().int().optional(),
+      /** The ROOT's mode — the graphic the runtime plays. An export flattens it there. */
+      mode: z.string(),
+      holdSource: z.string().optional(),
+      holdMs: z.number().optional(),
+      /**
+       * Does ANY scope in this template loop? Derived by `templateTimingOf`, which finds the
+       * first reachable `loop-cycle` scope.
+       *
+       * 🔴 **IT IS NOT WHAT THE PASS CONTROLS ARE OFFERED ON — see
+       * {@link templateAdmitsPassTiming} (owner, 2026-09-16).** It used to be, on the reasoning
+       * that the repeating scope is often a nested instance below a non-looping root. The
+       * reasoning was true; the conclusion was wrong, because that nested scope is usually not
+       * the graphic. On the plant's news ticker it is a BLINKING DOT.
+       *
+       * It stays on the record because it is a true derived fact and other readers may want it.
+       * What changed is who decides the controls.
+       */
+      loops: z.boolean().optional(),
+      /** The looping scope's AUTHORED count and gap — what an override inherits from. */
+      repeat: z.union([z.number(), z.literal('infinite')]).optional(),
+      delayMs: z.number().optional(),
+    })
+    .optional(),
+  /**
    * D-137 / C-015 — the Live Source carrier. See {@link TemplateLiveSourcesSchema}
    * for why it is one block, why `defaultPosition` inside it is required, and why
    * the block itself is optional.
@@ -174,16 +391,87 @@ export function liveSourceCarrierState(
   return template.liveSources.sources.length > 0 ? 'declared' : 'none';
 }
 
+/**
+ * 🔴 `single-clock-look-switch` — **WHICH HALF OF THE BANK THIS PACKAGE BELONGS ON, DERIVED.**
+ *
+ * A package that declares live plates is a graphics BED and must be composited BELOW them
+ * (`'low'`); anything else is furniture and belongs on an operator row above them
+ * (`'high'`). This is the ONE place the question is answered — the load refusal, the restore
+ * migration and the template picker all call it, so an operator can never be offered a
+ * placement the bridge will refuse, and the bridge can never refuse one the picker offered.
+ *
+ * ⚠ **IT IS DERIVED AT IMPORT, NEVER TICKED.** The input is `liveSources`, which
+ * `collectLiveSources` produces from the scene at import; no operator sees this decision and
+ * none can get it wrong. `design.md` §9a-Z states the objection to the alternative in its own
+ * words: _"a declared-backdrop flag that someone forgets to set is a silent black plate on
+ * air"_.
+ *
+ * 🔴 **`'unknown'` RESOLVES TO `'high'`, AND THAT IS A POSITIVE ARGUMENT, NOT A SHRUG.**
+ * An absent carrier means the record was written by a build that predates Live Sources
+ * entirely — so the bridge can seat no plates for it whatever the scene contains
+ * (`reconcileLivePlates` has only the carrier to act on), and its page therefore renders
+ * alone with nothing composited over it, exactly as it does today. `'high'` is where it has
+ * always been and where it still behaves correctly. Sending it low would put a graphic the
+ * bridge cannot reason about underneath every live picture.
+ */
+export function requiredBankFor(template: Pick<TemplateInfo, 'liveSources'>): 'low' | 'high' {
+  return liveSourceCarrierState(template) === 'declared' ? 'low' : 'high';
+}
+
+/**
+ * 🔴 `CHANNEL-TEMPLATES-01` (the owner, 2026-09-28) — **EACH CHANNEL HAS ITS OWN TEMPLATE LIST.**
+ *
+ * The four template requests below carry an optional top-level `channel`: the CasparCG channel
+ * whose list they read or change. With it, a read answers that channel's list (a template at the
+ * version THAT channel lists), an import lists the template there and nowhere else, and a removal
+ * takes it off that channel only. Because the key is top-level, the bridge's station fence, its
+ * channel grant and a channel-scoped lock judge an import or a removal on exactly that channel —
+ * nothing on one channel ever needs another.
+ *
+ * ABSENT is the station-wide reading every request had before the lists existed: a read answers
+ * every listed template once (the version on the lowest channel listing it), an import lists it
+ * on every declared channel and a removal takes it off every channel — each judged, by the grant,
+ * on every channel it changes.
+ */
+const TemplateChannelSchema = z.number().int().positive();
+
 export const TemplatesGetChannel = defineChannel(
   'templates.get',
-  z.object({ templateId: IdSchema }),
+  z.object({ templateId: IdSchema, channel: TemplateChannelSchema.optional() }),
   z.union([TemplateInfoSchema, z.null()]),
 );
 
 export const TemplatesListChannel = defineChannel(
   'templates.list',
-  z.void(),
+  z.object({ channel: TemplateChannelSchema.optional() }).optional(),
   z.array(TemplateInfoSchema),
+);
+
+/** `RELEASE-091-01` §1 (`B-288`) — why the bridge has no page to give for a template. */
+export const TEMPLATE_PAGE_REFUSALS = ['not-listed', 'no-file'] as const;
+export type TemplatePageRefusal = (typeof TEMPLATE_PAGE_REFUSALS)[number];
+
+/**
+ * 🔴 `RELEASE-091-01` §1 (`B-288`) — **THE PAGE THE BRIDGE SERVES CASPARCG, FOR PVW.**
+ *
+ * PVW rendered only a page THIS browser had imported (`LibraryStore`, OPFS — one profile, one
+ * origin), so a template imported on another machine, in another browser or on another channel
+ * could not be rehearsed until it was re-imported here: a manual side step. The bridge already holds
+ * every page and serves it to CasparCG at `/template/<id>~<version>`; this read hands PVW the same
+ * bytes — the version `channel` lists (absent: the station-wide reading's) — over the control
+ * socket, so the frame keeps this document's origin, which is what lets PVW drive the page's
+ * lifecycle. A read: it writes nothing and sends nothing to CasparCG.
+ *
+ * - `not-listed` — the channel's list does not hold the template;
+ * - `no-file` — it does, and the store holds no file for that version.
+ */
+export const TemplatesPageChannel = defineChannel(
+  'templates.page',
+  z.object({ templateId: IdSchema, channel: TemplateChannelSchema.optional() }),
+  z.union([
+    z.object({ ok: z.literal(true), html: z.string() }),
+    z.object({ ok: z.literal(false), reason: z.enum(TEMPLATE_PAGE_REFUSALS) }),
+  ]),
 );
 
 /**
@@ -207,25 +495,39 @@ export const TemplatesImportChannel = defineChannel(
     template: TemplateInfoSchema,
     html: z.string(),
     /**
-     * R-028 part B — is this a reconnect RE-DELIVERY rather than an operator's
-     * import? A re-delivery means "restore this if you lost it", never
-     * "resurrect it if you dropped it on purpose": the bridge ignores one whose
-     * id it has deliberately REMOVED, and keeps its own copy of an id it
-     * already holds instead of letting an older browser copy overwrite it.
+     * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **RETIRED: a console re-delivers nothing, and the bridge
+     * REFUSES a frame that says it is one.** It was R-028 part B's flag for `#resync`'s replay of
+     * a browser's whole library on every connect. The bridge keeps the library now, for every
+     * console; a replay from one console's older copy is how a removed template came back after a
+     * bridge restart and a stale version could replace a newer one.
      *
-     * Absent/false = an operator import, which always wins and clears any
-     * tombstone. The flag is the browser's honest statement about which of the
-     * two it is; the bridge decides what that means.
+     * ⚠ **Kept in the schema so the frame is RECOGNISED, not stripped.** Deleted, an older console's
+     * `redelivery: true` would be dropped by the parser and the frame would arrive as an OPERATOR
+     * import — the one kind that always wins. Recognised, it is refused with a sentence.
      */
     redelivery: z.boolean().optional(),
+    /**
+     * `CHANNEL-TEMPLATES-01` — the channel to list it on (see {@link TemplateChannelSchema}'s
+     * note). A RE-IMPORT is the same request: the channel's list moves to the new version and
+     * every other channel keeps the version it lists.
+     */
+    channel: TemplateChannelSchema.optional(),
   }),
   z.object({
     registered: z.boolean(),
     templateId: IdSchema,
-    /** True when a re-delivery was deliberately ignored (removed, or already held). */
-    skipped: z.boolean().optional(),
   }),
 );
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — the sentence a `templates.import` marked `redelivery: true` is
+ * refused with. Only a console older than this change sends one, and the version check refuses such
+ * a console at connect; this is the fence behind that fence, so a replay can never arrive as an
+ * operator's import. Names the state, that nothing was done, and the remedy (`R-006`'s rule).
+ */
+export const TEMPLATE_REDELIVERY_REFUSAL =
+  'CG Bridge keeps the template library for every console, so a copy sent back by this console ' +
+  'was refused and nothing was changed. Update CG Control to match CG Bridge.';
 
 /**
  * R-005 — remove a template from the library. The bridge is AUTHORITATIVE: it decides
@@ -238,19 +540,160 @@ export const TemplatesImportChannel = defineChannel(
  * missing template and the row can NEVER be brought back, and `setPosition`'s re-ADD stops
  * silently. An idle/loaded row is just as poisoned as an on-air one, so the predicate is
  * "any reference", not "any on-air reference". Remove the referencing items first
- * (`stack.remove` / Remove-All) — the same unblock path R-010 uses.
+ * (`stack.remove`, or the picker's per-item remedy).
+ *
+ * ⚠ **THE R-010 CROSS-REFERENCE THAT USED TO CLOSE THAT SENTENCE IS DELETED, not reworded.**
+ * `operator-surface` §6 moved R-010's unblock path to CLEAR-ALL, and the two paths are now
+ * genuinely different rather than differently spelled: Clear-All takes rows OFF AIR and
+ * leaves them on the stack, so every reference survives it and this refusal would repeat
+ * forever. Naming it here would be false, and naming Remove-All would point at a control
+ * `R-017` disables whenever an on-air row is what is holding the template.
  *
  * A confirmed removal must also prune the client's reconnect-reconciliation retention, or
  * the next reconnect re-imports what the operator just deleted. A REFUSED removal must
  * leave it intact.
  */
+/**
+ * `B-212` — WHERE one stack item that still uses a template is.
+ *
+ * `slot` is the layer the item holds; absent means the item is on the stack and on no
+ * layer at all (a load that was refused before a layer was bound leaves exactly that).
+ * The channel carries the coordinate, never a display name: the NAME is resolved by
+ * {@link describeTemplateReferences} on whichever side has the bank, through the same
+ * two functions the Layers table names its rows with.
+ */
+export const TemplateReferenceSchema = z.object({
+  itemId: IdSchema,
+  slot: z
+    .object({ channel: z.number().int().positive(), layer: z.number().int().nonnegative() })
+    .optional(),
+});
+export type TemplateReference = z.infer<typeof TemplateReferenceSchema>;
+
+/**
+ * `B-212` — the `in-use` refusal, worded so it names WHERE, not merely HOW MANY.
+ *
+ * _"2 stack item(s) still use this template — remove them (or Remove All) first."_ is
+ * what the owner read on 2026-09-04 while looking at rows that all said EMPTY. The two
+ * items were on CasparCG layers 60 and 61 — dynamic layers no row shows — so nothing on
+ * screen could be the "them" the sentence meant, and the sentence's only concrete remedy
+ * was the destructive one. He reached for it. A refusal that withholds the precise remedy
+ * and names the sweeping one is steering toward the sweeping one, and on a live station
+ * that is a safety property.
+ *
+ * So the sentence now names each place: a row by the name the Layers table gives it
+ * (alias, else `Layer N` / `Bed N`, through the SAME two functions — one naming rule,
+ * two readers), and a layer outside the bank as CasparCG names it, with the fact that it
+ * is not a row said out loud. It does NOT mention Remove All. The old opening fragment
+ * ~~The old opening fragment is kept so every surface and test that matched on _"still use
+ * this template"_ still does.~~
+ *
+ * 🔴 **REWORDED 2026-09-13 (`MODAL-CHROME-10` ADDENDUM C §C4(c)). Two defects in four words:**
+ *
+ *   1. **`item(s)` was a plural hack.** It was kept verbatim "because the tests match on it",
+ *      which is a test pinning a defect in place — the reason it was written down is the reason
+ *      it had to go. Singular and plural are now written properly, and every pinned copy moved
+ *      with it.
+ *   2. **`stack item` is DEVELOPER vocabulary.** There is no "stack item" on the operator's
+ *      screen. He has ROWS and he has LAYERS, and the same view's own footer already said so —
+ *      _"A row still holding a template must be cleared with its own REMOVE first."_ One rule
+ *      was being stated in two vocabularies, one of them ours.
+ *
+ * ⚠ **THE NOUN IS CHOSEN, NOT FIXED, and that is what keeps it honest.** `row` when every
+ * reference IS one of the station's rows — the footer's word, and the operator's. `layer` when
+ * one of them is not a row but is still on a layer, because `2 rows still hold this` directly
+ * above a place reading _"which is not one of this station's rows"_ is a sentence contradicting
+ * itself. `place` for the residue: a reference with no layer bound at all is neither, and
+ * calling it a layer would be the same contradiction one step further out. Three words, each
+ * the true one for its case, and not one of them ours.
+ *
+ * ⚠ ONE implementation, in the wire package, for the bridge, the offline mock and the
+ * browser's disconnected library path — a refusal spelled three times is a refusal that
+ * eventually disagrees with itself (golden rule 6).
+ *
+ * ⚠ **THE CONDITION IS UNTOUCHED.** A row still holding a template is still refused, on exactly
+ * the references it was refused on before. This is wording.
+ */
+export function describeTemplateReferences(
+  references: readonly TemplateReference[],
+  bank: BankSet,
+): string {
+  const count = references.length;
+  const places = references.map((ref) => describeReferencePlace(ref, bank));
+  const allRows = references.every((ref) => referenceRowName(ref, bank) !== null);
+  const allSeated = references.every((ref) => ref.slot !== undefined);
+  const noun = allRows ? 'row' : allSeated ? 'layer' : 'place';
+  const head =
+    count === 1
+      ? `1 ${noun} still holds this template`
+      : `${String(count)} ${noun}s still hold this template`;
+  const remedy = allRows
+    ? count === 1
+      ? "Clear it with the row's own REMOVE first."
+      : 'Clear each with its own REMOVE first.'
+    : count === 1
+      ? 'Remove it first.'
+      : 'Clear each row with its own REMOVE first; a layer that is not a row is removed here.';
+  return `${head} — ${places.join(', ')}. ${remedy}`;
+}
+
+/**
+ * One reference's place, in the operator's words. Exported for the surface's per-row line.
+ *
+ * `MULTI-CHANNEL-01` — the bank is the one that declares the reference's CHANNEL
+ * ({@link bankInSet}), and on a station that declares more than one channel the layer is written
+ * WITH its channel (`2-99`): "the row `Layer 99`" names a row on every channel at once there. A
+ * one-channel station reads exactly as before.
+ */
+export function describeReferencePlace(reference: TemplateReference, bank: BankSet): string {
+  const slot = reference.slot;
+  // ADDENDUM C §C4(c) — "on the stack" was the same developer vocabulary the count sentence
+  // carried. The operator has no stack; what is true is that the station holds it and nothing
+  // has put it on a layer.
+  if (slot === undefined) return 'on this station, not yet on a layer';
+  const own = bankInSet(bank, slot.channel);
+  const several = bankSetSize(bank) > 1;
+  if (own !== null && isFixedBankLayer(own, slot.channel, slot.layer)) {
+    const name = layerAlias(own, slot.layer) ?? defaultLayerAlias(own, slot.layer);
+    const where = several ? `${String(slot.channel)}-${String(slot.layer)}` : String(slot.layer);
+    return `on the row “${name}” (layer ${where})`;
+  }
+  // The channel is left out only where it cannot be mistaken: ONE declared bank, on this channel.
+  const channel = !several && own !== null ? '' : `${String(slot.channel)}-`;
+  return `on CasparCG layer ${channel}${String(slot.layer)}, which is not one of this station's rows`;
+}
+
+/**
+ * `B-212` — is this reference one of the station's ROWS (something the surface can
+ * scroll to), or somewhere no row shows? The same predicate the wording above uses.
+ */
+export function referenceRowName(reference: TemplateReference, bank: BankSet): string | null {
+  const slot = reference.slot;
+  if (slot === undefined) return null;
+  const own = bankInSet(bank, slot.channel);
+  if (own === null || !isFixedBankLayer(own, slot.channel, slot.layer)) return null;
+  return layerAlias(own, slot.layer) ?? defaultLayerAlias(own, slot.layer);
+}
+
 export const TemplatesRemoveChannel = defineChannel(
   'templates.remove',
-  z.object({ templateId: IdSchema }),
+  /*
+    `CHANNEL-TEMPLATES-01` — with a `channel`, the template leaves THAT channel's list, refused while
+    a row on that channel holds it (the in-use gate, per channel); its stored version goes only when
+    no channel lists it and no row holds it. Without one, it leaves every channel, refused while any
+    row holds it — the station-wide removal it always was.
+  */
+  z.object({ templateId: IdSchema, channel: TemplateChannelSchema.optional() }),
   z.object({
     ok: z.boolean(),
     reason: z.enum(['in-use', 'unknown-template']).optional(),
     message: z.string().optional(),
+    /**
+     * `B-212` — with `in-use`: WHERE each referencing item is, so the surface can offer
+     * the way there (scroll to the row) or the precise removal, instead of leaving the
+     * operator to hunt — or to reach for Remove All.
+     */
+    references: z.array(TemplateReferenceSchema).optional(),
   }),
 );
 
@@ -260,8 +703,80 @@ export const TemplatesRemoveChannel = defineChannel(
  * browser converges on the same library without polling: operator B's Library
  * re-lists the moment operator A imports. Full snapshot, not deltas — the
  * `stack.state-changed` precedent, and what makes a missed frame harmless.
+ *
+ * `CHANNEL-TEMPLATES-01` — the payload is the STATION-WIDE reading (`templates.list` with no
+ * channel). A console that reads per channel treats the push as "something changed" and re-reads
+ * the channels it shows; the shape is unchanged, so nothing that reads it had to learn the lists.
  */
 export const TemplatesChangedChannel = definePublishChannel(
   'templates.changed',
   z.array(TemplateInfoSchema),
 );
+
+/**
+ * 🔴 `B-300` (`CONSOLE-POLISH-01` §1) — **WHO DID WHAT TO THE TEMPLATE LIST.** `templates.changed` says
+ * the list changed and names no one, so a console whose picker was open could not say why its chosen
+ * template vanished — it met the raw `unknown-template` refusal on Load instead (the owner's own-PC
+ * run, 2026-09-30, two consoles on one CG Bridge). Published beside `templates.changed` after an
+ * import, a re-import or a removal CG Bridge ACCEPTED (a refused act publishes nothing), to every
+ * console, with the acting user as the audit names them. `name` and `sourceFileName` are the
+ * template's raw naming facts: a console names it by its one rule (`displayLabel`), never the id.
+ * `channel` — the channel the act was on; `null` — a request that named none (every channel).
+ */
+export const TemplateActSchema = z.object({
+  act: z.enum(['import', 'reimport', 'remove']),
+  templateId: IdSchema,
+  name: z.string().optional(),
+  sourceFileName: z.string().optional(),
+  channel: z.number().int().positive().nullable(),
+  actor: z.string().min(1),
+});
+export type TemplateAct = z.infer<typeof TemplateActSchema>;
+
+export const TemplatesActedChannel = definePublishChannel('templates.acted', TemplateActSchema);
+
+/** `B-300` — a template as a {@link TemplateAct} names it: its id, and the names an operator knows. */
+export function templateActNaming(
+  template: TemplateInfo,
+): Pick<TemplateAct, 'templateId' | 'name' | 'sourceFileName'> {
+  return {
+    templateId: template.templateId,
+    ...(template.name !== undefined ? { name: template.name } : {}),
+    ...(template.sourceFileName !== undefined ? { sourceFileName: template.sourceFileName } : {}),
+  };
+}
+
+/**
+ * 🔴 `PASSES-CYCLE-ONLY-26` (owner, 2026-09-16) — **DOES THIS TEMPLATE GET PASS CONTROLS?**
+ *
+ * ── THE RULE ──────────────────────────────────────────────────────────────────────────────
+ *
+ * The pass count and the between-pass gap exist ONLY when the Mode the console STATES is
+ * `loop-cycle`. `manual`, `auto-out` and `static` never get them — whatever loops inside the
+ * graphic. The HOLD does not decide: `loop-cycle` + `timed` and `loop-cycle` + `content-driven`
+ * both keep them.
+ *
+ * ── WHY IT IS NOT `playout.loops` ─────────────────────────────────────────────────────────
+ *
+ * `loops` answers "does ANY scope in this template repeat", and the honest answer is often
+ * "yes, a decoration does". On the plant's news ticker `نوار خبر (روی آنتن)` the root is
+ * `auto-out` / `content-driven` with a crawl of `repeat: 2`, and the only `loop-cycle` scope is
+ * a nested «چشمک» — a blinking dot at `holdMs: 0`, `repeat: 'infinite'`. So the section stated
+ * the DOT's `Default (∞)` over a graphic that ends after two crawl passes, and `Count 2` made
+ * the dot blink twice and vanish. The operator changed the numbers and nothing he could see
+ * happened.
+ *
+ * A control that steers another scope is worse than no control: the console is confidently
+ * wrong, which is the one thing an operator cannot defend against.
+ *
+ * ⚠ **ONE SPELLING, THREE CONSUMERS**, which is why this lives here rather than in the console:
+ * the Inspector decides whether to SHOW them, the console's press/PVW builder decides whether to
+ * SEND them, and the bridge decides whether to ATTACH a stored one to `__cg`. Three machines
+ * would otherwise each carry their own copy of the rule (golden rule 6).
+ *
+ * ⚠ An ABSENT `playout` is not admitted. A record from a build that predates the block says
+ * nothing about its mode, and the console already asks for a re-import in that case.
+ */
+export function templateAdmitsPassTiming(playout: TemplateInfo['playout'] | undefined): boolean {
+  return playout?.mode === 'loop-cycle';
+}

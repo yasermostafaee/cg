@@ -69,6 +69,24 @@ export interface DesignerStoreState {
    */
   previewScene: Scene | null;
   /**
+   * `multibox-layout-switch` C2 — the ARRANGEMENT the canvas is currently showing, or
+   * `null` for none.
+   *
+   * ⚠ EDITOR state, not scene state: which arrangement you are looking at belongs to the
+   * session exactly as the selection and the playhead do. At playout the active
+   * arrangement is DERIVED from which source toggles are lit (D1), so an authored field
+   * for it would be a value in the `.vcg` that the runtime must then be careful to ignore
+   * — a field that looks like it still means something.
+   */
+  activeArrangementId: string | null;
+  /**
+   * LOOKS phase 2 (`design.md` §14) — the LOOK the canvas is currently showing, or
+   * `null` for "the group's default". EDITOR state, exactly as `activeArrangementId`
+   * above: what a fresh TAKE enters is the group's authored `defaultLookId`, which is
+   * scene state; what the canvas shows right now is the session's business alone.
+   */
+  activeLookId: string | null;
+  /**
    * Top-level routing: the Designer starts at the Landing screen
    * (starter picker / recent / new) and flips to the Studio whenever
    * a scene becomes active. Clearing the scene flips it back.
@@ -132,6 +150,48 @@ export interface DesignerStoreState {
   /** View menu — snap element edges/centers while dragging on the canvas. */
   snappingEnabled: boolean;
   /**
+   * `D-157` — is the Issues panel showing? Lifted out of `StatusBar`'s local state so the
+   * control that was REFUSED can open it: the status-bar pill used to be the only opener, and
+   * it exists only while there are issues.
+   */
+  issuesOpen: boolean;
+  /**
+   * 🔴 `D-155` / `B-218` — **keep a declared aspect while resizing. A SESSION PREFERENCE,
+   * deliberately NOT authored state — and PER SUBJECT: the set of lock keys whose lock is
+   * OFF.** A key is the id of the thing the toggle sits beside: a Live Source plate's element
+   * id (the aspect row), or an arrangement's id (its `CELLS` fields). Absent ⇒ locked.
+   *
+   * ── WHY IT IS NOT IN THE SCENE (unchanged since `D-155`) ─────────────────
+   *
+   * 1. **A `.vcg` that resizes differently for two people is the failure mode.** The lock is
+   *    a fact about how the AUTHOR works, not about the template. The aspect itself
+   *    (`expectedAspect`) IS authored and stays so; only the editor's treatment of it is here.
+   * 2. **The runtime can never read it.** Storing it would mean a schema field, a migration
+   *    and an export path for a value nothing downstream consumes. Whether to persist the
+   *    per-plate choice anyway is an open decision recorded under `B-218`; it is a FORMAT
+   *    change and is not made here.
+   *
+   * ── 🔴 WHY IT IS PER PLATE, reversing `D-155`'s third reason (`B-218`) ──
+   *
+   * `D-155` argued _"per author, not per plate: a per-plate flag would be invisible state whose
+   * extent the author cannot see."_ Measured the other way round: this was ONE boolean, so
+   * setting one box FREE in a two-box look freed every box in every look, and nothing told the
+   * author that the extent of the toggle they pressed was the whole template. The toggle beside
+   * the SELECTED plate showing that plate's own state IS the visible extent; a flag shared by
+   * plates the author is not looking at was the invisible one.
+   *
+   * ⚠ **ONE predicate, three readers** — `isAspectLocked(state, key)` in `slices/view.ts` is what
+   * the gizmo, the aspect row and the `CELLS` fields all ask. The arrangement `CELLS` fields keep
+   * their own toggle, keyed by the arrangement, because they constrain a different quantity (a
+   * cell's composition resolution, see `lockedCellEdit`) and can no longer ride a plate's toggle.
+   *
+   * Stored as the OFF set rather than the ON set so the default needs no entry: a plate the
+   * author never touched, and every plate after a reopen, is locked. Defaults ON because the
+   * complaint that produced `D-155` is that the deformation happens by accident, and a lock
+   * that must be found before it helps does not answer that.
+   */
+  aspectLockOff: ReadonlySet<string>;
+  /**
    * D-122 — the canvas's live zoom (scene-px → screen-px scale), MIRRORED from the
    * CanvasArea-local zoom state so the store-side move paths (the arrow-key nudge) can
    * decide whether the pixel grid is active. The pointer-drag path already has the zoom
@@ -168,6 +228,8 @@ export const initialState: DesignerStoreState = {
   activeCompositionId: null,
   notice: null,
   previewScene: null,
+  activeArrangementId: null,
+  activeLookId: null,
   view: 'landing',
   tool: 'cursor',
   selection: new Set<string>(),
@@ -181,6 +243,8 @@ export const initialState: DesignerStoreState = {
   timelineZoom: 1,
   rulerVisible: false,
   snappingEnabled: true,
+  issuesOpen: false,
+  aspectLockOff: new Set<string>(),
   canvasZoom: 1,
   snapGuides: { x: [], y: [] },
   guides: { x: [], y: [] },
@@ -188,6 +252,19 @@ export const initialState: DesignerStoreState = {
   canRedo: false,
   dirty: false,
 };
+
+/**
+ * 🔴 `D-162` — **DOES THE OPEN PROJECT HOLD WORK THAT WOULD BE LOST?** The ONE predicate every
+ * "you will lose this" question asks (golden rule 6): the browser's leave prompt, CG Designer's
+ * window-close guard and the save-before-switch guard. A project is open AND `dirty` — D-088's
+ * content hash against the last load or save; with nothing open there is nothing to lose.
+ *
+ * ⚠ Ask it at the moment of the decision (`designerStore.get()`), never from a value captured
+ * earlier: a close or a leave is decided on the document as it is NOW.
+ */
+export function hasUnsavedChanges(state: Pick<DesignerStoreState, 'scene' | 'dirty'>): boolean {
+  return state.scene !== null && state.dirty;
+}
 
 export type Listener = (state: DesignerStoreState) => void;
 const listeners = new Set<Listener>();

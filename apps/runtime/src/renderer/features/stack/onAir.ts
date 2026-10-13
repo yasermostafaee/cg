@@ -1,20 +1,127 @@
+import { isOnAirStatus } from '@cg/shared-schema';
 import type { StackItemState } from '@cg/shared-schema';
+import { badgeTone } from '../../theme.js';
 
 /**
- * Does this item have something on air to CLEAR?
+ * Does this item have something on air that a GRACEFUL verb can act on?
  *
- * ONE definition, shared by the row's Clear gating and by the Clear-All count — and mirrored
- * by the bridge's `clearAll` predicate. "Clear All" has to mean exactly "press Clear on every
- * row where Clear is enabled", and it can only keep meaning that if the predicate is not
- * spelled out separately in three places.
+ * `idle` has nothing on air. `loaded` has been `CG ADD`-ed but never PLAYed, so it has no
+ * authored outro to run. Everything else — on-air, playing, updating, exiting, unconfirmed,
+ * error — may be showing something.
  *
- * `idle` has nothing on air. `loaded` has been `CG ADD`-ed but never PLAYed, so there is
- * nothing to clear there either. Everything else — on-air, playing, updating, exiting,
- * unconfirmed, error — may be showing something, and an item whose true state is UNKNOWN
- * (B-044 `unconfirmed`) is precisely the one an operator most needs to be able to clear.
+ * ⭐ **B-122 — THIS IS NO LONGER CLEAR-ALL'S PREDICATE, AND MUST NOT BE MADE ONE AGAIN.**
+ *
+ * It used to be, and the bridge's `clearAll` mirrored it deliberately, so that "Clear All"
+ * meant exactly "press Clear on every row where Clear is enabled". That symmetry was the
+ * defect: it gated the EMERGENCY control on the believed status — precisely the value that
+ * may be wrong in the emergency — so a stack of wrongly-`idle` rows produced a success report
+ * and no commands. Clear-All (both halves) now addresses every row that HOLDS A LAYER,
+ * whatever the status claims, and the row's own CLEAR was never status-gated either.
+ *
+ * What this still legitimately answers:
+ *
+ *   - **STOP / STOP ALL** — `CG STOP` asks a template to run its own outro, which is
+ *     meaningless for a row that never played. The status is the right question here because
+ *     it is not the axis under suspicion: a wrong `idle` costs a graceful exit, never a
+ *     stranded graphic, and CLEAR ALL sits beside it as the remedy that ignores it.
+ *
+ * ⚠ It must never gate a clear path again, on either side of the bridge seam.
+ *
+ * ⚠ **`B-213` — and it is NO LONGER THE HEADER'S TALLY EITHER.** It counts `error`, because
+ * an errored row MAY be showing something and STOP must be offered to it. A tally wearing the
+ * air colour cannot afford that "may": on 2026-09-04 the header read `State (2)` in green over
+ * two rows whose takes had been REFUSED — nothing on air at all. The header now reads
+ * {@link airTally}, which keeps the believed-on-air count and the error count APART.
  *
  * Kept React-free so it is unit testable on its own.
  */
 export function isOnAir(item: StackItemState): boolean {
   return item.status !== 'idle' && item.status !== 'loaded';
+}
+
+/**
+ * 🔴 `FIELD-FIXES-01` C — **DOES THIS ROW CLAIM AIR: the row's own green ON AIR mark, and nothing
+ * looser.** `on-air`, or a take the server has ACKNOWLEDGED (`playing`, no longer pending) — the
+ * one tone (`badgeTone` → `onair`) the state cell and `StatusBadge` paint in the air colour.
+ *
+ * ⚠ **NOT {@link isOnAir}**, which answers "may it be showing something?" and is therefore true for
+ * `error`, `unconfirmed` and `unverified`. The Inspector's look badge wore it, and on 2026-09-26 it
+ * said `ON AIR NOW` for Bed 59's look while the row above it read ERROR over a take the server had
+ * refused. Anything that says "on air" in the air colour asks THIS.
+ */
+export function claimsAir(item: Pick<StackItemState, 'status' | 'pending'>): boolean {
+  return badgeTone(item.status, item.pending) === 'onair';
+}
+
+/*
+ * `isOnAirOrUnsettled` USED TO LIVE HERE, and its own doc called it "the mirror of the
+ * bridge's `isOnAirStatus`". It was byte-for-byte the same six terms — two names for one
+ * rule, agreeing only by luck, which is what CLAUDE.md golden rule 6 forbids and what
+ * `tasks.md` 1.1 means by "ONE import, never two mirrored definitions".
+ *
+ * `operator-surface` §5 answer (B) DELETED it rather than leaving it delegating: a
+ * delegating wrapper is still the second name a later reader gates on. Everything that
+ * asked it now imports `isOnAirStatus` from `@cg/shared-schema` — the same function object
+ * the bridge's own gates call, which is what makes the agreement test an IDENTITY check
+ * rather than a table of equal answers.
+ */
+
+/**
+ * `B-213` — what the layer table's header SAYS about the list, as two numbers that mean
+ * two different things and are never added together.
+ *
+ * `onAir` is what this console believes is on air (or is unsettled), derived from each
+ * item's reconciled status — the bridge's ack, refined by OSC when there is any — never
+ * from raw intent: a refused take settles to `error`, not to `playing`. `inError` is how
+ * many rows' last command was REFUSED, which is a fact about the console's ability to
+ * reach air, not a claim about air.
+ *
+ * The old `State (n)` counted both as one number in the air colour, so two refused takes
+ * read as two graphics on air, and an operator who had just been refused twice was
+ * looking at a green 2.
+ */
+export interface AirTally {
+  readonly onAir: number;
+  readonly inError: number;
+}
+
+/**
+ * 🔴 `DESKTOP-APPS-01-D` j — **THE OWNER'S RULE: A CHANNEL'S MESSAGES NEVER APPEAR IN ANOTHER
+ * CHANNEL'S VIEW.** The one filter every channel-scoped count and notice passes its items
+ * through: an item whose slot is on another channel is not this view's to count or mention.
+ *
+ * Measured on the owner's channel-2 view: `0 loaded · 1 on air` over rows that were all EMPTY —
+ * the one was channel 1's logo, which no row of channel 2 could show. Such an item belongs to
+ * Station setup (`strays`), where a station-admin can take it off air.
+ *
+ * An item with NO slot holds no layer anywhere and stays (it is this station's own row that has
+ * not been placed). `channel === null` means no channel is declared yet: nothing is filtered.
+ */
+export function onChannel<T extends { slot?: { channel: number } | undefined }>(
+  items: readonly T[],
+  channel: number | null,
+): readonly T[] {
+  if (channel === null) return items;
+  return items.filter((i) => i.slot === undefined || i.slot.channel === channel);
+}
+
+/**
+ * 🔴 `B-301` (`CONSOLE-POLISH-01` §2) — **A ROW ERROR: an item in `error` THAT IS A ROW** — one with a
+ * layer. The ONE predicate the badge counts and lists by (golden rule 6). An item in `error` with no
+ * layer is no row: nothing shows it and nothing can settle it — it is what a refused Load used to leave
+ * behind (the owner's `2 in error`, 2026-09-30), and `onChannel` keeps layerless items in EVERY view,
+ * so one such leftover was counted on every channel. A failed import is never an item at all.
+ */
+export function isRowError(item: Pick<StackItemState, 'status' | 'slot'>): boolean {
+  return item.status === 'error' && item.slot !== undefined;
+}
+
+export function airTally(items: readonly StackItemState[]): AirTally {
+  let onAir = 0;
+  let inError = 0;
+  for (const item of items) {
+    if (isOnAirStatus(item)) onAir += 1;
+    else if (isRowError(item)) inError += 1;
+  }
+  return { onAir, inError };
 }

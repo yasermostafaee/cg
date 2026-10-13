@@ -7,6 +7,8 @@ import { OscRateLimiter } from './rate-limiter.js';
 import { OscChangeTracker } from './change-tracker.js';
 import { OscInterestFilter } from './interest.js';
 import { OscOccupancyTap } from './occupancy-tap.js';
+import { OscChannelTickTap } from './channel-tick-tap.js';
+import { OscClipTimeTap } from './clip-time-tap.js';
 
 /**
  * OscTransport — UDP receiver for CasparCG 2.3.x's pushed OSC stream.
@@ -46,7 +48,26 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
    * bridge's periodic orphan sweep samples it.
    */
   readonly occupancy: OscOccupancyTap;
+  /**
+   * R-058 — passive CHANNEL-TICK tap, fed at the same point as `occupancy` and, like it,
+   * emitting nothing into the pipeline. Answers "is this channel producing frames", which no
+   * other signal in this product can: every other one is about REACHABILITY.
+   */
+  readonly channelTicks: OscChannelTickTap;
+  /**
+   * `MEDIA-PLATES-01` — passive CLIP-TIME tap, fed at the same point: each media clip's reported
+   * clock (`file/time`, `paused`), which the console's remaining time and `Ended` read — only ever
+   * what the server reported, never an estimate.
+   */
+  readonly clipTimes: OscClipTimeTap;
   private readonly expectedSourceHost: string | undefined;
+  /**
+   * `CENTRAL-BRIDGE-01` rule 7 / `B-316` — the core's channel → the station's channel this transport
+   * takes it in as, or `null` (dropped); `null` as a whole takes every channel as it is. See
+   * {@link setChannelMap}.
+   */
+  private channelMap: ((coreChannel: number) => number | null) | null = null;
+  private foreignDropped = 0;
 
   constructor(options: OscTransportOptions = {}) {
     super();
@@ -54,6 +75,8 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
     this.rateLimiter = options.rateLimiter ?? new OscRateLimiter();
     this.changeTracker = options.changeTracker ?? new OscChangeTracker();
     this.occupancy = options.occupancy ?? new OscOccupancyTap();
+    this.channelTicks = options.channelTicks ?? new OscChannelTickTap();
+    this.clipTimes = options.clipTimes ?? new OscClipTimeTap();
     this.expectedSourceHost = options.expectedSourceHost;
     this.on('error', noop);
   }
@@ -104,10 +127,78 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
     // R-009 — occupancy re-accumulates from the fresh session's stream
     // within a tick; carrying pre-reconnect ghosts would fake orphans.
     this.occupancy.reset();
+    // R-058 — and the channel-tick tap, for the SAME reason stated one line up and a
+    // sharper consequence: entries carried across a reconnect would report a channel
+    // STOPPED whose ticks have merely not resumed yet — an alarm we manufactured.
+    this.channelTicks.reset();
+    // `MEDIA-PLATES-01` — and every clip's clock: a time from before the drop is not evidence.
+    this.clipTimes.reset();
+  }
+
+  /**
+   * 🔴 `RELEASE-091-01` (DELTA B, B2) — **A LAYER OUR OWN `CLEAR` EMPTIED, noted as the core never
+   * reports it.**
+   *
+   * CasparCG 2.5 erases a cleared layer from its stage and simply stops reporting it
+   * (`stage.cpp` `clear`); it never sends `producer "empty"` for it. So after OUR clear the evidence
+   * that the layer is empty is the core's own `202 CLEAR OK`, and the caller notes it here. The
+   * occupancy and clip-time taps forget the producer AT ONCE — no staleness window in which a take
+   * could read the old `html` and resume a layer that is empty — and the change tracker records
+   * `empty`, so the next producer placed there is not suppressed as a repeat (`B-053`).
+   *
+   * It emits NOTHING on `events`: the session's OSC liveness (`lastOscAt`) is fed only by what
+   * actually arrives on the wire, and a note of our own must never vouch for a silent link. The
+   * event is returned for the caller to apply to its own reconciler.
+   *
+   * The mock used to send `empty` itself, which is how every test stood on a report the real core
+   * never makes.
+   */
+  noteCleared(channel: number, layer: number, at: number = Date.now()): OscEvent {
+    const event: OscEvent = {
+      kind: 'osc.layer.foreground.producer',
+      channel,
+      layer,
+      producer: 'empty',
+    };
+    this.occupancy.note(event, at);
+    this.clipTimes.note(event, at);
+    this.changeTracker.shouldEmit(event);
+    return event;
   }
 
   get port(): number {
     return this.boundPort;
+  }
+
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` rule 7 — **ONLY THE CHANNELS THIS STATION SERVES.** `OSC SUBSCRIBE` carries
+   * every channel of the core, with no filter (on the Playout's machine: its programme channels, its
+   * previews, its holder and its guard). A message for a channel `accept` refuses is dropped the
+   * moment it is parsed — before the occupancy, channel-tick and clip-time taps and before any
+   * consumer — so nothing the bridge keeps or shows is built from a channel it does not serve.
+   * Packet-level traffic still counts as hearing the server (`noteTraffic`): which channel spoke
+   * says nothing about whether this server is reachable. Read per message, so a declaration that
+   * changes takes effect on the next packet. `null` takes every channel (the default).
+   */
+  setServedChannels(accept: ((channel: number) => boolean) | null): void {
+    this.setChannelMap(accept === null ? null : (channel) => (accept(channel) ? channel : null));
+  }
+
+  /**
+   * 🔴 `B-316` (`RELEASE-0113-01`) — **THE CORE'S CHANNEL, READ AS THE STATION'S.** On a backup engine the
+   * mirror of the station's channel N is the core's own channel M, and the core's channel N is something
+   * else — another programme, a preview, a holder. `map(M)` answers N, and every message is RE-KEYED to it
+   * before the occupancy, channel-tick and clip-time taps and before any consumer, so everything kept or
+   * shown speaks of the station's channel; `null` drops the message there, as an unserved channel's is.
+   * Read per message. `null` as a whole takes every channel as it is (the default).
+   */
+  setChannelMap(map: ((coreChannel: number) => number | null) | null): void {
+    this.channelMap = map;
+  }
+
+  /** Telemetry: OSC messages dropped because their channel is not served. */
+  get foreignChannelDroppedCount(): number {
+    return this.foreignDropped;
   }
 
   get address(): string {
@@ -159,12 +250,37 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
       if (this.isExpectedSource(rinfo.address)) this.occupancy.noteTraffic(recvAt);
       const messages = flatten(packet);
       const events: OscEvent[] = [];
+      const map = this.channelMap;
       for (const msg of messages) {
-        const event = messageToEvent(msg);
-        if (event === null) continue;
+        const parsed = messageToEvent(msg);
+        if (parsed === null) continue;
+        let event: OscEvent = parsed;
+        // `CENTRAL-BRIDGE-01` rule 7 — a channel this station does not serve stops here; `B-316` — and a
+        // served one is re-keyed to the station's number first.
+        if (map !== null && event.kind !== 'osc.health') {
+          const station = map(event.channel);
+          if (station === null) {
+            this.foreignDropped++;
+            continue;
+          }
+          if (station !== event.channel) event = { ...event, channel: station };
+        }
         // R-009 — the passive occupancy tap sees EVERY parsed producer
         // event, BEFORE the interest drop; it never adds to `events`.
         this.occupancy.note(event, recvAt);
+        /*
+          R-058 — and the channel-tick tap, at the same point and for a sharper reason.
+
+          BEFORE the rate limiter, which caps `osc.framerate` to 1 Hz. The cap is right for
+          the event stream (a 50 Hz firehose no consumer needs) and wrong for a liveness
+          question: reading the RAW tick means "has this channel stopped" is answered from
+          what CasparCG actually sent, not from what our own throttle let through. A tap fed
+          after the limiter would report a channel stale up to a full limiter window late,
+          and — worse — could never tell a slowed channel from a throttled one.
+        */
+        this.channelTicks.note(event, recvAt);
+        // `MEDIA-PLATES-01` — and the clip-time tap, the one reader of `file/time`.
+        this.clipTimes.note(event, recvAt);
         if (!this.interest.shouldEmit(event)) continue;
         if (!this.rateLimiter.shouldEmit(event)) continue;
         if (!this.changeTracker.shouldEmit(event)) continue;
@@ -184,7 +300,9 @@ export interface OscTransportOptions {
   interest?: OscInterestFilter;
   rateLimiter?: OscRateLimiter;
   changeTracker?: OscChangeTracker;
+  channelTicks?: OscChannelTickTap;
   occupancy?: OscOccupancyTap;
+  clipTimes?: OscClipTimeTap;
   /**
    * The server this transport is supposed to be hearing from. When set, only OSC
    * arriving FROM that address counts as evidence that we are hearing THIS

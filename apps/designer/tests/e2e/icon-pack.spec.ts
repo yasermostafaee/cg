@@ -73,6 +73,9 @@ test.describe('D-092 — shared vector Icon', () => {
       'Sequence',
       'Clock',
       'Repeater',
+      // LOOKS phase 2 (§14) — a DIRECT ACTION, not a placement tool: creates the
+      // multi-frame group. Deliberately last, after both tool groups.
+      'Add multi-frame group',
     ]);
   });
 

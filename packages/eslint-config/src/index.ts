@@ -23,5 +23,34 @@ export {
 } from './rules/cef-compat.js';
 export { cefCompat } from './configs/cef-compat.js';
 
+/*
+ * `TIMING-WIRE-22 · DELTA B · R2` — the raw-control RATCHET. Registered by `base` on the ONE
+ * `cg` plugin object; ENABLED per app, because the frozen debt it carries is per app. Exported
+ * so a config can name the rule id without spelling it, and so the rule object is reachable for
+ * a direct probe.
+ */
+export { RAW_CONTROL_RULE_ID, rawControlRule } from './rules/raw-control.js';
+
+// P-039 — the bank-shape guard. Registered by `base` under the `cg` namespace; exported
+// so the smoke check can assert on the one rule id and so a consumer can widen the
+// owner-file exemption deliberately rather than by copying the pattern.
+export { BANK_SHAPE_OWNER_FILES, BANK_SHAPE_RULE_ID, bankShapeRule } from './rules/bank-shape.js';
+
+// P-041 — the origin guard. Registered by `base` (same plugin object), ENABLED by the
+// renderer tier only; the pure folding + matching are exported so the smoke check can
+// probe them directly, and the owner-file list so a consumer can widen it deliberately.
+export {
+  BIND_DEFAULT_IMPORTS,
+  KNOWN_DEV_PORTS,
+  NO_HARDCODED_ORIGIN_RULE_ID,
+  ORIGIN_OWNER_FILES,
+  foldStringExpression,
+  hardcodedOriginIn,
+  noHardcodedOriginRule,
+} from './rules/no-hardcoded-origin.js';
+
+// THE ONE `cg` plugin object — both rules above. Register this and nothing else under `cg`.
+export { cgPlugin } from './rules/cg-plugin.js';
+
 export type { TierOptions } from './configs/node.js';
 export type { JsxA11yOptions } from './configs/jsx-a11y.js';

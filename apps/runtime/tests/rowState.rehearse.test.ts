@@ -33,6 +33,7 @@ function bound(status: StackItemStatus): { kind: 'bound'; item: StackItemState }
 function input(over: Partial<RowStateInput> = {}): RowStateInput {
   return {
     binding: bound('loaded'),
+    restoreBlocked: false,
     pending: false,
     observed: { kind: 'producer', producer: 'html' },
     linkDown: false,

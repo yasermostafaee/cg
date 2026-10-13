@@ -1,0 +1,759 @@
+import { z } from 'zod';
+import {
+  LIVE_SOURCE_FORMATS,
+  MEDIA_PLAYBACK_DEFAULTS,
+  MediaWhenHiddenSchema,
+  checkSourceCatalog,
+  mediaPlaybackOf,
+  type ConsoleSourceCatalog,
+  type LiveSourceFormat,
+  type LiveSourceLayerRange,
+  type MediaPlayback,
+  type PlateBandInForce,
+  type SourceCatalog,
+  type SourceDefinition,
+  type SourceProducer,
+} from './channels/sources.js';
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` — **THE PLAYOUT DEFINES THE SOURCES.** Contract v1.2 gives CG Control the
+ * Playout's input list (D10, `GET /api/cg/inputs`) and its media library (D11, `GET /api/cg/media`);
+ * v1.3 adds the holder channel's `route` shape. The contract is `docs/integration/playout/`, and where
+ * their answer differs from our request their answer wins (`PLAYOUT-CG-RESPONSE-INPUTS-MEDIA-v1.md`).
+ *
+ * This module is the ONE place the shapes are read and the ONE builder that turns what was read into
+ * the catalogue every plate resolves against. The bridge, the fake Playout and the offline mock all
+ * import it, so they cannot come to read one answer two ways.
+ */
+
+// ── Credentials ─────────────────────────────────────────────────────────────
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.E — a stream URL can carry `user:pass@` (their answer §1.2, and every CG
+ * role can read D10), so every line this product WRITES that can hold one goes through here:
+ * `scheme://anything@` becomes `scheme://***@`. The userinfo runs to the LAST `@` before the path, so
+ * a password with an `@` in it is redacted whole. Idempotent.
+ */
+export function redactUrlCredentials(text: string): string {
+  return text.replace(/([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^\s/"'<>]*@/g, '$1***@');
+}
+
+// ── D10: the inputs ─────────────────────────────────────────────────────────
+
+/** A Playout id: stable forever, `[A-Za-z0-9_-]`, 1–48 characters (both D10 and D11). */
+export const PlayoutIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,48}$/);
+
+/** A v1.3 `compatibleChannels` member: a channel of a core this input may be routed onto. */
+export const PlayoutCompatibleChannelSchema = z.object({
+  casparHost: z.string().min(1),
+  casparChannel: z.number().int().positive(),
+});
+export type PlayoutCompatibleChannel = z.infer<typeof PlayoutCompatibleChannelSchema>;
+
+/** The producer shapes D10 may carry (v1.2's four, plus v1.3's `videoMode` on a route). */
+const PlayoutProducerSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('decklink'), device: z.number().int().positive() }),
+  z.object({
+    kind: z.literal('route'),
+    channel: z.number().int().positive(),
+    layer: z.number().int().nonnegative().optional(),
+    videoMode: z.string().nullable().optional().catch(undefined),
+  }),
+  z.object({ kind: z.literal('ndi'), source: z.string().min(1) }),
+  z.object({ kind: z.literal('stream'), url: z.string().min(1) }),
+]);
+
+/**
+ * ONE D10 input, as kept. LENIENT: a field the list can do without is dropped rather than voiding the
+ * input, and `producer` is kept as sent — the builder decides what it can be (an input whose producer
+ * this product cannot express is left out, like one without an id).
+ */
+export const PlayoutInputSchema = z.object({
+  id: PlayoutIdSchema,
+  name: z.string().trim().min(1),
+  casparHost: z.string().min(1).optional().catch(undefined),
+  producer: z.unknown(),
+  format: z.string().min(1).optional().catch(undefined),
+  aspect: z.number().positive().optional().catch(undefined),
+  available: z.boolean().optional().catch(undefined),
+  reason: z.string().trim().min(1).optional().catch(undefined),
+  compatibleChannels: z.array(PlayoutCompatibleChannelSchema).optional().catch(undefined),
+  /**
+   * `PLAYOUT-FEATURES-01` B (`2.9.1`, ROUTE-ON-DONE §3) — this input is one of the Playout's OWN channel
+   * outputs (an NDI source named `<machine> (<a channel's NDI name>)`). RELIABLE when present; its
+   * ABSENCE means unknown, not safe. Only in the D10 of the server that owns the output.
+   */
+  ownOutputOf: PlayoutCompatibleChannelSchema.optional().catch(undefined),
+  /**
+   * `PLAYOUT-FEATURES-01` C (`2.9.2`, PLAYLIST-AUDIO §1.6) — this row is the PLAYLIST OUTPUT of a programme
+   * channel: a `route` to that channel's playout layer L (read from `producer.layer`, never assumed).
+   */
+  playlistOf: PlayoutCompatibleChannelSchema.optional().catch(undefined),
+});
+export type PlayoutInput = z.infer<typeof PlayoutInputSchema>;
+
+/**
+ * `PLAYOUT-FEATURES-01` C — a playlist row's id: `pl-` + the channel's code (their §1.6). A live input's
+ * id is `li-…`, so the prefix is the Playout's own mark too — read beside `playlistOf`, so a row that
+ * lost the field to a malformed value still has its audio locked.
+ */
+const PLAYLIST_ROW_ID = /^pl-/;
+
+/**
+ * `PLAYOUT-FEATURES-01` C — a playlist row's `reason` codes, in the operator's words (their §1.6). A `Map`,
+ * so a code like `constructor` can never find a prototype key; a code not here is shown as it came.
+ */
+export const PLAYLIST_UNAVAILABLE_WORDS: ReadonlyMap<string, string> = new Map([
+  ['not-running', "The Playout's core has not started yet."],
+  [
+    'pending-restart',
+    "This channel is not in the Playout's running core yet (it waits for a restart).",
+  ],
+  ['unlicensed', 'Unlicensed in the Playout — it clears that channel every minute.'],
+]);
+
+/**
+ * v1.3's `epoch`: changes with every core start and whenever an input's holder `(channel, layer)`
+ * moves; never repeats (their answer, `PLAYOUT-CG-RESPONSE-V13-STATE` §3.3). A 64-bit JSON integer on
+ * the wire — read losslessly by {@link parsePlayoutJson}, which hands it over as its digits — and
+ * compared only in its canonical form ({@link canonicalPlayoutEpoch}).
+ */
+export const PlayoutEpochSchema = z.union([z.number(), z.string().min(1)]);
+export type PlayoutEpoch = z.infer<typeof PlayoutEpochSchema>;
+
+/**
+ * 🔴 `ROUTE-PLATES-01` — **THE ONE SPELLING OF AN EPOCH**, the only form two epochs are compared in.
+ * A number is its decimal digits; a string is itself, trimmed. Two answers from the same core carry
+ * the same canonical epoch, and a restart never does.
+ */
+export function canonicalPlayoutEpoch(epoch: PlayoutEpoch | undefined): string | undefined {
+  if (epoch === undefined) return undefined;
+  if (typeof epoch === 'number') return Number.isFinite(epoch) ? String(epoch) : undefined;
+  const trimmed = epoch.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+/** The top-level `"epoch": <digits>` of a D10 body, as written — the raw-text fallback. */
+const RAW_EPOCH = /"epoch"\s*:\s*(-?\d+)\s*[,}]/;
+
+/**
+ * 🔴 `ROUTE-PLATES-01` — **PARSE A D10 BODY WITHOUT LOSING THE EPOCH.** The epoch is a 64-bit
+ * integer, and `JSON.parse` turns any integer above 2^53 into the nearest double: measured,
+ * `638954123456789013` parses as `638954123456789000`, so two consecutive epochs of a real core could
+ * compare EQUAL and a restart would pass unseen — the one thing rule 5 exists to catch. So the epoch
+ * is taken from its SOURCE TEXT (the reviver's `context.source`, Node 22+), falling back to the raw
+ * digits in the body; everything else parses as JSON always did.
+ */
+export function parsePlayoutJson(text: string): unknown {
+  const reviver = (key: string, value: unknown, context?: { source?: unknown }): unknown => {
+    if (key !== 'epoch' || typeof value !== 'number') return value;
+    const source = typeof context?.source === 'string' ? context.source : RAW_EPOCH.exec(text)?.[1];
+    return source ?? value;
+  };
+  return JSON.parse(text, reviver as (key: string, value: unknown) => unknown) as unknown;
+}
+
+/**
+ * Read a D10 body. `null` = not a D10 answer at all (a failed read). Otherwise every input that has an
+ * id and a name is kept, in the Playout's order; `epoch` is optional (v1.2, and `2.9.0` with the holder
+ * off, carry none).
+ */
+export function parsePlayoutInputs(
+  body: unknown,
+): { readonly inputs: PlayoutInput[]; readonly epoch?: PlayoutEpoch } | null {
+  const top = z
+    .object({ inputs: z.array(z.unknown()), epoch: PlayoutEpochSchema.optional().catch(undefined) })
+    .safeParse(body);
+  if (!top.success) return null;
+  const inputs: PlayoutInput[] = [];
+  for (const raw of top.data.inputs) {
+    const parsed = PlayoutInputSchema.safeParse(raw);
+    if (parsed.success) inputs.push(parsed.data);
+  }
+  return top.data.epoch === undefined ? { inputs } : { inputs, epoch: top.data.epoch };
+}
+
+// ── D11: the media ──────────────────────────────────────────────────────────
+
+/**
+ * `PLAYOUT-FEATURES-01` A (`2.9.1`, ROUTE-ON-DONE §2) — a content fingerprint: 64 hexadecimal characters, the
+ * same for the same bytes on any server. Kept lower-cased; anything else is not one.
+ */
+export const PlayoutFingerprintSchema = z
+  .string()
+  .regex(/^[0-9a-fA-F]{64}$/)
+  .transform((s) => s.toLowerCase());
+
+/** ONE D11 item as received. `clip` is an ABSOLUTE path with `/` (their answer §2.1). */
+export const PlayoutMediaItemSchema = z.object({
+  id: PlayoutIdSchema,
+  name: z.string().trim().min(1),
+  clip: z.string().min(1),
+  type: z.string().min(1),
+  durationMs: z.number().nonnegative().optional().catch(undefined),
+  width: z.number().int().positive().optional().catch(undefined),
+  height: z.number().int().positive().optional().catch(undefined),
+  folder: z.string().optional().catch(undefined),
+  updatedAt: z.string().optional().catch(undefined),
+  /** `PLAYOUT-FEATURES-01` A (`2.9.1`) — the logical source path, as it sits in the playlist. */
+  source: z.string().min(1).optional().catch(undefined),
+  /**
+   * `PLAYOUT-FEATURES-01` A (`2.9.1`) — the content fingerprint, given ONLY when `clip`'s bytes really match
+   * it. The key a BACKUP's own copy is found by (`B-286`); absent — an older Playout, or a source rewritten
+   * in place — there is none, and the backup is sent nothing for this clip.
+   */
+  fingerprint: PlayoutFingerprintSchema.optional().catch(undefined),
+});
+export type PlayoutMediaItem = z.infer<typeof PlayoutMediaItemSchema>;
+
+/** The types a plate may show. `audio` is never offered (their answer §2.2: no stills today). */
+export const PLATE_MEDIA_TYPES = ['video', 'still'] as const;
+
+/**
+ * Read a D11 page. `null` = not a D11 answer. Items without an id, name or clip are dropped, and so is
+ * any item whose type is not a plate's — audio is never offered even if the Playout sends one.
+ */
+export function parsePlayoutMediaPage(body: unknown): {
+  readonly items: PlayoutMediaItem[];
+  readonly total: number;
+  readonly nextCursor: string | null;
+} | null {
+  const top = z
+    .object({
+      items: z.array(z.unknown()),
+      total: z.number().int().nonnegative().optional().catch(undefined),
+      nextCursor: z.string().min(1).nullable().optional().catch(null),
+    })
+    .safeParse(body);
+  if (!top.success) return null;
+  const items: PlayoutMediaItem[] = [];
+  for (const raw of top.data.items) {
+    const parsed = PlayoutMediaItemSchema.safeParse(raw);
+    if (!parsed.success) continue;
+    if (!(PLATE_MEDIA_TYPES as readonly string[]).includes(parsed.data.type)) continue;
+    items.push(parsed.data);
+  }
+  return {
+    items,
+    total: top.data.total ?? items.length,
+    nextCursor: top.data.nextCursor ?? null,
+  };
+}
+
+// ── What the bridge keeps ───────────────────────────────────────────────────
+
+/**
+ * 🔴 **THE LAST GOOD INPUT LIST, as persisted** (`bridge-playout-inputs.json`). `inputs` is the latest
+ * successful read, in the Playout's order; `departed` holds every input an earlier good read listed
+ * and a later one did not — kept, never deleted by a read, and shown `unavailable` so a binding to it
+ * keeps its name. An input that comes back moves back to `inputs`.
+ */
+export const PlayoutInputsStateSchema = z.object({
+  /** ISO time of the last SUCCESSFUL read (a `304` counts). Absent = never read. */
+  readAt: z.string().optional(),
+  epoch: PlayoutEpochSchema.optional(),
+  inputs: z.array(PlayoutInputSchema),
+  departed: z.array(PlayoutInputSchema),
+});
+export type PlayoutInputsState = z.infer<typeof PlayoutInputsStateSchema>;
+
+export const EMPTY_PLAYOUT_INPUTS: PlayoutInputsState = { inputs: [], departed: [] };
+
+/**
+ * Fold a SUCCESSFUL read into what is kept: the new list in force, every input that left it moved to
+ * `departed`, every one that came back taken out of it. Pure.
+ */
+export function foldPlayoutInputsRead(
+  held: PlayoutInputsState,
+  read: { readonly inputs: readonly PlayoutInput[]; readonly epoch?: PlayoutEpoch },
+  readAt: string,
+): PlayoutInputsState {
+  const now = new Set(read.inputs.map((i) => i.id));
+  const departed = new Map(held.departed.map((i) => [i.id, i] as const));
+  for (const before of held.inputs) if (!now.has(before.id)) departed.set(before.id, before);
+  for (const id of now) departed.delete(id);
+  return {
+    readAt,
+    ...(read.epoch !== undefined ? { epoch: read.epoch } : {}),
+    inputs: [...read.inputs],
+    departed: [...departed.values()],
+  };
+}
+
+/**
+ * 🔴 **A MEDIA ITEM THIS STATION HAS BOUND**, as persisted (`bridge-bound-media.json`). Nothing else
+ * from the library is stored. `unavailable` is set when a successful `ids=` read left it out ("not
+ * playable now" — their answer §2.1), and cleared when one lists it again.
+ */
+export const BoundMediaItemSchema = z.object({
+  id: PlayoutIdSchema,
+  name: z.string().min(1),
+  clip: z.string().min(1),
+  type: z.string().min(1),
+  durationMs: z.number().nonnegative().optional(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+  folder: z.string().optional(),
+  lastBoundAt: z.string(),
+  unavailable: z.literal(true).optional(),
+  /** `PLAYOUT-FEATURES-01` A — the last read's `source` and `fingerprint` (absent when it gave none). */
+  source: z.string().min(1).optional(),
+  fingerprint: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .optional(),
+  /**
+   * `MEDIA-PLATES-01` — the clip's two playback settings, station-wide (`MediaPlayback`). A reference
+   * bound before they existed has neither, and reads as the defaults (`mediaPlaybackOf`).
+   */
+  loop: z.boolean().optional(),
+  whenHidden: MediaWhenHiddenSchema.optional(),
+});
+export type BoundMediaItem = z.infer<typeof BoundMediaItemSchema>;
+
+export const BoundMediaStateSchema = z.object({ items: z.array(BoundMediaItemSchema) });
+export type BoundMediaState = z.infer<typeof BoundMediaStateSchema>;
+
+/**
+ * A read media item as the bound set keeps it. `playback` is the clip's settings (`MEDIA-PLATES-01`):
+ * the defaults for a NEW reference, and the held ones when a re-read replaces a reference — a re-read
+ * refreshes what the Playout owns, never what this station set.
+ */
+export function toBoundMedia(
+  item: PlayoutMediaItem,
+  lastBoundAt: string,
+  playback: MediaPlayback = MEDIA_PLAYBACK_DEFAULTS,
+): BoundMediaItem {
+  return {
+    id: item.id,
+    name: item.name,
+    clip: item.clip,
+    type: item.type,
+    ...(item.durationMs !== undefined ? { durationMs: item.durationMs } : {}),
+    ...(item.width !== undefined ? { width: item.width } : {}),
+    ...(item.height !== undefined ? { height: item.height } : {}),
+    ...(item.folder !== undefined ? { folder: item.folder } : {}),
+    lastBoundAt,
+    // `PLAYOUT-FEATURES-01` A — refreshed by every read, like `clip`: a fingerprint the Playout stops
+    // giving (the file rewritten in place) is dropped, and the backup is sent nothing for it.
+    ...(item.source !== undefined ? { source: item.source } : {}),
+    ...(item.fingerprint !== undefined ? { fingerprint: item.fingerprint } : {}),
+    loop: playback.loop,
+    whenHidden: playback.whenHidden,
+  };
+}
+
+/** A bound reference's playback settings — through the ONE reader, so no default is spelled twice. */
+export function boundMediaPlayback(item: BoundMediaItem): MediaPlayback {
+  return mediaPlaybackOf({ media: item });
+}
+
+// ── Catalogue ids ───────────────────────────────────────────────────────────
+
+/** The catalogue id of a D10 input — `in-<id>`. Never shown to anyone. */
+export const inputSourceId = (playoutId: string): string => `in-${playoutId}`;
+/** The catalogue id of a D11 item — `md-<id>`. Never shown to anyone. */
+export const mediaSourceId = (playoutId: string): string => `md-${playoutId}`;
+
+/** The Playout id behind a catalogue id, when it is a media one. */
+export function playoutMediaIdOf(sourceId: string): string | null {
+  return sourceId.startsWith('md-') && sourceId.length > 3 ? sourceId.slice(3) : null;
+}
+
+// ── The builder ─────────────────────────────────────────────────────────────
+
+/** The operator's sentences for why an entry cannot be used (shown in a `title`). */
+export const INPUT_GONE_REASON = "Not in the Playout's input list.";
+export const MEDIA_GONE_REASON = 'Not available in the Playout right now.';
+export const ROUTE_NO_LAYER_REASON = 'The Playout gave this input no layer.';
+export const OTHER_SERVER_REASON = "Not played on this station's server.";
+export const DUPLICATE_NAME_REASON = 'Another input has the same name.';
+/** The Playout marked it unavailable (v1.3 health) and gave no reason of its own. */
+export const SIGNAL_UNAVAILABLE_REASON = 'The Playout reports it unavailable.';
+
+export interface PlayoutCatalogInput {
+  readonly inputs: PlayoutInputsState;
+  readonly media: readonly BoundMediaItem[];
+  readonly layerRange?: LiveSourceLayerRange | undefined;
+  /**
+   * D4's host rule for an input's own `casparHost` (after the loopback rewrite): is it a server this
+   * station drives? Absent `casparHost` is always ours (one core per install — their answer S1).
+   */
+  readonly hostIsOurs: (casparHost: string) => boolean;
+  /**
+   * D4's join for v1.3's `compatibleChannels`: the station channel a `(casparHost, casparChannel)` pair
+   * names, or `null` when it names none of ours. The SAME rule D4's rows join by.
+   */
+  readonly channelFor: (casparHost: string, casparChannel: number) => number | null;
+}
+
+/** A D10 format read case-insensitively; `undefined` for one this product does not know. */
+function formatOf(format: string | undefined): LiveSourceFormat | undefined {
+  if (format === undefined) return undefined;
+  const key = format.trim().toLowerCase();
+  return LIVE_SOURCE_FORMATS.find((f) => f.toLowerCase() === key);
+}
+
+/** The case- and space-insensitive name key — the catalogue validator's own. */
+const nameKey = (name: string): string => name.trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** What this product can send for a D10 producer, or `null` when it can express none of it. */
+function producerOf(raw: unknown): SourceProducer | null {
+  const parsed = PlayoutProducerSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  const p = parsed.data;
+  switch (p.kind) {
+    case 'decklink':
+      return { kind: 'decklink', device: p.device };
+    case 'route':
+      return {
+        kind: 'route',
+        channel: p.channel,
+        ...(p.layer !== undefined ? { layer: p.layer } : {}),
+        ...(p.videoMode !== undefined ? { videoMode: p.videoMode } : {}),
+      };
+    case 'ndi':
+      return { kind: 'ndi', source: p.source };
+    case 'stream':
+      return { kind: 'stream', url: p.url };
+  }
+}
+
+/** The reason an input cannot be bound at all, or `null` when it can. */
+function unusableReason(
+  input: PlayoutInput,
+  producer: SourceProducer,
+  hostIsOurs: (casparHost: string) => boolean,
+): string | null {
+  if (input.casparHost !== undefined && !hostIsOurs(input.casparHost)) return OTHER_SERVER_REASON;
+  // v1.3 rule 3 — a route with no layer stacks every held input. (`ROUTE-PLATES-01` removed the gate
+  // that held every `route` input back: a route WITH a layer is bindable, and seated by contract
+  // v1.3's rules at the bridge — `route-plates.ts`.)
+  if (producer.kind === 'route' && producer.layer === undefined) return ROUTE_NO_LAYER_REASON;
+  // The SAME rules a hand-made entry passed — asked of the one validator, never restated here.
+  const check = checkSourceCatalog(
+    { sources: [{ id: 'in-check', name: input.name, producer }] },
+    { fixedBank: null, reservedLayers: [] },
+  );
+  return check.ok ? null : check.message;
+}
+
+/**
+ * 🔴 **THE ONE RESOLUTION: what the Playout offers, and what this station has bound, as the catalogue
+ * every plate resolves against.** Called by the bridge on every change to what it read, and by the
+ * offline mock over its local lists — never a second copy.
+ *
+ * The inputs come first, in the Playout's order, then the ones that left the list (`unavailable`),
+ * then the bound media. Nothing is ever dropped because it went away: a binding to it keeps its name
+ * and reads `unavailable`, and the take refuses it before any AMCP.
+ */
+export function buildPlayoutSourceCatalog(input: PlayoutCatalogInput): SourceCatalog {
+  const sources: SourceDefinition[] = [];
+  const names = new Map<string, number>();
+  for (const i of input.inputs.inputs)
+    names.set(nameKey(i.name), (names.get(nameKey(i.name)) ?? 0) + 1);
+
+  const entryFor = (i: PlayoutInput, departed: boolean): SourceDefinition | null => {
+    const producer = producerOf(i.producer);
+    if (producer === null) return null;
+    const format = formatOf(i.format);
+    const channels =
+      i.compatibleChannels === undefined
+        ? undefined
+        : [
+            ...new Set(
+              i.compatibleChannels
+                .map((c) => input.channelFor(c.casparHost, c.casparChannel))
+                .filter((c): c is number => c !== null),
+            ),
+          ].sort((a, b) => a - b);
+    // `PLAYOUT-FEATURES-01` B — which of OUR channels it is the own output of, by D4's join (a loopback
+    // host names the Playout that listed it). A pair naming none of ours loops on none of ours.
+    const ownOutputOf =
+      i.ownOutputOf === undefined
+        ? null
+        : input.channelFor(i.ownOutputOf.casparHost, i.ownOutputOf.casparChannel);
+    /*
+      `PLAYOUT-FEATURES-01` C — THE PLAYOUT CHANNEL whose playlist this row outputs, in the Playout's own
+      numbering. NOT joined to our channels (`channelFor` answers null for a channel this station does not
+      declare — which is exactly the programme channel a squeeze-back shows): the fact is kept whenever
+      the row says it, because it is what locks the box's audio at 0.
+    */
+    const playlistOf =
+      i.playlistOf !== undefined
+        ? i.playlistOf.casparChannel
+        : PLAYLIST_ROW_ID.test(i.id) && producer.kind === 'route'
+          ? producer.channel
+          : null;
+    const unusable = unusableReason(i, producer, input.hostIsOurs);
+    const status: SourceDefinition['status'] = departed
+      ? 'unavailable'
+      : unusable !== null
+        ? 'unusable'
+        : i.available === false
+          ? 'unavailable'
+          : undefined;
+    const reason = departed
+      ? INPUT_GONE_REASON
+      : (unusable ??
+        (i.available === false
+          ? ((playlistOf !== null && i.reason !== undefined
+              ? PLAYLIST_UNAVAILABLE_WORDS.get(i.reason)
+              : undefined) ??
+            i.reason ??
+            SIGNAL_UNAVAILABLE_REASON)
+          : undefined) ??
+        ((names.get(nameKey(i.name)) ?? 0) > 1 ? DUPLICATE_NAME_REASON : undefined));
+    return {
+      id: inputSourceId(i.id),
+      name: i.name,
+      origin: 'input',
+      // An unknown format reads as AUTO, and the Playout's `aspect` (always sent) decides.
+      format: format ?? 'AUTO',
+      ...(i.aspect !== undefined ? { aspect: i.aspect } : {}),
+      producer,
+      ...(status !== undefined ? { status } : {}),
+      ...(departed ? { departed: true as const } : {}),
+      ...(reason !== undefined ? { reason } : {}),
+      ...(channels !== undefined ? { channels } : {}),
+      ...(ownOutputOf !== null ? { ownOutputOf } : {}),
+      ...(playlistOf !== null ? { playlistOf } : {}),
+    };
+  };
+
+  for (const i of input.inputs.inputs) {
+    const entry = entryFor(i, false);
+    if (entry !== null) sources.push(entry);
+  }
+  for (const i of input.inputs.departed) {
+    const entry = entryFor(i, true);
+    if (entry !== null) sources.push(entry);
+  }
+  for (const m of input.media) {
+    sources.push({
+      id: mediaSourceId(m.id),
+      name: m.name,
+      origin: 'media',
+      ...(m.width !== undefined && m.height !== undefined ? { aspect: m.width / m.height } : {}),
+      producer: { kind: 'media', file: m.clip },
+      ...(m.unavailable === true
+        ? { status: 'unavailable' as const, departed: true as const, reason: MEDIA_GONE_REASON }
+        : {}),
+      media: {
+        ...(m.durationMs !== undefined ? { durationMs: m.durationMs } : {}),
+        ...(m.width !== undefined ? { width: m.width } : {}),
+        ...(m.height !== undefined ? { height: m.height } : {}),
+        ...(m.folder !== undefined ? { folder: m.folder } : {}),
+        // `PLAYOUT-FEATURES-01` A — the key the backup's own copy is found by.
+        ...(m.fingerprint !== undefined ? { fingerprint: m.fingerprint } : {}),
+        lastBoundAt: m.lastBoundAt,
+        ...(m.loop !== undefined ? { loop: m.loop } : {}),
+        ...(m.whenHidden !== undefined ? { whenHidden: m.whenHidden } : {}),
+      },
+    });
+  }
+  const inputsEpoch = canonicalPlayoutEpoch(input.inputs.epoch);
+  return {
+    sources,
+    ...(input.layerRange !== undefined ? { layerRange: input.layerRange } : {}),
+    ...(input.inputs.readAt !== undefined ? { inputsReadAt: input.inputs.readAt } : {}),
+    ...(inputsEpoch !== undefined ? { inputsEpoch } : {}),
+  };
+}
+
+/**
+ * The catalogue as a CONSOLE may hold it: every stream URL with its credentials redacted. The console
+ * never shows a URL at all; this makes sure it never even holds a password.
+ */
+export function redactCatalogForConsole(catalog: SourceCatalog): SourceCatalog {
+  return {
+    ...catalog,
+    sources: catalog.sources.map((s) =>
+      s.producer.kind === 'stream'
+        ? { ...s, producer: { ...s.producer, url: redactUrlCredentials(s.producer.url) } }
+        : s,
+    ),
+  };
+}
+
+/**
+ * 🔴 `PLATE-BAND-01` — **THE CATALOGUE AS A CONSOLE IS TOLD IT**: redacted
+ * ({@link redactCatalogForConsole}), with the plate band in force beside it. The bridge's read, its
+ * push and the offline mock's bridge all build it HERE, so a console is told the band in force one
+ * way whichever of them answers.
+ */
+export function consoleSourceCatalog(
+  catalog: SourceCatalog,
+  band: PlateBandInForce | null,
+): ConsoleSourceCatalog {
+  return { ...redactCatalogForConsole(catalog), ...(band !== null ? { plateBand: band } : {}) };
+}
+
+/**
+ * Whether a catalogue entry may be BOUND (a hand-crafted request included): a usable one, or one the
+ * Playout still lists while marking it unavailable (v1.3: set up ahead of time) — never an unusable
+ * one, and never one the Playout no longer offers.
+ */
+export function sourceBindable(entry: SourceDefinition): boolean {
+  return entry.status !== 'unusable' && entry.departed !== true;
+}
+
+/** Whether a catalogue entry may be SEATED: only a usable one. */
+export function sourceSeatable(entry: SourceDefinition): boolean {
+  return entry.status === undefined;
+}
+
+/**
+ * 🔴 `ROUTE-PLATES-01` — **IS THIS A PLAYOUT ROUTE?** A D10 input the Playout holds on its holder
+ * channel, seated by `route://H-L` under contract v1.3's rules 1–5. The ONE question every door asks;
+ * a hand-made `route` entry (no `origin`) is not one, and keeps today's wire.
+ */
+export function isPlayoutRoute(entry: {
+  readonly origin?: 'input' | 'media' | undefined;
+  readonly producer: { readonly kind: string };
+}): boolean {
+  return entry.origin === 'input' && entry.producer.kind === 'route';
+}
+
+/**
+ * 🔴 `ROUTE-PLATES-01` / v1.3 rule 1 — **MAY THIS ENTRY BE SHOWN ON STATION CHANNEL `channel`?** A
+ * Playout route only on a channel its `compatibleChannels` named (none named is none allowed); any
+ * other entry wherever it names no channels, as before. The picker's disabled row and the bridge's
+ * refusal both ask THIS.
+ */
+export function sourceShowableOn(entry: SourceDefinition, channel: number): boolean {
+  if (isPlayoutRoute(entry)) return entry.channels?.includes(channel) === true;
+  return entry.channels === undefined || entry.channels.includes(channel);
+}
+
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` B (`B-298`) — **WOULD THIS ENTRY LOOP ON STATION CHANNEL `channel`?** It is that
+ * channel's own output (D10's `ownOutputOf`). The picker's disabled row and the bridge's refusal — a take,
+ * a look switch, a swap — all ask THIS. An entry without `ownOutputOf` loops nowhere: its absence is not
+ * guessed at.
+ */
+export function sourceLoopsOn(
+  entry: Pick<SourceDefinition, 'ownOutputOf'>,
+  channel: number,
+): boolean {
+  return entry.ownOutputOf === channel;
+}
+
+/** `B-298` — the picker's `title` for an input that is the row channel's own output. */
+export function ownOutputTitle(channel: number): string {
+  return `Own output of CH ${String(channel)} (would loop)`;
+}
+
+/** `B-298` — the refusal's clause, the NAME apart so a console can isolate it. */
+export function ownOutputWords(
+  name: string,
+  channel: number,
+): { readonly name: string; readonly rest: string } {
+  return { name, rest: ` is the own output of CH ${String(channel)} (would loop).` };
+}
+
+/** The refusal code a take, a switch or a swap carries for an input that would loop (`B-298`). */
+export const SOURCE_OWN_OUTPUT_CODE = 'source-own-output';
+
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` C (`R-075`, the Playout's rule 3) — **IS THIS THE PLAYOUT'S PLAYLIST OUTPUT?** A
+ * box showing it is ALWAYS at `VOLUME 0`: the route carries the programme sound again, so a raise would put
+ * about +6 dB on air with no normalisation. The ONE question the bridge's refusal of a raise, the seat's
+ * clamp and every console audio control ask.
+ */
+export function isPlaylistOutput(entry: Pick<SourceDefinition, 'playlistOf'>): boolean {
+  return entry.playlistOf !== undefined;
+}
+
+/** `R-075` — the refusal's code, and its words (the controls' `title` and the bridge's refusal). */
+export const PLAYLIST_AUDIO_LOCKED_CODE = 'playlist-audio-locked';
+export const PLAYLIST_AUDIO_LOCKED_REASON = 'Programme sound is already on air';
+
+/**
+ * `ROUTE-PLATES-01` — the clause for an entry that may not be shown on a channel, the entry's NAME
+ * apart so a console can isolate it: `“ورودی ۴” can't be shown on CH 2.`
+ */
+export function notShowableWords(
+  name: string,
+  channel: number,
+): { readonly name: string; readonly rest: string } {
+  return { name, rest: ` can't be shown on CH ${String(channel)}.` };
+}
+
+/**
+ * 🔴 §1.C — **WHY AN ENTRY A PLATE IS BOUND TO CANNOT GO ON AIR NOW, in the operator's words** —
+ * the entry's NAME and the clause after it, apart, so a console can isolate the name (it is often
+ * Persian) while the bridge writes the same words as one line. The two sentences for an entry the
+ * Playout stopped offering are the prompt's own:
+ *
+ *   “Studio 5” is not in the Playout's input list.
+ *   “تیتراژ خبر ۲۰” is not available in the Playout right now.
+ *
+ * ONE spelling, for the bridge's refusal message and the console's row line alike.
+ */
+export function unseatableWords(source: {
+  readonly name: string;
+  readonly origin?: 'input' | 'media' | undefined;
+  readonly status?: SourceDefinition['status'];
+  readonly departed?: true | undefined;
+  readonly reason?: string | undefined;
+}): { readonly name: string; readonly rest: string } {
+  if (source.status === 'unavailable' && source.departed === true) {
+    return {
+      name: source.name,
+      rest:
+        source.origin === 'media'
+          ? ' is not available in the Playout right now.'
+          : " is not in the Playout's input list.",
+    };
+  }
+  if (source.status === 'unavailable') {
+    return {
+      name: source.name,
+      rest: ` is unavailable: ${source.reason ?? 'the Playout reports it so.'}`,
+    };
+  }
+  return { name: source.name, rest: ` cannot be played: ${source.reason ?? 'it is not usable.'}` };
+}
+
+/** {@link unseatableWords} as one line: `“name” clause`. */
+export function unseatableClause(source: Parameters<typeof unseatableWords>[0]): string {
+  const words = unseatableWords(source);
+  return `“${words.name}”${words.rest}`;
+}
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` — **A NEW BINDING MUST BE TO SOMETHING BINDABLE; AN EXISTING ONE IS NEVER
+ * REFUSED FOR WHAT HAPPENED TO ITS ENTRY.** Every door that takes a whole set of bindings — the
+ * template defaults, a row's look bindings — asks this about each binding that is new or changed
+ * against the set in force. One that is unchanged passes whatever became of its entry, because only an
+ * operator action removes a binding (ADR 0010 rule 14): an input the Playout dropped must not make
+ * every OTHER edit impossible until someone unbinds it.
+ *
+ * Answers `null` when every changed binding is bindable, or the one sentence for the first that is not.
+ */
+export function unbindableChange(
+  next: readonly { readonly key: string; readonly sourceId: string }[],
+  current: readonly { readonly key: string; readonly sourceId: string }[],
+  catalog: SourceCatalog,
+): { readonly code: 'unknown-source' | 'source-unusable'; readonly message: string } | null {
+  const held = new Map(current.map((b) => [b.key, b.sourceId] as const));
+  const byId = new Map(catalog.sources.map((s) => [s.id, s] as const));
+  for (const binding of next) {
+    if (held.get(binding.key) === binding.sourceId) continue;
+    const entry = byId.get(binding.sourceId);
+    if (entry === undefined) {
+      return {
+        code: 'unknown-source',
+        message: 'That source is not one the Playout offers. Choose another.',
+      };
+    }
+    if (!sourceBindable(entry)) {
+      return {
+        code: 'source-unusable',
+        message: `“${entry.name}” cannot be bound: ${entry.reason ?? 'it is not available.'}`,
+      };
+    }
+  }
+  return null;
+}

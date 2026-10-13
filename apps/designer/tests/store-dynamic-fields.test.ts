@@ -142,6 +142,24 @@ describe('designerStore — D-018 Data key convenience layer', () => {
     expect(textOf('el-1')).toBe('7');
   });
 
+  /*
+    `PERSIAN-DIGITS-01` — switching a text field whose default was typed in Persian digits to
+    Number used to store `0`: `Number('۱۲')` is NaN. The text default `x` is the control — it is
+    still not a number and still becomes 0.
+  */
+  it('switching to number reads a Persian-digit default as its number', () => {
+    freshScene();
+    designerScene_addText('el-1');
+    designerStore.setElementDataKey('el-1', 'count');
+    designerStore.setElementFieldMeta('el-1', { default: '۱۲' });
+    designerStore.setElementFieldMeta('el-1', { fieldType: 'number' });
+    expect(fields()[0]).toMatchObject({ type: 'number', default: 12 });
+
+    designerStore.setElementFieldMeta('el-1', { fieldType: 'text', default: 'x' });
+    designerStore.setElementFieldMeta('el-1', { fieldType: 'number' });
+    expect(fields()[0]).toMatchObject({ type: 'number', default: 0 });
+  });
+
   it('editing the field default mirrors onto the element text (inline editor stays in sync)', () => {
     freshScene();
     designerScene_addText('el-1');

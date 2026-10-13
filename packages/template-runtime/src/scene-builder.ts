@@ -1,4 +1,5 @@
-import { pathVisualBBox } from '@cg/shared-schema';
+import { elementDigitsOf, followsComposition, pathVisualBBox } from '@cg/shared-schema';
+import { writeFieldDigits } from '@cg/text-shaping';
 import type {
   AnchorPoint,
   BoxStyle,
@@ -15,6 +16,7 @@ import type {
   Scene,
   SequenceElement,
   Shadow,
+  Stroke,
   TextElement,
   TickerElement,
   ImageElement,
@@ -28,6 +30,7 @@ import { clockInitialText } from './clock-driver.js';
 import { makeSequenceItemNode } from './sequence-driver.js';
 import { TEXT_NODE_DATASET } from './text-render-node.js';
 import { populateTickerStaticRow } from './ticker-driver.js';
+import { itemsInDigits, stampTypedDigits } from './typed-digits.js';
 import { assignZoneIndices, hasZonedCountdown } from './zone-css.js';
 
 /**
@@ -64,6 +67,13 @@ interface BuildCtx {
    * — a Live Source three instances deep cannot end up in the other mode.
    */
   mode: RenderMode;
+  /**
+   * B-134 — is this the editing CANVAS? Only the canvas paints the editor backdrop.
+   * Carried on the ctx for the same reason `mode` is: a nested instance inherits it by
+   * construction, so a composition three levels down cannot paint a backdrop the
+   * surface above it suppressed.
+   */
+  paintEditorBackdrop: boolean;
 }
 
 function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
@@ -90,13 +100,22 @@ export function buildScene(
   scene: Scene,
   doc: Document = document,
   mode: RenderMode = 'output',
+  paintEditorBackdrop = true,
 ): BuildSceneResult {
   const container = doc.createElement('div');
   container.className = 'cg-stage';
   container.style.width = `${scene.resolution.width}px`;
   container.style.height = `${scene.resolution.height}px`;
-  if (scene.background !== 'transparent') {
-    container.style.background = scene.background;
+  // B-129 — the backdrop is an EDITOR affordance and MUST NOT reach output. One
+  // field used to carry two facts ("let me see my white text" and "this paints on
+  // air"), so an editing preference went to air as a full-frame card over live
+  // video. `author` paints it; `output` paints nothing, and an authored background
+  // is a real full-frame element like anything else that paints.
+  // B-134 — and ONLY on the editing canvas. The Preview modal is a preview of AIR, so
+  // it must show what air shows: no backdrop. It still boots in `'author'` mode for
+  // Live Sources, which is exactly why the two facts cannot share one flag.
+  if (mode === 'author' && paintEditorBackdrop && scene.editorBackdrop !== 'transparent') {
+    container.style.background = scene.editorBackdrop;
   }
   // D-141 — this scope owns a zoned countdown, so it is a zone ROOT: the driver
   // publishes `data-cg-zone` here at run time, and the compiled reset rule keys off
@@ -112,6 +131,7 @@ export function buildScene(
     visited: new Set<string>(),
     resolutionWidth: scene.resolution.width,
     mode,
+    paintEditorBackdrop,
   };
 
   for (const layer of scene.layers) {
@@ -183,6 +203,20 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
   }
   return node;
 }
+
+/*
+ * 🔴 **`single-clock-look-switch` — `punchLiveSourceHoles` IS GONE from the build funnel.**
+ *
+ * `buildLayer` remains the single funnel every element kind passes through at every
+ * composition depth; what it no longer does there is cut a hole. A plate-bearing package is
+ * composited BELOW its plates, so no part of the page is ever in front of a picture, and an
+ * element that carries no mask property is exactly right rather than a case to reason about.
+ *
+ * ⚠ `ctx.punchTargets` went with it, and that is the half worth naming: it registered EVERY
+ * built element — not only the punched ones — so a later re-punch could reach an element that
+ * ACQUIRED a hole. With no punch there is nothing to re-reach, and keeping the registry would
+ * be a map nothing reads, built on every element of every scene.
+ */
 
 function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null {
   switch (element.type) {
@@ -275,7 +309,10 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
   const sx = comp.resolution.width === 0 ? 1 : element.transform.size.w / comp.resolution.width;
   const sy = comp.resolution.height === 0 ? 1 : element.transform.size.h / comp.resolution.height;
   inner.style.transform = `scale(${String(sx)}, ${String(sy)})`;
-  if (comp.background !== 'transparent') inner.style.background = comp.background;
+  // B-129 — author-mode only; a nested instance is where a backdrop would otherwise
+  // leak. B-134 — and canvas-only: the Preview modal suppresses it at every depth.
+  if (ctx.mode === 'author' && ctx.paintEditorBackdrop && comp.editorBackdrop !== 'transparent')
+    inner.style.background = comp.editorBackdrop;
   // D-141 — a nested instance whose own composition carries a zoned countdown is a
   // zone root in its own right; one without stays transparent to the host's zone,
   // which is how zone state crosses instance boundaries.
@@ -302,6 +339,9 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
     depth: ctx.depth + 1,
     visited: new Set([...ctx.visited, element.compositionId]),
     resolutionWidth: comp.resolution.width,
+    // 1.5c — extend the instance PATH, matching `flattenElements`' key exactly. The
+    // bare element id would collide across two instances of the same composition,
+    // and a hole computed for one instance's scene position is wrong for the other's.
   };
   for (const layer of comp.layers) {
     inner.appendChild(buildLayer(layer, childCtx));
@@ -568,7 +608,10 @@ function buildText(element: TextElement, ctx: BuildCtx): HTMLElement {
     }
   }
   renderTextGlyphs(el, element, doc);
+  // The ORIGINAL stays as typed: a placeholder binding splits it on its marker, then writes each
+  // piece in the element's digits (`bindings.ts`), so a marker holding a digit still matches.
   textOriginals.set(element.id, element.text);
+  stampTypedDigits(el, elementDigitsOf(element));
   return el;
 }
 
@@ -585,6 +628,8 @@ function buildText(element: TextElement, ctx: BuildCtx): HTMLElement {
  *   direction / white-space) so layout — auto-size, wrap, align, RTL — is unchanged.
  */
 function renderTextGlyphs(el: HTMLElement, element: TextElement, doc: Document): void {
+  // `TEXT-DIGITS-01` — the text its author typed, in the element's Digits choice.
+  const drawn = writeFieldDigits(element.text, elementDigitsOf(element));
   if (isGradientFill(element.colorFill)) {
     const inner = doc.createElement('div');
     inner.dataset[TEXT_NODE_DATASET] = '1';
@@ -600,7 +645,7 @@ function renderTextGlyphs(el: HTMLElement, element: TextElement, doc: Document):
     el.style.flexDirection = 'column';
     el.style.justifyContent = vAlignToFlex(element.verticalAlign);
     el.style.alignItems = hAlignToFlex(element.align);
-    inner.textContent = element.text;
+    inner.textContent = drawn;
     el.appendChild(inner);
     return;
   }
@@ -610,7 +655,7 @@ function renderTextGlyphs(el: HTMLElement, element: TextElement, doc: Document):
     const s = element.textShadow;
     el.style.textShadow = `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
   }
-  el.textContent = element.text;
+  el.textContent = drawn;
 }
 
 /**
@@ -684,10 +729,15 @@ function buildTicker(element: TickerElement, ctx: BuildCtx): HTMLElement {
   // live item nodes so authoring and runtime match). Default 'middle' = the prior centring.
   staticRow.style.alignItems = vAlignToFlex(element.verticalAlign ?? 'middle');
   staticRow.style.direction = element.direction;
-  populateTickerStaticRow(staticRow, element.items, {
+  // `TEXT-DIGITS-01` — the authored items and a text separator in the ticker's Digits choice.
+  const tickerDigits = elementDigitsOf(element);
+  populateTickerStaticRow(staticRow, itemsInDigits(element.items, tickerDigits), {
     direction: element.direction,
     gap: element.gap,
-    separator: element.separator,
+    separator:
+      typeof element.separator === 'string'
+        ? writeFieldDigits(element.separator, tickerDigits)
+        : element.separator,
   });
 
   viewport.appendChild(track);
@@ -830,7 +880,8 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
       if (built !== null) el.appendChild(built.cell);
     } else {
       const node = makeSequenceItemNode(doc, element.direction, glyphGradientCss);
-      node.textContent = first.text;
+      // `TEXT-DIGITS-01` — an authored item in the sequence's Digits choice (the driver's too).
+      node.textContent = writeFieldDigits(first.text, elementDigitsOf(element));
       el.appendChild(node);
     }
   }
@@ -868,6 +919,8 @@ export function buildSequenceCompositionItem(
   // may contain a Live Source. Defaults to `'output'` (paint nothing), the safe
   // direction: a caller that forgets cannot put colour bars on air.
   mode: RenderMode = 'output',
+  // B-134 — the canvas-only axis, threaded for the same reason.
+  paintEditorBackdrop = true,
 ): SequenceCompositionItemBuild | null {
   const comp = scene.compositions?.find((c) => c.id === compositionId);
   if (
@@ -897,7 +950,10 @@ export function buildSequenceCompositionItem(
   const sx = comp.resolution.width === 0 ? 1 : box.width / comp.resolution.width;
   const sy = comp.resolution.height === 0 ? 1 : box.height / comp.resolution.height;
   inner.style.transform = `scale(${String(sx)}, ${String(sy)})`;
-  if (comp.background !== 'transparent') inner.style.background = comp.background;
+  // B-129 — author-mode only (see `buildScene`); `mode` is the param this builder
+  // already takes. B-134 — and canvas-only, same reasoning.
+  if (mode === 'author' && paintEditorBackdrop && comp.editorBackdrop !== 'transparent')
+    inner.style.background = comp.editorBackdrop;
   // D-141 — a stamped scope is a scope: it publishes its own zone when it owns a
   // zoned countdown (same rule as every other scope container).
   if (hasZonedCountdown(comp.layers)) inner.dataset['cgZoneRoot'] = '';
@@ -906,6 +962,12 @@ export function buildSequenceCompositionItem(
   // but NEVER in `scope.children` (the sequence driver owns its lifecycle).
   const itemScope = newScope(inner, comp);
   const itemCtx: BuildCtx = {
+    // ⚠ Its OWN empty map, deliberately: `flattenElements` does NOT walk a `sequence` or a
+    // `repeater` (their stamps' positions are computed at run time), so nothing inside one
+    // ever carries a hole — and every stamp of the same authored element would key to the
+    // same mask key, so one shared map would have the last stamp silently stand for all of
+    // them. Registering nothing is the honest answer, and 4.6 refuses the case that would
+    // have made it matter.
     doc,
     scene,
     scope: itemScope,
@@ -913,6 +975,7 @@ export function buildSequenceCompositionItem(
     visited: new Set([...guard.visited, compositionId]),
     resolutionWidth: comp.resolution.width,
     mode,
+    paintEditorBackdrop,
   };
   for (const layer of comp.layers) {
     inner.appendChild(buildLayer(layer, itemCtx));
@@ -987,6 +1050,8 @@ export function buildRepeaterRows(
   // D-137 §9 — as above: a stamped ROW is a real scope and may contain a Live
   // Source, so the mode has to reach it. `'output'` by default, the safe direction.
   mode: RenderMode = 'output',
+  // B-134 — the canvas-only axis, threaded for the same reason.
+  paintEditorBackdrop = true,
 ): RepeaterRowBuild[] {
   const comp = scene.compositions?.find((c) => c.id === element.compositionId);
   if (
@@ -1038,7 +1103,10 @@ export function buildRepeaterRows(
     inner.style.height = `${comp.resolution.height}px`;
     inner.style.transformOrigin = '0 0';
     inner.style.transform = `scale(${String(scale)}, ${String(scale)})`;
-    if (comp.background !== 'transparent') inner.style.background = comp.background;
+    // B-129 — author-mode only (see `buildScene`); `mode` is the param this builder
+    // already takes. B-134 — and canvas-only, same reasoning.
+    if (mode === 'author' && paintEditorBackdrop && comp.editorBackdrop !== 'transparent')
+      inner.style.background = comp.editorBackdrop;
     // D-141 — same rule for a stamped repeater row.
     if (hasZonedCountdown(comp.layers)) inner.dataset['cgZoneRoot'] = '';
 
@@ -1046,6 +1114,7 @@ export function buildRepeaterRows(
     // content holds) by construction, but NEVER in `scope.children`.
     const rowScope = newScope(inner, comp);
     const rowCtx: BuildCtx = {
+      // Its OWN empty map — see the identical note on the sequence item context above.
       doc,
       scene,
       scope: rowScope,
@@ -1053,6 +1122,7 @@ export function buildRepeaterRows(
       visited: new Set([...guard.visited, element.compositionId]),
       resolutionWidth: comp.resolution.width,
       mode,
+      paintEditorBackdrop,
     };
     for (const layer of comp.layers) {
       inner.appendChild(buildLayer(layer, rowCtx));
@@ -1196,11 +1266,35 @@ function buildVideo(element: VideoElement, ctx: BuildCtx): HTMLElement {
  * hold frame is meaningful), else the clip midpoint. Inlined here (the designer
  * has its own `posterTimeMs`) exactly as the D-125 Lottie poster rule is inlined
  * at `runtime.ts` — the runtime package cannot import from the designer app.
+ *
+ * media-phases-follow-composition — a FOLLOW-source clip's stored `introEnd` is IGNORED
+ * data, so the poster falls back to `holdAt` (the authored held look) else the midpoint.
+ * This is only the NO-ANCHORS fallback: `createRuntime` REFINES the dataset to the exact
+ * derived `H` at driver construction, where the comp anchors exist.
  */
 function videoPosterMs(element: VideoElement): number {
-  const introEnd = element.phases?.introEnd;
-  if (introEnd !== undefined && introEnd > 0 && introEnd < element.durationMs) return introEnd;
+  const posterAnchor = followsComposition(element.phases)
+    ? element.phases?.holdAt
+    : element.phases?.introEnd;
+  if (posterAnchor !== undefined && posterAnchor > 0 && posterAnchor < element.durationMs) {
+    return posterAnchor;
+  }
   return Math.round(element.durationMs / 2);
+}
+
+/**
+ * The CSS shorthand for a {@link Stroke} — `"<w>px <solid|dashed> <color>"`.
+ *
+ * ONE spelling, two properties: {@link applyBoxStyle} feeds it to `border` for the
+ * box kinds, {@link buildLiveSource} feeds the SAME string to `outline` for a Live
+ * Source (see there for why the property differs). The grammar is identical for
+ * both, so a dash rule or a unit that changed here could not reach one and miss the
+ * other — which is exactly how a plate's frame and a shape's would come to disagree
+ * about the same authored value.
+ */
+function strokeShorthand(stroke: Stroke): string {
+  const style = stroke.dash !== undefined && stroke.dash.length > 0 ? 'dashed' : 'solid';
+  return `${stroke.width}px ${style} ${stroke.color}`;
 }
 
 /**
@@ -1211,8 +1305,7 @@ function videoPosterMs(element: VideoElement): number {
  */
 function applyBoxStyle(el: HTMLElement, box: BoxStyle): void {
   if (box.stroke) {
-    const style = box.stroke.dash !== undefined && box.stroke.dash.length > 0 ? 'dashed' : 'solid';
-    el.style.border = `${box.stroke.width}px ${style} ${box.stroke.color}`;
+    el.style.border = strokeShorthand(box.stroke);
   }
   if (box.cornerRadius !== undefined) {
     el.style.borderRadius =
@@ -1382,6 +1475,35 @@ function smpteBarsGradient(): string {
 }
 
 /**
+ * R-049 — the bars are the RUNTIME's too, and this is why they leave the module
+ * as a STATEMENT rather than as an `export` keyword on each declaration.
+ *
+ * PVW draws these same bars as a placeholder over each live plate, so there must
+ * be exactly ONE bar table and ONE gradient writer — a hand-written second copy
+ * would very likely lose the paired-stop rule above, and lose it only on the
+ * build nobody develops against.
+ *
+ * Two things here are deliberate, and both were MEASURED against the generated
+ * `cg-runtime-bundles.ts` rather than assumed:
+ *
+ *  1. **A statement, not `export const SMPTE_BARS = [...]`.** The prefix pushes
+ *     that declaration past `printWidth`, prettier then wraps the array over
+ *     seven lines, and esbuild reprints the wrap — **+64 bytes in every exported
+ *     `.vcg`, for a reformat**. Left as one line, the emitted bundle is
+ *     byte-identical.
+ *  2. **NOT re-exported from `src/index.ts`.** That file is esbuild's bundle
+ *     ENTRY, so its export list IS the on-air artifact's export table: adding
+ *     these two names there costs **+121 bytes** in every `.vcg` for names no
+ *     page ever calls. Consumers reach them through the `./scene-builder`
+ *     subpath instead (see `package.json`), which the entry never sees.
+ *
+ * Neither figure paints a pixel. They are recorded because the fact behind them —
+ * the entry index IS the on-air export table — is worth knowing before the next
+ * symbol is added to it.
+ */
+export { SMPTE_BARS, smpteBarsGradient };
+
+/**
  * D-137 — render a **Live Source**: the region CasparCG composites a live input
  * behind (C-015).
  *
@@ -1389,11 +1511,20 @@ function smpteBarsGradient(): string {
  * contracts, which is why they are branched here on an explicit
  * {@link RenderMode} rather than differentiated by a stylesheet the host injects:
  *
- * - `'output'` (both exporters) — **ZERO PAINTED PIXELS.** No background, no
- *   children, no border. The element still emits its box (positioned, sized, id'd)
- *   so layout, bindings and the element map are unchanged, and so the hole's rect
- *   is inspectable in the artifact. It paints nothing because a live guest goes
- *   BEHIND it: anything painted here is a lid over the guest's face.
+ * - `'output'` (both exporters) — **ZERO PAINTED PIXELS INSIDE THE HOLE.** No
+ *   background and no children. The element still emits its box (positioned,
+ *   sized, id'd) so layout, bindings and the element map are unchanged, and so the
+ *   hole's rect is inspectable in the artifact. Nothing may paint INSIDE the rect,
+ *   because a live guest goes BEHIND it: a pixel painted there is a lid over the
+ *   guest's face.
+ *   ⭐ **AMENDED (owner, 2026-08-10; `live-source-multibox` design.md §9a.1) — an
+ *   authored `stroke` DOES paint, in BOTH modes, and that is not an exception to
+ *   the rule above.** It is rendered as a CSS `outline`, which is painted outside the
+ *   box and takes no layout, so the hole stays empty and the plate's box stays
+ *   exactly `transform` — the rect `collectLiveSources` declares and the overlap
+ *   preflight compares — under any box model and any scale. See the note in
+ *   {@link buildLiveSource} for why `border` was measured and rejected.
+ *
  * - `'author'` (canvas + Preview modal) — procedural SMPTE bars with the source id
  *   overlaid, or the poster image when one is set. Never an unmarked black box:
  *   with several holes on one frame, an unlabelled black rectangle tells the author
@@ -1411,6 +1542,45 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
   el.dataset['cgLiveSource'] = element.routeKey;
   if (element.keySourceId !== undefined) el.dataset['cgLiveSourceKey'] = element.keySourceId;
   applyBaseStyles(el, element.transform, element.opacity, element.visible, element.filter);
+
+  // ⭐ §9a.1 — THE FRAME, applied BEFORE the 'output' return on purpose: the stroke
+  // is the one thing a Live Source paints on air.
+  //
+  // 🔴 **`outline`, NOT `border`, and the difference is the whole requirement.** The
+  // hole is a CONTRACT: `collectLiveSources` declares `transform` — position AND size
+  // — and CasparCG composites the live picture into exactly that rect, so any frame
+  // that moves or resizes the content box desyncs the picture from the frame drawn
+  // around it. An outline is painted outside the border edge and occupies NO layout
+  // at all, so the plate's box stays `transform` under every box model and every
+  // scale. `border` cannot do that, and §9a.1's reasoning that it could does not
+  // survive contact with either surface — MEASURED, both of them:
+  //
+  //   1. §9a.1 argued the CSS default `content-box` paints a border outside the
+  //      declared size because this package sets no `box-sizing` reset. True of the
+  //      package, false of every page it renders on: the shipped baseline stylesheet
+  //      opens with `*{box-sizing:border-box}` (`@cg/single-file-export`'s `cgCss` —
+  //      the same bytes in every `.vcg`, the single-file export and the Preview) and
+  //      `@cg/ui`'s `theme.css` resets the canvas identically. Left implicit, the
+  //      frame would be painted INSIDE the rect, cropping the live picture.
+  //   2. Declaring `content-box` fixes the SIZE and breaks the POSITION: `left`/`top`
+  //      place the BORDER edge, so the content box — the hole — slides right and down
+  //      by the stroke width. Measured in Chromium at 8px stroke: the hole moved from
+  //      (5828, 3662) to (5836, 3670) while the declaration still named the old rect.
+  //      A negative-margin compensation is not a fix either: under `transform: scale`
+  //      with `transform-origin: 0 0` the required offset is `-scale × width`, so the
+  //      correction would have to track a value `collectLiveSources` composes
+  //      separately — two spellings of one geometry, which is the shape this repo
+  //      keeps paying for.
+  //
+  // The shorthand itself is still ONE implementation, shared with `applyBoxStyle`
+  // through {@link strokeShorthand} — the property differs, the stroke grammar does
+  // not. `cornerRadius` is deliberately not applied: it is not on this kind's schema,
+  // rounding waits on the punch (1.5d), and ⚠ when it lands, note that Chromium
+  // follows `border-radius` on an OUTLINE only from ~94 — well above the CEF 71
+  // baseline — so rounding the hole and the frame TOGETHER will need its own answer.
+  if (element.stroke !== undefined) {
+    el.style.outline = strokeShorthand(element.stroke);
+  }
 
   if (ctx.mode === 'output') return el;
 
@@ -1433,7 +1603,20 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
 
   const label = ctx.doc.createElement('div');
   label.dataset['cgLiveSourceLabel'] = '';
-  label.textContent = element.routeKey;
+  /*
+    ⭐ `B-183` — an UNASSIGNED plate says so ON THE BARS.
+
+    The label's job has always been to tell the author what this hole is pointed at, and the
+    old `live-1` default was justified in `element-defaults.ts` precisely because it was
+    "visible on the canvas … which is what tells the author there is something to set". Now
+    that a new plate points at NOTHING, that sentence is only honoured by saying nothing is
+    set — an empty label would leave the bars looking finished.
+
+    ⚠ The plate paints NOTHING on air (the hole is transparent and the picture is composited
+    behind it), so this text is an authoring-preview affordance and never reaches broadcast
+    output. The export refuses an unassigned plate before it can.
+  */
+  label.textContent = element.routeKey ?? 'no source';
   label.style.position = 'absolute';
   label.style.left = '0';
   label.style.right = '0';

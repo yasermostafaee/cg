@@ -1,0 +1,671 @@
+import { PLAYLIST_AUDIO_LOCKED_REASON, plateList } from '@cg/shared-ipc';
+import { colors, cssVars } from '../../theme.js';
+
+/**
+ * `add-multibox-audio` — **THE ONE VOCABULARY FOR "WHAT IS THIS PLATE'S AUDIO DOING", and
+ * the four operator gestures expressed as maps.**
+ *
+ * React-free and in its own module for `liveLayerRows`' reason: FOUR surfaces answer this
+ * question now — the LIVE PLATES strip, the PVW overlay glyph, the layer row's summary and
+ * the per-row dialog — and four surfaces deriving the same fact independently is precisely
+ * how one of them comes to disagree with the others about whether a guest can be heard. Audio
+ * is the one property of a graphic an operator CANNOT see, so a disagreement here is
+ * invisible until air.
+ *
+ * ── 🔴 `0` IS A REAL AUTHORED VALUE, AND EVERY READ HERE TESTS `=== undefined` ────
+ *
+ * A recorded `0` means _"the operator muted this plate"_. An ABSENT key means _"nobody has
+ * said"_. They are different states, only one of them was CHOSEN, and zero is falsy — which
+ * this repo has paid for three times. Nothing in this module uses `||`, and nothing folds the
+ * two together.
+ *
+ * ── 🔴 AN INTENT IS NOT A MEASUREMENT ────────────────────────────────────────────
+ *
+ * Everything here describes what was ASKED FOR. Nothing here knows whether sound is actually
+ * present — CasparCG's programme channel reports ONE peak pair for the whole channel, so a
+ * per-input level does not exist to be read yet (see `add-multibox-audio` design.md §6). Every
+ * indicator built on this module is therefore a **PILL** and never a bar, a needle or a meter
+ * shape: a pill drawn as a meter would claim the thing this data cannot say.
+ */
+
+/**
+ * What one plate's audio is doing, in the operator's terms.
+ *
+ * THREE states, and the third is not a shade of the second. `held` is §12.4's disposition —
+ * the plate is seated but the active LOOK punches no hole in front of it, so the bridge keeps
+ * it muted and idle. That is why a raised held plate is silent, and an operator who cannot
+ * tell it from an ordinary mute will go looking for a fault in the input.
+ */
+export type PlateAudioState = 'audible' | 'silent' | 'held';
+
+/**
+ * The state of one plate.
+ *
+ * 🔴 **`held` WINS OVER THE VOLUME, whatever the volume is**, because the look — not the
+ * intent — is what decides audibility for a held plate. Reporting a held-and-raised plate as
+ * `audible` would be the console asserting sound that the hold's mute is actively preventing;
+ * reporting a held-and-muted one as `silent` would hide the reason it is not going to become
+ * audible when the operator raises it.
+ *
+ * `volume` is read with `=== undefined`, never truthiness — see the header.
+ */
+export function plateAudioState(volume: number | undefined, held: boolean): PlateAudioState {
+  if (held) return 'held';
+  if (volume === undefined) return 'silent';
+  return volume > 0 ? 'audible' : 'silent';
+}
+
+/**
+ * 🔴 **THE ONE ANSWER TO "WHAT IS THIS PLATE'S AUDIO DOING" — every surface asks THIS.**
+ *
+ * `add-multibox-audio` shipped with TWO definitions of "has sound" on one screen: the strips
+ * and the dialog derived AUDIBLE/SILENT/ARMED from {@link plateAudioPill}, while the layer
+ * row's summary counted `plateIntent > 0` on its own. That split is the whole of
+ * `B-164`, and it produced two wrong numbers at once — an INTENT numerator (a held plate
+ * armed at 100% counted as raised while it was silent on air) over a SEATED denominator (a
+ * held plate is invisible and still inflated the total).
+ *
+ * The split is closed by making this the only place the three facts are derived, and by having
+ * {@link plateAudioPill} and {@link audioSummary} both read it. It is the golden-rule-6 shape:
+ * a second local copy of "can this be heard" is exactly how one surface comes to disagree with
+ * the other about a property the operator CANNOT see.
+ *
+ * ⚠ **`audible` and `armed` are NOT the same question, and a held plate is where they part.**
+ * `armed` is the recorded INTENT — the operator raised it. `audible` additionally requires the
+ * active look to show the plate, because §12.4's hold keeps a seated-but-unshown plate muted
+ * and idle no matter what the intent says. For a SHOWN plate the two agree; for a held one they
+ * must not, and folding them is the defect.
+ *
+ * ⚠ Still an INTENT, never a measurement — see the module header. `audible` means "the console
+ * asked for this plate's sound and nothing it knows about is suppressing it", not "a sample
+ * reached the output".
+ */
+export interface PlateAudioVerdict {
+  /** The three-state disposition — the same one the pill wears. */
+  state: PlateAudioState;
+  /** Sound is being asked for AND the look is not suppressing it. */
+  audible: boolean;
+  /** The operator raised this plate. TRUE for a held plate too — that is the point. */
+  armed: boolean;
+}
+
+export function plateAudioVerdict(volume: number | undefined, held: boolean): PlateAudioVerdict {
+  const state = plateAudioState(volume, held);
+  return {
+    state,
+    audible: state === 'audible',
+    // `=== undefined` and then `> 0`, never truthiness: an explicit 0 is a CHOICE to mute and
+    // an absent key is nobody having said, and both must fail this test for different reasons
+    // (module header). Zero is falsy, which this repo has paid for three times.
+    armed: volume !== undefined && volume > 0,
+  };
+}
+
+/** Percent, for the operator. The wire takes a 0–1 gain. */
+export function pct(volume: number): string {
+  return `${String(Math.round(volume * 100))}%`;
+}
+
+/*
+  ⚠ **A `plateIntent(item, plateId)` helper lived here and was REMOVED, not left unused** —
+  the same call this module already made about `panicMap` below, for the same reason.
+
+  It read one plate's recorded volume off a `StackItemState`, and it existed because
+  `audioSummary` took the ITEM and did the join itself. That join was the wrong shape: reading
+  an intent map is not enough to answer "is this plate audible", because audibility also needs
+  §12.4's `held`, which lives on the LEDGER and not on the item. `B-164` moved the join to the
+  panel — `rowPlateAudioOf` reads both facts off the same `LiveLayerRowView`s the strips render
+  — and with it this helper's only caller went away.
+
+  Noted rather than silently deleted because the pull towards re-adding one is real: if you
+  find yourself reaching for a plate's volume off the stack item inside this module, the
+  question to ask is whether you also have its `held`, because a verdict built on one of the
+  two is the defect this item fixed.
+*/
+
+export interface PlateAudioPill {
+  /** The WORD. Never omitted — the hue is never the only signal (theme.ts's rule). */
+  label: string;
+  /** The dot's colour. */
+  tone: string;
+  /** The longer reading, for a tooltip and an accessible name. */
+  detail: string;
+}
+
+/**
+ * How each state READS.
+ *
+ * ── COLOUR, AND WHY EACH CANDIDATE WAS RULED IN OR OUT ──────────────────────────
+ *
+ * ⚠ **THE FIRST THREE BULLETS ARE SUPERSEDED, AND THEY ARE KEPT BECAUSE THEY WERE REASONED.**
+ * The owner overruled `held` on 2026-09-13 and `audible` plus `Not seated` on 2026-09-14; the
+ * blocks beside each value carry the amendments. Read them as the arguments that were weighed,
+ * never as the current rule.
+ *
+ *   - ~~**GREEN is out absolutely.**~~ It is the sacred ON AIR mark of the layer TABLE, and a
+ *     plate borrowing it would put a second, unrelated air claim on a different surface —
+ *     the rule `liveLayerRows` already states for this very tab. **(Amended: §29 now lets
+ *     green mark audible audio on these two surfaces, on its own token.)**
+ *   - ~~**AMBER is out for `held`**~~, which is the choice a reader will question. Amber means
+ *     ATTENTION here, and `held` is a NORMAL, CHOSEN disposition — the neighbouring module
+ *     says so in as many words: *"`held` is a normal, chosen disposition and wears a WORD,
+ *     not a hue."* **(Amended: see `HELD_TONE`.)**
+ *   - ~~**SKY for `audible`.**~~ It is unused on this surface, it is not a state hue anywhere in
+ *     the LIVE PLATES tab, and "this plate can be heard" is a positive statement rather than
+ *     something to go and look at. **(Amended: it is the green now.)**
+ *   - **MUTED GREY for `silent`**, which is the one that did NOT move: silence is the DEFAULT —
+ *     every producer the bridge creates is created muted — so the common case recedes.
+ *
+ * ── 🔴 THE GREEN IS ADOPTED — OWNER DECISION, 2026-09-14 (`PLATES-AUDIO-11` DELTA §1) ──
+ *
+ * `PLATES-AUDIO-11` §3 measured the reference's green at `rgb(128, 228, 176)`, established by
+ * falsification that it is NOT conditioned on air (taking the reference's row off air leaves
+ * the word green), and on that basis declined it under `design.md` §29's *green = ON AIR and
+ * nothing else*. **The owner amended §29 rather than the measurement: green ALSO marks audio
+ * that is audible, on this tab and in the audio modal.** Recorded, not re-argued — see
+ * `design.md` §29 and §34.3.
+ *
+ * The ink is `--r-audible-text`, a THIRD green with its own role name: `--r-onair` is the layer
+ * table's sacred air mark and `--r-ok-text` is the healthy mint, and pointing this at either
+ * would collapse a distinction the palette keeps on purpose.
+ *
+ * ⚠ **SKY (`colors.ready`) IS RETIRED FROM THIS WORD**, and that is the half a reader will
+ * check: `Audible` wore the reference's own TAB ink (`--blue #74cdf6`) until this amendment.
+ * Blue means DECLARED-not-on-air everywhere else in this console, so the two could not both
+ * stay — and the owner chose the green.
+ *
+ * ── 🔴 `PLATES-AUDIO-11` §3 — SENTENCE CASE, WHICH SUPERSEDES `design.md` §31.4's SECOND HALF ──
+ *
+ * §31.4 measured the reference as sentence case (true, and unchanged) and ruled that OURS would
+ * stay CAPS. The owner reversed that half on 2026-09-13: the state words are sentence case now.
+ * The vocabulary is still shared, and it is still shared from HERE — the recasing moved one
+ * object, not four surfaces' worth of local copies, which is the whole point of the module.
+ */
+const PILL: Record<'audible' | 'silent', PlateAudioPill> = {
+  audible: {
+    label: 'Audible',
+    tone: cssVars['--r-audible-text'],
+    detail: 'This plate is raised, so its source can be heard on air.',
+  },
+  silent: {
+    label: 'Silent',
+    tone: colors.textMuted,
+    detail:
+      'This plate is not raised. Every live plate starts silent — a plate carries its ' +
+      'guest’s live microphone, so nothing is audible until it is raised here.',
+  },
+};
+
+/**
+ * `RUNTIME-REDESIGN-01` Phase 6 — **a plate with NO SEAT, as the audio dialog lists it.**
+ *
+ * Not a fourth audio state: the three above answer "can this plate be heard", and a plate
+ * nothing has seated cannot be — there is no layer for a sample to reach. What the dialog has
+ * to say instead is that the fader still MEANS something: the intent is recorded now and the
+ * row's next take seats the plate at it (the arm-before-the-take affordance). The word replaces
+ * the dialog's old _"audible on air"_, which on a READY row was a claim about air that nothing
+ * on the channel backed — the A12 class (`design.md` §12.8).
+ *
+ * 🔴 **AMBER SINCE THE `PLATES-AUDIO-11` DELTA (owner, 2026-09-14) — the same treatment as
+ * `hidden by look`, and the pairing is the point.** It was muted grey, on the argument that
+ * nothing is wrong. Both states now share the caution ink because they share the operator's
+ * question: *why can I not hear this box?* Grey answered that question by receding.
+ *
+ * ⚠ The DETAIL is the one fact that stops a fader being misleading — the volume is recorded
+ * now and applied when a look seats this frame — and on the LIVE PLATES tab it is the ONLY
+ * place that fact is said (the DELTA's §3 removed the row's paragraph). So it is not
+ * decoration: shorten it and an operator who moves that fader can believe something was sent.
+ */
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` C (`R-075`) — **A BOX SHOWING THE PLAYOUT'S PLAYLIST OUTPUT: LOCKED AT 0.** The
+ * route carries the programme sound again, so the box is always at `VOLUME 0` and nothing here can raise
+ * it (the bridge refuses a raise too). A state fact, not a fourth audibility: the word says it is locked
+ * and at what level; the reason is its `title`.
+ */
+export const LOCKED_PILL: PlateAudioPill = {
+  label: 'Locked · 0',
+  tone: colors.textMuted,
+  detail: `${PLAYLIST_AUDIO_LOCKED_REASON} — this box stays at 0.`,
+};
+
+export const UNSEATED_PILL: PlateAudioPill = {
+  label: 'Not seated',
+  tone: cssVars['--r-caution-text'],
+  detail:
+    'Nothing is on a layer for this plate yet. The volume is recorded now and applied when a ' +
+    'look that uses this frame seats it — nothing is sent until then.',
+};
+
+/**
+ * 🔴 **`B-247` — A FRAME THAT *WAS* SEATED AND WAS TORN DOWN, which until now wore
+ * {@link UNSEATED_PILL} and was therefore indistinguishable from one that never had a
+ * producer.**
+ *
+ * ── WHY THE TWO MAY NOT SHARE A WORD ────────────────────────────────────────
+ *
+ * `Not seated`'s sentence says *"nothing is on a layer for this plate **yet**"*, and `yet`
+ * asserts a history. For a frame the look reconcile cleared it is the one false word in an
+ * otherwise correct sentence: that frame was on air a moment ago. The investigation
+ * (`LEDGER-SEAT-14`) measured the plant case — a three-frame row whose ledger went from three
+ * seats to one within the hour, with nothing in the audit log, because two of its three plates
+ * are `media` clips and §12.4 then tore every clip down rather than holding it (since
+ * `MEDIA-PLATES-01`, only a clip set to restart). The narrowing is CORRECT; being unable to tell
+ * it from "never seated" was not.
+ *
+ * ── THE CAUSE THIS SENTENCE NAMES, AND WHY IT IS SAFE TO NAME ONE ───────────
+ *
+ * ⚠ `releaseLivePlate` returns `torn-down` for TWO reasons — a `media` clip set to RESTART when
+ * hidden (`MEDIA-PLATES-01`: a `pause` or `continue` clip is held, like a live input), and a plate
+ * **no look binds any more**. Only the first can reach this pill, and the
+ * reason is structural rather than a guard: {@link declaredFrameRows} builds a row only for a
+ * plate the row's template still DECLARES, and a plate nothing declares is not in that list.
+ * (`liveLayerRows.test.ts` pins it, so the invariant cannot quietly stop holding.)
+ *
+ * 🔴 **And the bridge's OWN sentence is not discarded — it is the row's `title`.** This pill
+ * answers the AUDIO column's question (*why can I not hear this, and does my fader still do
+ * anything?*); the verbatim, unparaphrased account of the decision travels on the row itself,
+ * so nothing here is a second opinion about what the bridge decided.
+ *
+ * ⚠ **AMBER, the same ink as `hidden by look` and `Not seated`** — owner, 2026-09-14. All
+ * three answer one operator question under pressure (*why can I not hear this box?*), and a
+ * state that answers it by receding is the one that gets misread as a fault.
+ */
+export const CLEARED_PILL: PlateAudioPill = {
+  label: 'Cleared',
+  tone: cssVars['--r-caution-text'],
+  detail:
+    'This frame was on air and was cleared: its clip is set to restart when hidden. It plays ' +
+    'from the beginning when a look shows it again — the volume is recorded now and applied then.',
+};
+
+/**
+ * `held`'s hue, kept beside the other two rather than in {@link plateAudioPill}'s body — the
+ * three states' colours belong in one place even though this one's WORDING is computed.
+ *
+ * 🔴 **AMBER SINCE `PLATES-AUDIO-11` §3 — AN OWNER REVERSAL, ANNOTATED RATHER THAN ERASED.**
+ *
+ * This was NEUTRAL, and the argument for that is preserved because it was a real one: *"`held`
+ * is a normal, chosen disposition and wears a WORD, not a hue"* — amber means ATTENTION in this
+ * palette, and a held plate is not a fault. The owner overruled it on 2026-09-13 and the reason
+ * is the one thing that argument left out: a held plate is the state an operator most often
+ * MISREADS as a broken input, so it is the one that must catch the eye. The reference agrees in
+ * its own modal (measured `rgb(216, 190, 132)` on `Silent · hidden by look`).
+ *
+ * ⚠ **`--r-caution-text`, NOT the reference's value.** `rgb(216, 190, 132)` is `#d8be84`, which
+ * is not in the reference's own `:root` (its `--amber` is `#f3cd88`). `--r-caution-text` IS
+ * `#f3cd88` — the reference's declared amber, already unified across this console on
+ * 2026-09-13 — so the amber family stays one value rather than gaining a near-miss of itself.
+ * Measured on both grounds by `messageContrast.test.ts`.
+ */
+const HELD_TONE = cssVars['--r-caution-text'];
+
+/**
+ * The pill for one plate.
+ *
+ * 🔴 **A HELD PLATE READS DIFFERENTLY DEPENDING ON WHETHER IT IS ARMED, and that is the one
+ * place a state carries two wordings.** "Armed, not audible" and "not raised" are different
+ * things to tell an operator looking at a box they cannot hear:
+ *
+ *   - **armed and held** — you already raised this; it is silent because the look hides it,
+ *     not because anything is wrong. Do NOT go looking for a fault in the input.
+ *   - **not armed and held** — raising it now is exactly the right move, and it will take
+ *     effect when a look that shows this box is entered.
+ *
+ * That second sentence is the whole reason the control stays LIVE on a held plate rather than
+ * being disabled: arming a held plate's audio BEFORE switching to its look is the
+ * before-the-take affordance the mute rule exists to preserve.
+ */
+export function plateAudioPill(volume: number | undefined, held: boolean): PlateAudioPill {
+  // The SHARED verdict, not a local re-derivation — `armed` used to be computed inline here
+  // and nowhere else could reach it, which is half of why the row summary grew its own rule.
+  const { state, armed } = plateAudioVerdict(volume, held);
+  if (state !== 'held') return PILL[state];
+  return {
+    // 🔴 SHORTENED — owner, 2026-09-14. `Hidden by this look` overflowed the Audio column
+    // and ellipsised on the plant (`Hidden by this lo…`). A column's value may not
+    // disturb the table; the full reading is in `detail`, on the hover.
+    label: armed ? 'Armed · hidden by look' : 'Hidden by look',
+    tone: HELD_TONE,
+    detail: armed
+      ? 'Armed, not audible — the current look does not show this box. It becomes audible ' +
+        'the moment a look that shows it is entered; nothing is wrong with the input.'
+      : 'Not audible — the current look does not show this box. Raising it now takes effect ' +
+        'when you switch to a look that shows it.',
+  };
+}
+
+/**
+ * 🔴 **THE VERB SENTENCES — the promises the three buttons make, spelled ONCE.**
+ *
+ * `PLATES-AUDIO-11` §4 moved these here from `PlateAudioStrip`, where they lived while the
+ * DIALOG carried its own shorter spelling of the SOLO one. That is the shape this module
+ * exists to end: §4(b) asked for the no-un-solo clause on the SOLO control, and adding it to
+ * the second copy would have made the two agree once rather than making them unable to
+ * disagree. Both surfaces now render these.
+ *
+ * ── ON, AND WHY THE SENTENCE IS ON THE CONTROL AT ALL ──────────────────────
+ *
+ * OFF writes `0` and ON writes `1`. ON does NOT return the plate to whatever the fader said
+ * before OFF, and an operator who assumes it does will put a guest back at full when they
+ * meant forty percent. Restoring the previous level needs a SECOND store of intent beside the
+ * bridge's `#plateVolumes` answering the same question a second way — the `B-100` / `P-012`
+ * class — and only one of the two would be retained, so after a blip the plate would return at
+ * a volume nobody chose. The trade is deliberate; saying so on the button is its price.
+ */
+export const ON_TITLE = 'ON = full volume (100%). It does not return to the previous fader level.';
+
+export const OFF_TITLE = 'OFF = 0%. Silence this plate.';
+
+/**
+ * 🔴 `PLATES-AUDIO-11` §4(b) — **THE NO-UN-SOLO WARNING, WHICH CAME OUT OF THE DIALOG'S BODY
+ * AND HAD TO LAND SOMEWHERE.** §4 removed the explanatory paragraph; this clause is one of the
+ * two facts it ruled were SAFETY and not decoration, and this is where it went. It qualifies an
+ * irreversible cross-plate write, so it belongs on the control that performs it.
+ */
+export const SOLO_TITLE =
+  'Set this plate to 100% and every other plate on this row to 0%, including the frames the ' +
+  'current look hides. There is no un-solo — raise the others again on their own faders.';
+
+/** What SOLO says when there is nothing to solo against, so the disabled state is explained. */
+export const SOLO_ALONE_TITLE = 'This row has only one plate — there is nothing to solo against.';
+
+/**
+ * 🔴 **SOLO — one map, built HERE so that every surface offering SOLO addresses the same set.**
+ *
+ * The RAISED plate is placed FIRST in the map, and that is not cosmetic: the bridge applies
+ * entries in insertion order, so a map that fails half-way has silenced siblings rather than
+ * raised ones. Silence is the safe direction; a half-applied SOLO that left two guests up is
+ * not.
+ *
+ * ⚠ **THE SIBLING SET IS THE ITEM'S SEATED PLATES**, as the bridge's own ledger reports them —
+ * not the template's declaration and not the active look's membership. Three reasons, and they
+ * point the same way: only a SEATED plate can be audible; the pre-seat is the UNION of every
+ * look, so a HELD plate is in the set and correctly receives a recorded-only `0`; and the
+ * ledger is the same array the panel is already rendering, so what SOLO addresses and what the
+ * operator can see cannot disagree.
+ *
+ * ⚠ Every sibling is named EXPLICITLY rather than left out of the map. An absent key means
+ * "leave this plate alone", so omission would make SOLO a no-op on everything but the chosen
+ * plate.
+ */
+export function soloMap(
+  seatedPlateIds: readonly string[],
+  plateId: string,
+): Record<string, number> {
+  const map: Record<string, number> = { [plateId]: 1 };
+  for (const id of seatedPlateIds) {
+    if (id !== plateId) map[id] = 0;
+  }
+  return map;
+}
+
+/*
+  ⚠ **A `panicMap(seatedPlateIds)` helper lived here and was REMOVED, not left unused.**
+
+  It built PANIC's all-zero map for one row, back when the renderer resolved PANIC's SCOPE from
+  the on-air rows. That scope was the defect (`B-122`'s shape: an emergency control gated on
+  believed status), and PANIC is now a bridge verb that takes no arguments and reads its own
+  ledger — so nothing calls this, and a helper nothing calls is the written-but-unreachable
+  class this repo has filed repeatedly. Noted rather than silently deleted because the pull
+  towards re-adding one is real: if you find yourself building a panic map in the renderer, the
+  question to ask is why the browser is choosing the scope of an emergency verb at all.
+*/
+
+/**
+ * One plate this row owns, with the two facts audibility needs.
+ *
+ * Built by the panel from the SAME `LiveLayerRowView`s the LIVE PLATES tab renders
+ * (`rowPlateAudioOf`), so the chip and the strips below it cannot describe different plates.
+ * `volume` is the recorded intent — `undefined` is a REAL third state ("nobody has said") and
+ * is never collapsed to `0` on the way here.
+ */
+export interface RowPlateAudio {
+  plateId: string;
+  volume: number | undefined;
+  held: boolean;
+  /**
+   * The seat's coordinate (`1-10`), for a surface that names the layer in a sentence
+   * (`R-028`: the real layer number stays visible). Optional because `audioSummary`'s callers
+   * never needed it and a test builds these without one; absent means "not carried", never
+   * "not seated" — every record here IS a seat.
+   */
+  coordinate?: string | undefined;
+}
+
+export interface AudioSummary {
+  /** Plates the active look SHOWS whose sound is being asked for. */
+  audible: number;
+  /** Plates the active look SHOWS. The denominator, and the whole of `B-164`'s first half. */
+  shown: number;
+  /** Plates that are armed but HELD — outside the fraction, never folded into it. */
+  armedHidden: number;
+  /** The chip's text. */
+  label: string;
+  /** The sentence, for the tooltip and the accessible name. */
+  detail: string;
+}
+
+/**
+ * The layer row's compact READ-ONLY summary.
+ *
+ * 🔴 **`B-164` — BOTH NUMBERS WERE COUNTING THE WRONG THING, AND THE FIX IS THE AXIS, NOT THE
+ * ARITHMETIC.**
+ *
+ * The owner measured one row, one template declaring three plates, three looks:
+ *
+ * | look   | boxes on screen | the chip read |
+ * | ------ | --------------- | ------------- |
+ * | ghab-1 | 1               | `audio 1/2`   |
+ * | ghab-2 | 2               | `audio 1/3`   |
+ * | ghab-3 | 3               | `audio 1/3`   |
+ *
+ *   - **The DENOMINATOR counted SEATS, not what the look SHOWS.** The bridge pre-seats the
+ *     UNION of every look, so a held plate is seated, invisible, and was still inflating the
+ *     total — which is precisely `1 box → /2` and `2 boxes → /3`.
+ *   - **The NUMERATOR counted INTENT, not audibility.** A held plate armed at 100% — which the
+ *     audio dialog EXISTS to permit, so the operator can arm a box before switching to its
+ *     look — read as raised while it was silent on air. The chip could say `2/2` with one
+ *     plate making sound. That half is worse and the owner has not hit it yet.
+ *
+ * ⚠ **The wrong axis is SEATED vs SHOWN, and the fix is NOT to count DECLARED plates.**
+ * `LayerRow.tsx`'s prop still argues why seated beats declared — a declared plate with no
+ * producer cannot be audible — and that argument is untouched. Both numbers here are drawn
+ * from the SEATED set; what changed is that the fraction is narrowed to the shown part of it.
+ *
+ * ⚠ **The armed-but-hidden count is reported SEPARATELY and never inside the fraction.** The
+ * operator armed that plate deliberately and needs to know it is waiting; putting it in the
+ * numerator would claim sound that the hold is preventing, and dropping it would silently lose
+ * the one thing the pre-arm affordance exists to make visible.
+ *
+ * Returns `null` when the row owns no live plates at all — what keeps the chip off every
+ * ordinary row. A row whose active look shows NO plates still summarises (`audio 0/0` is
+ * suppressed by `plates.length === 0`, not by `shown === 0`): an all-held row with something
+ * armed has a real thing to say.
+ */
+export function audioSummary(plates: readonly RowPlateAudio[]): AudioSummary | null {
+  // Deduplicated by plate id: a fill+key pair puts the same `sourceId` on TWO ledger records,
+  // and counting both would double every keyed guest.
+  const unique = [...new Map(plates.map((p) => [p.plateId, p])).values()];
+  if (unique.length === 0) return null;
+  let audible = 0;
+  let shown = 0;
+  let armedHidden = 0;
+  for (const plate of unique) {
+    // ONE verdict function, the same one the strips and the dialog read.
+    const verdict = plateAudioVerdict(plate.volume, plate.held);
+    if (plate.held) {
+      if (verdict.armed) armedHidden++;
+      continue;
+    }
+    shown++;
+    if (verdict.audible) audible++;
+  }
+  const label =
+    `audio ${String(audible)}/${String(shown)}` +
+    // Only when non-zero: an ordinary row must not carry a permanent `· 0 armed`.
+    (armedHidden > 0 ? ` · ${String(armedHidden)} armed` : '');
+  return { audible, shown, armedHidden, label, detail: summaryDetail(audible, shown, armedHidden) };
+}
+
+/**
+ * The summary said as a sentence.
+ *
+ * 🔴 **IT CLAIMS ONLY WHAT THE CONSOLE KNOWS.** The old wording was _"N of this row's M live
+ * plates are raised"_ — and "raised" is an INTENT word being used where a reader takes it as a
+ * report about air. Nothing in this console can know a sample reached the output: CasparCG's
+ * programme channel reports ONE peak pair for the whole channel, so a per-input level does not
+ * exist to be read (`add-multibox-audio` design.md §6). So the sentence says what was ASKED
+ * FOR, and says out loud that it is not a measurement — rather than leaving a reader to infer
+ * which of the two they are looking at.
+ */
+function summaryDetail(audible: number, shown: number, armedHidden: number): string {
+  const head =
+    shown === 0
+      ? 'This look shows no live plates.'
+      : `Sound is asked for on ${String(audible)} of the ${String(shown)} live ` +
+        `${shown === 1 ? 'plate' : 'plates'} this look shows.`;
+  const waiting =
+    armedHidden === 0
+      ? ''
+      : ` ${String(armedHidden)} more ${armedHidden === 1 ? 'is' : 'are'} armed but hidden by ` +
+        `this look — ${armedHidden === 1 ? 'it becomes' : 'they become'} audible on switching ` +
+        `to a look that shows ${armedHidden === 1 ? 'it' : 'them'}.`;
+  return (
+    `${head}${waiting} Nothing here measures the output — this is what the console asked for. ` +
+    `Open LIVE PLATES, or this row's audio dialog, to change it.`
+  );
+}
+
+/**
+ * 🔴 `CONSOLE-LOOK-06` DELTA 8 — **WHAT AN AUDIO CHANGE SAYS WHEN IT LANDS.**
+ *
+ * The reference's three examples set the pattern, and the pattern is not "what was pressed":
+ *
+ *     l2 · 100% requested gain.
+ *     l2 · 0% silent.
+ *     l2 at 100%; other plates on Bed 1 set to zero. No automatic restore.
+ *
+ * - it names the LAYER by its coordinate, first;
+ * - it states the RESULTING STATE, not the verb — the operator knows what they pressed, they
+ *   need to know where it landed;
+ * - when the act has a consequence they cannot see, it says so in ONE clause. SOLO's example
+ *   is the whole reason this rule exists: other plates zeroed, and no automatic restore. **An
+ *   irreversible side effect is never left unsaid.**
+ * - one line, sentence case, no id in the sentence (golden rule 11).
+ *
+ * 🔴 The prototype's trailing `Demo only.` is the PROTOTYPE's marker, not part of the pattern,
+ * and is not carried anywhere.
+ *
+ * ⚠ **`requested gain`, never `level`.** A fader on this surface is REQUESTED GAIN and not a
+ * measurement — the same rule `LivePlateOverlay` states for the on-canvas pill, and the reason
+ * this console draws no meter anywhere: CasparCG reports one peak pair for the whole channel,
+ * so a per-plate level does not exist to be announced.
+ */
+export function plateAudioAnnouncement(
+  changed: readonly { coordinate: string; volume: number }[],
+  solo: { coordinate: string; ownerLabel: string } | null,
+): string | null {
+  // §4(c) — nothing changed, nothing announced. A no-op that speaks is noise.
+  if (changed.length === 0) return null;
+
+  /*
+    SOLO is a CROSS-PLATE statement, so it gets the cross-plate sentence: one toast for the
+    whole map (§4b), naming the frame that stays up, what happened to the others, and the fact
+    the operator cannot see — that nothing will put them back.
+  */
+  if (solo !== null) {
+    return `${solo.coordinate} at 100%; other plates on ${solo.ownerLabel} set to zero. No automatic restore.`;
+  }
+
+  // One plate: the coordinate, then the state it landed in.
+  if (changed.length === 1) {
+    const only = changed[0];
+    if (only === undefined) return null;
+    return only.volume === 0
+      ? `${only.coordinate} · 0% silent.`
+      : `${only.coordinate} · ${pct(only.volume)} requested gain.`;
+  }
+
+  // A map that is not a solo — say how many moved rather than listing them, which is §4(b)'s
+  // rule for a bulk act: one toast that states its scope, never one per plate.
+  return `${String(changed.length)} plates set.`;
+}
+
+/**
+ * 🔴 DELTA 8 §4 — **THE ONE PLACE AN AUDIO MAP ANNOUNCES ITSELF.**
+ *
+ * There are TWO call paths into `stack.setPlateVolumes` — `LayersPanel`'s (the plates tab and the
+ * dialog it opens) and `LayerRow`'s (the row's own dialog) — and a toast written at each is two
+ * spellings of one sentence, which is how they come to disagree (golden rule 6). Both call
+ * this.
+ *
+ * §4(e): it announces the CONFIRMED result, so a plate the bridge refused is not counted, and
+ * a wholly refused map says nothing at all — the refusal has its own persistent surface
+ * (DELTA R) and §4(d) forbids a refusal living only in a toast.
+ * §4(c): a plate whose volume did not actually move is not "changed", so pressing OFF on an
+ * already-silent plate announces nothing.
+ */
+/**
+ * Is this map a SOLO — one plate up, every other one zeroed?
+ *
+ * 🔴 READ FROM THE MAP'S OWN SHAPE, not from a flag threaded through the call. `soloMap` builds
+ * exactly this and nothing else does, so the shape IS the contract — and detecting it here
+ * keeps `add-multibox-audio`'s ONE-CALL door exactly as it was. Widening `onApplyVolumes` to
+ * carry an intent would have been a second channel for something the payload already says.
+ *
+ * ⚠ Two or more plates up is not a solo, and neither is a map of one plate: a lone plate set
+ * to 100% silences nothing, so it has no cross-plate consequence to announce.
+ */
+function soloTarget(requested: Record<string, number>): string | null {
+  const entries = Object.entries(requested);
+  if (entries.length < 2) return null;
+  const up = entries.filter(([, v]) => v > 0);
+  const only = up[0];
+  if (up.length !== 1 || only === undefined) return null;
+  return only[1] === 1 ? only[0] : null;
+}
+
+/**
+ * 🔴 `B-309` — **WHICH PLATES A REFUSED AUDIO CHANGE LEFT ALONE, in the operator's words**: each one
+ * `Plate N` (`plateLabelOf`), listed as a sentence lists them. When a plate has no position to name
+ * it by, the plates are COUNTED instead — a plate is never named by its id in a sentence (golden
+ * rule 11). The ids stay in the call's own result (`refused`).
+ */
+export function refusedPlatesPhrase(labels: readonly (string | undefined)[]): string {
+  const named = labels.filter((l): l is string => l !== undefined);
+  if (named.length > 0 && named.length === labels.length) return plateList(named);
+  return `${String(labels.length)} plate${labels.length === 1 ? '' : 's'}`;
+}
+
+/** `that plate is` / `those plates are` — `unchanged` follows. */
+export function platesUnchanged(count: number): string {
+  return count === 1 ? 'that plate is unchanged' : 'those plates are unchanged';
+}
+
+/** `B-309` — the Live plates tab's toast for a refused audio change. */
+export function refusedAudioSentence(labels: readonly (string | undefined)[]): string {
+  return `Audio not applied to ${refusedPlatesPhrase(labels)} — ${platesUnchanged(labels.length)}.`;
+}
+
+export function announcePlateAudio(
+  requested: Record<string, number>,
+  before: Record<string, number> | undefined,
+  refused: readonly string[],
+  coordinateOf: (plateId: string) => string | null,
+  ownerLabel: string,
+): string | null {
+  const landed = Object.entries(requested).filter(([plateId]) => !refused.includes(plateId));
+  const moved = landed.filter(([plateId, v]) => (before?.[plateId] ?? 0) !== v);
+  const changed = moved.flatMap(([plateId, volume]) => {
+    const coordinate = coordinateOf(plateId);
+    return coordinate === null ? [] : [{ coordinate, volume }];
+  });
+  const solo = soloTarget(requested);
+  if (solo !== null) {
+    const coordinate = coordinateOf(solo);
+    // A solo that changed nothing — the frame was already the only one up — is still a no-op.
+    if (coordinate === null || changed.length === 0) return null;
+    return plateAudioAnnouncement(changed, { coordinate, ownerLabel });
+  }
+  return plateAudioAnnouncement(changed, null);
+}

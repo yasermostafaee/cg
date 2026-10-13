@@ -41,6 +41,10 @@ test-results/
 .claude/*
 !.claude/settings.json
 !.claude/hooks/
+# P-035 — the never-stage list. It MUST be tracked: an untracked list is a guard
+# that silently does nothing on any other checkout, which is the failure mode the
+# guard itself exists to prevent.
+!.claude/never-stage
 # No slash command is tracked any more: `/ship` automated the retired per-change
 # branch + PR ship sequence and was deleted with that model (see `P-026`). The
 # GENERATED OpenSpec slash commands stay ignored, so `.claude/commands/` needs no
@@ -51,6 +55,14 @@ test-results/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# DESKTOP-APPS-01 — the desktop shells' Cargo output and Tauri's generated schemas. (CG Control
+# stages nothing since CENTRAL-BRIDGE-01: it bundles its console, and carries no bridge.)
+/target/
+apps/*/src-tauri/gen/
+# CENTRAL-BRIDGE-01 — CG Bridge's staged payload (`stage-bridge.mjs`) and the installer makensis builds.
+tools/bridge-installer/payload/
+tools/bridge-installer/CG-Bridge_*_x64-setup.exe
 
 # Logs
 *.log

@@ -6,11 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
+import { directionOf } from '../src/renderer/ui/OperatorNames.js';
 import {
   __resetDraftsForTest,
   buildApplyPayload,
 } from '../src/renderer/features/inspector/draftStore.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * dev-r028-b4 item 6 — the editor's text direction follows the value, and NOTHING ELSE
@@ -69,15 +71,28 @@ async function render(): Promise<HTMLDivElement> {
   const stub = {
     // §0a — BOTH hops, selected by name (support/reachability.ts). `link` is
     // needed too: the health snapshot rides `useBridgeSnapshot`, which reads it.
-    link: { status: () => linkFor('both-up'), onStatusChanged: () => () => undefined },
+    link: {
+      status: () => linkFor('both-up'),
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub('both-up'),
     templates: {
       get: vi.fn(() => Promise.resolve(TEMPLATE)),
       list: vi.fn(() => Promise.resolve([TEMPLATE])),
+      onChanged: () => () => undefined,
+    },
+    // Phase 6 — the Inspector names the ROW (`useOperatorNames`), so it reads the bank too.
+    fixedLayers: {
+      config: () => Promise.resolve(null),
+      onConfigChanged: () => () => undefined,
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
     },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -124,11 +139,54 @@ describe('item 6 — free-text editors delegate direction to the browser', () =>
 
   it('NO editor pins a literal direction — that is what would leak into authoring', async () => {
     const el = await render();
-    // The whole panel: not one `dir="rtl"` / `dir="ltr"` anywhere. A hard-coded
-    // direction on an editor is the first step toward one reaching a value.
-    expect(el.querySelectorAll('[dir="rtl"], [dir="ltr"]')).toHaveLength(0);
-    for (const node of el.querySelectorAll('[dir]')) {
-      expect(node.getAttribute('dir')).toBe('auto');
+    /*
+      🔴 NARROWED TO WHAT THE SENTENCE ABOVE SAYS — EDITORS — and STRENGTHENED on that
+      axis, `INSPECTOR-AUDIT-05` §2(c).
+
+      It used to assert the WHOLE PANEL carried no literal `dir`, which was a cheap
+      over-approximation: true when it was written, and it became wrong the moment the
+      panel adopted `IsolatedName` (`MODAL-CHROME-10` ADDENDUM B). That component is the
+      canonical repair for a bidi defect measured on four surfaces, and its LTR box is
+      exactly the point of it — a `<bdi>`'s own `dir=auto` reaching a BLOCK's ALIGNMENT is
+      what flushed Persian names to the wrong side, and an LTR wrapper is what stops it
+      without removing the isolation.
+
+      So the rule this file owns is asked precisely: every VALUE-CARRYING control delegates
+      direction to the browser. And the exception is not waved through — a literal `dir` is
+      permitted only on a NAME'S BOX, which is asserted to hold a `<bdi>` and no control at
+      all, so a `dir="ltr"` that drifted onto an editor still goes red here.
+    */
+    const editors = el.querySelectorAll('input, textarea, select, [contenteditable]');
+    // The positive control: without it this loop passes against a panel that rendered none.
+    expect(editors.length, 'the panel rendered editors to measure').toBeGreaterThan(0);
+    for (const node of editors) {
+      const dir = node.getAttribute('dir');
+      expect(dir === null || dir === 'auto', `${node.tagName} pins dir=${String(dir)}`).toBe(true);
+    }
+    /*
+      🔴 `B-303` (`CONSOLE-POLISH-01` §4) — **A NAME'S ISOLATE NOW CARRIES ITS OWN DIRECTION, and this
+      is where that is asked precisely.** The rule used to be "nothing pins RTL — that direction is
+      never ours to assert", leaving every name to `<bdi>`'s `dir=auto`. The owner's screenshot
+      (2026-09-30) is why it changed: `dir=auto` reads the FIRST strong letter, so a Persian name that
+      starts with a Latin word (`NDI کانالِ ۱ (APASAI)`) was laid out left to right and read out of
+      order. So a literal `dir` is permitted in exactly two places, and nowhere else:
+        - a NAME'S BOX — `IsolatedName`'s LTR wrapper, holding a `<bdi>` and no control; and
+        - a NAME'S ISOLATE — a `<bdi>` whose `dir` is its OWN text's direction (`directionOf`).
+      An editor that pins a direction, or a `dir` on anything else, still goes red here.
+    */
+    const directed = el.querySelectorAll('[dir="ltr"], [dir="rtl"]');
+    // The positive control: an empty set would make the loop below say nothing.
+    expect(directed.length, 'the panel rendered isolated names to measure').toBeGreaterThan(0);
+    for (const node of directed) {
+      expect(node.querySelector('input, textarea, select, [contenteditable]')).toBeNull();
+      if (node.tagName === 'BDI') {
+        expect(node.getAttribute('dir'), 'an isolate takes its OWN text’s direction').toBe(
+          directionOf(node.textContent ?? ''),
+        );
+      } else {
+        expect(node.getAttribute('dir'), 'a literal box direction is a name’s LTR box').toBe('ltr');
+        expect(node.firstElementChild?.tagName, 'a literal LTR box is a name’s box').toBe('BDI');
+      }
     }
   });
 });

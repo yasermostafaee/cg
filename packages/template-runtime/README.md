@@ -22,7 +22,8 @@ first.
 
 ## Public surface
 
-Everything consumers use is re-exported from [`src/index.ts`](./src/index.ts):
+Almost everything consumers use is re-exported from [`src/index.ts`](./src/index.ts) — the two
+deliberate exceptions are the subpaths listed after the table:
 
 | Export                                                       | Role                                                                                                                               |
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -33,6 +34,7 @@ Everything consumers use is re-exported from [`src/index.ts`](./src/index.ts):
 | `applyAnimationAtFrame`, `collectAnimatedElements`           | Per-frame animation application.                                                                                                   |
 | `interpolateAtFrame`, `applyEasing`, `lerpHexColor`          | Keyframe math.                                                                                                                     |
 | `FrameDriver`, `PlayoutController`                           | The timing primitives (normally owned by `createRuntime`).                                                                         |
+| `mergePlayoutOverride(base, override?)`                      | Layer a session override over a resolved playout by SPREADING the base — never re-list its keys (`TIMING-BUILD-21` §2b).           |
 | `TickerDriver`, `tickerDriverFor`, `coerceTickerItems`       | The ticker/crawler treadmill — inner repeat loop + `whenComplete()` content completion (D-028; normally owned by `createRuntime`). |
 | `ClockDriver`, `clockInitialText`                            | The digital-clock driver — wall/countup/countdown repaint + countdown `whenComplete()` (D-027; normally owned by `createRuntime`). |
 | `formatWallClock`, `formatCountClock`                        | The pure clock format-string engine (tokens, overflow absorption, digit mapping).                                                  |
@@ -41,6 +43,29 @@ Everything consumers use is re-exported from [`src/index.ts`](./src/index.ts):
 | `RepeaterDriver`, `repeaterDriverFor`, `coerceRepeaterItems` | Data-driven rows — stamp-at-play / live-values (model B), NOT a content source (D-030; normally owned by `createRuntime`).         |
 | `buildRepeaterRows`, `clampRowCount`, `repeaterItemValues`   | The row builder (flow cells + fresh row scopes) and its pure helpers.                                                              |
 | `LifecycleStateMachine`, `EventBus`, `applyTransform`        | Lifecycle state, events, value transforms.                                                                                         |
+
+### 🔴 The two SUBPATH exports, and why they are not on the table above
+
+`src/index.ts` is **esbuild's bundle ENTRY**, so its export list IS the export table of the runtime
+bundle inlined into every exported `.vcg`. Adding a name there costs bytes in every artifact on air,
+for a symbol no page calls. Two symbols are therefore reachable **only** through subpaths declared
+in `package.json`, and are deliberately absent from the entry:
+
+| Subpath                              | Export                               | Consumer                                                                    |
+| ------------------------------------ | ------------------------------------ | --------------------------------------------------------------------------- |
+| `@cg/template-runtime/scene-builder` | `SMPTE_BARS`, `smpteBarsGradient()`  | The Runtime's PVW live-plate placeholders (R-049) — ONE bar table, reused.  |
+| `@cg/template-runtime/position`      | the pure `position.ts` geometry half | The same overlay's scene-px → raster-px chain — ONE arithmetic, not a copy. |
+
+Two rules govern adding to either, both learned by measurement rather than argued:
+
+1. **Prefer a subpath to the entry index for anything the PAGE does not call.** Measured:
+   re-exporting these two from `src/index.ts` grows the IIFE export table by **121 bytes in every
+   `.vcg`**; through a subpath the generated bundle is byte-identical.
+2. **`@cg/template-runtime/position` exists because the entry cannot be imported by an app that owns
+   `window.cg`.** The index reaches `adapters/caspar-globals.ts`, whose `declare global` claims
+   `window.cg` for the SERVED PAGE's runtime. The Runtime app's `window.cg` is the bridge; importing
+   the index there merges the two declarations into one compilation and breaks typecheck across the
+   app. Two things legitimately own that name, and they must never share a program.
 
 ## How it's built — module map
 
@@ -66,7 +91,17 @@ createRuntime (runtime.ts)  ─ the orchestrator
  ├─ RepeaterDriver (repeater-driver.ts)   one per repeater element: stamps a
  │      ROW SUBTREE per data item through wireScopeSubtree (count at play,
  │      values live); not a content source
+ ├─ LookMediaPark (look-media.ts)         LOOKS: content inside a look that is
+ │      NOT on screen is SILENCED (unconditional) and PAUSED (the policy half),
+ │      revived in place on the switch back. Membership is asked of the DOM
+ │      (Element.contains), never of a parallel table. Registered from each
+ │      driver build site; re-asserted after every path that starts content.
+ │      Never parks a HOLD-GATING driver (it would never complete, so the
+ │      graphic would never exit) and never parks a CLOCK at all — B-150
  ├─ LifecycleStateMachine (lifecycle.ts)  pending→playing→on-air→exiting→stopped
+ │      plus exiting→playing: a play() SUPERSEDES an in-flight exit (the exit can
+ │      last the whole background OUT segment). stop()/out() are guarded on
+ │      on-air/playing, so a machine left behind the stage kills BOTH, silently
  ├─ EventBus (event-bus.ts)               play.start / stop.end / ready / …
  └─ installCasparGlobals (adapters/caspar-globals.ts)   window.* → runtime
 transforms.ts · css.ts   value formatters · baseline stylesheet
@@ -75,11 +110,84 @@ transforms.ts · css.ts   value formatters · baseline stylesheet
 ### scene-builder — `Scene` → DOM + the scope tree
 
 `buildScene` walks layers (sorted by `zIndex`) and creates one node per element
-(`text` / `ticker` / `clock` / `sequence` / `image` / `shape` / `lottie` rendered;
-`container` / `video-placeholder` emit a tagged placeholder div so layout and ids
-survive). It returns a **`scopeTree`** (a `FieldScope`): each composition instance
-owns its **own** `elementMap`, `textOriginals`, container, `animated` list,
-`tickers` + `clocks` + `sequences` + `lotties` lists, and lifecycle `source`.
+(`text` / `ticker` / `clock` / `sequence` / `image` / `shape` / `lottie` / `video` rendered;
+`container` emits a tagged placeholder div so layout and ids survive; `video-placeholder`
+is a **Live Source**, see below). It returns a **`scopeTree`** (a `FieldScope`): each
+composition instance owns its **own** `elementMap`, `textOriginals`, container,
+`animated` list, `tickers` + `clocks` + `sequences` + `lotties` lists, and lifecycle
+`source`.
+
+**A Live Source is a HOLE, and its geometry is a contract (D-137).** `buildLiveSource`
+branches on the render `mode`: `'author'` paints procedural SMPTE bars plus the id
+label (or a poster), `'output'` paints nothing inside the rect at all. What the element
+declares — `transform`, flattened by `collectLiveSources` at export — is the rect
+CasparCG composites a live input into, so **nothing may change that box**.
+
+**…and the HOLE is the PICTURE, not the box (C-028).** The box is where CasparCG is told
+to draw, but what is PUNCHED through the backdrop is where the picture actually lands
+inside it. One function decides both — `fitPictureToBox` in `@cg/shared-schema`, which
+returns a `picture` rect (the bridge's `MIXER FILL`) and a `visible` rect (`picture ∩ box`
+— the bridge's `MIXER CLIP` **and** this package's mask hole). Under the default
+`contain` mode the picture is smaller than its box on one axis, and punching at the box
+would leave that margin a transparent hole showing the channel behind the CG layer: black,
+on air. Punching at `visible` makes the template's own background fill the margin for
+free. Under `cover`, `visible` IS the box, so the shipped behaviour is unchanged.
+
+**The page is TOLD what it cannot know.** The fitted rect depends on the assigned source's
+aspect and the operator's mode override — installation facts the scene does not carry — so
+`sceneMaskHoles` takes them as a `PlateFits` argument rather than reading them off the
+element. The bridge sends them over the reserved `__cg` control key on `CG UPDATE`
+(`CgControl.plates`), the same transport the active look rides; `createRuntime` records
+them and re-punches. **The wire carries the FACTS, never the rect** — each side applies the
+one fit function to the box IT holds, because the page's box moves under an arrangement and
+is read back from the live layout. With no facts received (a Designer preview, a page
+before its first take) the mask falls back to the scene's own `expectedAspect` / `fitMode`,
+and an absent aspect means no fit at all.
+
+That constraint is why the plate's optional `stroke` renders as a CSS **`outline`**
+rather than the `border` every other box kind gets. An outline is painted outside the
+box and takes **no layout**, so the hole stays exactly `transform` under any box model
+and any scale. A border cannot: the shipped baseline stylesheet resets
+`*{box-sizing:border-box}`, which would paint the frame INSIDE the rect and crop the
+live picture, and declaring `content-box` to escape that fixes the size while sliding
+the hole by the stroke width (`left`/`top` place the border edge). The stroke SHORTHAND
+is still one implementation — `strokeShorthand` — fed to `border` by `applyBoxStyle` and
+to `outline` here, so the property differs and the stroke grammar does not.
+
+**The editor backdrop never reaches output (B-129).** `Scene.editorBackdrop` and
+`Composition.editorBackdrop` are an **authoring affordance** — a viewing aid that makes
+content legible while editing — and `buildScene` paints them **only when
+`mode === 'author'`**. In `'output'` (the DEFAULT, so a caller that forgets is safe) the
+stage and every composition inner are transparent, and an authored background is a real
+full-frame element like anything else that paints.
+
+The field used to be called `background` and painted in every mode, so an editing
+preference reached air as a full-frame card over live video — a lower-third going out as
+a fullscreen graphic. **Three builders apply the composition backdrop**
+(`buildComposition`, `buildSequenceCompositionItem`, `buildRepeaterRows`); all three are
+mode-gated, because one unguarded site is a leak that only shows on hardware. A legacy
+`background` key is normalized onto `editorBackdrop` at parse time by
+`@cg/shared-schema`, and both exporters emit it as `'transparent'` via the ONE shared
+`withoutEditorBackdrop` helper — defence in depth behind the mode check, never a second
+guard.
+
+**…and it paints on the editing CANVAS only (B-134).** `mode === 'author'` covers TWO
+surfaces — the canvas and the Designer's Preview modal — and they disagree about the
+backdrop. The modal is `'author'` deliberately, because it cannot show real live video
+either, so a Live Source must still paint its SMPTE bars there (D-137 §9); but it is a
+preview of AIR, so it must not paint a backdrop air will never show. One flag was
+carrying two questions.
+
+So there is a **second boot option, `paintEditorBackdrop`** (`RuntimeBootOptions`),
+threaded onto `BuildCtx` for the same reason `mode` is: a nested composition inherits it
+by construction, so a composition three levels down cannot paint a backdrop the surface
+above it suppressed. It defaults to `true`, which is a no-op in `'output'` (the backdrop
+is never painted there anyway) and preserves every existing `'author'` caller. Only
+`preview.ts` passes `false`, and only for the broadcast (modal) document.
+
+🔴 **Do not "simplify" this into a third `RenderMode` value.** The modal needs `'author'`
+and "no backdrop" **simultaneously**; no single enum value can express that, which is
+exactly why the axis is separate.
 
 **Auto-size text (D-060).** A `text` element with `fitMode: 'autosize'` hugs its
 content in BOTH dimensions via CSS intrinsic sizing — `buildText` skips the
@@ -144,7 +252,10 @@ GDD namespaces; the repeater's single bound `list` field is the data surface.
 
 `applyFieldValues` (flat) and `applyScopedFieldValues` (nested) walk the scene's
 declared `bindings`, look up each `fieldId` in the supplied values (falling back to
-the field's `default`), run the optional `transform` (`transforms.ts`, e.g.
+the field's `default`), write a value that lands as TEXT in its field's digits
+(`fieldValueText` → `@cg/text-shaping`'s `writeFieldDigits` with
+`@cg/shared-schema`'s `fieldDigitsOf`, `FIELD-DIGITS-01`; a field with no setting is
+drawn as before), run the optional `transform` (`transforms.ts`, e.g.
 `persian-digits`, `date-fa`), and write to the DOM by `target.kind`
 (`text` / `image` / `color` / `visible` / `transform` / `scene-background` /
 `lottie-override` / `ticker-items` / `sequence-items` / `repeater-items` —
@@ -165,6 +276,22 @@ its opacity boundary live in `@cg/lottie-bridge`'s `applyOverride`.
 - **One-way** — field → DOM only; the renderer never writes values back.
 - Text caps to the field's `maxLength` **by code point** (a surrogate pair / ZWNJ
   counts as one and is never split).
+- A field's digits are written in every place its text lands — the `text` target,
+  a `lottie-override` text layer and a bound sequence item (`textValueFor` in
+  `runtime.ts`, through the same `fieldValueText`) — and BEFORE the binding's own
+  transform, so a per-binding `latin-digits` still wins.
+- `TEXT-DIGITS-01` — **each text by its own rule.** The text an author typed INTO an
+  element is drawn in the ELEMENT's Digits (`@cg/shared-schema`'s `elementDigitsOf`):
+  a text element's glyphs (`renderTextGlyphs`), a ticker's authored items and text
+  separator, a sequence's authored items — at build and in their drivers. A `list`
+  value is drawn in its LIST field's digits (`itemsInDigits` on `ticker-items` /
+  `sequence-items`). A placeholder binding writes the author's pieces in the
+  element's digits and the value in its field's: the build stamps the element's
+  choice on its node as `data-cg-digits` (`typed-digits.ts`, only for a real
+  choice, so an old template's DOM is unchanged) and the apply walk reads it back.
+  A date transform (`date-fa`, `date-en`) reads its input in any digit set and
+  writes the DATE in its field's choice; Keyboard or none keeps the transform's
+  own. Keyboard (`as-typed`) is the identity everywhere on the page.
 - Nested values route by namespace: `values[instanceName]` descends into that
   child scope (D-025).
 
@@ -212,6 +339,32 @@ Playout **modes** (`scene.playout.mode`):
 | `auto-out`           | hold once, then run the outro automatically                         |
 | `loop-cycle`         | repeat IN → hold → OUT for `repeat` cycles (`'infinite'` = forever) |
 
+**`TIMING-BUILD-21` — the two axes a pass loop has beyond `mode`.**
+
+- **`repeat`** — how many passes. Absent ⇒ **`'infinite'`**, resolved by `@cg/shared-schema`'s
+  `repeatOf`. ⚠ It used to default to ONE, privately, inside this controller, so a stored
+  `loop-cycle` with no count played once. The default now lives in the schema and there is
+  exactly one statement of it.
+- **`delayMs`** — the gap BETWEEN passes, resolved by `delayMsOf` (absent ⇒ `0`). ⚠ **Not
+  `holdMs`.** `holdMs` is the hold WITHIN a pass, graphic on screen and readable; `delayMs` is
+  after the outro, graphic GONE. It never delays the first showing. While it runs, the
+  controller is in its own **`gap`** phase — neither `hold` (on screen) nor `idle` (settled) —
+  which is what lets `resume()` re-arm it and `stop()` end it without replaying an outro over an
+  already-hidden graphic.
+
+**Changing either ON AIR, without a restart:** `TemplateRuntime.setPassTiming({ passes, delayMs })`
+→ `PlayoutController.setRemainingPasses` / `setDelayMs`. `passes` is PASSES REMAINING FROM NOW
+(the pass on screen is not one of them; `0` means "after this pass, go out" and still runs `mode`'s
+outro). `delayMs` is re-read at every boundary rather than snapshotted, so a change applies to the
+NEXT gap and can never stretch or truncate one already running. Every other route to a playout knob
+rebuilds the scene, which on air is a black frame.
+
+**Before a run, and after one has settled, the same call is a TOTAL for the next `play()`.** The
+controller keeps the count (and the gap) and changes nothing else, so a settled graphic never
+re-arms from a configuration verb. `LOGO-LOOP-01` (`B-323`): a stopped producer stays resident,
+and its next take tells it the recorded timing on the `CG UPDATE` before the `CG PLAY`; a settled
+controller that dropped that tell re-ran the last count it had been given.
+
 What ends each hold is the orthogonal **`holdSource`** axis (`auto-out` and
 `loop-cycle`; ignored by `manual`): `'timed'` (default) holds for `holdMs`;
 `'content-driven'` holds until the controller's `waitForContent` promise
@@ -250,10 +403,47 @@ replays the crawl from its entering edge / re-runs the count / restarts the rota
 item 1 (a fresh run per cycle), and a `content-driven` wait (taken at `outPoint`) always
 awaits the run it already started.
 
+#### The HOLD LOOP — what a content-driven hold RENDERS (D-133)
+
+A hold used to be one parked frame. A **content-driven** hold now **replays
+`[contentStart → outPoint]`** underneath the running content — `startHoldLoop()` opens a
+single `FrameDriver` in `'loop'` mode over that range at hold entry, and `startOutro()`
+stops it. Nothing about the hold's start condition, its end condition, or the OUT phase
+changed: **looping is a rendering of the existing hold, not a new phase, and no
+`PlayoutMode` value was added.** The range is the two shipped lifecycle markers, so a
+"loop range" is not stored anywhere new.
+
+🔴 **The wrap is a re-render of the COMPOSITION FRAME and nothing else.** The loop driver's
+only output is `applyFrame`, so it CANNOT `reset()` / `start()` / transition a content
+driver — there is no path from it to one. That is structural, not a guard: a content-driven
+hold holds _because_ its drivers run on their own clocks, independent of the composition
+frame, so a crawl's position is not a function of the frame and wrapping the frame cannot
+move it. A ticker set to repeat 3× flows unbroken across every seam and consumes no repeat
+through a wrap; when it completes, playback passes the loop end without wrapping and the OUT
+phase runs. If an implementation ever needs a guard here, it has been built wrong.
+(`tests/hold-loop-range.test.ts` asserts this on the mechanism — prototype spies on every
+content driver's lifecycle methods — because the requirement is satisfiable by accident.)
+
+Two conditions keep it narrow, and both reuse existing answers rather than adding one:
+
+- **Content-driven holds only.** `manual` / `static` return before the branch (they ignore
+  `holdSource` entirely), and B-032 has already resolved a driver-less `content-driven` back
+  to `timed` in `effectivePlayoutFor` — so reaching `startHoldLoop` means real drivers exist.
+  Under any other hold the range is **INERT**: the timeline still parks on `outPoint`.
+- **A range with something to replay.** A degenerate range (`contentStart` at or past
+  `outPoint` — including `entranceSettleFrame`'s "there is NO entrance" fallback, which
+  returns `outPoint` verbatim), or one in which nothing paints differently from its end,
+  keeps the parked frame. The second test is `playRange`'s OWN collapse predicate, extracted
+  as `frameDependent` and shared — one definition, two readers.
+
+⚠ Per-frame gates are part of a frame, so an element whose `lifespan` excludes part of the
+loop range disappears and reappears on every pass. That is the honest meaning of replaying
+the range; it is recorded, not special-cased.
+
 **Invariants**
 
 - `pause()` / `resume()` freeze and continue **both** the driver and the hold-timer
-  countdown.
+  countdown — including the hold loop, which is the same `driver` field.
 - A **settled** controller (its lifecycle finished: `auto-out` exited, or a finite
   `loop-cycle` ran out of cycles) is a **no-op on `stop()`** — a cascaded parent
   `stop()` must not replay the exit on a child that's already done. An infinite
@@ -284,6 +474,55 @@ override) on its **own** timeline.
   crawl, the clock, and the sequence are wall-clock-driven and have no
   representation in `tick()`** — scrubbing moves none of them (by design;
   D-028/D-027/D-029).
+- **D-135 — `tick(frame)` also POSITIONS every Lottie** (`LottieDriver.positionAt`), so the
+  canvas shows the clip frame under the playhead instead of its static poster. Three things
+  about that contract are load-bearing:
+  - **The composition→clip ANCHOR lives here; the phase MAPPING lives in the driver.**
+    `tick` converts the playhead to elapsed TIME — from the composition's `activeRange.in`
+    for the IN/HOLD phases, and from `lifecycle.outPoint` for the OUT phase — and the driver
+    resolves that to a clip frame through the same `clipPositionAt` its own clock uses. The
+    clip is never RESCALED onto the composition's markers (§D1.1): it plays at its authored
+    `fr × speed` and the anchor only says where it starts.
+  - **Scrub and PLAY are the same call.** The Designer canvas has no `play()` path at all —
+    its transport advances the store's frame and the canvas posts one `scrub` per change —
+    so both halves of D-135's acceptance are this one function. A second path for play would
+    be a fork, and the tests assert the singularity (`tests/lottie-driver.test.ts`), not just
+    matching frames.
+  - **A driver running its own lifecycle OWNS the frame.** `positionAt` is a no-op while the
+    driver is running or holding a frame it drove to, so a tick reaching a PLAYING host (the
+    same page serves the Preview) can never yank a clip out from under its own driver.
+  - 🔴 **A DEGENERATE outro takes the INTRO mapping past the out-point.** `outroStart` falls back to
+    `op` for a clip with no outro marker, so asking for the OUT phase there clamps to `op` — the
+    frame a furniture clip has animated OFF to — and the element vanishes from the out-point onward.
+    A clip with no outro of its own holds its settled frame instead, which is what the runtime does
+    on air (a degenerate `playOutro()` resolves immediately; the composition's exit animates the
+    element off). The guard is in `positionAt`, never in `clipPositionAt`: it selects WHICH mapping
+    applies, exactly like the intro/outro selection itself. `hasOutro` is a driver option, computed
+    once by the runtime — not re-derived from `outroStart >= op` at each site that needs it.
+  - 🔴 **The composition's IN-POINT is not a special case**
+  - **`drivesHold` is NOT read on this path** (design §9.4): it answers "does this element
+    gate the HOLD", which is a different question from "does the canvas show its frame".
+    Furniture that deliberately does not drive the hold still follows the playhead.
+  - **A `<video>` follows the playhead the same way** (§9.5 answered (a), 2026-08-13:
+    position everywhere; the forward-1× hybrid was REJECTED — ONE mechanism for scrub,
+    forward, backward and bounce). `tick` hands the SAME elapsed pair to
+    `VideoDriver.positionAt`, which resolves the clip time through `expectedClipMs` — the
+    same function the driver's own clock reconciles against on air — and seeks a PAUSED
+    element (never `play()`). Three video-specific points:
+    - **Skip, never queue.** A tick that finds `seeking()` true issues nothing — the
+      canvas shows the NEAREST DECODABLE frame. That is the measured, specified contract
+      (~10 distinct fps on a 1080p VP8+alpha element; the Preview stays the frame-true
+      rendition), not a defect.
+    - **Every node access resolves through `live()`** (the handle's B-137 re-resolution):
+      the canvas reparents `<video>` nodes across `scene-replace`, and a captured
+      reference would command an orphan.
+    - **The at-rest poster is a PRE-TICK TRANSIENT now** (matching the Lottie): the host's
+      poster routine is kept as the LOAD path + seek-fragile recovery, but it chains a
+      re-tick on settle, so the tick's seek always lands last and the canvas rests at the
+      playhead's frame — including a build-on clip's transparent frame 0.
+    - A FOLLOW-source clip (`media-phases-follow-composition`) composes for free: the
+      derived window (`introStartMs`/`holdMs`/`outroEndMs`) is already inside
+      `expectedClipMs`, so the playhead shows the parked-at-`H` look the driver plays.
 - **Per-element lifespan visibility** (a `lifespan {in,out}` from a timeline start/end
   trim) is gated **per scope**. Each `FieldScope` owns a `lifespanGates` list, registered at
   BUILD time in `buildLayer` beside `scope.animated`, and that scope's controller evaluates
@@ -398,7 +637,8 @@ the ticker's self-wire pattern (lifecycle surface
 `RuntimeClock`). An rAF loop recomputes the formatted string each frame (the
 pure `clock-format.ts` engine: `HH H hh h mm m ss s A a` tokens,
 longest-token-first, literals pass through, the LARGEST unit present absorbs
-overflow, digits mapped LAST via `@cg/text-shaping`) and writes the DOM **only
+overflow, digits mapped LAST via `@cg/text-shaping`'s one writer, `writeFieldDigits`,
+since `TEXT-DIGITS-01`) and writes the DOM **only
 when it changes** — ≈1 write/second.
 
 Two time bases, chosen per mode: RELATIVE (`countup`, `countdown` with a
@@ -480,9 +720,15 @@ media clock, so `VideoDriver` does not paint frames — it keeps the element in
 lockstep with the injected `RuntimeClock` through a `VideoHandle`
 (`play`/`pause`/`seek`/`currentTime`/`seeking`/`dead`/`recover`), built in
 `runtime.ts` around the scene-builder's registered `<video>`. Phase mapping:
-intro `[0 → introEnd]`, hold loops `[loopStart, loopEnd]` or freezes at
-`introEnd`, outro `[outroStart → duration]` through the same element-outro seam
-as a Lottie.
+intro `[introStartMs → introEndMs]` (`introStartMs` defaults to 0), hold loops
+`[loopStart, loopEnd]` or freezes at `introEndMs`, outro
+`[outroStartMs → outroEndMs]` (`outroEndMs` defaults to `durationMs`) through the
+same element-outro seam as a Lottie. The window bounds serve the FOLLOW phase
+source exactly as the Lottie's (see above) — video consumes `followWindowMs`
+directly (ms-native, no unit adapter), and under follow an ABSENT idle range
+resolves the hold to a FREEZE at `H` even for `holdBehavior: 'loop'` (looping the
+whole clip would abandon the held look follow promises to keep; the stored value
+is untouched).
 
 **THE SEEK POLICY (2026-07-25 — the fragile-alpha-seek root cause):** on
 VP8+alpha WebM whose alpha side-stream keyframes misalign with the main
@@ -500,6 +746,36 @@ instead of a permanent freeze. Recovery fires ONLY on `media.error`; a
 transform change never sets it, so the Designer-preview no-remount-on-drag
 guarantee is untouched.
 
+**THE NODE-BINDING CONTRACT (B-137) — the handle follows the node a viewer can
+SEE, not the node the scene was built with.** A host is ALLOWED to reparent a
+media element across a rebuild: the Designer preview pools the live `<video>`
+and transplants it back over the freshly built one, so a transform-only edit
+never re-fetches the media. The engine therefore does not treat the node it
+captured at build time as final. Every `VideoHandle` member reads through a
+`live()` resolver which, when the captured node reports
+`isConnected === false`, re-queries the owning document for
+`video[data-cg-element-id="<element id>"]` and re-points to what it finds.
+
+Three properties are load-bearing, and all three are pinned by
+`tests/video-node-rebind.test.ts`:
+
+- **HOST-AGNOSTIC.** The rule keys off `isConnected` + `data-cg-element-id` and
+  nothing else, so any harness that reparents nodes is covered without the
+  engine knowing it exists. A host does NOT notify the driver of a swap, and is
+  not expected to.
+- **Only a DISCONNECTED node is re-resolved.** A node merely moved WITHIN the
+  document stays connected and is never re-resolved, so the normal path costs
+  one boolean read and a host that reorders its tree gets no surprise rebinding.
+- **`recover()` rebuilds the VISIBLE node.** It starts from `live()`, so a
+  terminal decode error replaces what is on screen rather than an orphan.
+
+Without this the newly built driver commanded a DETACHED element — which, with a
+valid `src`, plays quite happily and reports success — while the node on screen
+was the one the OUTGOING driver paused during teardown. Nothing ever played it
+again: a frozen picture with a healthy driver behind it. A rejected `play()` is
+now also reported ONCE per element (latched — the path can be re-entered every
+tick), because swallowing it is what made that failure invisible.
+
 ### LottieDriver + the element-outro seam (D-125)
 
 A `lottie` element mounts a `lottie_light` player (`@cg/lottie-bridge`,
@@ -512,9 +788,21 @@ the whole lifecycle is deterministic under a fake clock.
 
 The composition lifecycle maps onto the animation's own frame space **by phase**
 (never rescaled onto `outPoint`): `play()` → `reset()`+`start()` drives
-`[ip → introEnd]` once; the HOLD **freezes** at `introEnd` or **loops**
-`[idleIn, idleOut]` per `holdBehavior`; `out()`/`stop()` → `playOutro()` drives
-`[outroStart → op]` once.
+`[introStart → introEnd]` once (`introStart` defaults to `ip`); the HOLD
+**freezes** at `introEnd` or **loops** `[idleIn, idleOut]` per `holdBehavior`;
+`out()`/`stop()` → `playOutro()` drives `[outroStart → outroEnd]` once
+(`outroEnd` defaults to `op`).
+
+**The window bounds (`introStart` / `outroEnd`) exist for the FOLLOW phase source**
+(`media-phases-follow-composition`): a `phases.source: 'composition'` element derives
+its window from the composition's lifecycle anchors — intro `[H − entranceSpan → H]`,
+hold at `H` (`holdAt`, else the entrance span), outro `[H → min(H + outSpan, clipEnd)]`
+— through ONE derivation: `followWindowMs` (`@cg/shared-schema`, ms — video's native
+unit) + the `lottieFollowWindow` frames↔ms adapter (`@cg/lottie-bridge`). `runtime.ts`
+resolves it at driver construction (the settle aggregation is a PRE-PASS so the
+effective content start exists there), a follower contributes `settleOffset: null`
+(it derives FROM that value, so it must not vote on it), and NOTHING bakes the derived
+numbers — every surface re-derives from the stored relationship.
 
 **The element-outro seam** is the one structural change to the D-105 split exit.
 `out()` / `stop()` collect every outro-owning driver (`collectElementOutros()`)
@@ -536,7 +824,8 @@ Two signals are kept deliberately separate:
   `drivesHold`.
 
 **Invariants.** `playOutro()` ALWAYS resolves — a degenerate/absent outro
-(`outroStart >= op`) resolves immediately, the final paint is clamped to `op`, and
+(`hasOutro: false`) resolves immediately, the final paint is clamped to the
+window end (`outroEnd`, default `op`), and
 `reset()` / `stop()` / `destroy()` settle a still-pending outro — so a superseding
 `play()`, a second `out()`, or a hard kill can never strand the exit. `reset()`
 also re-mints `whenComplete()` (B-033), so a replay's hold waits again.
@@ -692,6 +981,20 @@ payloads are dropped silently (a broadcast frame can't write logs).
    countdown clock). If it creates SCOPES at runtime, stamp them through
    `wireScopeSubtree` and attach under the hosting `ScopeNode` (cf. the
    repeater).
+   3b. 🔴 **If the element RUNS (a playhead, a treadmill, a decoder), enrol it in the
+   `LookMediaPark`** beside the driver you just built (`look-media.ts`, `B-150`). Under
+   LOOKS every look a template authors is built and running while only one is visible, so a
+   new running kind that skips this quietly spends the frame budget on a picture nobody can
+   see. Register with the node whose look membership decides its fate, and with `parkable`
+   read from the SAME `drivesHold` the hold arrays use — a driver that gates a hold must
+   never be paused, or the graphic never comes off air. **A kind that must keep tracking real
+   time (the clock) is deliberately not enrolled**; if yours is like that, say so at the site.
+   The driver contract is `pause()` / `resume()` / **`isRunning()`** (`B-217`): the park
+   asks `isRunning()` BEFORE it pauses and owes a `resume()` only to a driver that was
+   running, because `VideoDriver.resume()` and `LottieDriver.resume()` START a never-started
+   driver — in the Designer canvas, which never plays, a blind revive set clips playing. If a
+   host may REPLACE your node across a rebuild (the preview's video pool does), register a
+   getter (`node: () => live()`) so membership is asked of the node actually in the document.
 4. **Designer UI** — the canvas/inspector to author it (`apps/designer`).
 5. If it can be **animated/bound**, make sure `applyBaseStyles` / `animation-applier`
    / `bindings` handle its target properties (see below).
@@ -726,6 +1029,15 @@ payloads are dropped silently (a broadcast frame can't write logs).
 - **New value transform** (e.g. a new formatter): add it to `BindingTransformSchema`
   and `applyTransform` (`transforms.ts`); reuse `@cg/text-shaping` for
   Persian/RTL-aware formatting.
+- **Reading a NUMBER, a TIME OF DAY or a DURATION out of a field value** (a
+  `transform` target, the `clock-target` binding): read it through
+  `@cg/text-shaping`'s one reader — `readLocalizedNumber` / `parseTimeOfDay` /
+  `parseDurationMs` (`numerals.ts`) — never a bare `Number()` or a local `\d`
+  regex. An operator on a Persian keyboard sends `۲۰:۳۲` and `۰٫۵`; `\d` without
+  the `u` flag and `Number()` both reject them (`PERSIAN-DIGITS-01`). Where a
+  value may already arrive in a Latin form another client relies on, keep
+  `Number()` FIRST and fall back to the reader (`bindings.ts`'s
+  `transformNumber`).
 
 ### Add a new animatable property
 

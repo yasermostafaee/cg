@@ -1,5 +1,7 @@
 import type {
   AnimatableProperty,
+  Arrangement,
+  LookGroups,
   Composition,
   DynamicField,
   Element,
@@ -20,7 +22,7 @@ import { dropFullyOffFrameForExport } from './off-frame.js';
  * The "active document" layer shared by every domain slice. The editor edits
  * either the main scene (`activeCompositionId === null`) or one of
  * `scene.compositions`; these accessors read and write that active document's
- * layers and doc-level fields (size / duration / background / fields+bindings)
+ * layers and doc-level fields (size / duration / editorBackdrop / fields+bindings)
  * so every mutation stays agnostic of which one is active. Plus `locate` (find
  * an element) and `editSceneOf` (project the active comp into a flat `Scene` for
  * the inspector/preview/exporter).
@@ -38,7 +40,11 @@ export interface EditDocFields {
   activeRange?: FrameRange | undefined;
   lifecycle?: Lifecycle | undefined;
   playout?: Playout | undefined;
-  background: Scene['background'];
+  editorBackdrop: Scene['editorBackdrop'];
+  /** `multibox-layout-switch` — this document's arrangements (see `Composition.arrangements`). */
+  arrangements?: Arrangement[] | undefined;
+  /** LOOKS phase 2 (§14) — this document's multi-frame groups (see `Composition.lookGroups`). */
+  lookGroups?: LookGroups | undefined;
 }
 
 export function activeCompId(): string | null {
@@ -131,13 +137,24 @@ export function editSceneOf(scene: Scene | null, id: string | null): Scene | nul
     activeRange: c.activeRange,
     lifecycle: c.lifecycle,
     playout: c.playout,
-    background: c.background,
+    editorBackdrop: c.editorBackdrop,
     layers: c.layers,
     // D-025 — fields/bindings are per-composition; surface the active comp's own
     // (the inspector/preview/exporter read these). `compositions` stays from the
     // root so nested instances resolve and aggregate.
     fields: c.fields ?? [],
     bindings: c.bindings ?? [],
+    // `multibox-layout-switch` — the ACTIVE composition's arrangements, projected onto the
+    // working scene exactly as its resolution / range / layers / fields already are. The
+    // Scene field is this projection's TARGET, and it is what `collectArrangements` reads at
+    // export; authoring writes the COMPOSITION's, so two compositions in one project cannot
+    // end up sharing one arrangement list.
+    arrangements: c.arrangements ?? [],
+    // LOOKS phase 1 (`design.md` §14) — the ACTIVE composition's look groups, projected for
+    // the same reason and to the same contract as `arrangements` above: the Scene field is
+    // the projection's TARGET, read by the export preflight and `collectLookCarrier`.
+    // Without this line an exported template's looks would never reach either.
+    lookGroups: c.lookGroups ?? [],
   };
 }
 
@@ -246,7 +263,7 @@ export function ensureCompositions(scene: Scene): { scene: Scene; activeId: stri
       // absent one stays absent rather than materializing an `undefined` key.
       ...(scene.lifecycle !== undefined ? { lifecycle: scene.lifecycle } : {}),
       ...(scene.playout !== undefined ? { playout: scene.playout } : {}),
-      background: scene.background,
+      editorBackdrop: scene.editorBackdrop,
       layers: rootLayers,
       fields: [],
       bindings: [],

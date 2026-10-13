@@ -26,7 +26,7 @@ const minimalScene = {
   frameRate: 50 as const,
   safeAreas: { title: 10, action: 5 },
   frameRange: { in: 0, out: 50 },
-  background: 'transparent' as const,
+  editorBackdrop: 'transparent' as const,
   layers: [],
   fields: [],
   bindings: [],
@@ -118,9 +118,42 @@ describe('Scene', () => {
     expect(() => SceneSchema.parse({ ...minimalScene, schemaVersion: 2 })).toThrow();
   });
 
-  it('accepts solid hex background', () => {
-    const s = { ...minimalScene, background: '#000000' };
-    expect(SceneSchema.parse(s).background).toBe('#000000');
+  it('accepts a solid hex editor backdrop', () => {
+    const s = { ...minimalScene, editorBackdrop: '#000000' };
+    expect(SceneSchema.parse(s).editorBackdrop).toBe('#000000');
+  });
+
+  /*
+   * P-031 — THREE TESTS WERE REPLACED BY THE TWO BELOW, and the replacement IS the
+   * decision.
+   *
+   * B-129 renamed `background` → `editorBackdrop` and left a parse-time `z.preprocess`
+   * that accepted the old key on the scene and on every composition. Three tests pinned
+   * that shim ("normalizes a legacy `background` key", "lets an explicit
+   * `editorBackdrop` WIN over a stale `background`", "normalizes the legacy key on
+   * COMPOSITIONS too"). The shim is gone — nothing has shipped to a client, so no
+   * document in the world needs it, and the owner's compatibility-floor decision retires
+   * every such path while it is still free to do so (`P-031`).
+   *
+   * What must NOT be lost is the property those tests really protected: `background`
+   * must never reach a parsed Scene under a name the render path might read. That is now
+   * true by construction — there is no key to normalize — and the tests below assert the
+   * two halves that remain observable: the key is unknown (stripped), and its absence is
+   * a LOUD parse failure rather than a silent default.
+   */
+  it('a legacy `background` key does NOT stand in for `editorBackdrop` — it FAILS', () => {
+    const { editorBackdrop: _absent, ...legacyScene } = minimalScene;
+    // Loud, and specific: zod names the required key that is missing, which is exactly
+    // what an author needs in order to know the file predates the current format.
+    expect(() => SceneSchema.parse({ ...legacyScene, background: '#123456' })).toThrow(
+      /editorBackdrop/,
+    );
+  });
+
+  it('a stale `background` beside a real `editorBackdrop` is STRIPPED, never read', () => {
+    const parsed = SceneSchema.parse({ ...minimalScene, background: '#123456' });
+    expect(parsed.editorBackdrop).toBe('transparent');
+    expect(Object.hasOwn(parsed, 'background')).toBe(false);
   });
 });
 
@@ -235,7 +268,7 @@ describe('Scene — D-026 single project fps (no per-composition frameRate)', ()
     name: 'Comp',
     resolution: { width: 1920, height: 1080 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent' as const,
+    editorBackdrop: 'transparent' as const,
     layers: [],
     ...over,
   });
@@ -361,7 +394,7 @@ describe('hasEffectiveHoldDrivers — D-128 video is an OPT-IN hold driver', () 
       name: 'Comp',
       resolution: { width: 1920, height: 1080 },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent' as const,
+      editorBackdrop: 'transparent' as const,
       layers: [
         {
           id: 'CL1',

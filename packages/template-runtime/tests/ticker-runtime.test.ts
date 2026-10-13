@@ -119,7 +119,7 @@ function tickerScene(overrides: {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     ...(overrides.playout !== undefined ? { playout: overrides.playout } : {}),
     layers: [
       {
@@ -287,8 +287,40 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
     const events: string[] = [];
     runtime.on('stop.end', () => events.push('stop.end'));
     await runtime.play({});
-    // Normalized to loop-cycle (1 cycle) + content-driven hold: one ticker run
-    // (repeat 1 ⇒ completes at 7100ms), then exit.
+    /*
+      🔴 `TIMING-BUILD-21` §3 — THIS CASE CHANGED, DELIBERATELY, and it is the clearest
+      statement of what changed. It used to read "loop-cycle (1 cycle) … then exit", because an
+      absent `repeat` privately defaulted to ONE in the controller. The default now lives in the
+      schema (`repeatOf`) and is INFINITE, so a stored `loop-cycle` with no count loops — which
+      is what a mode named "loop cycle" was always supposed to mean.
+
+      The legacy document under test stores no `repeat`, so it is exactly the shape the change
+      affects: one ticker run completes the content-driven hold at 7100 ms, the outro plays, and
+      the composition goes round again instead of settling.
+    */
+    await run(clock, 7000);
+    expect(events).toEqual([]);
+    await run(clock, 200);
+    expect(events, 'an absent repeat now loops rather than settling after one cycle').toEqual([]);
+    // Still normalized and still under the operator's control: stop() ends it.
+    runtime.stop();
+    await run(clock, 2000);
+    expect(events).toEqual(['stop.end']);
+  });
+
+  it('an EXPLICIT repeat of 1 settles after one cycle, as it always did', async () => {
+    // The complement of the case above: what changed is the DEFAULT, not the meaning of a
+    // stated count. A document that says `repeat: 1` behaves exactly as before.
+    const clock = makeClock();
+    const scene = tickerScene({ tickerRepeat: 1 });
+    const explicit = {
+      ...scene,
+      playout: { mode: 'loop-cycle', holdSource: 'content-driven', repeat: 1 },
+    } as unknown as Scene;
+    const runtime = createRuntime(explicit, { skipFontLoad: true, clock, tickerMeasure });
+    const events: string[] = [];
+    runtime.on('stop.end', () => events.push('stop.end'));
+    await runtime.play({});
     await run(clock, 7000);
     expect(events).toEqual([]);
     await run(clock, 200);
@@ -349,7 +381,7 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
           name: 'band',
           resolution: { width: 400, height: 60 },
           frameRange: { in: 0, out: 50 },
-          background: 'transparent',
+          editorBackdrop: 'transparent',
           playout: { mode: 'auto-out', holdSource: 'content-driven' },
           layers: [
             {
@@ -416,7 +448,7 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
           name: 'band',
           resolution: { width: 400, height: 60 },
           frameRange: { in: 0, out: 50 },
-          background: 'transparent',
+          editorBackdrop: 'transparent',
           // B-031 — the band is itself content-driven (a coordinator) with an infinite
           // crawl; the content-driven root now WAITS on its self-settle, so the infinite
           // crawl holds the root on air until stop().
@@ -617,5 +649,134 @@ describe('createRuntime — per-element ticker timing overrides (D-102 Phase 1)'
       expect(band(id).dataset['cgTickerRepeat']).toBe('infinite');
       expect(band(id).dataset['cgTickerBoundary']).toBe('seamless');
     }
+  });
+});
+
+describe('createRuntime — a ticker draws in its Digits choice (TEXT-DIGITS-01)', () => {
+  /** The fixture ticker with its own items, separator and Digits (absent when undefined). */
+  function digitTicker(over: {
+    digits?: 'as-typed' | 'persian' | 'latin' | 'arabic-indic';
+    items: { id: string; text: string }[];
+    separator?: string;
+    fields?: Scene['fields'];
+    bindings?: Scene['bindings'];
+  }): Scene {
+    const base = tickerScene({ playout: { mode: 'manual' } });
+    const layer = base.layers[0];
+    const el = layer?.children[0];
+    if (layer === undefined || el === undefined || el.type !== 'ticker') {
+      throw new Error('fixture ticker missing');
+    }
+    return {
+      ...base,
+      layers: [
+        {
+          ...layer,
+          children: [
+            {
+              ...el,
+              items: over.items,
+              ...(over.digits !== undefined ? { digits: over.digits } : {}),
+              ...(over.separator !== undefined ? { separator: over.separator } : {}),
+            },
+          ],
+        },
+      ],
+      fields: over.fields ?? [],
+      bindings: over.bindings ?? [],
+    };
+  }
+
+  const staticTexts = (): string[] =>
+    [...bandEl().querySelectorAll<HTMLElement>('[data-cg-ticker-static] span')].map(
+      (n) => n.textContent ?? '',
+    );
+  const crawlTexts = (): string[] =>
+    [...bandEl().querySelectorAll<HTMLElement>('[data-cg-ticker-item]')]
+      .filter((n) => n.style.visibility !== 'hidden')
+      .map((n) => n.textContent ?? '');
+
+  it('the authored items and a text separator draw in the element’s Digits — static and crawling', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      digitTicker({
+        digits: 'persian',
+        items: [
+          { id: 'a', text: 'خبر 12' },
+          { id: 'b', text: 'خبر 34' },
+        ],
+        separator: ' 7 ',
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    // The Designer canvas's static row, before the crawl.
+    expect(staticTexts()).toEqual(['خبر ۱۲', ' ۷ ', 'خبر ۳۴']);
+    await runtime.play({});
+    await run(clock, 500);
+    const crawl = crawlTexts();
+    expect(crawl).toContain('خبر ۱۲');
+    expect(crawl).toContain('خبر ۳۴');
+    expect(crawl).toContain(' ۷ ');
+    expect(crawl.join('')).not.toMatch(/[0-9]/);
+  });
+
+  it('an old ticker — no Digits key — crawls its items exactly as stored (the control)', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      digitTicker({
+        items: [
+          { id: 'a', text: 'Score 12' },
+          { id: 'b', text: 'خبر ۳۴' },
+        ],
+        separator: ' 7 ',
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    expect(staticTexts()).toEqual(['Score 12', ' 7 ', 'خبر ۳۴']);
+    await runtime.play({});
+    await run(clock, 500);
+    const crawl = crawlTexts();
+    expect(crawl).toContain('Score 12');
+    expect(crawl).toContain('خبر ۳۴');
+    expect(crawl).toContain(' 7 ');
+  });
+
+  it('a list-bound ticker draws the LIST’s Digits; the separator stays the element’s', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      digitTicker({
+        digits: 'latin', // the element's — its authored separator
+        items: [{ id: 'x', text: 'authored' }],
+        separator: ' ۷ ',
+        fields: [
+          {
+            id: 'headlines',
+            label: 'Headlines',
+            required: false,
+            type: 'list',
+            default: [{ id: 'a', text: 'خبر 12' }],
+            digits: 'persian', // the list's — every bound item
+          },
+        ],
+        bindings: [{ fieldId: 'headlines', target: { kind: 'ticker-items', elementId: 'crawl' } }],
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    await runtime.play({});
+    await run(clock, 500);
+    expect(crawlTexts()).toContain('خبر ۱۲');
+
+    // An update in Latin — however CG Control or a GDD client sent it — draws in the list's.
+    await runtime.update({
+      headlines: [
+        { id: 'a', text: 'خبر 12' },
+        { id: 'n', text: 'خبر 56' },
+      ],
+    });
+    await run(clock, 60_000, 5000);
+    const crawl = crawlTexts();
+    expect(crawl).toContain('خبر ۵۶');
+    expect(crawl).not.toContain('خبر 56');
+    expect(crawl).toContain(' 7 ');
   });
 });

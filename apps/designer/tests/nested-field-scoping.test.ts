@@ -51,8 +51,8 @@ describe('D-025 — (e) instance names are unique within a parent', () => {
     const parent = designerStore.addComposition()!; // B (active)
     designerStore.setActiveComposition(parent);
 
-    expect(designerStore.addCompositionInstance(child)).toBe(true);
-    expect(designerStore.addCompositionInstance(child)).toBe(true);
+    expect(designerStore.addCompositionInstance(child)).not.toBeNull();
+    expect(designerStore.addCompositionInstance(child)).not.toBeNull();
 
     const names = instancesOf(parent).map((i) => i.name);
     expect(names).toHaveLength(2);

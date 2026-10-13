@@ -149,7 +149,7 @@ function sceneOf(children: Element[], compositions: Composition[] = []): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 40 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       { id: 'pl', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
     ],
@@ -309,7 +309,7 @@ describe('createRuntime — repeater-stamped content honors the AUTHORED element
       name: 'Row',
       resolution: { width: 400, height: 60 },
       frameRange: { in: 0, out: 40 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         {
           id: 'rl',

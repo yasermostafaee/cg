@@ -1716,9 +1716,16 @@ would send an operator hunting for a link that is not part of the design. Only P
 awaits a real feed (`C-016`, the program-channel return).
 
 Fixed: the empty state is now per-panel (`icon` + `emptyLabel` + `detail`) — PREVIEW
-reads "Nothing to preview", PROGRAM reads "No program return". Recorded because the two
+reads "No layers on preview" (it read "Nothing to preview" until `CONSOLE-MATCH-03`
+took the reference's heading, which names the MECHANISM rather than the absence),
+PROGRAM reads "No program return". Recorded because the two
 boxes look interchangeable and the next person to touch them will be tempted to share
 one placeholder again; the reasoning is in `MonitorPanel`'s header comment.
+
+⚠ **Superseded in part 2026-09-24 (`C-016`, `pgm-return`).** PROGRAM is no longer an empty
+state: it shows the Playout's own return, and says "No return signal" or "Return feed
+stalled" when it cannot vouch for a live picture. The per-panel `icon`/`emptyLabel`/`detail`
+props are gone. The PREVIEW half of this entry stands.
 
 ### The failover banner overlays the monitor strip
 

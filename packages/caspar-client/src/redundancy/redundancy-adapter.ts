@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { isServerReachable } from '@cg/shared-ipc';
 import type { ServerSession, ServerSessionState } from '../session/server-session.js';
 import type { CommandQueue, QueueResult } from '../queue/command-queue.js';
-import { InMemoryJournal, type CommandJournal } from './journal.js';
+import { InMemoryJournal, journalLineFor, type CommandJournal } from './journal.js';
 import type {
   FailoverEvent,
   FailoverReason,
@@ -39,6 +39,17 @@ export interface RedundancyAdapterOptions {
   correctiveResendEnabled?: boolean; // true
   /** Override for tests. */
   now?: () => number;
+  /**
+   * 🔴 `B-316` (`RELEASE-0113-01`) — **THE LINE SERVER B GETS FOR A STATION LINE, or `null`: nothing.**
+   *
+   * On the Playout, redundancy belongs to a CHANNEL: the mirror of the primary's channel N is a channel of
+   * the backup engine's own, M, and its channel N may be airing another programme. So no line may reach
+   * server B with the primary's channel number. Every road to B asks this one function — the live fan-out,
+   * every send while B is the primary, the failover catch-up and the corrective resend — after `B-286`'s own
+   * clip path is chosen. REQUIRED whenever a server B is declared: an adapter built with a B and without
+   * it throws, so no road to B can exist untranslated. Server A's line never passes through it.
+   */
+  serverBLine?: (line: string) => string | null;
 }
 
 export interface RedundancyAdapterEvents {
@@ -102,8 +113,12 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   private readonly divergenceBudget: number;
   private readonly correctiveResendEnabled: boolean;
   private readonly now: () => number;
+  /** `B-316` — see {@link RedundancyAdapterOptions.serverBLine}; `null` only with no server B. */
+  private readonly serverBLine: ((line: string) => string | null) | null;
 
   private consecutiveTimeouts = 0;
+  /** `B-313` — servers never failed over onto ({@link setHeld}). */
+  private readonly held = new Set<ServerLabel>();
   private fiveXxTimestamps: number[] = [];
   private divergenceTimestamps: number[] = [];
   private correctiveResendInFlight = false;
@@ -126,6 +141,13 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     this.divergenceBudget = options.divergenceBudget ?? 3;
     this.correctiveResendEnabled = options.correctiveResendEnabled ?? true;
     this.now = options.now ?? (() => Date.now());
+    if (options.sessions.B !== undefined && options.serverBLine === undefined) {
+      throw new Error(
+        'RedundancyAdapter: a server B needs serverBLine (B-316) — a line never reaches the backup ' +
+          "with the primary's channel number",
+      );
+    }
+    this.serverBLine = options.serverBLine ?? null;
 
     this.wireSessionEvents();
     this.on('error', noop);
@@ -153,6 +175,39 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     return this.sessions[this.primary === 'A' ? 'B' : 'A'] ?? null;
   }
 
+  /** The label of the server in the backup role right now. */
+  private get backupLabel(): ServerLabel {
+    return this.primary === 'A' ? 'B' : 'A';
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` A (`B-286`) — the line SERVER `label` gets for this send: A always `line`; B its
+   * own ({@link SendOptions.serverB}) when the caller gave one, `null` meaning nothing. The journal's
+   * replays read the same rule (`journalLineFor`).
+   */
+  private lineFor(label: ServerLabel, line: string, options: SendOptions): string | null {
+    // `B-313` — a HELD server is sent nothing, and its absence is no divergence (`null`, as `B-286`'s).
+    if (this.held.has(label) && label !== this.primary) return null;
+    return this.ownLine(
+      { line, ...(options.serverB !== undefined ? { lineB: options.serverB } : {}) },
+      label,
+    );
+  }
+
+  /**
+   * 🔴 `B-316` — **THE ONE ANSWER TO "WHAT DOES SERVER `label` GET?"**, for a live send and for every
+   * journal replay alike: `B-286`'s own clip line first, then — for server B only — {@link serverBLine},
+   * which writes B's own channel number or answers `null` (nothing). Server A's line is returned as it is.
+   */
+  private ownLine(
+    entry: { line: string; lineB?: string | null },
+    label: ServerLabel,
+  ): string | null {
+    const own = journalLineFor(entry, label);
+    if (own === null || label === 'A') return own;
+    return this.serverBLine === null ? null : this.serverBLine(own);
+  }
+
   /**
    * Unified send. Behavior depends on the configured strategy:
    *
@@ -161,17 +216,31 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    *   journal-replay : send to primary only; journal
    */
   async send(line: string, options: SendOptions = {}): Promise<RedundancySendResult> {
+    /*
+      `PLAYOUT-FEATURES-01` A (`B-286`) — a line server B has no version of cannot be sent while B is the
+      primary: nothing is sent, and the caller (which checks this first) refuses it as it refuses a PLAY.
+      🔴 `B-316` — nor one B has no channel for: the same `null`, from the same function, and the same
+      refusal. Asked of EVERY send, the primary-only ones included — after a failover they go to B.
+    */
+    const primaryLine = this.lineFor(this.primary, line, options);
+    if (primaryLine === null) {
+      throw new Error(`no line for server ${this.primary} (it has no copy, or no channel for it)`);
+    }
+    // `ROUTE-PLATES-01` — a line that must never reach the backup: primary only, not journaled.
+    if (options.mirror === false) {
+      return this.sendPrimaryUnjournaled(primaryLine, options);
+    }
     // B-046 — no declared backup: every strategy degenerates to primary-only.
     if (this.backupSession === null) {
-      return this.sendJournalReplay(line, options);
+      return this.sendJournalReplay(line, primaryLine, options);
     }
     if (this.strategy === 'journal-replay') {
-      return this.sendJournalReplay(line, options);
+      return this.sendJournalReplay(line, primaryLine, options);
     }
     if (this.strategy === 'mirror-async') {
-      return this.sendMirrorAsync(line, options);
+      return this.sendMirrorAsync(line, primaryLine, options);
     }
-    return this.sendMirrorSync(line, options);
+    return this.sendMirrorSync(line, primaryLine, options);
   }
 
   /**
@@ -185,9 +254,11 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     if (this.failoverInProgress) return false;
     if (this.backupSession === null) return false;
     if (reason !== 'manual' && !this.autoFailoverEnabled) return false;
-    this.failoverInProgress = true;
     const from = this.primary;
     const to: ServerLabel = from === 'A' ? 'B' : 'A';
+    // `B-313` — never onto a HELD server: another CG Bridge drives its core.
+    if (this.held.has(to)) return false;
+    this.failoverInProgress = true;
     const event: FailoverEvent = { reason, from, to, at: this.now() };
     this.emit('failover-requested', event);
     try {
@@ -195,7 +266,7 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       if (this.strategy === 'journal-replay' || this.strategy === 'mirror-async') {
         // Backup may be cold/lagging — drain the retained journal to it
         // (skipped when the target session is not live at fire time).
-        await this.replayJournalTo(this.sessions[to]);
+        await this.replayJournalTo(to);
       }
       this.primary = to;
       this.resetFailoverCounters();
@@ -204,6 +275,16 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     } finally {
       this.failoverInProgress = false;
     }
+  }
+
+  /**
+   * 🔴 `B-313` — **HOLD A SERVER: never fail over onto it.** The bridge holds server B while another CG
+   * Bridge drives B's core (it also stops B's session, so nothing is sent there); a failover onto a
+   * held server would make this bridge that core's second sender. Released, it is a target again.
+   */
+  setHeld(label: ServerLabel, held: boolean): void {
+    if (held) this.held.add(label);
+    else this.held.delete(label);
   }
 
   /**
@@ -241,17 +322,28 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   // Strategy implementations
   // ──────────────────────────────────────────────────────────────────────
 
-  private async sendMirrorSync(line: string, options: SendOptions): Promise<RedundancySendResult> {
+  private async sendMirrorSync(
+    line: string,
+    primaryLine: string,
+    options: SendOptions,
+  ): Promise<RedundancySendResult> {
     const backup = this.backupSession;
-    if (backup === null) return this.sendJournalReplay(line, options);
-    const seq = this.journal.append(line, 'both');
+    if (backup === null) return this.sendJournalReplay(line, primaryLine, options);
+    const seq = this.journal.append(line, 'both', options.serverB);
     const primaryQ = this.primarySession.queue;
     const backupQ = backup.queue;
+    // `B-286` / `B-316` — each server its OWN line; a backup with none is sent nothing, and is no divergence.
+    const backupLine = this.lineFor(this.backupLabel, line, options);
     const [pRes, bRes] = await Promise.allSettled([
-      primaryQ.enqueue(line, options),
-      backupQ.enqueue(line, options),
+      primaryQ.enqueue(primaryLine, options),
+      backupLine === null ? Promise.resolve(null) : backupQ.enqueue(backupLine, options),
     ]);
-    if (pRes.status === 'fulfilled' && bRes.status === 'fulfilled') {
+    if (pRes.status === 'fulfilled' && bRes.status === 'fulfilled' && bRes.value === null) {
+      this.journal.resolve(seq, 'ok', pRes.value.response.code);
+      this.recordPrimaryResult(pRes.value);
+      return { ...pRes.value, winner: this.primary };
+    }
+    if (pRes.status === 'fulfilled' && bRes.status === 'fulfilled' && bRes.value !== null) {
       this.journal.resolve(seq, 'ok', pRes.value.response.code);
       if (pRes.value.response.code !== bRes.value.response.code) {
         this.reportDivergence(seq, pRes.value.response.code, bRes.value.response.code);
@@ -267,7 +359,7 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       this.reportDivergence(seq, pRes.value.response.code, -1);
       return { ...pRes.value, winner: this.primary };
     }
-    if (bRes.status === 'fulfilled') {
+    if (bRes.status === 'fulfilled' && bRes.value !== null) {
       this.journal.resolve(seq, 'err');
       this.recordPrimaryFailure();
       return { ...bRes.value, winner: this.primary === 'A' ? 'B' : 'A' };
@@ -277,18 +369,24 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     throw pRes.reason as Error;
   }
 
-  private async sendMirrorAsync(line: string, options: SendOptions): Promise<RedundancySendResult> {
+  private async sendMirrorAsync(
+    line: string,
+    primaryLine: string,
+    options: SendOptions,
+  ): Promise<RedundancySendResult> {
     const backup = this.backupSession;
-    if (backup === null) return this.sendJournalReplay(line, options);
-    const seq = this.journal.append(line, 'both');
+    if (backup === null) return this.sendJournalReplay(line, primaryLine, options);
+    const seq = this.journal.append(line, 'both', options.serverB);
     const primaryQ = this.primarySession.queue;
     const backupQ = backup.queue;
+    const backupLine = this.lineFor(this.backupLabel, line, options);
     try {
-      const result = await primaryQ.enqueue(line, options);
+      const result = await primaryQ.enqueue(primaryLine, options);
       this.journal.resolve(seq, 'ok', result.response.code);
       this.recordPrimaryResult(result);
-      // Backup runs in parallel — divergence detection is best-effort.
-      backupQ.enqueue(line, options).then(
+      // Backup runs in parallel — divergence detection is best-effort. `B-286`: its own line, or none.
+      if (backupLine === null) return { ...result, winner: this.primary };
+      backupQ.enqueue(backupLine, options).then(
         (bRes) => {
           if (bRes.response.code !== result.response.code) {
             this.reportDivergence(seq, result.response.code, bRes.response.code);
@@ -306,13 +404,34 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     }
   }
 
-  private async sendJournalReplay(
-    line: string,
+  /**
+   * `ROUTE-PLATES-01` — {@link SendOptions.mirror} `false`: the primary alone, and no journal entry,
+   * because every path that reaches the backup other than the live fan-out — the failover catch-up
+   * and the corrective resend — reads the journal. Health is recorded exactly as for any send.
+   * `primaryLine` is the primary's OWN line (`B-316`: B's channel when B is the primary).
+   */
+  private async sendPrimaryUnjournaled(
+    primaryLine: string,
     options: SendOptions,
   ): Promise<RedundancySendResult> {
-    const seq = this.journal.append(line, 'primary');
     try {
-      const result = await this.primarySession.queue.enqueue(line, options);
+      const result = await this.primarySession.queue.enqueue(primaryLine, options);
+      this.recordPrimaryResult(result);
+      return { ...result, winner: this.primary };
+    } catch (err) {
+      this.recordPrimaryFailure();
+      throw err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  private async sendJournalReplay(
+    line: string,
+    primaryLine: string,
+    options: SendOptions,
+  ): Promise<RedundancySendResult> {
+    const seq = this.journal.append(line, 'primary', options.serverB);
+    try {
+      const result = await this.primarySession.queue.enqueue(primaryLine, options);
       this.journal.resolve(seq, 'ok', result.response.code);
       this.recordPrimaryResult(result);
       return { ...result, winner: this.primary };
@@ -415,6 +534,8 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    */
   private async triggerCorrectiveResend(target: ServerLabel): Promise<void> {
     if (this.correctiveResendInFlight) return;
+    // `B-313` — never a replay to a held server.
+    if (this.held.has(target)) return;
     const session = this.sessions[target];
     if (session === undefined || !isLiveState(session.state)) return;
     this.correctiveResendInFlight = true;
@@ -422,9 +543,12 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       const queue = session.queue;
       const entries = this.journal.all().filter((e) => e.outcome === 'ok');
       for (const entry of entries) {
-        this.emit('corrective-resend', { seq: entry.seq, line: entry.line, target });
+        // `B-286` / `B-316` — the server's OWN line, with its own channel NOW; none — not replayed to it.
+        const own = this.ownLine(entry, target);
+        if (own === null) continue;
+        this.emit('corrective-resend', { seq: entry.seq, line: own, target });
         try {
-          await queue.enqueue(entry.line, { priority: 'urgent' });
+          await queue.enqueue(own, { priority: 'urgent' });
         } catch {
           // Replay best-effort. The next divergence burst will fire again.
         }
@@ -489,13 +613,18 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    * for the journal-replay / mirror-async strategies). Skipped when the
    * target is not live at fire time (B-046).
    */
-  private async replayJournalTo(session: ServerSession | undefined): Promise<void> {
+  private async replayJournalTo(label: ServerLabel): Promise<void> {
+    if (this.held.has(label)) return;
+    const session = this.sessions[label];
     if (session === undefined || !isLiveState(session.state)) return;
     const queue: CommandQueue = session.queue;
     const entries = this.journal.all().filter((e) => e.outcome === 'ok');
     for (const entry of entries) {
+      // `B-286` / `B-316` — the server's OWN line, with its own channel NOW; none — not replayed to it.
+      const own = this.ownLine(entry, label);
+      if (own === null) continue;
       try {
-        await queue.enqueue(entry.line, { priority: 'urgent' });
+        await queue.enqueue(own, { priority: 'urgent' });
       } catch {
         // Replay best-effort; the Reconciler resolves the rest.
       }

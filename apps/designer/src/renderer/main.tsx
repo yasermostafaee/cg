@@ -1,10 +1,14 @@
 import '@cg/ui/theme.css';
 import './fonts.css';
+// `B-263` — the chrome's Persian face; chrome-only, so never inlined into an export.
+import './chromeFonts.css';
 import './index.css';
 import { StrictMode, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
+import { CloseGuard } from './features/shell/CloseGuard.js';
 import { initDesignerPlatform } from '../platform/createDesignerBridge.js';
+import { startKeyboardLanguage } from './keyboardLanguage.js';
 import './splashTiming.js';
 
 /**
@@ -56,6 +60,9 @@ function BootComplete({ children }: { children: ReactNode }): JSX.Element {
 async function bootstrap(): Promise<void> {
   window.__CG_SPLASH__?.phase('OPENING STORAGE');
   window.cg = await initDesignerPlatform();
+  // TEXT-DIGITS-01 — the one keyboard-language detector, with the shell's report when there is one.
+  const keyboard = window.cg.keyboard;
+  startKeyboardLanguage(document, keyboard.reportsLanguage() ? () => keyboard.language() : null);
 
   const rootEl = document.getElementById('root');
   if (!rootEl) {
@@ -67,6 +74,9 @@ async function bootstrap(): Promise<void> {
     <StrictMode>
       <BootComplete>
         <App />
+        {/* `D-162` — unsaved work is never lost silently: the leave prompt and, inside CG
+            Designer, the window's close. Beside `App`, so every view it shows is covered. */}
+        <CloseGuard />
       </BootComplete>
     </StrictMode>,
   );

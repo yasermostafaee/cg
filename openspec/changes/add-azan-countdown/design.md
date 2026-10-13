@@ -312,6 +312,13 @@ sits at 00:00. The graphic does not flip back to base the instant it arrives.
   `21:30`, and the living spec requires every preset be anchored, flagless, and Persian/Arabic-
   Indic tolerant where relevant (`openspec/specs/designer-dynamic-fields/spec.md:211-228`). The
   operator gets input validation with zero new code.
+  ⚠ **CORRECTED by `template-value-digits` (`PERSIAN-DIGITS-01`, 2026-09-27): the `time` preset
+  was NOT Persian-tolerant** — its `[0-9]` refused `۲۱:۳۰` in the preview form, and
+  `parseTimeOfDay`'s `\d` (no `u` flag) refused `۲۰:۳۲` on air, keeping the old target. Both
+  were measured. The fix reads the VALUE rather than rewriting the preset (a rewritten preset
+  would not reach templates already exported): the pattern check also tries the value's digits
+  read as Latin, and `parseTimeOfDay` moved into `@cg/text-shaping`'s one reader, which accepts
+  all three digit sets and returns the canonical Latin time.
 - **R-018 "from file" comes free.** Text-carrying fields already accept a file source
   (`apps/runtime/src/renderer/features/inspector/Inspector.tsx:321-323`), so a station that keeps
   today's azan time in a text file can already wire it — which is the R-track schedule-import

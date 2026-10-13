@@ -1,7 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AnchorPoint, Element, LottiePhases, Scene, TextElement } from '@cg/shared-schema';
-import type { AssetMeta } from '@cg/shared-ipc';
-import { importLottie, lottieLayerNames, markersToSegments } from '@cg/lottie-bridge';
+import type {
+  AnchorPoint,
+  Element,
+  LottieElement,
+  LottiePhases,
+  Scene,
+  TextElement,
+} from '@cg/shared-schema';
+import type { AssetMeta, ExportIssue } from '@cg/shared-ipc';
+import { ErrorMarkOverlay } from './ErrorMarkOverlay.js';
+import {
+  importLottie,
+  lottieClipMeta,
+  lottieLayerNames,
+  markersToSegments,
+} from '@cg/lottie-bridge';
+import {
+  guardedAddCompositionInstance,
+  guardedAddLottie,
+  guardedAddVideo,
+} from '../addGuard/duration-guard.js';
 import {
   designerStore,
   editSceneOf,
@@ -26,7 +44,7 @@ import { getActiveSharedImage } from '../sharedLibrary/activeSharedImage.js';
 import { resolveBinding } from '../fields/bind-resolver.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import { probeStoredVideo } from '../assets/video-asset-probe.js';
-import { effectivePathBoxPoints, effectiveTransformAt } from '../timeline/keyframe-helpers.js';
+import { effectivePathBoxPoints } from '../timeline/keyframe-helpers.js';
 import { topmostHit } from './hit-test.js';
 import {
   PEN_CLOSE_PX,
@@ -45,6 +63,7 @@ import {
   clampDeltaToPasteboard,
   pasteboardSceneBounds,
   pixelSnapActive,
+  quantiseDragCommit,
   screenToScene,
   snapAxis,
   snapDragToPixel,
@@ -52,6 +71,8 @@ import {
 import { Gizmo, MultiGizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
 import * as s from './CanvasOverlay.css.js';
+import { hasNoActiveCell, renderedTransformAt } from '../../state/slices/arrangements.js';
+import { lookGroupOf } from '@cg/shared-schema';
 
 /**
  * The default canvas pointer — a bold black arrow with a white outline, a bit
@@ -75,35 +96,23 @@ function logoSize(image: AssetMeta): { width: number; height: number } {
   return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
 }
 
-/**
- * D-137 — the first free `live-N` id, swept across the WHOLE scene: the root layers
- * AND every composition, recursing into containers.
- *
- * Scene-wide and not composition-local on purpose. A source id is resolved by the
- * BRIDGE against one installation-wide mapping, so two holes carrying `live-1` in
- * two different compositions still name ONE producer. Scoping the sweep to the open
- * composition would hand out a duplicate that looks unique while you are authoring
- * and is not once both are on air.
- *
- * The id is only a starting point — the author renames it in the Inspector, and
- * nothing forbids a deliberate duplicate (two windows showing the same feed is a
- * real shot). This picks a default that is not a collision.
- */
-function nextLiveSourceId(scene: Scene): string {
-  const taken = new Set<string>();
-  const walk = (children: readonly Element[]): void => {
-    for (const el of children) {
-      if (el.type === 'video-placeholder') taken.add(el.routeKey);
-      else if (el.type === 'container') walk(el.children);
-    }
-  };
-  for (const layer of scene.layers) walk(layer.children);
-  for (const comp of scene.compositions ?? [])
-    for (const layer of comp.layers) walk(layer.children);
-  let n = 1;
-  while (taken.has(`live-${String(n)}`)) n += 1;
-  return `live-${String(n)}`;
-}
+/*
+  ⭐ `B-183` — `nextLiveSourceId` WAS HERE AND IS DELETED, not merely unused.
+
+  It swept the scene for the first free `live-N` and handed it to every newly drawn plate.
+  The id looked authoritative and was a GUESS: `live-N` was the placeholder text of the Looks
+  panel's source input, so the tool was accepting a suggestion on the author's behalf and
+  nothing declared the result. A new plate is now UNASSIGNED (see the creation path below),
+  and there is no id to pick. ⚠ `B-188` has since deleted the DECLARATION the guess was wrong
+  against — the reason survives it unchanged: the author never typed the id, and a plate that
+  starts pointed at something nobody chose is the defect, group or no group.
+
+  Recorded rather than silently removed because its docstring made a real argument — a
+  scene-wide rather than composition-local sweep, because the bridge resolves ids against one
+  installation-wide mapping. That argument still holds for ids the AUTHOR chooses, and
+  `look-source-duplicate` is where it now lives. Reintroducing a generator here would
+  reintroduce `B-183`.
+*/
 
 /**
  * D-040 — insert the canvas logo tool's target as a `source: 'shared'` image:
@@ -152,7 +161,7 @@ function lottieSize(w: number, h: number): { width: number; height: number } {
  * the clip plays once and freezes), and sizes the element to the animation's
  * native canvas. A malformed / rejected file surfaces a notice and inserts nothing.
  */
-async function insertLottieFromAsset(
+export async function insertLottieFromAsset(
   assetId: string,
   scenePoint: { x: number; y: number },
 ): Promise<void> {
@@ -186,14 +195,19 @@ async function insertLottieFromAsset(
         };
   const { width, height } = lottieSize(result.animation.w, result.animation.h);
   const id = `el-${String(Date.now())}`;
-  designerStore.addElement(
+  // D-151 — through the add-time duration guard (door L1, the ONLY Lottie door). The parsed
+  // animation's ip/op/fr are handed as the intrinsic-duration facts (at 1× — the creation
+  // default; `lottieAssetCache` is primed only post-insert, so it cannot be the source here).
+  // The guard commits via `addElement`, which also selects — a deferred/cancelled add must not
+  // leave a selection pointing at an id that was never inserted.
+  guardedAddLottie(
     defaultLottie(id, scenePoint.x, scenePoint.y, assetId, {
       ...(phases ? { phases } : {}),
       width,
       height,
-    }),
+    }) as LottieElement,
+    lottieClipMeta(result.animation),
   );
-  designerStore.setSelection([id]);
 }
 
 /**
@@ -207,7 +221,7 @@ async function insertLottieFromAsset(
  * 1920-wide clip at 1/4 size. An unreadable asset surfaces a notice and inserts
  * nothing.
  */
-async function insertVideoFromAsset(
+export async function insertVideoFromAsset(
   assetId: string,
   scenePoint: { x: number; y: number },
   resolution: { width: number; height: number },
@@ -223,7 +237,10 @@ async function insertVideoFromAsset(
     return;
   }
   const id = `el-${String(Date.now())}`;
-  designerStore.addElement(
+  // D-151 — through the add-time duration guard (door V3; V1/V2 are the import modal's
+  // place-on-confirm tail). Same convergence rule as before: both entry points build via the
+  // SHARED fitVideoElement, now both route the result through the same guard.
+  guardedAddVideo(
     fitVideoElement({
       id,
       x: scenePoint.x,
@@ -235,7 +252,6 @@ async function insertVideoFromAsset(
       resolution,
     }),
   );
-  designerStore.setSelection([id]);
 }
 
 interface Props {
@@ -257,6 +273,8 @@ interface Props {
   currentFrame: number;
   /** Hand-tool drag delta callback (deltaX, deltaY in scene pixels). */
   onPan?: (dx: number, dy: number) => void;
+  /** `D-157` — live preflight issues, so the canvas MARKS what is blocking the export. */
+  issues?: readonly ExportIssue[];
 }
 
 /**
@@ -279,10 +297,16 @@ export function CanvasOverlay({
   frameOffset,
   currentFrame,
   onPan,
+  issues = [],
 }: Props): JSX.Element {
   // D-124 — the path in point-edit mode (anchors/handles shown, gizmo hidden).
   // Self-subscribed (like TransformSection's currentFrame) rather than drilled.
   const editingPathId = useDesignerSelector((s) => s.editingPathId);
+  // (A′'s cell-overlay subscription sat here; the mount is disabled — owner, 2026-08-19.)
+  // LOOKS phase 2 (§14) — which look the canvas is showing, resolved the same way the
+  // preview resolves it (session pick, else the group's default). Self-subscribed like
+  // the two above.
+  const activeLookIdSession = useDesignerSelector((s) => s.activeLookId);
   const layerRef = useRef<HTMLDivElement>(null);
   // B-037 — the pointer's scene position while a pen draft is live (null otherwise),
   // driving the rubber-band + close-affordance feedback overlay.
@@ -293,8 +317,26 @@ export function CanvasOverlay({
   const frameRef = useRef<HTMLDivElement>(null);
 
   const allElements: Element[] = [];
-  for (const layer of scene.layers) {
-    for (const el of layer.children) allElements.push(el);
+  {
+    // LOOKS phase 2 — a HIDDEN look's instance is not on the canvas, so it must not be
+    // hittable: every look instance sits full-frame at the origin, and without this
+    // filter a click (and the double-click drill) would land on the TOPMOST look in
+    // document order rather than the one the canvas shows.
+    const lookGroup = lookGroupOf(scene);
+    const shownLookId =
+      lookGroup === undefined
+        ? null
+        : (lookGroup.looks.find((l) => l.id === activeLookIdSession)?.id ??
+          lookGroup.defaultLookId ??
+          null);
+    const hiddenInstances = new Set(
+      (lookGroup?.looks ?? []).filter((l) => l.id !== shownLookId).map((l) => l.instanceId),
+    );
+    for (const layer of scene.layers) {
+      for (const el of layer.children) {
+        if (!hiddenInstances.has(el.id)) allElements.push(el);
+      }
+    }
   }
   // For hit-testing: clone each element with its *visually effective*
   // transform at the current frame, so the bounding boxes the
@@ -309,7 +351,11 @@ export function CanvasOverlay({
     const boxPoints = el.type === 'path' ? effectivePathBoxPoints(el, currentFrame) : null;
     return {
       ...el,
-      transform: effectiveTransformAt(el, currentFrame),
+      // D-154 — hit-test the ARRANGED rect, so a click selects the box where it is drawn.
+      // B-175 — through the ONE read side, the same one the gizmo draws and the gestures
+      // compute from. `drillTarget` reads its instance out of THIS list, which is why the
+      // double-click drill was already correct while the gestures were not.
+      transform: renderedTransformAt(el, currentFrame),
       ...(boxPoints !== null ? { points: boxPoints } : {}),
     };
   });
@@ -544,16 +590,23 @@ export function CanvasOverlay({
       return;
     }
     if (tool === 'live-source') {
-      // D-137 — the Live Source's creation path, which did not exist before this
-      // change (design.md §11, C2). The id is made UNIQUE per existing hole in the
-      // open composition (`live-1`, `live-2`, …): a multi-box show places several,
-      // and two holes sharing an id would map to ONE producer with nothing saying
-      // so — the bars carry the id as their label, so a duplicate is at least
-      // visible, but a collision should not be the default the tool hands you.
+      /*
+        D-137 — the Live Source's creation path (design.md §11, C2).
+
+        ⭐ **`B-183` — the new plate is UNASSIGNED, and choosing its source is the author's
+        first act.** This used to hand it `nextLiveSourceId(scene)`, the first free `live-N`.
+        That id was the PLACEHOLDER TEXT of the Looks panel's source input — a suggestion, not
+        an acceptance — so drawing a box created a plate already pointed at something the owner
+        never typed. `B-188` has since removed the declaration this used to contradict, and the
+        reason is unchanged without it: the tool chose, not the author.
+
+        The uniqueness argument the deleted generator rested on ("two holes sharing an id
+        would map to ONE producer") is not lost: it now applies to ids the author actually
+        chose, and `look-source-duplicate` is the rule that states it. An unassigned plate
+        cannot collide with anything.
+      */
       const id = `el-${String(Date.now())}`;
-      designerStore.addElement(
-        defaultLiveSource(id, scenePoint.x, scenePoint.y, nextLiveSourceId(scene)),
-      );
+      designerStore.addElement(defaultLiveSource(id, scenePoint.x, scenePoint.y));
       designerStore.setTool('cursor');
       return;
     }
@@ -659,15 +712,20 @@ export function CanvasOverlay({
     if (compId !== '') {
       e.preventDefault();
       const p = viewportToScene(e.clientX, e.clientY);
-      const ok = designerStore.addCompositionInstance(compId, {
-        x: Math.round(p.x),
-        y: Math.round(p.y),
-      });
-      if (!ok) {
+      // The cycle pre-check keeps the loop notice EXACT (the guard silently refuses a cyclic
+      // child, and this door's contract is to explain the refusal).
+      if (!designerStore.canNestCompositionInActive(compId)) {
         designerStore.showNotice(
           'Can’t place this composition here — it already contains the open composition, so nesting it would loop forever.',
         );
+        return;
       }
+      // D-151 — through the add-time duration guard (door C2; C1 is the panel's menu item). A
+      // longer child raises the TWO-choice dialog (an instance has no phases and cannot follow).
+      guardedAddCompositionInstance(compId, {
+        x: Math.round(p.x),
+        y: Math.round(p.y),
+      });
       return;
     }
     const assetId = e.dataTransfer.getData('application/x-cg-asset-id');
@@ -722,6 +780,13 @@ export function CanvasOverlay({
           height: scene.resolution.height * scale,
         }}
       >
+        {/* A′'s cell overlay is DISABLED, not deleted (owner, 2026-08-19) — under LOOKS
+            there are no cells to draw; `tasks.md` §1b P2.DEL deletes the component. */}
+        {/* ⭐ `D-157` — MARK the boxes that are blocking the export. Inside the frame box so
+            the marks track scene coords like every other overlay, and BEFORE the gizmo so a
+            selected offender's resize handles stay on top: the author's next move is to drag
+            this box apart, and the mark must never be in the way of doing so. */}
+        <ErrorMarkOverlay scene={scene} issues={issues} scale={scale} />
         {/* B-037 — no gizmo while the pen is armed: addElement auto-selects the
             in-progress draft, and the gizmo's corner/edge/rotation hit-zones sit
             exactly where pen clicks go (the first anchor is always on the draft's
@@ -903,6 +968,10 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
     }
   }
   if (element === null) return;
+  // 🔴 B-175 — a box the active arrangement gives NO CELL is not on screen; a move gesture
+  // on it would drag the `NO_CELL` origin. Refused at the door, from the same predicate the
+  // resize/rotate doors and the write side all read.
+  if (hasNoActiveCell(elementId)) return;
   // Hold the move (arrow) cursor for the whole drag so it doesn't flip when the
   // pointer passes over the gizmo's resize/rotate handles.
   const unlockCursor = lockCursor(ARROW_CURSOR);
@@ -910,7 +979,11 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
   const startY = ev.clientY;
   // Drag from the *visually effective* start so the shape stays under
   // the cursor when the property is animated.
-  const t0 = effectiveTransformAt(element, currentFrame);
+  // 🔴 B-175 — and from the ARRANGED rect, through the ONE read side. "Visually effective"
+  // was already the intent of this line; with an arrangement active `effectiveTransformAt`
+  // stopped being visually effective, and the box jumped to its authored position on the
+  // first pointer-move. Same fault as `beginResize`, on the gesture the author uses most.
+  const t0 = renderedTransformAt(element, currentFrame);
   const startPos = { x: t0.position.x, y: t0.position.y };
   const w = t0.size.w * t0.scale.x;
   const h = t0.size.h * t0.scale.y;
@@ -924,7 +997,10 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
   for (const layer of doc.layers) {
     for (const el of layer.children) {
       if (el.id === elementId) continue;
-      const t = effectiveTransformAt(el, currentFrame);
+      // B-175 — snap to where a box IS DRAWN (the `buildSnapTargets` twin in `Gizmo.tsx`
+      // says the same thing): a target read off the authored rect is an alignment the
+      // author cannot see.
+      const t = renderedTransformAt(el, currentFrame);
       const ew = t.size.w * t.scale.x;
       const eh = t.size.h * t.scale.y;
       xTargets.push(t.position.x, t.position.x + ew / 2, t.position.x + ew);
@@ -960,17 +1036,44 @@ function beginDrag(elementId: string, scale: number, currentFrame: number, ev: P
       // element snapping below, whose ~6-screen-px threshold is sub-0.1 scene px at this zoom.
       nx = snapDragToPixel(nx);
       ny = snapDragToPixel(ny);
-    } else if (snapping) {
-      const threshold = 6 / scale; // ~6 screen px regardless of zoom
-      const sx = snapAxis(nx, w, xTargets, threshold);
-      if (sx !== null) {
-        nx = sx.value;
-        guides.x.push(sx.guide);
+    } else {
+      let snappedX = false;
+      let snappedY = false;
+      if (snapping) {
+        const threshold = 6 / scale; // ~6 screen px regardless of zoom
+        const sx = snapAxis(nx, w, xTargets, threshold);
+        if (sx !== null) {
+          nx = sx.value;
+          guides.x.push(sx.guide);
+          snappedX = true;
+        }
+        const sy = snapAxis(ny, h, yTargets, threshold);
+        if (sy !== null) {
+          ny = sy.value;
+          guides.y.push(sy.guide);
+          snappedY = true;
+        }
       }
-      const sy = snapAxis(ny, h, yTargets, threshold);
-      if (sy !== null) {
-        ny = sy.value;
-        guides.y.push(sy.guide);
+      /*
+        ⭐ `B-180` — QUANTISE THE AXES A GUIDE DID NOT CLAIM, at every zoom.
+
+        A free drag computes `startPos + (clientDelta / scale)`, and `scale` is an arbitrary
+        fraction, so every free drag commits an arbitrary fractional coordinate. Rounding it is
+        the owner's half-1 decision: `Alt` becomes the only way to place sub-pixel by drag.
+
+        🔴 **Only the axes that did NOT snap.** A guide snap has landed the box exactly on a REAL
+        target — a neighbour's edge, the frame centre, a ruler guide — and rounding after it would
+        pull the box back off by up to half a pixel, breaking the flush abutment the author just
+        made. That matters most where the target is legitimately fractional: inside a scaled
+        composition instance, every flattened edge is `size.w / comp.resolution.width` times
+        something, so the guides an author snaps to there are almost never integers.
+
+        ⚠ Which is also why half 1 cannot fix `B-180` alone, and why the noise guard exists: the
+        residue comes from DIVISIONS, not from drags.
+      */
+      if (quantiseDragCommit(e.altKey)) {
+        if (!snappedX) nx = snapDragToPixel(nx);
+        if (!snappedY) ny = snapDragToPixel(ny);
       }
     }
     // B-027 — clamp AFTER snapping: the element's full box [pos, pos+size] can never
@@ -1021,6 +1124,8 @@ function beginGroupDrag(
     anchorId,
     currentFrame,
     doc.resolution,
+    // B-175 — the ONE read side, the same resolver the nudge door passes.
+    renderedTransformAt,
   );
   if (anchor === null) return;
   const anc = anchor;
@@ -1060,17 +1165,31 @@ function beginGroupDrag(
       // member, so the anchor lands on the grid and relative offsets are preserved.
       ax = snapDragToPixel(ax);
       ay = snapDragToPixel(ay);
-    } else if (snapping) {
-      const threshold = 6 / scale; // ~6 screen px regardless of zoom
-      const sx = snapAxis(ax, anc.w, xTargets, threshold);
-      if (sx !== null) {
-        ax = sx.value;
-        guides.x.push(sx.guide);
+    } else {
+      let snappedX = false;
+      let snappedY = false;
+      if (snapping) {
+        const threshold = 6 / scale; // ~6 screen px regardless of zoom
+        const sx = snapAxis(ax, anc.w, xTargets, threshold);
+        if (sx !== null) {
+          ax = sx.value;
+          guides.x.push(sx.guide);
+          snappedX = true;
+        }
+        const sy = snapAxis(ay, anc.h, yTargets, threshold);
+        if (sy !== null) {
+          ay = sy.value;
+          guides.y.push(sy.guide);
+          snappedY = true;
+        }
       }
-      const sy = snapAxis(ay, anc.h, yTargets, threshold);
-      if (sy !== null) {
-        ay = sy.value;
-        guides.y.push(sy.guide);
+      // `B-180` — the ANCHOR is quantised, exactly as the grid-zoom branch above quantises it,
+      // and for the same reason the anchor is what snaps: its delta moves every member, so
+      // relative offsets are preserved. Guide-claimed axes are left alone (see the single-drag
+      // handler for why).
+      if (quantiseDragCommit(e.altKey)) {
+        if (!snappedX) ax = snapDragToPixel(ax);
+        if (!snappedY) ay = snapDragToPixel(ay);
       }
     }
     let fdx = ax - anc.x;

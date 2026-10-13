@@ -8,6 +8,7 @@ import {
   type Manifest,
   type Scene,
 } from '@cg/shared-schema';
+import { requiredBankFor, type TemplateInfo } from '@cg/shared-ipc';
 import { STARTER_TEMPLATES } from '@cg/starter-templates';
 import { pack } from '@cg/vcg-format';
 
@@ -21,11 +22,18 @@ import { pack } from '@cg/vcg-format';
  * starts deterministically.
  */
 /**
- * The first EMPTY row of the seeded bank. 70–73 hold the four documented
- * display cases (html / non-html producer / empty / unknown) and must keep
+ * The first EMPTY row of the seeded bank. The bank's first four rows hold the four
+ * documented display cases (html / non-html producer / empty / unknown) and must keep
  * them; everything from here up is seeded empty for the suite to load onto.
+ *
+ * ⚠ `LAYER-BANDS-16` — these are the SEED's rows, and the seed follows
+ * `DEFAULT_FIXED_BANK_START`, which moved 70 → 80 when the template band was re-cut. They
+ * are still written out rather than derived because a Playwright fixture reads best with
+ * the number the operator would see in the table; what keeps them honest is that clicking
+ * a row that does not exist fails loudly (the picker never opens), which is exactly how
+ * this was caught — a green `pnpm gate` says nothing about a row that is not there.
  */
-const FIRST_LOADABLE_LAYER = 74;
+const FIRST_LOADABLE_LAYER = 84;
 
 /**
  * The row `openTemplatePicker` uses when the caller does not name one.
@@ -36,7 +44,22 @@ const FIRST_LOADABLE_LAYER = 74;
  * `#nextLayer` never reaches it. (The same constraint held before, when the entry
  * point was a context menu item disabled on a filled row.)
  */
-const TEMPLATE_PROBE_LAYER = 85;
+const TEMPLATE_PROBE_LAYER = 95;
+
+/**
+ * 🔴 `B-201` — THE FIRST LOADABLE **BED** ROW, and why the suite needs one at all.
+ *
+ * `single-clock-look-switch` split the bank: a package that DECLARES live plates is a
+ * graphics bed and may only be loaded onto a bed row (the BED band, 50–59 since
+ * `LAYER-BANDS-16`); the picker disables `Load` on an operator row and the bridge refuses it
+ * as `wrong-bank`. Eleven specs were written before that rule existed and load plate-bearing
+ * packages, so they need the other half of the bank.
+ *
+ * The bed rows are seeded empty and all ticked by `MockRuntime.seedFixedBank`, so the whole
+ * band is loadable — see that function for why the mock deviates from the two-row default.
+ */
+const FIRST_LOADABLE_BED_LAYER = 50;
+const LAST_LOADABLE_BED_LAYER = 59;
 
 export class RuntimeApp {
   constructor(readonly page: Page) {}
@@ -54,7 +77,7 @@ export class RuntimeApp {
    */
   #nextLayer = FIRST_LOADABLE_LAYER;
 
-  /** Take the next free row, refusing to encroach on the picker probe row. */
+  /** Take the next free OPERATOR row, refusing to encroach on the picker probe row. */
   #takeLayer(): number {
     const layer = this.#nextLayer++;
     if (layer >= TEMPLATE_PROBE_LAYER) {
@@ -63,6 +86,48 @@ export class RuntimeApp {
       );
     }
     return layer;
+  }
+
+  /** `B-201` — the bed half's counterpart to `#nextLayer`. */
+  #nextBedLayer = FIRST_LOADABLE_BED_LAYER;
+
+  /** Take the next free BED row. */
+  #takeBedLayer(): number {
+    const layer = this.#nextBedLayer++;
+    if (layer > LAST_LOADABLE_BED_LAYER) {
+      throw new Error(
+        `E2E fixture ran out of loadable BED rows (reached ${String(layer)}). Widen the bed half in MockRuntime.seedFixedBank.`,
+      );
+    }
+    return layer;
+  }
+
+  /**
+   * 🔴 `B-201` — WHICH HALF OF THE BANK THIS PACKAGE MAY BE LOADED ONTO.
+   *
+   * Read through `requiredBankFor`, **the same predicate the picker disables its `Load`
+   * button on and the bridge refuses `wrong-bank` on** — never a local "does the name look
+   * like a plate template?" rule. A second derivation here would be a fixture that can
+   * disagree with the product about where a package belongs, and it would disagree SILENTLY:
+   * the failure is a 30-second click timeout on a disabled button, which reads as a hang.
+   *
+   * The carrier is fetched from the registry rather than assumed, because that is what the
+   * picker itself reads.
+   */
+  async #bankFor(templateId: string): Promise<'low' | 'high'> {
+    const liveSources = await this.page.evaluate(async (id) => {
+      const w = window as unknown as {
+        cg: {
+          templates: {
+            get: (req: { templateId: string }) => Promise<{ liveSources?: unknown } | null>;
+          };
+        };
+      };
+      return (await w.cg.templates.get({ templateId: id }))?.liveSources ?? null;
+    }, templateId);
+    return requiredBankFor({
+      liveSources: (liveSources ?? undefined) as TemplateInfo['liveSources'],
+    });
   }
 
   /**
@@ -85,12 +150,90 @@ export class RuntimeApp {
   get layers(): Locator {
     return this.page.getByRole('region', { name: 'Layers' });
   }
+  /**
+   * The console's own tab strip.
+   *
+   * 🔴 SCOPED, and that is the point rather than tidiness. The owner sentence-cased the three
+   * tabs (2026-09-12) and Station setup's rail has a tab called `Layers` too — the CASING was
+   * what kept the two apart for a page-wide `getByRole('tab')`, and it is gone. Addressing the
+   * strip by its own accessible name is a match that cannot go ambiguous when a dialog opens.
+   */
+  get layerTabs(): Locator {
+    return this.page.getByRole('tablist', { name: 'Layer surfaces' });
+  }
   /** The playout tab's panel (the reserved layers another system owns). */
   get playoutTab(): Locator {
-    return this.page.getByRole('tab', { name: /PLAYOUT/ });
+    return this.layerTabs.getByRole('tab', { name: /^station layers/i });
+  }
+  /**
+   * B-145 (2.8) — the LIVE PLATES tab: the layers the BRIDGE seated for a
+   * template’s Live Source plates. A THIRD ownership class, beside our own rows
+   * and the station’s.
+   */
+  get liveSourcesTab(): Locator {
+    return this.layerTabs.getByRole('tab', { name: /^live plates/i });
+  }
+  /** One seated live-source row, anchored on its stable coordinate attribute. */
+  liveSourceRow(coordinate: string): Locator {
+    return this.layers.locator(`[data-live-layer="${coordinate}"]`);
   }
   get inspector(): Locator {
     return this.page.getByRole('complementary', { name: 'Inspector' });
+  }
+
+  /**
+   * 🔴 `STATION-CHROME-02` §1 — **OPEN STATION SETUP AT A SECTION, THROUGH THE ONE DOOR.**
+   *
+   * Six specs used to press a `SOURCES` button on the status bar. That button is gone: the
+   * owner's decision is one entry point, so every one of them now opens SETTINGS and presses
+   * the rail tab — which is also what the operator does, so the specs got MORE faithful
+   * rather than less by losing their shortcut.
+   *
+   * It is one method for the same reason `setTemplateDefault` is: six copies of "click, then
+   * click the tab" is six edits the next change to the rail would cost.
+   */
+  async openStationSetupAt(tab: string): Promise<void> {
+    await this.page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+    const setup = this.page.getByRole('dialog', { name: 'Station setup' });
+    await expect(setup).toBeVisible();
+    await setup
+      .getByRole('tablist', { name: 'Station setup sections' })
+      .getByRole('tab', { name: new RegExp(`^${tab}`) })
+      .click();
+  }
+
+  /**
+   * Dismiss Station setup.
+   *
+   * ⭐ `B-240` — THERE IS NOW EXACTLY ONE WAY, which is why this no longer has to say which
+   * it means. The footer used to carry a `Close` on three tabs and a `Cancel` on a fourth,
+   * beside the primitive's ✕ — three answers to one job — so this helper had to disambiguate
+   * with a regex. Dismissal is dialog-level now: the ✕, Escape and the backdrop, and nothing
+   * in any section's footer.
+   *
+   * ⚠ It presses the ✕ WITHOUT answering a question, so it is for specs that have left no
+   * unapplied draft behind. A tab holding one now asks before dropping it — deliberately, and
+   * `setupFooterVocabulary.dom.test.ts` is where that is driven.
+   */
+  async closeStationSetup(): Promise<void> {
+    /*
+      ⚠ `SETTINGS-MATCH-02` — `exact: true`. `B-240`'s amendment put a `Close` back in the
+      footer of the panes with nothing to commit (named `Close Station setup`, so the two can
+      be told apart); this helper means the PRIMITIVE's ✕, which every tab has. Without the
+      flag the locator matches both and fails strict mode on three of five tabs.
+    */
+    await this.page
+      .getByRole('dialog', { name: 'Station setup' })
+      .getByRole('button', { name: 'Close', exact: true })
+      .click();
+  }
+
+  /**
+   * 🔴 `PLAYOUT-SOURCES-01` §2.A — **CHOOSE IN A SOURCE PICKER**, the one control every binding
+   * site uses. See {@link chooseSource}; this is the page-object spelling of it.
+   */
+  async chooseSource(field: Locator, pick: SourcePick): Promise<void> {
+    await chooseSource(this.page, field, pick);
   }
   /**
    * R-028 — the fixed-layers panel WAS its own region; it is now the Layers
@@ -149,27 +292,40 @@ export class RuntimeApp {
    * confused with the connection banner (also an alert, differently named).
    */
   get error(): Locator {
-    return this.page.getByRole('alert', { name: 'Command error' });
+    /*
+      🔴 `CONSOLE-LOOK-06` DELTA R — REPOINTED, and the repoint is load-bearing. Refusals left
+      the transient toast for the persistent `RefusalBanner`, so the accessible name this used
+      to match ("Command error") no longer exists. Both callers assert `toHaveCount(0)` — a
+      locator that matches nothing passes those FOREVER, which is the vacuous-green shape this
+      repo has filed before. It addresses the real surface now.
+    */
+    return this.page.locator('[data-refusal]');
   }
 
   /** A command / import SUCCESS toast (page-level, `role="alert"` named "Command success"). */
   get success(): Locator {
-    return this.page.getByRole('alert', { name: 'Command success' });
+    /*
+      CONSOLE-LOOK-06 DELTA R — role STATUS, not ALERT. The two feedback surfaces split:
+      a confirmation is announced POLITELY (status) and a refusal ASSERTIVELY (alert, on the
+      persistent banner). This accessor followed the toast.
+    */
+    return this.page.getByRole('status', { name: 'Command success' });
   }
 
   // ── actions ───────────────────────────────────────────────────────────────
 
   /**
-   * R-028 — import a `.vcg` AND load it onto a row, in ONE operator flow.
+   * R-028 — import a `.vcg` and load it onto a row, as the operator now performs it.
    *
-   * §6 — `LOAD` now opens the TEMPLATE PICKER, and importing a new file is one
-   * option inside it rather than the whole of it. So this is LOAD → "Import a
-   * .vcg…" → the file chooser, which is the flow the operator actually performs;
-   * the row still ends bound to the exact slot in one gesture.
+   * 🔴 `RUNTIME-REPAIR-05` — THIS IS TWO STEPS, BECAUSE THE PRODUCT IS. Importing REGISTERS a
+   * package and binds no row, and the new template lands selected on the list, one press from
+   * the load. `UI-POLISH-01` D retired the separate Import dialog, so `Import a .vcg` opens the
+   * OS chooser itself. This drives LOAD → `Import a .vcg` → the file chooser → `Load onto <row>`.
    *
-   * The extra click is the point of the change, not overhead: the other option in
-   * that dialog — re-using a template already imported — used to be reachable only
-   * through a context-menu entry named after a panel that no longer exists.
+   * ⚠ THE SECOND PRESS IS NOT CEREMONY, AND A HELPER THAT SKIPPED IT WOULD HIDE THE ONE
+   * THING THIS SESSION CHANGED. Nine specs call this to get a bound row; if it committed the
+   * load by calling the bridge directly they would all still pass with the commit control
+   * broken. It presses what the operator presses.
    *
    * With no `layer`, takes the next free one (see `#nextLayer`) and returns it.
    */
@@ -178,8 +334,10 @@ export class RuntimeApp {
     const before = await this.templateCount();
     await this.layerRow(target).getByRole('button', { name: 'LOAD' }).click();
     await expect(this.templatePicker).toBeVisible();
+    // The tools row's door, not the footer's: the footer's primary is the LOAD now. Its press
+    // IS the OS chooser, so the wait for it starts first.
     const chooser = this.page.waitForEvent('filechooser');
-    await this.templatePicker.getByRole('button', { name: 'Import a .vcg…' }).click();
+    await this.page.getByRole('button', { name: 'Import a .vcg' }).click();
     await (
       await chooser
     ).setFiles({
@@ -194,9 +352,35 @@ export class RuntimeApp {
     // (imported), or the command toast reported a refusal. Read from the
     // registry rather than a toast alone, because a toast left over from an
     // earlier action in the same spec would satisfy a naive wait instantly.
+    /*
+      🔴 `RUNTIME-REPAIR-05` — THE REFUSAL MOVED, SO THE WAIT HAD TO. It used to settle on
+      "the registry grew, or the command TOAST said something"; the picker now pins its
+      own refusal (the A9 rule — a toast raised under a modal backdrop is a refusal nobody
+      reads), so the toast never fires for this path and the poll waited out its timeout on a
+      correctly-refused package. Same two real outcomes, read where they now appear.
+    */
     await expect
-      .poll(async () => (await this.templateCount()) > before || (await this.error.count()) > 0)
+      .poll(
+        async () =>
+          (await this.templateCount()) > before ||
+          (await this.page.locator('[data-modal-message]').count()) > 0 ||
+          (await this.error.count()) > 0,
+      )
       .toBe(true);
+
+    /*
+      The import is over and NOTHING is loaded — that is the new invariant. If the package
+      registered, the Templates list has it selected, so the load is the commit control's
+      press. If it was REFUSED the registry did not grow and the
+      caller is asserting the refusal, so there is nothing to commit and the dialog is left as
+      it is for them to read.
+    */
+    if ((await this.templateCount()) > before) {
+      const commit = this.page.locator('[data-template-commit]');
+      await expect(commit).toBeEnabled();
+      await commit.click();
+      await expect(this.templatePicker).toHaveCount(0);
+    }
     return target;
   }
 
@@ -221,6 +405,8 @@ export class RuntimeApp {
 
   /** Dismiss the picker without loading anything (resolves the pick as `null`). */
   async closeTemplatePicker(): Promise<void> {
+    // `UI-POLISH-01` C retired `Manage` and its `Back to selection`: the picker has one view
+    // again, and its footer's `Cancel` is always there.
     await this.templatePicker.getByRole('button', { name: 'Cancel' }).click();
     await expect(this.templatePicker).toHaveCount(0);
   }
@@ -255,20 +441,37 @@ export class RuntimeApp {
   /**
    * Load an ALREADY-IMPORTED template onto a row, via the row's `LOAD` and the
    * picker it opens.
+   *
+   * ⚠ `B-201` — with no explicit `layer` this takes the next free row **of the half this
+   * package belongs on** (`#bankFor`), not simply the next operator row. That is what an
+   * operator does: a graphics bed goes on a bed row because the picker offers it nowhere
+   * else. A caller that names a `layer` is trusted and gets it unchanged — a spec asserting
+   * the REFUSAL needs to be able to aim at the wrong half deliberately.
    */
   async loadTemplate(templateId: string, layer?: number): Promise<number> {
-    const target = layer ?? this.#takeLayer();
+    const target =
+      layer ??
+      ((await this.#bankFor(templateId)) === 'low' ? this.#takeBedLayer() : this.#takeLayer());
     await this.openTemplatePicker(target);
+    /*
+      🔴 `RUNTIME-REPAIR-05` — SELECT, THEN COMMIT. The row's press used to BE the load;
+      the owner reversed that on 2026-09-09. Every spec that loads a template comes through
+      here, so this is the one place the two-step flow is spelled — and it presses the real
+      controls rather than short-circuiting to the bridge, so a broken commit fails them all.
+    */
     await this.templateRow(templateId)
-      .getByRole('button', { name: /^Load / })
+      .getByRole('button', { name: /^Select / })
       .click();
+    const commit = this.page.locator('[data-template-commit]');
+    await expect(commit, 'the selected template can go onto this row').toBeEnabled();
+    await commit.click();
     await expect(this.templatePicker).toHaveCount(0);
     return target;
   }
 
-  /** How many templates the OPEN picker lists (one "Load …" button each). */
+  /** How many templates the OPEN picker lists (one "Select …" button each). */
   loadButtons(): Locator {
-    return this.templatePicker.getByRole('button', { name: /^Load / });
+    return this.templatePicker.getByRole('button', { name: /^Select / });
   }
 
   /**
@@ -311,9 +514,58 @@ export class RuntimeApp {
     await this.layerRow(layer).locator('[data-row-body]').click();
   }
 
+  /**
+   * 🔴 `MONITORS-01` — BRING THE MONITOR STRIP UP. The console boots with it FOLDED AWAY
+   * (`DEFAULT_MONITORS_SHOWN`; `design.md` §19), because neither box was confidence monitoring: PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default) and PVW is a local
+   * browser render of the rehearsing rows (`R-022` — nothing reaches CasparCG).
+   *
+   * Every spec whose subject is INSIDE the strip — the rehearsal frames, the PVW stage, the
+   * strip's own divider — calls this first. It lives on the fixture rather than in each
+   * spec so the boot state is stated in ONE place: when this default moves again, the specs
+   * that merely need the strip present do not each have to be found and edited.
+   *
+   * IDEMPOTENT, and it ASSERTS rather than assuming: a helper that only clicked would leave
+   * every caller starting from an unknown state if the toggle's name ever changed.
+   */
+  async showMonitors(): Promise<void> {
+    const show = this.page.getByRole('button', { name: 'Show monitors' });
+    if (await show.count()) await show.first().click();
+    await expect(this.page.getByRole('button', { name: 'Hide monitors' })).toBeVisible();
+    await expect(this.page.locator('[data-monitor-strip]')).toHaveCount(1);
+  }
+
   /** R-003 — apply the selected item's staged edits via the Inspector's Update. */
   async applyEdits(): Promise<void> {
     await this.inspector.getByRole('button', { name: 'Apply staged edits' }).click();
+  }
+
+  /**
+   * 🔴 `SOURCE-DEFAULTS-20` — **SET ONE OF THE SELECTED TEMPLATE'S SOURCE DEFAULTS.**
+   *
+   * The per-plate selects used to sit inline in the Inspector's LIVE PLATES section; they are
+   * in a dialog a link in the section head opens, and it commits with its own button rather
+   * than riding the row's Update. That is three steps where it used to be one, so it lives
+   * HERE rather than being spelled out in each spec — when the door moves again, the specs
+   * that merely need a default set do not each have to be found and edited.
+   *
+   * ⚠ The link is in `LOOK INPUTS` for a template that declares looks and in `LIVE PLATES`
+   * for one that does not, which is why this does NOT scope to either section: it asks the
+   * Inspector for the one door, wherever that template put it.
+   */
+  async setTemplateDefault(plateId: string, source: string | SourcePick): Promise<void> {
+    await this.inspector.locator('[data-open-template-defaults]').click();
+    const dialog = this.page.getByRole('dialog', { name: 'Source defaults' });
+    await expect(dialog).toBeVisible();
+    // `PLAYOUT-SOURCES-01` — the select became the source picker; a bare name is an INPUT's.
+    await chooseSource(
+      this.page,
+      dialog.locator(`[data-defaults-select="${plateId}"]`),
+      typeof source === 'string' ? { input: source } : source,
+    );
+    await dialog.locator('[data-defaults-save]').click();
+    // The dialog closes on acceptance; a refusal keeps it open with the reason on it, so this
+    // also asserts the commit was ACCEPTED rather than leaving a spec to continue past one.
+    await expect(dialog).toHaveCount(0);
   }
 
   /** R-003 — discard the selected item's staged edits. */
@@ -358,7 +610,7 @@ function fixtureScene(): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [
       {
         id: 'layer-1',
@@ -641,6 +893,51 @@ export async function buildPositionedVcg(templateId = 'tpl-e2e-pos'): Promise<Ui
   });
 }
 
+/**
+ * 🔴 `TIMING-WIRE-22 · DELTA B4` — a `.vcg` whose scene LOOPS, so the Inspector's Timing section
+ * renders its controls rather than only its two facts.
+ *
+ * `loop-cycle` on the ROOT is what `templateTimingOf` reads since `DELTA B1` (an exported
+ * template's root IS the composition the designer chose), and `repeat`/`delayMs` give the
+ * section something to state as INHERITED — which is the case the owner's note is about, since a
+ * placeholder is what carries the inherited value.
+ */
+export async function buildLoopingVcg(templateId = 'tpl-e2e-loop'): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  scene.playout = {
+    mode: 'loop-cycle',
+    holdSource: 'timed',
+    holdMs: 3000,
+    repeat: 3,
+    delayMs: 2500,
+  };
+  scene.lifecycle = { outPoint: 40 };
+  const fontDeps: readonly FontReference[] = scene.fonts;
+  const assetIndex: readonly AssetEntry[] = [];
+  const manifestExtras = {
+    id: templateId,
+    name: 'e2e-looping',
+    authoring: {
+      designerVersion: '0.0.0',
+      createdAt: '2026-06-29T00:00:00.000Z',
+      exportedAt: '2026-06-29T00:01:00.000Z',
+    },
+    compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+    fontDeps,
+    assetIndex,
+  } satisfies Pick<Manifest, 'id' | 'name' | 'authoring' | 'compatibility'> & {
+    fontDeps: readonly FontReference[];
+    assetIndex: readonly AssetEntry[];
+  };
+  return pack({
+    scene,
+    manifestExtras,
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
 /** Bytes that are NOT a valid `.vcg` — `verify()` fails to even unpack them. */
 export function buildInvalidVcg(): Uint8Array {
   return new TextEncoder().encode('this is not a .vcg archive');
@@ -662,6 +959,269 @@ export function buildInvalidVcg(): Uint8Array {
  *  - defaulted HERE, in the harness, not in product code — so the product's default is
  *    "show the splash" and the splash's own specs opt back in simply by not using this.
  */
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.G — **THE OFFLINE CONSOLE'S PLAYOUT, AS A SPEC ARMS IT.**
+ *
+ * The station's sources are the Playout's now (D10 inputs, D11 media); nothing in the console
+ * defines one. With auth off there is no Playout, so a spec that needs sources seeds the offline
+ * mock's through `window.CG_E2E_PLAYOUT_SOURCES` — read ONCE, when the mock is built, through the
+ * bridge's own parsers and its one catalogue builder. Opt in per file with
+ * `test.use({ playoutSources: E2E_PLAYOUT })`; the default is no Playout at all, which is also
+ * the real state of a station whose Playout has shared nothing.
+ *
+ * Catalogue ids are the builder's: an input `studio-1` binds as `in-studio-1`, a media item
+ * `m-studio1` as `md-m-studio1`.
+ */
+export interface PlayoutSeed {
+  readonly inputs: { readonly inputs: readonly unknown[]; readonly epoch?: string | number };
+  /** Inputs a later read no longer listed — kept, `unavailable` (ADR 0010 rule 14). */
+  readonly departed?: readonly unknown[];
+  /** The D11 library. */
+  readonly media?: readonly unknown[];
+  /** Media ids already bound on this station (the `Recent` group). */
+  readonly bound?: readonly string[];
+  /** Bound media ids the Playout no longer offers. */
+  readonly unavailable?: readonly string[];
+  /** A Playout that does not answer a media search. */
+  readonly down?: boolean;
+}
+
+/** One generated library clip — `Clip 001`…, in two folders, a minute or two long. */
+const libraryClip = (i: number): Record<string, unknown> => {
+  const n = String(i).padStart(3, '0');
+  return {
+    id: `m-clip-${n}`,
+    name: `Clip ${n}`,
+    clip: `D:/Media Library/clips/clip ${n}.mp4`,
+    type: 'video',
+    width: 1920,
+    height: 1080,
+    durationMs: 60_000 + i * 1_000,
+    folder: i % 2 === 0 ? 'SPORT' : 'NEWS',
+    updatedAt: `2026-09-${String(1 + (i % 26)).padStart(2, '0')}T08:00:00Z`,
+  };
+};
+
+/**
+ * The standard seed: the fake Playout's list (`tools/caspar-bridge/tests/support/fake-playout.ts`
+ * §3) cut to what the console needs — three NDI cameras, a stream CARRYING CREDENTIALS (§1.E: its
+ * URL must reach no DOM), a multicast stream, the two v1.3 routes (bindable since `ROUTE-PLATES-01`;
+ * `ورودی ۴` is channel 1 only, and down), and a library of 124 video items — more than two
+ * pages of 50 — with a media item named exactly `Studio 1`, a name to find through Arabic `ي`/`ك`,
+ * one with Persian digits, and audio that is never offered.
+ */
+export const E2E_PLAYOUT: PlayoutSeed = {
+  inputs: {
+    epoch: 'e2e-1',
+    inputs: [
+      { id: 'studio-1', name: 'Studio 1', producer: { kind: 'ndi', source: 'STUDIO-PC (Cam 1)' } },
+      { id: 'studio-2', name: 'Studio 2', producer: { kind: 'ndi', source: 'STUDIO-PC (Cam 2)' } },
+      { id: 'studio-3', name: 'Studio 3', producer: { kind: 'ndi', source: 'STUDIO-PC (Cam 3)' } },
+      {
+        id: 'newscam',
+        name: 'دوربین خبر',
+        producer: { kind: 'stream', url: 'rtsp://cam:secret@10.0.0.21/live' },
+      },
+      {
+        id: 'multicast',
+        name: 'Multicast',
+        producer: { kind: 'stream', url: 'udp://239.255.0.1:5000?reuse=1' },
+      },
+      {
+        id: 'input-3',
+        name: 'ورودی ۳',
+        producer: { kind: 'route', channel: 9, layer: 12, videoMode: '1080i5000' },
+        compatibleChannels: [
+          { casparHost: '127.0.0.1', casparChannel: 1 },
+          { casparHost: '127.0.0.1', casparChannel: 2 },
+        ],
+        available: true,
+      },
+      {
+        id: 'input-4',
+        name: 'ورودی ۴',
+        producer: { kind: 'route', channel: 9, layer: 13 },
+        compatibleChannels: [{ casparHost: '127.0.0.1', casparChannel: 1 }],
+        available: false,
+        reason: 'no signal',
+      },
+    ],
+  },
+  media: [
+    {
+      id: 'm-studio1',
+      name: 'Studio 1',
+      clip: 'D:/Media Library/studio one.mov',
+      type: 'video',
+      width: 1920,
+      height: 1080,
+      durationMs: 42_000,
+      folder: 'STUDIO',
+    },
+    {
+      id: 'm-kelip',
+      name: 'کلیپ معرفی',
+      clip: 'D:/Media Library/کلیپ معرفی.mp4',
+      type: 'video',
+      width: 1920,
+      height: 1080,
+      durationMs: 30_000,
+      folder: 'PROMO',
+    },
+    {
+      id: 'm-khabar',
+      name: 'خبر ۱۴۰۵',
+      clip: 'D:/Media Library/خبر ۱۴۰۵.mp4',
+      type: 'video',
+      width: 1920,
+      height: 1080,
+      durationMs: 1_059_000,
+      folder: 'NEWS',
+    },
+    {
+      id: 'm-bed',
+      name: 'Bed music',
+      clip: 'D:/Media Library/bed.wav',
+      type: 'audio',
+      durationMs: 60_000,
+    },
+    ...Array.from({ length: 121 }, (_, i) => libraryClip(i + 1)),
+  ],
+};
+
+/**
+ * Arm a Playout for every page load from now on. The `app` fixture calls it before it navigates;
+ * a spec that needs the Playout to CHANGE (an input leaves) arms a second seed and reloads — init
+ * scripts run in the order they were added, so the latest seed is the one the mock reads.
+ */
+export async function armPlayoutSources(page: Page, seed: PlayoutSeed): Promise<void> {
+  await page.addInitScript((value) => {
+    (window as unknown as { CG_E2E_PLAYOUT_SOURCES: unknown }).CG_E2E_PLAYOUT_SOURCES = value;
+  }, seed);
+}
+
+/**
+ * 🔴 `MEDIA-PLATES-01` — **THE OFFLINE CONSOLE'S CLIPS ON AIR, AS A SPEC ARMS THEM.** The mock seats
+ * nothing on its own, so which plate carries a clip — the bridge's `liveLayers.media-state` — is
+ * seeded (`window.CG_E2E_MEDIA_STATE`), one entry per `(templateId, plateId)`, shown for every ON-AIR
+ * row of that template. `lengthMs` is what Restart rewinds to; no `remainingMs` is a server that
+ * reported no time. Opt in per file with `test.use({ mediaState: [...] })`.
+ */
+export interface MediaStateSeed {
+  readonly templateId: string;
+  readonly plateId: string;
+  readonly lengthMs: number;
+  readonly remainingMs?: number;
+  readonly paused?: boolean;
+  readonly ended?: boolean;
+  readonly loop?: boolean;
+  /** The clip's catalogue id (`md-…`): its name for the audit, and which clip a Loop change reaches. */
+  readonly sourceId?: string;
+}
+
+export async function armMediaState(page: Page, seed: readonly MediaStateSeed[]): Promise<void> {
+  await page.addInitScript((value) => {
+    (window as unknown as { CG_E2E_MEDIA_STATE: unknown }).CG_E2E_MEDIA_STATE = value;
+  }, seed);
+}
+
+/** What to choose in a source picker: one of the call site's own choices, an input, or media. */
+export type SourcePick =
+  | { readonly choice: string }
+  | { readonly input: string }
+  | { readonly media: string; readonly search?: string };
+
+const exactly = (text: string): RegExp =>
+  new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §2.A — **CHOOSE IN A SOURCE PICKER.** Every binding site — the template
+ * defaults, a look's input, the live swap — is one field that opens one anchored panel: the call
+ * site's own choices on a row above two tabs, `Inputs` and `Media`. One helper, because the next
+ * change to the panel should cost one edit, not one per spec.
+ *
+ * An input and a call-site choice are named EXACTLY; a media row's accessible name also carries its
+ * folder and facts, so it is matched on its name element. `search` types into the Media search first
+ * (a library longer than a page does not show every item at once). Waits for the panel to close,
+ * which is what a pick does.
+ */
+export async function chooseSource(page: Page, field: Locator, pick: SourcePick): Promise<void> {
+  await field.click();
+  const panel = page.getByRole('dialog', { name: 'Choose a source' });
+  await expect(panel).toBeVisible();
+  if ('choice' in pick) {
+    await panel
+      .locator('[data-picker-choices]')
+      .getByRole('button', { name: pick.choice, exact: true })
+      .click();
+  } else if ('input' in pick) {
+    await panel.getByRole('tab', { name: /^Inputs/ }).click();
+    await panel.getByRole('option', { name: pick.input, exact: true }).click();
+  } else {
+    await panel.getByRole('tab', { name: /^Media/ }).click();
+    if (pick.search !== undefined) await panel.locator('[data-picker-search]').fill(pick.search);
+    await panel
+      .locator('[data-picker-media]')
+      .filter({ has: page.locator('.cg-picker-row__name', { hasText: exactly(pick.media) }) })
+      .first()
+      .click();
+  }
+  await expect(panel).toHaveCount(0);
+}
+
+/**
+ * Resolve a declared CSS colour — a token reference, a hex, an `rgb()`, a `color-mix(…)` —
+ * to the exact string `getComputedStyle` reports, by letting the browser do the normalising.
+ * Comparing that way keeps an assertion on IDENTITY with the token rather than on a parser
+ * here agreeing with Chromium's, which is what "severity and identity BY TOKEN, never by
+ * hex" asks for on the test side.
+ *
+ * ⚠ The probe is appended to `<body>` so it INHERITS the app's custom properties: a detached
+ * element resolves `var(--r-verb-clear)` to nothing and the helper would quietly answer
+ * `rgba(0, 0, 0, 0)` for every token — a pass against any colour at all.
+ *
+ * Lives here, and not beside its first caller, because a second local copy is how one helper
+ * becomes two that disagree. `layer-table-geometry.spec.ts` had the original.
+ */
+export async function cssColour(page: Page, declared: string): Promise<string> {
+  return page.evaluate((value) => {
+    const probe = document.createElement('div');
+    probe.style.backgroundColor = value;
+    document.body.appendChild(probe);
+    const out = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return out;
+  }, declared);
+}
+
+/**
+ * The x of a sub-range of one element's text, so character ORDER can be measured in a real engine
+ * (`MODAL-CHROME-10` ADDENDUM B §2, and `B-303`). It walks the element's TEXT NODES with a `Range`, so
+ * it measures where the glyphs of `needle` actually land, whatever isolate holds them.
+ *
+ * ⚠ It takes a LOCATOR and not a selector string: an element found by its text uses Playwright's
+ * `:has-text()`, which is not a CSS selector — handing it to `querySelector` throws.
+ */
+export async function textRunX(
+  target: Locator,
+  needle: string,
+): Promise<{ left: number; right: number }> {
+  return target.evaluate((host, want) => {
+    const walk = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+    while (walk.nextNode()) {
+      const node = walk.currentNode;
+      const at = (node.textContent ?? '').indexOf(want);
+      if (at === -1) continue;
+      const r = document.createRange();
+      r.setStart(node, at);
+      r.setEnd(node, at + want.length);
+      const box = r.getBoundingClientRect();
+      return { left: +box.left.toFixed(1), right: +box.right.toFixed(1) };
+    }
+    throw new Error(`the element does not contain ${want}`);
+  }, needle);
+}
+
 export async function disableSplash(page: Page): Promise<void> {
   await page.addInitScript(() => {
     (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;
@@ -669,7 +1229,16 @@ export async function disableSplash(page: Page): Promise<void> {
 }
 
 /** The extended `test` every Runtime spec imports: provides a booted `app`. */
-export const test = base.extend<{ app: RuntimeApp; splashDisabled: void }>({
+export const test = base.extend<{
+  app: RuntimeApp;
+  splashDisabled: void;
+  /** `PLAYOUT-SOURCES-01` — the offline console's Playout ({@link E2E_PLAYOUT}); none by default. */
+  playoutSources: PlayoutSeed | null;
+  /** `MEDIA-PLATES-01` — the offline console's clips on air ({@link MediaStateSeed}); none by default. */
+  mediaState: readonly MediaStateSeed[] | null;
+}>({
+  playoutSources: [null, { option: true }],
+  mediaState: [null, { option: true }],
   /**
    * Auto, so a spec that drives the raw `page` (arming its own bridge URL and navigating
    * itself, e.g. `bridge-indicator.spec.ts`) is covered too — those never touch `app`, so
@@ -683,8 +1252,10 @@ export const test = base.extend<{ app: RuntimeApp; splashDisabled: void }>({
     },
     { auto: true },
   ],
-  app: async ({ page }, use) => {
+  app: async ({ page, playoutSources, mediaState }, use) => {
     await disableSplash(page);
+    if (playoutSources !== null) await armPlayoutSources(page, playoutSources);
+    if (mediaState !== null) await armMediaState(page, mediaState);
     await page.addInitScript(() => {
       (window as unknown as { CG_E2E: boolean }).CG_E2E = true;
       // R-028 — the declared bank is armed for EVERY spec now, because the
@@ -738,7 +1309,10 @@ export async function buildNestedCompVcg(
       ...(entry.activeRange !== undefined ? { activeRange: entry.activeRange } : {}),
       ...(entry.lifecycle !== undefined ? { lifecycle: entry.lifecycle } : {}),
       ...(entry.playout !== undefined ? { playout: entry.playout } : {}),
-      background: entry.background,
+      // P-031 — the composition's own backdrop is an EDITOR preference and never
+      // travels in an exported package; the scoped scene keeps the root's
+      // `editorBackdrop` from the `...migrated` spread above. (This line used to copy a
+      // legacy `background` key that the schema's now-retired parse shim understood.)
       layers: entry.layers,
       fields: entry.fields ?? [],
       bindings: entry.bindings ?? [],

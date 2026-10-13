@@ -5,8 +5,10 @@ import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import type { ConnectionConfig, RetainedStackItem, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import type { RetainedStackItem } from '@cg/shared-schema';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * Two questions C-012 raised, answered against the wire rather than by reasoning.
@@ -71,13 +73,7 @@ async function waitFor(cond: () => boolean, timeoutMs: number, what: string): Pr
 
 async function recvLines(m: MockHandle, file: string): Promise<string[]> {
   await m.traceFlush();
-  return fs
-    .readFileSync(file, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(file);
 }
 
 function status(r: CasparRuntime, itemId: string): string | undefined {
@@ -85,7 +81,11 @@ function status(r: CasparRuntime, itemId: string): string | undefined {
 }
 
 async function boot(m: MockHandle, oscPort: number): Promise<CasparRuntime> {
-  const r = new CasparRuntime(singleServer(m.amcpPort, oscPort));
+  const r = new CasparRuntime(
+    singleServer(m.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   r.start();
   await r.startServing();
@@ -184,15 +184,19 @@ it('B-092: a STOPPED item restored across a bridge restart is adopted WITHOUT be
       itemId: 'item1',
       templateId: 'lower-third',
       fields: {},
-      played: false,
+      state: 'loaded',
       slot: { ...SLOT, server: 'primary' },
     },
   ];
-  const r2 = new CasparRuntime(singleServer(mock.amcpPort, oscPort));
+  const r2 = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r2;
   await r2.startServing();
   r2.templateImport(TEMPLATE, HTML);
-  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: 0 });
+  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [], migrated: [] });
   r2.start();
   await r2.whenServerHealthy(HEALTH_MS);
   await delay(1200);

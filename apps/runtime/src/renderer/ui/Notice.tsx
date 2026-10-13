@@ -1,31 +1,37 @@
-import type { CSSProperties } from 'react';
-import { colors } from '../theme.js';
+import type { CSSProperties, ReactNode } from 'react';
+import { X, type LucideIcon } from 'lucide-react';
+import { colors, cssVars } from '../theme.js';
+import { Icon } from './Icon.js';
 
 /**
  * THE ONE SPELLING OF A MESSAGE TREATMENT IN THE RUNTIME.
  *
- * Before this there were five, all local, and two of them were illegible. Measured
- * against the modal surface (`chrome.panel` `#111827`):
+ * Before this there were five, all local, and two of them were illegible.
  *
- * | where                                    | foreground | ratio     |
- * | ---------------------------------------- | ---------- | --------- |
- * | `SourcesModal` `styles.error`            | `#991B1B`  |  2.13:1 ✗ |
- * | `DelimitersModal` `styles.error`         | `#991B1B`  |  2.13:1 ✗ |
- * | `ServerSettingsPanel` `styles.error`     | `#991B1B`  |  2.13:1 ✗ |
- * | `ServerSettingsPanel` `styles.blocked`   | `#FCA5A5`  |  8.66:1   |
- * | `FixedBankConfigModal` `styles.refusal`  | `#FCD34D`  | 11.21:1   |
+ * ⚠ RE-MEASURED IN `RUNTIME-REDESIGN-01` PHASE 2, when the modal surface moved to the
+ * reference's ground. Each row now NAMES what it is measured against — the old table
+ * said "the modal surface" for all five while two of its numbers were in fact against
+ * other grounds, which is the failure a table of ratios is least able to show.
  *
- * `#991B1B` is `colors.error`, and it is a BACKGROUND colour in this palette — the
+ * | where                                   | foreground | on             | ratio     |
+ * | --------------------------------------- | ---------- | -------------- | --------- |
+ * | `SourcesModal` `styles.error`           | `#991B1B`  | `--r-surface`  |  2.08:1 ✗ |
+ * | `DelimitersModal` `styles.error`        | `#991B1B`  | `--r-surface`  |  2.08:1 ✗ |
+ * | `ServerSettingsPanel` `styles.error`    | `#991B1B`  | `--r-surface`  |  2.08:1 ✗ |
+ * | `ServerSettingsPanel` `styles.blocked`  | `#ffaaa7`  | `--r-surface`  |  9.53:1   |
+ * | `FixedBankConfigModal` `styles.refusal` | `#f3cd88`  | the amber fill | 10.39:1   |
+ *
+ * `#991B1B` is `colors.alarmFill`, and it is a BACKGROUND colour in this palette — the
  * command toast, the connection banner and the raster banner all fill with it and
- * put white on top. Used as a FOREGROUND on a dark panel it measures 2.13:1, which
+ * put white on top. Used as a FOREGROUND on a dark panel it measures 2.08:1, which
  * is below even the 3:1 large-text floor: that is the owner's report, and it was
  * three independent copies of the same mistake rather than one.
  *
  * ── NO NEW COLOUR IS INTRODUCED HERE ────────────────────────────────────────
  *
  * `refusal` is `FixedBankConfigModal`'s treatment, moved rather than redesigned —
- * the same border, the same 12% amber fill, the same `#FCD34D`. It measures
- * 11.21:1. The red spellings are DELETED, not replaced by a second red: per
+ * the same border, the same 12% amber fill, the same `--r-caution-text`. It measures
+ * 10.39:1. The red spellings are DELETED, not replaced by a second red: per
  * `theme.ts`, red means error or destructive intent, and a refusal is neither. It
  * is the palette's ATTENTION case, which is amber — the hue `pending`, `OCCUPIED`
  * and `UNKNOWN` already carry.
@@ -48,37 +54,52 @@ export type NoticeRole = 'refusal' | 'notice';
 
 const ROLE_STYLE: Record<NoticeRole, CSSProperties> = {
   refusal: {
-    border: '1px solid #B45309',
-    background: 'rgba(180, 83, 9, 0.12)',
-    color: '#FCD34D',
+    border: `1px solid ${cssVars['--r-notice-line']}`,
+    background: cssVars['--r-notice-fill'],
+    color: cssVars['--r-caution-text'],
   },
+  /*
+    `RUNTIME-REDESIGN-01` Phase 9 — the reference's PLAIN `.notice` pair, which is what a
+    neutral statement looks like in the approved design. It used to borrow the panel's own
+    surface and border, which made a notice indistinguishable from a panel.
+  */
   notice: {
-    border: `1px solid ${colors.border}`,
-    background: colors.panelMuted,
-    color: colors.text,
+    border: `1px solid ${cssVars['--r-notice-neutral-line']}`,
+    background: cssVars['--r-notice-neutral-bg'],
+    color: cssVars['--r-notice-neutral-text'],
   },
 };
 
 /**
- * The quieter second line — the bridge's own sentence, which names the layer or
- * both ranges while the first line carries the rule.
+ * The quieter second line — ours: a row's name, the places a refusal names. Never the
+ * bridge's own `message` on an operator surface (`DELTA-MULTI-CHANNEL-01-A` A5); the Audit
+ * panel, a diagnostic surface, is the one reader that quotes a failure there.
  *
  * It was `colors.textMuted` inside the amber box. The hierarchy now comes from SIZE
  * and not from a grey that has to survive an unusual backdrop: `colors.text` on the
- * amber fill measures 13.06:1, `colors.textMuted` on the neutral fill 5.78:1. Both
+ * amber fill measures 12.18:1, `colors.textMuted` on the neutral fill 5.55:1. Both
  * clear AA, which the old pairing did only by luck of the backdrop it happened to
- * sit on.
+ * sit on. (Re-measured in Phase 9 on the reference's pairs; Phase 2 read 14.07:1 and
+ * 5.64:1 on the previous fills.)
  */
 const DETAIL_COLOR: Record<NoticeRole, string> = {
   refusal: colors.text,
   notice: colors.textMuted,
 };
 
+/*
+  `RUNTIME-REDESIGN-01` Phase 9 — the reference's `.notice` box as rendered: `13px 15px`,
+  radius 8, 13 px on a 1.6 line (`NOTICE_PX` in the token home). The two lines stack, so the
+  reference's icon-to-text gap is not what `gap` means here; the inter-line gap stays small.
+*/
+/** `.notice svg{width:18px}` — the reference's mark beside a message. */
+const NOTICE_MARK_PX = 18;
+
 const base: CSSProperties = {
-  borderRadius: '0.25rem',
-  padding: '0.5rem 0.7rem',
-  fontSize: '0.85rem',
-  lineHeight: 1.45,
+  borderRadius: cssVars['--r-notice-radius'],
+  padding: cssVars['--r-notice-pad'],
+  fontSize: cssVars['--r-notice-fs'],
+  lineHeight: cssVars['--r-notice-lh'],
   display: 'flex',
   flexDirection: 'column',
   gap: '0.2rem',
@@ -111,24 +132,201 @@ export function Notice({
   text,
   detail,
   aria,
+  onDismiss,
+  dismissLabel,
+  icon,
+  title,
+  remedies,
 }: {
   noticeRole: NoticeRole;
   text: string;
   detail?: string;
   aria?: 'alert' | 'status' | 'note';
+  /**
+   * 🔴 `CONSOLE-LOOK-06` DELTA R ADDENDUM A §A2 — **A MESSAGE'S DISMISS CONTROL IS PART OF
+   * THE MESSAGE.**
+   *
+   * The owner found both halves of that on the refusal banner's first cut: the control sat
+   * OUTSIDE the box, on the page ground beside it, and it took the page's default foreground
+   * instead of the message's own — so it read as unrelated furniture rather than as this
+   * message's control. It had been a sibling of this component, which is precisely how both
+   * happen at once.
+   *
+   * So it lives HERE, and every caller that passes `onDismiss` inherits the fix rather than
+   * re-solving it. It is a CALLBACK and not a node, which keeps the constraint this file's
+   * header sets out: the component owns the markup and the treatment, the caller owns only
+   * the behaviour. A node prop could carry a `style`, and a message that arrives carrying its
+   * own style is the whole defect this file exists to close.
+   */
+  onDismiss?: () => void;
+  /** The dismiss control's accessible name. Required with `onDismiss` — an icon is not a label. */
+  dismissLabel?: string;
+  /**
+   * 🔴 `CONSOLE-LOOK-06` §B4 — **THE CAPABILITY MOVES; THE APPEARANCE DOES NOT.**
+   *
+   * `SetupNotice` has two things this component lacked: a MARK beside the message (a padlock
+   * for a block, an info glyph for a standing fact) and a bold TITLE over a quieter body. The
+   * owner's ruling settles the geometry question the other way — each surface keeps its own
+   * approved drawing, and `SETTINGS-MATCH-02`'s nine pinned files are untouched — but the
+   * COMPONENT is one, so the capability lives here.
+   *
+   * ⚠ BOTH ARE OPTIONAL AND BOTH DEFAULT TO ABSENT, which is the whole of "defaults unchanged":
+   * every existing caller renders byte-for-byte what it rendered before, and the DOM shape is
+   * only altered for a caller that asks (see the wrapper note below, which had to learn this
+   * once already).
+   */
+  icon?: LucideIcon;
+  /** A bold line above `text`. With it, `text` becomes the quieter explanation under it. */
+  title?: string;
+  /**
+   * 🔴 `MODAL-CHROME-10` ADDENDUM C §C4(e) — **THE WAY OUT, SEATED IN THE MESSAGE THAT
+   * NAMES IT.**
+   *
+   * Controls that RESOLVE this message — "go to the row that is holding it", "remove that one
+   * item". They belong here and not beside the box, because a remedy that floats next to a
+   * refusal reads as an unrelated control: the owner photographed exactly that, a blue button
+   * apparently belonging to nothing.
+   *
+   * ⚠ **THIS DOES NOT REOPEN `ModalMessage`'s §3 DECISION**, and the distinction is the whole
+   * reason it is safe. That decision made the SENTENCE data rather than a node, because four
+   * callers passing nodes gave four TREATMENTS — three of them the 2.08:1 ink. This slot takes
+   * CONTROLS, whose treatment comes from `Button` exactly as `ModalActionRole`'s does. Pass
+   * buttons and isolated names; never a styled sentence. The message's own words stay in
+   * `text` and `detail`, which are still strings.
+   */
+  remedies?: ReactNode;
 }): JSX.Element {
+  const dismissable = onDismiss !== undefined;
+  /*
+    A mark or a title makes the box a ROW with a column inside it, exactly as a dismiss does —
+    so the three share one wrapper decision rather than three. Without any of them the markup
+    is what it always was.
+  */
+  const stacked =
+    dismissable || icon !== undefined || title !== undefined || remedies !== undefined;
   return (
     <div
-      style={{ ...base, ...ROLE_STYLE[noticeRole] }}
+      style={{
+        ...base,
+        ...ROLE_STYLE[noticeRole],
+        /*
+          The box becomes a ROW once it carries a control: the lines stack in their own column
+          and the control sits at the inline END. `start` alignment, so a two-line message does
+          not drag the control to the middle of the box where it reads as belonging to the
+          detail line.
+        */
+        ...(stacked
+          ? { flexDirection: 'row' as const, alignItems: 'start' as const, gap: '0.6rem' }
+          : {}),
+      }}
       data-notice={noticeRole}
       role={aria ?? (noticeRole === 'refusal' ? 'alert' : 'status')}
     >
-      <span dir="auto">{text}</span>
-      {detail !== undefined && detail !== '' && (
-        <span dir="auto" style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}>
-          {detail}
+      {icon !== undefined && <Icon icon={icon} size={NOTICE_MARK_PX} />}
+      {/*
+        ⚠ THE LINES ARE WRAPPED ONLY WHEN THERE IS SOMETHING TO SIT BESIDE THEM.
+
+        The first cut wrapped them always, which changed the DOM of every notice in the app to
+        solve a problem only the dismissable ones have — `modalMessageRegion.dom.test.ts` caught
+        it by counting the box's direct children, and it was right to: a notice's two lines
+        being its two children is the shape every other caller was written against. With no
+        dismiss the markup is byte-for-byte what it always was.
+      */}
+      {stacked ? (
+        <span
+          style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1, minWidth: 0 }}
+        >
+          {title !== undefined && (
+            <strong dir="auto" style={{ fontWeight: 600 }}>
+              {title}
+            </strong>
+          )}
+          <span dir="auto">{text}</span>
+          {detail !== undefined && detail !== '' && (
+            <span dir="auto" style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}>
+              {detail}
+            </span>
+          )}
+          {remedies !== undefined && (
+            /*
+              The remedies sit UNDER the sentence, inside the same box: one refusal, one
+              surface. The row wraps, because a template held by four rows offers four ways
+              out and a message must not push its own dismiss off the edge.
+            */
+            <span
+              className="cg-notice-remedies"
+              data-notice-remedies=""
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 'var(--r-space-2)',
+                marginTop: '0.35rem',
+              }}
+            >
+              {remedies}
+            </span>
+          )}
         </span>
+      ) : (
+        <>
+          <span dir="auto">{text}</span>
+          {detail !== undefined && detail !== '' && (
+            <span dir="auto" style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}>
+              {detail}
+            </span>
+          )}
+        </>
+      )}
+      {dismissable && (
+        <NoticeDismiss onDismiss={onDismiss} label={dismissLabel ?? 'Dismiss this message'} />
       )}
     </div>
+  );
+}
+
+/**
+ * A message's dismiss control — `Notice`'s, and a message box that is not a `Notice` wears the
+ * same one (`FIELD-FIXES-01` L: the orphan strips, whose rows carry their own controls). Seat it
+ * INSIDE the box, at its inline end (§A2 above).
+ */
+export function NoticeDismiss({
+  onDismiss,
+  label,
+}: {
+  onDismiss: () => void;
+  /** The accessible name, also its title — an icon is not a label. */
+  label: string;
+}): JSX.Element {
+  return (
+    /*
+      ⚠ `color: inherit` is the second half of §A2 and it is not cosmetic: the control
+      takes the MESSAGE's ink, so an amber refusal's dismiss is amber and a neutral
+      notice's is neutral. Without it the shared button ink wins and the control belongs
+      to the page instead of to the box it sits in.
+    */
+    <button
+      type="button"
+      onClick={onDismiss}
+      data-notice-dismiss=""
+      aria-label={label}
+      title={label}
+      style={{
+        flex: 'none',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '22px',
+        height: '22px',
+        padding: 0,
+        border: '1px solid transparent',
+        borderRadius: cssVars['--r-radius-sm'],
+        background: 'transparent',
+        color: 'inherit',
+        cursor: 'pointer',
+        opacity: 0.75,
+      }}
+    >
+      <Icon icon={X} size={14} />
+    </button>
   );
 }

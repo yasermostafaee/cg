@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { cssVars } from '../theme.js';
 
 /**
@@ -19,6 +19,11 @@ export type ButtonVariant =
   | 'play'
   | 'primary'
   | 'secondary'
+  /**
+   * ADD — every "add a thing to this list" control. Its own variant so its colour
+   * is its own declaration (`--r-btn-add`); see `.cg-btn--add` in `controls.css`.
+   */
+  | 'add'
   | 'accent'
   | 'commit'
   | 'caution'
@@ -28,12 +33,21 @@ export type ButtonVariant =
   | 'verb'
   | 'neutral'
   | 'icon'
+  /**
+   * `STATION-CHROME-02` §3 — A QUIET ROW ACTION: `icon`'s geometry with no fill and no
+   * border at rest, appearing under the pointer. For the ACTIONS COLUMN of a record table
+   * and nothing else — the framing that column supplies is what licenses it. Add
+   * `className="cg-list-remove"` to make it the destructive one (red on intent, never at
+   * rest). See `.cg-btn--quiet` in `controls.css` for the ghost-trap argument.
+   */
+  | 'quiet'
   | 'default';
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
   play: 'cg-btn--play',
   primary: 'cg-btn--primary',
   secondary: 'cg-btn--secondary',
+  add: 'cg-btn--add',
   accent: 'cg-btn--accent',
   commit: 'cg-btn--commit',
   caution: 'cg-btn--caution',
@@ -43,6 +57,7 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   verb: 'cg-btn--verb',
   neutral: 'cg-btn--neutral',
   icon: 'cg-btn--icon',
+  quiet: 'cg-btn--quiet',
   default: '',
 };
 
@@ -62,6 +77,9 @@ export const VARIANT_ACCENT: Record<ButtonVariant, string | undefined> = {
   play: cssVars['--r-onair'],
   primary: cssVars['--r-accent-strong'],
   secondary: cssVars['--r-accent'],
+  // ADD reads its OWN token, never `--r-accent` — that separation is the point of
+  // the variant, and a right-click item mirroring an Add must move with the button.
+  add: cssVars['--r-btn-add'],
   // THE ACCENTED ACTION — the sky the filled variant is built from, so a
   // right-click item mirroring one of these three reads as the same control.
   accent: cssVars['--r-accent'],
@@ -83,6 +101,10 @@ export const VARIANT_ACCENT: Record<ButtonVariant, string | undefined> = {
   // third geometry — see `controls.css`: `--verb`'s `width: 100%` is column geometry
   // and stretches anything that is not in a sized column.
   icon: undefined,
+  // A QUIET row action carries no accent at rest either — that IS the variant. Its
+  // destructive form takes its red from `.cg-list-remove`'s hover, never from a resting
+  // colour, so a right-click item mirroring one stays neutral like the button.
+  quiet: undefined,
   default: undefined,
 };
 
@@ -95,14 +117,31 @@ export function buttonClass(variant: ButtonVariant = 'default', extra = ''): str
  * R-007 — a plain styled button for PURE-LOCAL actions (no bridge round-trip):
  * hover / active-pressed / focus-visible / disabled via `controls.css`. For a
  * bridge round-trip use `AsyncButton` instead (busy / success / error).
+ *
+ * The ref reaches the `<button>` itself (`MEDIA-PLATES-01`): an anchored panel (`Popover`) hangs from
+ * the control that opened it and gives focus back to it on close — the same forwarding `ComboField`
+ * and `TextInput` do.
  */
-export function Button({
-  variant = 'default',
-  active,
-  className,
-  children,
-  ...rest
-}: {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = 'default', active, className, children, ...rest },
+  ref,
+): JSX.Element {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={buttonClass(
+        variant,
+        [active === true ? 'is-on' : '', className].filter(Boolean).join(' '),
+      )}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+});
+
+type ButtonProps = {
   variant?: ButtonVariant;
   /**
    * This control is a TOGGLE and it is currently ENGAGED — paints the `.is-on`
@@ -121,17 +160,4 @@ export function Button({
    */
   active?: boolean;
   children: ReactNode;
-} & ButtonHTMLAttributes<HTMLButtonElement>): JSX.Element {
-  return (
-    <button
-      type="button"
-      className={buttonClass(
-        variant,
-        [active === true ? 'is-on' : '', className].filter(Boolean).join(' '),
-      )}
-      {...rest}
-    >
-      {children}
-    </button>
-  );
-}
+} & ButtonHTMLAttributes<HTMLButtonElement>;

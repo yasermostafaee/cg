@@ -13,9 +13,18 @@ import type {
   LayerState,
   MixerRect,
   MockHandle,
+  MockMediaFile,
   MockOptions,
   OscArgValue,
+  ReceivedCommand,
 } from './types.js';
+
+/**
+ * `B-331` — how long after its `202` a queued erase lands when no further command arrives first
+ * (`MockOptions.clearRepliesBeforeErase`). Under one frame at 50 Hz, as on the core, and long
+ * enough that the reply is read before the late frame — the order the core sends them in.
+ */
+const CLEAR_ERASE_LAG_MS = 5;
 
 /**
  * Spin up an AMCP mock listening on TCP + UDP. The returned handle exposes
@@ -31,9 +40,13 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
   const oscHost = opts.oscHost ?? '127.0.0.1';
   const oscHz = opts.disableOsc === true ? 0 : (opts.oscHz ?? 10);
   const channelCount = opts.channels ?? 1;
+  // `ROUTE-PLATES-01` — the mock's clock: it stamps every received line (the timing instrument),
+  // and `MEDIA-PLATES-01` runs each clip's clock on it.
+  const now = opts.now ?? ((): number => performance.now());
+  const clipLength = opts.clipLength ?? ((): number | undefined => undefined);
 
   const registry = new LayerRegistry();
-  const emitter = new OscEmitter(registry, channelCount, oscHz);
+  const emitter = new OscEmitter(registry, channelCount, oscHz, now);
   await emitter.start(host, oscHost, oscPort);
 
   const handlers = defaultHandlers();
@@ -58,20 +71,77 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
   let nextAddToken = 0;
   const addTokens = new Map<string, number>();
   const pageTokens = new Map<string, number>();
+  // `B-198` / `B-221` — the deferred mixer queue, ONE per channel and owned by the mock
+  // (the server), not by a connection: CasparCG's `deferred_transforms_` is a process-wide
+  // static keyed by channel index, so a change staged on one socket is applied by a commit
+  // from any socket and survives the socket that staged it. Per mock instance rather than
+  // per module, so one test's orphan cannot land in the next test's channel.
+  const deferredMixer = new Map<number, (() => void)[]>();
+  // `PLAYOUT-SOURCES-01` — the files this server no longer has (`setMissingMedia`).
+  let missingMedia = new Set<string>();
+  // `DEV-LOCAL-CASPAR-01` — the media scanner's library (`CLS`); `null` = no scanner running.
+  let mediaFiles: readonly MockMediaFile[] | null = opts.media ?? null;
+  // `B-331` — the erases queued behind a `CLEAR`'s reply (`clearRepliesBeforeErase`).
+  const queuedErases: (() => void)[] = [];
+  let eraseTimer: NodeJS.Timeout | null = null;
 
   const ctx: HandlerContext = {
     channelCount,
+    now,
+    subscribeOsc(oscSubscriberHost: string, oscSubscriberPort: number): () => void {
+      return emitter.subscribe(oscSubscriberHost, oscSubscriberPort);
+    },
+    paths: {
+      media: opts.paths?.media ?? 'media/',
+      initial: opts.paths?.initial ?? 'C:\\casparcg/',
+    },
+    clipLengthOf(file: string): number | undefined {
+      return clipLength(file);
+    },
+    isMissingMedia(file: string): boolean {
+      return missingMedia.has(file);
+    },
+    mediaFiles(): readonly MockMediaFile[] | null {
+      return mediaFiles;
+    },
     getLayer(slot: LayerSlot): LayerState {
       return registry.get(slot);
     },
+    peekLayer(slot: LayerSlot): LayerState | undefined {
+      return registry.peek(slot);
+    },
+    stageLayers(channel: number): readonly LayerState[] {
+      return registry
+        .onStage()
+        .filter((l) => l.slot.channel === channel)
+        .sort((a, b) => a.slot.layer - b.slot.layer);
+    },
+    clearRepliesBeforeErase: opts.clearRepliesBeforeErase === true,
+    queueErase(erase: () => void): void {
+      queuedErases.push(erase);
+      if (eraseTimer !== null) return;
+      eraseTimer = setTimeout(() => ctx.runQueuedErases(), CLEAR_ERASE_LAG_MS);
+      eraseTimer.unref();
+    },
+    runQueuedErases(): void {
+      if (eraseTimer !== null) clearTimeout(eraseTimer);
+      eraseTimer = null;
+      if (queuedErases.length === 0) return;
+      // The frame the channel composed before the erase: it still reports the page.
+      emitter.emitFrame();
+      for (const erase of queuedErases.splice(0)) erase();
+    },
     setLayer(slot: LayerSlot, patch: Partial<Omit<LayerState, 'slot'>>): void {
-      registry.patch(slot, patch);
+      const next = registry.patch(slot, patch);
       // Emit immediately so an integration test can observe state changes
       // without having to wait for the next tick. The tick still fires
       // independently to model CasparCG's framerate heartbeat.
+      // `RELEASE-091-01` B2 — only for a layer ON THE STAGE: a cleared layer goes silent, as the
+      // core's does, and a mixer write on a layer nothing was placed on says nothing either.
+      if (!next.onStage) return;
       emitter.sendMessage(
         `/channel/${String(slot.channel)}/stage/layer/${String(slot.layer)}/foreground/producer`,
-        [registry.get(slot).producer],
+        [next.producer],
       );
     },
     recordCgAdd(slot: LayerSlot, template: string, result: CgDataResult): number {
@@ -129,6 +199,20 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
         });
       }
     },
+    stageMixer(channel: number, apply: () => void): void {
+      const queue = deferredMixer.get(channel);
+      if (queue === undefined) deferredMixer.set(channel, [apply]);
+      else queue.push(apply);
+    },
+    commitMixer(channel: number): number {
+      const queue = deferredMixer.get(channel) ?? [];
+      deferredMixer.delete(channel);
+      // In arrival order — the last change staged for a layer is the one that stands,
+      // which is what lets a fresh batch override a stale orphan on the layers it touches
+      // and NOT on the layers it does not.
+      for (const apply of queue) apply();
+      return queue.length;
+    },
   };
 
   const onTrace = traceStream
@@ -137,10 +221,57 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
       }
     : undefined;
 
-  const server = new AmcpServer(handlers, ctx, onTrace);
-  const boundAmcp = await server.start(host, amcpPort);
+  // `ROUTE-PLATES-01` — every received line, stamped with the mock's clock (the timing instrument).
+  const received: ReceivedCommand[] = [];
+  // `CENTRAL-BRIDGE-01` — the core's default per-client subscription, when this mock models one.
+  const clientOscPort = opts.oscToAmcpClientsPort;
+  const server = new AmcpServer(
+    handlers,
+    ctx,
+    onTrace,
+    (line) => {
+      received.push({ at: now(), line });
+    },
+    clientOscPort === undefined
+      ? undefined
+      : (conn) => {
+          conn.bindLifecycle(
+            'osc_default_client',
+            emitter.subscribe(conn.remoteAddress, clientOscPort),
+          );
+        },
+  );
+  server.setAdmission(opts.admit ?? null);
+  let boundAmcp: number;
+  try {
+    boundAmcp = await server.start(host, amcpPort);
+  } catch (err) {
+    /*
+      `DEV-LOCAL-CASPAR-01` (review) — the emitter above has bound its UDP socket and started its tick
+      timer; a failed AMCP listen must not leave them open. They kept `pnpm dev:station --fake` alive
+      after it had said, in one line, why it could not start.
+    */
+    await emitter.stop();
+    if (traceStream !== null) {
+      await new Promise<void>((resolve) => {
+        traceStream.end(() => {
+          resolve();
+        });
+      });
+    }
+    throw err;
+  }
 
   return {
+    receivedCommands(): readonly ReceivedCommand[] {
+      return [...received];
+    },
+    setAdmission(admit: ((sourceAddress: string) => boolean) | null): void {
+      server.setAdmission(admit);
+    },
+    get refusedConnections(): number {
+      return server.refusedCount;
+    },
     amcpPort: boundAmcp,
     oscPort: emitter.port,
     host,
@@ -166,6 +297,15 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     },
     setLayerVolume(slot: LayerSlot, volume: number): void {
       registry.patch(slot, { volume });
+    },
+    setMissingMedia(paths: readonly string[]): void {
+      missingMedia = new Set(paths);
+    },
+    setMedia(files: readonly MockMediaFile[] | null): void {
+      mediaFiles = files;
+    },
+    stagedMixerCount(channel: number): number {
+      return deferredMixer.get(channel)?.length ?? 0;
     },
     lastCgAdd(
       slot: LayerSlot,
@@ -219,6 +359,25 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     },
     get amcpClientCount(): number {
       return server.clientCount;
+    },
+    oscDestinations(): readonly { host: string; port: number }[] {
+      return emitter.destinations();
+    },
+    async restartCore(options: { readonly downMs?: number } = {}): Promise<void> {
+      await server.suspend();
+      registry.reset();
+      deferredMixer.clear();
+      cgAdds.clear();
+      cgUpdates.clear();
+      addTokens.clear();
+      pageTokens.clear();
+      const downMs = options.downMs ?? 0;
+      if (downMs > 0) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, downMs);
+        });
+      }
+      await server.resume();
     },
     async stop(): Promise<void> {
       await server.stop();

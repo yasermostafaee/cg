@@ -20,10 +20,10 @@ import { HEALTH_MS } from './support/harness.js';
  * built-in default, an absent CATALOG falls back to nothing, and S1 is the pin
  * on that difference.
  *
- * S7 pins the one place the two stores meet at boot: an assignment naming a
- * source the catalog does not define is PRUNED, loudly, rather than taking the
- * station off air. That plate then reads as unassigned, which is a state the
- * whole feature already handles.
+ * 🔴 `PLAYOUT-SOURCES-01` REWROTE TWO OF THEM, deliberately. The Playout defines the sources now:
+ * the file's `layerRange` (the plate band) is still read, its hand-made `sources` are IGNORED and
+ * never deleted (P-031, S5), and nothing is PRUNED at boot any more — an assignment naming a source
+ * the catalogue does not have is KEPT, and only an operator removes a binding (ADR 0010 rule 14, S7).
  */
 
 let mock: MockHandle | null = null;
@@ -151,7 +151,7 @@ it('S3 — a band overlapping the candidate bank throws BEFORE binding, naming b
     createBridge({
       port: wsPort,
       connection: singleServer(mock.amcpPort, oscPort),
-      fixedLayers: { channel: 1, start: 70, count: 30 },
+      fixedLayers: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 30 },
       // 50–75 reaches into the operator's candidate bank.
       sourceCatalog: { sources: [], layerRange: { start: 50, end: 75 } },
     }),
@@ -177,7 +177,7 @@ it('S4 — a band overlapping the RESERVED playout range throws BEFORE binding',
   await expectNothingListening(wsPort);
 });
 
-it('S5 — the catalog is in force, with its provenance, before the first client is served', async () => {
+it('S5 — the file’s BAND is in force before the first client is served; its hand-made sources are ignored, never deleted', async () => {
   const { oscPort } = await bootMock();
   if (mock === null) throw new Error('mock not booted');
   const file = path.join(tmpDir(), 'bridge-source-catalog.json');
@@ -190,9 +190,10 @@ it('S5 — the catalog is in force, with its provenance, before the first client
         producer: { kind: 'route', channel: 2 },
       },
     ],
-    layerRange: { start: 10, end: 59 },
+    layerRange: { start: 60, end: 69 },
   };
-  fs.writeFileSync(file, JSON.stringify(value), 'utf8');
+  const written = JSON.stringify(value);
+  fs.writeFileSync(file, written, 'utf8');
 
   bridge = await createBridge({
     port: 0,
@@ -202,8 +203,15 @@ it('S5 — the catalog is in force, with its provenance, before the first client
 
   // Read WITHOUT awaiting health: the load happens before the WebSocket binds,
   // so it is already answerable the moment `createBridge` resolves.
-  expect(bridge.runtime.sourceCatalog()).toEqual(value);
+  // `PLAYOUT-SOURCES-01` — the band is in force and the sources are the Playout's (none read yet):
+  // the hand-made entry is not migrated (P-031) …
+  expect(bridge.runtime.sourceCatalog()).toEqual({
+    sources: [],
+    layerRange: { start: 60, end: 69 },
+  });
   expect(bridge.sourceCatalog.source).toBe('file');
+  // … and not deleted either: the file is exactly what was written.
+  expect(fs.readFileSync(file, 'utf8')).toBe(written);
 });
 
 it('S6 — a change is validated against the SAME bank and reservation the boot saw', async () => {
@@ -212,9 +220,12 @@ it('S6 — a change is validated against the SAME bank and reservation the boot 
   bridge = await createBridge({
     port: 0,
     connection: singleServer(mock.amcpPort, oscPort),
-    fixedLayers: { channel: 1, start: 70, count: 30 },
-    reservedLayers: { ranges: [{ from: 60, to: 69 }] },
-    sourceCatalog: { sources: [], layerRange: { start: 10, end: 59 } },
+    // `LAYER-BANDS-16` — beds 50-58 < band 60-69 < reservation 70-79 < bank 80-99. All
+    // three refusals below need their own space, and the bank questions are asked before
+    // the reserved one, so a band under the beds would never reach the reserved arm.
+    fixedLayers: { channel: 1, low: { start: 50, count: 9 }, start: 80, count: 20 },
+    reservedLayers: { ranges: [{ from: 70, to: 79 }] },
+    sourceCatalog: { sources: [], layerRange: { start: 60, end: 69 } },
   });
   await bridge.runtime.whenServerHealthy(HEALTH_MS);
 
@@ -222,43 +233,40 @@ it('S6 — a change is validated against the SAME bank and reservation the boot 
   // can trigger with a graphic on air.
   const intoBank = bridge.runtime.setSourceCatalog({
     sources: [],
-    layerRange: { start: 10, end: 72 },
+    layerRange: { start: 60, end: 85 },
   });
   expect(intoBank).toMatchObject({ ok: false, reason: 'overlaps-fixed-bank' });
 
   const intoReserved = bridge.runtime.setSourceCatalog({
     sources: [],
-    layerRange: { start: 10, end: 61 },
+    layerRange: { start: 60, end: 72 },
   });
   expect(intoReserved).toMatchObject({ ok: false, reason: 'overlaps-reserved' });
 
   // The refusals left the catalog in force untouched.
-  expect(bridge.runtime.sourceCatalog().layerRange).toEqual({ start: 10, end: 59 });
+  expect(bridge.runtime.sourceCatalog().layerRange).toEqual({ start: 60, end: 69 });
 
   const ok = bridge.runtime.setSourceCatalog({
     sources: [{ id: 'src-aaa', name: 'Studio A', producer: { kind: 'route', channel: 2 } }],
-    layerRange: { start: 10, end: 59 },
+    layerRange: { start: 60, end: 69 },
   });
   expect(ok).toEqual({ ok: true });
   expect(bridge.runtime.sourceCatalog().sources).toHaveLength(1);
 });
 
-it('S7 — an assignment naming a source the catalog dropped is PRUNED at boot, not fatal', async () => {
+it('S7 — an assignment naming a source the catalog does not have is KEPT at boot, never pruned', async () => {
   const { oscPort } = await bootMock();
   if (mock === null) throw new Error('mock not booted');
   const assignmentsFile = path.join(tmpDir(), 'bridge-source-assignments.json');
-  // Two hand-editable files, restorable apart: the catalog knows `src-aaa` and
-  // nothing else, while the assignments still point one plate at `src-gone`.
-  fs.writeFileSync(
-    assignmentsFile,
-    JSON.stringify({
-      assignments: [
-        { templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
-        { templateId: 'tpl-1', plateId: 'guest-2', sourceId: 'src-gone' },
-      ],
-    }),
-    'utf8',
-  );
+  // The catalog knows `src-aaa` and nothing else, while the assignments still point one plate
+  // at `src-gone` — an input the Playout no longer lists, say, before its first read.
+  const written = {
+    assignments: [
+      { templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
+      { templateId: 'tpl-1', plateId: 'guest-2', sourceId: 'src-gone' },
+    ],
+  };
+  fs.writeFileSync(assignmentsFile, JSON.stringify(written), 'utf8');
 
   bridge = await createBridge({
     port: 0,
@@ -269,16 +277,16 @@ it('S7 — an assignment naming a source the catalog dropped is PRUNED at boot, 
     sourceAssignmentsPath: assignmentsFile,
   });
 
-  // It BOOTED — refusing to start would take a station off air to protect it
-  // from a plate that was already safe — and the dangling binding is gone.
-  expect(bridge.runtime.sourceAssignments().assignments).toEqual([
-    { templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
-  ]);
-  // And it is REPORTED, so the boot line can name it: a plate that was bound and
-  // now is not must not become one silently.
-  expect(bridge.sourceAssignments.pruned).toEqual([
-    { templateId: 'tpl-1', plateId: 'guest-2', sourceId: 'src-gone' },
-  ]);
+  /*
+    🔴 `PLAYOUT-SOURCES-01` §1.C — it BOOTED, and BOTH bindings are still there. The catalogue is
+    rebuilt from Playout reads, so an entry missing at boot says nothing about whether the binding
+    is wrong — an outage or a first boot looks exactly like this. Only an operator action removes
+    a binding (ADR 0010 rule 14); the take of `guest-2` refuses by name until then.
+  */
+  expect(bridge.runtime.sourceAssignments().assignments).toEqual(written.assignments);
+  // Control: the store read the file at all — the handle names where the assignments came from.
+  expect(bridge.sourceAssignments.source).toBe('file');
+  expect('pruned' in bridge.sourceAssignments).toBe(false);
 });
 
 it('S8 — deleting a source CASCADES: the delete is allowed, the binding never dangles', async () => {

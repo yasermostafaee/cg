@@ -38,6 +38,21 @@ function showTimedFinite(scene: Scene): Scene {
   return next;
 }
 
+/**
+ * B-129 — `background` (scene AND every composition) is now `editorBackdrop`, applied
+ * by the schema at parse time. Applied here so a pre-B-129 committed fixture compares
+ * like with like.
+ */
+function renameBackgroundKeys(raw: unknown): unknown {
+  if (Array.isArray(raw)) return raw.map(renameBackgroundKeys);
+  if (raw === null || typeof raw !== 'object') return raw;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    out[k === 'background' ? 'editorBackdrop' : k] = renameBackgroundKeys(v);
+  }
+  return out;
+}
+
 describe('B-034 — exporter guard against the REAL hidden-content .vcg', () => {
   it('the committed .vcg round-trips to the committed scene.json (schema-validated artifact)', async () => {
     const vcgBytes = readFileSync(resolve(fixtureDir, 'hidden-content-inert.vcg'));
@@ -45,7 +60,11 @@ describe('B-034 — exporter guard against the REAL hidden-content .vcg', () => 
     const sceneJson = JSON.parse(
       readFileSync(resolve(fixtureDir, 'hidden-content-inert.scene.json'), 'utf8'),
     ) as Scene;
-    expect(scene).toEqual(sceneJson);
+    // B-129 — the committed fixtures predate the `background` -> `editorBackdrop`
+    // rename, so the ONE documented difference is applied to the EXPECTATION rather
+    // than relaxed away. Any OTHER divergence between the artifact and the committed
+    // scene still fails, which is the whole point of this guard.
+    expect(scene).toEqual(renameBackgroundKeys(sceneJson));
     // Sanity: the artifact really carries the hidden finite ticker under a TIMED hold.
     const timed = scene.compositions?.find((c) => c.id === 'timedFinite');
     const ticker = timed?.layers[0]?.children[0] as {

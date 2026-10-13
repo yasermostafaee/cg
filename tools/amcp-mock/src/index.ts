@@ -1,4 +1,7 @@
 export { createMock } from './mock.js';
+// `B-221` — the built-in handlers, so a test can WRAP one (count, then drop the socket,
+// then delegate) instead of re-implementing the verb it is injecting a fault around.
+export { defaultHandlers } from './handlers.js';
 export type {
   AmcpHandler,
   AmcpRequest,
@@ -11,9 +14,12 @@ export type {
   LayerState,
   MixerRect,
   MockHandle,
+  MockMediaFile,
   MockOptions,
+  MockPaths,
   OscArgValue,
   ProducerKind,
+  ReceivedCommand,
 } from './types.js';
 export { FULL_FRAME } from './types.js';
 export { renderedRect } from './mixer-rect.js';

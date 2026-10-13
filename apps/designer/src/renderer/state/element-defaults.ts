@@ -62,6 +62,8 @@ export function defaultText(id: string, x: number, y: number): TextElement {
     direction: 'auto',
     fitMode: 'fixed',
     overflow: 'clip',
+    // TEXT-DIGITS-01 — a new element's typed digits start on Persian (the owner's decision).
+    digits: 'persian',
   };
 }
 
@@ -107,6 +109,8 @@ export function defaultTicker(id: string, x: number, y: number): TickerElement {
       { id: 'item-2', text: 'Second headline — sample' },
       { id: 'item-3', text: 'Third headline — sample' },
     ],
+    // TEXT-DIGITS-01 — the authored items' and separator's digits start on Persian.
+    digits: 'persian',
   };
 }
 
@@ -187,6 +191,8 @@ export function defaultSequence(id: string, x: number, y: number): SequenceEleme
     transitionTiming: 'simultaneous',
     transitionMs: 400,
     repeat: 'infinite',
+    // TEXT-DIGITS-01 — the authored items' digits start on Persian.
+    digits: 'persian',
   };
 }
 
@@ -277,21 +283,36 @@ export function defaultEllipse(id: string, x: number, y: number): ShapeElement {
  * matches it, so a freshly drawn hole is self-consistent before the author touches
  * anything.
  *
- * `routeKey` defaults to `live-1`, NOT to an empty string: the id is required by
- * the schema and symbolic by refinement, so an empty default would create an
- * element that cannot be saved. `live-1` is also visible on the canvas (it is the
- * bars' label), which is what tells the author there is something to set. Callers
- * that place several pass their own id.
+ * ⭐ **`B-183` — `routeKey` is OMITTED: a new plate points at NOTHING.**
+ *
+ * This used to default to `live-1`, argued for here on the grounds that "the id is required
+ * by the schema … so an empty default would create an element that cannot be saved" and that
+ * `live-1` is "visible on the canvas (it is the bars' label), which is what tells the author
+ * there is something to set".
+ *
+ * 🔴 **The first half was true and is now false** — the schema makes `routeKey` optional
+ * precisely so absence is storable. **The second half was the defect.** `live-N` was the
+ * PLACEHOLDER TEXT of the Looks panel's source input: a suggestion the author had not
+ * accepted. So the label did not say "there is something to set", it said "this is set, to
+ * `live-1`". The bars now read `no source`, which says what the old default only pretended to.
+ *
+ * ⭐ The owner's principle, stated on 2026-08-26: **nothing lands unconfirmed.**
+ *
+ * `routeKey` is deliberately NOT a parameter any more. The one caller that passed one was the
+ * canvas tool, handing over a generated `live-N`; keeping the parameter would leave that door
+ * open for the next caller.
  */
-export function defaultLiveSource(
-  id: string,
-  x: number,
-  y: number,
-  routeKey = 'live-1',
-): VideoPlaceholderElement {
+/**
+ * `DESIGNER-FIX-0905` — the factory's default name, exported so the preflight can tell a
+ * plate the author NAMED from one still wearing this default. A refusal that read
+ * _'Live Source "Live Source" has no source'_ was repeating the kind as if it were a name.
+ */
+export const DEFAULT_LIVE_SOURCE_NAME = 'Live Source';
+
+export function defaultLiveSource(id: string, x: number, y: number): VideoPlaceholderElement {
   return {
     id,
-    name: 'Live Source',
+    name: DEFAULT_LIVE_SOURCE_NAME,
     type: 'video-placeholder',
     visible: true,
     locked: false,
@@ -299,7 +320,6 @@ export function defaultLiveSource(
     zIndex: 0,
     transform: baseTransform(x, y, 640, 360),
     expectedAspect: 16 / 9,
-    routeKey,
   };
 }
 

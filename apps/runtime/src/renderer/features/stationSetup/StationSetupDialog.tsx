@@ -1,0 +1,2073 @@
+import { NO_AIR } from '../channels/channelAir.js';
+import { OutputDot } from '../channels/OutputDot.js';
+import {
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
+import {
+  ChevronDown,
+  ChevronRight,
+  CircleCheck,
+  Info,
+  Layers,
+  Lock,
+  Monitor,
+  Radio,
+  Server,
+  Settings,
+  Type,
+  type LucideIcon,
+} from 'lucide-react';
+import { DEFAULT_OSC_PORT, type ConnectionConfig, type TemplateServeInfo } from '@cg/shared-ipc';
+import type { StackItemState } from '@cg/shared-schema';
+import { isLoopbackHost } from '../../../shared/loopback.js';
+import { useConnections } from '../../hooks/useConnections.js';
+import { useLink } from '../../hooks/useLink.js';
+import { useStack } from '../../hooks/useStack.js';
+import { isOnAirStatus } from '@cg/shared-schema';
+import { STATION_SETUP_PX, colors, cssVars } from '../../theme.js';
+import { AsyncButton } from '../../ui/AsyncButton.js';
+import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
+import { hostError, hostValue, oscPortError, portError } from '../../ui/fieldValue.js';
+import { Modal, ModalAction, modalActionVariant, type ModalMessage } from '../../ui/Modal.js';
+import { NumericInput } from '../../ui/NumericInput.js';
+import { RailStationCard, TabPanel, TabStrip, type TabSpec } from '../../ui/Tabs.js';
+import { APP_BUILD, APP_VERSION } from '../../appVersion.js';
+import { useSelectedChannel } from '../channels/useSelectedChannel.js';
+import {
+  CandidateLayersHelper,
+  CandidateLayersSection,
+  CandidateLayersSummary,
+} from '../fixedLayers/CandidateLayersSection.js';
+import { DelimitersSection } from '../inspector/DelimitersSection.js';
+import { SourcesSection } from '../sources/SourcesSection.js';
+import { BackupServerDialog } from './BackupServerDialog.js';
+import { BackupChannelsCard } from './BackupChannelsCard.js';
+import { useBackupChannels } from '../../hooks/useBackupChannels.js';
+import { ChannelSection } from './ChannelSection.js';
+import {
+  DEFAULT_STATION_SETUP_SECTION,
+  STATION_SETUP_SECTIONS,
+  sectionSpecFor,
+  type StationSetupSection,
+} from './sections.js';
+import { SetupNotice, type SetupNoticeSpec } from './SetupNotice.js';
+import { SetupSection } from './SetupSection.js';
+import { Tag } from '../../ui/Tag.js';
+import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
+import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
+import { PlayoutConnection, type ConnectionDraft } from '../firstRun/PlayoutConnection.js';
+import {
+  AMCP_PORT as STANDARD_AMCP_PORT,
+  playoutOriginOf,
+  type ShownCheckLine,
+} from '../firstRun/firstRunStation.js';
+import { stationFieldsChanged } from '../firstRun/stationFields.js';
+import { serverStateWord } from '../status/StatusBar.js';
+
+/**
+ * `STATION-SETUP-02` / `STATION-CHROME-01` §2 — **ONE HOME FOR THE STATION'S SETTINGS, IN
+ * TABS.**
+ *
+ * This was `ServerSettingsPanel` — the Server connection dialog — which GREW into the
+ * settings home: the live sources (the Playout's inputs, read-only since `PLAYOUT-SOURCES-01`,
+ * and the plate band), the delimiter list, candidate-layer membership, and the channel. What it
+ * looks like is `STATION-CHROME-01`'s subject; what it stores is unchanged, key for key.
+ *
+ * ── TABS, AND THE ARGUMENT AGAINST THEM, ANSWERED ───────────────────────────
+ *
+ * The full argument is written once, at the head of `sections.ts`, and not repeated here.
+ * The short of it: the previous build's reason for a scroll — "a tab hides the section a
+ * refusal came from" — was sound, and the scroll did not deliver it. It put
+ * `Apply is blocked for Servers…` in front of an operator editing DELIMITERS. What replaces
+ * it keeps the protection and drops the assumption:
+ *
+ *   · **the active section's messages, and only those, reach the pinned region** — so a
+ *     refusal is rendered by the section that raised it, above that section's own footer,
+ *     and never in front of another section's work;
+ *   · **every blocked section marks itself in the RAIL** with an amber dot, and every
+ *     section with unapplied changes marks itself with a sky one — so nothing is hidden,
+ *     and one press lands on the sentence that says why.
+ *
+ * ── EACH SECTION OWNS ITS FOOTER ────────────────────────────────────────────
+ *
+ * Read-only sections carry no commit action at all and say there is nothing to apply.
+ * Sections that commit as they go say so and offer a quiet Close, which dismisses and
+ * commits nothing. Only the two draft sections carry an APPLY, and each one's APPLY names
+ * its own scope. `CandidateLayersSection` renders its Apply/Revert straight INTO this
+ * footer through `footerSlot` — that is what the tabs bought it: its own note recorded that
+ * the buttons sat in the body only because "the dialog's footer belongs to Servers", and
+ * that is no longer true.
+ *
+ * ── THE ON-AIR GUARD DID NOT WIDEN ──────────────────────────────────────────
+ *
+ * `connections.set-config` is refused while anything is on air, and this dialog pre-disables
+ * APPLY SERVERS for that reason. That guard covers the SERVERS section alone, exactly as it
+ * did. Its refusal keeps the sentence saying every other section stays editable — and now it
+ * also lives where it belongs, in front of Servers and nowhere else.
+ *
+ * ── WHAT DELIBERATELY DID NOT MOVE IN ───────────────────────────────────────
+ *
+ * ⚠ The operator name USED TO HEAD THIS LIST and is no longer on it: it was retired
+ * outright by `OPERATOR-NAME-SWEEP-01` rather than moved, so there is nothing left to keep
+ * out of this dialog. The lock PIN (one press from the status bar, engaged while
+ * walking away from a live desk — `STATION-CHROME-01` §7 re-confirmed this); panel widths
+ * and the Inspector overlay; per-plate audio, the per-row source override and the on-air
+ * position; the plate→source ASSIGNMENTS; and the stack, which is the work, not a setting.
+ * `stationSetupScope.dom.test.ts` proves each is still reachable where it was.
+ *
+ * ⭐ **AND STATION LAYERS MOVED OUT** (§3). It is in front of the operator, in the panel it
+ * already has, not behind a door. The live-layer LEDGER — which was reachable only from the
+ * settings copy — moved to that panel rather than disappearing with the section.
+ */
+
+interface Props {
+  open: boolean;
+  /** The section the operator asked for — a deep link. Defaults to Channel. */
+  section?: StationSetupSection;
+  /** Changes on every open request, so a repeat request while open still switches tab. */
+  requestId?: number;
+  onClose: () => void;
+}
+
+/**
+ * `RUNTIME-REDESIGN-01` Phase 7 — the rail's glyphs, the reference's five (`#i-monitor`,
+ * `#i-server`, `#i-radio`, `#i-text`, `#i-layers`) as their lucide equivalents. Decorative — the
+ * label is the name — and kept here rather than in `sections.ts`, which stays data.
+ */
+const SECTION_ICONS: Record<StationSetupSection, LucideIcon> = {
+  channel: Monitor,
+  servers: Server,
+  sources: Radio,
+  delimiters: Type,
+  'candidate-layers': Layers,
+};
+
+const styles = {
+  /*
+   * ⚠ `SETTINGS-MATCH-02` — `shell` IS GONE, not merely unused. It was the row flex that held
+   * the rail beside the pane INSIDE the modal's body, and the rail is a named region of the
+   * FRAME now (`Modal`'s `rail` prop), so the layout that used to live here belongs to the
+   * primitive. Leaving it would leave a second, silent way to lay this dialog out.
+   *
+   * `status` and `candidates` went with the serve-host candidate list, which is a row of
+   * `.cg-setup-chip` buttons under its own field now rather than a sentence and a row of
+   * full-size buttons in the card's flex rhythm.
+   */
+  /**
+   * `STATION-CHROME-02` §2 — THE ONE SCROLL CONTAINER. The frame is fixed, the rail and
+   * the footer never move, and this is the only thing that scrolls; its scrollbar is
+   * therefore inside the pane rather than against the dialog's edge.
+   *
+   * ⚠ `justifyContent` is deliberately NOT `stretch`, and no child is `flex: 1`: a short
+   * section sits at the TOP with empty space below it. Growing Delimiters' card to fill a
+   * 680px frame would be worse than the space it leaves.
+   */
+  pane: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    overflowY: 'auto' as const,
+    /* Phase 7 — the inset is the reference's `.panel-scroll` padding, from `.cg-setup-pane`. */
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.75rem',
+  },
+  /**
+   * The footer's standing sentence — what this section's commit contract is.
+   *
+   * ⚠ `STATION-CHROME-02` §2 — NO WIDTH CAP. It had `maxWidth: 58ch`, and §5's corrected
+   * Live-sources sentence is longer than that: the note wrapped to two lines, the footer
+   * grew, and its TOP EDGE MOVED on that one tab — the exact property §2 forbids and
+   * `station-setup-frame.spec.ts` measures. The cap was protecting against a note running
+   * the full width of a very wide dialog; the frame is 1000px and the note shares the row
+   * with one button, so flex already does that job.
+   */
+  /*
+    🔴 `SETTINGS-POLISH-04` §3 — **THE COLOUR IS GONE FROM HERE, AND THAT IS THE FIX.**
+
+    `color: colors.textMuted` was set INLINE on this span, so
+    `.cg-footer-contract[data-footer-tone='blocked']` in `controls.css` could never win: the
+    attribute was on the element, the rule matched, and the sentence rendered muted grey anyway.
+    Measured on Servers with two items on air: `rgb(142, 158, 175)` — the resting ink — on a
+    span carrying `data-footer-tone="blocked"`.
+
+    That is the third time this file's family has met the same trap (`Modal`'s `library` body
+    padding, `dialogFixed`'s ground), and the remedy is always the same one: a property a
+    stylesheet needs to vary MUST NOT be set inline. Both tones live in `controls.css` now —
+    the resting muted one included, so there is exactly one place the ink is decided.
+  */
+  footNote: {
+    marginInlineEnd: 'auto',
+    minWidth: 0,
+    /* Phase 7 — the reference's `.foot-message` is 13 px; `.cg-footer-contract` keeps the weight. */
+    fontSize: cssVars['--r-setup-foot-text'],
+    textAlign: 'start' as const,
+  },
+  /*
+   * `SETTINGS-DIALOG-01` §3 — `row`, `label`, `host` and `port` are GONE, not merely unused:
+   * they were the inline `label + input` idiom (a 92 px label column, a 88 px port) that the
+   * reference's `.field` replaces. Leaving them would leave a second way to spell a labelled
+   * control in the one file that just stopped having one.
+   */
+  /*
+    `C-024` — THE MASKING TREATMENT, AND WHY IT IS NOT GREY.
+
+    Grey is this app's DISABLED signal. Spending it here would say "you cannot change this",
+    which is false: the stored value is exactly what takes over at the next boot without the
+    flag, so it must stay editable and legible. A strike-through says "NOT IN FORCE RIGHT NOW"
+    while keeping the text readable.
+  */
+  maskedNote: {
+    fontSize: '0.78rem',
+    color: colors.textMuted,
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    gap: '0.35rem',
+    alignItems: 'baseline',
+  },
+  maskedStored: { textDecoration: 'line-through' },
+  inForce: { color: colors.text, fontWeight: 700 },
+} as const;
+
+interface EndpointDraft {
+  host: string;
+  amcpPort: string;
+  oscPort: string;
+}
+
+/**
+ * R-010 — how many rows block APPLY SERVERS. A COUNT, not a predicate: the dialog says the
+ * number in its refusal. Counted with `isOnAirStatus` from `@cg/shared-schema` — the same
+ * function object the bridge's own `#onAirCount` filters on — so the pre-emptive message
+ * and the bridge's refusal cannot disagree about which rows count.
+ */
+export function anyOnAirOrUnsettled(items: readonly StackItemState[]): number {
+  return items.filter(isOnAirStatus).length;
+}
+
+/**
+ * Do these two configs say the SAME thing? — the sky "unapplied changes" dot's whole basis.
+ *
+ * 🔴 NOT `JSON.stringify(a) !== JSON.stringify(b)`, and the first spelling of this was
+ * exactly that and was wrong in a way that looked right: the form always emits
+ * `templateServeHost` (`''` meaning "derive it"), while a stored config that has never had
+ * one simply OMITS the key. Absent and empty MEAN THE SAME THING here — the bridge's own
+ * normalizer says so — but they are different JSON, so every freshly-opened dialog claimed
+ * an unapplied draft the operator had not typed. A dot that is on before anything is done
+ * teaches the operator to ignore dots.
+ *
+ * So the comparison is on the NORMALISED fields, in one place, rather than on the shape.
+ */
+function sameServerConfig(a: ConnectionConfig, b: ConnectionConfig): boolean {
+  const endpoint = (e?: { host: string; amcpPort: number; oscPort: number }): string =>
+    e === undefined ? '' : `${e.host}|${String(e.amcpPort)}|${String(e.oscPort)}`;
+  const key = (c: ConnectionConfig): string =>
+    [
+      endpoint(c.servers.A),
+      endpoint(c.servers.B),
+      c.strategy,
+      String(c.autoFailoverEnabled),
+      c.templateServeHost ?? '',
+      c.templateServePort === undefined ? '' : String(c.templateServePort),
+    ].join('\u0001');
+  return key(a) === key(b);
+}
+
+/**
+ * 🔴 `SERVERS-SIMPLIFY-01` (T5) — **A SERVER'S DEFAULT PORTS, SHOWN AS PLACEHOLDERS.** An empty port field IS
+ * its default: what is stored and applied is the number, and a field shows text only when it overrides it.
+ * Server A's OSC port is CG Bridge's own (`DEFAULT_OSC_PORT`), server B's the one above it (`CENTRAL-BRIDGE-01`
+ * rule 7, never `6250`); both engines answer AMCP on the standard `5250`, each on its own machine.
+ */
+interface EndpointDefaults {
+  readonly amcpPort: string;
+  readonly oscPort: string;
+}
+const PRIMARY_DEFAULTS: EndpointDefaults = {
+  amcpPort: String(STANDARD_AMCP_PORT),
+  oscPort: String(DEFAULT_OSC_PORT),
+};
+const BACKUP_DEFAULTS: EndpointDefaults = {
+  amcpPort: String(STANDARD_AMCP_PORT),
+  oscPort: String(DEFAULT_OSC_PORT + 1),
+};
+
+function toDraft(
+  ep: { host: string; amcpPort: number; oscPort: number },
+  defaults: EndpointDefaults,
+): EndpointDraft {
+  const amcpPort = String(ep.amcpPort);
+  const oscPort = String(ep.oscPort);
+  return {
+    host: ep.host,
+    amcpPort: amcpPort === defaults.amcpPort ? '' : amcpPort,
+    oscPort: oscPort === defaults.oscPort ? '' : oscPort,
+  };
+}
+
+/**
+ * 🔴 **THE SERVERS PANE BEFORE ANYTHING HAS BEEN READ — declared ONCE, and read in three
+ * places: the initial state, the close-discard, and the backup draft a station with no
+ * `servers.B` is offered.**
+ *
+ * ⚠ These are SUGGESTIONS for fields that have nothing behind them, never a claim about what
+ * is in force: the pane reads `No backup declared` while `backupEnabled` is false, and a
+ * backup draft is only ever shown once the operator has opened that door himself.
+ *
+ * 🔴 `MODAL-TRUTH-01 · DELTA A` — **hoisting this out of `useState` is the fix, not tidiness.**
+ * The close-discard restores from `loaded` — what the bridge last stated — and was written
+ * `if (loaded !== null) restore(loaded)`. On a console whose bridge has NEVER answered,
+ * `loaded` is `null` from boot to close and that branch does nothing at all, so the typed
+ * value survived every close. The owner met it on exactly that station, and it was legible to
+ * him because it was this pane ALONE: Live sources and Layers unmount with the dialog and
+ * reset for free, so one tab kept its edit while the others did not. With the state named,
+ * "no reading" has something to restore TO — what a first open shows — and the null branch
+ * cannot be forgotten, because it is the same object the initial state is built from.
+ */
+// `CENTRAL-BRIDGE-01` rule 7 — never 6250, the Playout engine's; server B's is one above A's.
+// `SERVERS-SIMPLIFY-01` (T5) — the ports are their defaults, so their fields are empty.
+const PRIMARY_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '', oscPort: '' };
+const BACKUP_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '', oscPort: '' };
+/*
+  ⚠ TYPED, never `as const`. The first spelling was, and the literal types it produced
+  (`false`, `true`, `''`) flowed into `useState` as `useState<false>` and friends — nine
+  typecheck errors, and every one of them at a SETTER rather than here. The widths are what
+  this object is for.
+*/
+const UNREAD_SERVERS: {
+  readonly primary: EndpointDraft;
+  readonly backupEnabled: boolean;
+  readonly backup: EndpointDraft;
+  readonly strategy: ConnectionConfig['strategy'];
+  readonly autoFailover: boolean;
+  readonly serveHost: string;
+  readonly servePort: string;
+} = {
+  primary: PRIMARY_SUGGESTION,
+  backupEnabled: false,
+  backup: BACKUP_SUGGESTION,
+  strategy: 'mirror-sync',
+  autoFailover: true,
+  serveHost: '',
+  servePort: '',
+};
+
+/**
+ * 🔴 `SETTINGS-MATCH-02` §10.6 — **ONE LABELLED FIELD, WITH ITS OWN REFUSAL UNDER IT.**
+ *
+ * ── WHERE AN INVALID FIELD IS REPORTED, AND WHY IT MOVED ────────────────────
+ *
+ * `AMCP port must be an integer between 1 and 65535.` used to go to the dialog's PINNED
+ * REGION, beside `Apply is blocked for Servers…`. Those are two different kinds of thing and
+ * the region is the wrong home for one of them:
+ *
+ *   · the pinned region answers **"why did the last action not happen?"** — it is an EVENT,
+ *     and `AUDIT-CLOSE-01` delta A put it there because a refusal the operator has to scroll
+ *     for is a silent one;
+ *   · a bad port answers **"what is wrong with THIS field?"** — it is a standing fact about a
+ *     control that is on screen, and the one place it is useful is beside that control. In the
+ *     region it sat four cards away from the box it was about, and with two endpoints on the
+ *     tab it could not even say WHICH port.
+ *
+ * So the field says it, `aria-describedby` binds the two so a screen reader reads them
+ * together, and the footer keeps its own job: whether the commit is available (§9c).
+ *
+ * ⚠ **NOT a `role="alert"`.** §9d's rule stands — a body alert is the thing the pinned region
+ * exists to replace, and this is a description of a control rather than an announcement. The
+ * input carries `aria-invalid` so the state is reported where the operator's focus already is.
+ */
+function SetupField({
+  label,
+  optional = false,
+  hint,
+  after,
+  error,
+  id,
+  readOnlyValue,
+  children,
+}: {
+  label: string;
+  optional?: boolean;
+  hint?: string | undefined;
+  /** Anything that belongs to this field but is not its control — the serve-host chips. */
+  after?: ReactNode;
+  /** The one sentence this field is currently wrong by, or `null`. */
+  error: string | null;
+  /** Stable id root, so the control and its error can be bound together. */
+  id: string;
+  /**
+   * 🔴 `OPERATOR-NAME-SWEEP-01` § 3(b) — **THE VALUE, AS A VALUE, for a principal who may not
+   * commit this dialog.**
+   *
+   * Supplied by the caller because only the caller knows what the field's value READS as — a
+   * port is its digits, a host is its string, a raster is "1920 × 1080". When present AND the
+   * dialog is read-only, it is rendered INSTEAD of `children`.
+   *
+   * ⚠ **Not a `disabled` control, and the difference is the requirement.** Golden rule 13: a
+   * greyed-out input says "you cannot type here just now", which reads as a transient
+   * condition; the truth is that this setting is not this principal's to change. A fact is
+   * written as a fact. It is also the treatment `ChannelSection` already uses for the video
+   * format, which is designer-owned for a different reason — one appearance, one meaning.
+   */
+  readOnlyValue?: string | undefined;
+  children: ReactNode;
+}): JSX.Element {
+  const errorId = `${id}-error`;
+  return (
+    <div className="cg-setup-field" data-setup-field={id}>
+      <span className="cg-setup-field__label">
+        {label}
+        {optional && <span className="cg-setup-field__optional"> · optional</span>}
+      </span>
+      {/*
+        🔴 § 3(b) — the VALUE stands in for the control when this principal cannot commit.
+
+        `Tag`'s type makes `onClick`, `tabIndex` and `role="button"` inexpressible, so what
+        renders here cannot become a control by accident — the enforcement is the type, not a
+        review note. `data-setup-readonly` is the handle the spec reads.
+      */}
+      {readOnlyValue !== undefined ? (
+        <Tag className="cg-setup-field__value" data-setup-readonly="">
+          {readOnlyValue}
+        </Tag>
+      ) : isValidElement(children) ? (
+        cloneElement(children as ReactElement<Record<string, unknown>>, {
+          ...(error !== null ? { 'aria-invalid': true, 'aria-describedby': errorId } : {}),
+        })
+      ) : (
+        children
+      )}
+      {/*
+        🔴 `MULTI-CHANNEL-01` §2 I — A VALUE IS ONLY A VALUE. What sits around a field is about
+        CHANGING it — the serve-host chips are buttons that type into it, the hint says what to
+        type, the error says what is wrong with what was typed — so none of it belongs beside a
+        value its reader cannot change.
+      */}
+      {readOnlyValue === undefined && after}
+      {readOnlyValue === undefined && hint !== undefined && (
+        <p className="cg-setup-field__hint">{hint}</p>
+      )}
+      {readOnlyValue === undefined && error !== null && (
+        <p className="cg-setup-field__error" id={errorId} data-field-error="">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function parsePort(raw: string, min: number): number | null {
+  if (!/^\d+$/.test(raw.trim())) return null;
+  const n = Number(raw.trim());
+  return Number.isInteger(n) && n >= min && n <= 65535 ? n : null;
+}
+
+/**
+ * 🔴 `MODAL-TRUTH-01` (owner, 2026-09-22) — **THE FIELD'S REFUSAL AND `Apply servers`' GATE
+ * ARE ONE PREDICATE, CONSULTED TWICE.**
+ *
+ * They were two, and they disagreed. `hostError` has always decided what the sentence UNDER
+ * the field says; this function decided whether the BUTTON is live, and all it asked was
+ * whether the host was non-empty. So `127.0.6110.121151515` — the owner's own measurement —
+ * put a refusal under the field while `Apply servers` stayed enabled beside it: the surface
+ * contradicting itself about the same value, which is this whole session's subject.
+ *
+ * Routing the gate through `hostError` is the `B-228`/golden-rule-6 shape: one reader, so a
+ * rule added to the field cannot fail to reach the button. It costs the bespoke
+ * `Host must not be empty.` string, which said less than `hostError`'s own required-sentence
+ * and was pinned by nothing (swept by string and by component before it went).
+ */
+function parseEndpoint(
+  d: EndpointDraft,
+  defaults: EndpointDefaults,
+): { host: string; amcpPort: number; oscPort: number } | string {
+  const hostProblem = hostError(d.host, { label: 'Host' });
+  if (hostProblem !== null) return hostProblem;
+  const host = d.host.trim();
+  // T5 — an empty port is its default.
+  const amcpPort = parsePort(d.amcpPort.trim() === '' ? defaults.amcpPort : d.amcpPort, 1);
+  if (amcpPort === null) return 'AMCP port must be an integer between 1 and 65535.';
+  // OSC port 0 is a valid ephemeral-bind request (matches the schema).
+  const oscPort = parsePort(d.oscPort.trim() === '' ? defaults.oscPort : d.oscPort, 0);
+  if (oscPort === null) return 'OSC port must be an integer between 0 and 65535.';
+  return { host, amcpPort, oscPort };
+}
+
+export function StationSetupDialog({
+  open,
+  section = DEFAULT_STATION_SETUP_SECTION,
+  requestId = 0,
+  onClose,
+}: Props): JSX.Element | null {
+  const items = useStack();
+  // B-223 — the output check's technical surface reads the same health the banner does.
+  const health = useConnections();
+  /*
+    `RUNTIME-REDESIGN-01` Phase 7 — WHICH CHANNEL this dialog's per-channel tab reports: the
+    same read the channel strip makes (`useSelectedChannel`), so the subtitle, the strip and
+    the Channel tab cannot name three different channels. Station-wide tabs never read it.
+  */
+  const { selected: channel, names: channelNames, air: channelAirs } = useSelectedChannel();
+  const [active, setActive] = useState<StationSetupSection>(section);
+  const [primary, setPrimary] = useState<EndpointDraft>(UNREAD_SERVERS.primary);
+  const [backupEnabled, setBackupEnabled] = useState(UNREAD_SERVERS.backupEnabled);
+  const [backup, setBackup] = useState<EndpointDraft>(UNREAD_SERVERS.backup);
+  /*
+    `C-024` — THE STORED SERVE ADDRESS, AS DRAFT STRINGS. Strings because this is a form: the
+    empty field is a real state the operator can reach by clearing it, and it MEANS "derive it".
+    The absent-vs-empty distinction the schema keeps is resolved by the bridge's one normalizer.
+  */
+  const [serveHost, setServeHost] = useState(UNREAD_SERVERS.serveHost);
+  const [servePort, setServePort] = useState(UNREAD_SERVERS.servePort);
+  /** What is actually IN FORCE, and why — the read that makes the masking possible. */
+  const [serveInfo, setServeInfo] = useState<TemplateServeInfo | null>(null);
+  const [strategy, setStrategy] = useState<ConnectionConfig['strategy']>(UNREAD_SERVERS.strategy);
+  const [autoFailover, setAutoFailover] = useState(UNREAD_SERVERS.autoFailover);
+  const [status, setStatus] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
+  /**
+   * What the bridge last told us is stored — the baseline the SKY "unapplied changes" dot
+   * measures against. Without it the dot would have to guess, and a dot that is on when
+   * nothing has been typed is worse than no dot.
+   */
+  const [loaded, setLoaded] = useState<ConnectionConfig | null>(null);
+  /** One standing message per section — a refusal or an outcome, replaced by the next. */
+  const [sectionMessages, setSectionMessages] = useState<
+    Partial<Record<StationSetupSection, ModalMessage>>
+  >({});
+  /** Sections that hold an unapplied draft, as they report it themselves. */
+  const [sectionDirty, setSectionDirty] = useState<Partial<Record<StationSetupSection, boolean>>>(
+    {},
+  );
+  /**
+   * `SETTINGS-MATCH-02` — HOW MANY unapplied changes a section holds, for the rail's count
+   * chip. A section that reports only a flag counts as one; the bank reports a real number,
+   * from the same comparison its flag comes from.
+   */
+  const [sectionDirtyCount, setSectionDirtyCount] = useState<
+    Partial<Record<StationSetupSection, number>>
+  >({});
+  /**
+   * The FOOTER SLOT. A section whose commit is its own — the bank — renders its Apply and
+   * Revert into this element, so the buttons are physically in the footer rather than
+   * duplicated there. Held in state rather than a ref because the portal target has to
+   * exist before the section renders into it, and a ref does not re-render.
+   */
+  const [footerSlotEl, setFooterSlot] = useState<HTMLElement | null>(null);
+  /*
+    🔴 `C-038` / `R-066` bullet 4 — **THE COMMIT CONTROLS ARE ABSENT FOR A PRINCIPAL WHO
+    MAY NOT CONFIGURE THE STATION.**
+
+    Every section portals its own APPLY into this slot, so withholding the slot is what makes
+    them absent rather than disabled — ONE gate, at the one place the slot is handed out, and
+    a section added later inherits it without its author having to remember.
+
+    ⚠ It asks `useHoldsStationAdmin`, NOT `useCanOperate`: these six routes are
+    `station-admin` class, so an ORDINARY OPERATOR may not commit them either. Reusing the
+    operator gate here would offer every operator a control the bridge then refuses.
+
+    ⚠ **The fields themselves stay typeable, and that half is NOT done** — recorded in the
+    change's `design.md` §9 rather than left to be discovered. What is closed here is the
+    HAZARD: no control that reaches the bridge and comes back refused. A draft that can never
+    be committed is a poor surface, not an unsafe one, and making the whole dialog read-only
+    is its own piece of work.
+  */
+  const holdsStationAdmin = useHoldsStationAdmin();
+  // `RELEASE-0113-01` (`R-089`) — each channel's backup line, for the Backup engine card.
+  const backupChannels = useBackupChannels();
+  // `DESKTOP-APPS-01` — the Playout this station trusts, as the bridge advertises it.
+  const capabilities = useAuthCapabilities();
+  const playoutOrigin = playoutOriginOf(capabilities?.signInUrl);
+  /*
+    🔴 `SERVERS-SIMPLIFY-01` (T2) — **A PLAYOUT STATION**: one whose CG Bridge advertises `auth: playout`. There
+    CasparCG is where the Playout is and the Playout names it (`casparHost`, the contract's join key), so server A
+    is not the operator's to type: it is a fact.
+  */
+  const playoutStation = capabilities?.mode === 'playout';
+  /** `T3` — `Advanced` (the graphics address and the redundancy): `null` — as the station has it. */
+  const [advancedOpen, setAdvancedOpen] = useState<boolean | null>(null);
+  const advancedShown = advancedOpen ?? !playoutStation;
+  /*
+    🔴 `B-327` (T6) — **DOES SERVER A JOIN THE PLAYOUT'S?** CG Bridge's verdict from the last check of this
+    station's own Playout (`casparJoin`), through the same `hostIsOurs` its meters, sources and grants read.
+    `null` — not judged (not signed in, the Playout's list not read, or a CG Bridge too old to say).
+  */
+  const [casparJoin, setCasparJoin] = useState<{
+    readonly casparHost: string;
+    readonly playoutCasparHost: string;
+    readonly joins: boolean;
+  } | null>(null);
+  /** Bumped to run the card's check again — after `Use the Playout's`, so the line says what is now in force. */
+  const [recheck, setRecheck] = useState(0);
+  /*
+    🔴 `SERVERS-SIMPLIFY-01` (`B-324`) — **THE CONNECTION CARD'S OPEN EDIT, HELD HERE.** The card unmounts with
+    its tab, so a draft it kept itself was dropped in silence on a tab switch (the owner's picture 5). Held
+    here it survives the switch like every other draft on this tab, marks the rail, and is discarded on close
+    and by `Revert` with the rest. `null` — nothing open.
+  */
+  const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
+  const connectionDirty =
+    connectionDraft !== null &&
+    stationFieldsChanged(connectionDraft.fields, playoutOrigin, window.cg.setup.bridgeOverride());
+  /*
+    🔴 `B-325` — **WHICH CG BRIDGE THE DRAFT CAME FROM.** The dialog stays mounted while the console is re-pointed
+    at another CG Bridge, and a reconnect re-reads the stack, the health and the lock, never the configuration.
+    So the fields and their baseline kept the first CG Bridge's values on the second one — no mark on the rail,
+    and `Apply servers` sent them there. Measured: open on `192.168.21.93`, re-pointed at a CG Bridge whose server
+    A is `127.0.0.1`, `Apply servers` sent `192.168.21.93`. The suspected path of the owner's `.93` into `.32`.
+  */
+  const loadedFrom = useRef<string | null>(null);
+  const link = useLink();
+  const wasLive = useRef(link === 'live');
+  const footerSlot = holdsStationAdmin ? footerSlotEl : null;
+  /** §6 — the backup server's own small second dialog. */
+  const [addingBackup, setAddingBackup] = useState(false);
+  /** Stable reporters, one per section, so a section's effect deps do not churn. */
+  const reporters = useMemo(() => {
+    const make =
+      (id: StationSetupSection) =>
+      (message: ModalMessage | null): void => {
+        setSectionMessages((prev) => {
+          const next = { ...prev };
+          if (message === null) delete next[id];
+          else next[id] = message;
+          return next;
+        });
+      };
+    return {
+      sources: make('sources'),
+      delimiters: make('delimiters'),
+      candidateLayers: make('candidate-layers'),
+    };
+  }, []);
+
+  const markDirty = useMemo(
+    () =>
+      (id: StationSetupSection) =>
+      (dirty: boolean): void => {
+        setSectionDirty((prev) => (prev[id] === dirty ? prev : { ...prev, [id]: dirty }));
+      },
+    [],
+  );
+
+  const markDirtyCount = useMemo(
+    () =>
+      (id: StationSetupSection) =>
+      (count: number): void => {
+        setSectionDirtyCount((prev) => (prev[id] === count ? prev : { ...prev, [id]: count }));
+      },
+    [],
+  );
+
+  /**
+   * 🔴 `MODAL-TRUTH-01` §2 — **ONE RESTORE OF THE SERVERS FIELDS FROM A STORED CONFIG**,
+   * called by the load, by `Revert`, and by the close-discard below.
+   *
+   * It was written out three times before this — in the load effect, in `revertServers`, and
+   * nowhere at all on close, which is how the third one came to be missing. A draft restored
+   * by two copies of the same seven assignments is one edit away from a pane that reverts
+   * differently depending on which door the operator used.
+   *
+   * ⚠ It restores the FIELDS and nothing else. The messages are deliberately NOT cleared
+   * here: this is also the `onConfigChanged` handler, and a push that arrives just after
+   * this console's own successful apply would wipe the outcome sentence the operator is
+   * reading. The two callers that DO want the messages gone clear them themselves.
+   *
+   * ⚠ And an absent `servers.B` restores the backup draft to its SUGGESTION rather than
+   * leaving it. A stale host under a closed `Add backup` door is the same defect this
+   * change is about, one door further in.
+   *
+   * 🔴 `MODAL-TRUTH-01 · DELTA A` — **`null` IS AN ANSWER HERE, NOT A REASON TO DO NOTHING.**
+   * It means the bridge has never told this console anything, so nothing is in force, and the
+   * honest state is the one a first open shows. The caller used to decide this with
+   * `if (loaded !== null) restore(loaded)` — which on a bridge-less station is a discard that
+   * discards nothing, and is the defect the owner met. Moving the decision INSIDE the one
+   * restore is what makes it impossible to forget at a call site.
+   */
+  const restoreServersDraft = useCallback((config: ConnectionConfig | null): void => {
+    if (config === null) {
+      setPrimary(UNREAD_SERVERS.primary);
+      setBackupEnabled(UNREAD_SERVERS.backupEnabled);
+      setBackup(UNREAD_SERVERS.backup);
+      setStrategy(UNREAD_SERVERS.strategy);
+      setAutoFailover(UNREAD_SERVERS.autoFailover);
+      setServeHost(UNREAD_SERVERS.serveHost);
+      setServePort(UNREAD_SERVERS.servePort);
+      return;
+    }
+    setPrimary(toDraft(config.servers.A, PRIMARY_DEFAULTS));
+    setBackupEnabled(config.servers.B !== undefined);
+    setBackup(
+      config.servers.B === undefined
+        ? UNREAD_SERVERS.backup
+        : toDraft(config.servers.B, BACKUP_DEFAULTS),
+    );
+    setStrategy(config.strategy);
+    setAutoFailover(config.autoFailoverEnabled);
+    setServeHost(config.templateServeHost ?? '');
+    setServePort(config.templateServePort === undefined ? '' : String(config.templateServePort));
+  }, []);
+
+  // Load the current config when opened; refresh when any client applies one.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const applyConfig = (config: ConnectionConfig): void => {
+      if (cancelled) return;
+      restoreServersDraft(config);
+      setLoaded(config);
+      // `B-325` — the CG Bridge this baseline came from.
+      loadedFrom.current = window.cg.link.bridgeAddress?.() ?? null;
+    };
+    void window.cg.connections.config().then(applyConfig);
+    /*
+      `C-024` — READ WHAT IS IN FORCE ON OPEN, not only after an Apply. A panel that could
+      learn about a mask only by CHANGING something would show a wrong value for as long as
+      the operator merely looked at it.
+    */
+    void window.cg.connections
+      .templateServe()
+      .then((info) => {
+        if (!cancelled) setServeInfo(info);
+      })
+      // An OLDER bridge does not know this channel; `serveInfo` stays null and the panel
+      // makes NO CLAIM about masking. Skew has its own owner (`BridgeSkewBanner`).
+      .catch(() => undefined);
+    const unsubscribe = window.cg.connections.onConfigChanged(applyConfig);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [open, restoreServersDraft]);
+
+  /*
+    🔴 `B-325` — **BACK ON A CG BRIDGE: READ IT AGAIN, AND NEVER CARRY A DRAFT ACROSS.** When the link comes back
+    while the dialog is open, the configuration and the serve state are read again. On ANOTHER CG Bridge (the
+    console was re-pointed) the draft goes with the baseline it was typed against — every field reads the CG
+    Bridge the console is on now, and so does the card. On the SAME one, a draft being typed stands unless what
+    is stored there changed meanwhile (a blink of the LAN is not a reason to drop the operator's typing).
+  */
+  const loadedRef = useRef(loaded);
+  loadedRef.current = loaded;
+  useEffect(() => {
+    const back = link === 'live' && !wasLive.current;
+    wasLive.current = link === 'live';
+    if (!open || !back) return;
+    let cancelled = false;
+    const now = window.cg.link.bridgeAddress?.() ?? null;
+    const elsewhere = now !== loadedFrom.current;
+    if (elsewhere) {
+      setConnectionDraft(null);
+      // T6 — another CG Bridge's verdict says nothing about this one.
+      setCasparJoin(null);
+    }
+    void window.cg.connections
+      .config()
+      .then((config) => {
+        if (cancelled) return;
+        const before = loadedRef.current;
+        if (!elsewhere && before !== null && sameServerConfig(before, config)) return;
+        restoreServersDraft(config);
+        setLoaded(config);
+        loadedFrom.current = now;
+        // An outcome or a refusal from before is a statement about an act on another baseline.
+        setStatus(null);
+        setRefusal(null);
+      })
+      .catch(() => undefined);
+    void window.cg.connections
+      .templateServe()
+      .then((info) => {
+        if (!cancelled) setServeInfo(info);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [link, open, restoreServersDraft]);
+
+  /**
+   * 🔴 `MODAL-TRUTH-01` §2 — **CLOSING DISCARDS THE UNAPPLIED DRAFT, AT THE MOMENT OF
+   * CLOSING.**
+   *
+   * ── WHAT THE OPERATOR SAW ───────────────────────────────────────────────────
+   *
+   * Type a host, dismiss without applying, open again — and the typed host was still in the
+   * field, reading exactly like a value that had been applied. Nothing on the surface tells
+   * the two apart: the field looks the same either way, and the operator's own evidence that
+   * it was applied is that it survived a close.
+   *
+   * ── WHY THE RE-READ WAS NOT THE FIX, MEASURED ───────────────────────────────
+   *
+   * `App` keeps this dialog MOUNTED and toggles `open` (it returns `null` below), so every
+   * section BELOW unmounts on close and loses its draft — the bank's aliases and the Live
+   * sources band both reset for free, and that is why only this pane has the defect. This
+   * component's own `useState` survives, and the only thing that used to correct it was the
+   * asynchronous `connections.config()` above. Measured in jsdom, three ways:
+   *
+   *   · bridge answers            → the field resets, but only AFTER the round trip;
+   *   · `config()` REJECTS        → the field never resets, and the rejection is unhandled;
+   *   · `config()` never answers  → the field never resets.
+   *
+   * So the draft was on screen for the whole of every reopen, and permanently on a station
+   * whose bridge is down — which is exactly when an operator opens Station setup. A read
+   * that has not landed cannot be the thing that makes the surface honest (`B-101`'s axis
+   * rule, one dialog up): the discard is a LOCAL act and is done locally, at close, without
+   * waiting for anything.
+   *
+   * ⚠ **This does not weaken the `B-240` question.** The ✕, Escape and the backdrop still
+   * ask before dropping a draft and still name what would be lost; this is what happens
+   * once the operator has answered `Leave and discard`, which until now was a button that
+   * discarded nothing.
+   *
+   * ⚠ `status` and `refusal` go with it — a Servers outcome or refusal from a previous
+   * opening is a statement about an act the operator has since left behind, which is this
+   * change's whole subject. `sectionMessages` was already cleared here for that reason.
+   */
+  useEffect(() => {
+    if (open) return;
+    setSectionMessages({});
+    setStatus(null);
+    setRefusal(null);
+    setAddingBackup(false);
+    restoreServersDraft(loaded);
+    // `B-324` — the Connection card's open edit is a draft like the rest: closing discards it.
+    setConnectionDraft(null);
+    // T3 — `Advanced` opens again as the station has it.
+    setAdvancedOpen(null);
+    // T6 — a verdict is the check's that produced it; the next opening runs its own.
+    setCasparJoin(null);
+  }, [open, loaded, restoreServersDraft]);
+
+  /*
+    THE DEEP LINK LANDS ON THE TAB, not merely on the dialog. Keyed on `requestId` so a
+    SECOND request while the dialog is already open — SOURCES pressed with Servers showing —
+    still switches the tab; that repeat case is exactly what the id exists for.
+  */
+  useEffect(() => {
+    if (open) setActive(section);
+  }, [open, section, requestId]);
+
+  const onAirCount = anyOnAirOrUnsettled(items);
+
+  const validated = useMemo((): ConnectionConfig | string => {
+    const a = parseEndpoint(primary, PRIMARY_DEFAULTS);
+    if (typeof a === 'string') return `Primary: ${a}`;
+    let b: { host: string; amcpPort: number; oscPort: number } | undefined;
+    if (backupEnabled) {
+      const parsed = parseEndpoint(backup, BACKUP_DEFAULTS);
+      if (typeof parsed === 'string') return `Backup: ${parsed}`;
+      b = parsed;
+    }
+    /*
+      `C-024` — EMPTY PORT IS ABSENT; EMPTY HOST IS AN EMPTY STRING. Both mean "derive it".
+      The host field must be CLEARABLE, and a cleared field has to round-trip through the
+      store as `''`; the port has no such problem and `0` already means something specific.
+    */
+    /*
+      `MODAL-TRUTH-01` — the SERVE host goes through the same door. Its field has rendered
+      `hostError` since `C-024`; the gate never read it, so the second address on this pane
+      had the identical split the primary one did. Blank is legal here and means "derive it".
+    */
+    // `SERVERS-SIMPLIFY-01` (T3) — the field's own words: its `Host` and `Port`, as the field's error says them.
+    const serveProblem = hostError(serveHost, { label: 'Host', blankAllowed: true });
+    if (serveProblem !== null) return serveProblem;
+    const port = servePort.trim();
+    const portProblem = portError(port, { min: 0, label: 'Port', blankAllowed: true });
+    if (portProblem !== null) return portProblem;
+    return {
+      servers: { A: a, ...(b !== undefined ? { B: b } : {}) },
+      strategy,
+      autoFailoverEnabled: autoFailover,
+      templateServeHost: serveHost,
+      ...(port.length > 0 ? { templateServePort: Number(port) } : {}),
+    };
+  }, [primary, backupEnabled, backup, strategy, autoFailover, serveHost, servePort]);
+
+  const validationError = typeof validated === 'string' ? validated : null;
+  const remoteHosts = [
+    ...(primary.host.trim().length > 0 && !isLoopbackHost(primary.host) ? [primary.host] : []),
+    ...(backupEnabled && backup.host.trim().length > 0 && !isLoopbackHost(backup.host)
+      ? [backup.host]
+      : []),
+  ];
+
+  /*
+    `C-024` — THE MASK COMES FROM THE BRIDGE, NEVER FROM COMPARING VALUES. Inferring "a flag
+    must be set" from `serveInfo.serveHost !== serveHost` fires on every fresh install.
+  */
+  const flagServeHost = serveInfo?.flagOverrides?.serveHost;
+  const flagServePort = serveInfo?.flagOverrides?.port;
+  const serveCandidates = serveInfo?.candidates ?? [];
+
+  /*
+    🔴 `B-326` (T3) — **A GRAPHICS HOST THAT IS ANOTHER MACHINE IS THE CHECK'S OWN FAILED LINE.** CG Bridge
+    judges it (`elsewhere`, from the one predicate behind its boot line and its apply answer, against its own
+    addresses); this only words the verdict and offers the one remedy. `Detect automatically` clears the field
+    and opens `Advanced` so the cleared field is in view — and, like every edit here, `Apply servers` commits it.
+  */
+  const graphicsLines: readonly ShownCheckLine[] =
+    serveInfo?.elsewhere === true
+      ? [
+          {
+            id: 'graphics',
+            status: 'fail',
+            text: `CasparCG would fetch graphics from ${serveInfo.serveHost}, another machine than CG Bridge's.`,
+          },
+        ]
+      : [];
+  const graphicsActions =
+    serveInfo?.elsewhere === true && holdsStationAdmin
+      ? {
+          graphics: (
+            <Button
+              variant="secondary"
+              data-detect-graphics=""
+              onClick={() => {
+                setServeHost('');
+                setAdvancedOpen(true);
+              }}
+            >
+              Detect automatically
+            </Button>
+          ),
+        }
+      : undefined;
+  /*
+    🔴 `B-327` (T6) — **THE JOIN, AS A LINE OF THE CHECK.** CG Bridge's verdict, worded: a pass names the host; a
+    failure is never a pass and names both hosts and the cost in a few words — the owner's meter read `— LUFS`
+    with picture and sound present, and nothing said why.
+  */
+  const joinLines: readonly ShownCheckLine[] =
+    casparJoin === null
+      ? []
+      : [
+          casparJoin.joins
+            ? {
+                id: 'caspar-join',
+                status: 'pass',
+                text: `CasparCG A is the Playout's: ${casparJoin.casparHost}.`,
+              }
+            : {
+                id: 'caspar-join',
+                status: 'fail',
+                text:
+                  `CasparCG A is ${casparJoin.casparHost}; the Playout names ` +
+                  `${casparJoin.playoutCasparHost}: meters, sources and grants are dropped.`,
+              },
+        ];
+  /*
+    T6 — **A CHANGED CASPARCG HOST IS SHOWN AS NOT APPLIED, NEVER AS SAVED.** `Apply servers` is refused while
+    anything is on air, so a typed host can sit in its field for a whole show: the card says, as a fact, that
+    what it shows is not in force.
+  */
+  const sameEndpoint = (
+    a: { host: string; amcpPort: number; oscPort: number },
+    b: { host: string; amcpPort: number; oscPort: number },
+  ): boolean => a.host === b.host && a.amcpPort === b.amcpPort && a.oscPort === b.oscPort;
+  const draftA = parseEndpoint(primary, PRIMARY_DEFAULTS);
+  const aNotApplied =
+    loaded !== null && (typeof draftA === 'string' || !sameEndpoint(draftA, loaded.servers.A));
+  const draftB = backupEnabled ? parseEndpoint(backup, BACKUP_DEFAULTS) : null;
+  const bNotApplied =
+    loaded !== null &&
+    (backupEnabled !== (loaded.servers.B !== undefined) ||
+      (draftB !== null &&
+        (typeof draftB === 'string' ||
+          loaded.servers.B === undefined ||
+          !sameEndpoint(draftB, loaded.servers.B))));
+  // T2 — server A's state, whichever role it holds now (the health names each server by its label).
+  const serverAState =
+    health === null
+      ? null
+      : health.primary.label === 'A'
+        ? health.primary.state
+        : health.backup?.label === 'A'
+          ? health.backup.state
+          : null;
+
+  if (!open) return null;
+
+  /** Servers holds an unapplied draft when the typed config differs from what is stored. */
+  const serversDirty =
+    loaded !== null && typeof validated !== 'string' && !sameServerConfig(validated, loaded);
+
+  /**
+   * 🔴 `SETTINGS-POLISH-04` §4 — **THE STANDING BLOCK, WHICH IS NOT A MESSAGE.**
+   *
+   * It was the first entry in `serverMessages` below, so it rendered in the modal's PINNED
+   * region — the region `AUDIT-CLOSE-01` delta A gave one job: *why did the last action not
+   * happen?* This sentence answers a different question. It is true before anything is
+   * pressed, it never changes within the tab, and no act produces it; the drawing puts exactly
+   * this text in a `.notice` between the section head and the first card, in the pane's flow.
+   *
+   * ⚠ **`SETTINGS-MATCH-02` §9a's two weights survive the move intact** — a bold title over a
+   * quieter explanation that NAMES THE REMEDY (`take all items off air…`). What changed is the
+   * element it renders in, not a word of it. The `Notice`/`ModalMessage` pair that used to
+   * carry them is `SetupNotice`'s `title` + `body`, both still strings (§9d).
+   */
+  /*
+    `MULTI-CHANNEL-01` §2 I — the block is about APPLYING, so it is a station-admin's: for any
+    other principal there is no Apply to pause, and "you can prepare edits now" would be untrue.
+    The bridge's refusal condition is untouched — this is only who is told about it.
+  */
+  const serversOnAirBlock: SetupNoticeSpec | null =
+    holdsStationAdmin && onAirCount > 0
+      ? {
+          icon: Lock,
+          title: 'Server changes are paused while on air',
+          body:
+            `${String(onAirCount)} item(s) are on air or unsettled. You can prepare edits now — ` +
+            `take all items off air in the console before applying, which Clear All does while ` +
+            `keeping the rows. Every other section stays editable.`,
+        }
+      : null;
+
+  /**
+   * The Servers section's own refusals, worst-first. They live here rather than in a shared
+   * list because they belong to ONE tab: the whole point of §2 is that they are never in
+   * front of another section's work.
+   */
+  const serverMessages: readonly ModalMessage[] = [
+    /*
+      🔴 `SETTINGS-MATCH-02` §10.6 — **A BAD FIELD IS NOT REPORTED HERE ANY MORE.**
+
+      `validationError` used to be pushed into this region, which put `AMCP port must be an
+      integer between 1 and 65535.` four cards away from the box it was about — and, with two
+      endpoints on the tab, unable to say WHICH port. It is an inline error beside its own
+      field now (`SetupField`), and this region keeps the job `AUDIT-CLOSE-01` delta A gave it:
+      why the last ACTION did not happen.
+
+      ⚠ It still GATES the commit — `Apply servers` stays disabled while any field is invalid,
+      and the footer's clause says the commit is unavailable. What moved is where the sentence
+      is read, not what it stops.
+    */
+    ...(refusal !== null ? [{ role: 'refusal' as const, text: refusal }] : []),
+    ...(status !== null ? [{ role: 'notice' as const, text: status }] : []),
+  ];
+
+  const messagesFor = (id: StationSetupSection): readonly ModalMessage[] => {
+    if (id === 'servers') return serverMessages;
+    const m = sectionMessages[id];
+    return m === undefined ? [] : [m];
+  };
+
+  /**
+   * 🔴 `SETTINGS-POLISH-04` §4 — **THE REFUSAL CONDITION IS UNCHANGED, AND THIS LINE IS WHERE
+   * THAT IS PROVED.** Servers is blocked when something is on air OR a field is invalid, which
+   * is exactly what it was when both sentences lived in one list. Moving the on-air sentence
+   * to the pane would have silently un-blocked the tab if this predicate had kept reading only
+   * `messagesFor` — the rail's lock, the footer's amber and `Apply servers`' disabled state
+   * all hang off it. One predicate, both halves, read at every door.
+   */
+  const isBlocked = (id: StationSetupSection): boolean =>
+    (id === 'servers' && serversOnAirBlock !== null) ||
+    messagesFor(id).some((m) => m.role === 'refusal');
+  /*
+    `B-324` — the tab holds TWO commits now: the card's `Connect` (this console's station record) and `Apply
+    servers` (what the bridge drives). Either one open marks the tab, and the rail's count is how many of the
+    two are waiting — a commit each, never a count of keystrokes.
+  */
+  const isDirty = (id: StationSetupSection): boolean =>
+    id === 'servers' ? serversDirty || connectionDirty : (sectionDirty[id] ?? false);
+  const dirtyCount = (id: StationSetupSection): number =>
+    id === 'servers'
+      ? (serversDirty ? 1 : 0) + (connectionDirty ? 1 : 0)
+      : (sectionDirtyCount[id] ?? 1);
+
+  const tabs: readonly TabSpec[] = STATION_SETUP_SECTIONS.map((s) => ({
+    id: s.id,
+    label: s.title,
+    group: s.group,
+    icon: SECTION_ICONS[s.id],
+    // BLOCKED beats EDITED: a section you cannot apply is the more urgent fact, and two
+    // marks on one row would be a puzzle rather than a signal.
+    ...(isBlocked(s.id)
+      ? { badge: { tone: 'warn' as const, label: `${s.title} is blocked` } }
+      : isDirty(s.id)
+        ? {
+            badge: {
+              tone: 'edited' as const,
+              label: `${s.title} has unapplied changes`,
+              // `SETTINGS-MATCH-02` — the chip says HOW MANY. Servers is one draft however
+              // many fields were typed into it: the section applies atomically, so `1` is the
+              // honest number rather than a count of keystrokes (`B-324`: one more for the card).
+              count: dirtyCount(s.id),
+            },
+          }
+        : {}),
+  }));
+
+  // `MULTI-CHANNEL-01` §2 M — the footer states the contract as it is for THIS principal.
+  const activeSpec = sectionSpecFor(active, holdsStationAdmin);
+  const activeMessages = messagesFor(active);
+  /** The footer's standing sentence goes amber when THIS section's commit is refused. */
+  const footerBlocked = isBlocked(active);
+
+  /**
+   * `B-240` — DISCARD THIS SECTION'S DRAFT, and nothing else. The Layers tab's `Revert` has
+   * always meant exactly this; the Servers tab's control was called `Cancel` and dismissed the
+   * whole dialog instead. Same name, same act, same scope, on both tabs now.
+   *
+   * It restores from `loaded` — what the bridge last told us is stored — which is the same
+   * baseline `serversDirty` measures against, so pressing it necessarily clears the dot.
+   */
+  const revertServers = (): void => {
+    /*
+      ⚠ `MODAL-TRUTH-01 · DELTA A` — NO `if (loaded === null) return` HERE EITHER. It is
+      unreachable today (`serversDirty` is false without a `loaded`, so this button is not
+      drawn), and it is deleted anyway: it is the second copy of the early return that made
+      the close-discard do nothing on a bridge-less station, and a dormant copy of a defect is
+      how the defect comes back. `restoreServersDraft` answers `null` itself now.
+    */
+    restoreServersDraft(loaded);
+    // `B-324` — the tab's discard is the whole tab's: the card's open edit goes with the fields.
+    setConnectionDraft(null);
+    setRefusal(null);
+    setStatus(null);
+  };
+
+  /**
+   * 🔴 `MODAL-TRUTH-01 · DELTA A` (owner, 2026-09-22) — **DISMISSING CLOSES. IT DOES NOT ASK.**
+   *
+   * ── WHAT `B-240` DECIDED, AND WHICH HALF OF IT SURVIVES ─────────────────────
+   *
+   * `B-240` found three answers for one job and two names for one act: `Close` dismissed and
+   * discarded nothing it warned about, and `Cancel` one tab along dismissed AND dropped the
+   * Servers draft while being named for the drop. **That diagnosis was right and its fix is
+   * untouched** — there is still ONE name for discard (`Revert`), ONE name for commit
+   * (`Apply <section>`), and dismissal still lives in the ✕, Escape and the backdrop, one
+   * path routed here. What `B-240` ALSO did was raise a question before leaving, and that
+   * half is withdrawn.
+   *
+   * ── WHY, MEASURED IN THE REAL APP ───────────────────────────────────────────
+   *
+   * The owner reported, after the close-discard landed, that Station setup STILL kept his
+   * edit across a close. Driven through Chromium, every pane and both dismissal paths
+   * discard correctly — and the reason he saw otherwise is the question itself:
+   *
+   *   type a host → press ✕ → the confirm opens → press Escape (or `Cancel`) →
+   *   **Station setup is still open, with the edit still in it.**
+   *
+   * From the operator's seat that is indistinguishable from "I closed it without saving and
+   * my edit survived". The confirm turned a dismissal into a two-step act whose first step
+   * looks exactly like the defect it was guarding.
+   *
+   * ⭐ And `B-240`'s own reasoning is what settles it rather than overrules it. It argued —
+   * citing `R-017` — that a confirmation an operator meets every time he leaves a dialog is
+   * one he learns to dismiss without reading. The premise underneath was that leaving LOST
+   * something silently. It no longer does: closing discards, always, which is the
+   * conventional contract for a modal with an explicit Save, and `Revert` is the named,
+   * visible discard for a draft the operator wants gone without leaving. There is nothing
+   * left for the question to protect.
+   *
+   * ⚠ The rail's dirty dot and count are UNCHANGED and are now the whole of the warning:
+   * every section holding an unapplied draft marks itself, on every tab, before the operator
+   * reaches for the ✕. That is a signal he can act on; a modal in his way is not.
+   */
+  const dismiss = onClose;
+
+  /**
+   * `SETTINGS-DIALOG-01` §3 — ONE ENDPOINT AS A FIELD GRID, label ABOVE control.
+   *
+   * The reference's `.fields.three` (`design.md` 14.3's bodies table): a wide host beside two
+   * narrow ports, each control under its own 13 px label, the row gapped `19px 18px`. This was
+   * two inline `label + input` rows with a hand-set 92 px label column and 88 px ports — the
+   * idiom the whole dialog is being brought off, because a label BESIDE a control is what makes
+   * a Persian label collide with its own input.
+   *
+   * ⚠ The `aria-label` on each control is the accessible NAME and is unchanged, deliberately:
+   * `Primary host`, `Primary AMCP port`, `Primary OSC port` and their Backup twins are what
+   * `stationSetupServers.dom.test.ts` and `server-settings.spec.ts` query by. The visible label
+   * moved; the name a test holds did not.
+   */
+  /*
+    `SERVERS-SIMPLIFY-01` (T5) — each port's default is its placeholder, and an empty port is legal: it IS the
+    default. (T2) — `fact`: server A in a Playout station, its values as facts and nothing typed.
+  */
+  const endpointFields = (
+    draft: EndpointDraft,
+    set: (next: EndpointDraft) => void,
+    prefix: string,
+    defaults: EndpointDefaults,
+    fact = false,
+  ): JSX.Element => (
+    /*
+      ⭐ `SETTINGS-MATCH-02` — THE MONO FACE ON AN ADDRESS, which the reference sets on every
+      one of these three and the app set on none. It is not decoration on a host field: `1` and
+      `l`, `0` and `O` are the characters an operator mistypes into an IP address, and the
+      proportional face is where they look alike.
+    */
+    /*
+      ⭐ `SETTINGS-MATCH-02` — THE MONO FACE ON AN ADDRESS, which the reference sets on every
+      one of these three and the app set on none. It is not decoration on a host field: `1` and
+      `l`, `0` and `O` are the characters an operator mistypes into an IP address, and the
+      proportional face is where they look alike.
+
+      🔴 §10.5 — AND ALL THREE ARE `dir="ltr"`, EXPLICITLY. This console renders Persian, so a
+      field left to the document's direction can reorder its own segments the moment anything
+      ambiguous enters it — an address whose octets are drawn in the wrong order is a value the
+      operator cannot check by eye. `dir="auto"` stays where it belongs: row names, source
+      names, delimiter names — the operator's own words.
+    */
+    <div className="cg-setup-fields cg-setup-fields--three">
+      <SetupField
+        label="Host"
+        {...(holdsStationAdmin && !fact ? {} : { readOnlyValue: draft.host })}
+        error={hostError(draft.host, { label: 'Host' })}
+        id={`${prefix}-host`}
+      >
+        {/* §10.4 — a host is `z.string().min(1)`: a NAME or an address, so letters are legal
+            and only the whitespace a paste carries is removed. What cannot be a host is said
+            beside the field, not silently deleted (`fieldValue.ts`). */}
+        <input
+          className="cg-field cg-field--mono"
+          dir="ltr"
+          aria-label={`${prefix} host`}
+          value={draft.host}
+          onChange={(e) => set({ ...draft, host: hostValue(e.target.value) })}
+        />
+      </SetupField>
+      <SetupField
+        label="AMCP port"
+        {...(holdsStationAdmin && !fact
+          ? {}
+          : { readOnlyValue: draft.amcpPort.trim() === '' ? defaults.amcpPort : draft.amcpPort })}
+        error={portError(draft.amcpPort, { min: 1, label: 'AMCP port', blankAllowed: true })}
+        id={`${prefix}-amcp`}
+      >
+        {/* R-020 + §10.2 — Persian/Arabic-Indic digits normalize to Latin BEFORE anything
+            asks whether the character is a digit; `allow="digits"` then drops the rest. */}
+        <NumericInput
+          className="cg-field cg-field--mono"
+          dir="ltr"
+          allow="digits"
+          aria-label={`${prefix} AMCP port`}
+          placeholder={defaults.amcpPort}
+          value={draft.amcpPort}
+          onValueChange={(v) => set({ ...draft, amcpPort: v })}
+        />
+      </SetupField>
+      <SetupField
+        label="OSC port"
+        {...(holdsStationAdmin && !fact
+          ? {}
+          : { readOnlyValue: draft.oscPort.trim() === '' ? defaults.oscPort : draft.oscPort })}
+        error={draft.oscPort.trim() === '' ? null : oscPortError(draft.oscPort)}
+        id={`${prefix}-osc`}
+      >
+        <NumericInput
+          className="cg-field cg-field--mono"
+          dir="ltr"
+          allow="digits"
+          aria-label={`${prefix} OSC port`}
+          placeholder={defaults.oscPort}
+          value={draft.oscPort}
+          onValueChange={(v) => set({ ...draft, oscPort: v })}
+        />
+      </SetupField>
+    </div>
+  );
+
+  return (
+    <Modal
+      title="Station setup"
+      /* `REPAIR-03` B, audit row 72 — the reference draws an emblem in this head. */
+      emblem={Settings}
+      /*
+        `RUNTIME-REDESIGN-01` Phase 7 — the reference's `.settings-subtitle` (`Channel 1 · News ·
+        Primary A`): the channel this dialog's per-channel tab reports, and which server is
+        primary. No channel NAME here yet: when this was built the bridge published none and none
+        was invented (A3). ⚠ `CHANNEL-AUTHORITY-01` — the discovery call now carries the Playout's
+        catalogue name (`useSelectedChannel().names`, what the channel strip shows); this subtitle
+        does not read it, and adding it is a separate, visual item rather than a silent one here.
+
+        ⭐ `MULTI-CHANNEL-01` §2 H — IT READS IT NOW: `Channel 2 · کانال دوم (تست CG) · Primary A`,
+        the reference's own shape. The name is the SAME one the strip shows for the selected channel
+        (one map, `names`), it is operator data in its own `<bdi>` with the separators outside it
+        (golden rule 11), and with no catalogue — auth OFF, the Playout unreachable — the line is
+        exactly what it was.
+      */
+      subtitle={
+        <>
+          {/* `UI-POLISH-01` G — the output dot, before the channel's name, as on the strip. */}
+          <OutputDot air={channelAirs.get(channel) ?? NO_AIR} />
+          Channel {String(channel)}
+          {channelNames.get(channel) !== undefined && (
+            <>
+              {' · '}
+              <bdi data-setup-channel-name="">{channelNames.get(channel)}</bdi>
+            </>
+          )}
+          {health !== null && <> · Primary {health.currentPrimary}</>}
+        </>
+      }
+      ariaLabel="Station setup"
+      /*
+        🔴 `STATION-CHROME-02` §2 — A FIXED FRAME, not a wide one. `wide` sized the dialog to
+        its content, so the box moved every time the operator changed tab: Delimiters is five
+        rows and Layers is thirty-four. See `Modal`'s `styles.dialogFixed`.
+      */
+      size="fixed"
+      /*
+        🔴 `B-240`, AMENDED by `MODAL-TRUTH-01 · DELTA A` — the ✕, Escape and the backdrop
+        all route here, and all three now CLOSE
+        before dropping an unapplied draft. One path, so the guard cannot be reachable by one
+        affordance and not another.
+      */
+      onClose={dismiss}
+      {...(activeMessages.length > 0 ? { message: activeMessages } : {})}
+      /*
+        🔴 `SETTINGS-MATCH-02` §1 — THE RAIL IS A NAMED REGION OF THE FRAME NOW, not the first
+        thing inside the body. That is what puts the message region and the footer in the
+        PANEL's column, so a Servers refusal stops taking 109 px out of the rail and the pane
+        every time the operator presses that tab — see `Modal`'s `styles.panelFixed`.
+      */
+      rail={
+        <TabStrip
+          tabs={tabs}
+          activeId={active}
+          onSelect={(id) => setActive(id as StationSetupSection)}
+          ariaLabel="Station setup sections"
+          idPrefix="station"
+          orientation="vertical"
+          /*
+            The rail's foot — OUR primary server and OUR host, from what the bridge says is
+            stored and which server is currently primary. Never the prototype's sample address
+            (§0), and nothing at all until the bridge has answered.
+          */
+          foot={
+            <RailStationCard
+              label={health?.currentPrimary ?? 'A'}
+              // T2 — the engine by its name; its chip still says which one, A or B.
+              name="CasparCG"
+              host={
+                loaded === null
+                  ? null
+                  : health?.currentPrimary === 'B' && loaded.servers.B !== undefined
+                    ? loaded.servers.B.host
+                    : loaded.servers.A.host
+              }
+              /* `CLIENT-TEST-RELEASE-01` B1 — the one line in CG Control that names its release. */
+              version={{ release: APP_VERSION, build: APP_BUILD }}
+            />
+          }
+        />
+      }
+      footer={
+        <>
+          {/*
+            🔴 `B-239` — THIS IS A LABEL, AND IT NOW SAYS SO.
+
+            The section's COMMIT CONTRACT — what pressing something here will do. It stays,
+            and the first attempt to fix `B-239` by DELETING it was wrong: the section's own
+            legend says the same thing fifteen lines up, and that legend SCROLLS AWAY while
+            this is pinned.
+
+            What was genuinely wrong is that it looked like a message. It was the same muted
+            grey sentence in the same corner an event would arrive in, so the operator read it
+            as a report and then ignored it as furniture. It now wears the app's existing
+            "this is chrome, not content" treatment — small, tracked-out, uppercase, the same
+            one a card title, a rail group and a table header wear — and declares its role, so
+            a test can prove the distinction rather than assert it.
+
+            ⚠ The EVENT never lands here. It lands in the pinned region ABOVE the footer, as an
+            amber `Notice`. `data-modal-message` is conditional and absent at rest; this is
+            unconditional and never changes. Two elements, two treatments, two lifetimes.
+          */}
+          {/*
+            ⭐ `SETTINGS-MATCH-02` — IT KEEPS A GLYPH AND A TONE NOW, which is the reference's
+            `.foot-message`, and neither turns it into an event. It is still unconditional,
+            still unchanging within a tab, and still the only thing in the footer that never
+            reacts to anything — `removeRowRefusal.dom.test.ts` measures exactly that, by
+            reading the sentence before and after a refusal arrives beside it.
+
+            The amber + lock on a BLOCKED section is where the reference's on-air banner lands
+            in this build: the refusal itself stays in the pinned region (`AUDIT-CLOSE-01`
+            delta A), and the footer says in the corner he is about to press that the press is
+            unavailable.
+          */}
+          <span
+            style={styles.footNote}
+            className="cg-footer-contract"
+            data-section-footer={active}
+            data-footer-role="contract"
+            {...(footerBlocked ? { 'data-footer-tone': 'blocked' } : {})}
+          >
+            <Icon
+              icon={footerBlocked ? Lock : activeSpec.footerIcon === 'saved' ? CircleCheck : Info}
+              size={STATION_SETUP_PX.footMessageIcon}
+            />
+            {footerBlocked && activeSpec.footerBlocked !== undefined
+              ? activeSpec.footerBlocked
+              : activeSpec.footerRest}
+          </span>
+          {/*
+            The slot a section's own commit controls portal into (the bank's).
+
+            🔴 `SETTINGS-POLISH-04` §1 — **IT IS A ROW, AND IT HAS THE FAMILY'S GAP.** It was a
+            bare `<span>`, so the footer's `gap: 9px` applied between the slot and its
+            neighbours and NOT between the two buttons INSIDE it: measured on Layers, `Revert`
+            ended at x = 1067 and `Apply layers` began at x = 1067 — the two controls were
+            TOUCHING. A wrapper that holds buttons is an action row, and an action row's gap is
+            its own property rather than something it inherits by being a direct child.
+          */}
+          <span ref={setFooterSlot} className="cg-setup-foot-actions" data-station-footer-slot="" />
+          {/* `MULTI-CHANNEL-01` §2 I — Servers' commit is a station-admin's (`sectionSpecFor`). */}
+          {active === 'servers' && activeSpec.commits ? (
+            <>
+              {/*
+                🔴 `B-240` — REVERT, NOT CANCEL, AND ONLY WHEN THERE IS A DRAFT.
+
+                This was `Cancel`, and it routed to `onClose` — so it DISMISSED THE DIALOG
+                while being named for discarding a draft. One tab along, `Revert` discarded a
+                draft without dismissing. Two names for one act, and one of them silently did
+                a second thing.
+
+                Discard is SECTION-level and is called Revert everywhere. Dismissal is
+                DIALOG-level and lives in the ✕, Escape and the backdrop — see the guard on
+                `dismiss` below, which is what the two blurred names were hiding.
+
+                `isDirty('servers')` is the SAME read the rail's blue dot makes, so the button
+                and the dot cannot disagree about whether there is anything to revert.
+              */}
+              {isDirty('servers') && (
+                <ModalAction
+                  actionRole="cancel"
+                  onClick={revertServers}
+                  title="Puts this tab's fields back to what is in force. Nothing is sent, and the dialog stays open."
+                >
+                  Revert
+                </ModalAction>
+              )}
+              {/*
+                Apply servers — `primary`, and named for its SCOPE. It commits the Servers
+                section and nothing else; the bank, the catalogue and the delimiters each
+                commit from their own tab.
+
+                ⭐ `STATION-CHROME-02` §3 — SENTENCE CASE. It shipped as `APPLY SERVERS`, and
+                the shout was a leftover from the dialog this grew out of: the modal contract
+                already says a dialog's TITLE is sentence case and never shouting, and its
+                buttons had simply never been brought to the same rule. `Apply layers`, one
+                tab along, was already right — two spellings of one rule in one dialog.
+              */}
+              <AsyncButton
+                variant={modalActionVariant('primary')}
+                data-modal-role="primary"
+                aria-label="Apply server settings"
+                title="Applies this tab's server settings. Refused while anything is on air."
+                disabled={onAirCount > 0 || validationError !== null}
+                run={async () => {
+                  if (typeof validated === 'string') return { accepted: false };
+                  setRefusal(null);
+                  setStatus(null);
+                  const result = await window.cg.connections.setConfig(validated);
+                  if (!result.ok) {
+                    setRefusal(result.message ?? 'The bridge refused the new configuration.');
+                    return { accepted: false, errorCode: result.reason ?? 'refused' };
+                  }
+                  /*
+                    🔴 B-162 — THE APPLY THAT SUCCEEDS AND STILL COSTS A SERVER ITS GRAPHICS.
+                    The bridge's own verdict (`unreachable`) is read FIRST: a loopback template
+                    server with a remote CasparCG configured means that server fetches ITSELF,
+                    gets nothing, and shows live sources with no graphic over them while
+                    `CG ADD` reports success. The bridge's verdict, never re-derived here.
+                  */
+                  // `C-024` — RE-READ WHAT IS IN FORCE: the panel never computes it, it asks.
+                  void window.cg.connections.templateServe().then(setServeInfo);
+                  const unreachable = result.templateServe?.unreachable ?? [];
+                  if (unreachable.length > 0) {
+                    /*
+                      `B-326` — the bridge says WHY (`elsewhere`), and the sentence follows it: a host
+                      that is another machine is not fixed by any address of CG Bridge's — it is
+                      cleared, and detected again. Never "this machine": the owner read it as his PC.
+                    */
+                    setRefusal(
+                      result.templateServe?.elsewhere === true
+                        ? `Applied, but CasparCG would fetch graphics from ${result.templateServe.serveHost}, ` +
+                            `another machine than CG Bridge's: ${unreachable.join(', ')} will show live ` +
+                            `sources with NO TEMPLATE — no background, no text — and their CG ADD will ` +
+                            `still report success. Press Detect automatically, then Apply again — CG ` +
+                            `Bridge does not need restarting.`
+                        : `Applied, but the graphics address is loopback-only and ${unreachable.join(', ')} ` +
+                            `cannot reach it. Those servers will show live sources with NO TEMPLATE — no ` +
+                            `background, no text — and their CG ADD will still report success. Set the ` +
+                            `graphics Host under Advanced to CG Bridge's address as those servers see it, ` +
+                            `then Apply again — CG Bridge does not need restarting.`,
+                    );
+                    return { accepted: true };
+                  }
+                  setStatus(
+                    result.templateServe?.exposed === true
+                      ? `Applied. Template serve is LAN-exposed at ${result.templateServe.serveHost} (remote server); control stays on 127.0.0.1.`
+                      : 'Applied. All listeners remain loopback-only.',
+                  );
+                  return { accepted: true };
+                }}
+              >
+                Apply servers
+              </AsyncButton>
+            </>
+          ) : null}
+          {/*
+            🔴 `B-240`, AMENDED 2026-09-11 — A SECTION WITH NOTHING TO COMMIT CARRIES `Close`.
+
+            `B-240` removed it, and its reason was sound as far as it went: the ✕, Escape and
+            the backdrop already dismiss, so a per-section `Close` was a THIRD answer to one
+            job and made leaving look like a property of whichever tab you stood on. The
+            reference draws `Close` on exactly these three panes, **the owner has now looked at
+            it and asked for it**, and the amendment costs `B-240` nothing it was actually
+            protecting:
+
+              · it is the DIALOG's dismissal, not a fourth act — it routes through `dismiss`,
+                the same function the ✕ calls, so it asks the same question before dropping an
+                unapplied draft in another tab;
+              · it appears only where there is no commit, so no footer ever offers a `Close`
+                beside an `Apply` — which is the configuration that made "which of these two
+                am I pressing?" a real question;
+              · discard is still `Revert` and only `Revert`, and commit is still
+                `Apply <section>`. The three-names-for-one-act defect stays fixed.
+
+            `sections.ts`'s `commits` is where that rule is written down, with the dating.
+          */}
+          {!activeSpec.commits && (
+            /*
+              ⚠ Its accessible NAME is the longer one, and that is a decision rather than a
+              flourish: the primitive's ✕ is already named `Close`, so two controls in one
+              dialog would answer to that word — which is ambiguous for a screen reader and a
+              strict-mode violation for every spec that presses one of them. The visible label
+              is still `Close` and the name still opens with it, so WCAG 2.5.3 holds.
+            */
+            <ModalAction
+              actionRole="cancel"
+              aria-label="Close Station setup"
+              onClick={dismiss}
+              title="Closes Station setup. Nothing in this section is waiting to be applied."
+            >
+              Close
+            </ModalAction>
+          )}
+        </>
+      }
+    >
+      <TabPanel activeId={active} idPrefix="station">
+        {/*
+          THE PANE IS THE SCROLL CONTAINER, not the modal's body: the frame holds the rail and
+          the panel side by side and must not scroll them together, or the rail would slide
+          away from the section it is naming. The message region is still OUTSIDE this, pinned
+          above the footer — which is what `modal-message-in-viewport` measures, and why that
+          spec takes its overflow reading here.
+        */}
+        <div style={styles.pane} className="cg-setup-pane" data-station-pane="">
+          {active === 'channel' && (
+            <SetupSection id="channel">
+              <ChannelSection health={health} />
+            </SetupSection>
+          )}
+
+          {active === 'servers' && (
+            <SetupSection
+              id="servers"
+              {...(serversOnAirBlock !== null
+                ? { notice: <SetupNotice spec={serversOnAirBlock} /> }
+                : {})}
+            >
+              {/* `STATION-CHROME-02` §3 — the shared card rhythm, so this tab is built from
+                    the same blocks as every other one. The heads used to SHOUT their titles
+                    in hand-spelled uppercase; `.cg-card__title` is the one treatment. */}
+              {/*
+                  `SETTINGS-DIALOG-01` §3 — the reference's `.server-label`: the letter is a CHIP
+                  beside a sentence-case name, not a parenthesis inside it. `Primary (A)` spent
+                  the head's one title on two facts; the chip says which slot and the title says
+                  what it is.
+                */}
+              {/*
+                  `DESKTOP-APPS-01` §2F — the Playout this station trusts, and the connection check,
+                  reachable after first-run. CHANGE exists only inside CG Control and only for a
+                  station admin; it writes through the app, never over the control socket.
+              */}
+              <section className="cg-card" aria-label="Playout">
+                <div className="cg-card__head">
+                  <span className="cg-card__title">Playout</span>
+                </div>
+                <div className="cg-card__body">
+                  <PlayoutConnection
+                    origin={playoutOrigin}
+                    startEditing={playoutOrigin === null}
+                    mayChange={holdsStationAdmin}
+                    // 🔴 `B-324` — the open edit outlives the tab: held by the dialog, discarded on close.
+                    draft={connectionDraft}
+                    onDraft={setConnectionDraft}
+                    // `CENTRAL-BRIDGE-01` (D8) — where this console reaches CG Bridge, and an admin's override.
+                    showBridge
+                    /*
+                      🔴 `R-081` — **FIRST-RUN'S CHECK, RUN AGAIN HERE.** The same four groups, and for a
+                      station admin it RUNS when this pane opens, so the check is on screen without
+                      looking for it: the owner could not find it again after his first install. CHECK
+                      runs it again; anyone else presses CHECK, as before.
+                    */
+                    grouped
+                    // `B-327` — once server A is read, so the first check names the host CG Bridge drives.
+                    checkOnOpen={holdsStationAdmin && loaded !== null}
+                    // 🔴 `B-327` — the configured CasparCG host rides the check, so the AMCP line judges it.
+                    casparHost={loaded?.servers.A.host}
+                    onAnswer={(answer) => setCasparJoin(answer?.casparJoin ?? null)}
+                    recheck={recheck}
+                    // 🔴 `B-327` / `B-326` — the join, and where CasparCG fetches graphics.
+                    extraLines={[...joinLines, ...graphicsLines]}
+                    lineActions={graphicsActions}
+                  />
+                </div>
+              </section>
+
+              {/*
+                  🔴 `SERVERS-SIMPLIFY-01` (T2) — **`CasparCG A`, NOT `Primary server`.** The owner read
+                  `Primary server` as "where the bridge is" and typed his own PC into it. The card names
+                  what it is; the redundancy ROLE (`Primary A`) stays where it belongs, in the status bar
+                  and the subtitle. In a Playout station CasparCG is where the Playout is and the Playout
+                  names it, so nothing here is typed: its values are facts, beside where it is and how
+                  it is.
+                */}
+              <section className="cg-card" aria-label="CasparCG A">
+                <div className="cg-card__head">
+                  <Tag className="cg-setup-server-chip" aria-hidden="true">
+                    A
+                  </Tag>
+                  <span className="cg-card__title">CasparCG A</span>
+                  <span className="cg-card__spacer" />
+                  {aNotApplied && (
+                    <Tag className="cg-setup-card-tag" data-not-applied="">
+                      Not applied
+                    </Tag>
+                  )}
+                  {playoutStation && (
+                    <>
+                      <Tag className="cg-setup-card-tag" data-caspar-placement="">
+                        On the Playout machine
+                      </Tag>
+                      {serverAState !== null && (
+                        <Tag className="cg-setup-card-tag" data-caspar-health="">
+                          {serverStateWord(serverAState)}
+                        </Tag>
+                      )}
+                    </>
+                  )}
+                  {/*
+                      🔴 `B-327` (T6) — **`Use the Playout's`**, offered only while CG Bridge says server A does not
+                      join the Playout's. It writes the host CG Bridge derived — `resolveCasparHost` by its own
+                      Playout host: `127.0.0.1` on the Playout's machine, the Playout's address on a separate one
+                      — never the Playout's network address written by hand. Through `connections.set-config`, so
+                      it is refused while anything is on air, exactly as `Apply servers` is (and is unavailable
+                      here for the same reason).
+                    */}
+                  {casparJoin !== null &&
+                    !casparJoin.joins &&
+                    holdsStationAdmin &&
+                    loaded !== null && (
+                      <AsyncButton
+                        variant="secondary"
+                        data-use-playouts=""
+                        disabled={onAirCount > 0}
+                        title={
+                          onAirCount > 0
+                            ? 'Refused while anything is on air.'
+                            : `Sets CasparCG A to ${casparJoin.playoutCasparHost}.`
+                        }
+                        run={async () => {
+                          const host = casparJoin.playoutCasparHost;
+                          const next: ConnectionConfig = {
+                            ...loaded,
+                            servers: { ...loaded.servers, A: { ...loaded.servers.A, host } },
+                          };
+                          setRefusal(null);
+                          setStatus(null);
+                          const result = await window.cg.connections.setConfig(next);
+                          if (!result.ok) {
+                            setRefusal(
+                              result.message ?? 'The bridge refused the new configuration.',
+                            );
+                            return { accepted: false, errorCode: result.reason ?? 'refused' };
+                          }
+                          setStatus(`Applied. CasparCG A is ${host}.`);
+                          // The line says what is now in force: the check runs again.
+                          setRecheck((n) => n + 1);
+                          return { accepted: true };
+                        }}
+                      >
+                        Use the Playout&apos;s
+                      </AsyncButton>
+                    )}
+                </div>
+                <div className="cg-card__body">
+                  {endpointFields(primary, setPrimary, 'Primary', PRIMARY_DEFAULTS, playoutStation)}
+                </div>
+              </section>
+
+              {/* T2 — `CasparCG B · backup`: the engine, and its role, in the operator's words. */}
+              <section className="cg-card" aria-label="CasparCG B">
+                <div className="cg-card__head">
+                  <Tag className="cg-setup-server-chip" aria-hidden="true">
+                    B
+                  </Tag>
+                  <span className="cg-card__title">CasparCG B · backup</span>
+                  {/*
+                      The reference's `.tag` on this head, and it says something TRUE that the
+                      card otherwise only implies: a station may run on one server, so the
+                      absence of a backup is a configuration and not an omission — `B-046`'s
+                      point, stated where the operator is deciding rather than only in the
+                      empty state below.
+
+                      ⚠ It is a CARD-head tag, a different level from the section's contract
+                      tag (`Read only` / `Apply together` / `Auto-save`) at the pane's head.
+                      The reference draws both, at those two levels, for that reason.
+                    */}
+                  <Tag className="cg-setup-card-tag">Optional</Tag>
+                  <span className="cg-card__spacer" />
+                  {/* T6 — a changed backup is shown as not applied, never as saved. */}
+                  {bNotApplied && (
+                    <Tag className="cg-setup-card-tag" data-not-applied="">
+                      Not applied
+                    </Tag>
+                  )}
+                  {/* `MULTI-CHANNEL-01` §2 I — adding or removing a server is a Servers commit. */}
+                  {holdsStationAdmin && backupEnabled && (
+                    <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>
+                      Remove backup
+                    </Button>
+                  )}
+                </div>
+                {backupEnabled ? (
+                  <div className="cg-card__body">
+                    {endpointFields(backup, setBackup, 'Backup', BACKUP_DEFAULTS)}
+                  </div>
+                ) : (
+                  /*
+                      The reference's `.empty-backup` — a glyph, the state, the consequence, and
+                      the one act that changes it, on the row that states the absence rather
+                      than in the card's head. `B-046`'s point survives verbatim: a single
+                      server is a CONFIGURATION, not a fault, so nothing here is a warning ink.
+                    */
+                  <div className="cg-setup-empty">
+                    <span className="cg-setup-empty__icon">
+                      <Icon icon={Server} size={20} />
+                    </span>
+                    <div className="cg-setup-empty__text">
+                      <span className="cg-setup-empty__title">No backup declared</span>
+                      <p className="cg-setup-empty__body">
+                        Single-server operation (B-046: quiet by design).
+                      </p>
+                    </div>
+                    {holdsStationAdmin && (
+                      <Button
+                        variant="add"
+                        aria-label="Add backup"
+                        onClick={() => setAddingBackup(true)}
+                      >
+                        Add backup
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </section>
+
+              {/*
+                  🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — WHICH OF THE BACKUP ENGINE'S OWN CHANNELS MIRRORS EACH OF
+                  THIS STATION'S, for the server B IN FORCE (never a draft): from its D4 (`2.9.5`), or a station
+                  admin's entry checked against it. Its own save — it does not wait for anything to leave air.
+              */}
+              {loaded?.servers.B !== undefined && (
+                <BackupChannelsCard state={backupChannels} mayChange={holdsStationAdmin} />
+              )}
+
+              {/*
+                  `C-024` — BESIDE THE SERVER HOSTS: a fact ABOUT the two servers above — the
+                  address they fetch templates from. 🔴 The bridge is NOT restarted, and nothing
+                  here offers to: `connections.set-config` rebuilds template serving on the
+                  running process.
+
+                  🔴 `SERVERS-SIMPLIFY-01` (T3) — **BEHIND `Advanced`, AND NAMED FOR WHAT IT IS.** It was
+                  `How those servers reach this machine`, and the owner read "this machine" as his own PC:
+                  `.32` then served every graphic from `.93` while `CG ADD` came back `CG OK`. It is
+                  `Where CasparCG fetches graphics`, its fields `Host` and `Port` with their defaults as
+                  placeholders, the chips labelled as CG Bridge's machine's addresses — and collapsed in a
+                  Playout station, where nothing here needs touching. A host that names another machine is
+                  the check's own failed line (`B-326`), with `Detect automatically` beside it.
+                */}
+              <details
+                className="cg-card cg-setup-advanced"
+                open={advancedShown}
+                onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
+                data-setup-advanced=""
+              >
+                <summary className="cg-card__head cg-setup-advanced__head">
+                  <Icon icon={advancedShown ? ChevronDown : ChevronRight} size={16} flipRtl />
+                  <span className="cg-card__title">Advanced</span>
+                </summary>
+                <div className="cg-card__body">
+                  {/* ⚠ This copy deliberately does not say "NO TEMPLATE" — that phrase is the
+                        ALARM, asserted ABSENT on a healthy apply, and ambient copy would drain it. */}
+                  <section
+                    className="cg-station-fields__group"
+                    aria-label="Where CasparCG fetches graphics"
+                  >
+                    <span className="cg-station-fields__name" aria-hidden="true">
+                      Where CasparCG fetches graphics
+                    </span>
+                    <div className="cg-setup-fields">
+                      {/* Both genuinely derive when left empty, which is why blank is legal on both
+                          (§10.3) — and why their placeholders say so. */}
+                      <SetupField
+                        label="Host"
+                        {...(holdsStationAdmin
+                          ? {}
+                          : {
+                              readOnlyValue: serveHost === '' ? 'derived automatically' : serveHost,
+                            })}
+                        id="serve-host"
+                        error={hostError(serveHost, { label: 'Host', blankAllowed: true })}
+                        {...(serveCandidates.length > 0
+                          ? {
+                              after: (
+                                <div
+                                  className="cg-setup-chips"
+                                  data-serve-candidates=""
+                                  role="group"
+                                  aria-label="CG Bridge's machine's addresses"
+                                >
+                                  {/* ⚠ CANDIDATES, NEVER A VERDICT: the bridge enumerates its own
+                                        machine's interfaces; it cannot know which one the plant
+                                        routes to. So they are labelled as what they are, and none is
+                                        marked as the answer. */}
+                                  <span className="cg-setup-field__hint" aria-hidden="true">
+                                    CG Bridge&apos;s machine
+                                  </span>
+                                  {serveCandidates.map((candidate) => (
+                                    <Button
+                                      key={candidate}
+                                      className="cg-setup-chip"
+                                      aria-label={`Use graphics host ${candidate}`}
+                                      title={`Use ${candidate}`}
+                                      onClick={() => setServeHost(candidate)}
+                                    >
+                                      {candidate}
+                                    </Button>
+                                  ))}
+                                </div>
+                              ),
+                            }
+                          : {})}
+                      >
+                        <input
+                          className="cg-field cg-field--mono"
+                          dir="ltr"
+                          aria-label="Graphics host"
+                          placeholder="Detect automatically"
+                          value={serveHost}
+                          onChange={(e) => setServeHost(hostValue(e.target.value))}
+                        />
+                      </SetupField>
+                      <SetupField
+                        label="Port"
+                        {...(holdsStationAdmin
+                          ? {}
+                          : {
+                              readOnlyValue:
+                                servePort === '' ? 'assigned automatically' : servePort,
+                            })}
+                        id="serve-port"
+                        error={portError(servePort, { min: 0, label: 'Port', blankAllowed: true })}
+                      >
+                        <NumericInput
+                          className="cg-field cg-field--mono"
+                          dir="ltr"
+                          allow="digits"
+                          aria-label="Graphics port"
+                          placeholder="Assign automatically"
+                          value={servePort}
+                          onValueChange={setServePort}
+                        />
+                      </SetupField>
+                    </div>
+                  </section>
+                  {flagServeHost === undefined ? null : (
+                    <div style={styles.maskedNote} data-testid="serve-host-masked">
+                      <span style={styles.inForce}>In force: {flagServeHost}</span>
+                      <span>(set by --template-serve-host)</span>
+                      <span style={styles.maskedStored}>
+                        {serveHost.trim().length === 0 ? 'empty (would derive)' : serveHost}
+                      </span>
+                      <span>
+                        not in force — overridden by --template-serve-host. It takes over at the
+                        next start without the flag, so it stays editable.
+                      </span>
+                    </div>
+                  )}
+                  {flagServePort === undefined ? null : (
+                    <div style={styles.maskedNote} data-testid="serve-port-masked">
+                      <span style={styles.inForce}>In force: {String(flagServePort)}</span>
+                      <span>(set by --template-serve-port)</span>
+                      <span style={styles.maskedStored}>
+                        {servePort.trim().length === 0 ? 'empty (ephemeral)' : servePort}
+                      </span>
+                      <span>not in force — overridden by --template-serve-port.</span>
+                    </div>
+                  )}
+
+                  {/*
+                      ⭐ `SETTINGS-DIALOG-01` §3 — REDUNDANCY FOLDED IN, because the reference
+                      draws one `Station connection` card holding the template address, the
+                      strategy and the failover switch, and the app had a second card
+                      (`Redundancy`) for the last two. They are facts about the SAME pair of
+                      servers, and the split cost a card head and a rule to say nothing.
+
+                      ⚠ The reference's `Station connection` is not adopted. Since
+                      `SERVERS-SIMPLIFY-01` (T3) the card is `Advanced`, and the graphics block in it
+                      is named for what it is — `Where CasparCG fetches graphics` — which
+                      `server-settings.spec.ts` queries by.
+
+                      ⚠ And the strategy keeps all THREE of the app's options. The reference
+                      draws two (`Mirror sync` / `Primary only`); `ConnectionConfig['strategy']`
+                      has three, and a select that cannot express a stored value is a defect,
+                      not a simplification.
+                    */}
+                  <div className="cg-setup-fields">
+                    <div className="cg-setup-field cg-setup-field--full">
+                      <span className="cg-setup-field__label">Strategy</span>
+                      <select
+                        className="cg-field"
+                        aria-label="Redundancy strategy"
+                        value={strategy}
+                        onChange={(e) =>
+                          setStrategy(e.target.value as ConnectionConfig['strategy'])
+                        }
+                      >
+                        <option value="mirror-sync">mirror-sync</option>
+                        <option value="mirror-async">mirror-async</option>
+                        <option value="journal-replay">journal-replay</option>
+                      </select>
+                      <p className="cg-setup-field__hint">
+                        How the backup is kept in step while both servers are configured.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="cg-setup-switch-row">
+                    <div className="cg-setup-switch-row__text">
+                      <span className="cg-setup-field__label">Automatic failover</span>
+                      <p className="cg-setup-field__hint">
+                        Switch to the backup if the primary becomes unavailable.
+                      </p>
+                    </div>
+                    {/*
+                        `SETTINGS-MATCH-02` — a SWITCH, not a bare tick. The control is still
+                        the native checkbox (it keeps the accessible name every spec queries by,
+                        and the keyboard); the track is drawn over it. A setting that is either
+                        on or off reads as a switch; a tick reads as an item in a list.
+                      */}
+                    <span className="cg-switch">
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        aria-label="Auto-failover enabled"
+                        checked={autoFailover}
+                        onChange={(e) => setAutoFailover(e.target.checked)}
+                      />
+                      <span className="cg-switch__track" aria-hidden="true" />
+                    </span>
+                  </div>
+                </div>
+
+                {/*
+                    🔴 `SETTINGS-MATCH-02` §9b — THE REMOTE-HOST NOTE IS A CARD HELP STRIP NOW,
+                    and the reclassification is the fix rather than a restyle.
+
+                    It was a `Notice` with `noticeRole="refusal"` — the AMBER treatment — for a
+                    fact that refuses nothing: a remote CasparCG is a configuration, and the
+                    sentence merely says which address the template server will use. `R-055`:
+                    a signal must not say what it does not mean, and amber in this dialog means
+                    BLOCKED (the rail's lock, the footer's clause, the banner). Spending it on
+                    an always-true explanation drains it where it is real.
+
+                    So it takes the class the reference gives exactly this kind of sentence —
+                    a help strip at the bottom of the card it is about — and the amber goes
+                    back to being about the on-air block alone.
+
+                    ⚠ It stays INSIDE this card, which is §9b's rule: a help strip belongs to
+                    one card and is not a pane-level band.
+                  */}
+                {/* T3 — "this machine" was read as the operator's own PC: it is CG Bridge's. */}
+                {remoteHosts.length > 0 && (
+                  <p className="cg-card__note cg-card__note--inline" data-remote-host-note="">
+                    <Icon icon={Info} size={STATION_SETUP_PX.helpIcon} />
+                    <span>
+                      Remote server ({remoteHosts.join(', ')}): the template server and OSC listener
+                      will use a LAN address so CasparCG can reach CG Bridge&apos;s machine. The
+                      control connection stays on 127.0.0.1.
+                    </span>
+                  </p>
+                )}
+              </details>
+            </SetupSection>
+          )}
+
+          {active === 'sources' && (
+            <SetupSection id="sources">
+              <SourcesSection report={reporters.sources} />
+            </SetupSection>
+          )}
+
+          {active === 'delimiters' && (
+            <SetupSection id="delimiters">
+              <DelimitersSection report={reporters.delimiters} />
+            </SetupSection>
+          )}
+
+          {active === 'candidate-layers' && (
+            /*
+                `SETTINGS-MATCH-02` DEFECT 3 — the head's SUMMARY TAGS and its `<details>` are
+                the section's, not the dialog's: `SetupSection` owns the head, so the pane
+                hands them in rather than drawing a second head of its own. Both read the same
+                selected-channel bank (`useChannelBankState`) the table does.
+              */
+            <SetupSection
+              id="candidate-layers"
+              summary={<CandidateLayersSummary />}
+              helper={<CandidateLayersHelper />}
+            >
+              <CandidateLayersSection
+                report={reporters.candidateLayers}
+                onDirtyChange={markDirty('candidate-layers')}
+                onDirtyCountChange={markDirtyCount('candidate-layers')}
+                footerSlot={footerSlot}
+              />
+            </SetupSection>
+          )}
+        </div>
+      </TabPanel>
+
+      {/*
+        §6 — THE SAME SMALL SECOND DIALOG. It adds the record to the Servers DRAFT; APPLY
+        SERVERS is still what reaches the bridge, and the dialog says so.
+      */}
+      {addingBackup && (
+        <BackupServerDialog
+          onCancel={() => setAddingBackup(false)}
+          onAdd={(draft) => {
+            setBackup(draft);
+            setBackupEnabled(true);
+            setAddingBackup(false);
+          }}
+        />
+      )}
+    </Modal>
+  );
+}

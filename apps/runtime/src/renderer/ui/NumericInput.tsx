@@ -1,5 +1,12 @@
 import type { InputHTMLAttributes } from 'react';
-import { latinDigits } from '@cg/text-shaping';
+import {
+  formatNumberLike,
+  latinDigits,
+  parseLocalizedNumber,
+  writeFieldDigits,
+  type FieldDigits,
+} from '@cg/text-shaping';
+import { writeDigitsAsTyped } from './fieldDigitsInput.js';
 import { arrowStep, runScrubGesture } from './scrubGesture.js';
 
 /**
@@ -10,7 +17,9 @@ import { arrowStep, runScrubGesture } from './scrubGesture.js';
  * `latinDigits` (from @cg/text-shaping, same helper the render path uses) maps
  * Persian ۰–۹ and Arabic-Indic ٠–٩ to Latin and preserves everything else, so
  * the value a caller receives — and therefore everything stored or put on the
- * wire — is always canonical Latin digits.
+ * wire — is always canonical Latin digits. The one exception is a TEMPLATE VALUE: the
+ * operator's own text, kept as typed (`digits="as-typed"`, `PERSIAN-DIGITS-01`) or written in
+ * its field's digit set (`FIELD-DIGITS-01`).
  *
  * Deliberately `type="text"` + `inputMode`: a browser `type="number"` input
  * SILENTLY DROPS non-Latin digits before `onChange` ever fires, so a
@@ -36,7 +45,10 @@ interface NumericInputProps extends Omit<
   'type' | 'inputMode' | 'value' | 'onChange'
 > {
   value: string;
-  /** Receives the NORMALIZED value (canonical Latin digits) on every change. */
+  /**
+   * Receives the NORMALIZED value (canonical Latin digits) on every change — or, with
+   * `digits="as-typed"`, the operator's text exactly as typed.
+   */
   onValueChange: (next: string) => void;
   /** Accept a decimal value: ٫ also normalizes to "." and the OSK offers one. */
   decimal?: boolean;
@@ -50,6 +62,47 @@ interface NumericInputProps extends Omit<
    * control is worse than meaningless. A caller says when the value is a magnitude.
    */
   scrub?: { step?: number | undefined; min?: number | undefined; max?: number | undefined };
+  /**
+   * 🔴 `SETTINGS-MATCH-02` §10.3 — **DIGITS ONLY: keep `0-9`, drop everything else.**
+   *
+   * ── WHY IT IS OPT-IN RATHER THAN THIS PRIMITIVE'S DEFAULT ───────────────────
+   *
+   * Normalising Persian digits is right for every numeric field and always has been, which is
+   * why it is unconditional above. FILTERING is not: this component also serves values that
+   * legitimately hold a character that is not a digit — a position offset can be negative
+   * (`-`), a `decimal` field carries a `.`, and both are mid-typing states (`-`, `1.`) that a
+   * filter would eat as the operator typed them.
+   *
+   * So the fields whose contract is a WHOLE NUMBER say so — the ports, a device index, a route
+   * channel, a layer — and nothing else changes. `fieldValue.ts` carries the contract table
+   * that decides which ones those are.
+   *
+   * ⚠ Applied to the VALUE, in `onChange`, never to the keystroke: `preventDefault` on keydown
+   * would break paste, Ctrl+A/C/V, the arrows, Home/End and undo — and paste is the path that
+   * actually carries `port 5250 (AMCP)` into a field.
+   */
+  allow?: 'digits';
+  /**
+   * 🔴 `PERSIAN-DIGITS-01` — **WHOSE NUMBER IS THIS?** A CONSOLE number (a port, an offset, a
+   * PIN) is the console's own, and it normalises to Latin as above: `latin`, the default. A
+   * TEMPLATE VALUE is the operator's, and the owner's rule is that it keeps its digits exactly as
+   * the keyboard typed them: `as-typed` hands the text over UNCHANGED and leaves reading it to
+   * the caller, through `@cg/text-shaping`'s one reader.
+   *
+   * The scrub still works in `as-typed`: it reads the current text through the same reader and
+   * writes the new number back in the text's own digit set and decimal mark
+   * (`formatNumberLike`) — a drag on `۱۲٫۵` shows `۱۳٫۵`, never `13.5`.
+   *
+   * ⚠ `allow="digits"` is a console-number filter and is not applied in `as-typed`: filtering
+   * after NOT normalising would delete every Persian digit the operator typed.
+   *
+   * `FIELD-DIGITS-01` — `persian` and `arabic-indic` are a template field's own choice: every
+   * digit is written in that set as it is typed, whatever key produced it, and a `decimal`
+   * value's mark with it (`٫`), through `@cg/text-shaping`'s one writer; the caret stays where it
+   * was. The scrub writes its new number in the same set. The reading is the caller's, as in
+   * `as-typed`.
+   */
+  digits?: FieldDigits;
 }
 
 export function NumericInput({
@@ -57,15 +110,63 @@ export function NumericInput({
   onValueChange,
   decimal = false,
   scrub,
+  allow,
+  digits = 'latin',
   ...rest
 }: NumericInputProps): JSX.Element {
+  const asTyped = digits === 'as-typed';
+  /** A template field's digit set (`FIELD-DIGITS-01`) — Latin stays the console's own path. */
+  const fieldSet = digits === 'persian' || digits === 'arabic-indic';
+  const kind = decimal ? 'number' : 'text';
   // The gestures operate on a NUMBER while the input is controlled by a STRING (so
   // "-", "1." and "" survive typing). A value that is not yet a number simply has
   // no magnitude to adjust, so both gestures no-op rather than guessing at 0.
-  const numeric = scrub === undefined ? null : Number(value);
+  const numeric =
+    scrub === undefined
+      ? null
+      : asTyped || fieldSet
+        ? (parseLocalizedNumber(value) ?? NaN)
+        : Number(value);
   const current =
     numeric !== null && value.trim() !== '' && Number.isFinite(numeric) ? numeric : null;
-  const emit = (next: number): void => onValueChange(String(next));
+  const emit = (next: number): void =>
+    onValueChange(
+      fieldSet
+        ? writeFieldDigits(formatNumberLike(next, value), digits, kind)
+        : asTyped
+          ? formatNumberLike(next, value)
+          : String(next),
+    );
+  /*
+   * 🔴🔴 **DISABLED IS A BEHAVIOUR, NOT A RENDERING** — `INSPECTOR-DELTA` §1, measured.
+   *
+   * `disabled` rode in on `...rest` and reached the `<input>` only, so the browser stopped
+   * TYPING and this component went on running the whole scrub gesture. On a row that is ON
+   * AIR the POSITION section says `locked while on air` and renders both boxes disabled —
+   * and a drag still moved the value. Measured in Chromium, `position-lock-refuses-drag`:
+   * a locked X field went **50 → 130** under one drag.
+   *
+   * ⚠ **THE INTUITION THAT THIS CANNOT HAPPEN IS WRONG, which is why it survived.** A
+   * disabled form control is barred from ACTIVATION behaviour — no `click`, no focus, no
+   * typing — and it is easy to read that as "no pointer events either". It is not:
+   * `pointerdown` is dispatched to a disabled `<input type="text">` and it is the only event
+   * this gesture needs, because `runScrubGesture` then listens on the WINDOW for the moves.
+   * The browser's own guard stops at the edge of the thing the browser owns.
+   *
+   * 🔴 A field that LOOKS locked and accepts a drag is worse than one that never claimed to
+   * be locked: the operator trusts the word and moves a graphic that is transmitting. So the
+   * refusal is asked HERE, of the props, once — and the two gestures read the SAME
+   * evaluation, because a pointer guard without the matching key guard is the same defect
+   * with a different input device.
+   *
+   * ⚠ `readOnly` is included deliberately. It is the other spelling of "you may not change
+   * this value", and a gesture that honours one and not the other is a rule with two
+   * meanings. No caller pairs it with `scrub` today; that is exactly when to close it.
+   *
+   * ⚠ This changes NO refusal CONDITION. `isPositionLocked` is untouched and decides who is
+   * locked; this only makes the control obey what it already claims.
+   */
+  const inert = rest.disabled === true || rest.readOnly === true;
 
   return (
     <input
@@ -73,12 +174,16 @@ export function NumericInput({
       type="text"
       inputMode={decimal ? 'decimal' : 'numeric'}
       value={value}
-      // `ew-resize` is the affordance: it says "drag me sideways" before the
-      // operator tries. Only when scrubbing is actually enabled.
-      style={scrub !== undefined ? { cursor: 'ew-resize', ...rest.style } : rest.style}
+      /*
+        `ew-resize` is the affordance: it says "drag me sideways" before the operator tries.
+        Only when scrubbing is actually enabled — and only when it will actually be honoured.
+        A locked field advertising the gesture it is about to refuse is the shape lying about
+        the behaviour (golden rule 11), and it is how the owner came to try the drag at all.
+      */
+      style={scrub !== undefined && !inert ? { cursor: 'ew-resize', ...rest.style } : rest.style}
       onPointerDown={(e) => {
         rest.onPointerDown?.(e);
-        if (scrub === undefined || current === null || e.button !== 0) return;
+        if (inert || scrub === undefined || current === null || e.button !== 0) return;
         const el = e.currentTarget;
         // Already editing? Let the click place the caret normally — a scrub would
         // hijack an ordinary text interaction.
@@ -98,7 +203,8 @@ export function NumericInput({
       }}
       onKeyDown={(e) => {
         rest.onKeyDown?.(e);
-        if (scrub === undefined || current === null || e.defaultPrevented) return;
+        // THE SAME `inert`, read from the same place as the pointer guard above.
+        if (inert || scrub === undefined || current === null || e.defaultPrevented) return;
         const next = arrowStep(e, { value: current, ...scrub });
         if (next === null) return;
         // Stop the caret from also jumping to the start/end of the text.
@@ -108,16 +214,47 @@ export function NumericInput({
       onChange={(e) => {
         const el = e.currentTarget;
         const raw = el.value;
-        const normalized = normalizeDigits(raw, { decimal });
-        if (normalized !== raw) {
-          // The mapping is 1:1 per character, so the caret index survives the
-          // swap — write the DOM now and restore it, or React's controlled
-          // re-render would throw the caret to the end on a mid-string edit.
-          const caret = el.selectionStart;
-          el.value = normalized;
-          if (caret !== null) el.setSelectionRange(caret, caret);
+        // A template value is the operator's text, verbatim — see `digits`.
+        if (asTyped) {
+          onValueChange(raw);
+          return;
         }
-        onValueChange(normalized);
+        // …or written in its field's digit set as it is typed (`FIELD-DIGITS-01`).
+        if (fieldSet) {
+          onValueChange(writeDigitsAsTyped(el, digits, kind, e.nativeEvent));
+          return;
+        }
+        const normalized = normalizeDigits(raw, { decimal });
+        /*
+          §10.3 — normalise FIRST, then filter. The order is the whole of §10.2: a Persian
+          `۵` has to become `5` before anything asks whether it is a digit, or the operator's
+          own keyboard produces a field he cannot type into.
+        */
+        const next = allow === 'digits' ? normalized.replace(/[^0-9]/g, '') : normalized;
+        if (next !== raw) {
+          /*
+            Normalising is 1:1 per character, so the caret index survives it — write the DOM
+            now and restore it, or React's controlled re-render would throw the caret to the
+            end on a mid-string edit.
+
+            ⚠ FILTERING is not 1:1: dropping a character means everything after it moves left
+            by one, so the caret is walked back by however many characters were removed BEFORE
+            it. Without that, typing a letter in the middle of `5250` left the caret one place
+            to the right of where the operator was working.
+          */
+          const caret = el.selectionStart;
+          el.value = next;
+          if (caret !== null) {
+            const removedBefore = raw.slice(0, caret).length - next.slice(0, caret).length;
+            const dropped =
+              allow === 'digits'
+                ? normalizeDigits(raw.slice(0, caret), { decimal }).replace(/[^0-9]/g, '').length
+                : caret - removedBefore;
+            const at = Math.max(0, Math.min(next.length, allow === 'digits' ? dropped : caret));
+            el.setSelectionRange(at, at);
+          }
+        }
+        onValueChange(next);
       }}
     />
   );

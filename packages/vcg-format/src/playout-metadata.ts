@@ -23,8 +23,15 @@ export interface PlayoutMetadata {
    */
   holdSource?: HoldSource;
   outPoint?: number;
+  /** The hold WITHIN a pass. ⚠ Not the gap between passes — see {@link PlayoutMetadata.delayMs}. */
   holdMs?: number;
   repeat?: number | 'infinite';
+  /**
+   * `TIMING-BUILD-21` — the gap BETWEEN passes in milliseconds, so a scheduler computing a
+   * looped composition's total length includes the dead air the author asked for. Omitting it
+   * would make an N-pass template read as shorter than it is by `(N − 1) × delayMs`.
+   */
+  delayMs?: number;
   /**
    * The outro's duration in milliseconds —
    * `(activeRange.out − outPoint) / frameRate × 1000`. Present only when the
@@ -48,6 +55,7 @@ export function buildPlayoutMetadata(scene: Scene): PlayoutMetadata {
   if (holdSource === 'content-driven') meta.holdSource = 'content-driven';
   if (playout.holdMs !== undefined) meta.holdMs = playout.holdMs;
   if (playout.repeat !== undefined) meta.repeat = playout.repeat;
+  if (playout.delayMs !== undefined) meta.delayMs = playout.delayMs;
   if (scene.lifecycle !== undefined) {
     const active = activeRangeOf(scene);
     meta.outPoint = scene.lifecycle.outPoint;

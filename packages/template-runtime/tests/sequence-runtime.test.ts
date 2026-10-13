@@ -177,7 +177,7 @@ function sequenceScene(opts: {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     ...(opts.playout !== undefined ? { playout: opts.playout } : {}),
     layers: [
       {
@@ -444,7 +444,7 @@ describe('createRuntime — D-083 composition sequence items (text | composition
       name: 'Clock card',
       resolution: { width: 400, height: 60 },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         {
           id: 'cl',
@@ -468,7 +468,7 @@ describe('createRuntime — D-083 composition sequence items (text | composition
       name: 'Label card',
       resolution: { width: 400, height: 60 },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         {
           id: 'cl',
@@ -531,7 +531,7 @@ describe('createRuntime — D-083 composition sequence items (text | composition
       frameRate: 50,
       safeAreas: { title: 10, action: 5 },
       frameRange: { in: 0, out: 50 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       playout: { mode: 'manual' },
       layers: [
         {
@@ -637,6 +637,46 @@ describe('createRuntime — D-083 composition sequence items (text | composition
     // The operator edits the BOUND field (by its id, not the instance namespace) → the item updates.
     await runtime.update({ headline: 'Operator text' });
     expect(visibleItems()).toEqual(['Operator text']);
+  });
+
+  /** FIELD-DIGITS-01 — one bound text item, its field set to `digits`; the item's text after an update. */
+  async function boundItemDraws(digits: 'persian' | 'latin', value: string): Promise<string[]> {
+    const runtime = createRuntime(
+      compScene(
+        { advance: 'manual', repeat: 'infinite', items: [{ id: 'a', text: 'authored' }] },
+        [],
+        {
+          fields: [
+            {
+              id: 'headline',
+              type: 'text',
+              label: 'Headline',
+              required: false,
+              default: 'authored',
+              digits,
+            },
+          ],
+          bindings: [
+            {
+              fieldId: 'headline',
+              target: { kind: 'sequence-item-text', elementId: 'seq', itemId: 'a' },
+            },
+          ],
+        },
+      ),
+      { skipFontLoad: true, clock: makeClock() },
+    );
+    await runtime.play({});
+    await runtime.update({ headline: value });
+    return visibleItems();
+  }
+
+  it('(FIELD-DIGITS-01) a bound text item draws in its field digits', async () => {
+    expect(await boundItemDraws('persian', 'ساعت 12:30')).toEqual(['ساعت ۱۲:۳۰']);
+  });
+
+  it('(FIELD-DIGITS-01) a bound text item in a Latin field draws Latin (the control)', async () => {
+    expect(await boundItemDraws('latin', 'ساعت ۱۲:۳۰')).toEqual(['ساعت 12:30']);
   });
 
   it('a LIST-BOUND sequence ignores per-item text keys (the bound list owns the items)', async () => {
@@ -776,5 +816,69 @@ describe('createRuntime — D-083 composition sequence items (text | composition
     expect(live).toBe(1);
     driver.destroy(); // must tear it down — NOT rebuild a stranded subtree
     expect(live).toBe(0);
+  });
+});
+
+describe('createRuntime — a sequence draws in its Digits choice (TEXT-DIGITS-01)', () => {
+  const twoTimes = [
+    { id: 'a', text: 'ساعت 14' },
+    { id: 'b', text: 'ساعت 15' },
+  ];
+
+  it('the authored items draw in the element’s Digits — the static first item and the run', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      sequenceScene({
+        playout: { mode: 'manual' },
+        sequence: { advance: 'manual', repeat: 'infinite', items: twoTimes, digits: 'persian' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    expect(visibleItems()).toEqual(['ساعت ۱۴']); // the Designer canvas, before the run
+    await runtime.play({});
+    expect(visibleItems()).toEqual(['ساعت ۱۴']);
+    await runtime.next?.();
+    await run(clock, 400);
+    expect(visibleItems()).toEqual(['ساعت ۱۵']);
+  });
+
+  it('an old sequence — no Digits key — shows its items exactly as stored (the control)', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      sequenceScene({
+        playout: { mode: 'manual' },
+        sequence: { advance: 'manual', repeat: 'infinite', items: twoTimes },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    expect(visibleItems()).toEqual(['ساعت 14']);
+    await runtime.play({});
+    expect(visibleItems()).toEqual(['ساعت 14']);
+  });
+
+  it('a list-bound sequence draws the LIST’s Digits, not the element’s', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      sequenceScene({
+        playout: { mode: 'manual' },
+        sequence: { advance: 'manual', repeat: 'infinite', items: twoTimes, digits: 'latin' },
+        fields: [
+          {
+            id: 'rundown',
+            label: 'Rundown',
+            required: false,
+            type: 'list',
+            default: [{ id: 'a', text: 'ساعت 14' }],
+            digits: 'persian',
+          },
+        ],
+        bindings: [{ fieldId: 'rundown', target: { kind: 'sequence-items', elementId: 'seq' } }],
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    expect(visibleItems()).toEqual(['ساعت ۱۴']);
+    await runtime.update({ rundown: [{ id: 'a', text: 'ساعت 20' }] });
+    expect(visibleItems()).toEqual(['ساعت ۲۰']);
   });
 });

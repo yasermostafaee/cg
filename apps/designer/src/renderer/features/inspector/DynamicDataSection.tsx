@@ -1,16 +1,22 @@
 import { useState } from 'react';
-import type {
-  DynamicField,
-  FieldBinding,
-  RepeaterElement,
-  Scene,
-  SequenceElement,
-  TextElement,
-  TickerElement,
+import {
+  fieldAllowsFileSource,
+  fieldDigitsOf,
+  FieldDigitsSchema,
+  NumberFieldDigitsSchema,
+  type DynamicField,
+  type FieldBinding,
+  type RepeaterElement,
+  type Scene,
+  type SequenceElement,
+  type TextElement,
+  type TickerElement,
 } from '@cg/shared-schema';
+import type { DigitSet } from '@cg/text-shaping';
 import { designerStore, type ElementFieldMetaPatch } from '../../state/store.js';
 import { CollapseSection } from './CollapseSection.js';
 import { NumberField, SelectField, TextField } from './controls.js';
+import { DigitsField } from './DigitsField.js';
 import {
   CUSTOM_PATTERN,
   PATTERN_PRESET_ORDER,
@@ -211,6 +217,13 @@ function FieldMeta({
           checked={field.required}
           onChange={(v) => patch({ required: v })}
         />
+        {/* TEXT-DIGITS-01 — a list's items are typed text: the one Digits control. */}
+        <DigitsField
+          value={fieldDigitsOf(field)}
+          options={FieldDigitsSchema.options}
+          onCommit={(v) => patch({ digits: v })}
+        />
+        <FileSourceRow field={field} onChange={(v) => patch({ allowFileSource: v })} />
         <p className={s.hint}>
           The field’s items are the {element.type}’s Items section; operators edit them live in the
           preview’s data form.
@@ -244,6 +257,15 @@ function FieldMeta({
         options={['text', 'number'] as const}
         onCommit={(v) => patch({ fieldType: v })}
       />
+      {/* FIELD-DIGITS-01 / TEXT-DIGITS-01 — the one Digits control; Keyboard only for text, since
+          a number reaches the page as a number. Absent reads Keyboard / Latin (`fieldDigitsOf`). */}
+      <DigitsField
+        value={fieldDigitsOf(field)}
+        options={
+          fieldType === 'number' ? NumberFieldDigitsSchema.options : FieldDigitsSchema.options
+        }
+        onCommit={(v) => patch({ digits: v })}
+      />
       {fieldType === 'text' && (
         <>
           <CheckRow
@@ -275,6 +297,12 @@ function FieldMeta({
             resetKey={element.id}
             onCommit={(p) => patch({ pattern: p })}
           />
+          {/* TEXT-FILE-OPT-01 — inside the `fieldType === 'text'` block on purpose:
+              a NUMBER cannot hold file content, so the author is never shown a
+              control for a grant that could not exist. Switching to Number drops
+              any grant the field had (`rebuildField`), so nothing is hidden here —
+              it is gone. */}
+          <FileSourceRow field={field} onChange={(v) => patch({ allowFileSource: v })} />
         </>
       )}
       {fieldType === 'number' ? (
@@ -282,12 +310,18 @@ function FieldMeta({
           label="Value"
           value={field.type === 'number' ? field.default : 0}
           step={1}
+          // `PERSIAN-DIGITS-01` — a template value, read by the one reader; `TEXT-DIGITS-01` — shown
+          // and typed in the field's digits, what goes on air.
+          digits="as-typed"
+          valueDigits={numberDigits(field)}
           onCommit={(n) => patch({ default: n })}
         />
       ) : (
         <TextField
           label="Value"
           value={defaultStr(field)}
+          // `TEXT-DIGITS-01` — typed in the field's digits (Keyboard: the keyboard's), what goes on air.
+          digits={fieldDigitsOf(field)}
           onCommit={(v) => patch({ default: v })}
           resetKey={element.id}
         />
@@ -347,6 +381,41 @@ function PatternField({
   );
 }
 
+/**
+ * TEXT-FILE-OPT-01 — the AUTHORED grant that decides whether the Runtime operator
+ * may point this field at a text file.
+ *
+ * WHY IT IS AUTHORED HERE AT ALL. The Runtime's "From file…" affordance used to be
+ * gated on FIELD KIND alone, which is a decision about a TYPE rather than about a
+ * field: it rendered identically under a twelve-character `title` and under a
+ * four-hundred-word crawl, once per text / multiline / list field on the template.
+ * The owner's report — _"it is really for subtitles and long copy, not small
+ * labels"_ — is a statement only the AUTHOR can make, and this is where they are
+ * already saying what kind of content the field holds.
+ *
+ * The hint names the operator's control because that is the honest explanation of
+ * what ticking the box does; the LABEL names the grant, not the control.
+ */
+function FileSourceRow({
+  field,
+  onChange,
+}: {
+  field: DynamicField;
+  onChange: (v: boolean) => void;
+}): JSX.Element {
+  const granted = fieldAllowsFileSource(field);
+  return (
+    <>
+      <CheckRow label="Allow file source" checked={granted} onChange={onChange} />
+      <p className={s.hint}>
+        {granted
+          ? 'Operators can point this field at a text file and reload it — for subtitles and long copy.'
+          : 'Off: operators type this field by hand. Turn it on for subtitles and long copy prepared elsewhere.'}
+      </p>
+    </>
+  );
+}
+
 function CheckRow({
   label,
   checked,
@@ -386,4 +455,10 @@ function patternOf(f: DynamicField): string {
 function defaultStr(f: DynamicField): string {
   if (f.type === 'image') return '';
   return typeof f.default === 'string' ? f.default : String(f.default);
+}
+
+/** `TEXT-DIGITS-01` — a number field's digit set (a number is never Keyboard; absent reads Latin). */
+function numberDigits(f: DynamicField): DigitSet {
+  const digits = fieldDigitsOf(f);
+  return digits === 'as-typed' ? 'latin' : digits;
 }

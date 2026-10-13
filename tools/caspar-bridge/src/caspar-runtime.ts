@@ -1,34 +1,76 @@
 import {
+  AmcpTimeoutError,
   DEFAULT_LAYER_POLICY,
   isLiveState,
   LayerManager,
   OutOfLayersError,
+  oscProducerKind,
   Reconciler,
   RedundancyAdapter,
   ServerSession,
   UnknownTemplateTypeError,
   type FailoverEvent,
+  type OscOccupancyTap,
   type LayerPolicy,
   type LayerSlot,
+  type ParsedAmcpResponse,
   type ServerLabel,
+  type ServerSessionState,
 } from '@cg/caspar-client';
-import { positionQuery } from '@cg/shared-schema';
+import {
+  isRestorable,
+  liveSourceFit,
+  positionQuery,
+  resolveDefaultPosition,
+  type LiveSourceFit,
+} from '@cg/shared-schema';
 import type {
   AuditEntry,
+  CgControl,
+  CgPassTiming,
   FieldValues,
+  LiveFitMode,
+  LivePlateVolumes,
+  LiveSourceDeclaration,
+  LiveSourceOverride,
   Position,
   RetainedStackItem,
   StackItemState,
+  StackItemTimingOverride,
+  TakeRefusal,
 } from '@cg/shared-schema';
+import { isOnAirStatus, isRetainedOnAir, ownsLiveSeats, withCgControl } from '@cg/shared-schema';
 import {
-  isLayerVisible,
+  bankForChannel,
+  firstBank,
+  fixedBanksSlots,
+  isLowBankLayer,
+  layerAlias,
+  lowBankEnd,
+  requiredBankFor,
+  sortBanks,
   // R-030 — the video-mode token map lives in shared-ipc, not caspar-client, so
   // the browser's MockRuntime can read the SAME map without dragging `node:net`
   // into the SPA bundle (see channelSettings.ts for the full reasoning).
   parseVideoModeFromInfo,
+  videoModeFramePeriodMs,
   videoModeRaster,
+  // C-029 — the program-output check's two parsers and its diff, beside the wire types
+  // they read into, for the same reason as `parseVideoModeFromInfo` above.
+  judgeConsumers,
+  parseDeclaredConsumersFromConfig,
+  parseRunningConsumersFromInfo,
+  type ChannelOutputCheck,
+  type DeclaredChannelConsumers,
+  type RunningConsumer,
+  type LayerClearReason,
   type PLAYOUT_CLEAR_REASONS,
+  type RestoreMigration,
+  type RestoreSkip,
+  type RestoreSkipReason,
+  type StackRestoreReport,
   type PlayoutLayerState,
+  type LiveLayerState,
   type DelimiterOption,
   type ChannelResponse,
   type ConnectionConfig,
@@ -40,17 +82,69 @@ import {
   type OrphanLayer,
   type OwnedOccupancyWarning,
   type PendingUpdate,
-  type Settings,
+  type TemplateAct,
+  templateActNaming,
+  // `CONSOLE-POLISH-01` (`R-083`) — the audit's page, its filter, and the one predicate over both.
+  AUDIT_PAGE_SIZE,
+  auditMatches,
+  templateDisplayName,
+  type AuditCursor,
+  type AuditFilter,
+  type AuditNaming,
   type TemplateInfo,
+  type TemplatePageRefusal,
+  type ClearedOutsideLayer,
+  type TemplateLook,
   type ChannelSettings,
   type ChannelSettingsState,
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
+  assignmentsOnChannel,
+  copyAssignmentsToChannel,
   checkSourceAssignments,
-  checkSourceCatalog,
+  checkSourceCatalogAgainstBanks,
+  // `PLATE-BAND-01` — the plate band in force, asked of the ONE reader; and which channels' Source
+  // defaults a write changes, for the channel grant.
+  plateBandInForce,
+  type PlateBandInForce,
+  channelsWhoseDefaultsDiffer,
+  describeTemplateReferences,
+  type TemplateReference,
+  activeLookOf,
+  liveSourceCarrierState,
+  lookPlateFits,
+  lookPlateRects,
   pruneAssignmentsForCatalog,
+  // `PLAYOUT-SOURCES-01` — what may be bound and what may be seated, asked of the ONE module.
+  sourceSeatable,
+  // `ROUTE-PLATES-01` — which entries are Playout routes, and on which channels one may be shown.
+  isPlayoutRoute,
+  sourceShowableOn,
+  // `PLAYOUT-FEATURES-01` B — an input that is a channel's own output loops there.
+  sourceLoopsOn,
+  ownOutputWords,
+  SOURCE_OWN_OUTPUT_CODE,
+  // `B-299` — the binding door names a source this channel may not show by rule 1's clause.
+  notShowableWords,
+  // `B-308` — a plate is `Plate N` in every sentence, and every name in one is isolated.
+  plateLabel,
+  isolateText,
+  lookLabel,
+  // `PLAYOUT-FEATURES-01` C — the playlist output's box is locked at volume 0.
+  isPlaylistOutput,
+  PLAYLIST_AUDIO_LOCKED_CODE,
+  unbindableChange,
+  redactUrlCredentials,
+  // `MEDIA-PLATES-01` — a clip's playback settings, through the ONE reader.
+  mediaPlaybackOf,
+  type MediaPlayback,
+  type MediaPlateState,
+  type MediaPlateTransportAction,
+  type LiveSourceLayerRange,
   type SourceAssignments,
   type SourceCatalog,
+  type SourceDefinition,
+  type SourceProducer,
   type SourcesSetAssignmentsReason,
   type SourcesSetConfigReason,
   type TemplateSourceAssignment,
@@ -58,29 +152,644 @@ import {
   type Rehearsal,
   type REHEARSE_ENTER_REASONS,
   type REHEARSE_EXIT_REASONS,
+  REMOVE_ON_AIR_CODE,
+  TAKE_ON_AIR_CODE,
+  EMPTIED_AIR_REFUSALS,
+  type EmptiedAirNotice,
+  type EmptiedAirRefusal,
+  FIRST_ALLOCATABLE_LAYER,
+  type StationStray,
 } from '@cg/shared-ipc';
-import { ChannelSettingsStore } from './channel-settings-store.js';
+import { randomBytes } from 'node:crypto';
 import {
-  validateFixedBank,
+  inAnyLayerBand,
+  isInCgBands,
+  ledgerChannels,
+  templateAdmitsPassTiming,
+  unlicensedTakeRefusal,
+  CG_UNLICENSED_CODE,
+  BACKUP_UNMAPPED_CODE,
+  backupUnmappedRefusal,
+} from '@cg/shared-ipc';
+import {
+  NO_BACKUP_CHANNELS,
+  serverBLineFor,
+  type BackupChannelMap,
+  type ServerBLineVerdict,
+} from './server-b-line.js';
+import {
+  operatorActor,
+  operatorConsoleAddress,
+  operatorSub,
+  runAsTemplate,
+} from './actor-context.js';
+import { SILENCE_CHECK_MS, SILENT_LAYER_MS, silentLayersToAsk } from './silent-layer-question.js';
+import {
+  ChannelSettingsStore,
+  adoptionNotice,
+  type AdoptedRaster,
+} from './channel-settings-store.js';
+import { OUTPUT_RECHECK_MS, describeMissingOutput, describeUnknownOutput } from './output-check.js';
+import {
   validateFixedBankChange,
+  validateFixedBankInstall,
+  validateFixedBanksChange,
   FixedLayersConfigError,
   type FixedLayersErrorCode,
   type SlotOccupancy,
+  type ValidateChangeOptions,
 } from './fixed-layers-store.js';
-import { CommandBuilder, type CommandSlot } from './command-builder.js';
+import type { AmcpLogEntry } from './amcp-log.js';
+import {
+  CommandBuilder,
+  summarizeWireLine,
+  type CommandSlot,
+  type TakeControl,
+} from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
+import {
+  foregroundUnchanged,
+  mayClearAfterRefusal,
+  outcomeOf,
+  type RefusalSeat,
+  type SeatOutcome,
+} from './refusal-cleanup.js';
+import {
+  projectLiveLayers,
+  reconcileLiveLayers,
+  type DroppedLiveLayer,
+  type LiveLayerAdoption,
+  type LiveLayerLedger,
+  type LiveLayerOccupancy,
+  type LiveLayerRecord,
+  type NormalizedRect,
+} from './live-layers.js';
+import {
+  AuditRecordMovedError,
+  AuditWriter,
+  DEFAULT_AUDIT_ROTATION,
+  auditFiles,
+  readAuditPage,
+  readRecentEntries,
+  type AuditFile,
+} from '@cg/audit';
+import {
+  LIVE_PLATE_SOURCE_NOT_SHOWABLE,
+  resolvePlateAssignments,
+} from './live-plate-assignment.js';
+import { amcpLineRefusal } from './amcp-guard.js';
+import { type BackupClip, type BackupRefusalReason } from './backup-media.js';
+
+/** `PLAYOUT-FEATURES-01` A (`B-286`) — a clip's `PLAY` refused because server B, the primary now, has no copy. */
+export const BACKUP_NO_COPY_CODE = 'backup-no-copy';
+import {
+  ROUTE_EPOCH_READ_MS,
+  ROUTE_EPOCH_STALE_CODE,
+  ROUTE_LOADBG_MAX_MS,
+  ROUTE_LOADBG_MIN_MS,
+  // `PLAYOUT-FEATURES-01` C — the reveal waits two ticks of the route's own rate (never under 80 ms).
+  routeRevealDelayMs,
+  ROUTE_WAITING_CODE,
+  ROUTE_WINDOW_MISSED_CODE,
+  SYSTEM_ROUTE_CLOCK,
+  isPlayoutRouteRecord,
+  sleepUntil,
+  type RouteClock,
+} from './route-plates.js';
+import { resolvePlateAspect, resolvePlateFitMode } from './live-plate-fit.js';
+import {
+  allocateLiveLayers,
+  liveBandExhaustedMessage,
+  LIVE_PLATE_NO_LAYER,
+  LIVE_PLATE_NO_RANGE,
+} from './live-plate-seating.js';
+import {
+  effectiveOverridesForLook,
+  framesOfLook,
+  resolveLookBindings,
+  seatCollisionMessage,
+  type LookSourceBindings,
+} from './live-look-bindings.js';
+import {
+  hiddenWhenHeld,
+  isParkedFit,
+  parkedFit,
+  releaseLivePlate,
+  type LivePlateRelease,
+} from './live-plate-release.js';
 import { TemplateRegistry } from './template-registry.js';
 import { DelimiterStore } from './delimiter-store.js';
 import {
   TemplateHttpServer,
   deriveServeOptions,
+  hostsUnableToFetchTemplates,
   isLoopbackHost,
+  servesFromAnotherMachine,
+  templateServeUnreachableWarning,
   type TemplateServeOptions,
   type TemplateServeOverride,
 } from './template-http-server.js';
+import {
+  detectServeHostCandidates,
+  resolveServeOverride,
+  storedServeOverride,
+} from './serve-host-config.js';
 
 /** R-010 — the `connections.set-config` response shape. */
 type SetConfigResult = ChannelResponse<typeof ConnectionsSetConfigChannel>;
+
+/**
+ * PANIC's report — `silenceAllLivePlates` and (`MULTI-CHANNEL-01` §2 C) its per-channel sibling
+ * `silenceChannelLivePlates` return this one shape, from one loop.
+ */
+interface PanicReport {
+  ok: boolean;
+  /** Plates whose `MIXER … VOLUME 0` LANDED on the wire — what actually left air. */
+  silenced: number;
+  /** Plates whose intent was set to `0`, including the held (already silent) ones. */
+  recorded: number;
+  /** WHICH rows it addressed, and how many plates each owns. */
+  rows: { itemId: string; plates: number }[];
+  failed: { itemId: string; plateId: string; reason: string }[];
+}
+
+/**
+ * R-021 stage 4 (task 3.1) — where a restored item is put, or WHY it is not.
+ *
+ * A bare `CommandSlot | null` could not carry the second answer, and B-108's rule
+ * is that every skip is reported WITH ITS REASON: "your operator row was already
+ * taken" and "the dynamic range is exhausted" send the operator to two different
+ * places, and only one of them can be fixed by removing something.
+ */
+type RestorePlacement =
+  | {
+      /**
+       * 🔴 `LAYER-BANDS-16` — **`null` means THE ROW NEEDS NO LAYER**, and that is a
+       * different answer from every skip.
+       *
+       * A `cleared` or `error` row holds nothing on the channel: `isRestorable` says so in
+       * as many words, and for those two states occupancy is not even consulted. Such a row
+       * must still COME BACK — visibly, wearing its state and its reason — and it comes back
+       * onto no coordinate at all.
+       *
+       * ⚠ **WHAT THIS REPLACES, recorded so nobody "restores" it as a fix.** Until the
+       * dynamic allocator was retired, `#slotForRestore` fell through to `#allocate()`, so
+       * an errored row — one that never had a producer and never will — was handed a
+       * DYNAMIC LAYER IT NEVER USED: assigned, written into `#slots`, and given OSC
+       * interest on a layer nothing would ever be placed on. That was not a feature; it was
+       * the allocator being the only way this function knew how to return. The layers it
+       * invented came from the dynamic ranges, which after the 2026-09-14 re-cut lie in the
+       * span left to the playout server — so bringing the fall-through back would put a
+       * phantom claim on somebody else's layer.
+       *
+       * ⚠ INTERNAL. This type is module-local and never crosses the seam: `StackItemState`
+       * and `RetainedStackItem` already declare `slot` OPTIONAL, and `Reconciler.restoreItem`
+       * never took one, so a row that comes back without a layer needs no wire, IPC or
+       * persisted-key change.
+       */
+      slot: CommandSlot | null;
+      /**
+       * `single-clock-look-switch` — set when the retained coordinate was an OPERATOR row and
+       * the package turned out to be a graphics BED, so the row was re-homed onto a bed row.
+       * Present ONLY for that migration; every other placement leaves it absent.
+       */
+      migratedFrom?: CommandSlot;
+    }
+  | { skip: RestoreSkipReason };
+
+/**
+ * C-015 phase 6 (task 6.0) — ONE plate, fully resolved and ready to seat.
+ *
+ * Every term is DECIDED before a single command leaves this process: which
+ * catalog entry the plate resolved to, which layer it goes on, and the exact
+ * geometry. That split is the point of the type — a refusal (unassigned plate,
+ * contradicted aspect, no room in the band) must be reachable while the wire is
+ * still untouched, so a refused take mutates nothing at all.
+ */
+/**
+ * `B-199` — the seating plan `#applyLivePlates` applies, NAMED so the guard wrapper and the
+ * method it guards can share one signature. It was an inline literal on the method; a wrapper
+ * cannot restate an inline literal without becoming a second place the shape is written down.
+ */
+interface LivePlateApplyPlan {
+  readonly placements: readonly LivePlatePlacement[];
+  readonly parked: readonly LivePlatePlacement[];
+  /**
+   * Keyed by the PRODUCER ARGUMENT — the seat's identity (session BM). The catalogue ENTRY, because
+   * `canHoldLivePlate` reads a clip's `whenHidden` beside the producer form (`MEDIA-PLATES-01`).
+   */
+  readonly resolved: ReadonlyMap<string, SourceDefinition>;
+  readonly offFrame: ReadonlySet<string>;
+  /** The producer arguments some look still binds. Keyed by identity, like `resolved`. */
+  readonly declared: ReadonlySet<string>;
+  readonly unresolved: ReadonlySet<string>;
+}
+
+interface LivePlatePlacement {
+  /** The layer this seat's producer goes on — inside the declared band. */
+  readonly slot: CommandSlot;
+  /**
+   * The SCENE's handle for the hole (`guest-1`) that punches this seat in the look being
+   * entered — or, for a PARKED seat, the frame that will punch it when its look arrives.
+   *
+   * ⚠ **Session BM: this is the seat's LABEL, not its identity.** It is what the ledger
+   * records and what the operator's table shows, and it can legitimately CHANGE across a
+   * look switch when a different frame comes to punch the same input. {@link producerArg}
+   * is what the seat IS.
+   */
+  readonly plateId: string;
+  /**
+   * 🔴 **THE SEAT'S IDENTITY — the wire argument this producer is played with.**
+   *
+   * `looks.ts`'s invariant is _"never N producers on one route"_, and a route is the wire
+   * string. Keying on it is what makes the invariant mean what it says, and it needs no
+   * new persisted field: the ledger already records `producer` as SENT.
+   */
+  readonly producerArg: string;
+  /** The assigned catalog entry's producer, still as a parsed union. */
+  readonly producer: SourceProducer;
+  /**
+   * `FIELD-FIXES-01` B — the catalog entry this seat resolved to: its stable id, and the NAME the
+   * operator gave it. Carried so a refused seat is named in the operator's words (`studio1`) from
+   * the resolution the wire was built from, never from a later read of a catalog that may have
+   * been edited since.
+   */
+  readonly source: {
+    readonly id: string;
+    readonly name: string;
+    /**
+     * `PLAYOUT-SOURCES-01` — where the entry came from. `input` (D10) makes this a plate that is seated
+     * silent and only ever raised by a ramp (contract v1.3 rule 2).
+     */
+    readonly origin?: 'input' | 'media';
+    /**
+     * `PLAYOUT-FEATURES-01` C — the Playout channel whose PLAYLIST this entry outputs: its box is always
+     * at `VOLUME 0` (`isPlaylistOutput`).
+     */
+    readonly playlistOf?: number;
+    /** `PLAYOUT-FEATURES-01` A (`B-286`) — a clip's content fingerprint: the key server B's own copy is found by. */
+    readonly fingerprint?: string;
+  };
+  /** `FILL` and `CLIP`, from ONE computation — never assembled separately. */
+  readonly fit: { readonly fill: NormalizedRect; readonly clip: NormalizedRect };
+  /**
+   * This seat is needed by SOME look but is not punched by the one being entered — §12.4's
+   * hold, and session BM's PRESET, which are the same state reached from two directions.
+   * Its {@link fit} is the parked one (`B-154`), so it renders nothing.
+   */
+  readonly held: boolean;
+  /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 — for a PLAYOUT ROUTE, the `epoch` of the D10 answer its
+   * `route://H-L` was resolved from (canonical). The seat step sends the route only while this is
+   * the current, confirmed epoch; the ledger keeps it. Absent on every other seat.
+   */
+  readonly epoch?: string;
+  /**
+   * `MEDIA-PLATES-01` — for a CLIP (a `media` producer), its playback settings as the catalogue
+   * holds them (`mediaPlaybackOf`, the one reader): `loop` decides `PLAY … LOOP`, `whenHidden`
+   * whether a parked seat is paused. Absent on every live input.
+   */
+  readonly playback?: MediaPlayback;
+}
+
+/** Is this placement a Playout route (`@cg/shared-ipc`'s one predicate, asked of a placement)? */
+function placementIsPlayoutRoute(placement: LivePlatePlacement): boolean {
+  return isPlayoutRoute({ origin: placement.source.origin, producer: placement.producer });
+}
+
+/** `ROUTE-PLATES-01` — the first Playout-route seat a plan holds (punched or parked), if any. */
+function planSeatsPlayoutRoute(plan: {
+  readonly placements: readonly LivePlatePlacement[];
+  readonly parked: readonly LivePlatePlacement[];
+}): LivePlatePlacement | undefined {
+  return [...plan.placements, ...plan.parked].find(placementIsPlayoutRoute);
+}
+
+/**
+ * `ROUTE-PLATES-01` — the refusal's sentence when no epoch could be confirmed for a route plate.
+ * `B-308`: the plate is `Plate N` (`plate`), never its id.
+ */
+function routeWaitingMessage(plate: string | undefined): string {
+  return (
+    `${plate ?? 'A plate'}: waiting for the Playout's input list — its route cannot be sent until ` +
+    `a fresh one is read. Nothing was sent.`
+  );
+}
+
+/** `ROUTE-PLATES-01` — a reconcile refused for a waiting route plate, naming it for the row's line. */
+function routeWaitingRefusal(
+  placement: LivePlatePlacement,
+  /** `B-308` — the plate's `Plate N`, for the sentence; `refused.plateId` keeps the id. */
+  plate: string | undefined,
+): {
+  readonly ok: false;
+  readonly errorCode: string;
+  readonly message: string;
+  readonly refused: {
+    readonly plateId: string;
+    readonly source: { readonly id: string; readonly name: string; readonly origin: 'input' };
+  };
+} {
+  return {
+    ok: false,
+    errorCode: ROUTE_WAITING_CODE,
+    message: routeWaitingMessage(plate),
+    refused: {
+      plateId: placement.plateId,
+      source: { id: placement.source.id, name: placement.source.name, origin: 'input' },
+    },
+  };
+}
+
+/**
+ * 🔴 `LOOK-SWITCH-01` — ONE seat the SEAT STEP starts ({@link CasparRuntime}'s `#seatPlates`).
+ */
+interface SeatRequest {
+  readonly placement: LivePlatePlacement;
+  /**
+   * Hide it before its `PLAY`: `OPACITY 0` + `VOLUME 0` + its fit, committed first. TRUE only on
+   * a layer no producer of ours is on — see `#seatPlates` for why a layer carrying ours is never
+   * hidden.
+   *
+   * `PLAYOUT-SOURCES-01` §1.I — a Playout input on a layer of ours is not hidden either, but it is
+   * still MUTED first (`VOLUME 0` alone, in the same commit), so it starts silent on every seating.
+   */
+  readonly hide: boolean;
+  /** A PARKED preset: a refusal DROPS it and the action goes on (session BM). */
+  readonly optional: boolean;
+}
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.I — **a Playout plate seated IN PLACE** (an `R-048` swap or restore,
+ * on a layer of ours). It is not hidden — that would take the working picture off air before the
+ * replace is known to land (`B-126`) — but it IS muted before its `PLAY`, in the seat step's one
+ * commit, so a Playout plate starts silent on every seating (contract v1.3 rule 2; a D11 clip too
+ * since `RELEASE-091-01` §2 — {@link startsSilentFromPlayout}).
+ */
+function mutedInPlace(request: SeatRequest): boolean {
+  return !request.hide && startsSilentFromPlayout(request.placement.source.origin);
+}
+
+/**
+ * The volume a ledger record's layer carries as today's code computes it: SILENT while held or
+ * parked (a box nobody can see is never audible), its recorded intent otherwise.
+ */
+function wireVolumeOf(record: LiveLayerRecord): number {
+  return record.held === true || isParkedFit(record.fill)
+    ? CREATED_MUTED_VOLUME
+    : record.intendedVolume;
+}
+
+/**
+ * 🔴 `ROUTE-PLATES-01` (C2) — the opacity a ledger record's layer carries as today's code computes
+ * it: a PLAYOUT ROUTE that is held or parked is HIDDEN, `OPACITY 0` — kept playing, never paused,
+ * so showing it again is only the reveal. `MEDIA-PLATES-01` — and so is a held or parked CLIP
+ * ({@link hiddenWhenHeld}, the one question). Every other settled plate is shown, as before.
+ */
+function wireOpacityOf(record: LiveLayerRecord): number {
+  return hiddenWhenHeld(record) && (record.held === true || isParkedFit(record.fill)) ? 0 : 1;
+}
+
+/** What the seat step did for one seat — the facts its action's failure path reads. */
+interface SeatResult {
+  readonly placement: LivePlatePlacement;
+  /** Its `PLAY`, read from the reply (`refusal-cleanup.ts`); `refused` when no `PLAY` was sent. */
+  readonly outcome: SeatOutcome;
+  /** A `PLAY` left this process for it — so a producer of this action may be on the layer. */
+  readonly sent: boolean;
+  /** `OPACITY 0` + `VOLUME 0` + the fit were committed before the `PLAY`. */
+  readonly hidden: boolean;
+  /**
+   * `PLAYOUT-SOURCES-01` §1.C — the producer argument actually played when the one retry replaced
+   * the placement's (a media item's fresh `clip`). The ledger records THIS; absent = the placement's.
+   */
+  readonly playedArg?: string;
+  /**
+   * `ROUTE-PLATES-01` rule 4 — for a Playout route, when (on the route clock) its bare `PLAY` left:
+   * the reveal waits until {@link ROUTE_REVEAL_AFTER_PLAY_MS} after the latest one.
+   */
+  readonly routePlayedAt?: number;
+  /** `PLAYOUT-FEATURES-01` A (`B-286`) — why server B was sent nothing for this clip (the row says so). */
+  readonly backupRefused?: BackupRefusalReason;
+  readonly errorCode?: string;
+  /** The refused line as `#send` summarised it (`B-209`). */
+  readonly command?: string;
+}
+
+/** One `MIXER <ch> COMMIT`: did it land on the primary (`B-221`), and if not, what came back. */
+interface MixerCommitOutcome {
+  readonly landed: boolean;
+  readonly errorCode?: string;
+  readonly command?: string;
+}
+
+/**
+ * 🔴 `LOOK-SWITCH-01` — **THE DELTA'S ONE QUESTION, ASKED BY THE APPLIER AND THE PRE-SEAT ALIKE:**
+ * is this seat already sitting where it needs to be, showing what it needs to show? Layer AND
+ * producer, both; and never under a `'take'`, which re-asserts from nothing. ONE spelling, because
+ * the switch's pre-seat must seat exactly the plates the applier would otherwise `PLAY` (golden
+ * rule 6: a second copy is how the two sets would come to differ).
+ */
+function isSeatUnchanged(
+  mode: 'take' | 'live' | 'switch',
+  prior: LiveLayerRecord | undefined,
+  placement: LivePlatePlacement,
+): prior is LiveLayerRecord {
+  // `!== 'take'` and never `=== 'live'`: the question is "is this a re-assert from nothing", and a
+  // SWITCH is as much a delta as a swap is (`B-166`). An allow-list of one is how the third action
+  // silently became a re-seat.
+  return (
+    mode !== 'take' &&
+    prior !== undefined &&
+    adoptionKey(prior.slot) === adoptionKey(placement.slot) &&
+    prior.producer === placement.producerArg
+  );
+}
+
+/** What one live-plate apply answered — and, when refused, the seat it stopped on. */
+interface LivePlateApplyResult {
+  readonly ok: boolean;
+  readonly errorCode?: string;
+  readonly message?: string;
+  /** The refused AMCP line, as `#send` summarised it (`B-209`) — for the record, not the sentence. */
+  readonly command?: string;
+  /**
+   * `FIELD-FIXES-01` B — the plate the apply stopped on and the catalog entry behind it. Only the
+   * plate that was REFUSED: plates after it were never tried and are never named.
+   */
+  readonly refused?: {
+    readonly plateId: string;
+    readonly source: { readonly id: string; readonly name: string };
+  };
+}
+
+/**
+ * A catalogue entry as a seat carries it: its id, its NAME and — `PLAYOUT-SOURCES-01` — where it came
+ * from, which decides the D10 audio rule. One spelling, for every seat the plan builds.
+ */
+function sourceLabelOf(source: SourceDefinition): LivePlatePlacement['source'] {
+  return {
+    id: source.id,
+    name: source.name,
+    ...(source.origin !== undefined ? { origin: source.origin } : {}),
+    // `PLAYOUT-FEATURES-01` C — the playlist output's seat is locked at volume 0 (`isPlaylistOutput`).
+    ...(source.playlistOf !== undefined ? { playlistOf: source.playlistOf } : {}),
+    // `PLAYOUT-FEATURES-01` A — the backup's own copy is found by it (`B-286`).
+    ...(source.media?.fingerprint !== undefined ? { fingerprint: source.media.fingerprint } : {}),
+  };
+}
+
+/** `R-083` — the cursor `file` of the in-memory audit tail (a bridge with no record file). */
+const MEMORY_AUDIT_CURSOR = 'memory';
+
+/** The refused seat of a failed apply, in the shape {@link LivePlateApplyResult} carries it. */
+function refusalOf(
+  failed:
+    | { readonly placement: LivePlatePlacement; readonly command: string | undefined }
+    | undefined,
+): Pick<LivePlateApplyResult, 'command' | 'refused'> {
+  if (failed === undefined) return {};
+  return {
+    ...(failed.command !== undefined && { command: failed.command }),
+    refused: { plateId: failed.placement.plateId, source: failed.placement.source },
+  };
+}
+
+/** The decision half of the assembly: what to seat, or why the take is refused. */
+type LiveSeatingPlan =
+  | {
+      readonly ok: true;
+      /** What the look being ENTERED asks to be on screen — one entry per punched seat. */
+      readonly placements: readonly LivePlatePlacement[];
+      /**
+       * Session BM — **seats some OTHER look needs, which the entered look does not punch.**
+       *
+       * Their layers are allocated alongside {@link placements} and they are just as much
+       * this item's property; what differs is only what goes on the wire — muted, and parked
+       * so they render nothing (`B-154`). This is §12.4's hold and the PRESET at once: an
+       * input bound only to a look nobody is showing is seated here, so entering that look
+       * costs a `MIXER FILL` and no `PLAY`.
+       */
+      readonly parked: readonly LivePlatePlacement[];
+      /**
+       * `multibox-layout-switch` `tasks.md` 6.5 — **every plate the template DECLARES,
+       * resolved to its producer, whether or not the desired set places it.**
+       *
+       * The release policy needs BOTH axes and they are different questions: a plate with
+       * no rect in this look is HELD (it is still declared, a later look can show it),
+       * while a plate the template no longer declares at all is TORN DOWN (nothing can
+       * bring it back). A plan that carried only `placements` could not tell them apart,
+       * and the reconcile would have to re-read the carrier to find out — a second
+       * spelling of "what does this template declare", resolved a second way.
+       *
+       * It also carries the producer FORM, which is what `canHoldLivePlate` needs: the
+       * ledger records the producer as the string that went on the wire, and re-parsing
+       * that string to recover its kind would be a third spelling of the same fact.
+       * `MEDIA-PLATES-01` — the whole catalogue ENTRY, so a clip's `whenHidden` travels with it.
+       */
+      readonly resolved: ReadonlyMap<string, SourceDefinition>;
+      /**
+       * Plates the desired set DID place a rect for, whose hole then clipped to nothing —
+       * the row's position override has carried them off the frame entirely.
+       *
+       * Carried separately from plain absence because the two are different facts and the
+       * operator-facing sentence differs: "this look does not show it" is authoring, "it
+       * is off the frame" is the row's position. Same disposition, honest reason.
+       */
+      readonly offFrame: ReadonlySet<string>;
+      /**
+       * Every plate the template DECLARES, whether or not this plan resolved it.
+       *
+       * 🔴 Separate from {@link resolved}, and the separation is what keeps a release honest.
+       * "Is this plate still part of the template" is a question about the CARRIER; "what
+       * producer is behind it" is a question about the ASSIGNMENT, and under a live action
+       * the second is only asked of the plates going on screen. Reading declaredness off
+       * `resolved` would make an unresolved plate look RETIRED and tear down a producer that
+       * a later look still wants.
+       */
+      readonly declared: ReadonlySet<string>;
+      /**
+       * Declared plates this plan could not resolve to a catalog entry, and was not allowed
+       * to refuse over (see `#planLiveSeating`'s `scope`).
+       *
+       * 🔴 The apply LEAVES THESE EXACTLY AS THEY ARE — not re-fitted, not held, not torn
+       * down. "I cannot tell what this is" is not a licence to change anything about it, and
+       * the one thing that must never follow from a missing assignment is a destroyed
+       * picture that was working.
+       */
+      readonly unresolved: ReadonlySet<string>;
+      /**
+       * 🔴 **SESSION BP — THE LEVEL-2 ANSWER THIS PLAN ACTUALLY RESOLVED AGAINST**, as
+       * `{plate → catalog id}` for this item's template.
+       *
+       * Returned rather than re-read by the caller because the TAKE has to freeze exactly
+       * what it seated. A second read of the assignment store would be a second evaluation
+       * of the same question with the take's `await`s available to interleave between them,
+       * and the row would then be pinned to an assignment its own plan never saw — golden
+       * rule 7's shape, on a value instead of a boolean.
+       *
+       * ⚠ It is whatever this plan's {@link LevelTwoSource} said to use — the LIVE store for
+       * a take, the row's existing pin for everything else. Only the take writes it back, so
+       * a live reconcile can never re-freeze a row to something new, and a RE-TAKE always
+       * adopts the assignment in force (§5.3), which is the operator's way to take up an
+       * edited default.
+       */
+      readonly resolvedFrom: Readonly<Record<string, string>>;
+      /**
+       * ⭐ `B-178` — **each plate's fit mode WITH WHERE IT CAME FROM**, for the operator-facing
+       * report. One entry per resolved frame, in binding order.
+       *
+       * 🔴 Separate from {@link plateFits} because they answer different audiences and only one
+       * of them belongs on the wire. The page needs the MODE to punch its hole; a human needs
+       * to know whether that mode is anything the author actually said. Widening the payload
+       * with provenance the page would never read is how a wire format accretes fields nobody
+       * consumes — the shape `B-143` already names.
+       */
+      readonly fitProvenance: readonly PlateFitReport[];
+    }
+  | {
+      readonly ok: false;
+      readonly errorCode: string;
+      readonly message: string;
+      /**
+       * `PLAYOUT-SOURCES-01` — for `source-unavailable` / `source-unusable`, the plate the refusal
+       * stopped on and its entry, so the row can carry its one line (`FIELD-FIXES-01` B).
+       */
+      readonly refused?: { readonly plateId: string; readonly source: SourceDefinition };
+    };
+
+/**
+ * ⭐ `B-178` — one plate's resolved fit mode and the link of the chain that answered.
+ *
+ * `from: 'default'` is the one that matters: it means NOBODY STATED A MODE, which is a
+ * different fact from an author who chose `contain` and had it honoured. Those two were
+ * indistinguishable on the wire, and that is why a dropped `cover` took a plant walk to find.
+ */
+interface PlateFitReport {
+  readonly plateId: string;
+  readonly mode: LiveFitMode;
+  readonly from: 'override' | 'authored' | 'default';
+}
+
+/**
+ * 🔴 **SESSION BP — WHERE A PLAN GETS LEVEL 2 FROM, and the whole freeze is this one word.**
+ *
+ * - **`'fresh'` — THE TAKE, and only the take.** It resolves the template assignment from the
+ *   live store, ignoring any pin the row already has, and PINS what it resolved. That is what
+ *   makes a re-take the operator's way to adopt an edited default (§5.3), and it is why the
+ *   answer cannot simply be "echo the pin if there is one": a re-taken row would then be
+ *   permanently welded to its first take and the assignment editor would be inert for it.
+ * - **`'pinned'` — EVERYTHING ELSE.** A look switch, an `R-048` swap, an UPDATE, a reconcile
+ *   after a blip: all resolve from the row's frozen snapshot, so no edit to configuration can
+ *   reach a row that is on air.
+ *
+ * ⚠ **A SEPARATE PARAMETER FROM `scope`, deliberately, even though the two happen to agree
+ * today.** `scope` says WHICH FRAMES MAY REFUSE this action; this says WHERE LEVEL 2 COMES
+ * FROM. They are different questions with the same current answer, and a name is a contract
+ * (golden rule 6) — reading freshness off a refusal-breadth flag is exactly how a name comes
+ * to mean two things and then to lie about one of them.
+ */
+type LevelTwoSource = 'fresh' | 'pinned';
 
 /** R-028 part B — a refused deliberate playout clear. */
 type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
@@ -127,28 +836,225 @@ const BUSY_MESSAGE =
 const INTENDED_VOLUME = 1;
 
 /**
- * THE on-air predicate for a stack item — the ONE definition of "on air or
- * unsettled", read by R-010's `setConfig` gate, R-030's raster gate, the
- * rehearse-entry guard and the rehearse abort.
+ * C-015 phase 6 (6.5) — **the volume every producer the bridge creates is born
+ * with: silent.**
  *
- * Extracted because rehearse made it the fourth consumer, and a fourth inline
- * copy of this status list is exactly how one of them comes to disagree — the
- * repo's one-canonical-predicate rule (CLAUDE.md golden rule 6). The stakes
- * differ per caller but the question does not: `updating`/`exiting` ride an
- * on-air producer, and B-044's `unconfirmed` means the on-air result is UNKNOWN.
- * Unknown must count as on air in every one of these gates, because each one's
- * failure mode is acting on a live graphic.
+ * Named rather than a bare `0` for the reason `INTENDED_VOLUME` is named, plus
+ * one this project has now been bitten by three times: **zero is falsy.** A bare
+ * literal here invites a `volume && …` or a `?? INTENDED_VOLUME` somewhere
+ * downstream to read a deliberate mute as "no volume requested" and blanket the
+ * layer back to full — which is a guest's live microphone on air with nothing in
+ * any log saying it happened. A named constant makes the intent unmistakable at
+ * every site that touches it.
  */
-function isOnAirStatus(status: StackItemState['status'], pending: boolean): boolean {
-  return (
-    pending ||
-    status === 'playing' ||
-    status === 'on-air' ||
-    status === 'updating' ||
-    status === 'exiting' ||
-    status === 'unconfirmed'
-  );
+const CREATED_MUTED_VOLUME = 0;
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.I — **the ramp a Playout plate rises by: 25 frames.**
+ *
+ * Contract v1.3 rule 2 (`PLAYOUT-CG-RESPONSE-V13-STATE` §3.1): the Playout may route the same
+ * input to the same channel, where the two sounds add up (about +6 dB), and it warns on air when
+ * a CG plate on such an input is not at 0. So a D10 plate is seated silent and its volume never
+ * JUMPS up — even `VOLUME 1 4` reaches 0.25 in its first block. Silences stay immediate.
+ * `RELEASE-091-01` §2 (`B-289`) — a D11 clip rises by the same ramp ({@link startsSilentFromPlayout}).
+ */
+export const PLATE_VOLUME_RAMP_FRAMES = 25;
+
+/**
+ * 🔴 `RELEASE-091-01` §2 (`B-289`) — **A PLATE WHOSE SOURCE COMES FROM THE PLAYOUT STARTS SILENT AND
+ * ONLY RISES BY A RAMP.** Contract v1.3 rule 2 was written for a D10 input (`PLAYOUT-SOURCES-01`
+ * §1.I); the owner extended it to a D11 media clip on 2026-09-29: "a media clip starts silent, exactly
+ * like a D10 input; the operator raises it". The ONE predicate both halves ask — the mute before an
+ * in-place `PLAY` ({@link mutedInPlace}) and the ramp ({@link plateVolumeFrames}) — so the two can
+ * never disagree about which plates the rule covers. A plate seated before `origin` existed answers
+ * false and keeps its wire.
+ */
+export function startsSilentFromPlayout(origin: 'input' | 'media' | undefined): boolean {
+  return origin === 'input' || origin === 'media';
 }
+
+/**
+ * `RELEASE-091-01` (DELTA B, B1) — the layers an `INFO <channel>` reply lists on the stage, or `null`
+ * when the reply is not a channel's info at all. CasparCG 2.5 lists each live layer as
+ * `<stage><layer><layer_N>` and a channel with none has no `<stage>` (plant captures
+ * `b3-info-2-80-on-air`, `b5-teardown-info`), so no `<stage>` is an EMPTY channel, never "unknown".
+ */
+export function stageLayersOfInfo(xml: string): ReadonlySet<number> | null {
+  if (!/<channel>/.test(xml)) return null;
+  const stage = /<stage>([\s\S]*?)<\/stage>/.exec(xml);
+  const layers = new Set<number>();
+  if (stage === null) return layers;
+  for (const m of (stage[1] ?? '').matchAll(/<layer_(\d+)>/g)) layers.add(Number(m[1]));
+  return layers;
+}
+
+/**
+ * `CENTRAL-BRIDGE-01` — each layer on the stage with its FOREGROUND producer kind, from the same
+ * `INFO <channel>` reply {@link stageLayersOfInfo} reads (`<layer_N><foreground>…<producer>K`); a
+ * layer whose foreground is `empty` (stopped, still on the stage) is left out. `null` when the reply
+ * is not a channel's info at all; an empty map is an empty channel.
+ */
+export function stageProducersOfInfo(xml: string): ReadonlyMap<number, string> | null {
+  if (!/<channel>/.test(xml)) return null;
+  const producers = new Map<number, string>();
+  const stage = /<stage>([\s\S]*?)<\/stage>/.exec(xml);
+  if (stage === null) return producers;
+  for (const m of (stage[1] ?? '').matchAll(/<layer_(\d+)>([\s\S]*?)<\/layer_\1>/g)) {
+    const foreground = /<foreground>([\s\S]*?)<\/foreground>/.exec(m[2] ?? '');
+    const kind = /<producer>([^<]*)<\/producer>/.exec(foreground?.[1] ?? '')?.[1]?.trim();
+    if (kind !== undefined && kind !== '' && kind !== 'empty') producers.set(Number(m[1]), kind);
+  }
+  return producers;
+}
+
+/**
+ * `RELEASE-091-01` (DELTA B, B2) — the layer a settled exchange cleared: a `CLEAR <ch>-<L>` the core
+ * answered `202`. Anything else — a refusal, a timeout, a channel-wide `CLEAR` — proves nothing
+ * about one layer and answers `null`.
+ */
+export function acknowledgedClearOf(
+  line: string,
+  reply: string | undefined,
+): { channel: number; layer: number } | null {
+  if (reply === undefined || !reply.startsWith('202')) return null;
+  const m = /^CLEAR (\d+)-(\d+)$/.exec(line.trim());
+  return m === null ? null : { channel: Number(m[1]), layer: Number(m[2]) };
+}
+
+/**
+ * `PLAYOUT-SOURCES-01` §1.I — the frames one plate's `MIXER … VOLUME <v>` carries. **The one
+ * spelling** every plate site asks: a Playout plate (a D10 input or a D11 clip) going above silence
+ * ramps; every silence, and a plate seated before `origin` existed, is the bare line.
+ */
+export function plateVolumeFrames(
+  origin: 'input' | 'media' | undefined,
+  volume: number,
+): number | undefined {
+  return startsSilentFromPlayout(origin) && volume > CREATED_MUTED_VOLUME
+    ? PLATE_VOLUME_RAMP_FRAMES
+    : undefined;
+}
+
+/**
+ * C-015 phase 6 (6.5b) — the load was refused because the layer could not be
+ * MUTED, so the `CG ADD` was never sent.
+ *
+ * A code of its own rather than the rehearse path's `mute-failed`, because §8's
+ * rule applies to consequences as much as to mechanisms: both say "CasparCG
+ * refused the mute", but one means PVW was not started and the other means the
+ * graphic was not loaded. One sentence covering both would be right about the
+ * cause and wrong about what just happened to the operator.
+ */
+const ADD_MUTE_FAILED = 'add-mute-failed';
+
+/**
+ * §8 — A TIMEOUT IS NOT "THE COMMAND NEVER LEFT", and B-141 is where the
+ * difference stops being cosmetic.
+ *
+ * `#send`'s catch used to flatten every throw — `AmcpTimeoutError` included —
+ * into `amcp-send-failed`, whose operator sentence is "The command never reached
+ * CasparCG". On a timeout the command DID leave this process and nothing came
+ * back: a different machine to go and look at, and a different remedy. That is
+ * exactly the `mute-failed` class DEBT.md §5 records — a wrapper may add
+ * context, it may not replace the cause.
+ *
+ * ONE spelling, deliberately, and both readers use it: `#send` returns it to the
+ * caller, and `auditVerdict` maps it to the schema's `timeout` outcome. Two
+ * literals would be two rules, which is how the panel's action list drifted from
+ * the schema's in the first place (B-141 fact 4).
+ */
+const AMCP_TIMEOUT_CODE = 'amcp-timeout';
+
+/*
+ * B-141 — who the bridge records as having acted.
+ *
+ * This WAS the constant `'operator'`, left as a single seam so that the day an
+ * identity scheme was decided there would be exactly one place to change. That
+ * day came: it is now `operatorActor()`, the per-console name the acting browser
+ * declared, resolved in `actor-context.ts` — which is still exactly one place.
+ *
+ * 🔴 Read that file before relying on the value. It is SELF-DECLARED and
+ * UNVERIFIED: it answers "which console, as labelled", never "which person,
+ * proven".
+ */
+
+/**
+ * B-141 — the facts ONE audited action carries, filled in as they become known.
+ *
+ * Seeded from the PRE-STATE (`#itemDetail`) so that the EARLIEST refusals — the
+ * ones that return before the item is even looked up — still say which item,
+ * which template and which layer the operator was acting on. An impl that learns
+ * more on the way (a `load` allocating its slot) writes it here.
+ */
+interface AuditDetail {
+  itemId?: string;
+  templateId?: string;
+  slot?: CommandSlot;
+  /**
+   * `B-209` — the AMCP line a refusal came back on (payload elided), when the impl
+   * had one. Written by the impl from `#send`'s answer, read by `auditVerdict`; an
+   * impl that refuses before the wire leaves it unset, and the record then says
+   * only the code — which is honest, because no command was refused.
+   */
+  command?: string;
+  /**
+   * `remove()` ONLY — the wire failure its `{ accepted: true }` response cannot
+   * express. See the note at the assignment. Nothing else may use this to
+   * contradict a result, or "the outcome is DERIVED from the result" stops being
+   * a rule and becomes a habit.
+   */
+  wireFailure?: string;
+  /**
+   * `TIMING-WIRE-22 · DELTA B · R3` — `set-pass-timing` ONLY: the values the operator ASKED
+   * FOR, carried here so the `{ detail, verdict } → AuditEntry` mapping stays in one place.
+   * Never the row's resulting state: a set carrying only a gap leaves an earlier count in
+   * force, and recording the merged result would attribute that count to this press.
+   */
+  timing?: AuditEntry['timing'];
+  /**
+   * `MEDIA-PLATES-01` — `set-media-playback` and `media-transport` ONLY: the clip's NAME and what
+   * was asked (the settings, or the transport action and its plate), through the same one mapping.
+   */
+  media?: AuditEntry['media'];
+}
+
+/**
+ * B-141 — the audit outcome of a finished operation, DERIVED from what it
+ * answered rather than from where in the method we happen to be standing.
+ *
+ * This function is the whole reason the seven verbs could not simply grow an
+ * append at the end of each: every one of them has more exits than it has happy
+ * paths, and an entry written before the answer is known records `ok` for a
+ * refusal. A forensic log that misreports an on-air action is worse than none.
+ */
+function auditVerdict(
+  detail: AuditDetail,
+  result: { accepted: boolean; errorCode?: string; command?: string },
+): { outcome: AuditEntry['outcome']; errorCode?: string; command?: string } {
+  const errorCode = detail.wireFailure ?? result.errorCode;
+  if (result.accepted && detail.wireFailure === undefined) return { outcome: 'ok' };
+  // `B-209` — the refused LINE rides beside the code. The result's own is preferred
+  // (it is the line the answer above came back on); `detail.command` is the path for
+  // a verb whose response shape cannot carry it, the `wireFailure` precedent.
+  const command = result.command ?? detail.command;
+  return {
+    // The schema's third outcome, reachable exactly because `#send` now tells a
+    // timeout apart from a send failure. "Nothing came back" and "it was refused"
+    // are the two readings a dispute has to choose between.
+    outcome: errorCode === AMCP_TIMEOUT_CODE ? 'timeout' : 'failed',
+    ...(errorCode !== undefined ? { errorCode } : {}),
+    ...(command !== undefined ? { command } : {}),
+  };
+}
+
+/*
+ * `isOnAirStatus` USED TO BE DEFINED HERE, module-private, while the renderer kept a
+ * hand-written mirror of the same six terms and six further copies existed besides.
+ * `operator-surface` §5 answer (B) moved the ONE definition to `@cg/shared-schema`
+ * (`runtime/item-state.ts`, beside the status enum it reads), so both sides of the
+ * bridge seam now import the same function object. It is imported at the top of this
+ * file; do not re-declare it here, and do not add a local wrapper.
+ */
 
 /**
  * R-010 — where the OSC UDP ingest binds, derived from the declared server's
@@ -160,6 +1066,26 @@ function isOnAirStatus(status: StackItemState['status'], pending: boolean): bool
  */
 export function deriveOscBindHost(serverHost: string): string {
   return isLoopbackHost(serverHost) ? '127.0.0.1' : '0.0.0.0';
+}
+
+/**
+ * `B-162` — every CasparCG host this config declares, primary AND backup, in
+ * declaration order.
+ *
+ * 🔴 **The template serve decision is about the SET, never about the primary.**
+ * OSC gets this right by construction because each session binds its own ingest
+ * (`#buildSessions` → `deriveOscBindHost(ep.host)`, one derivation PER server);
+ * the template server is a single shared socket handing out a single shared URL,
+ * so it has no per-server seam to make the mistake impossible — this helper is
+ * that seam. Both `deriveServeOptions` and `hostsUnableToFetchTemplates` are fed
+ * from here and from nowhere else, so a future server C cannot be forgotten by
+ * one caller and remembered by the other.
+ */
+export function configuredCasparHosts(config: ConnectionConfig): readonly string[] {
+  return [
+    config.servers.A.host,
+    ...(config.servers.B !== undefined ? [config.servers.B.host] : []),
+  ];
 }
 
 /** CasparCG video channel the bridge drives (Phase 2: single channel). */
@@ -189,6 +1115,96 @@ const SWEEP_MS = 5000;
  * repetition (~50 Hz), far below the sweep cadence doubling.
  */
 const OCCUPANCY_STALE_MS = 2500;
+
+/**
+ * 🔴 `DONGLE-RECOVER-01` — **`403` ON A PAGE'S `CG UPDATE` MEANS "NO PAGE ON THIS LAYER".** `#send`'s code
+ * for CasparCG's `403 CG UPDATE FAILED`. Read from the core (`v2.5.0-stable`): `CG UPDATE` / `STOP` /
+ * `NEXT` find the layer's proxy through `get_expected_cg_proxy`, which throws `expected_user_error` ("No
+ * CG proxy running on layer") when the layer's foreground holds no CG producer, and `AMCPCommandQueue`
+ * answers that `403`. The only other `403`s are a parse failure (`bad_lexical_cast`, `user_error`), which
+ * a line the bridge built cannot provoke, and the HTML proxy's own `update` throws nothing. `CG PLAY`
+ * skips the check (`get_proxy(...)->play()`, a no-op on the empty proxy) and answers `202` regardless —
+ * which is why the take's TELL, not its PLAY, is the line that can say the page is gone.
+ */
+const PAGE_NOT_ON_LAYER_CODE = 'amcp-403';
+/**
+ * `MEDIA-PLATES-01` §1.E — how often the media clock LOOKS for a change the console would show (a
+ * whole second of remaining time, a pause, an end). A look, not a publish: nothing is pushed unless
+ * the shown state changed, so a second of countdown costs one push, not four.
+ */
+const MEDIA_STATE_TICK_MS = 250;
+/**
+ * `MEDIA-PLATES-01` — a clip that is not looping is ENDED once its reported time stands within a
+ * frame of its length. 2.5.0 holds `file/time` AT the length after the end (measured `4.00/4.00`
+ * three seconds past the end of a 4 s clip); the margin only absorbs the last frame's rounding.
+ */
+const CLIP_END_MARGIN_S = 0.05;
+/**
+ * `R-058` — how long a channel may go without a `/channel/N/framerate` tick before it is
+ * reported as having STOPPED.
+ *
+ * ⚠ **Its own constant, deliberately NOT `OCCUPANCY_STALE_MS`.** The two windows answer
+ * different questions on different clocks: occupancy ages out a LAYER's producer report,
+ * while this ages out a CHANNEL's heartbeat. Sharing one number would make a change made for
+ * one silently retune the other — and `hasFreshOsc`'s own header already argues that two
+ * signals which must decay together should say so explicitly rather than by coincidence.
+ *
+ * 3 s against a heartbeat the transport sees RAW (the tap is fed before the 1 Hz rate
+ * limiter): generous enough that a scheduler hiccup on a loaded machine cannot fake a
+ * stoppage, short enough that an operator learns of a dead channel within a breath.
+ */
+const CHANNEL_TICK_STALE_MS = 3000;
+
+/**
+ * `B-174` — the mixer hold while the channel's video mode is UNREAD: one frame of the
+ * plant's `1080i5000` (40 ms). Only a fallback — the real default is one frame of the
+ * OBSERVED mode, per `#lookMixerHoldMsFor` — and 40 rather than 20 because over-holding
+ * by a field costs a field of the OPPOSITE skew while under-holding leaves half the
+ * measured skew standing, and the plant this exists for runs interlaced.
+ */
+const LOOK_MIXER_HOLD_FALLBACK_MS = 40;
+
+/**
+ * 🔴 `LOOK-SWITCH-01` — **A FRESHLY SEATED PLATE RUNS HIDDEN FOR THIS MANY HOLDS BEFORE THE PAGE IS
+ * TOLD**, so its producer has produced its own picture by the reveal.
+ *
+ * MEASURED, not chosen (`design.md` §3 v3, the owner's CasparCG 2.5.0, `--fixture ghab`, 10 runs):
+ * with the reveal one hold after the `PLAY`'s reply, the new box showed no picture of its own for
+ * 2, 2 and 4 fields in 3 runs of 10 — a media clip's first decoded frame arriving after the reveal
+ * (term (b), `B-192`). Four fields is two channel frames; three holds cover it with one to spare.
+ * Counted in the hold's own unit (`#lookMixerHoldMsFor`: one frame of the observed mode, or the
+ * configured `--look-mixer-hold-ms`), so it moves with it. Only a switch that SEATED something waits:
+ * a switch of held plates sends no `PLAY` and lands exactly as it did.
+ */
+const PRE_SEAT_PREROLL_HOLDS = 3;
+
+/** The one sentence for a row taken off air while its switch was in flight — before or after the tell. */
+const ROW_LEFT_AIR_MID_SWITCH =
+  'The row left the air while the switch was in flight — nothing was moved. ' +
+  'Re-issue the look once it is back on air.';
+
+/** The one timer this file sleeps on (`B-174`'s mixer hold). Not cancellable on purpose:
+ * the hold is at most a frame or two, far inside every teardown bound, and a cancellation
+ * path would be a second way for the fills to go out early. */
+const sleepMs = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * `ROUTE-PLATES-01` §1.E — the layer a PRODUCER command puts something on (`PLAY`/`LOADBG`/`LOAD`
+ * `<ch>-<L>`, `CG <ch>-<L> ADD`), or `null`. The seam's "holds a seated plate" answer reads it.
+ */
+function producerTargetOf(line: string): CommandSlot | null {
+  const match = /^(?:PLAY|LOADBG|LOAD) (\d+)-(\d+)(?:\s|$)|^CG (\d+)-(\d+) ADD\s/.exec(line);
+  if (match === null) return null;
+  const channel = Number(match[1] ?? match[3]);
+  const layer = Number(match[2] ?? match[4]);
+  return { channel, layer };
+}
+
+/** `ROUTE-PLATES-01` §1.E — the layer a `CLEAR <ch>-<L>` empties, or `null`. */
+function clearTargetOf(line: string): CommandSlot | null {
+  const match = /^CLEAR (\d+)-(\d+)$/.exec(line.trim());
+  return match === null ? null : { channel: Number(match[1]), layer: Number(match[2]) };
+}
 
 /**
  * R-021 stage 2a (D7) — is a FIXED slot busy (a resident item or retained
@@ -248,11 +1264,52 @@ class Emitter<T> {
  * Integration-tested ONLY against `tools/amcp-mock` (NOT real hardware — the
  * on-hardware AMCP-sequence validation is Phase 3b).
  */
+
+/**
+ * `B-233` — the naming a `RestoreSkip` carries, in ONE place.
+ *
+ * Every skip site in `restore()` spreads this, rather than each repeating
+ * `templateId: item.templateId, ...(item.slot ? { slot: item.slot } : {})`. Six copies of a
+ * two-field spread is six chances for the next skip reason to be added without it, and a
+ * skip with no naming renders as a shortened id — the exact defect this closes, arriving
+ * one reason later.
+ *
+ * The row is named by where it was RETAINED (`item.slot`), which is where the operator last
+ * saw it and where he will look. `exactOptionalPropertyTypes` is on, so an absent slot is
+ * OMITTED rather than set to `undefined`.
+ *
+ * ⚠ The return type is a `Pick` of the WIRE type, not a hand-written shape. The first
+ * spelling annotated `slot` as `@cg/caspar-client`'s `LayerSlot` — which is a different
+ * type from the schema's, missing its `server` field — and it did not compile. Naming the
+ * destination is what keeps this honest: the helper's job is to produce two fields of a
+ * `RestoreSkip`, so it says exactly that and cannot drift from the schema it feeds.
+ */
+function restoreSkipNaming(item: RetainedStackItem): Pick<RestoreSkip, 'templateId' | 'slot'> {
+  return {
+    templateId: item.templateId,
+    ...(item.slot !== undefined ? { slot: item.slot } : {}),
+  };
+}
+
+/**
+ * A take's answer. `FIELD-FIXES-01` B — `refusalOnRow` is set exactly where the take reached the
+ * wire, was refused and RECORDED the refusal on the item (`#recordTakeRefusal`): the row and its
+ * Inspector say it, so no other surface repeats it. A refusal that never reached the wire (on air,
+ * rehearsing, disconnected, an unassigned plate) keeps its own surface and never carries it.
+ */
+interface TakeVerdict {
+  accepted: boolean;
+  errorCode?: string;
+  message?: string;
+  refusalOnRow?: true;
+}
+
 export class CasparRuntime {
   readonly stackChanged = new Emitter<readonly StackItemState[]>();
+  /** `DESKTOP-APPS-01-D` j — the strays Station setup shows changed. */
+  readonly straysChanged = new Emitter<readonly StationStray[]>();
   readonly healthChanged = new Emitter<ConnectionHealth>();
   readonly lockChanged = new Emitter<LockState>();
-  readonly settingsChanged = new Emitter<Settings>();
   readonly updateChanged = new Emitter<PendingUpdate | null>();
   /** R-010 — emitted after every successful `setConfig` apply. */
   readonly configChanged = new Emitter<ConnectionConfig>();
@@ -260,8 +1317,16 @@ export class CasparRuntime {
   readonly orphansChanged = new Emitter<OrphanLayer[]>();
   /** B-056 — emitted ONLY when the owned-slot warning set changes. */
   readonly ownedOccupancyChanged = new Emitter<OwnedOccupancyWarning[]>();
-  /** R-021 stage 2a — emitted after every applied fixed-bank change. */
+  /**
+   * R-021 stage 2a — emitted after every applied fixed-bank change, with the v1 view of the set
+   * ({@link firstBank}): on a one-channel station, the bank itself, exactly as before.
+   */
   readonly fixedConfigChanged = new Emitter<FixedLayerBank | null>();
+  /**
+   * `MULTI-CHANNEL-01` — emitted after every applied change with the WHOLE set, in channel order.
+   * The console's per-channel views read this; `fixedConfigChanged` above is the v1 view of it.
+   */
+  readonly fixedBanksChanged = new Emitter<FixedLayerBank[]>();
   /** R-021 stage 2a — emitted ONLY when the per-slot fixed state changes. */
   readonly fixedStateChanged = new Emitter<FixedSlotState[]>();
   /**
@@ -269,6 +1334,14 @@ export class CasparRuntime {
    * so every connected browser converges on the same library.
    */
   readonly templatesChanged = new Emitter<TemplateInfo[]>();
+  /**
+   * 🔴 `CONSOLE-POLISH-01` (`B-300`) — WHO changed the catalogue, beside {@link templatesChanged}'s
+   * WHAT: one per accepted import, re-import or removal. A console whose open picker holds a
+   * template another console removed names the act from this instead of meeting a raw refusal.
+   */
+  readonly templatesActed = new Emitter<TemplateAct>();
+  /** `CONSOLE-POLISH-01` (`R-083`) — every row the record takes, as it takes it (`audit.appended`). */
+  readonly auditAppended = new Emitter<AuditEntry>();
   /** R-028 part B — emitted ONLY when the declared playout layers' state changes. */
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
   /** R-034 — emitted with the full delimiter list whenever a browser changes it. */
@@ -285,6 +1358,62 @@ export class CasparRuntime {
    * every browser is showing plates it now affects.
    */
   readonly sourceAssignmentsChanged = new Emitter<SourceAssignments>();
+  /**
+   * B-145 — emitted with the FULL ledger whenever the Live Source layers this bridge owns
+   * change, so it can be PERSISTED and survive a restart.
+   *
+   * 🔴 **The runtime emits; it does not write files.** That is the same seam
+   * `sourceCatalogChanged` / `sourceAssignmentsChanged` already use, and it is what keeps
+   * `fs` out of the class that talks to the wire. `bridge.ts` subscribes and persists.
+   */
+  readonly liveLayersChanged = new Emitter<LiveLayerLedger>();
+  /**
+   * `B-225` — emitted when the standing "air was emptied under us" notice is RAISED by a
+   * reconnect, NARROWED by a partial restore, or DISMISSED. `null` means there is nothing
+   * to report.
+   *
+   * A push as well as a pull because the raise happens on the bridge's own schedule — no
+   * browser asked for it, and the operator may be looking at the console when it lands.
+   */
+  readonly emptiedAirChanged = new Emitter<EmptiedAirNotice | null>();
+  /** `CENTRAL-BRIDGE-01` (`B-294`) — the restore report, raised at start and narrowed by a dismissal. */
+  readonly restoreReportChanged = new Emitter<StackRestoreReport | null>();
+  /** `RELEASE-091-01` (DELTA B, B1) — the layers cleared outside CG Control, pushed on change. */
+  readonly clearedOutsideChanged = new Emitter<readonly ClearedOutsideLayer[]>();
+  /**
+   * `PLAYOUT-FEATURES-01` A (`B-286`) — who is told a server gained a NEW connection (`healthy`, never the same
+   * socket's `degraded → healthy`): its core may have restarted with another library, so the bridge re-reads
+   * what the backup's own Playout lists for the bound clips. PRIVATE, not an `Emitter` field: it is the
+   * bridge's own business and reaches no console (`publish-coverage.test.ts` holds every public emitter to
+   * that).
+   */
+  readonly #serverConnectedHandlers = new Set<(label: 'A' | 'B') => void>();
+
+  /** `PLAYOUT-FEATURES-01` A — be told when a server gains a new connection. Returns an unsubscribe. */
+  onServerConnected(handler: (label: 'A' | 'B') => void): () => void {
+    this.#serverConnectedHandlers.add(handler);
+    return () => {
+      this.#serverConnectedHandlers.delete(handler);
+    };
+  }
+  /**
+   * `multibox-layout-switch` `tasks.md` 6.5 / §12.4 — emitted for EVERY plate the
+   * reconcile releases, held or torn down.
+   *
+   * 🔴 **This is what makes §12.4's teardown fallback "a NAMED, OBSERVABLE behaviour"
+   * rather than a teardown nobody can tell from a bug.** A held plate and a torn-down one
+   * look identical from outside — both stop being visible — and they differ in the one way
+   * that matters on air: the held one comes back as a cut, the torn-down one comes back as
+   * a fresh `PLAY`. An operator watching a switch that re-acquires needs to be able to
+   * learn WHY here, not by reading the source.
+   */
+  readonly livePlateReleased = new Emitter<LivePlateRelease>();
+  /**
+   * 🔴 `MEDIA-PLATES-01` §1.E — every seated media plate's transport state ({@link mediaPlateStates}),
+   * emitted when what the console SHOWS would change: a whole second of remaining time, a pause, an
+   * end, a plate seated or cleared — never at the server's frame rate.
+   */
+  readonly mediaStateChanged = new Emitter<MediaPlateState[]>();
   /**
    * R-030 — emitted when a browser changes the channel raster AND when a fresh
    * `INFO <channel>` reading lands. Both, because the mismatch verdict is a
@@ -304,13 +1433,21 @@ export class CasparRuntime {
   /** One session per DECLARED server (B-046: B exists only when configured). */
   #sessions: { A: ServerSession; B?: ServerSession };
   #adapter: RedundancyAdapter;
+  /** `B-313` — server B held: another CG Bridge drives its core ({@link holdServerB}). */
+  #serverBHeld = false;
   readonly #reconciler = new Reconciler();
   // R-021 stage 1 — constructed in the constructor so the resolved fixed bank
   // (and the ONE policy object the validator saw) reach the allocator.
   readonly #layers: LayerManager;
-  // R-021 stage 2a — the declared bank (null = none), the policy in force, and
-  // the last PUBLISHED per-slot state (JSON, for the publish-on-change compare).
-  #fixedBank: FixedLayerBank | null;
+  // R-021 stage 2a — the declared banks, the policy in force, and the last PUBLISHED
+  // per-slot state (JSON, for the publish-on-change compare).
+  /**
+   * 🔴 `MULTI-CHANNEL-01` — **ONE BANK PER DECLARED CHANNEL, in channel order.** Empty = none
+   * declared. It was a single `#fixedBank` while a station operated one channel; every reader of
+   * a bank now asks {@link #bankFor} for the bank of the coordinate in front of it, and every
+   * reader of "which channels" asks {@link #declaredChannels} — never this list directly.
+   */
+  #fixedBanks: FixedLayerBank[];
   readonly #layerPolicy: LayerPolicy;
   /**
    * R-028 — the reserved playout layer numbers, from real config. The SAME list
@@ -347,6 +1484,87 @@ export class CasparRuntime {
    * retained through out (the item is still on the stack, idle), deleted at remove.
    */
   readonly #slots = new Map<string, CommandSlot>();
+  /**
+   * C-015 phase 5 — THE LIVE SOURCE LEDGER, deliberately BESIDE {@link #slots}
+   * and never folded into it.
+   *
+   * `#slots` answers ONE question — "where does this item's TEMPLATE live" — as
+   * one coordinate per item, and every read site below depends on that answer
+   * being exactly that. An item owning N live layers is unrepresentable in it,
+   * so widening its value type would touch every one of those sites for a
+   * reason none of them share. The types live in `live-layers.ts`, which argues
+   * this at length; the field is here because phase 5 is where it is WIRED.
+   *
+   * This is the third ownership class: not `#slots` (an operator graphic's
+   * layer), not `#reservedSet` (a fence AWAY from the company's playout system),
+   * but a layer the BRIDGE itself owns. Three doors read it — the R-009 sweep,
+   * the C-014 quarantine, and `clearLayer`'s R-015 refusal — and each is
+   * commented at its own site.
+   *
+   * ⚠ **Empty in this phase, and that is expected, not a gap.** No verb can seat
+   * a live producer yet (`playSource` is phase 6.1), so nothing populates this
+   * in production. The doors are still wired now, because the alternative — a
+   * live guest box existing on a layer the un-narrowed sweep can reclaim — is
+   * an operator being invited to clear a face off air (`design.md` §4).
+   */
+  readonly #liveLayers: LiveLayerLedger = new Map();
+  /**
+   * `B-225` — the standing notice, or `null`. Process state, deliberately NOT persisted: it
+   * describes a reconnect THIS process observed, and a bridge that restarts has no way to
+   * know whether the rows were put back in the meantime. A notice that outlived its evidence
+   * would be the same class of defect as the ledger that outlived its producers (`B-227`).
+   */
+  #emptiedAir: EmptiedAirNotice | null = null;
+  /**
+   * `CENTRAL-BRIDGE-01` (`B-294`) — what this process's restore did not bring back as it was, or
+   * `null`. Process state like `#emptiedAir`, for its reason: it describes the start THIS process
+   * made.
+   */
+  #restoreReport: StackRestoreReport | null = null;
+  /**
+   * 🔴 **The ADOPTED coordinates nothing has confirmed since the restart.**
+   *
+   * `bridge.ts` adopts the persisted ledger with occupancy hard-coded to `unknown` —
+   * no session exists at that point, and dropping an unverifiable record would strand
+   * exactly the producer `B-145` protects. So after a restart EVERY record is a file
+   * claim, and without this set a row the bridge seated seconds ago and a row read out
+   * of a file with CasparCG possibly black would be indistinguishable on the wire.
+   *
+   * Membership is by coordinate (`adoptionKey`), and it is CLEARED whenever the bridge
+   * itself writes that item's records: a take, a look reconcile, a swap. Those send real
+   * AMCP, so what they record is first-hand. That is the whole clearing rule — there is
+   * deliberately no occupancy-based un-marking, because reading the tap would be a
+   * SECOND authority over the ledger and `reconcileLiveLayers` exists to keep there
+   * being exactly one.
+   */
+  #unverifiedLive = new Set<string>();
+  /**
+   * `multibox-layout-switch` §14 (LOOKS) phase 3 — **itemId → the id of the look that
+   * item is currently showing.**
+   *
+   * ABSENT means "the authored default", never "no look": exactly one look is always
+   * active (§14.5), so this map records a DEPARTURE from the default rather than the
+   * state itself — which is why nothing has to write it at take time and why an item
+   * whose template has no looks simply never appears here.
+   *
+   * 🔴 **It is not a second spelling of the ledger.** The ledger says which producers are
+   * SEATED; this says which of them the page is PUNCHING A HOLE for. `tasks.md` 6.5 makes
+   * that separation load-bearing — a held plate is seated and not punched — so the two
+   * facts cannot share one store without one of them becoming unrepresentable.
+   */
+  readonly #activeLooks = new Map<string, string>();
+  /*
+    🔴 **`single-clock-look-switch` — `#plateFits` IS GONE, and its rule survives it.**
+
+    `C-028` kept each plan's resolved `{ aspect, mode }` so the PAGE could be told what to
+    punch its holes with, and the rule it enforced was that the hole and the fill must be ONE
+    computation. That rule now has one consumer instead of two: the page has no holes, and the
+    only `fitPictureToBox` that reaches air is the one behind `MIXER FILL` / `CLIP`. Two
+    evaluations cannot disagree when there is only one.
+
+    `B-178`'s `fitProvenance` is UNTOUCHED and is a different thing: it is the operator-facing
+    report of where each mode came from, which is still worth saying out loud.
+  */
   /**
    * B-039 — itemIds whose slot currently has a LIVE producer (a `CG ADD` succeeded
    * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
@@ -399,6 +1617,105 @@ export class CasparRuntime {
    */
   readonly #positions = new Map<string, Position>();
   /**
+   * R-048 / C-015 phase 6 (6.9) — itemId → plateId → catalog source id: this
+   * ROW's live-source substitutions.
+   *
+   * The `#positions` precedent EXACTLY, and deliberately: process memory, keyed by
+   * itemId, deleted at remove, survives a setConfig, and carried across a bridge
+   * restart by the browser's retention rather than by a file (6.9d). It is an
+   * OPERATOR PLACEMENT-shaped fact, not server knowledge.
+   *
+   * 🔴 **IT NEVER WRITES BACK to the template's assignment or the installation's
+   * catalog.** An emergency substitution must not silently become the permanent
+   * configuration — the operator patching around a dead feed at 20:59 is not
+   * making a decision about tomorrow's rundown, and the assignment is shared by
+   * every other row carrying that template.
+   */
+  readonly #sourceOverrides = new Map<string, LiveSourceOverride>();
+  /**
+   * Session BM — **the ROW's PER-LOOK composition: what this row shows in each look.**
+   *
+   * Level 3 of the four (`live-look-bindings.ts` carries the order and the argument). It
+   * sits BESIDE `#sourceOverrides` rather than replacing it, because the two answer
+   * different questions, and re-keying the emergency patch per look would break what it is
+   * for: an input that is DEAD is dead in EVERY look, so `R-048`'s override stays per-plate
+   * and outranks this one everywhere.
+   */
+  readonly #lookSourceBindings = new Map<string, LookSourceBindings>();
+  /**
+   * 🔴 **SESSION BP — THE ROW'S FROZEN LEVEL 2: the template assignment as it stood at the
+   * moment of THIS row's take.**
+   *
+   * **A ROW THAT IS ON AIR DOES NOT CHANGE ITS PICTURE BECAUSE SOMEBODY EDITED
+   * CONFIGURATION.** `LiveSourceFrozenAssignmentSchema` carries the full argument, the three
+   * exemptions and the ABSENT-vs-EMPTY rule; what belongs HERE is the lifetime and the two
+   * places the ordering matters:
+   *
+   *   - **WRITTEN by the take**, from the value {@link #planLiveSeating} actually resolved
+   *     against ({@link LiveSeatingPlan.resolvedFrom}) rather than by a second read of the
+   *     store. One evaluation, two uses — golden rule 7's shape, on a value instead of a
+   *     boolean. A second read could sit on the far side of an `await` and pin an assignment
+   *     the plan never saw.
+   *   - **DELETED by `out` and by `remove`.** A row that is not on air resolves LIVE, which
+   *     is what the Inspector has always promised: _"an off-air edit lands at the next
+   *     take."_ Presence of a key here is therefore also the answer to "is this row's level 2
+   *     pinned", and nothing derives that from the row's status a second way.
+   *
+   * ⚠ **`.has()`, NEVER emptiness.** An empty record is a real freeze — the template had no
+   * assignment at take. Do NOT copy `#applyBindingMaps`'s delete-when-empty idiom here; it is
+   * right for an override (nothing to override IS no override) and wrong for this.
+   *
+   * Process memory like its three neighbours, carried across a bridge restart by the
+   * browser's retention (`RetainedStackItem.frozenAssignment`) — without which a blip THAWS
+   * every on-air row and the edits made during the show land at the first reconcile after the
+   * reconnect.
+   */
+  readonly #frozenAssignments = new Map<string, Record<string, string>>();
+  /**
+   * C-015 phase 6 (6.5f) — itemId → plateId → the volume that PLATE is intended to
+   * have. **THE single source of the audio intent.**
+   *
+   * 🔴 **IT IS NOT `LiveLayerRecord.intendedVolume`, AND THE SPLIT IS THE POINT.**
+   * This map is the INTENT — what the operator asked for, which outlives any
+   * producer and any layer. The ledger's field is what was SENT, exactly as its
+   * `producer` is _"recorded as SENT rather than as configured"_. Reading the
+   * intent from the ledger, as the first cut did, ties it to a record that is
+   * rebuilt on every seat and destroyed on every teardown — so a raised plate went
+   * silent the moment its item was cleared and re-taken, and nothing said so.
+   *
+   * The `#positions` / `#sourceOverrides` precedent in every other respect:
+   * process memory, keyed by itemId, dropped at remove, carried across a bridge
+   * restart by the browser's retention rather than by a file (6.5f / 6.9d).
+   */
+  readonly #plateVolumes = new Map<string, LivePlateVolumes>();
+  /**
+   * 🔴 `TIMING-WIRE-22` — the operator's PASS TIMING intent, per item. Beside `#plateVolumes`
+   * and with the same lifetime: it is the INTENT, not a reading of the page, so it outlives the
+   * ledger and is what a restore re-applies.
+   *
+   * ⚠ Written only by a set that SUCCEEDED. A refused set records nothing — the same contract
+   * `swapLiveSource` and `setActiveLook` settled, and for the same reason: an intent left here
+   * by a failed send is not inert, it is what the next reconcile and the next take would read.
+   */
+  readonly #passTimings = new Map<string, StackItemTimingOverride>();
+  /*
+    🔴 `SELF-STOP-24` / `C-013` — **ITEM ID → THE TOKEN THAT NAMES ITS CURRENT TAKE.**
+
+    ⚠ **ONE MAP, scanned, rather than two kept in step.** The route needs token → item and the
+    mint needs item → token, and the obvious shape is a pair of maps. A pair is a pair that can
+    drift, and drift here means a token that still names a row after the row moved on — which is
+    a stop on a run nobody reported. The stack is tens of rows, so the scan is free and the
+    invariant is structural: writing a row's new token DELETES its old one because it is the
+    same key.
+
+    ⚠ It is NOT cleared on every exit path. Nothing needs it to be: a row's entry is replaced on
+    its next route into air, matching SPENDS it, and an unspent leftover can do nothing because
+    {@link #completionMayStop} asks the row's state as well. Clearing it at `out`, `remove`,
+    `stopItem` and each restore would be four more places to forget one — and the one forgotten
+    would fail by stopping a LIVE row, which is the direction that costs a picture.
+  */
+  readonly #takeTokens = new Map<string, string>();
+  /**
    * B-092 — restored items awaiting their adopt-vs-re-ADD decision.
    *
    * Retained stack intent arrives when the SPA reconnects, which on a bridge
@@ -417,8 +1734,85 @@ export class CasparRuntime {
     string,
     { slot: CommandSlot; templateId: string; fields: FieldValues }
   >();
+
+  /** `DESKTOP-APPS-01-D` j — a station in first-run declares no channel until its bank exists. */
+  readonly #declaresNothingWithoutBank: boolean;
+
+  /**
+   * 🔴 `PLATE-BAND-01` — **IS THIS STATION LINKED TO THE PLAYOUT?** Resolved once in `createBridge`
+   * from the auth config (`auth.mode === 'playout'`): a Playout address or issuer names one. Read by
+   * {@link plateBandInForce} alone, and fixed for the process — a new Playout address restarts the
+   * bridge (CG Bridge's configuration, `CENTRAL-BRIDGE-01`; `--set-playout-address` in a dev station).
+   */
+  readonly #playoutLinked: boolean;
+
+  /**
+   * 🔴 `DESKTOP-APPS-01-D` j — **ITEMS OF OURS ON A CHANNEL THIS STATION DOES NOT DECLARE**, keyed
+   * by `adoptionKey`. Measured: the owner moved the station from channel 1 to channel 2 with a
+   * logo still looping on 1-99; the channel-2 view counted it (`0 loaded · 1 on air`) and then,
+   * after a restart, told him to declare a row for it and load it again — which would have put
+   * it back on the Playout's programme output. Here it is kept out of every channel view, shown
+   * only in Station setup, and offered exactly one action.
+   */
+  readonly #strays = new Map<
+    string,
+    { itemId: string; templateId: string; channel: number; layer: number }
+  >();
+
+  /**
+   * R-021 stage 4 (task 3.1, owner decision d1) — **RESTORE-BLOCKED**: a retained
+   * item whose DECLARED row is held by a producer that is provably not ours, so
+   * the restore parked instead of acting.
+   *
+   * ⭐ **WHY IT IS RECORDED AND NOT DERIVED.** "Non-html producer under a binding"
+   * is the same shape as several honest, non-blocked situations, and the one that
+   * separates them is our KNOWLEDGE at the moment of decision: from a BLIND tap
+   * that shape means `unverified` (B-093 — silence is evidence of nothing), and
+   * only from a HEARING tap does it mean blocked. A re-derivation at publish time
+   * cannot see which of those actually happened, so it would eventually claim
+   * blocked on evidence that never existed. This map is written at exactly ONE
+   * place — the decision itself, in `#decidePendingRestores` — and read at
+   * exactly one — `#computeFixedState`, which puts it on the wire.
+   *
+   * The entry keeps the OBSERVED producer beside the slot so the reason survives
+   * with the state rather than being re-looked-up from a tap that has since moved
+   * on.
+   *
+   * It is cleared by every route out of the state: the item is decided (the
+   * foreign producer vacated, or it turned out to be ours), the operator issues
+   * any command (`#retirePendingRestore`), or the item is removed. It may NEVER
+   * be cleared by allocate-elsewhere or by an automatic CLEAR — those are the two
+   * exits d1 forbids.
+   */
+  readonly #restoreBlocked = new Map<string, { slot: CommandSlot; producer: string }>();
+  /**
+   * `CENTRAL-BRIDGE-01` (`C-046`) — what each server's last `OSC SUBSCRIBE` came to (or `unbound` when
+   * its OSC socket could not be bound). Read by `/health`; absent until the first handshake.
+   */
+  readonly #oscStatus = new Map<ServerLabel, 'subscribed' | 'refused' | 'unbound'>();
+  /**
+   * `CENTRAL-BRIDGE-01` (`C-047`) — has the first connection after start been judged from the core's
+   * own `INFO` (`#startCheck`)? Once per process: every later connection keeps the OSC sample.
+   */
+  #startChecked = false;
+  /** The start check's picture, read in the handshake and consumed at the healthy transition. */
+  #startSample: ReadonlyMap<string, string> | null = null;
+  /**
+   * `FIELD-FIXES-01` B — why each row's last take was refused, published on the row
+   * (`StackItemState.takeRefusal`) so every console shows the same one line there and none needs
+   * a banner. Written by {@link #recordTakeRefusal}; retired by the row's next successful take,
+   * its CLEAR, or its removal ({@link #retireTakeRefusal}).
+   */
+  readonly #takeRefusals = new Map<string, TakeRefusal>();
   #seq = 0;
   #lastFailover: ConnectionHealth['lastFailover'] = undefined;
+  /**
+   * `DESKTOP-APPS-01-B` B1.1 — set by the bridge while it authenticates against a Playout and no
+   * `station-admin` has signed in to it yet; see {@link setAmcpAwaitsSignIn}.
+   */
+  #amcpAwaitsSignIn = false;
+  /** Has AMCP been up on the current sessions? A link that was up has been trusted. */
+  #amcpEverUp = false;
 
   // Coalescing (Phase-2 NOTE): collapse per-itemId changes into bounded publishes.
   readonly #dirty = new Set<string>();
@@ -431,18 +1825,40 @@ export class CasparRuntime {
   // cleared in stop() (the B-053 dispose caution); the tick reads the
   // CURRENT primary dynamically, so failover/setConfig need no rewiring.
   #sweepTimer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * 🔴 `RELEASE-091-01` (DELTA B, B1) — the SILENCE QUESTION's tick, and what it remembers: for each
+   * layer of ours already asked about, the last producer report its current silence began after (so
+   * one silence is asked about once); the channels with an `INFO` read in flight; and the layers
+   * found cleared outside CG Control, still to be said.
+   */
+  #silenceTimer: ReturnType<typeof setInterval> | null = null;
+  #silenceAsked: ReadonlyMap<string, number> = new Map();
+  readonly #silenceReading = new Set<number>();
+  #clearedOutside: ClearedOutsideLayer[] = [];
   readonly #sweepMs: number;
   readonly #occupancyStaleMs: number;
+  readonly #channelTickStaleMs: number;
   readonly #orphanTracker = new OrphanTracker();
 
   // ── non-playout stub state ──────────────────────────────────────────
   // B-038 Phase 2 — holds each imported template's info + the browser-produced
-  // self-contained HTML, keyed by id. B-038 Phase 3 — the HTTP server serves that
-  // HTML at `/template/<id>`, so `CG ADD` can reference a real, loadable URL.
+  // self-contained HTML. B-038 Phase 3 — the HTTP server serves that HTML at
+  // `/template/<key>`, so `CG ADD` can reference a real, loadable URL.
   // R-028 (o1) — persisted to disk when a templates dir is configured, and
   // hydrated in the constructor so the registry is complete before the
   // WebSocket ever answers a `templates.list`.
+  // 🔴 `CHANNEL-TEMPLATES-01` — PER CHANNEL: each channel lists its own
+  // `(template, version)` over one shared store of versions. A row resolves its
+  // template through ITS OWN channel's list (`#templateOn`), never another's.
   readonly #templates: TemplateRegistry;
+  /**
+   * `C-031` — what the registry's boot hydration found: how many persisted templates
+   * it loaded, how many files it refused, and from where. Kept so the CLI can SAY it
+   * on the boot line. On 2026-09-04 every take was refused and the first question —
+   * "does the bridge even hold the templates?" — had no line to answer it; this number
+   * would have answered it in a second.
+   */
+  readonly #templateProvenance: { loaded: number; skipped: number; dir: string | null };
   /** R-034 — the station's delimiter list, persisted beside the templates. */
   readonly #delimiters: DelimiterStore;
   /** R-030 — the per-channel output raster + what `INFO` reports, persisted. */
@@ -456,6 +1872,54 @@ export class CasparRuntime {
    * adjudicated at take time (the fixed-bank governing principle).
    */
   #sourceCatalog: SourceCatalog;
+  /**
+   * `PLAYOUT-SOURCES-01` §1.C — the one retry's read ({@link setMediaFreshener}): a media item's
+   * `clip` read fresh from the Playout, answered only when it differs from the path played.
+   */
+  #freshMediaClip: ((sourceId: string, played: string) => Promise<string | null>) | null = null;
+  /**
+   * `MEDIA-PLATES-01` §1.A — the bound-media store's writer ({@link setMediaPlaybackWriter}): sets a
+   * clip's two playback settings on its reference and answers its NAME, or `null` for an id it does
+   * not hold. `null` — no Playout media — means there is no clip to set.
+   */
+  #writeMediaPlayback:
+    | ((sourceId: string, playback: MediaPlayback) => { readonly name: string } | null)
+    | null = null;
+  /** `MEDIA-PLATES-01` §1.E — the media clock's tick; armed in `start()`, cleared in `stop()`. */
+  #mediaStateTimer: ReturnType<typeof setInterval> | null = null;
+  readonly #mediaStateTickMs: number;
+  /** What the last `mediaStateChanged` said, in the whole seconds the console shows. */
+  #mediaStateShown = '[]';
+  /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 — the bounded D10 re-read ({@link setInputsConfirmer}), handed in by
+   * the bridge like the media freshener. Answers the catalogue's epoch once a successful read lands
+   * within the bound. `null` — no Playout reader — means no route can ever be confirmed.
+   */
+  #confirmInputs:
+    | ((
+        timeoutMs: number,
+      ) => Promise<{ readonly ok: true; readonly epoch?: string } | { readonly ok: false }>)
+    | null = null;
+  /**
+   * `ROUTE-PLATES-01` rule 5 — counts the PRIMARY's new AMCP connections. An epoch confirmed on an
+   * earlier connection says nothing about this one: the core may have restarted in between.
+   */
+  #amcpGeneration = 0;
+  /** `ROUTE-PLATES-01` rule 5 — the epoch a D10 read confirmed, and on which connection. */
+  #routeEpochConfirmed: { readonly generation: number; readonly epoch: string } | null = null;
+  /** `ROUTE-PLATES-01` rule 4 — the clock the `LOADBG` → `PLAY` window and the reveal wait use. */
+  readonly #routeClock: RouteClock;
+  /**
+   * `ROUTE-PLATES-01` §1.E — layers a `CLEAR` of ours LANDED on (primary-acked) and nothing was
+   * played on since: the guard's "holds a seated plate" answer excludes them, so a teardown's
+   * `MIXER CLEAR` — sent only after its `CLEAR` landed, while the ledger still names the layer —
+   * is not taken for a mixer clear under a seated plate. Keys are {@link adoptionKey}s.
+   */
+  readonly #emptiedLayers = new Set<string>();
+  /** `ROUTE-PLATES-01` C4 — the rows last published `backupUnmirrored` (see `#publishLiveLayers`). */
+  #backupUnmirroredItems = new Set<string>();
+  /** `PLAYOUT-FEATURES-01` A — each row's last published `backupNoCopy`, as JSON (see `#publishLiveLayers`). */
+  #backupNoCopyItems = new Map<string, string>();
   /**
    * D-137 / C-015 — which catalog entry each template's each PLATE uses.
    * LOADED, VALIDATED and PRUNED in `createBridge`, before the WebSocket binds.
@@ -473,6 +1937,35 @@ export class CasparRuntime {
    * golden rules state for liveness, applied to geometry.
    */
   readonly #modeReadFrom = new Map<number, ServerLabel>();
+  /*
+    🔴 `C-029` — THE PROGRAM-OUTPUT CHECK: what `casparcg.config` DECLARES against what
+    `INFO <channel>` reports RUNNING, per server, per channel.
+
+    Two reads, two latches, one verdict:
+
+    - `#declaredConsumers` — `INFO CONFIG`, read ONCE PER CONNECTION on the sweep tick
+      (`undefined` = not read yet, asked again next tick; `null` = answered but not a
+      configuration, latched — asking again would not make it one).
+    - `#runningConsumers` — the `<output>` block of the SAME `INFO <channel>` reply the
+      `R-030` mode read already sends, so the running half costs no extra AMCP traffic; a
+      slow wall-clock re-read (`#outputRecheckMs`, 60 s) keeps it honest afterwards.
+    - `#outputChecks` — the verdict, KEPT across a disconnect on purpose so the renderer can
+      say "last seen missing, cannot re-check" (`outputVerdictOf`'s `unverifiable` arm)
+      instead of falling silent. Reset only by a fresh reading.
+
+    All three are keyed by the server that ANSWERED, never by whoever was primary when the
+    send started — a failover mid-flight would otherwise file A's declaration under B.
+  */
+  readonly #declaredConsumers = new Map<ServerLabel, DeclaredChannelConsumers[] | null>();
+  readonly #configReadInFlight = new Set<ServerLabel>();
+  readonly #runningConsumers = new Map<
+    ServerLabel,
+    Map<number, { running: RunningConsumer[]; at: string }>
+  >();
+  readonly #outputChecks = new Map<ServerLabel, Map<number, ChannelOutputCheck>>();
+  /** When this server's running set was last read (ms epoch), for the slow re-check. */
+  readonly #outputReadAt = new Map<ServerLabel, number>();
+  readonly #outputRecheckMs: number;
   /**
    * R-030 — channels whose raster mismatch has already been shouted, so a
    * settled fault is announced on its TRANSITION and not on every publish.
@@ -504,18 +1997,21 @@ export class CasparRuntime {
   readonly #rehearseBusy = new Set<string>();
   /** R-022 — the startup volume re-assert is once per process, not per sweep. */
   #volumesReasserted = false;
-  /**
-   * R-028 part B — ids this bridge REMOVED, so a reconnecting browser's
-   * re-delivery cannot bring them back. Process-lifetime only, deliberately: a
-   * bridge restart re-reads the persisted registry, and a template absent from
-   * it is indistinguishable from one that was never imported — at which point a
-   * browser's re-delivery is the desired REPAIR rather than a resurrection. The
-   * tombstone only needs to outlive the reconnects of the session that removed.
-   */
-  readonly #removedTemplateIds = new Set<string>();
   readonly #templateServer: TemplateHttpServer;
   #serveOptions: TemplateServeOptions;
   /** Kept for `setConfig`'s serve re-derivation (explicit overrides keep winning). */
+  /**
+   * `C-024` — **the COMMAND-LINE layer only, and the name is load-bearing.**
+   *
+   * This is what `--template-serve-host` / `--template-serve-port` set, held for the life of the
+   * process. It is NOT "the override in force": the config file is a second source, and the two are
+   * combined by {@link resolveServeOverride} with THIS ONE LAST, so a flag always wins.
+   *
+   * ⚠ Do not merge the stored value INTO this field. It is `readonly` because the flags cannot
+   * change while the process runs, whereas the stored value changes on every apply — folding them
+   * together here would make a value from a panel permanently indistinguishable from one a boot
+   * script passed, and there would be no way left to report the mask to the operator.
+   */
   readonly #serveOverride: TemplateServeOverride;
   /**
    * fix-setconfig-serve-restart — TRUE once `startServing()` has run for
@@ -530,23 +2026,95 @@ export class CasparRuntime {
   #applyInFlight = false;
   #lock: LockState = { engaged: false };
   #lockPin: string | null = null;
+  /**
+   * B-141 — THE AUDIT RECORD.
+   *
+   * `#auditWriter` is the source of truth when a path is configured: NDJSON on
+   * disk, append-only, surviving a bridge restart. `#audit` remains as the
+   * in-memory tail ONLY for the no-writer case (tests, and a bridge started
+   * without `--audit-log-path`), so `auditRecent` always has something coherent
+   * to answer with.
+   *
+   * 🔴 **A FAILED AUDIT WRITE MUST NEVER TAKE THE STATION OFF AIR**, and the
+   * contrast with the config stores is deliberate rather than an inconsistency.
+   * An unusable `--source-assignments-path` or `--fixed-layers-path` IS a hard
+   * boot failure, because those files are PRECONDITIONS for correct playout — a
+   * take resolved against a half-read bank puts the wrong thing on the wrong
+   * layer. An audit entry is a RECORD OF what happened; nothing downstream reads
+   * it to decide what to send. So every append is fire-and-forget: the writer
+   * emits `error`, keeps its own `lastError` and `errorCount`, keeps trying, and
+   * the take proceeds regardless.
+   */
   #audit: AuditEntry[] = [];
-  #settings: Settings = { telemetry: 'off' };
+  /** `R-083` — rows recorded since start: the in-memory tail's page cursor counts by it. */
+  #auditSeq = 0;
+  #auditWriter: AuditWriter | null = null;
+  #auditLogPath: string | null = null;
   #pendingUpdate: PendingUpdate | null = null;
 
   #started = false;
   readonly #intentTimeoutMs: number;
+  /**
+   * `B-174` — the configured mixer hold, or `undefined` to derive one channel frame from
+   * the observed video mode at each switch. See the constructor option of the same name.
+   */
+  readonly #lookMixerHoldMs: number | undefined;
+  /** `FIELD-FIXES-01-A` — where every settled AMCP exchange goes (the bridge's AMCP log). */
+  readonly #onAmcpExchange: ((entry: AmcpLogEntry) => void) | undefined;
+  /** `R-090` — the OSC bind-failure sink (`/health`'s `port-refused`). */
+  readonly #onOscUnbound: ((server: ServerLabel, port: number) => void) | undefined;
   /**
    * TEST-ONLY seam (B-100): per-`ServerSession` health-timer overrides. Empty in
    * production, so the ServerSession defaults apply. A test uses it to drive and
    * HOLD a session in `degraded` (OSC-silent, AMCP up) deterministically — the
    * state the reachability predicate must count as reachable.
    */
+  /** `B-198` — TEST-ONLY, see the constructor option. `0` (the default) is a no-op. */
+  readonly #mixerLineDelayMs: number;
+  /** `B-199` — TEST-ONLY, see the constructor option. `0` (the default) never throws. */
+  readonly #throwAfterMixerLines: number;
+  /** `B-199` — TEST-ONLY: STAGED lines sent so far, counted only when the injector is armed. */
+  #mixerLinesSent = 0;
+  /** `B-198` — the layer the last `MIXER` line addressed, so the injector can find the boundary. */
+  #lastMixerTarget: string | null = null;
+  /**
+   * 🔴 `B-199` — **the channel this process has `MIXER … DEFER`red something on and not yet
+   * committed**, or `null`. An INSTANCE field rather than a local, so the guard that drains it
+   * can sit OUTSIDE the batch that fills it and still run when that batch throws.
+   */
+  #stagedMixerChannel: number | null = null;
+  /**
+   * 🔴 `B-221` — **the channel on which this process staged something and then could not
+   * DELIVER the commit**, or `null`.
+   *
+   * `B-199`'s guard puts the commit in a `finally`, which guarantees it is SENT on every
+   * exit path; nothing can guarantee it ARRIVES. A link that dies between the first
+   * `DEFER` and the `COMMIT` — measured on the plant: the staged half survives the socket
+   * that staged it — leaves the server holding a change that the next `COMMIT`, ours or
+   * anyone's, applies at a moment nothing chose. This field is the memory of that: written
+   * by {@link #sendMixerCommit} when a commit does not land on the primary, drained by
+   * {@link #flushOrphanedStaging} on the next healthy connection, which commits the orphan
+   * and puts the ledger's geometry back — the same repair `B-199` makes on the throw path,
+   * moved to the one moment a dead link can be repaired at.
+   */
+  #orphanedMixerChannel: number | null = null;
   readonly #sessionTuning: {
     oscDegradedAfterMs?: number;
     oscDownAfterMs?: number;
     watcherIntervalMs?: number;
   };
+  /** `DESKTOP-APPS-01-C` C6 — see the option: the address a session dials, per configured host. */
+  readonly #amcpAddressFor: (host: string) => string;
+  /**
+   * 🔴 `RELEASE-0113-01` (`B-316`) — **WHERE EACH CHANNEL'S LINES GO ON SERVER B.** Nothing mapped until the
+   * bridge hands in the backup engine's mapping ({@link useBackupChannels}): no line ever reaches server B
+   * with the primary's channel number, and with no mapping none reaches it at all.
+   */
+  #backupChannels: BackupChannelMap = NO_BACKUP_CHANNELS;
+  /** `B-316` — TEST-ONLY, see the constructor option: hand server B the station's line untranslated. */
+  readonly #serverBVerbatim: boolean;
+  /** `B-316` — server B refusals already logged (one line per kind and channel). */
+  readonly #serverBRefusalsSaid = new Set<string>();
 
   constructor(
     config: ConnectionConfig,
@@ -555,14 +2123,93 @@ export class CasparRuntime {
       intentTimeoutMs?: number;
       sweepMs?: number;
       occupancyStaleMs?: number;
+      channelTickStaleMs?: number;
+      /** `MEDIA-PLATES-01` — TEST-ONLY: how often the media clock looks for a change to publish. */
+      mediaStateTickMs?: number;
+      /** `C-029` — TEST-ONLY: how often a reachable server's running consumers are re-read. */
+      outputRecheckMs?: number;
+      /**
+       * `B-174` — how long a look switch HOLDS its `MIXER FILL`/`CLIP` batch after the
+       * page has been told, in ms, so the fills land with the holes instead of 1–3 fields
+       * ahead of them (measured, `tools/skew-harness`).
+       *
+       * ABSENT means ONE CHANNEL FRAME of the channel's OBSERVED video mode (40 ms at the
+       * plant's `1080i5000`; 20 ms at `1080p5000`), falling back to 40 ms while the mode
+       * is unread — see {@link #lookMixerHoldMsFor}. `0` is a REAL value meaning no hold
+       * (the page-first order is kept; only the sleep is skipped), which is also what the
+       * wire-order tests pass so they do not spend 40 ms per switch. Resolved with `??`,
+       * never `||`, so that 0 survives.
+       */
+      lookMixerHoldMs?: number;
       /** TEST-ONLY seam: inject a template server (e.g. one whose start() fails). */
       templateServer?: TemplateHttpServer;
+      /**
+       * 🔴 **TEST-ONLY FAULT INJECTOR (`B-198`) — delay a `MIXER` line by this many ms at the
+       * SEND SEAM when it addresses a DIFFERENT LAYER from the one before it, so a split that
+       * is otherwise 1-in-50 fires on demand.**
+       *
+       * ⚠ **AT THE PLATE BOUNDARY, NOT AT EVERY LINE, AND THAT DISTINCTION IS THE EXPERIMENT.**
+       * A per-LINE delay was tried first and it forced a different artefact: it also separates
+       * a plate's own `FILL` from its own `CLIP`, and it drags the probe that reads the second
+       * plate — so the recording came back with `k` = 1–2 channel frames and 77 % of the frame
+       * misplaced, against the reported event's `k` = 0 and 22.68 %. Same mechanism, wrong
+       * amplitude and wrong shape. Delaying only where the batch crosses from one plate to the
+       * next reproduces what was actually seen: one plate's geometry in force a channel frame
+       * before the next plate's, and nothing else disturbed.
+       *
+       * ⚠ **IT SITS AT THE SEAM ON PURPOSE, AND THAT IS THE WHOLE DESIGN.** The obvious place
+       * to force a split is between the lines in `#applyLivePlates` — and it is the wrong
+       * place, because the fix REPLACES that loop, so the forcing would vanish with the
+       * defect and "it passes with the forcing still in place" would be a claim about nothing.
+       * Delaying each `MIXER` line as it is SENT survives the fix intact: after it the lines
+       * are still separate writes, still this far apart, and still staged — so the same
+       * injector that produced the artefact is what proves it cannot happen any more.
+       *
+       * Never set in production. `bridge.ts` does not expose it and no CLI flag reaches it;
+       * only the skew harness passes it, and only when asked to.
+       */
+      faultInjection?: {
+        mixerLineDelayMs?: number;
+        /**
+         * 🔴 **TEST-ONLY (`B-199`) — THROW after this many STAGED `MIXER` lines have been sent.**
+         *
+         * The guard it exercises catches a batch that dies BETWEEN its first `DEFER` and its
+         * `COMMIT`, and nothing on an ordinary path throws there — `#send` catches its own
+         * errors and answers `{ ok: false }`. Without a way to make it happen, the guard would
+         * be reasoning; with one, a test can assert the wire.
+         *
+         * ⚠ **It counts DEFERRED lines, not `MIXER` lines**, and that is what makes the test
+         * independent of how many un-staged mixer commands a caller happens to send first — a
+         * take's own un-mute, for one. Dying anywhere else leaves nothing staged and so has
+         * nothing for this guard to do.
+         */
+        throwAfterMixerLines?: number;
+        /**
+         * 🔴 **TEST-ONLY (`B-316`) — hand server B the STATION's line, untranslated**, as a regression in
+         * the translation would. The guard for server B (`serverBLineRefusal`) must still refuse every such
+         * line that names a channel that is not one of B's mirrors; this is how a test proves it does.
+         */
+        serverBVerbatim?: boolean;
+      };
+      /**
+       * `B-316` — TEST-ONLY: the backup channel map to start with (production: the bridge hands one in with
+       * {@link useBackupChannels}). Absent — nothing is mapped, and nothing reaches server B.
+       */
+      backupChannels?: BackupChannelMap;
       /** TEST-ONLY seam (B-100): override each session's OSC health timers. */
       sessionTuning?: {
         oscDegradedAfterMs?: number;
         oscDownAfterMs?: number;
         watcherIntervalMs?: number;
       };
+      /**
+       * 🔴 `DESKTOP-APPS-01-C` C6 — **THE ADDRESS AN AMCP SESSION DIALS**, for a configured host.
+       * The bridge pins the Playout's host to the ONE IPv4 its HTTP reads use, so the Playout sees
+       * AMCP arrive from the same address that introduced this machine. The configured host is
+       * untouched everywhere else (grants, the serve-host derivation, the UI); only the dial moves.
+       * Absent: every session dials its configured host, as before.
+       */
+      amcpAddressFor?: (host: string) => string;
       /**
        * R-021 stage 1 — the VALIDATED fixed operator slots (from
        * `fixed-layers-store`'s validator) and the layer policy in force. The
@@ -573,9 +2220,15 @@ export class CasparRuntime {
       layerPolicy?: LayerPolicy;
       /**
        * R-021 stage 2a — the bank the slots came from (aliases + the CURRENT
-       * side of live change validation). Absent = no bank declared.
+       * side of live change validation). Absent = no bank declared. The ONE-bank
+       * spelling of {@link fixedBanks}; a caller passes one or the other.
        */
       fixedBank?: FixedLayerBank;
+      /**
+       * `MULTI-CHANNEL-01` — the station's banks, one per declared channel (`createBridge`
+       * resolves and validates them). Absent, with no {@link fixedBank} either = none declared.
+       */
+      fixedBanks?: readonly FixedLayerBank[];
       /**
        * R-028 / C-015 — the reserved playout layer numbers, from real config
        * (resolved once in `createBridge`; the SAME list the boot validator
@@ -599,8 +2252,67 @@ export class CasparRuntime {
        * ASSIGNED, which is exactly what a freshly imported library has.
        */
       sourceAssignments?: SourceAssignments;
+      /**
+       * B-141 — where the NDJSON audit record lives. ABSENT means no writer is
+       * configured, which the panel reports AS SUCH rather than as "no entries".
+       */
+      auditLogPath?: string;
+      /**
+       * 🔴 `DESKTOP-APPS-01-D` j — an installed station in FIRST-RUN declares NO channel until its
+       * bank is written. Without it a bank-less runtime answers channel 1 (the schema's default),
+       * and the owner's channel-2 set-up adopted channel 1's logo into its stack: a console that
+       * remembered it re-delivered it, and the bank-less bridge took it as its own.
+       */
+      declaresNothingWithoutBank?: boolean;
+      /**
+       * 🔴 `PLATE-BAND-01` — this station is LINKED TO THE PLAYOUT (its auth config names one), so
+       * with no band declared its plates go in the contract's plate band, 60–79, unless its own config
+       * claims a layer there ({@link plateBandInForce}). Absent = not linked: the band is the declared
+       * one or none, exactly as before.
+       */
+      playoutLinked?: boolean;
+      /**
+       * 🔴 `FIELD-FIXES-01-A` — every AMCP command a session settles, with its reply line and the
+       * server it went to: the bridge's AMCP log (`amcp-log.ts`) is the one consumer.
+       *
+       * ⚠ **A SINK, NOT AN EMITTER, and deliberately.** Every emitter this class declares is pushed
+       * to every console (`B-247`'s guard, `publish-coverage.test.ts`), and an exchange must never
+       * be: its raw line carries the page's take token, which the log redacts and a console must
+       * not be handed. A file sink is not a publication, so it is not shaped like one.
+       */
+      onAmcpExchange?: (entry: AmcpLogEntry) => void;
+      /**
+       * 🔴 `R-090` — told when a server's OSC port cannot be bound (another program holds it), so
+       * `/health` can name the port and its holder. A sink, like `onAmcpExchange`: never a publication.
+       */
+      onOscUnbound?: (server: ServerLabel, port: number) => void;
+      /**
+       * `ROUTE-PLATES-01` rule 4 — TEST-ONLY: the clock a Playout route's `LOADBG` → `PLAY` window
+       * and its reveal wait run on. Absent: the real one.
+       */
+      routeClock?: RouteClock;
+      /**
+       * `ROUTE-PLATES-01` §2 — TEST-ONLY: hands the caller the send seam itself, so a test can
+       * PLANT one line (a forbidden command, a stale-epoch route, a holder-channel target) and
+       * watch the guard refuse it before the wire. No IPC channel reaches it: only whoever
+       * constructs the runtime holds the function.
+       */
+      seamForTest?: (
+        send: (
+          line: string,
+          options?: { readonly routeEpoch?: string },
+        ) => Promise<{ ok: boolean; errorCode?: string }>,
+      ) => void;
+      /**
+       * `DONGLE-RECOVER-01` — TEST-ONLY: hands the caller a read of `#loaded` ("a page of this row is
+       * resident on its layer"), so a test can say what the bridge BELIEVES beside what the core holds.
+       * No IPC channel reaches it: only whoever constructs the runtime holds the function.
+       */
+      loadedForTest?: (isLoaded: (itemId: string) => boolean) => void;
     } = {},
   ) {
+    this.#declaresNothingWithoutBank = options.declaresNothingWithoutBank === true;
+    this.#playoutLinked = options.playoutLinked === true;
     this.#reservedLayers = options.reservedLayers ?? [];
     this.#reservedSet = new Set(this.#reservedLayers);
     this.#layers = new LayerManager({
@@ -609,11 +2321,29 @@ export class CasparRuntime {
       reservedLayers: this.#reservedLayers,
     });
     this.#layerPolicy = options.layerPolicy ?? DEFAULT_LAYER_POLICY;
-    this.#fixedBank = options.fixedBank ?? null;
+    this.#fixedBanks = sortBanks(
+      options.fixedBanks ?? (options.fixedBank !== undefined ? [options.fixedBank] : []),
+    );
     // R-028 (o1) — hydrate the persisted catalogue BEFORE anything can ask
     // for it; a bridge restart must not empty the library.
     this.#templates = new TemplateRegistry(options.templatesDir);
-    this.#templates.loadPersisted();
+    // `C-031` — the counts are KEPT, not discarded: the boot line reads them back.
+    this.#templateProvenance = {
+      ...this.#templates.loadPersisted(),
+      dir: options.templatesDir ?? null,
+    };
+    /*
+      🔴 `CHANNEL-TEMPLATES-01` decision 5 — THE ONE-TIME COPY: a library written before the
+      per-channel lists is listed on every declared channel, at the version it has. A second load
+      copies nothing; a station in first-run (nothing declared) is copied when it declares.
+    */
+    this.#templates.migrate(this.#declaredChannels());
+    /*
+      A row that leaves the stack HOLDS nothing any more, so the version its last page was served
+      from may now be collected. Subscribed HERE rather than in `start()`: the hold is written by
+      the first `CG ADD`, which a runtime that is never started can still reach in a unit test.
+    */
+    this.#reconciler.on('item-removed', (info) => this.#templates.release(info.itemId));
     // R-034 — same shape, same reason: the delimiter list is read from disk
     // before the WebSocket can answer a `delimiters.list`, so a bridge restart
     // never hands a browser the defaults over the operator's own list.
@@ -626,22 +2356,69 @@ export class CasparRuntime {
     // every later one against the configured raster — the kind of difference
     // nobody would think to look for.
     this.#channelSettings = new ChannelSettingsStore(options.templatesDir);
-    this.#channelSettings.hydrate(this.#declaredChannels());
+    // `CHANNEL-AUTHORITY-01` — the PREDICATE, not a boot-time copy of its answer.
+    this.#channelSettings.hydrate(() => this.#declaredChannels());
     // D-137 / C-015 — already loaded and validated by `createBridge`; absent
     // files resolved to the EMPTY value there, never to a guessed default.
     this.#sourceCatalog = options.sourceCatalog ?? EMPTY_SOURCE_CATALOG;
     this.#sourceAssignments = options.sourceAssignments ?? EMPTY_SOURCE_ASSIGNMENTS;
+    // B-141 — the audit writer, when a path is configured. Constructing it opens
+    // nothing yet; the first `append` creates the parent directory and the file.
+    // Deliberately NOT wrapped in a boot-time reachability check: an audit log we
+    // cannot open must not stop the bridge coming up.
+    if (options.auditLogPath !== undefined) {
+      this.#auditLogPath = options.auditLogPath;
+      // `CONSOLE-POLISH-01` (`R-083`) — daily and at 20 MB; 90 days and 200 MB kept.
+      this.#auditWriter = new AuditWriter({
+        filePath: options.auditLogPath,
+        rotation: DEFAULT_AUDIT_ROTATION,
+      });
+    }
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
+    // `undefined` is MEANINGFUL here (derive from the observed mode per switch), so this
+    // one is not defaulted at construction the way its siblings below are.
+    this.#lookMixerHoldMs = options.lookMixerHoldMs;
+    this.#onAmcpExchange = options.onAmcpExchange;
+    this.#onOscUnbound = options.onOscUnbound;
+    this.#routeClock = options.routeClock ?? SYSTEM_ROUTE_CLOCK;
+    options.seamForTest?.((line, sendOptions = {}) =>
+      this.#send(line, this.#nextSeq(), 'urgent', sendOptions),
+    );
+    options.loadedForTest?.((itemId) => this.#loaded.has(itemId));
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
+    this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
+    this.#mediaStateTickMs = options.mediaStateTickMs ?? MEDIA_STATE_TICK_MS;
+    this.#outputRecheckMs = options.outputRecheckMs ?? OUTPUT_RECHECK_MS;
+    this.#mixerLineDelayMs = options.faultInjection?.mixerLineDelayMs ?? 0;
+    this.#throwAfterMixerLines = options.faultInjection?.throwAfterMixerLines ?? 0;
+    this.#serverBVerbatim = options.faultInjection?.serverBVerbatim ?? false;
+    if (options.backupChannels !== undefined) this.#backupChannels = options.backupChannels;
     this.#sessionTuning = options.sessionTuning ?? {};
+    this.#amcpAddressFor = options.amcpAddressFor ?? ((host: string): string => host);
     this.#templateServer =
-      options.templateServer ?? new TemplateHttpServer((id) => this.#templates.html(id));
+      options.templateServer ??
+      new TemplateHttpServer(
+        // `CHANNEL-TEMPLATES-01` — the path segment is a VERSION's serve key: the bare
+        // template id for a template with one version, qualified only beside a second.
+        (key) => this.#templates.htmlForServeKey(key),
+        // `SELF-STOP-24` — the completion route's decision. Bound here rather than passed down
+        // because the server holds no take state: this is the only object that can answer it.
+        (take) => this.#onTemplateComplete(take),
+      );
     this.#config = config;
     this.#serveOverride = serveOverride;
-    // B-038 Phase 3 — serve loopback when CasparCG is local; an opt-in routable
-    // host (configured or guessed) when remote. The control WS stays loopback.
-    this.#serveOptions = deriveServeOptions(config.servers.A.host, serveOverride);
+    // B-038 Phase 3 — serve loopback when EVERY CasparCG is local; an opt-in
+    // routable host (configured or guessed) when ANY of them is remote. The
+    // control WS stays loopback.
+    //
+    // B-162 — `configuredCasparHosts`, never `servers.A.host`: one URL goes to
+    // every server, so the decision belongs to the whole declared set.
+    // C-024 — flag > stored > derived, through the ONE merge. `serveOverride` is the flag layer.
+    this.#serveOptions = deriveServeOptions(
+      configuredCasparHosts(config),
+      resolveServeOverride(storedServeOverride(config), serveOverride),
+    );
     // B-046 — only DECLARED servers get a session: no phantom backup, no
     // reconnect churn, no divergence noise under the single-server default.
     this.#sessions = this.#buildSessions(config);
@@ -650,6 +2427,8 @@ export class CasparRuntime {
       sessions: this.#sessions,
       initialPrimary: 'A',
       autoFailoverEnabled: config.autoFailoverEnabled,
+      // 🔴 `B-316` — every road to server B asks this, and only this.
+      serverBLine: (line) => this.#serverBLine(line),
     });
   }
 
@@ -663,17 +2442,67 @@ export class CasparRuntime {
    * untouched by any of this.
    */
   #buildSessions(config: ConnectionConfig): { A: ServerSession; B?: ServerSession } {
-    const session = (name: ServerLabel, ep: ConnectionConfig['servers']['A']): ServerSession =>
-      new ServerSession({
+    this.#amcpEverUp = false;
+    const session = (name: ServerLabel, ep: ConnectionConfig['servers']['A']): ServerSession => {
+      const built = new ServerSession({
         name,
-        host: ep.host,
+        // C6 — the dial (and the OSC source filter, which compares against it) on the pinned IPv4.
+        host: this.#amcpAddressFor(ep.host),
         port: ep.amcpPort,
         oscPort: ep.oscPort,
         oscBindHost: deriveOscBindHost(ep.host),
+        /*
+          🔴 `CENTRAL-BRIDGE-01` rule 7 (`C-046`) — every connection asks the core for OSC on the port
+          this session bound, inside its handshake. On the Playout's machine UDP 6250 is the engine's;
+          the core's own default per-client subscription goes there and is left alone.
+        */
+        oscSubscribe: true,
+        // `CENTRAL-BRIDGE-01` (`C-047`) — the start check's `INFO` reads, before `healthy`.
+        onHandshake: (read) => this.#startCheckRead(name, read),
         resyncDurationMs: RESYNC_MS,
         // TEST-ONLY (B-100): empty in production, so ServerSession defaults hold.
         ...this.#sessionTuning,
       });
+      built.on('healthy', () => {
+        this.#noteAmcpUp();
+      });
+      /*
+        `CENTRAL-BRIDGE-01` rule 7 — `OSC SUBSCRIBE` carries every channel of the core (on the
+        Playout's machine its previews, its holder and its guard among them): only the channels this
+        station declares are taken in. While none is declared (first-run) every channel is.
+      */
+      /*
+        🔴 `B-316` — and server B's core speaks its OWN channel numbers: its M is read as the station's N
+        before any tap, and a channel of B's that is no mirror in force (its own programme, a preview, a
+        holder) is dropped — said once per channel.
+      */
+      built.osc.setChannelMap(
+        name === 'A'
+          ? (channel) => (this.#servesOscChannel(channel) ? channel : null)
+          : (channelOnB) => this.#stationChannelOfB(channelOnB, 'OSC'),
+      );
+      const where = `${ep.host}:${String(ep.amcpPort)}`;
+      built.on('oscSubscription', ({ port, outcome, detail }) => {
+        this.#oscStatus.set(name, outcome);
+        process.stderr.write(
+          outcome === 'subscribed'
+            ? `[caspar-bridge] OSC: server ${name} (${where}) sends to this bridge's UDP ${String(port)} (OSC SUBSCRIBE)\n`
+            : outcome === 'refused'
+              ? `[caspar-bridge] ⚠ OSC: server ${name} (${where}) refused OSC SUBSCRIBE ${String(port)} (${detail}) - ` +
+                `only what the core sends by default reaches this bridge\n`
+              : `[caspar-bridge] ⚠ OSC: server ${name} (${where}) - no OSC port is bound, so none was asked for\n`,
+        );
+      });
+      built.on('oscUnavailable', ({ host, port, error }) => {
+        this.#oscStatus.set(name, 'unbound');
+        this.#onOscUnbound?.(name, port);
+        process.stderr.write(
+          `[caspar-bridge] ⚠ OSC: cannot bind UDP ${host}:${String(port)} for server ${name} ` +
+            `(${error.message}) - AMCP is connected without OSC; the bind is tried again at the next reconnect\n`,
+        );
+      });
+      return built;
+    };
     return {
       A: session('A', config.servers.A),
       ...(config.servers.B !== undefined ? { B: session('B', config.servers.B) } : {}),
@@ -697,6 +2526,43 @@ export class CasparRuntime {
         if (this.#adapter.currentPrimary !== label) return;
         for (const event of events) this.#reconciler.applyOsc(event);
       });
+      /*
+        🔴 `RELEASE-091-01` (DELTA B, B2) — **OUR OWN ACKNOWLEDGED `CLEAR` IS THE EVIDENCE THE LAYER
+        IS EMPTY**, because the core never says so: it erases a cleared layer and goes silent
+        (`stage.cpp` `clear`). Until now the bridge waited for an `empty` report that only
+        `@cg/amcp-mock` ever sent, so on a real core a row read `loaded` or ON AIR for the tap's
+        staleness window after its own clear — and a take in that window could resume an EMPTY
+        layer (`CG PLAY` on nothing answers `202`). At the queue, where every CLEAR any path sends
+        is settled; the reconciler hears it from the primary only, exactly as it hears OSC.
+      */
+      session.on('exchange', (exchange) => {
+        if (this.#sessions[label] !== session) return; // torn-down era
+        const cleared = acknowledgedClearOf(exchange.line, exchange.reply);
+        if (cleared === null) return;
+        // `B-316` — server B's line named B's own channel: read it as the station's.
+        const channel =
+          label === 'A'
+            ? cleared.channel
+            : this.#stationChannelOfB(cleared.channel, 'an acknowledged CLEAR');
+        if (channel === null) return;
+        const event = session.osc.noteCleared(channel, cleared.layer);
+        if (this.#adapter.currentPrimary === label) this.#reconciler.applyOsc(event);
+      });
+      /*
+        `FIELD-FIXES-01-A` — EVERY AMCP COMMAND THIS SESSION SETTLES, AND ITS REPLY LINE, for the
+        bridge's AMCP log. At the session's queue, the one place every command it sends passes —
+        the take, the seating, the mode and output reads, the heartbeat — so the log cannot miss a
+        path that forgot to report itself.
+      */
+      const sink = this.#onAmcpExchange;
+      if (sink !== undefined) {
+        const server = this.#config.servers[label];
+        const host = server === undefined ? '' : `${server.host}:${String(server.amcpPort)}`;
+        session.on('exchange', (exchange) => {
+          if (this.#sessions[label] !== session) return; // torn-down era
+          sink({ ...exchange, server: label, host, at: Date.now() });
+        });
+      }
       // B-054 — 'healthy' fires only when a session completes a full AMCP
       // (re)connect cycle (never on degraded→healthy OSC recovery): the
       // server behind it may have restarted with EMPTY layers, so producer
@@ -729,55 +2595,62 @@ export class CasparRuntime {
       //                     emptied item never flashes red.
       session.on('state-change', ({ from, to }) => {
         if (this.#sessions[label] !== session) return; // torn-down era
+        /*
+          C-029 — a NEW CONNECTION invalidates the per-connection facts: the declaration
+          and the mode latch. A CasparCG restarted after a
+          config fix comes back through resyncing → healthy, and this is what makes the
+          alarm CLEAR on the next tick's re-read instead of latching for the life of the
+          bridge. `degraded → healthy` is the SAME connection with OSC back, so it is
+          deliberately excluded — it must not re-send INFO on every OSC flap. The kept
+          verdict (`#outputChecks`) is NOT cleared here: until the re-read lands it is
+          still the last thing anyone saw.
+        */
+        if (to === 'healthy' && from !== 'degraded') {
+          for (const handler of [...this.#serverConnectedHandlers]) handler(label);
+          this.#declaredConsumers.delete(label);
+          this.#outputReadAt.delete(label);
+          for (const [channel, readFrom] of [...this.#modeReadFrom]) {
+            if (readFrom === label) this.#modeReadFrom.delete(channel);
+          }
+        }
         if (this.#adapter.currentPrimary !== label) return; // only the primary feeds the reconciler
         if (to === 'healthy') {
           this.#reconciler.setLinkDown(false);
-          const occupiedKeys = new Set(
-            session.osc.occupancy
-              .occupied(this.#occupancyStaleMs)
-              .map((o) => `${String(o.channel)}:${String(o.layer)}`),
-          );
-          // B-092 — decide the pending RESTORES here, against this same drained
-          // occupancy sample, and BEFORE `reconcileOnReconnect`. This is the
-          // only point where the answer exists: the tap resets on resync and
-          // refills during the RESYNCING drain, so at the SPA's reconnect (when
-          // the intent arrived) it was empty. Ordering is load-bearing twice
-          // over: `transitionTo` emits this BEFORE `emit('healthy')`, so we run
-          // before that handler clears `#loaded`; and every record mutation
-          // inside is SYNCHRONOUS (only the CG ADD is awaited), so the
-          // `reconcileOnReconnect` on the next line iterates a settled
-          // reconciler — a re-ADDed item already reads `played: false` and is
-          // correctly left alone by it.
-          const heard = session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
-          void this.#decidePendingRestores(occupiedKeys, heard);
-          // The SAME blind-tap distinction applies here, and this path had the
-          // bug too: `reconcileOnReconnect` resets a `played` item to IDLE when
-          // its slot is not in `occupiedKeys`, treating silence as proof the
-          // producer is gone (B-053). From a tap that has never heard any OSC
-          // that is not proof of anything — it would report a genuinely LIVE
-          // graphic as idle, on a link that is UP. Skipping is the honest move:
-          // items keep their last known state (B-086's `unverified` demotion
-          // from the drop still stands) rather than being falsely reset, and the
-          // sweep reconciles for real once OSC arrives.
-          if (heard) {
-            this.#reconciler.reconcileOnReconnect(occupiedKeys);
-          } else {
-            // …and while blind, NO on-air claim is verifiable — not just the
-            // restored ones. Skipping the reconcile alone would leave a played
-            // item that is genuinely gone sitting on a confident red ON AIR
-            // (its ack floor), because `setLinkDown(false)` has just cleared the
-            // only demotion that was covering it. The link being UP is exactly
-            // what makes that insidious: a green health pill beside a red claim
-            // nothing can back. Mark every played item unverifiable instead —
-            // the same honest answer B-086 gives when the link drops, for the
-            // same reason: the verification channel is dead.
-            for (const item of this.#reconciler.snapshot()) {
-              if (item.status === 'on-air' || item.status === 'playing') {
-                this.#reconciler.setUnverifiable(item.itemId, true);
-                this.#markDirty(item.itemId);
-              }
-            }
+          // `ROUTE-PLATES-01` rule 5 — a NEW primary connection: an epoch confirmed on an earlier
+          // one proves nothing about this one (the core may have restarted in between).
+          if (from !== 'degraded') this.#amcpGeneration += 1;
+          // `B-221` — FIRST, before anything else this connection is asked to carry: a batch
+          // whose commit died with the previous link is committed here and the ledger's
+          // geometry put back, so the orphan cannot ride on the next take instead. A no-op
+          // unless a commit is on record as undelivered (`#sendMixerCommit`).
+          // 🔴 `LOOK-SWITCH-01` — and on a NEW connection (never `degraded → healthy`, which is
+          // the same socket with OSC back), our full mixer state follows it: see
+          // {@link #resendLiveMixerState}.
+          void this.#mixerStateOnHealthy(from !== 'degraded');
+          /*
+            🔴 `CENTRAL-BRIDGE-01` (`C-047`) — THE START CHECK. The FIRST connection after this
+            bridge starts is judged from the core's own answer, one `INFO <ch>` per declared channel
+            (`B-292`'s reader), not from an OSC drain: the ledger and the restored stack are checked
+            against what CasparCG says is on its stage. Every later connection keeps the OSC sample
+            (a reconnect adds nothing to the wire). Asynchronous, so it runs after this handler.
+          */
+          const startSample = from !== 'degraded' ? this.#takeStartSample() : null;
+          if (startSample !== null) {
+            process.stderr.write(
+              `[caspar-bridge] start check: ${String(startSample.size)} occupied layer(s) on the ` +
+                `declared channel(s), from the core's own INFO\n`,
+            );
+            this.#reconcileAtHealthy(from, startSample, true);
+            return;
           }
+          // R-021 stage 4 — sampled ONCE, with the producer KIND, and the key set
+          // derived from it. `reconcileOnReconnect` only asks "occupied?"; the
+          // restore decision additionally asks "ours?" on a declared row.
+          this.#reconcileAtHealthy(
+            from,
+            this.#observedProducers(session),
+            session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs),
+          );
         } else if (from === 'healthy') {
           this.#reconciler.setLinkDown(true);
         }
@@ -787,6 +2660,8 @@ export class CasparRuntime {
     // Real health + failover from the adapter — replaces the Phase-1/2 mock health.
     this.#adapter.on('health', () => this.healthChanged.emit(this.health()));
     this.#adapter.on('failover-complete', (event: FailoverEvent) => {
+      // `B-331` — the new primary's stage was never cleared by the old one's acknowledgements.
+      this.#reconciler.liftProducerCleared();
       this.#lastFailover = {
         at: new Date(event.at).toISOString(),
         reason: event.reason,
@@ -795,6 +2670,142 @@ export class CasparRuntime {
       };
       this.healthChanged.emit(this.health());
     });
+  }
+
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`C-047`) — **THE START CHECK'S READS, IN THE HANDSHAKE.** On the first
+   * connection after this bridge starts, and on the primary's: one `INFO <ch>` per declared channel
+   * (`B-292`'s reader; 2.5 answers the whole channel), sent on that connection BEFORE it is declared
+   * healthy — so no take can be sent meanwhile, and the picture cannot be overtaken by one (reading it
+   * after `healthy` was measured to reset a row taken during the await). The picture is kept for
+   * {@link #takeStartSample}; a read that fails, or a reply that is not a channel's info, keeps none,
+   * and the healthy transition falls back to the OSC sample. A partial picture never passes for a
+   * whole one.
+   */
+  async #startCheckRead(
+    label: ServerLabel,
+    read: (line: string) => Promise<ParsedAmcpResponse>,
+  ): Promise<void> {
+    if (this.#startChecked || this.#adapter.currentPrimary !== label) return;
+    this.#startChecked = true;
+    const byKey = new Map<string, string>();
+    for (const channel of this.#declaredChannels()) {
+      // `B-316` — on server B, the station's channel is asked at B's own number; none — no picture at all.
+      const onCore = label === 'A' ? channel : this.#backupChannels.channelOnB(channel);
+      if (onCore === null) return;
+      const response = await read(this.#builder.info(onCore));
+      const xml =
+        response.kind === 'ok-line'
+          ? response.data
+          : response.kind === 'ok-multi'
+            ? response.lines.join('\n')
+            : null;
+      const producers = xml === null ? null : stageProducersOfInfo(xml);
+      if (producers === null) return;
+      for (const [layer, producer] of producers) {
+        byKey.set(adoptionKey({ channel, layer }), producer);
+      }
+    }
+    this.#startSample = byKey;
+  }
+
+  /** The start check's picture, once — `null` when there is none (any later connection). */
+  #takeStartSample(): ReadonlyMap<string, string> | null {
+    const sample = this.#startSample;
+    this.#startSample = null;
+    return sample;
+  }
+
+  /**
+   * THE RECONCILE AT A HEALTHY TRANSITION, from one occupancy sample — the tap's (every reconnect) or
+   * the core's own (`#startCheck`). Moved out of the state-change handler unchanged in its order and
+   * its gates, so the two samples take exactly one path.
+   */
+  #reconcileAtHealthy(
+    from: ServerSessionState,
+    observedProducers: ReadonlyMap<string, string>,
+    heard: boolean,
+  ): void {
+    const occupiedKeys = new Set(observedProducers.keys());
+    // B-092 — decide the pending RESTORES here, against this same drained
+    // occupancy sample, and BEFORE `reconcileOnReconnect`. This is the
+    // only point where the answer exists: the tap resets on resync and
+    // refills during the RESYNCING drain. Every record mutation inside is
+    // SYNCHRONOUS (nothing is sent), so the `reconcileOnReconnect` below
+    // iterates a settled reconciler. `CENTRAL-BRIDGE-01` — the rows it took
+    // off air (restored ON AIR over an empty layer) join this transition's notice.
+    const emptiedByRestore = this.#decidePendingRestores(observedProducers, heard);
+    // `B-227` — and the LEDGER is reconciled against the SAME sample, inside the same
+    // `heard` gate, immediately below. See `#reconcileLedgerOnReconnect` for why the
+    // two halves belong together and why nobody had joined them.
+    // The SAME blind-tap distinction applies here, and this path had the
+    // bug too: `reconcileOnReconnect` resets a `played` item to IDLE when
+    // its slot is not in `occupiedKeys`, treating silence as proof the
+    // producer is gone (B-053). From a tap that has never heard any OSC
+    // that is not proof of anything — it would report a genuinely LIVE
+    // graphic as idle, on a link that is UP. Skipping is the honest move:
+    // items keep their last known state (B-086's `unverified` demotion
+    // from the drop still stands) rather than being falsely reset, and the
+    // sweep reconciles for real once OSC arrives.
+    if (heard) {
+      // `B-227` — BOTH halves of one event, from the one sample. The ledger first: it
+      // is the structural fact (what the bridge OWNS), and the status reset below is
+      // the derived one (what the operator SEES). Neither sends anything.
+      const dropped = this.#reconcileLedgerOnReconnect(occupiedKeys);
+      /*
+              🔴 `B-225` — THE BEFORE-STATE, SAMPLED HERE BECAUSE IT DOES NOT SURVIVE THE
+              NEXT LINE. Which rows were ON AIR when the server stopped carrying them is the
+              question the notice turns on, and `reconcileOnReconnect` answers a different
+              one — it resets every `played` record whose layer is silent, and `played` is
+              NOT "on air": `out` leaves it TRUE (only `stop` retracts it), so an operator's
+              own CLEAR is inside the reset set and must be excluded HERE.
+            */
+      const wasOnAir = new Set(
+        this.#reconciler
+          .snapshot()
+          .filter((item) => isOnAirStatus(item) && item.status !== 'exiting')
+          .map((item) => item.itemId),
+      );
+      const reset = this.#reconciler.reconcileOnReconnect(occupiedKeys);
+      /*
+              🔴 `B-225` — AND THIS IS WHERE THE ANSWER EXISTS, SO THIS IS WHERE IT IS KEPT.
+
+              `reset` is every row this reconnect took from a played state to `idle` — air
+              this console had put up, which the server is no longer carrying. One publish
+              later it is unrecoverable: the browser retains `idle` as `cleared`, which
+              `item-state.ts` defines as *"KNOWN EMPTY … NOT restorable"* — correct by
+              `B-109` (a deliberately-emptied row must never be resurrected) and fatal to any
+              consumer downstream of it. Everything the notice and the one press need is in
+              hand right here and nowhere afterwards.
+
+              ⚠ It was already being computed and thrown away. Nothing new is measured, no
+              probe is added and nothing extra reaches the wire — `RESTART-NOTICE-01` §B.1's
+              constraint — the return value is simply no longer discarded.
+            */
+      // `CENTRAL-BRIDGE-01` — ONE notice for this transition: the restored rows the
+      // decision above found empty, then the live rows this reconcile reset.
+      this.#raiseEmptiedAir(
+        [...emptiedByRestore, ...reset.filter((item) => wasOnAir.has(item.itemId))],
+        dropped,
+        from !== 'degraded',
+      );
+    } else {
+      // …and while blind, NO on-air claim is verifiable — not just the
+      // restored ones. Skipping the reconcile alone would leave a played
+      // item that is genuinely gone sitting on a confident red ON AIR
+      // (its ack floor), because `setLinkDown(false)` has just cleared the
+      // only demotion that was covering it. The link being UP is exactly
+      // what makes that insidious: a green health pill beside a red claim
+      // nothing can back. Mark every played item unverifiable instead —
+      // the same honest answer B-086 gives when the link drops, for the
+      // same reason: the verification channel is dead.
+      for (const item of this.#reconciler.snapshot()) {
+        if (item.status === 'on-air' || item.status === 'playing') {
+          this.#reconciler.setUnverifiable(item.itemId, true);
+          this.#markDirty(item.itemId);
+        }
+      }
+    }
   }
 
   /** Wire the stack and connect the declared sessions. Idempotent. */
@@ -813,9 +2824,46 @@ export class CasparRuntime {
       this.#sweepOccupancy();
     }, this.#sweepMs);
     this.#sweepTimer.unref?.();
+    // `RELEASE-091-01` (DELTA B, B1) — a layer of ours gone silent is a question; unref'd like the sweep.
+    this.#silenceTimer = setInterval(() => {
+      this.#questionSilentLayers();
+    }, SILENCE_CHECK_MS);
+    this.#silenceTimer.unref?.();
+    // `MEDIA-PLATES-01` §1.E — the media clock: a passive read of the OSC tap, unref'd like the sweep.
+    this.#mediaStateTimer = setInterval(() => {
+      this.#publishMediaState();
+    }, this.#mediaStateTickMs);
+    this.#mediaStateTimer.unref?.();
 
     this.#sessions.A.start();
-    this.#sessions.B?.start();
+    // `B-313` — a held server B is not connected: nothing at all is sent to its core.
+    if (!this.#serverBHeld) this.#sessions.B?.start();
+  }
+
+  /**
+   * 🔴 `B-313` (`RELEASE-0112-01` Part B) — **HOLD SERVER B: another CG Bridge drives its core.**
+   *
+   * Held, server B's session is STOPPED — not one line reaches that core, not even the handshake's
+   * `OSC SUBSCRIBE` — and the adapter never fails over onto it; released, it connects again. Server A
+   * is never touched. Callable before {@link start} (the bridge holds B until its guard's first answer),
+   * and it outlives a reconfigure: a new server B is held as the old one was until the guard reads it.
+   * Answers once the session has stopped or started.
+   */
+  async holdServerB(held: boolean): Promise<void> {
+    if (this.#serverBHeld === held) return;
+    this.#serverBHeld = held;
+    this.#adapter.setHeld('B', held);
+    const session = this.#sessions.B;
+    if (session !== undefined && this.#started) {
+      if (held) await session.stop();
+      else session.start();
+    }
+    this.healthChanged.emit(this.health());
+  }
+
+  /** `B-313` — is server B held? */
+  serverBHeld(): boolean {
+    return this.#serverBHeld;
   }
 
   /**
@@ -842,9 +2890,20 @@ export class CasparRuntime {
       : null;
   }
 
-  /** The served URL for a template id (the `CG ADD` arg), or null if not serving. */
-  templateServeUrl(templateId: string): string | null {
-    return this.#templateServer.listening ? this.#templateServer.urlFor(templateId) : null;
+  /**
+   * The served URL for a template (the `CG ADD` arg), or null if not serving or not listed.
+   *
+   * `CHANNEL-TEMPLATES-01` — the URL of the version `channel` lists; with no channel, of the
+   * version the station-wide reading answers.
+   */
+  templateServeUrl(templateId: string, channel?: number): string | null {
+    if (!this.#templateServer.listening) return null;
+    const versionId =
+      channel === undefined
+        ? this.#templates.versionAny(templateId)
+        : this.#templates.versionOn(channel, templateId);
+    const key = versionId === null ? null : this.#templates.serveKeyOf(versionId);
+    return key === null ? null : this.#templateServer.urlFor(key);
   }
 
   async stop(): Promise<void> {
@@ -852,10 +2911,28 @@ export class CasparRuntime {
     this.#flushTimer = null;
     if (this.#sweepTimer !== null) clearInterval(this.#sweepTimer);
     this.#sweepTimer = null;
+    if (this.#silenceTimer !== null) clearInterval(this.#silenceTimer);
+    this.#silenceTimer = null;
+    if (this.#mediaStateTimer !== null) clearInterval(this.#mediaStateTimer);
+    this.#mediaStateTimer = null;
     for (const timer of this.#expiryTimers.values()) clearTimeout(timer);
     this.#expiryTimers.clear();
     await Promise.all([this.#sessions.A.stop(), this.#sessions.B?.stop() ?? Promise.resolve()]);
     await this.#templateServer.stop();
+    /*
+      B-141 — CLOSE THE AUDIT FILE HANDLE. `AuditWriter` holds one open for its
+      whole life and offers `close()`; nothing was calling it, so every runtime
+      leaked a descriptor that node then destroyed at GC — which since node 22 is a
+      hard `ERR_INVALID_STATE`, not a warning. Surfaced by the B-141 append-site
+      suite, where one runtime per test made it seven uncaught exceptions in a run
+      that otherwise reported all green.
+
+      LAST, and awaited: the sessions and the template server are torn down first,
+      so anything they record on the way out is still written before the handle
+      goes. Failure is swallowed for the same reason every other audit failure is —
+      a shutdown must not be blocked by the record of it.
+    */
+    await this.#auditWriter?.close().catch(() => undefined);
   }
 
   /** Which server is currently the live primary. */
@@ -919,12 +2996,145 @@ export class CasparRuntime {
   #published(): readonly StackItemState[] {
     return this.#reconciler.snapshot().map((item) => {
       const position = this.#positions.get(item.itemId);
-      return position === undefined ? item : { ...item, position };
+      // R-048 (6.9 / 6.9d) — the source override joins the snapshot at the same
+      // point and for the same reasons: the row must be able to SAY that a plate
+      // is not on its configured source, and the bridge's own stack file keeps what
+      // it is published (`retainedFromStackItem`, `CENTRAL-BRIDGE-01`), which is what
+      // carries it across a bridge restart. Both are spread conditionally so an item with
+      // neither is the identical object it was before either field existed.
+      const sourceOverride = this.#sourceOverrides.get(item.itemId);
+      // Session BM — and the per-look composition, beside it and for the same reason.
+      const lookSourceOverride = this.#lookSourceBindings.get(item.itemId);
+      // 6.5f — the audio intent joins them, and it matters MORE than either: audio
+      // is the one property of a graphic an operator cannot see, so a console that
+      // cannot read this back cannot tell a live guest from a silent one.
+      const plateVolumes = this.#plateVolumes.get(item.itemId);
+      // §14 (LOOKS) Stage E — and the ACTIVE LOOK, through the ONE resolver rather than
+      // off `#activeLooks` directly. The map holds only what an operator explicitly
+      // picked; `activeLookId()` answers what the row is actually SHOWING (the pick, else
+      // the authored default, else the first look) — the question the picker asks and the
+      // look a take would enter. Publishing the raw map would leave a never-switched row
+      // with no look on the wire while it is plainly showing one.
+      const activeLookId = this.activeLookId(item.itemId);
+      // SESSION BP — the FROZEN level 2, published because a surface that shows the LIVE
+      // template default for a row resolving a frozen one is confidently wrong, which is the
+      // worst class of defect this product has. The Inspector names it on any plate where the
+      // two disagree, and it cannot do that unless it can read it.
+      const frozenAssignment = this.#frozenAssignments.get(item.itemId);
+      // 🔴 `TIMING-WIRE-22` (e) — the row's PASS TIMING intent, published for the same reason
+      // the audio intent is: the console cannot show what it cannot read, and a count is not
+      // visible on the picture either. Without this the Inspector would have to guess, and a
+      // surface that guesses about air is the class of defect this product refuses.
+      const timingOverride = this.#passTimings.get(item.itemId);
+      /*
+        🔴 `B-228` — THE BRIDGE'S OWN ANSWER TO "may this be removed", SAID OUT LOUD.
+
+        `#removeRefusal` is `isOnAirStatus` PLUS two exemptions, and until this line only the
+        predicate crossed the seam. The renderer could see one exemption (published as
+        `binding.restoreBlocked`) and could not see the other AT ALL — `#declaredLayerClass`
+        is bridge knowledge — so REMOVE ALL gated on the bare predicate and withheld a press
+        `removeAll` would have accepted.
+
+        Published rather than re-derived, deliberately: handing the renderer the inputs and
+        asking it to recompute the rule would rebuild the mirrored-copies problem `R-017` had
+        just deleted, one level up. `false` is spread away rather than sent, so an ordinary
+        row is the identical object it was before the field existed — and ABSENT reads as NOT
+        EXEMPT, which is the fail-safe direction.
+
+        ⚠ NOT retained: `RetainedStackItemSchema` is a whitelist and this is deliberately not
+        in it — a retained copy would come back describing a plant the browser has not spoken
+        to since.
+      */
+      const removeExempt = this.#removeExempt(item.itemId);
+      // `FIELD-FIXES-01` B — why this row's last take was refused (see `#takeRefusals`).
+      const takeRefusal = this.#takeRefusals.get(item.itemId);
+      // `ROUTE-PLATES-01` C4 — the backup carries this row without its Playout route plates.
+      const backupUnmirrored = this.#backupUnmirrored(item.itemId);
+      // `PLAYOUT-FEATURES-01` A (`B-286`) — the clips server B was sent nothing for.
+      const backupNoCopy = this.#backupNoCopy(item.itemId);
+      /*
+        ⚠ **EVERY OPTIONAL FIELD BELOW MUST BE NAMED IN THIS GUARD.** It is the
+        "nothing to join, return the identical object" fast path, and a field it does not
+        list is a field this method silently DROPS for an item that has only that one.
+        `lookSourceOverride` was missing here from the day it was added — reachable only
+        through a narrow window (a bound row whose template is no longer registered, so
+        `activeLookId` answers `undefined` too), which is precisely why nothing caught it.
+        `mockShimFieldParity`'s schema-derived guard covers the shim; this list is the same
+        class of hazard one layer over, and it is checked by hand.
+      */
+      if (
+        position === undefined &&
+        sourceOverride === undefined &&
+        lookSourceOverride === undefined &&
+        frozenAssignment === undefined &&
+        plateVolumes === undefined &&
+        activeLookId === undefined &&
+        // 🔴 `TIMING-WIRE-22` (e) — BOTH HALVES, and this is the half that bites. A row whose
+        // ONLY override is a pass count would take the fast path above and be published without
+        // it, so the console would show the count reverting the instant anything republished.
+        // The comment above names `lookSourceOverride` as having been missed here on the day it
+        // was added; this is that list, one entry longer, added on the day of.
+        timingOverride === undefined &&
+        !removeExempt &&
+        takeRefusal === undefined &&
+        !backupUnmirrored &&
+        backupNoCopy.length === 0
+      )
+        return item;
+      return {
+        ...item,
+        ...(position !== undefined && { position }),
+        ...(sourceOverride !== undefined && { sourceOverride }),
+        ...(lookSourceOverride !== undefined && { lookSourceOverride }),
+        ...(frozenAssignment !== undefined && { frozenAssignment }),
+        ...(plateVolumes !== undefined && { plateVolumes }),
+        ...(activeLookId !== undefined && { activeLookId }),
+        ...(timingOverride !== undefined && { timingOverride }),
+        ...(removeExempt && { removeExempt: true }),
+        ...(backupUnmirrored && { backupUnmirrored: true }),
+        ...(backupNoCopy.length > 0 && { backupNoCopy }),
+        /*
+          `FIELD-FIXES-01` B / Decision 1 — a row whose last take was REFUSED reads ERROR, whatever
+          the wire now says about its layer. The refused take took its own graphic back off that
+          layer, so OSC reads it `idle`, and the row would drop the one line that says why. Only a
+          row with nothing on air is re-labelled: a status that claims, or may claim, air is never
+          overwritten by a refusal.
+        */
+        ...(takeRefusal !== undefined && {
+          takeRefusal,
+          ...((item.status === 'idle' || item.status === 'loaded') && {
+            status: 'error' as const,
+            errorCode: takeRefusal.code,
+          }),
+        }),
+      };
     });
   }
 
-  stackSnapshot(): readonly StackItemState[] {
-    return this.#published();
+  /**
+   * The published stack — every item, or (`MULTI-CHANNEL-01` §2 B) with a `channel`, the items
+   * wholly on it ({@link #withinChannel}). Bare, exactly what it always was.
+   */
+  stackSnapshot(channel?: number): readonly StackItemState[] {
+    const all = this.#published();
+    return channel === undefined ? all : all.filter((i) => this.#withinChannel(i.itemId, channel));
+  }
+
+  /**
+   * 🔴 `MULTI-CHANNEL-01` §2 B — **IS THIS ITEM WHOLLY ON `channel`?** Every channel it touches is
+   * `channel` — its template's slot and its seated plates, the union {@link channelsForItem}
+   * answers and the permission gate reads. An item that touches NO channel (no layer, no plate) is
+   * inside every channel's scope, as it is inside every channel's view, and a verb on it writes to
+   * no channel at all.
+   *
+   * The ONE membership rule the four housekeeping verbs share, so "the items on channel 2" cannot
+   * mean one set to REMOVE ALL and another to CLEAR ALL. A plate is seated on its template's own
+   * channel (`#seatLivePlates` takes `slot.channel`), so an item never straddles two; were one
+   * ever to, it would be in NEITHER channel's scope — reached only by the bare, station-wide verb,
+   * never by a per-channel one that would write to the other channel.
+   */
+  #withinChannel(itemId: string, channel: number): boolean {
+    return this.channelsForItem(itemId).every((c) => c === channel);
   }
 
   async load(
@@ -932,17 +3142,32 @@ export class CasparRuntime {
     templateId: string,
     fields: FieldValues,
   ): Promise<{ accepted: boolean; errorCode?: string }> {
+    return this.#audited('load', { itemId, templateId }, (detail) =>
+      this.#loadImpl(itemId, templateId, fields, detail),
+    );
+  }
+
+  async #loadImpl(
+    itemId: string,
+    templateId: string,
+    fields: FieldValues,
+    detail: AuditDetail,
+  ): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
-    const seq = this.#nextSeq();
-    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
+    /*
+      🔴 `B-301` — **A REFUSED LOAD CREATES NOTHING.** The intent used to be applied HERE, before the
+      checks, so every refusal below left a stack item behind — in `error`, with no layer: no row shows
+      it, no OSC settles it, it was saved and restored, and the Layers badge counted it forever (the
+      owner's `2 in error`, 2026-09-30). The checks now run first and the intent is applied only on the
+      way into `#loadOnto`; a refusal is answered and audited exactly as before, and changes nothing.
+    */
 
     // Reconnect-reconciliation — never blind-ADD a URL the bridge can't serve:
     // an unregistered template is a visible failed load. (Real CasparCG would
     // 202 the ADD without fetching and CEF-load the 404 page — a silent blank
     // on air; the guard is what makes the failure loud.)
-    if (!this.#templates.has(templateId)) {
-      this.#reconciler.applyAck(seq, false, 'unknown-template');
+    if (!this.#templates.hasAny(templateId)) {
       return { accepted: false, errorCode: 'unknown-template' };
     }
 
@@ -958,10 +3183,21 @@ export class CasparRuntime {
       // Library's Load toast can say it.
       const foreignBlocked = err instanceof OutOfLayersError && err.quarantinedInRange > 0;
       const code = foreignBlocked ? 'no-layer-foreign-occupied' : 'no-layer';
-      this.#reconciler.applyAck(seq, false, code);
       return { accepted: false, errorCode: code };
     }
+    // `CHANNEL-TEMPLATES-01` — the layer's channel must LIST the template: a row takes its own
+    // channel's version, never another channel's. Checked once the channel is known.
+    if (!this.#templates.hasOn(slot.channel, templateId)) {
+      this.#releaseSlot(slot);
+      return { accepted: false, errorCode: 'unknown-template' };
+    }
 
+    // The layer is only known HERE, after allocation — the refusals above it
+    // genuinely have no slot to name, and inventing one would be worse than the gap.
+    detail.slot = slot;
+    // `B-301` — every check passed: only now does the item exist.
+    const seq = this.#nextSeq();
+    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
     return this.#loadOnto(itemId, templateId, fields, slot, seq);
   }
 
@@ -991,19 +3227,72 @@ export class CasparRuntime {
     templateId: string,
     fields: FieldValues,
   ): Promise<{ accepted: boolean; errorCode?: string }> {
+    // B-141 — the SECOND entry point for the `load` action, audited HERE rather
+    // than in the shared `#loadOnto`: every refusal `loadFixed` owns
+    // (`unknown-template`, `not-fixed`, `slot-bound`) returns long before
+    // `#loadOnto` is reached, and those are exactly the entries worth having.
+    // Auditing the shared tail instead would have recorded nothing for any of them.
+    return this.#audited('load', { itemId, templateId, slot }, () =>
+      this.#loadFixedImpl(slot, itemId, templateId, fields),
+    );
+  }
+
+  async #loadFixedImpl(
+    slot: CommandSlot,
+    itemId: string,
+    templateId: string,
+    fields: FieldValues,
+  ): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
-    const seq = this.#nextSeq();
-    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
+    // 🔴 `B-301` — the checks run FIRST and a refusal creates nothing (see `#loadImpl`): the intent is
+    // applied only once every check has passed, on the way into `#loadOnto`. A refused re-load of a
+    // row's OWN item no longer replaces that row's record with a layerless one in `error` either.
 
     // Same guard, same code as `load()`: never blind-ADD a URL we cannot serve.
-    if (!this.#templates.has(templateId)) {
-      this.#reconciler.applyAck(seq, false, 'unknown-template');
+    // `CHANNEL-TEMPLATES-01` — on THE ROW'S channel: a template another channel lists is not
+    // this row's to take (the picker offers only its own channel's list). A coordinate that is
+    // not a row keeps the station-wide check, so it is refused `not-fixed` just below, exactly
+    // as before: its channel's list is not the thing that is wrong with it.
+    const listed = this.#layers.isFixed(slot)
+      ? this.#templates.hasOn(slot.channel, templateId)
+      : this.#templates.hasAny(templateId);
+    if (!listed) {
       return { accepted: false, errorCode: 'unknown-template' };
     }
     if (!this.#layers.isFixed(slot)) {
-      this.#reconciler.applyAck(seq, false, 'not-fixed');
       return { accepted: false, errorCode: 'not-fixed' };
+    }
+    /*
+      🔴 `single-clock-look-switch` — THE WRONG-BANK REFUSAL, in BOTH directions.
+
+      A plate-bearing package on an OPERATOR row composites its own background OVER every
+      plate it declares; a furniture package on a BED row composites the logo or super UNDER
+      any live picture. Both are on-air faults and both are silent — the first shows a
+      designed layout with the guests missing, the second shows nothing at all — so neither
+      may be accepted and left for the operator to notice.
+
+      ⚠ THE CLASSIFICATION IS NOT RE-DERIVED HERE. `requiredBankFor` is the one function
+      that answers it (from the carrier `collectLiveSources` produced at import), and the
+      template picker calls the SAME one to decide what to offer — so the surface can never
+      offer a placement this refuses, and this can never refuse one the surface offered.
+      A second local `sources.length > 0` is how that agreement would end (golden rule 6).
+
+      FAIL-OPEN WITH NO DECLARED BANK, deliberately: the slot's channel has no bank only when
+      slots were fenced without a bank being declared (the harnesses and the unit fixtures do
+      this), and with no bank there are no two groups to be on the wrong side of.
+
+      `MULTI-CHANNEL-01` — the bank of the SLOT'S channel: a bed on channel 2 is judged by
+      channel 2's bed rows, never by whichever bank happens to be first.
+    */
+    const declaredBank = this.#bankFor(slot.channel);
+    if (declaredBank !== null) {
+      const info = this.#templates.getOn(slot.channel, templateId);
+      const wanted = info === null ? 'high' : requiredBankFor(info);
+      const actual = isLowBankLayer(declaredBank, slot.layer) ? 'low' : 'high';
+      if (wanted !== actual) {
+        return { accepted: false, errorCode: 'wrong-bank' };
+      }
     }
     /*
      * THE REHEARSE INTERLOCK ON LOAD IS GONE, AND ITS ABSENCE IS THE STRONGER
@@ -1025,7 +3314,8 @@ export class CasparRuntime {
     // The registry's OWN templateType — the LayerManager records what is bound,
     // and the per-slot publish reads it straight back out, so the row names the
     // template kind the operator recognises rather than an internal id.
-    const templateType = this.#templates.get(templateId)?.templateType ?? templateId;
+    const templateType =
+      this.#templates.getOn(slot.channel, templateId)?.templateType ?? templateId;
     /**
      * `slot-bound` NOW REFUSES ON OCCUPANCY, NOT ON THE BINDING.
      *
@@ -1055,11 +3345,9 @@ export class CasparRuntime {
      */
     const boundItemId = this.#itemBoundToSlot(slot);
     if (boundItemId !== undefined && boundItemId !== itemId) {
-      this.#reconciler.applyAck(seq, false, 'slot-bound');
       return { accepted: false, errorCode: 'slot-bound' };
     }
     if (boundItemId === itemId && this.#loaded.has(itemId)) {
-      this.#reconciler.applyAck(seq, false, 'slot-bound');
       return { accepted: false, errorCode: 'slot-bound' };
     }
     // Re-binding the SAME item onto its own empty row: drop the stale binding so
@@ -1067,9 +3355,11 @@ export class CasparRuntime {
     // the dynamic pool, so this cannot leak a fixed layer into allocation.
     if (boundItemId === itemId) this.#layers.unbindFixed(slot);
     if (!this.#layers.bindFixed(slot, templateType)) {
-      this.#reconciler.applyAck(seq, false, 'slot-bound');
       return { accepted: false, errorCode: 'slot-bound' };
     }
+    // `B-301` — every check passed: only now does the item exist.
+    const seq = this.#nextSeq();
+    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
     // NOTE: the state is published from `#loadOnto`, once the item→slot map is
     // set. A publish HERE would find only half the binding (the LayerManager's
     // template type, no itemId yet) and so publish `null` — the honest
@@ -1135,7 +3425,10 @@ export class CasparRuntime {
     // slot/interest and ADDing an ownerless producer.
     if (this.#reconciler.get(itemId) === null) {
       this.#releaseSlot(slot);
-      return { accepted: false };
+      // B-141 — the race has a NAME now. Recorded as a bare failure it was
+      // indistinguishable from an AMCP refusal, which sends whoever reads the log
+      // the next day to the playout machine for something that happened here.
+      return { accepted: false, errorCode: 'item-removed' };
     }
 
     this.#slots.set(itemId, slot);
@@ -1194,12 +3487,13 @@ export class CasparRuntime {
   }
 
   /**
-   * B-092 — rebuild the stack from the browser's RETAINED intent.
+   * B-092 — rebuild the stack from its RETAINED intent. 🔴 `CENTRAL-BRIDGE-01` (`B-294`): the
+   * intent is the bridge's own file now (`stack-store.ts`), restored by `createBridge` at start,
+   * before any console connects — a console re-delivers nothing, and no socket route reaches this.
    *
    * The stack otherwise lives ONLY in this process's Reconciler and dies with
-   * it: a restarted bridge boots empty, the SPA re-pulls that empty snapshot,
-   * and every row the operator built disappears. The browser owns the intent
-   * across the death; this puts it back.
+   * it: a restarted bridge boots empty, and every row the operator built
+   * disappears. This puts it back.
    *
    * This method deliberately does NOT go through `load()`. `load()` ADOPTS the
    * layer first — a hard `CLEAR` before its first `CG ADD` there — and on a
@@ -1211,19 +3505,32 @@ export class CasparRuntime {
    *   1. HERE: seed the Reconciler, take the retained layer, bind OSC interest,
    *      restore the position override, publish. The rows are back immediately
    *      — before CasparCG is even reachable — and NOTHING is sent to the wire.
-   *   2. `#decidePendingRestores`: once real occupancy is knowable, adopt the
-   *      layer without clearing it (a producer survived) or re-ADD onto it (the
-   *      layer is empty). Neither branch can ever clear a live layer.
+   *   2. `#decidePendingRestores`: once real occupancy is knowable (the start
+   *      check's `INFO`, or the OSC sample), adopt the layer without clearing it
+   *      (a producer survived) or, the layer being empty, send NOTHING and say
+   *      so (`C-047`: detect and say). Neither branch can ever clear a layer.
    *
-   * Skipped, never fatal: an item this bridge ALREADY holds (local intent must
-   * never clobber a live bridge's own state — a page reload against a healthy
-   * bridge changes nothing), an unregistered template (the SPA re-delivers its
-   * library first, so this means the template is genuinely gone), or an
-   * exhausted layer range.
+   * Skipped, never fatal: an item this bridge ALREADY holds (never clobbered),
+   * an unregistered template (the bridge persists its templates beside its stack,
+   * so this means the template is genuinely gone), or an exhausted layer range.
+   * B-108 — every skip is reported WITH ITS REASON, per item, because a bare count
+   * cannot tell the operator which rows are gone — and the report is standing
+   * bridge state ({@link restoreReport}), since no console made this call.
+   *
+   * ⭐ **B-109 / B-107 — step 2 runs ONLY for a restorable state.** A row retained
+   * as `cleared` (the operator emptied that layer) or `error` (it never got what it
+   * asked for) is restored as a ROW — slot reserved, OSC interest bound, published —
+   * but is NEVER entered into `#pendingRestore`. That is the whole fix, and it is
+   * deliberately structural: an item that is not pending cannot reach
+   * `#decidePendingRestores`, so its "silent layer → re-ADD" branch is UNREACHABLE
+   * for it rather than guarded against. Occupancy is not consulted for such a row at
+   * all — silence on a layer the operator emptied is the EXPECTED reading, not
+   * evidence that a producer was lost.
    */
   async restore(items: readonly RetainedStackItem[]): Promise<{
     restored: number;
-    skipped: number;
+    skipped: RestoreSkip[];
+    migrated: RestoreMigration[];
   }> {
     // B-086 honesty, applied to seeded records: the reconciler learns `linkDown`
     // from session TRANSITIONS, and a bridge whose CasparCG session has never
@@ -1242,28 +3549,171 @@ export class CasparRuntime {
     if (this.#adapter.primarySession.state !== 'healthy') this.#reconciler.setLinkDown(true);
 
     let restored = 0;
-    let skipped = 0;
+    const skipped: RestoreSkip[] = [];
+    const migrated: RestoreMigration[] = [];
     for (const item of items) {
-      // The live bridge wins over the retained copy — never clobber.
+      // The live bridge wins over the retained copy — never clobber. BENIGN: the row
+      // is still there, backed by the live bridge, so nothing is lost and B-108's
+      // surface deliberately says nothing about it.
       if (this.#reconciler.get(item.itemId) !== null) {
-        skipped++;
+        skipped.push({ itemId: item.itemId, reason: 'already-held', ...restoreSkipNaming(item) });
         continue;
       }
-      if (!this.#templates.has(item.templateId)) {
-        skipped++;
+      /*
+        🔴 `B-301` — **WHAT A REFUSED LOAD LEFT BEHIND IS NOT BROUGHT BACK.** Before the Loads checked
+        first, every refusal left an item in `error` WITH NO LAYER: no row showed it, nothing could
+        settle it, and the Layers badge counted it — the owner's stored `2 in error`. Such an item
+        holds nothing on air and never did, so it is dropped here, one log line each, and the badge
+        reads 0 after the update. A row in `error` ON A LAYER comes back exactly as before (`B-107`).
+      */
+      if (item.state === 'error' && item.slot === undefined) {
+        process.stderr.write(
+          `[caspar-bridge] restore: dropped ${item.itemId} (template ${item.templateId}) — ` +
+            'a refused Load left it in error with no layer (B-301)\n',
+        );
         continue;
       }
-      const slot = this.#slotForRestore(item);
-      if (slot === null) {
-        skipped++;
+      /*
+        `CHANNEL-TEMPLATES-01` — the row comes back on its own channel, so it is that channel's list
+        that must hold its template. A coordinate on a channel this station does not declare is left
+        to `#slotForRestore`'s fence, which reports it (and notes a stray) as what it is; a row with
+        no coordinate holds nothing on any channel and asks only that the station still has it.
+      */
+      const retainedChannel = item.slot?.channel;
+      const listed =
+        retainedChannel === undefined
+          ? this.#templates.hasAny(item.templateId)
+          : !this.#isDeclaredChannel(retainedChannel) ||
+            this.#templates.hasOn(retainedChannel, item.templateId);
+      if (!listed) {
+        skipped.push({
+          itemId: item.itemId,
+          reason: 'unknown-template',
+          ...restoreSkipNaming(item),
+        });
         continue;
+      }
+      const placement = this.#slotForRestore(item);
+      if ('skip' in placement) {
+        // `DESKTOP-APPS-01-D` j — an on-air row on a channel this station does not declare is
+        // remembered as a stray (Station setup's, never a channel view's); `#noteStray` ignores
+        // a not-declared skip on the station's OWN channel, which is a layer that is not a row.
+        if (
+          placement.skip === 'not-declared' &&
+          item.slot !== undefined &&
+          isRetainedOnAir(item.state)
+        ) {
+          this.#noteStray({
+            itemId: item.itemId,
+            templateId: item.templateId,
+            channel: item.slot.channel,
+            layer: item.slot.layer,
+          });
+        }
+        skipped.push({ itemId: item.itemId, reason: placement.skip, ...restoreSkipNaming(item) });
+        continue;
+      }
+      const { slot } = placement;
+      /*
+        🔴 `LAYER-BANDS-16` — `slot === null` is a row that needs NO LAYER (see
+        `RestorePlacement`). Every block below that touches a layer is already gated on
+        `isRetainedOnAir` or `isRestorable`, both of which are FALSE for the only states
+        that reach here with a null slot — so the guards added below are the compiler
+        seeing what those predicates already guarantee, never a second opinion about it.
+      */
+      /*
+        `single-clock-look-switch` — THE MIGRATED ROW'S STATE, RESOLVED ONCE, HERE.
+
+        A bed re-homed off an operator row comes back present but NOT on air (see
+        `#migrateRetainedBed` for why the air claim cannot travel with it). Golden rule 7
+        applies literally: this one value gates the exclusivity refusal, the looks refusal,
+        what the reconciler is told, and whether a producer may be seated — so it is
+        evaluated ONCE and every reader below takes it, rather than four sites each
+        re-asking `isRetainedOnAir(item.state)` and one of them forgetting the migration.
+      */
+      const migratedFrom = 'migratedFrom' in placement ? placement.migratedFrom : undefined;
+      const restoredState: RetainedStackItem['state'] =
+        migratedFrom !== undefined && isRetainedOnAir(item.state) ? 'loaded' : item.state;
+      // `slot !== null` is true by construction here — a MIGRATED row is one that was
+      // re-homed ONTO a bed row, so it has a destination — but it is written out rather
+      // than asserted past, so the compiler checks the invariant instead of trusting it.
+      if (migratedFrom !== undefined && slot !== null) {
+        migrated.push({
+          itemId: item.itemId,
+          from: { channel: migratedFrom.channel, layer: migratedFrom.layer },
+          to: { channel: slot.channel, layer: slot.layer },
+          demoted: restoredState !== item.state,
+        });
+      }
+      /*
+        🔴 §12.6 — DOOR 2 OF 2: EXCLUSIVITY, on the door that has NO OTHER COVER.
+
+        A restore never passes through `take()` (`design.md` §8), and it adopts every
+        retained on-air item with no cap — so without this a reconnect re-seats the very
+        pair of multi-box templates a take refuses, and does it silently, on a link that
+        just came back. ONE predicate, called from both sites, never re-derived here
+        (golden rule 6).
+
+        Gated on `isRetainedOnAir` — the canonical reading of a retained state, the same
+        one `restoreItem` uses — because only a row coming back ON AIR can collide. A
+        `loaded` or `cleared` multi-box row puts nothing on the channel and must still come
+        back, or the refusal would quietly delete rows the operator can see.
+
+        Refused BEFORE `restoreItem`, so a refused restore mutates nothing — the same
+        discipline the take door keeps, and the same as the three skips above it.
+      */
+      // Same shape: `isRetainedOnAir` implies `isRestorable`, and only a NON-restorable row
+      // can arrive with a null slot — so this can never be the thing that skips a refusal.
+      // Written out so that stays a fact the compiler holds rather than a comment.
+      if (isRetainedOnAir(restoredState) && slot !== null) {
+        const exclusivity = this.#refuseSecondMultiBox(item.itemId, item.templateId, slot.channel);
+        if (exclusivity !== null) {
+          // B-114 — release by the SAME door the slot was taken through (see below).
+          if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
+          else this.#layers.deallocate(slot);
+          skipped.push({
+            itemId: item.itemId,
+            reason: 'multibox-already-on-air',
+            ...restoreSkipNaming(item),
+            // The bridge's own sentence, naming BOTH halves. `RestoreSkipReason` is a
+            // fixed code and cannot say WHICH template is already on air — the same gap
+            // `stack.take`'s `message` exists to fill, and filled the same way.
+            detail: exclusivity.message,
+          });
+          continue;
+        }
+        /*
+          §14.5 — and the LOOKS refusal, at this door too.
+
+          🔴 The take refuses a zero-look template, so it looks impossible for one to be
+          RETAINED on air. It is not: the TEMPLATE can change under a retained row. The
+          operator takes a template that has looks, re-imports it with the group emptied,
+          and a reconnect restores an on-air row against the new definition — seating
+          nothing and putting a designed layout of empty holes on air, silently, on a link
+          that just came back. That is the same reasoning `multibox-already-on-air` is at
+          both doors for: restore never passes through `take()`.
+        */
+        const noLooksRestore = this.#refuseNoLooksAuthored(slot.channel, item.templateId);
+        if (noLooksRestore !== null) {
+          // B-114 — release by the SAME door the slot was taken through.
+          if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
+          else this.#layers.deallocate(slot);
+          skipped.push({
+            itemId: item.itemId,
+            reason: 'looks-none-authored',
+            ...restoreSkipNaming(item),
+            detail: noLooksRestore.message,
+          });
+          continue;
+        }
       }
       if (
         this.#reconciler.restoreItem({
           itemId: item.itemId,
           templateId: item.templateId,
           fields: item.fields,
-          played: item.played,
+          state: restoredState,
+          ...(item.errorCode !== undefined && { errorCode: item.errorCode }),
         }) === null
       ) {
         // B-114 — release by the SAME door the slot was taken through.
@@ -1271,56 +3721,592 @@ export class CasparRuntime {
         // the fence), so using it alone here would leave the row bound to an
         // item the reconciler just refused — a permanently occupied row holding
         // nothing, which no verb can clear.
-        if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
-        else this.#layers.deallocate(slot);
-        skipped++;
+        // Nothing was taken for a no-layer row, so there is nothing to give back.
+        if (slot !== null) {
+          if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
+          else this.#layers.deallocate(slot);
+        }
+        skipped.push({ itemId: item.itemId, reason: 'already-held', ...restoreSkipNaming(item) });
         continue;
       }
-      this.#slots.set(item.itemId, slot);
-      this.#reconciler.assignSlot(item.itemId, { ...slot, server: 'primary' });
-      this.#addInterest(slot);
+      // Bound for EVERY restored row that HAS a layer, including a cleared one: an `out`
+      // retains its slot (B-109's own trace), so the row keeps its layer identity and OSC
+      // is what confirms the layer really is idle.
+      //
+      // 🔴 A row with NO layer takes none of these three steps, and that is the whole
+      // point: no `#slots` entry, no published coordinate, and no OSC interest opened on a
+      // layer nothing will ever be placed on. The row still comes back — `restoreItem`
+      // above has already seated it, with its state and its `errorCode` — it simply comes
+      // back without a coordinate, which `StackItemState.slot` has always allowed.
+      if (slot !== null) {
+        this.#slots.set(item.itemId, slot);
+        this.#reconciler.assignSlot(item.itemId, { ...slot, server: 'primary' });
+        this.#addInterest(slot);
+      }
       // R-011 — the operator's placement is intent too, and #sendAdd reads it
       // off #positions, so it must be back BEFORE any re-ADD decision runs.
+      //
+      // ⭐ R-048 (6.9d) — the per-plate SOURCE override attaches HERE, beside it and
+      // for the identical reason: an OPEN-axis optional field on `RetainedStackItem`,
+      // re-applied BEFORE any adopt-vs-re-ADD decision runs, so whatever this restore
+      // goes on to seat carries it. Dropping it would silently revert the plate to
+      // the DEAD source the operator patched around — the B-107 / B-109 class,
+      // retention losing state it did not model. See `RetainedStackItemSchema`'s
+      // two-axes note.
       if (item.position !== undefined) this.#positions.set(item.itemId, item.position);
-      this.#pendingRestore.set(item.itemId, {
-        slot,
-        templateId: item.templateId,
-        fields: item.fields,
-      });
+      if (item.sourceOverride !== undefined) {
+        this.#sourceOverrides.set(item.itemId, item.sourceOverride);
+      }
+      // Session BM — the per-look composition, re-applied HERE for the identical reason:
+      // losing it would silently put every look back on the template assignment.
+      if (item.lookSourceOverride !== undefined) {
+        this.#lookSourceBindings.set(item.itemId, item.lookSourceOverride);
+      }
+      /*
+        🔴 SESSION BP — and the FROZEN level 2, re-applied HERE, before any adopt-vs-re-ADD
+        decision, for a reason sharper than either of the two above.
+
+        The bridge's freeze is PROCESS memory. Without this line a momentary blip THAWS every
+        on-air row: the restore re-resolves level 2 from the live store, and whatever
+        configuration was edited during the show lands on air at the first reconcile after the
+        reconnect. That is `B-155`'s mechanism arriving through the one door nobody was
+        watching — the freeze would look present, be tested, and be gone exactly when a plant
+        needed it.
+
+        ⚠ `!== undefined`, never a truthiness or emptiness test: an EMPTY record is a real
+        freeze (the template had no assignment at take) and must be restored as one.
+      */
+      if (item.frozenAssignment !== undefined) {
+        this.#frozenAssignments.set(item.itemId, { ...item.frozenAssignment });
+      }
+      // 6.5f — and the audio intent, for the same reason and with a failure that is
+      // HARDER to notice: a dropped source override shows the wrong picture, which
+      // somebody sees; a dropped volume shows the right picture in silence.
+      if (item.plateVolumes !== undefined) {
+        this.#plateVolumes.set(item.itemId, item.plateVolumes);
+      }
+      /*
+        §14 (LOOKS) Stage E — and the ACTIVE LOOK, re-applied HERE for the same reason as
+        its three neighbours: BEFORE any adopt-vs-re-ADD decision runs, so whatever this
+        restore goes on to do carries it.
+
+        🔴 It matters to BOTH outcomes, differently. A RE-ADD reads the look straight off
+        `#activeLookOf` into the `CG ADD` payload, so without this the page enters the
+        authored default and the operator’s choice is undone on air. An ADOPTED row keeps
+        whatever the page is already showing, so without this the row would publish the
+        default while the page shows the chosen look — the picker asserting something that
+        is not on air.
+
+        ⚠ **This is the deliberate third writer of `#activeLooks`** ({@link #recordActiveLook}
+        names the other two, and `7.9` is why they are counted). It writes the map directly and
+        is entitled to: the value was PUBLISHED, and a look is published only once the page was
+        told it, so re-applying it restates a fact rather than asserting a new one. It is also
+        why this must stay a re-apply and never become a fresh `setActiveLook` call — that
+        would send a `CG UPDATE` to a page mid-restore, before the adopt-vs-re-ADD decision has
+        worked out whether there is a producer to send it to.
+      */
+      if (item.activeLookId !== undefined) {
+        this.#activeLooks.set(item.itemId, item.activeLookId);
+      }
+      /*
+        🔴 `TIMING-WIRE-22` (d) — THE PASS TIMING, re-applied HERE for the same reason as its
+        neighbours, and then TOLD TO AN ADOPTED PAGE below, which none of them needs.
+
+        ⚠ **This map alone is NOT the requirement, and mistaking it for the requirement is the
+        whole trap.** The schema already proves the value SURVIVES a restart. What §3 asks is
+        that the template NOW RUNNING obeys it — and timing differs from every neighbour here
+        in exactly that way:
+
+        - a RE-ADD carries it into the fresh build through `#sendAdd`'s control payload, the
+          same road the look takes;
+        - an ADOPTED row is the hard case. The producer survived, so the page is still looping
+          on the count it snapshotted at `play()` — which is the AUTHORED repeat, not the
+          operator's later override, because the process that held that override just died.
+          Restoring the map without telling the page leaves a row whose stored count says two
+          and whose picture loops forever, with every surface reporting it as normal. That
+          disagreement between stored value and live behaviour is the worst outcome available
+          to this feature, which is why the adopt branch sends.
+
+        ⚠ Like `#activeLooks` above, this is a DIRECT re-apply and must not become a fresh
+        `setPassTiming` call: that would send a `CG UPDATE` mid-restore, before the
+        adopt-vs-re-ADD decision has worked out whether there is a producer to send it to.
+      */
+      if (item.timingOverride !== undefined) {
+        this.#passTimings.set(item.itemId, { ...item.timingOverride });
+      }
+      /*
+       * 🔴 B-109 / B-107 — THE PENDING RESTORE IS THE LICENCE TO TOUCH THE LAYER, and
+       * only a restorable state gets one.
+       *
+       * `cleared` — the operator CLEARed this graphic to take it off air and kept the
+       * row. Its layer is empty BECAUSE THEY EMPTIED IT. Parking it here would hand it
+       * to `#decidePendingRestores`, whose "silent layer → the producer is gone, re-ADD
+       * it" branch cannot tell a producer CasparCG destroyed from one the OPERATOR
+       * destroyed — and would put the graphic back with a `CG ADD` nobody asked for.
+       * `error` — the row never had a producer to lose, and a lost link may never
+       * IMPROVE a status.
+       *
+       * NOT a guard inside the decision: the decision is reached only THROUGH this map,
+       * so leaving the row out of it makes the re-ADD unreachable rather than merely
+       * refused. A second copy of the predicate inside `#decidePendingRestores` is the
+       * kind of drift golden rule 6 exists to prevent.
+       */
+      if (isRestorable(item.state) && slot !== null) {
+        this.#pendingRestore.set(item.itemId, {
+          slot,
+          templateId: item.templateId,
+          fields: item.fields,
+        });
+      }
       this.#markDirty(item.itemId);
       restored++;
     }
 
     // If the primary session is ALREADY healthy the `to === 'healthy'`
-    // transition fired long ago and will not fire again (the late-page-reload
-    // case) — but the tap has been filling ever since, so the answer is
-    // available right now. Without this branch those items would sit pending
-    // forever, visible but never adopted or re-ADDed.
-    if (restored > 0 && this.#adapter.primarySession.state === 'healthy') {
-      const occupiedKeys = new Set(
-        this.#adapter.primarySession.osc.occupancy
-          .occupied(this.#occupancyStaleMs)
-          .map((o) => `${String(o.channel)}:${String(o.layer)}`),
-      );
-      await this.#decidePendingRestores(
-        occupiedKeys,
-        this.#adapter.primarySession.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs),
+    // transition has fired and will not fire again (a restore that lands after
+    // the first connection) — but the tap has been filling ever since, so the
+    // answer is available right now. Without this branch those items would sit
+    // pending forever, visible but never decided.
+    //
+    // Gated on the PENDING set, not on `restored`: a restore of nothing but cleared
+    // and errored rows restores rows but licenses no wire action, and sampling
+    // occupancy for it would be work done to reach a no-op.
+    if (this.#pendingRestore.size > 0 && this.#adapter.primarySession.state === 'healthy') {
+      // `CENTRAL-BRIDGE-01` — a row restored ON AIR over an empty layer is said, as at a reconnect.
+      this.#raiseEmptiedAir(
+        this.#decidePendingRestores(
+          this.#observedProducers(this.#adapter.primarySession),
+          this.#adapter.primarySession.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs),
+        ),
+        [],
+        false,
       );
     }
-    return { restored, skipped };
+    this.#setRestoreReport(skipped, migrated);
+    return { restored, skipped, migrated };
+  }
+
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`B-294`, `B-108`) — **THE RESTORE'S REPORT IS STANDING BRIDGE STATE.**
+   * The restore runs here, at the bridge's start, before any console connects — so what it did not
+   * bring back cannot be a console's return value any more. It is held, pulled on connect, pushed
+   * on change and dismissed for every console at once, as the restart notice is. The BENIGN skip
+   * (`already-held`: the live bridge has the row) is left out, as the console used to leave it out.
+   */
+  #setRestoreReport(skipped: readonly RestoreSkip[], migrated: readonly RestoreMigration[]): void {
+    const said = skipped.filter((s) => s.reason !== 'already-held');
+    const report: StackRestoreReport | null =
+      said.length === 0 && migrated.length === 0
+        ? null
+        : { at: new Date().toISOString(), skipped: said, migrated: [...migrated] };
+    if (report === null && this.#restoreReport === null) return;
+    this.#restoreReport = report;
+    this.restoreReportChanged.emit(report);
+  }
+
+  /** `CENTRAL-BRIDGE-01` — the standing restore report, or `null`. */
+  restoreReport(): StackRestoreReport | null {
+    return this.#restoreReport;
+  }
+
+  /**
+   * Dismiss one half of the report, for every console — with a `channel`, only that channel's
+   * rows (a skip by its retained slot, a migration by the row it came from; a row naming no
+   * channel goes with any dismissal). Changes nothing on the wire and nothing on the stack;
+   * `ok: false` when nothing was left to dismiss.
+   *
+   * 🔴 `CENTRAL-BRIDGE-01` (D4) — `holds` is the dismissing principal's channels (`null`: every
+   * channel). A console is told only its own channels' rows, so a dismissal it makes reaches only
+   * those: a row on a channel it does not hold stays for the console that does.
+   */
+  dismissRestoreReport(
+    part: 'skipped' | 'migrated',
+    channel?: number,
+    holds: ((channel: number) => boolean) | null = null,
+  ): { ok: boolean } {
+    const report = this.#restoreReport;
+    if (report === null) return { ok: false };
+    // A row stays when the dismissal names another channel, or when the dismisser is not told it
+    // (`restoreReportFor`'s rule: a skip by its slot, a migration by either end). A row naming no
+    // channel is told to everyone, so it goes with any dismissal.
+    const otherChannel = (rowChannel: number): boolean =>
+      channel !== undefined && rowChannel !== channel;
+    const unseen = (...rowChannels: number[]): boolean =>
+      holds !== null && !rowChannels.some(holds);
+    const next: StackRestoreReport =
+      part === 'skipped'
+        ? {
+            ...report,
+            skipped: report.skipped.filter(
+              (s) =>
+                s.slot !== undefined && (otherChannel(s.slot.channel) || unseen(s.slot.channel)),
+            ),
+          }
+        : {
+            ...report,
+            migrated: report.migrated.filter(
+              (m) => otherChannel(m.from.channel) || unseen(m.from.channel, m.to.channel),
+            ),
+          };
+    if (next[part].length === report[part].length) return { ok: false };
+    this.#restoreReport = next.skipped.length === 0 && next.migrated.length === 0 ? null : next;
+    this.restoreReportChanged.emit(this.#restoreReport);
+    return { ok: true };
+  }
+
+  // ── DESKTOP-APPS-01-D j — items of ours on a channel this station does not declare ──
+
+  /**
+   * 🔴 Record an item of ours that is (or may be) ON AIR on a channel this station does not
+   * declare. It is never seated, updated or re-ADDed from here: the one thing it offers is
+   * {@link takeStrayOffAir}. Its layer's OSC interest is bound so the sweep can tell when nothing
+   * is left there and drop it ({@link #pruneStrays}).
+   */
+  #noteStray(stray: { itemId: string; templateId: string; channel: number; layer: number }): void {
+    if (this.#isDeclaredChannel(stray.channel)) return;
+    const key = adoptionKey({ channel: stray.channel, layer: stray.layer });
+    if (!this.#strays.has(key)) this.#addInterest({ channel: stray.channel, layer: stray.layer });
+    this.#strays.set(key, stray);
+    this.straysChanged.emit(this.strays());
+  }
+
+  /**
+   * A stack item left on a channel the station no longer declares (a bank installed or changed
+   * under it). Recorded as a stray when it holds or may hold air, then dropped from the stack
+   * WITHOUT a wire command: any command to it would be a write to somebody else's channel.
+   */
+  #strandItem(itemId: string): void {
+    const item = this.#reconciler.get(itemId);
+    const slot = this.#slots.get(itemId);
+    if (
+      item !== null &&
+      item !== undefined &&
+      slot !== undefined &&
+      (isOnAirStatus(item) || item.status === 'unverified' || this.#loaded.has(itemId))
+    ) {
+      this.#noteStray({
+        itemId,
+        templateId: item.templateId,
+        channel: slot.channel,
+        layer: slot.layer,
+      });
+    }
+    this.#forgetWithoutWire(itemId);
+  }
+
+  /** `#removeImpl`'s bookkeeping, and NOTHING on the wire. */
+  #forgetWithoutWire(itemId: string): void {
+    const slot = this.#slots.get(itemId);
+    this.#reconciler.applyIntent({ kind: 'remove', itemId }, this.#nextSeq());
+    this.#loaded.delete(itemId);
+    this.#positions.delete(itemId);
+    this.#sourceOverrides.delete(itemId);
+    this.#lookSourceBindings.delete(itemId);
+    this.#frozenAssignments.delete(itemId);
+    this.#plateVolumes.delete(itemId);
+    this.#activeLooks.delete(itemId);
+    this.#passTimings.delete(itemId);
+    this.#pendingRestore.delete(itemId);
+    this.#restoreBlocked.delete(itemId);
+    this.#takeRefusals.delete(itemId);
+    if (slot !== undefined) {
+      this.#slots.delete(itemId);
+      this.#removeInterest(slot);
+      this.#releaseSlot(slot);
+      this.#resolveOwnedOccupancy(slot);
+    }
+  }
+
+  /**
+   * Drop every stray whose layer a HEARING tap reads empty, or reads holding a producer that is
+   * not an html page (not ours). Nothing is dropped on a tap that is not hearing — unknown is
+   * never empty.
+   */
+  #pruneStrays(): void {
+    if (this.#strays.size === 0) return;
+    const session = this.#adapter.primarySession;
+    if (session.state !== 'healthy' || !session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs)) {
+      return;
+    }
+    const observed = this.#observedProducers(session);
+    let changed = false;
+    for (const [key, stray] of this.#strays) {
+      if (observed.get(key) === 'html') continue;
+      this.#strays.delete(key);
+      this.#removeInterest({ channel: stray.channel, layer: stray.layer });
+      changed = true;
+    }
+    if (changed) this.straysChanged.emit(this.strays());
+  }
+
+  /** `DESKTOP-APPS-01-D` j — the strays, as Station setup shows them. */
+  strays(): StationStray[] {
+    const session = this.#adapter.primarySession;
+    const hearing =
+      session.state === 'healthy' && session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
+    const observed = hearing ? this.#observedProducers(session) : null;
+    const out: StationStray[] = [];
+    for (const [key, stray] of this.#strays) {
+      if (observed !== null && observed.get(key) !== 'html') continue;
+      // A stray sits on a channel this station does not declare, so no list of ours names it:
+      // the station-wide reading is the only name there is.
+      const name = this.#templates.getAny(stray.templateId)?.name;
+      out.push({
+        itemId: stray.itemId,
+        templateId: stray.templateId,
+        ...(name !== undefined && name !== '' ? { templateName: name } : {}),
+        casparChannel: stray.channel,
+        layer: stray.layer,
+        observed: observed === null ? 'unknown' : 'producer',
+      });
+    }
+    return out.sort((a, b) => a.casparChannel - b.casparChannel || b.layer - a.layer);
+  }
+
+  /**
+   * 🔴 `DESKTOP-APPS-01-D` j — **TAKE A STRAY OFF AIR: `CG <ch>-<layer> STOP 0`, then
+   * `CLEAR <ch>-<layer>`, on that exact layer and nothing else.**
+   *
+   * The one command this bridge sends to a channel it does not declare, and it is narrower than
+   * the fence it bypasses: the coordinate must be a stray this bridge recorded, and never a layer
+   * in 1–49 (the playout server's span, `FIRST_ALLOCATABLE_LAYER`). No `MIXER … CLEAR` follows:
+   * the mixer of a channel this station does not declare is not ours to reset. Audited as `out`.
+   */
+  async takeStrayOffAir(
+    channel: number,
+    layer: number,
+  ): Promise<{ ok: boolean; message?: string }> {
+    const key = adoptionKey({ channel, layer });
+    const stray = this.#strays.get(key);
+    if (stray === undefined || layer < FIRST_ALLOCATABLE_LAYER) {
+      return {
+        ok: false,
+        message: `Nothing of ours is recorded on ${String(channel)}-${String(layer)}.`,
+      };
+    }
+    const slot: CommandSlot = { channel, layer };
+    const verdict = await this.#audited(
+      'out',
+      { itemId: stray.itemId, templateId: stray.templateId, slot },
+      async (): Promise<{ accepted: boolean; errorCode?: string }> => {
+        if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+        await this.#send(this.#builder.stop(slot), this.#nextSeq(), 'urgent', {
+          strayTarget: slot,
+        });
+        const cleared = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent', {
+          strayTarget: slot,
+        });
+        return cleared.ok
+          ? { accepted: true }
+          : { accepted: false, errorCode: cleared.errorCode ?? 'amcp-error' };
+      },
+    );
+    if (!verdict.accepted) {
+      return {
+        ok: false,
+        message:
+          verdict.errorCode === 'disconnected'
+            ? 'CasparCG is not reachable — nothing was sent.'
+            : `CasparCG did not clear ${String(channel)}-${String(layer)}.`,
+      };
+    }
+    this.#strays.delete(key);
+    this.#removeInterest(slot);
+    this.straysChanged.emit(this.strays());
+    return { ok: true };
+  }
+
+  /**
+   * 🔴 `DESKTOP-APPS-01-D` d — **WHAT IS ALREADY ON AIR ON A CHANNEL, before this station
+   * declares it.** First-run asks this after it has written the connection and before it writes
+   * the channel, so the admin is told — once, and not blocked — that the channel carries
+   * somebody else's content.
+   *
+   * From the primary's OSC tap, waited for up to `waitMs`: a hearing tap answers `occupied` with
+   * the layers and their producer kinds, or `empty`; a tap that never hears answers `unknown`,
+   * which warns of nothing and claims nothing.
+   */
+  async channelOccupancy(
+    channel: number,
+    waitMs = 3000,
+  ): Promise<{
+    state: 'occupied' | 'empty' | 'unknown';
+    layers: { layer: number; producer: string }[];
+  }> {
+    /*
+      `CENTRAL-BRIDGE-01` rule 7 — a channel this bridge does not serve has its OSC dropped at the
+      transport, so the tap would call it EMPTY for want of data (Change channel… asks about the new
+      channel before declaring it). The core itself answers instead: one `INFO <channel>`.
+    */
+    if (!this.#servesOscChannel(channel)) return this.#occupancyFromInfo(channel, waitMs);
+    const deadline = Date.now() + waitMs;
+    for (;;) {
+      const session = this.#adapter.primarySession;
+      if (
+        session.state === 'healthy' &&
+        session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs)
+      ) {
+        const layers = session.osc.occupancy
+          .occupied(this.#occupancyStaleMs)
+          .filter((o) => o.channel === channel)
+          .map((o) => ({ layer: o.layer, producer: o.producer }))
+          .sort((a, b) => a.layer - b.layer);
+        return { state: layers.length > 0 ? 'occupied' : 'empty', layers };
+      }
+      if (Date.now() >= deadline) return { state: 'unknown', layers: [] };
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  /**
+   * `CENTRAL-BRIDGE-01` — {@link channelOccupancy} for a channel whose OSC is not taken in: one
+   * `INFO <channel>` to the primary (never journaled, `low`, the `B-292` reader's own road). A
+   * primary that is not healthy, a refusal or a reply that is not a channel's info answers
+   * `unknown`, which warns of nothing and claims nothing.
+   */
+  async #occupancyFromInfo(
+    channel: number,
+    waitMs: number,
+  ): Promise<{
+    state: 'occupied' | 'empty' | 'unknown';
+    layers: { layer: number; producer: string }[];
+  }> {
+    const unknown = { state: 'unknown' as const, layers: [] };
+    if (this.#adapter.primarySession.state !== 'healthy') return unknown;
+    try {
+      const result = await this.#adapter.send(this.#builder.info(channel), {
+        priority: 'low',
+        timeoutMs: Math.max(500, Math.min(waitMs, 2000)),
+        mirror: false,
+      });
+      const response = result.response;
+      const xml =
+        response.kind === 'ok-line'
+          ? response.data
+          : response.kind === 'ok-multi'
+            ? response.lines.join('\n')
+            : null;
+      const producers = xml === null ? null : stageProducersOfInfo(xml);
+      if (producers === null) return unknown;
+      const layers = [...producers]
+        .map(([layer, producer]) => ({ layer, producer }))
+        .sort((a, b) => a.layer - b.layer);
+      return { state: layers.length > 0 ? 'occupied' : 'empty', layers };
+    } catch {
+      return unknown;
+    }
+  }
+
+  /**
+   * R-021 stage 4 — the tap's observation as `adoptionKey → producer KIND`.
+   *
+   * The restore decision used to take a bare `Set` of occupied keys, which
+   * answered "is something there?" and could not answer "is it OURS?" — and those
+   * are different questions with opposite safe answers on a DECLARED row. One
+   * helper rather than a third hand-rolled loop: the key format is `adoptionKey`
+   * (the sweep's own), and the staleness bound is `#occupancyStaleMs` and never a
+   * second constant.
+   *
+   * The caller decides whether the tap is HEARING at all (`hasFreshOsc`); this
+   * only reports what it heard. An empty map from a hearing tap means empty
+   * layers (B-053); from a blind one it means nothing whatsoever, which is why
+   * the distinction never lives in here.
+   */
+  #observedProducers(session: ServerSession): ReadonlyMap<string, string> {
+    const byKey = new Map<string, string>();
+    for (const o of session.osc.occupancy.occupied(this.#occupancyStaleMs)) {
+      byKey.set(adoptionKey({ channel: o.channel, layer: o.layer }), o.producer);
+    }
+    return byKey;
   }
 
   /**
    * B-092 — the layer a restored item takes. The RETAINED slot is preferred and
-   * reserved exactly: it is the layer the surviving producer is actually on, so
-   * it is the layer whose occupancy decides adopt-vs-re-ADD. Re-allocating some
+   * taken exactly: it is the layer the surviving producer is actually on, so it
+   * is the layer whose occupancy decides adopt-vs-re-ADD. Re-allocating some
    * other free layer would consult the wrong layer's occupancy and could ADD a
-   * second producer beside a live one. Falls back to normal allocation when the
-   * intent carries no slot or the layer is already taken; `null` when the range
-   * is exhausted (the item is skipped, exactly as a load would fail).
+   * second producer beside a live one.
+   *
+   * ⭐ **R-021 stage 4 (task 3.1) — THE BRANCH IS THE POINT: A DECLARED ROW AND A
+   * DYNAMIC LAYER GET OPPOSITE ANSWERS WHEN THE EXACT SLOT CANNOT BE TAKEN.**
+   *
+   *   DYNAMIC → #368's fall-through to `#allocate()`, unchanged and
+   *     hardware-validated. Re-homing an anonymous layer costs nothing an
+   *     operator can perceive; the item just comes back somewhere in its range.
+   *   DECLARED (fixed) → **NEVER `#allocate()`.** R-021's acceptance is "the item
+   *     survives ON THE SAME layer", and the row IS the promise ("layer 72 is the
+   *     clock"). An item bound to 72 coming back on 61 silently breaks the whole
+   *     item — and under R-028's declared model EVERY item is on a declared row,
+   *     so the fall-through would misplace every row after a bridge restart, not
+   *     an edge case. Skipped honestly instead (`fixed-slot-taken`).
+   *
+   * 🔴 **THE TWO DOORS ARE DIFFERENT FUNCTIONS AND THAT IS LOAD-BEARING.**
+   * `reserve()` refuses a fixed slot BY CONSTRUCTION (born allocated, so never
+   * "free" to reserve) and `bindFixed()` refuses a non-fixed one, so neither can
+   * stand in for the other. B-114 replaced `reserve()` with `bindFixed()` rather
+   * than branching, which fixed the declared row and silently cost the DYNAMIC
+   * row its exact-slot restore: every dynamic retained coordinate fell straight
+   * through to `#allocate()`, which is precisely the wrong-layer-occupancy hazard
+   * this method's own contract forbids. Both doors are now reached through an
+   * explicit `isFixed` test, so neither branch can be "simplified" into the other
+   * again (design.md §d test 5 pins it).
+   *
+   * The bound value for a declared row is the REGISTRY's `templateType`, resolved
+   * exactly as `fixedLoad` resolves it — the row reads this straight back out as
+   * its label, so binding the raw id here would restore the row under a UUID.
+   *
+   * `null` means the item is SKIPPED, with the caller reporting which of the two
+   * reasons applied (B-108 — every skip is reported WITH ITS REASON).
    */
-  #slotForRestore(item: RetainedStackItem): CommandSlot | null {
+  #slotForRestore(item: RetainedStackItem): RestorePlacement {
     if (item.slot !== undefined) {
+      /*
+        🔴 `CHANNEL-RESOLUTION-01` — **A RETAINED COORDINATE ON ANOTHER CHANNEL IS NOT
+        THIS STATION'S TO HONOUR.**
+
+        Measured 2026-09-22: a bridge configured for channel 2 seated six template
+        producers onto channel 1 of a PARTNER'S LIVE PROGRAMME OUTPUT — six
+        `MIXER 1-L VOLUME 0` and six `CG 1-L ADD`, layers 59 and 95–99, one timestamp.
+        On the same connection the connect-time unity sweep went correctly to channel 2.
+        Two paths, two answers, and the difference is where each one LOOKS:
+        `#reassertDeclaredVolumes` reads the STATION (every declared bank's `fixedBankSlots`
+        → `{ channel: bank.channel, layer }`), while this method read the CLIENT
+        (`item.slot.channel`) and compared it to nothing at all.
+
+        The client was a console tab left open from a session against a different
+        station, whose bank was channel 1. It reconnected to the bridge's WebSocket
+        port, replayed its retained stack, and was believed.
+
+        ⚠ **THE FENCE THAT EXISTED DID NOT FAIL — IT WAS STEPPED AROUND, and that is the
+        part worth keeping in mind.** `this.#layers.isFixed(slot)` is keyed on the FULL
+        coordinate, so an off-bank channel does not fail that door, it MISSES it: the
+        row falls through to `reserve()`, which checks fixed, reserved-layer and
+        occupancy — and never the channel. So the safety property was inverted. The
+        closer a client's coordinate was to the declared bank the more checks it met,
+        and a coordinate naming somebody else's output met the fewest. `reserve()`'s own
+        docstring is where the trust was granted, on a premise nothing enforces: "the
+        coordinate came from this allocator in a previous process". It came from a
+        browser (that comment is corrected in place).
+
+        ⚠ **Gated on the BANK, which is the only thing that knows what this station is,
+        and skipped as `not-declared`, which is the reason whose doctrine already says
+        exactly this** — "the coordinate this row remembers is not a row at all", with
+        the remedy "declare a row for it and load it there", and whose own note names
+        this very hazard: re-homing such a row "would have meant putting a graphic on
+        somebody else's output". A new reason code would have said the same thing in a
+        second vocabulary.
+
+        ⚠ **`CHANNEL-AUTHORITY-01` — the fence now asks `#isDeclaredChannel`, the one
+        predicate every channel door asks.** It used to read the bank's channel itself and
+        wave everything through when there was no bank, on the argument that a bank-less
+        runtime "has no configured channel". It has one: `#declaredChannels()` answers
+        channel 1 there — `FixedLayerBankSchema`'s own documented default, the channel the
+        settings store is seeded for and the permitted-channel strip lists — so the bank-less
+        case now refuses what every other door refuses rather than disagreeing with them.
+        Every CLI boot has a bank (an absent file yields the built-in default), so that case
+        is programmatic callers only.
+      */
+      if (!this.#isDeclaredChannel(item.slot.channel)) return { skip: 'not-declared' };
       // R-028 / C-015 — a retained coordinate now inside the RESERVED playout
       // range is SKIPPED, never re-homed. Falling through to `#allocate()`
       // would consult a DIFFERENT layer's occupancy (the exact
@@ -1329,33 +4315,115 @@ export class CasparRuntime {
       // playout layer — two copies on air, with the row pointing at the wrong
       // one. Skipping keeps the wire untouched, exactly like the
       // exhausted-range case; the survivor is the playout team's to deal with.
-      if (this.#reservedSet.has(item.slot.layer)) return null;
+      if (this.#reservedSet.has(item.slot.layer)) return { skip: 'no-layer' };
       const slot = { channel: item.slot.channel, layer: item.slot.layer };
-      // B-114 — a retained coordinate inside the DECLARED BANK is re-bound with
-      // `bindFixed`, not `reserve`.
+      // 🔴 `single-clock-look-switch` — THE BED MIGRATION, before either door below,
+      // because a retained coordinate that is no longer a legal home for THIS package must
+      // not be taken exactly.
+      const migration = this.#migrateRetainedBed(item, slot);
+      if (migration !== null) return migration;
+      // ── A DECLARED OPERATOR ROW — the exact slot or nothing. ───────────────
       //
-      // `reserve()` refuses a fixed slot BY CONSTRUCTION (a fixed slot is born
-      // allocated, so it is never "free" to reserve). Falling through to
-      // `#allocate()` for one is wrong twice over: it re-homes the operator's
-      // row onto some dynamic layer, and for a `custom` template type that
-      // range IS the reserved playout range, so allocation throws and the item
-      // is SKIPPED entirely. Either way `fixedBinding` is never recorded, so
-      // after a bridge restart every declared row published `binding: null` —
-      // the operator's templates vanished from the surface, and the rows also
-      // refused a fresh LOAD because their occupancy is `unknown` until OSC
-      // arrives. The row was left with nothing on it and no way to fill it.
+      // B-114's reason for `bindFixed` stands and is why the branch exists at
+      // all: `reserve()` refuses a fixed slot, and for a `custom` template type
+      // `#allocate()` would additionally throw (that range IS the reserved playout
+      // range), so a declared row used to come back with `fixedBinding` unrecorded
+      // — publishing `binding: null`, the operator's templates gone from the
+      // surface, and the row refusing a fresh LOAD because its occupancy reads
+      // `unknown` until OSC arrives.
+      if (this.#layers.isFixed(slot)) {
+        const templateType =
+          this.#templates.getOn(slot.channel, item.templateId)?.templateType ?? item.templateId;
+        // The `false` case is a row ANOTHER restored item already bound. It is
+        // returned as a skip and NOT allocated elsewhere — see the method's note.
+        return this.#layers.bindFixed(slot, templateType) ? { slot } : { skip: 'fixed-slot-taken' };
+      }
+      // ── A DYNAMIC layer — #368: the EXACT slot, and now nowhere else. ─────────
       //
-      // The bound value is the REGISTRY's `templateType`, resolved exactly as
-      // `fixedLoad` resolves it — the row reads this straight back out as its
-      // label, so binding the raw id here would restore the row under a UUID.
-      const templateType = this.#templates.get(item.templateId)?.templateType ?? item.templateId;
-      if (this.#layers.bindFixed(slot, templateType)) return slot;
+      // `reserve()` still honours a retained coordinate that is free: a row that came back
+      // exactly where the operator left it is the good case and is untouched.
+      if (this.#layers.reserve(slot, item.templateId)) return { slot };
+      /*
+        🔴 `LAYER-BANDS-16` — AND THE "ELSEWHERE" HALF IS GONE, DELIBERATELY.
+
+        This used to fall through to `#allocate()`, which would have re-homed the row onto
+        a dynamic range. Every one of those ranges lay in 1-49 — the span the owner's re-cut
+        leaves to the playout server — so the fall-through's remaining behaviour was
+        "silently put this graphic on somebody else's output". The dynamic policy is empty
+        now, so `#allocate()` would throw in any case; what matters is that the skip is
+        reported as what it IS rather than as an exhausted range.
+      */
+      return this.#placementWithoutLayer(item);
     }
-    try {
-      return this.#allocate(item.templateId);
-    } catch {
-      return null;
+    /*
+      No retained coordinate at all — nothing to honour and nothing to allocate from.
+    */
+    return this.#placementWithoutLayer(item);
+  }
+
+  /**
+   * 🔴 What a row with NO usable coordinate gets, and the split is `isRestorable` — THE
+   * canonical predicate, the same one this file already gates `#pendingRestore` on.
+   *
+   * A row that may be re-seated (`on-air` / `loaded`) genuinely needs a layer, and there is
+   * no longer an allocator to invent one: it is skipped, VISIBLY, with the sentence that
+   * tells the operator to declare a row. A row that may NOT be re-seated (`cleared` /
+   * `error`) holds nothing on the channel and never will — so a missing coordinate is not a
+   * reason to drop it, and dropping it would be the worse failure of the two: a row that
+   * vanishes after a restart takes its error message with it, and the operator never learns
+   * it was broken.
+   *
+   * ⚠ ONE predicate, not a local re-derivation of "which states own a layer" (golden rule 6).
+   */
+  #placementWithoutLayer(item: RetainedStackItem): RestorePlacement {
+    return isRestorable(item.state) ? { skip: 'not-declared' } : { slot: null };
+  }
+
+  /**
+   * 🔴 `single-clock-look-switch` — **A RETAINED GRAPHICS BED HELD AGAINST AN OPERATOR ROW
+   * IS RE-HOMED ONTO A BED ROW — THE ROW MOVES, THE AIR DOES NOT.**
+   *
+   * Reachable only across the upgrade that introduced the bed bank: a retention file written
+   * by an older build can hold a plate-bearing package against layer 95, and restoring it
+   * there would render its background OVER every plate it declares. `null` means "not this
+   * case", which is every ordinary restore.
+   *
+   * ⚠ **THE MIGRATED ROW COMES BACK NOT ON AIR, AND THAT IS THE WHOLE SAFETY ARGUMENT.**
+   * `#slotForRestore`'s contract is that the retained slot is taken EXACTLY because it is the
+   * layer whose occupancy decides adopt-vs-re-ADD — "re-allocating some other free layer would
+   * consult the wrong layer's occupancy and could ADD a second producer beside a live one".
+   * A migration cannot honour that: the surviving producer is on 95 and the row's new home is
+   * layer 9. So the migration deliberately does not carry the air claim across. The caller
+   * demotes an `on-air` retained state to `loaded`, LOAD is list-only and emits no AMCP, and
+   * the wire is therefore touched NOT AT ALL — the same property the reserved-layer skip above
+   * relies on, with the row kept instead of lost.
+   *
+   * WHY MIGRATE RATHER THAN SKIP. `B-092` exists because a restore that drops rows leaves the
+   * operator's rundown short of the thing they were looking at. A bed is the one row a
+   * programme cannot work without, so losing it is the worst available outcome; coming back
+   * one row along, not on air, and SAID OUT LOUD, is the least bad.
+   *
+   * The highest free bed row is chosen — `Bed 1`, the top of the bed group on the operator's
+   * surface — so the row lands where they will look for it.
+   */
+  #migrateRetainedBed(item: RetainedStackItem, slot: CommandSlot): RestorePlacement | null {
+    // `MULTI-CHANNEL-01` — the bed rows of the retained coordinate's OWN channel.
+    const bank = this.#bankFor(slot.channel);
+    if (bank === null) return null;
+    if (!this.#layers.isFixed(slot)) return null;
+    if (isLowBankLayer(bank, slot.layer)) return null;
+    const info = this.#templates.getOn(slot.channel, item.templateId);
+    // ONE predicate, the same one the load refusal and the picker read (golden rule 6).
+    if (info === null || requiredBankFor(info) !== 'low') return null;
+    const templateType = info.templateType;
+    for (let layer = lowBankEnd(bank); layer >= bank.low.start; layer--) {
+      const bed = { channel: bank.channel, layer };
+      if (this.#layers.bindFixed(bed, templateType)) return { slot: bed, migratedFrom: slot };
     }
+    // Every bed row is taken. Reported with its own reason rather than folded into
+    // `no-layer`: nothing is exhausted in the dynamic sense and freeing a dynamic layer
+    // would not help — the operator has to clear a bed row.
+    return { skip: 'no-bed-row' };
   }
 
   /**
@@ -1371,9 +4439,13 @@ export class CasparRuntime {
    *     touch NOTHING. Marking the layer adopted is what guarantees no later
    *     adoption issues the CLEAR that would flash it off air; resumed OSC
    *     re-derives `on-air` by itself from the record's play evidence.
-   *   SILENT → RE-ADD as loaded. The producer is gone (bridge AND CasparCG
-   *     restarted), so a fresh `CG ADD` puts the item back — still with NO
-   *     adopt-CLEAR in front of it.
+   *   SILENT → 🔴 `CENTRAL-BRIDGE-01` (`C-047`): NOTHING IS SENT. The producer is gone
+   *     (the bridge AND the core restarted). It used to be re-ADDed as `loaded`; the owner's
+   *     standing decision for our layers is DETECT AND SAY (`RESTART-NOTICE-01`), and "nothing
+   *     is re-sent by itself" is the start check's rule. A row restored ON AIR leaves ON AIR
+   *     here and is RETURNED, so the restart notice names it and PUT BACK ON AIR is the
+   *     operator's; a row restored `loaded` stays `loaded`, not resident, and its next take
+   *     re-ADDs it (B-039).
    *
    *   TAP NEVER HEARD ANY OSC → REFUSE TO DECIDE. Send nothing at all and
    *     publish the item as `unverified`. See below.
@@ -1393,14 +4465,17 @@ export class CasparRuntime {
    * ONLY from a tap that is actually hearing OSC. Otherwise it is evidence of
    * no evidence, and the honest move is to do nothing and say so.
    *
-   * Record mutations are synchronous; only the ADD is awaited. The caller at
-   * the healthy transition relies on that (see `#wireAdapter`).
+   * SYNCHRONOUS, all of it (nothing is sent). The caller at the healthy transition relies on
+   * that (see `#wireAdapter`): its reconcile reads a settled reconciler.
+   *
+   * Returns the rows restored ON AIR that this decision found EMPTY and took off air
+   * (`markLayersEmptied`) — for the caller's restart notice.
    */
-  async #decidePendingRestores(
-    occupiedSlotKeys: ReadonlySet<string>,
+  #decidePendingRestores(
+    observedProducers: ReadonlyMap<string, string>,
     tapHasReceivedOsc: boolean,
-  ): Promise<void> {
-    if (this.#pendingRestore.size === 0) return;
+  ): readonly StackItemState[] {
+    if (this.#pendingRestore.size === 0) return [];
 
     // BLIND TAP — refuse to decide. The items stay pending (so the periodic
     // sweep can decide them if OSC starts arriving), nothing is sent, and every
@@ -1422,46 +4497,137 @@ export class CasparRuntime {
 `,
         );
       }
-      return;
+      return [];
     }
 
     const pending = [...this.#pendingRestore];
     this.#pendingRestore.clear();
-
-    // The restore pass does not report per-item reasons anywhere (it is a bulk
-    // rebuild with no operator waiting on it), so it takes `#sendAdd`'s result
-    // whole and looks at neither half.
-    const adds: Promise<{ ok: boolean; errorCode?: string }>[] = [];
-    for (const [itemId, { slot, templateId, fields }] of pending) {
+    /*
+     * R-021 stage 4 — the entries this pass could not decide, re-parked verbatim
+     * at the end. Collected rather than left in place because the loop below
+     * consults `#pendingRestore` through nothing else, and re-adding DURING the
+     * iteration would make "was this decided?" depend on map ordering.
+     */
+    const stillPending = new Map<string, (typeof pending)[number][1]>();
+    // `CENTRAL-BRIDGE-01` (`C-047`) — the layers of restored rows that turned out EMPTY.
+    const emptiedOnAir = new Set<string>();
+    for (const [itemId, entry] of pending) {
+      const { slot } = entry;
       // A remove landed between the restore and this decision — the item is
       // gone; its slot was already released by remove(). Nothing to do.
       if (this.#reconciler.get(itemId) === null) continue;
+      /*
+        🔴 `DESKTOP-APPS-01-D` j — **NEVER SEAT ON A CHANNEL THIS STATION DOES NOT DECLARE.** A
+        restore accepted before the bank moved (the owner's channel-2 set-up took channel 1's logo
+        on a bank-less bridge) must not reach this decision's re-ADD: measured against the mock,
+        a silent 1-99 got `MIXER 1-99 VOLUME 0` and `CG 1-99 ADD` — the Playout's programme
+        channel. It becomes a stray and nothing is sent.
+      */
+      if (!this.#isDeclaredChannel(slot.channel)) {
+        this.#strandItem(itemId);
+        continue;
+      }
       // We can decide now, so any earlier blind-tap doubt is resolved: drop the
       // `unverified` marker before settling the item either way. (No-op unless a
       // previous, blind pass had set it.)
       this.#reconciler.setUnverifiable(itemId, false);
 
-      if (occupiedSlotKeys.has(adoptionKey(slot))) {
+      const producer = observedProducers.get(adoptionKey(slot));
+      if (producer !== undefined) {
+        /*
+         * 🔴 R-021 stage 4 (task 3.1, owner decision d1) — RESTORE-BLOCKED.
+         *
+         * A DECLARED operator row holding a producer that is provably not ours.
+         * All three of the obvious moves are wrong, and each is wrong for a
+         * reason this codebase has already paid for:
+         *
+         *   ADOPT IN PLACE — NO. Adopting a decklink as our html item is B-092's
+         *     recorded misadoption lie: the row would claim an item that is not
+         *     on that layer, and `#adopted` would additionally suppress the one
+         *     CLEAR that could later fix it.
+         *   CLEAR IT — NO. An automatic CLEAR of a live non-html producer is the
+         *     blind-destruction class R-015 exists to prevent. The hard Clear is
+         *     an OPERATOR power (task 4.3); a restore is not an operator action,
+         *     and automatic paths never destroy.
+         *   ALLOCATE ELSEWHERE — NO, and doubly so: `#slotForRestore` has already
+         *     refused it for this row, because the row IS the promise.
+         *
+         * So it PARKS: nothing is sent, the item keeps its slot and its binding,
+         * and the row states both facts — the item waiting and what is observed.
+         * It stays in `#pendingRestore`, which is what makes the second exit d1
+         * names work by itself: when the foreign producer vacates, this same
+         * decision runs from the sweep and sees a silent layer — and since
+         * `CENTRAL-BRIDGE-01` sends nothing there either: the row is free, and the
+         * operator's take seats it. No separate un-block mechanism exists to drift.
+         *
+         * "Not html" fails safe and video kinds are never enumerated — the same
+         * discriminator `clearLayer` and the playout tab use, never a second list.
+         */
+        if (this.#layers.isFixed(slot) && producer !== 'html') {
+          this.#restoreBlocked.set(itemId, { slot, producer });
+          stillPending.set(itemId, entry);
+          this.#markDirty(itemId);
+          continue;
+        }
         // Adopted by OBSERVATION, not by a CLEAR — so this deliberately does
         // NOT go through `#markAdoptedOnPrimary`, whose owned-occupancy
         // resolution means "provably cleared". We proved the opposite: there IS
         // a producer, and it is ours.
+        this.#restoreBlocked.delete(itemId);
         this.#adopted.add(adoptionKey(slot));
+        /*
+          🔴 `TIMING-WIRE-22 · DELTA A1` — **NOTHING IS TOLD TO AN ADOPTED PAGE, AND A TELL HERE
+          WOULD CORRUPT THE COUNT.** This branch briefly HAD one; it is gone, and the reason is
+          worth the paragraph because the argument for adding it sounds right.
+
+          `passes` is RELATIVE — "remaining FROM NOW" — so it is an INSTRUCTION, and instructions
+          are not idempotent. Re-sending the stored `2` to a page that has already run one of its
+          two gives the operator two more instead of one
+          (`packages/template-runtime/tests/pass-count-is-relative.test.ts` pins that arithmetic).
+
+          ⚠ **AND THE STATE THE TELL WAS WRITTEN FOR CANNOT ARISE.** Only `isRestorable` states
+          reach this branch — `on-air` or `loaded`:
+
+            - `on-air` — `#ownsLiveSeats` is true, so an accepted set REACHED this producer and
+              the page holds it. A tell re-arms.
+            - `loaded` — the gate recorded without sending, so the page really does lack it; but
+              it has not `play()`ed, and `play()` snapshots `repeatOf(playout)` over anything set
+              beforehand. A tell would be discarded by the take seconds later.
+
+          So there is no adopted state a tell helps and one it corrupts. What the restore carries
+          is the MAP — the bridge's own record, re-applied above — which is what the console reads
+          and what `#sendAdd` gives a REBUILT page.
+
+          ⭐ A page REBUILT later (the operator's take re-ADDs it) starts over by definition, so
+          `#sendAdd`'s payload is the only thing that could tell it; a RESIDENT page is told by
+          the take's own tell (`#tellPageTake`), from the same `#takeControl` (`LOGO-LOOP-01`).
+          ⚠ `DELTA A3` found that the `CG PLAY` after such a payload reset `cyclesLeft` from the
+          authored `repeat`, discarding it. FIXED in the page by `DELTA B0`: `play()` seats the
+          count it was told (`pendingPasses`) and falls back to `repeat` only when told none —
+          and since `B-323` a SETTLED page keeps a count told to it, too.
+        */
         continue;
       }
 
-      // Silent layer: no producer survived, so the honest state is `loaded`.
-      // Re-creating the record through the ordinary `load` intent is what makes
-      // it honest — it resets play evidence, so the item can no longer claim
-      // air, and `reconcileOnReconnect` (which runs right after us) correctly
-      // leaves it alone. The slot must be re-assigned: a fresh `load` record
-      // carries none.
-      const seq = this.#nextSeq();
-      this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
-      this.#reconciler.assignSlot(itemId, { ...slot, server: 'primary' });
-      adds.push(this.#sendAdd(itemId, slot, templateId, fields, seq));
+      // The layer is silent, so nothing is blocking this row any more — the marker goes
+      // first, so a publish triggered below cannot carry a stale block.
+      this.#restoreBlocked.delete(itemId);
+      /*
+        🔴 `CENTRAL-BRIDGE-01` (`C-047`) — THE LAYER IS EMPTY, AND NOTHING IS SENT FOR IT. It was
+        re-ADDed here as `loaded`; the owner's standing decision for our layers is detect and say,
+        and the start check's rule is "nothing is re-sent by itself". A row restored ON AIR is
+        collected and taken off air below — the restart notice names it, PUT BACK ON AIR is the
+        operator's. A row restored `loaded` keeps its state and is not resident (`#loaded` does not
+        hold it), so its next take re-ADDs it (B-039) — the same row the operator would see after
+        any core restart.
+      */
+      // `markLayersEmptied` resets only a record with play evidence, so a `loaded` row passes
+      // through it untouched and only a row restored ON AIR comes back in the list.
+      emptiedOnAir.add(adoptionKey(slot));
+      this.#markDirty(itemId);
     }
-    await Promise.all(adds);
+    for (const [itemId, entry] of stillPending) this.#pendingRestore.set(itemId, entry);
+    return emptiedOnAir.size === 0 ? [] : this.#reconciler.markLayersEmptied(emptiedOnAir);
   }
 
   /**
@@ -1481,14 +4647,11 @@ export class CasparRuntime {
   ): Promise<{ ok: boolean; reason?: 'on-air' | 'unknown-item' }> {
     const item = this.#reconciler.get(itemId);
     if (item === null) return { ok: false, reason: 'unknown-item' };
-    if (
-      item.pending ||
-      item.status === 'playing' ||
-      item.status === 'on-air' ||
-      item.status === 'updating' ||
-      item.status === 'exiting' ||
-      item.status === 'unconfirmed'
-    ) {
+    // `operator-surface` §5(B) — this re-derived the six terms inline, and the
+    // renderer's `isPositionLocked` was written as a mirror OF THIS COPY rather than
+    // of the canonical predicate. Two mirrors of a copy is how the R-011 lock and the
+    // R-011 refusal come to disagree about one row; both now ask the one function.
+    if (isOnAirStatus(item)) {
       return { ok: false, reason: 'on-air' };
     }
     this.#positions.set(itemId, position);
@@ -1500,7 +4663,11 @@ export class CasparRuntime {
     // traffic (the R-011 refusal predicate and the AMCP path are untouched).
     this.#markDirty(itemId);
     const slot = this.#slots.get(itemId);
-    if (slot !== undefined && this.#loaded.has(itemId) && this.#templates.has(item.templateId)) {
+    if (
+      slot !== undefined &&
+      this.#loaded.has(itemId) &&
+      this.#templates.hasOn(slot.channel, item.templateId)
+    ) {
       await this.#sendAdd(itemId, slot, item.templateId, item.fields, this.#nextSeq());
     }
     return { ok: true };
@@ -1564,6 +4731,12 @@ export class CasparRuntime {
    * waiting to infer, so it simply retires the restore.
    */
   #retirePendingRestore(itemId: string): void {
+    // R-021 stage 4 — an explicit operator command is the FIRST of d1's two exits
+    // from `restore-blocked` ("Clear, then take"). Dropped unconditionally and
+    // beside the pending entry, so there is exactly one place a block dies by the
+    // operator's hand and no route can retire the restore while leaving the row
+    // still reading BLOCKED.
+    this.#restoreBlocked.delete(itemId);
     if (this.#pendingRestore.delete(itemId)) {
       // The doubt is resolved by the operator's own command; drop the marker so
       // the row stops reading `unverified` on the strength of it.
@@ -1571,7 +4744,214 @@ export class CasparRuntime {
     }
   }
 
-  async take(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+  /**
+   * `CENTRAL-BRIDGE-01` (D12) — whether the Playout reports a channel `unlicensed` (the bridge's D4
+   * reader, joined to this station's host). Absent — no Playout, a test — nothing is unlicensed.
+   */
+  #unlicensed: (channel: number) => boolean = () => false;
+
+  /** `CENTRAL-BRIDGE-01` (D12) — hand the runtime the Playout's unlicensed verdict. */
+  useUnlicensedCheck(check: (channel: number) => boolean): void {
+    this.#unlicensed = check;
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` D — why CG is not licensed on a channel (the Playout's message, or our
+   * sentence), or `null` when it is — `cgUnlicensedReason` over the license and D4. Absent: licensed.
+   */
+  #cgUnlicensed: (channel: number) => string | null = () => null;
+
+  /** `PLAYOUT-FEATURES-01` D — hand the runtime the CG license's verdict. */
+  useCgLicenseCheck(check: (channel: number) => string | null): void {
+    this.#cgUnlicensed = check;
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` A (`B-286`) — what server B gets for a clip, by fingerprint, from the BACKUP
+   * Playout's own D11 (`BackupMediaLookup.lookup`: synchronous, never awaited). `null` — no Playout, or
+   * no server B — and a clip's `PLAY` is mirrored as it always was.
+   */
+  #backupClip: ((fingerprint: string | undefined) => BackupClip) | null = null;
+
+  /** `PLAYOUT-FEATURES-01` A — hand the runtime the backup's own media lookup. */
+  useBackupMedia(lookup: ((fingerprint: string | undefined) => BackupClip) | null): void {
+    this.#backupClip = lookup;
+  }
+
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **SERVER B'S OWN `PLAY` FOR A CLIP**: the same line with the path
+   * B's own Playout listed for the clip's fingerprint, or `null` — B is sent nothing — with the reason.
+   * Nothing (`{}`) when there is no lookup, no server B, or the seat is not a clip: mirrored as always.
+   */
+  #backupPlayFor(
+    placement: LivePlatePlacement,
+    play: { readonly loop: boolean },
+  ): { readonly serverB?: string | null; readonly refused?: BackupRefusalReason } {
+    const lookup = this.#backupClip;
+    if (lookup === null || this.config().servers.B === undefined) return {};
+    if (placement.producer.kind !== 'media') return {};
+    const clip = lookup(placement.source.fingerprint);
+    if (clip.kind === 'copy') {
+      return {
+        serverB: this.#builder.playSource(
+          placement.slot,
+          { ...placement.producer, file: clip.clip },
+          play,
+        ),
+      };
+    }
+    return { serverB: null, refused: clip.reason };
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` A (`B-286`) — is this a clip's transport verb (`PAUSE`, `RESUME`, `CALL`) to a seat
+   * server B was sent NOTHING for? Then it reaches the primary only: B's layer holds nothing of ours, and a
+   * `CALL` to anything but a file producer holds the Playout core's AMCP for seconds.
+   */
+  #primaryOnlyTransport(line: string): boolean {
+    const [verb, target] = line.split(' ');
+    if (verb !== 'PAUSE' && verb !== 'RESUME' && verb !== 'CALL') return false;
+    const match = /^(\d+)-(\d+)$/.exec(target ?? '');
+    if (match === null) return false;
+    const channel = Number(match[1]);
+    const layer = Number(match[2]);
+    for (const records of this.#liveLayers.values()) {
+      for (const r of records) {
+        if (r.slot.channel === channel && r.slot.layer === layer && r.backupRefused !== undefined) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — the bridge hands in where each channel's lines go on server B
+   * (`BackupChannels`). The redundancy seam reads it on every line; B's OSC and clears are mapped back with it.
+   */
+  useBackupChannels(map: BackupChannelMap): void {
+    this.#backupChannels = map;
+    this.#serverBRefusalsSaid.clear();
+  }
+
+  /** `B-316` — the backup channel map in force (`/health` and `B-313`'s guard read it). */
+  backupChannelMap(): BackupChannelMap {
+    return this.#backupChannels;
+  }
+
+  /**
+   * `B-316` — does CG hold live layers on this channel: a row on air or unsettled there, or a seat of the
+   * ledger? The backup mapping's question when it changes — a change while live HOLDS the channel.
+   */
+  holdsLiveLayersOn(channel: number): boolean {
+    return this.#heldOnAirLayers().has(channel);
+  }
+
+  /**
+   * 🔴 `B-316` — **WHAT SERVER B GETS FOR A STATION LINE** (`server-b-line.ts`): its own channel number,
+   * checked by B's own guard, or a refusal. One function for every road, so the adapter's fan-out, its
+   * catch-up and resend, and `#send`'s refusal while B is the primary can never disagree.
+   */
+  #serverBVerdict(line: string): ServerBLineVerdict {
+    return serverBLineFor(
+      line,
+      {
+        map: this.#backupChannels,
+        isOwnLayer: (channel, layer) => this.#isOwnConfiguredLayer(channel, layer),
+      },
+      { verbatim: this.#serverBVerbatim },
+    );
+  }
+
+  /** The adapter's `serverBLine`: the verdict's line, or `null` — said once per kind and channel. */
+  #serverBLine(line: string): string | null {
+    const verdict = this.#serverBVerdict(line);
+    if ('line' in verdict) return verdict.line;
+    const key = `${verdict.refused}:${String(verdict.channel ?? '-')}:${verdict.reason}`;
+    if (!this.#serverBRefusalsSaid.has(key)) {
+      this.#serverBRefusalsSaid.add(key);
+      process.stderr.write(
+        `[caspar-bridge] 🔴 not sent to server B — ${verdict.reason}: ` +
+          `${redactUrlCredentials(summarizeWireLine(line))} (said once)\n`,
+      );
+    }
+    return null;
+  }
+
+  /**
+   * `B-316` — the station's channel for server B's own channel M (OSC, an acknowledged clear), or `null`:
+   * M is no mirror in force — B's own programme, a preview, a holder — and what it says is ignored, said once.
+   */
+  #stationChannelOfB(channelOnB: number, what: string): number | null {
+    const channel = this.#backupChannels.stationChannelOf(channelOnB);
+    if (channel !== null) return this.#servesOscChannel(channel) ? channel : null;
+    const key = `read:${String(channelOnB)}`;
+    if (!this.#serverBRefusalsSaid.has(key)) {
+      this.#serverBRefusalsSaid.add(key);
+      process.stderr.write(
+        `[caspar-bridge] server B's channel ${String(channelOnB)} is no mirror of this station's — ` +
+          `${what} from it is ignored (said once)\n`,
+      );
+    }
+    return null;
+  }
+
+  async take(itemId: string): Promise<TakeVerdict> {
+    const verdict = await this.#audited('take', this.#itemDetail(itemId), () =>
+      this.#takeImpl(itemId),
+    );
+    /*
+      `B-225` — a row that is BACK ON AIR must leave the standing notice, and it leaves it
+      here rather than in the restore verb: the operator's own take of a listed row is the
+      same event as the one press taking it, and a notice that went on naming a row already
+      back on air would be a surface describing a plant that has moved on. One narrowing
+      point ({@link #retireFromEmptiedAir}), reached by every door.
+    */
+    if (verdict.accepted) {
+      this.#retireFromEmptiedAir(itemId);
+      // `FIELD-FIXES-01` B — and the row's refusal line goes with the take that landed.
+      this.#retireTakeRefusal(itemId);
+    }
+    return verdict;
+  }
+
+  /**
+   * `FIELD-FIXES-01` B — the row's refusal, recorded where it is published. A new refusal
+   * replaces the previous one: the row says why its LAST take was refused.
+   */
+  #recordTakeRefusal(itemId: string, refusal: TakeRefusal): void {
+    // `PLAYOUT-SOURCES-01` §1.E — the row's record is published to every console: a stream URL's
+    // credentials never ride it, whichever door recorded it.
+    this.#takeRefusals.set(
+      itemId,
+      refusal.command === undefined
+        ? refusal
+        : { ...refusal, command: redactUrlCredentials(refusal.command) },
+    );
+    this.#markDirty(itemId);
+  }
+
+  /** `FIELD-FIXES-01` B — the row's refusal line is withdrawn (taken, cleared or removed). */
+  #retireTakeRefusal(itemId: string): void {
+    if (this.#takeRefusals.delete(itemId)) this.#markDirty(itemId);
+  }
+
+  /**
+   * 🔴 `FIELD-FIXES-01-A` DECISION 1 — **the graphic a refused take ADDED comes off its layer
+   * unplayed**, so nothing of the take is left behind: the layer carries nothing of ours, and the
+   * next take re-ADDs it (`B-039` — `#loaded` is the producer record every take reads).
+   *
+   * Through the one rule: this take's `CG ADD` landed and no page of ours was on the layer before
+   * it (that is why the take added one), so the `CLEAR` is permitted — and it is sent the way
+   * `out()` sends it.
+   */
+  async #removeUnplayedPage(itemId: string, slot: CommandSlot): Promise<void> {
+    await this.#clearAfterRefusal(slot, { outcome: 'landed', heldBefore: false }, 'page');
+    this.#loaded.delete(itemId);
+    this.#markDirty(itemId);
+  }
+
+  async #takeImpl(itemId: string): Promise<TakeVerdict> {
     /**
      * R-022 — THE INTERLOCK. A rehearsing item cannot be taken to air, and the
      * refusal lives HERE rather than only in a disabled button.
@@ -1593,25 +4973,366 @@ export class CasparRuntime {
      * mutate nothing, and retiring a parked restore is a mutation.
      */
     if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (D12, the Playout team's rule 11) — AN UNLICENSED CHANNEL. The Playout
+      clears it every minute (`CLEAR <ch>`), ours with it, so a take there puts a graphic on air for
+      at most a minute and then loses it with no word from anyone. Refused HERE, before anything is
+      sent and before anything mutates, with the reason; a clear or a removal is not a take and
+      passes. `PUT BACK ON AIR` re-takes through this method, so it is refused the same way. The ONE
+      predicate (`isUnlicensedPlaylist`) is the console's line's too.
+    */
+    const unlicensed = this.channelsForItem(itemId).find((channel) => this.#unlicensed(channel));
+    if (unlicensed !== undefined) {
+      return {
+        accepted: false,
+        errorCode: 'unlicensed',
+        message: unlicensedTakeRefusal(unlicensed),
+      };
+    }
+    /*
+      🔴 `PLAYOUT-FEATURES-01` D (`R-077`, the rule agreed with the Playout team, LICENSE §4) — CG IS NOT
+      LICENSED ON THIS CHANNEL. A NEW take is refused, here, before anything is sent and before anything
+      else mutates, with the Playout's own message on the row. Nothing on air is cleared because of it
+      — by us or by the Playout — and a clear, a stop or a removal is not a take and passes. `PUT BACK
+      ON AIR` re-takes through this method, so it is refused the same way.
+    */
+    for (const channel of this.channelsForItem(itemId)) {
+      const reason = this.#cgUnlicensed(channel);
+      if (reason === null) continue;
+      this.#recordTakeRefusal(itemId, { code: CG_UNLICENSED_CODE, message: reason });
+      return { accepted: false, errorCode: CG_UNLICENSED_CODE, message: reason };
+    }
+    /*
+      🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — SERVER B IS THE PRIMARY AND THIS CHANNEL HAS NO BACKUP CHANNEL.
+      Its number on B is unknown, and B's channel N is another channel — maybe another programme on air. So
+      the take is refused HERE, in words, before anything is sent and before anything mutates. A HELD channel
+      is judged by the mapping its take would put in force (`channelOnBAtTake`).
+    */
+    if (this.#adapter.currentPrimary === 'B') {
+      const unmapped = this.channelsForItem(itemId).find(
+        (channel) => this.#backupChannels.channelOnBAtTake(channel) === null,
+      );
+      if (unmapped !== undefined) {
+        const message = backupUnmappedRefusal(unmapped);
+        this.#recordTakeRefusal(itemId, { code: BACKUP_UNMAPPED_CODE, message });
+        return { accepted: false, errorCode: BACKUP_UNMAPPED_CODE, message };
+      }
+    }
+    /*
+      🔴 `FIELD-FIXES-01-A` DECISION 2 — **A ROW ALREADY ON AIR IS NOT TAKEN, and neither is one
+      whose previous take has not resolved.** Refused HERE, for every console, with nothing sent.
+
+      The console has always greyed PLAY on an on-air row; that was a courtesy, and a second
+      console on a stale snapshot, or a take whose reply was slow, reached this method with the
+      page on air. A re-take then re-`PLAY`ed every plate — which on a DeckLink fails by
+      construction (`B-177`), and the rollback took the working pictures off air
+      (`FIELD-FIXES-01` §0.5). A changed look, changed fields and a dead input each have their
+      own door (the look picker, UPDATE, the `R-048` swap); a take is for a row that is not up.
+
+      ⚠ ONE PREDICATE, the one golden rule 10 names: {@link #ownsLiveSeats} — the row's status is
+      on air or unsettled (`isOnAirStatus`: a take in flight is `pending`, an overdue one reads
+      `unconfirmed`), OR the ledger holds its seats. BEFORE anything else below, because a refused
+      take must mutate nothing — including the parked restore the next line retires.
+    */
+    if (this.#ownsLiveSeats(itemId)) return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+    /*
+      🔴 `B-316` — A TAKE IS WHERE A HELD CHANNEL'S NEW BACKUP CHANNEL COMES INTO FORCE: its mapping changed
+      while it was live, and nothing has been sent to server B for it since. From here this take's lines —
+      and every later one — reach B's newly resolved channel, or nothing.
+    */
+    for (const channel of this.channelsForItem(itemId)) this.#backupChannels.release(channel);
+
+    /*
+      C-015 phase 6 (6.0) — DECIDE THE LIVE PLATES HERE, WHERE A REFUSAL COSTS
+      NOTHING.
+
+      `#planLiveSeating` resolves every plate to a catalog entry, validates the
+      author's aspect assertion, computes the geometry and picks the layers —
+      and sends nothing. So an unassigned plate, a contradicted aspect or a band
+      with no room refuses the take with the wire, the Reconciler and the ledger
+      all untouched, exactly like the three refusals above it. Deciding it later
+      would mean refusing after the pre-roll `CG ADD` had already replaced the
+      stage, which is a mutation on a take the operator was told did not happen.
+
+      The SEATING is deliberately far from here — one command before the `CG
+      PLAY` — because a live producer starts rendering the instant it is played:
+      there is no loaded-but-not-playing state for a route or a card the way
+      there is for an html producer. Every frame between seating and the take is
+      a frame with a guest's picture on air and no graphic around it.
+    */
+    /*
+      §12.6 — DOOR 1 OF 2: EXCLUSIVITY. Exactly one multi-box template on air per
+      channel.
+
+      Here for the same reason `#planLiveSeating` is here — a refusal costs nothing at
+      this point, with the wire, the Reconciler and the ledger all untouched. BEFORE the
+      seating plan rather than inside it: the plan resolves THIS item's plates, while this
+      asks about the on-air SET, and folding one question into the other is how the answer
+      to either stops being findable.
+
+      The second door is `restore()`, which never passes through here. Both call
+      `#refuseSecondMultiBox` — ONE predicate, two sites (golden rule 6).
+    */
+    const exclusivity = this.#refuseSecondMultiBox(
+      itemId,
+      this.#reconciler.get(itemId)?.templateId ?? itemId,
+      slot.channel,
+    );
+    if (exclusivity !== null) {
+      process.stderr.write(
+        `[caspar-bridge] take refused for ${itemId}: ${exclusivity.message}
+`,
+      );
+      return { accepted: false, ...exclusivity };
+    }
+
+    /*
+      §14.5 / `tasks.md` 7.5 — the LOOKS refusal, at the same door and for the same kind of
+      reason: a state the operator cannot fix from the console, named before anything
+      reaches the wire. AFTER exclusivity, because that one is about the on-air SET while
+      this is about THIS template — the narrower answer must not mask the broader one.
+    */
+    const noLooks = this.#refuseNoLooksAuthored(
+      slot.channel,
+      this.#reconciler.get(itemId)?.templateId ?? itemId,
+    );
+    if (noLooks !== null) {
+      process.stderr.write(
+        `[caspar-bridge] take refused for ${itemId}: ${noLooks.message}
+`,
+      );
+      return { accepted: false, ...noLooks };
+    }
+
+    /*
+      §14 (LOOKS) phase 3 — A TAKE IS THE FIRST RECONCILE, AGAINST AN EMPTY PRIOR SET.
+
+      The desired set is the ACTIVE LOOK's rects — the authored default for a fresh row
+      (`#activeLookOf`), or whichever look a previous switch left recorded on a re-take, so
+      re-taking a row does not silently return it to the default look while the operator is
+      watching the one they chose.
+    */
+    const planTake = () =>
+      this.#planLiveSeating(
+        itemId,
+        slot,
+        this.activeLookId(itemId),
+        'entering-look',
+        // SESSION BP — THE TAKE IS THE ONE ACTION THAT RESOLVES LEVEL 2 AFRESH, and pins what
+        // it resolved. See `LevelTwoSource`.
+        'fresh',
+      );
+    const refusePlan = (refused: Extract<ReturnType<typeof planTake>, { ok: false }>) => {
+      // A refused take mutates NOTHING — and the freeze below is the newest thing that would
+      // break that, so it is written on the far side of this return rather than before the
+      // plan (`tasks.md` 7.9's rule, met by a fourth writer).
+      process.stderr.write(`[caspar-bridge] take refused for ${itemId}: ${refused.message}\n`);
+      if (refused.refused !== undefined) {
+        /*
+          🔴 `PLAYOUT-SOURCES-01` §1.C — a plate bound to an entry the Playout stopped offering (or
+          one that became unusable) is refused BEFORE ANY AMCP, and the row carries its own reason
+          exactly as a server's refusal does (`FIELD-FIXES-01` B): one line, no banner. The binding
+          is kept; a later read that lists the entry again lets the next take play.
+        */
+        const { plateId, source } = refused.refused;
+        this.#recordTakeRefusal(itemId, {
+          code: refused.errorCode,
+          plateId,
+          sourceId: source.id,
+          sourceName: source.name,
+          ...(source.origin !== undefined ? { sourceOrigin: source.origin } : {}),
+        });
+        return {
+          accepted: false as const,
+          errorCode: refused.errorCode,
+          message: refused.message,
+          refusalOnRow: true as const,
+        };
+      }
+      if (refused.errorCode === LIVE_PLATE_NO_RANGE) {
+        /*
+          🔴 `CHANNEL-SOURCES-01` decision 3 (the owner, 2026-09-28) — a take refused because no
+          plate band is declared is said ON ITS ROW, in that channel's view only, as one short line
+          (`FIELD-FIXES-01` A/B) — never a console-wide banner. It names no plate: the band is the
+          station's, not a box's. Nothing was sent, exactly as before.
+        */
+        this.#recordTakeRefusal(itemId, { code: refused.errorCode });
+        return {
+          accepted: false as const,
+          errorCode: refused.errorCode,
+          message: refused.message,
+          refusalOnRow: true as const,
+        };
+      }
+      // The MESSAGE rides out with the code. Which PLATE is unassigned, and which
+      // two aspects disagree, are the facts that make these refusals actionable,
+      // and no fixed code can carry them — see `StackTakeChannel`.
+      return { accepted: false as const, errorCode: refused.errorCode, message: refused.message };
+    };
+    let plan = planTake();
+    if (!plan.ok) return refusePlan(plan);
+
+    /*
+      🔴 `ROUTE-PLATES-01` rule 5 — **A TAKE SENDS A PLAYOUT ROUTE ONLY FROM A CONFIRMED EPOCH.** The
+      catalogue's epoch, confirmed by a D10 read on the primary's current connection — one bounded
+      read if none has yet. A read that MOVED the epoch re-plans, so every `route://H-L` this take
+      sends is the fresh one; one that cannot confirm refuses the take, before any AMCP, with the
+      row's line (`waiting for the Playout's input list`). This is also the restore: after a core
+      restart PUT BACK ON AIR is a take, and it passes here.
+    */
+    const routeSeat = planSeatsPlayoutRoute(plan);
+    if (routeSeat !== undefined) {
+      const epochBefore = this.#sourceCatalog.inputsEpoch;
+      const confirmed = await this.#ensureRouteEpoch();
+      // The read is an await: re-ask what the take's first lines asked before it.
+      if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
+      if (this.#ownsLiveSeats(itemId)) return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
+      if (!confirmed) return this.#refuseRouteWaiting(itemId, routeSeat);
+      if (this.#sourceCatalog.inputsEpoch !== epochBefore) {
+        plan = planTake();
+        if (!plan.ok) return refusePlan(plan);
+      }
+    }
+
+    /*
+      🔴 **SESSION BP — THE FREEZE. THE TAKE PINS LEVEL 2, AND THIS IS THE ONLY PLACE IT IS
+      WRITTEN.**
+
+      **A row that is on air does not change its picture because somebody edited
+      configuration.** From here until this row's `out`, every resolution on it — a look
+      switch, an `R-048` swap, an UPDATE, a reconcile after a blip — reads this snapshot
+      instead of the assignment store. `B-155`'s mechanism (an edit LURKS in
+      `setSourceAssignments` and the next look press applies it mid-switch, flashing the
+      previous guest) is closed from every direction at once, including the two a rule about
+      WHO MAY EDIT cannot reach: another row carrying the same template, and another
+      station's Runtime against the same bridge.
+
+      🔴 **`plan.resolvedFrom`, NOT A SECOND READ OF THE STORE.** One evaluation, two uses —
+      golden rule 7's shape on a value rather than a boolean. A re-read here would sit on the
+      near side of this method's `await`s with `setSourceAssignments` free to land between
+      them, and the row would be pinned to an assignment its own plan never saw: the exact
+      divergence the freeze exists to abolish, manufactured by the freeze.
+
+      ⚠ **SET, not "set if absent", and the plan above resolved `'fresh'` for the same
+      reason.** A RE-TAKE re-freezes to what is in force NOW — §5.3, the operator's way to
+      adopt an edited default. A take that echoed an existing pin would weld a re-taken row to
+      its first take for ever and make the assignment editor inert for it, which is a worse
+      product than the defect this closes.
+    */
+    this.#frozenAssignments.set(itemId, { ...plan.resolvedFrom });
+    // `B-178` — SAY what each plate is running, where anything fell through to the
+    // default. At the take, off the same plan the wire is built from, so the log can never
+    // describe a resolution the payload did not carry.
+    this.#reportPlateFits(itemId, plan.fitProvenance);
+
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'take', itemId }, seq);
 
+    /** `B-191` — the look whose tell was refused, so the landed take can SAY so. */
+    let lookTellFailed: string | undefined;
+    /*
+      🔴 `FIELD-FIXES-01-A` DECISION 1 — WHAT THIS TAKE PUTS THERE, known before it puts anything.
+
+      A fresh take airs everything or nothing, and undoing it takes back exactly what it put there
+      and nothing else: the graphic it `CG ADD`s (`addedPage`) and the plates it seats — never a
+      layer one of ours held before it began (`oursBeforeTake`, read once, before the wire).
+    */
+    let addedPage = false;
+    const oursBeforeTake = this.#liveLayerKeys();
+    /*
+      🔴 `DONGLE-RECOVER-01` — **`#loaded` IS A BELIEF, AND THE CORE IS ASKED BEFORE IT IS TRUSTED.**
+      A STOPPED row keeps its page resident (C-012), and the take below resumes it with no re-load. But
+      a layer can be emptied while nobody holds it on air — the Playout's own license rule clears the
+      whole channel (`CLEAR <ch>`, LICENSE §4), stopped pages included — and `B-292`'s silence question
+      watches only the layers held ON AIR. On `.32` (2026-10-11T06:37:24Z) the next Play of a stopped
+      multi-frame row sent `CG 1-59 UPDATE … << 403`, its plates' PLAYs, and `CG 1-59 PLAY 0` onto a layer
+      with no page: the pictures with no template behind them.
+
+      The resident route's FIRST line is the take tell (`#tellPageTake`), and CasparCG answers it `403`
+      exactly when the layer's foreground holds no CG producer (`get_expected_cg_proxy`, `v2.5.0-stable`;
+      `PAGE_NOT_ON_LAYER_CODE`). So that answer IS the check: on it the row's page is forgotten here and
+      THIS take goes on by the ADD route below — the lines a take sends for a row with no resident page,
+      nothing the operator did not ask for. When the page IS resident the tell lands and the route is
+      unchanged.
+
+      ⚠ `LOGO-LOOP-01`'s rule stands: a failed tell does not REFUSE the take. A `403` does not refuse it
+      either — it re-routes it. Any other failure is still reported, not acted on.
+    */
+    let resident = this.#loaded.has(itemId);
+    if (resident) {
+      /*
+        🔴 **`B-191` — THE OTHER HALF OF THE RE-ADD, AND THE ONLY PLACE BOTH ROUTES INTO AIR
+        MEET.** The branch below rebuilds a destroyed page, and `#sendAdd`'s payload carries
+        the recorded look into it by construction. This branch is the case that had nothing:
+        the producer is RESIDENT — a `stop` leaves it so, and so does a rehearsal — while the
+        look may have been changed since it was last told. `setActiveLook` records and stays
+        silent on an off-air row with nothing seated (`B-151`: a rehearse control must reach
+        no plant), so the page can be a whole look behind, and the take below seats the plates
+        from the RECORDED look. Measured on the wire before this existed: `MIXER FILL 0 0 1 1`
+        (the new look) under a `CG … PLAY` carrying no payload at all — pictures on one look,
+        holes on another, until a further switch or another stop-and-play.
+
+        Told HERE, before the seating and the play, for the same reason the re-ADD is here: it
+        is the last moment at which the page can be made to agree BEFORE anything is on air.
+        The fits are already this take's (`#plateFits` was written from the plan above), so the
+        page punches what the bridge is about to fill.
+
+        ⚠ **A failed tell does NOT refuse the take.** The graphic is mid-way to air with its
+        plates about to be seated, and a row that comes up looking wrong is a smaller failure
+        than a take the operator was told did not happen while the wire had already moved. It
+        is reported instead — the take says what is wrong with what it just did.
+      */
+      /*
+        🔴 `SELF-STOP-24` — AND THE TAKE TOKEN IS REFRESHED IN THE SAME BREATH, WHICH IS WHY
+        THIS TELL IS NO LONGER GATED ON HAVING A LOOK.
+
+        The look half is unchanged and is `B-191`'s, above. What is new is that this branch —
+        the resident producer, no `CG ADD` — is the ONE route into air whose `CG PLAY` carries no
+        payload, so it is the one place a page keeps the PREVIOUS run's token. A report from the run that
+        finished would then stop the run that had just started; `template-completion-stop`
+        measured exactly that before this line existed.
+
+        ⚠ **A look-less template needs the token as much as a look-bearing one does**, so the
+        tell is now unconditional. That is one extra `CG UPDATE` on the resident-take path for a
+        template with no looks — a configuration verb carrying no fields, seating nothing.
+      */
+      /*
+        🔴 `LOGO-LOOP-01` (`B-322`) — AND THE ROW'S RECORDED PASS TIMING RIDES THE SAME TELL.
+
+        An off-air timing set is only recorded (golden rule 10), on the promise that the next take
+        carries it. The other branch kept that promise (`#sendAdd`); this one did not, so a logo
+        stopped after an on-air count and set to `Until stop` came back with the old count. The
+        control is `#takeControl`'s, the one both branches build from. No command is added.
+      */
+      const told = await this.#tellPageTake(itemId, slot);
+      if (told.pageGone === true) {
+        resident = false;
+        this.#loaded.delete(itemId);
+        process.stderr.write(
+          `[caspar-bridge] ${itemId}: no page on ${String(slot.channel)}-${String(slot.layer)} ` +
+            `(CG UPDATE answered 403) — this take adds it\n`,
+        );
+      } else if (!told.ok && told.lookId !== undefined) {
+        lookTellFailed = told.lookId;
+      }
+    }
     // B-039 — PRESCRIPTIVE: `CG PLAY` only renders if a live producer exists on the
     // slot. If a prior out destroyed it, re-issue `CG ADD` (a fresh load) FIRST so
     // the take re-renders instead of playing an empty layer. The re-ADD recovers the
     // template id + current (merged) fields from the Reconciler, and rides a
     // non-intent seq so its ack doesn't perturb the take's status.
-    if (!this.#loaded.has(itemId)) {
+    if (!resident) {
       const item = this.#reconciler.get(itemId);
       const templateId = item?.templateId ?? itemId;
       // Reconnect-reconciliation — the re-ADD is a fresh load: the same
       // unknown-template guard applies (never blind-ADD an unservable URL).
-      if (!this.#templates.has(templateId)) {
+      // `CHANNEL-TEMPLATES-01` — against the row's OWN channel's list.
+      if (!this.#templates.hasOn(slot.channel, templateId)) {
         this.#reconciler.applyAck(seq, false, 'unknown-template');
         return { accepted: false, errorCode: 'unknown-template' };
       }
@@ -1635,9 +5356,22 @@ export class CasparRuntime {
           did fail at the wire with no code to quote.
         */
         const code = added.errorCode ?? 'amcp-error';
+        // `FIELD-FIXES-01` B — the row carries its own reason (no plate: the graphic's own command).
+        this.#recordTakeRefusal(itemId, {
+          code,
+          ...(added.command !== undefined && { command: added.command }),
+        });
         this.#reconciler.applyAck(seq, false, code);
-        return { accepted: false, errorCode: code };
+        // `B-209` — WHICH line was refused. On 2026-09-04 this was the exit every
+        // take left by, and the record could not say so.
+        return {
+          accepted: false,
+          errorCode: code,
+          refusalOnRow: true,
+          ...(added.command !== undefined && { command: added.command }),
+        };
       }
+      addedPage = true;
     }
 
     // R-022 — RE-ASSERT THE INTENDED VOLUME, UNCONDITIONALLY, ON EVERY TAKE.
@@ -1686,6 +5420,54 @@ export class CasparRuntime {
       );
     }
 
+    /*
+      C-015 phase 6 (6.0) — SEAT THE PLATES, one command before the graphic they
+      belong to.
+
+      LAST, and BEFORE the `CG PLAY`. Both halves of that are on-air decisions:
+
+      - LAST, because a live producer renders the moment it is played. Seating at
+        load time — the obvious "pre-roll it like the template" — would put a
+        guest's picture on the programme channel for as long as the operator
+        cued ahead, framed by nothing.
+      - BEFORE the take, because the alternative is the template landing with its
+        holes still empty. That is the outcome 6.7's whole refusal exists to
+        prevent, and arriving at it by an ordering choice would be no better than
+        arriving at it by a missing assignment. The cost is the mirror window —
+        pictures with no frame around them for one command — which is bounded by
+        the very next line on the same connection.
+
+      🔴 `FIELD-FIXES-01-A` DECISION 1 — A SEATING FAILURE REFUSES THE TAKE, ALL OR NOTHING.
+      The applier stopped at the first refused plate (no later plate is tried) and undid the
+      plates this take seated, through the one rule; the graphic's `CG PLAY` is never sent; and
+      the graphic THIS take added comes off its layer unplayed, so nothing of the take is left
+      behind anywhere. The row ends in its error state, naming the plate that was refused — and
+      only that plate. (This comment used to say an item already on air "keeps its template layer
+      and loses its boxes". That was the re-take `FIELD-FIXES-01` §0.5 measured, and an on-air row
+      is no longer taken at all — see the refusal at the top of this method.)
+    */
+    const seated = await this.#applyLivePlates(itemId, plan, 'take');
+    if (!seated.ok) {
+      const code = seated.errorCode ?? 'amcp-error';
+      if (addedPage) await this.#removeUnplayedPage(itemId, slot);
+      this.#recordTakeRefusal(itemId, {
+        code,
+        ...(seated.command !== undefined && { command: seated.command }),
+        ...(seated.refused !== undefined && {
+          plateId: seated.refused.plateId,
+          sourceId: seated.refused.source.id,
+          sourceName: seated.refused.source.name,
+        }),
+      });
+      this.#reconciler.applyAck(seq, false, code);
+      return {
+        accepted: false,
+        errorCode: code,
+        refusalOnRow: true,
+        ...(seated.command !== undefined && { command: seated.command }),
+      };
+    }
+
     // B-079 — bounded completion for a take, which it never had: #armExpiry was called for
     // update and out only, so a take whose ack never settled rested on its optimistic
     // playing/on-air claim forever, with nothing to bound it.
@@ -1694,8 +5476,59 @@ export class CasparRuntime {
     // left this process) and `amcp-404` (CasparCG refused it) are different facts
     // pointing at different machines, and flattening both to `amcp-error` told the
     // operator neither.
-    const { ok, errorCode } = await this.#send(this.#builder.take(slot), seq, 'normal');
-    return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
+    const { ok, errorCode, command } = await this.#send(this.#builder.take(slot), seq, 'normal');
+    if (!ok) {
+      /*
+        🔴 `FIELD-FIXES-01-A` DECISION 1, THE OTHER HALF — the graphic's own `CG PLAY` failed
+        AFTER its plates were seated, which left live pictures on air with no graphic around
+        them. All or nothing: the plates this take seated come down and the graphic it added
+        comes off its layer, each through the one rule (a layer one of ours held before the take
+        is never cleared).
+      */
+      // The ledger keeps naming every layer whose producer is still ours: one held before the
+      // take (never cleared), and one whose `CLEAR` did not land.
+      const stillOurs: LiveLayerRecord[] = [];
+      for (const record of this.#liveLayers.get(itemId) ?? []) {
+        const cleared = await this.#clearAfterRefusal(
+          record.slot,
+          { outcome: 'landed', heldBefore: oursBeforeTake.has(adoptionKey(record.slot)) },
+          'plate',
+        );
+        if (!cleared) stillOurs.push(record);
+      }
+      this.registerLiveLayers(itemId, stillOurs);
+      if (addedPage) await this.#removeUnplayedPage(itemId, slot);
+      const code = errorCode ?? 'amcp-error';
+      this.#recordTakeRefusal(itemId, { code, ...(command !== undefined && { command }) });
+      return {
+        accepted: false,
+        errorCode: code,
+        refusalOnRow: true,
+        ...(command !== undefined && { command }),
+      };
+    }
+    // `B-191` — the take LANDED, and the one thing that may still be wrong about it is said
+    // rather than swallowed: the pictures are on the recorded look, the holes are not.
+    if (lookTellFailed === undefined) return { accepted: true };
+    // `B-309` — the look by the name its author gave it, in its own isolate; its id goes to the log.
+    process.stderr.write(
+      `[caspar-bridge] ${itemId}: on air, but the look tell for look "${lookTellFailed}" was refused\n`,
+    );
+    const name = this.#lookNameOf(itemId, slot.channel, lookTellFailed);
+    return {
+      accepted: true,
+      message:
+        `The graphic is on air, but CasparCG refused the command that tells it to punch ` +
+        `${name === undefined ? 'its look' : `look “${isolateText(name)}”`} — the pictures are in ` +
+        `that look's places while the holes are wherever the graphic last put them. Re-issue the ` +
+        `look to converge.`,
+    };
+  }
+
+  /** `B-309` — a look of this row's template, by the name its author gave it (`lookLabel`). */
+  #lookNameOf(itemId: string, channel: number, lookId: string): string | undefined {
+    const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
+    return lookLabel(this.#templates.getOn(channel, templateId)?.liveSources?.looks, lookId);
   }
 
   /**
@@ -1747,7 +5580,7 @@ export class CasparRuntime {
     // result is UNKNOWN, and an unknown must never be muted on a guess. Reuses
     // the SAME predicate `#onAirCount` and R-010's `setConfig` gate read, never a
     // second local list of what counts as on air.
-    if (isOnAirStatus(item.status, item.pending)) {
+    if (isOnAirStatus(item)) {
       return {
         ok: false,
         reason: 'on-air',
@@ -1915,7 +5748,7 @@ export class CasparRuntime {
       // An item that has VANISHED (removed from the stack) is also no longer
       // ours to interlock. Its volume still has to be restored — the producer may
       // be gone but the mixer setting is not.
-      const live = item == null || isOnAirStatus(item.status, item.pending);
+      const live = item == null || isOnAirStatus(item);
       if (!live) continue;
       process.stderr.write(
         `[caspar-bridge] rehearse on ${String(itemId)} ended: the layer went live by another ` +
@@ -1933,18 +5766,32 @@ export class CasparRuntime {
    * survives the process, so without this the next operator would take that
    * graphic to air silent, with nothing anywhere explaining why. Runs once the
    * primary is first reachable, best-effort, and is idempotent.
+   *
+   * 🔴 `B-204` — EVERY DECLARED ROW MEANS BOTH HALVES. This walked
+   * `start … start+count` by hand, which is the operator half and silently
+   * nothing else, so a bed row muted by a dead rehearse was never re-asserted:
+   * the mute (`enterRehearse`) is not half-aware, but the recovery was. The rows
+   * are enumerated through `fixedBankSlots` — the ONE function that returns the
+   * bank's range — never rebuilt here; a second derivation of the range is how
+   * this asymmetry existed for a full change cycle (`B-201`, `B-205`).
+   *
+   * ⚠ WHAT THIS CONSULTS ABOUT THE LAYER: nothing. It blankets every declared
+   * row with `INTENDED_VOLUME` and asks nothing about what is on it (recorded in
+   * `live-source-multibox/design.md` as a constraint on the Live Source range,
+   * which sits outside both halves for exactly this reason). Widening to the bed
+   * half keeps that property: beds lie BELOW the Live Source band by the
+   * `low-bank-not-below-band` rule, so no live box can be un-muted here.
+   *
+   * 🔴 `MULTI-CHANNEL-01` — EVERY DECLARED ROW means every declared BANK's rows, in channel
+   * order. A second channel's muted row is the same stranded mute on another channel, and a
+   * sweep that covered the first bank alone would leave it silent at its next take. With one
+   * bank the walk is the same slots in the same order as before, so the wire is unchanged.
    */
   async #reassertDeclaredVolumes(): Promise<void> {
-    const bank = this.#fixedBank;
-    if (bank === null) return;
-    for (let layer = bank.start; layer < bank.start + bank.count; layer++) {
+    for (const slot of fixedBanksSlots(this.#fixedBanks)) {
       // `normal`, not `urgent`: this is startup housekeeping across the whole
       // bank, and it must never sit ahead of an operator's take in the queue.
-      await this.#send(
-        this.#builder.mixerVolume({ channel: bank.channel, layer }, INTENDED_VOLUME),
-        this.#nextSeq(),
-        'normal',
-      );
+      await this.#send(this.#builder.mixerVolume(slot, INTENDED_VOLUME), this.#nextSeq(), 'normal');
     }
   }
 
@@ -1952,13 +5799,102 @@ export class CasparRuntime {
     itemId: string,
     fields: FieldValues,
     mergeMode: 'merge' | 'replace',
-  ): Promise<{ accepted: boolean; errorCode?: string }> {
+    /**
+     * 🔴 **SESSION BM-2 — the row's COMPLETE per-look input map, applied in the SAME call
+     * as the texts.**
+     *
+     * ── WHY IT RIDES `update` RATHER THAN GETTING ITS OWN VERB ──────────────────
+     *
+     * The operator's action is ONE press of UPDATE carrying both halves — *"change `l-2` to
+     * studio-3 AND fix the caption"* — and the two must land together or not at all. Two
+     * verbs make that impossible to promise: whichever went second could be refused, leaving
+     * a caption describing a feed that did not move, or a feed with no caption for it. That
+     * is a wrong graphic on air that nothing reports, and it is exactly what the renderer
+     * looping the per-plate writer would have produced.
+     *
+     * ⚠ **COMPLETE, NOT A DELTA.** It replaces the item's map wholesale, the same shape
+     * `sources.set-assignments` uses, so "remove this binding" is expressible at all — a
+     * merge-only payload can add and change but never clear. The renderer sends
+     * applied-with-drafts-overlaid, which is what it already does for fields.
+     *
+     * `undefined` means "not part of this update" and leaves the map untouched: an ordinary
+     * field-only update from any other surface must not silently drop a row's composition.
+     */
+    lookBindings?: LookSourceBindings,
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+    return this.#audited('update', this.#itemDetail(itemId), () =>
+      this.#updateImpl(itemId, fields, mergeMode, lookBindings),
+    );
+  }
+
+  async #updateImpl(
+    itemId: string,
+    fields: FieldValues,
+    mergeMode: 'merge' | 'replace',
+    lookBindings?: LookSourceBindings,
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     // R-006 — see #noServerReachable(): refuse before the intent exists.
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+    /*
+      🔴 **BM-2 §4.3 — THE BINDINGS MOVE THE FILLS FIRST, AND THE PAGE IS TOLD LAST AND ONLY
+      ON SUCCESS (BD).**
+
+      Ordered here, before the intent is even recorded, for two reasons that pull the same
+      way. **On air:** telling the page new text over feeds that did not move paints a caption
+      onto the wrong picture — the exact half-applied state §4.1 forbids. **In the ledger:** a
+      refused binding must leave nothing staged or recorded (`tasks.md` 7.9), and the only way
+      to promise that is to refuse before anything else in this method has happened.
+
+      So a refused binding refuses the WHOLE update: no intent, no `CG UPDATE`, no field
+      change. The texts and the inputs land together or neither does, which is what makes one
+      press of UPDATE an atomic operator action rather than two commands sharing a button.
+    */
+    if (lookBindings !== undefined) {
+      /*
+        🔴 `PLAYOUT-SOURCES-01` — a binding the row NEWLY makes must be to something bindable: never
+        an unusable entry (the route gate included), never one the Playout stopped offering, never
+        an id the catalogue does not hold. One the row already had passes whatever became of it —
+        only an operator action removes a binding. Refused before anything else, so the WHOLE
+        update is refused (BM-2).
+      */
+      const flat = (maps: LookSourceBindings | undefined): { key: string; sourceId: string }[] =>
+        Object.entries(maps ?? {}).flatMap(([lookId, plates]) =>
+          Object.entries(plates).map(([plateId, sourceId]) => ({
+            key: `${lookId}\u0000${plateId}`,
+            sourceId,
+          })),
+        );
+      const refusal = unbindableChange(
+        flat(lookBindings),
+        flat(this.#lookSourceBindings.get(itemId)),
+        this.#sourceCatalog,
+      );
+      if (refusal !== null) {
+        return { accepted: false, errorCode: refusal.code, message: refusal.message };
+      }
+      // `B-155` §B — under the item's live-seat lock (see `#withLiveSeatLock`), so a
+      // binding apply cannot interleave into an in-flight look switch's window; the
+      // overrides are read INSIDE the lock so a queued apply composes with what the
+      // action ahead of it recorded.
+      const applied = await this.#withLiveSeatLock(itemId, () =>
+        this.#applyBindingTransaction(itemId, slot, {
+          overrides: this.#sourceOverrides.get(itemId),
+          bindings: lookBindings,
+        }),
+      );
+      if (!applied.ok) {
+        return {
+          accepted: false,
+          errorCode: applied.reason ?? 'amcp-error',
+          ...(applied.message !== undefined && { message: applied.message }),
+        };
+      }
+    }
+
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
 
@@ -1982,8 +5918,18 @@ export class CasparRuntime {
     // Send the merged field set the Reconciler now holds.
     const merged = this.#reconciler.get(itemId)?.fields ?? fields;
     this.#armExpiry(seq);
-    const { ok, errorCode } = await this.#send(this.#builder.update(slot, merged), seq, 'normal');
-    return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
+    const { ok, errorCode, command } = await this.#send(
+      this.#builder.update(slot, merged),
+      seq,
+      'normal',
+    );
+    return ok
+      ? { accepted: true }
+      : {
+          accepted: false,
+          errorCode: errorCode ?? 'amcp-error',
+          ...(command !== undefined && { command }),
+        };
   }
 
   /**
@@ -2016,6 +5962,13 @@ export class CasparRuntime {
   // NB `stop()` on this class is the PROCESS shutdown, so the item verb is
   // `stopItem` — the AMCP verb it sends is still `CG … STOP`.
   async stopItem(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    // The audit ACTION is `stop` — the schema's word for the verb, not this
+    // method's disambiguating name (`stop()` on this class is the process
+    // shutdown). The log speaks the operator's vocabulary, not the class's.
+    return this.#audited('stop', this.#itemDetail(itemId), () => this.#stopItemImpl(itemId));
+  }
+
+  async #stopItemImpl(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
@@ -2027,13 +5980,26 @@ export class CasparRuntime {
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'stop', itemId }, seq);
     this.#armExpiry(seq);
+    // C-015 phase 6 (6.0/6.6) — the plates come down WITH the graphic. STOP takes
+    // the template off air but leaves its producer resident, so without this the
+    // guest pictures would still be on the channel with nothing around them. See
+    // `out()` for why the live layers go FIRST.
+    await this.teardownLiveLayers(itemId);
     // Urgent lane, like out(): an air-affecting verb does not queue behind loads.
     // §8 — and the code comes with it. A refused STOP used to answer a bare
     // `{ accepted: false }`, which the toast could only render as "Not accepted."
     // — the operator told that a graphic did not come off air, and nothing about
     // whether the command reached CasparCG at all.
-    const { ok, errorCode } = await this.#send(this.#builder.stop(slot), seq, 'urgent');
-    return { accepted: ok, ...(!ok && errorCode !== undefined && { errorCode }) };
+    const { ok, errorCode, command } = await this.#send(this.#builder.stop(slot), seq, 'urgent');
+    // SESSION BP — a landed STOP is off air too, so level 2 thaws here for the same reason
+    // and through the same method as `out`'s. The producer staying resident is beside the
+    // point: what the freeze protects is the PICTURE, and there is no longer one.
+    this.#thawAssignment(itemId, ok);
+    return {
+      accepted: ok,
+      ...(!ok && errorCode !== undefined && { errorCode }),
+      ...(!ok && command !== undefined && { command }),
+    };
   }
 
   /**
@@ -2057,42 +6023,100 @@ export class CasparRuntime {
    * gate is the UI's to hold and this path stays a thin verb.
    */
   async nextItem(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    return this.#audited('next', this.#itemDetail(itemId), () => this.#nextItemImpl(itemId));
+  }
+
+  async #nextItemImpl(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
-    const { ok, errorCode } = await this.#send(this.#builder.next(slot), this.#nextSeq(), 'urgent');
-    return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
+    const { ok, errorCode, command } = await this.#send(
+      this.#builder.next(slot),
+      this.#nextSeq(),
+      'urgent',
+    );
+    return ok
+      ? { accepted: true }
+      : {
+          accepted: false,
+          errorCode: errorCode ?? 'amcp-error',
+          ...(command !== undefined && { command }),
+        };
   }
 
   async out(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
+    return this.#audited('out', this.#itemDetail(itemId), () => this.#outImpl(itemId));
+  }
+
+  async #outImpl(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
-    if (slot === undefined) return { accepted: false };
+    // B-141 — the code the other five item verbs already answer. `out` alone
+    // returned a bare `{ accepted: false }`, so its refusal reached the operator as
+    // "Not accepted." and would reach the audit log with nothing to say WHICH
+    // refusal it was — the one field a dispute turns on.
+    if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     // R-006 — see #noServerReachable(). An out cannot reach a dead server either; claiming it
     // succeeded would be the mirror-image lie (an operator believing a graphic came OFF).
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'out', itemId }, seq);
     this.#armExpiry(seq);
-    const { ok, onPrimary, errorCode } = await this.#send(this.#builder.out(slot), seq, 'urgent');
+    /*
+      C-015 phase 6 (6.0/6.6) — THE LIVE LAYERS COME DOWN FIRST, THEN THE GRAPHIC.
+
+      The order is an on-air decision, not a tidy-up. The template sits ABOVE its
+      plates (70–99 over the declared 10–59 band) and covers the frame with a hole
+      punched in it. Clearing the template first would strip that covering off and
+      leave bare guest rectangles keyed over programme for the duration of the
+      teardown round-trips — which reads on air as the wrong source having been
+      taken. Clearing the plates first leaves the designed frames standing with
+      programme showing through them for the same moment: still wrong, but it is a
+      graphic the audience has already been looking at.
+
+      The cost is that the operator's Out waits for the plates. Best-effort per
+      layer (`teardownLiveLayers`), so one stuck send cannot strand the graphic
+      behind it.
+    */
+    await this.teardownLiveLayers(itemId);
+    const { ok, onPrimary, errorCode, command } = await this.#send(
+      this.#builder.out(slot),
+      seq,
+      'urgent',
+    );
     // B-039 — `CLEAR` DESTROYS the producer: record that no producer exists on the
     // slot so a subsequent take re-ADDs (instead of `CG PLAY`-ing an empty layer).
     // The slot stays RESERVED (the item is still on the stack, idle) until remove —
     // retake re-ADDs onto the same slot; OSC interest stays put so idle confirms.
     this.#loaded.delete(itemId);
+    // `FIELD-FIXES-01` B — a row the operator has CLEARED no longer carries its refusal line.
+    if (ok) this.#retireTakeRefusal(itemId);
+    // SESSION BP — and the row's level 2 thaws with it: off air, so an assignment edit lands
+    // at the next take exactly as the Inspector has always promised. See `#thawAssignment`
+    // for why a FAILED clear deliberately keeps the pin.
+    this.#thawAssignment(itemId, ok);
     // A CLEAR executed on the CURRENT PRIMARY counts as adoption — the layer's
     // state is known there (a backup-only ack proves nothing about the primary)
     // — and provably resolves any B-056 owned-slot warning; a backup-only out
     // leaves the warning standing (the primary's orphan may still be live).
     if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
+    // `B-331` — and the row is off air NOW: the page a frame composed before the erase reports
+    // after the `202` is not this item's (see the method). Primary only, like the adoption above.
+    if (ok && onPrimary) this.#reconciler.noteProducerCleared(itemId);
+    // `B-253` — and the mixer residue goes with the producer. See the method.
+    await this.#resetEmptiedLayerMixer(slot, { ok, onPrimary });
     // §8 — CLEAR is the escape hatch, so it is the verb where "the command never
     // left" versus "CasparCG refused it" matters MOST: the first is fixed by
     // waiting for the link, the second means the graphic is still on air and
     // needs another route off. It answered a bare `{ accepted: false }`.
-    return { accepted: ok, ...(!ok && errorCode !== undefined && { errorCode }) };
+    return {
+      accepted: ok,
+      ...(!ok && errorCode !== undefined && { errorCode }),
+      ...(!ok && command !== undefined && { command }),
+    };
   }
 
   // ── R-009: orphan-layer sweep + explicit per-layer Clear ────────────
@@ -2112,9 +6136,26 @@ export class CasparRuntime {
 
   // ── R-021 stage 2a: fixed-bank wire contract (config + per-slot state) ──
 
-  /** The declared fixed bank, or null when none is configured. */
+  /**
+   * The v1 SINGLE-BANK VIEW: the lowest-numbered declared channel's bank, or null when none is
+   * declared ({@link firstBank}). On a one-channel station it IS the bank, exactly as before.
+   */
   fixedLayersConfig(): FixedLayerBank | null {
-    return this.#fixedBank;
+    return firstBank(this.#fixedBanks);
+  }
+
+  /** `MULTI-CHANNEL-01` — every declared bank, in channel order (empty when none is declared). */
+  fixedLayerBanks(): FixedLayerBank[] {
+    return [...this.#fixedBanks];
+  }
+
+  /**
+   * 🔴 `MULTI-CHANNEL-01` — **THE BANK THAT DECLARES `channel`, or null.** Every per-coordinate
+   * reader in this class asks THIS — the wrong-bank refusal, the bed migration, the alias on the
+   * per-slot publish — so "which bank owns this coordinate" has one answer (golden rule 6).
+   */
+  #bankFor(channel: number): FixedLayerBank | null {
+    return bankForChannel(this.#fixedBanks, channel);
   }
 
   /**
@@ -2125,65 +6166,164 @@ export class CasparRuntime {
    * are renumber/channel-change and shrink-with-residents). On refusal
    * NOTHING is applied or published; persistence is the caller's step
    * (`bridge.ts` persists on ok, non-fatally, after this returns).
+   *
+   * 🔴 `MULTI-CHANNEL-01` — **THE v1 DOOR: "the station's bank is THIS one."** On a station that
+   * declares at most one bank it validates exactly as it always has — an install on a bank-less
+   * bridge, or `validateFixedBankChange` against the one bank in force, channel replace
+   * (`B-269`) included — so a one-channel station is byte-identical. On a station that declares
+   * more than one, "the bank is this one" means the SET becomes this one bank, and it is the
+   * plural door's rule that judges that: every other channel is REMOVED, refused while ours holds
+   * air there.
    */
   setFixedLayers(next: FixedLayerBank): {
     ok: boolean;
     reason?: FixedLayersErrorCode;
     message?: string;
+    layer?: number;
   } {
+    const current = this.#fixedBanks;
+    if (current.length > 1) return this.setFixedLayerBanks([next]);
+    const options = this.#bankChangeOptions();
+    const only = current[0];
+    return this.#applyBanks([next], () =>
+      only === undefined
+        ? // No current bank: installing one live is validated like a load, PLUS the
+          // fail-closed untick rule (`validateFixedBankInstall`, the store's one copy of it).
+          validateFixedBankInstall(next, options)
+        : validateFixedBankChange(only, next, options),
+    );
+  }
+
+  /**
+   * 🔴 `MULTI-CHANNEL-01` — **THE PLURAL DOOR: set the station's banks** — add, remove, replace
+   * and edit channels in one request (`validateFixedBanksChange`: an edit keeps every single-bank
+   * rule, an added channel is validated as a fresh install, a removed one is refused while ours
+   * holds air on it). All or nothing: on refusal nothing is applied or published.
+   */
+  setFixedLayerBanks(next: readonly FixedLayerBank[]): {
+    ok: boolean;
+    reason?: FixedLayersErrorCode;
+    message?: string;
+    layer?: number;
+  } {
+    const current = this.#fixedBanks;
+    const options = this.#bankChangeOptions();
+    return this.#applyBanks(next, () => validateFixedBanksChange(current, next, options));
+  }
+
+  /** The store's validators, with THIS runtime's policy, reservation and two air facts. */
+  #bankChangeOptions(): ValidateChangeOptions {
+    return {
+      policy: this.#layerPolicy,
+      reservedLayers: this.#reservedLayers,
+      slotOccupancy: (slot) => this.#fixedSlotOccupancy(slot),
+      // `DESKTOP-APPS-01-D` e — the one condition a channel change is refused on.
+      channelHoldsOurAir: (channel) => this.#holdsOurAirOn(channel),
+    };
+  }
+
+  /**
+   * The ONE apply step both doors share: validate, then strand what the set no longer declares,
+   * fence the LayerManager with every bank's slots, and publish — the v1 view and the whole set.
+   */
+  #applyBanks(
+    next: readonly FixedLayerBank[],
+    validate: () => readonly LayerSlot[],
+  ): { ok: boolean; reason?: FixedLayersErrorCode; message?: string; layer?: number } {
     let slots: readonly LayerSlot[];
     try {
-      if (this.#fixedBank === null) {
-        // No current bank: installing one live is validated like a load…
-        slots = validateFixedBank(next, {
-          policy: this.#layerPolicy,
-          reservedLayers: this.#reservedLayers,
-        });
-        // …PLUS the fail-closed untick rule, which validateFixedBank alone
-        // cannot carry (the BOOT path shares it, and at boot occupancy is
-        // always unknown — the persisted ticks were adjudicated when applied).
-        // A LIVE install that arrives with layers already hidden must not
-        // slip an occupied or unverifiable layer out of sight in one step.
-        for (let layer = next.start; layer <= next.start + next.count - 1; layer++) {
-          if (isLayerVisible(next, layer)) continue;
-          const occupancy = this.#fixedSlotOccupancy({ channel: next.channel, layer });
-          if (occupancy === 'occupied') {
-            throw new FixedLayersConfigError(
-              'untick-occupied',
-              `cannot hide layer ${String(layer)}: it is OCCUPIED (an item or producer is on ` +
-                `it) — remove its template first (removal implies clear), then untick`,
-            );
-          }
-          if (occupancy === 'unknown') {
-            throw new FixedLayersConfigError(
-              'untick-unknown',
-              `cannot hide layer ${String(layer)}: its occupancy is UNKNOWN (no healthy ` +
-                `CasparCG link or no fresh OSC), and unknown is never treated as empty — a ` +
-                `hidden row may be on air. Restore the link/OSC so the layer reads empty, ` +
-                `then untick`,
-            );
-          }
-        }
-      } else {
-        slots = validateFixedBankChange(this.#fixedBank, next, {
-          policy: this.#layerPolicy,
-          reservedLayers: this.#reservedLayers,
-          slotOccupancy: (slot) => this.#fixedSlotOccupancy(slot),
-        });
-      }
+      slots = validate();
     } catch (err) {
       if (err instanceof FixedLayersConfigError) {
-        return { ok: false, reason: err.code, message: err.message };
+        // A5 — the layer rides as data, so the console never has to read it out of `message`.
+        return {
+          ok: false,
+          reason: err.code,
+          message: err.message,
+          ...(err.layer !== undefined ? { layer: err.layer } : {}),
+        };
       }
       throw err;
     }
+    const channels = new Set(next.map((bank) => bank.channel));
+    const declaredBefore = this.#fixedBanks.map((bank) => bank.channel);
+    const bandBefore = JSON.stringify(this.plateBandInForce());
+    /*
+      🔴 `DESKTOP-APPS-01-D` e/j — **EVERY ITEM LEFT ON A CHANNEL THE SET NO LONGER DECLARES LEAVES
+      THE STACK, BEFORE THE NEW ROWS ARE APPLIED** (its slot must be released while it is still a
+      fixed slot). A channel REMOVED or REPLACED reaches here only when nothing of ours holds air
+      on it, so what leaves is list-only; a FIRST bank installed under a restored item (the
+      owner's channel-2 set-up) can strand one that holds air, and that one becomes a stray.
+      Nothing is sent. `MULTI-CHANNEL-01` — "another channel" is now "a channel not in the set":
+      an item on a channel that stays declared stays exactly where it is.
+    */
+    for (const item of this.#reconciler.snapshot()) {
+      const slot = this.#slots.get(item.itemId);
+      if (slot !== undefined && !channels.has(slot.channel)) this.#strandItem(item.itemId);
+    }
     this.#layers.applyFixed(slots);
-    this.#fixedBank = next;
-    this.fixedConfigChanged.emit(next);
+    this.#fixedBanks = sortBanks(next);
+    this.#copyDefaultsToJoiningChannels(declaredBefore, [...channels]);
+    /*
+      🔴 `CHANNEL-TEMPLATES-01` decision 5 — a library written before the per-channel lists and not
+      yet copied (a station that upgraded while in first-run) is copied the moment it has channels
+      to copy to. Once copied, a channel JOINING the set starts with an empty template list: unlike
+      Source defaults, nothing is carried to it (the owner's rule). A channel leaving keeps its list,
+      dormant, and finds it again if it is declared again. Nothing is sent to CasparCG.
+    */
+    if (this.#templates.migrate(this.#declaredChannels()) > 0) {
+      this.templatesChanged.emit(this.#templates.listAll());
+    }
+    this.fixedConfigChanged.emit(firstBank(this.#fixedBanks));
+    this.fixedBanksChanged.emit(this.fixedLayerBanks());
+    /*
+      🔴 `PLATE-BAND-01` — a bank change can turn a Playout-linked station's DEFAULT band on or off
+      (a bank row in 60–79 claims the band) without the catalogue changing, so the catalogue is
+      published again: its push carries the band in force, and a console must not keep showing a band
+      the next take will not seat in. Nothing is sent to CasparCG.
+    */
+    if (JSON.stringify(this.plateBandInForce()) !== bandBefore) {
+      this.sourceCatalogChanged.emit(this.#sourceCatalog);
+    }
     // The bank changed, so the per-slot state did too — publish through the
     // same change-compare the sweep uses (never a second derivation).
     this.#publishFixedStateIfChanged();
     return { ok: true };
+  }
+
+  /**
+   * 🔴 `CHANNEL-SOURCES-01` decision 2 — **A CHANNEL JOINING THE SET starts from a copy of each
+   * template's current defaults**, read from the channels declared before it
+   * ({@link copyAssignmentsToChannel}: per template, the lowest of them holding its own). A station
+   * that MOVES (Change channel…, one bank for one) therefore carries its defaults to the new
+   * channel. Configuration only: nothing is sent, and a row already taken keeps what it froze.
+   * `bridge.ts` persists the result beside the banks.
+   */
+  #copyDefaultsToJoiningChannels(before: readonly number[], after: readonly number[]): void {
+    let value = this.#sourceAssignments;
+    let copied = 0;
+    for (const channel of after) {
+      if (before.includes(channel)) continue;
+      const result = copyAssignmentsToChannel(value, before, channel);
+      value = result.value;
+      copied += result.copied;
+    }
+    if (copied === 0) return;
+    this.#sourceAssignments = value;
+    this.sourceAssignmentsChanged.emit(value);
+  }
+
+  /**
+   * `DESKTOP-APPS-01-D` e — does anything of OURS hold air on `channel`: an item on air or
+   * unsettled (`isOnAirStatus`), one whose air claim cannot be checked (`unverified`), or one
+   * whose producer is resident (`#loaded` — a STOPPED graphic is still on the channel's stage)?
+   */
+  #holdsOurAirOn(channel: number): boolean {
+    return this.#reconciler.snapshot().some((item) => {
+      const slot = this.#slots.get(item.itemId);
+      if (slot === undefined || slot.channel !== channel) return false;
+      return isOnAirStatus(item) || item.status === 'unverified' || this.#loaded.has(item.itemId);
+    });
   }
 
   /** The current per-slot state, computed on demand ([] when no bank). */
@@ -2254,7 +6394,11 @@ export class CasparRuntime {
   #computeFixedState(): FixedSlotState[] {
     const slots = this.#layers.fixedSlots();
     if (slots.length === 0) return [];
-    const aliases = this.#fixedBank?.aliases ?? {};
+    // `single-clock-look-switch` — read through `layerAlias`, the ONE helper that knows
+    // which half of the bank a layer belongs to. `bank.aliases` alone would silently drop
+    // every bed row's alias, since those live in `bank.low.aliases`.
+    // `MULTI-CHANNEL-01` — and from the bank of the SLOT'S channel (`#bankFor`, per slot below):
+    // channel 2's row 98 carries channel 2's alias, never channel 1's.
     const itemBySlot = new Map<string, string>();
     for (const [itemId, s] of this.#slots) {
       itemBySlot.set(`${String(s.channel)}:${String(s.layer)}`, itemId);
@@ -2272,7 +6416,8 @@ export class CasparRuntime {
       .sort((a, b) => a.channel - b.channel || a.layer - b.layer)
       .map((slot) => {
         const key = `${String(slot.channel)}:${String(slot.layer)}`;
-        const alias = aliases[String(slot.layer)];
+        const bank = this.#bankFor(slot.channel);
+        const alias = bank === null ? undefined : layerAlias(bank, slot.layer);
         const producer = occupiedBy.get(key);
         const observed: FixedSlotState['observed'] = !hearing
           ? { kind: 'unknown' }
@@ -2300,7 +6445,8 @@ export class CasparRuntime {
             // resolves the display label with its ONE canonical rule
             // (`templateDisplayName`: file name first); resolving here would
             // be the second copy of that rule.
-            const info = this.#templates.get(templateId);
+            // `CHANNEL-TEMPLATES-01` — the name THIS row's channel lists it under.
+            const info = this.#templates.getOn(slot.channel, templateId);
             identity = {
               templateId,
               ...(info?.name !== undefined && info.name !== '' ? { templateName: info.name } : {}),
@@ -2310,6 +6456,18 @@ export class CasparRuntime {
             };
           }
         }
+        /*
+         * R-021 stage 4 (task 3.1) — the RESTORE-BLOCKED fact, read from the
+         * ledger the decision itself wrote and never re-derived from
+         * `observed` (see `#restoreBlocked`).
+         *
+         * Guarded on the SLOT as well as the item: the block is about THIS row,
+         * so an item that somehow moved must not carry a stale block onto its
+         * new row. Absent, never `false` — the wire says nothing about rows
+         * that are not blocked, so an old browser reads them exactly as before.
+         */
+        const blocked =
+          itemId !== undefined && this.#restoreBlocked.get(itemId)?.slot.layer === slot.layer;
         return {
           channel: slot.channel,
           layer: slot.layer,
@@ -2317,7 +6475,7 @@ export class CasparRuntime {
           observed,
           binding:
             itemId !== undefined && templateType !== undefined
-              ? { itemId, templateType, ...identity }
+              ? { itemId, templateType, ...identity, ...(blocked ? { restoreBlocked: true } : {}) }
               : null,
         };
       });
@@ -2330,7 +6488,7 @@ export class CasparRuntime {
    * bank change. With no bank declared it never publishes anything.
    */
   #publishFixedStateIfChanged(): void {
-    if (this.#layers.fixedSlots().length === 0 && this.#fixedBank === null) return;
+    if (this.#layers.fixedSlots().length === 0 && this.#fixedBanks.length === 0) return;
     const state = this.#computeFixedState();
     const json = JSON.stringify(state);
     if (json === this.#lastFixedStateJson) return;
@@ -2342,6 +6500,6032 @@ export class CasparRuntime {
   ownedOccupancy(): OwnedOccupancyWarning[] {
     return [...this.#ownedOccupancy.values()].sort(
       (a, b) => a.channel - b.channel || a.layer - b.layer,
+    );
+  }
+
+  // ── C-015 phase 5: the Live Source ledger (the THIRD ownership class) ──────
+
+  /**
+   * Every Live Source coordinate the bridge currently owns, as `ch:layer` keys.
+   *
+   * The ONE place that flattens the ledger to coordinates — all three ownership
+   * doors call this rather than walking `#liveLayers` themselves, so "is this a
+   * Live Source layer" has exactly one implementation and cannot drift between
+   * the sweep, the quarantine and the refusal (golden rule 6). Keyed through
+   * `adoptionKey` so the format matches the sweep's `owned` set exactly.
+   */
+  #liveLayerKeys(): Set<string> {
+    const keys = new Set<string>();
+    for (const records of this.#liveLayers.values()) {
+      for (const record of records) keys.add(adoptionKey(record.slot));
+    }
+    return keys;
+  }
+
+  /**
+   * C-015 phase 6 (6.2) — **the EFFECTIVE output position of one stack item: the
+   * SAME three-step chain the page resolves for itself.**
+   *
+   * `operator override ?? the template's carried defaultPosition ?? centred`
+   *
+   * 🔴 **THE MIDDLE STEP IS THE ONE THAT WAS ALMOST MISSED, AND IT IS LOAD-BEARING.**
+   * An earlier draft of the design said `defaultPosition` need not reach the bridge,
+   * on the grounds that the bridge holds the operator's effective position in
+   * `#positions` and would otherwise use the same `centred` default the page does.
+   * That is wrong for every template whose author set a position: the bridge appends
+   * the position query **only when an override exists** (see `#sendAdd`), so with no
+   * override no `pos` rides the URL and the page falls back to
+   * `scene.defaultPosition` — while a bridge assuming `centred` would compute a
+   * different anchor translate and put the live box where the hole is not.
+   *
+   * The hole is transparent, so nothing on air would say why. That is the whole
+   * reason `defaultPosition` joins `resolution` on the `liveSources` carrier.
+   *
+   * `resolveDefaultPosition` (@cg/shared-schema) supplies the tail rather than a
+   * local `{ anchor: 'center' }` literal — the same rule as `positionQuery` one
+   * method over: two spellings of "centred" is how the composited box comes to sit
+   * somewhere the hole is not.
+   */
+  #effectivePosition(itemId: string, carried: Position | undefined): Position {
+    return this.#positions.get(itemId) ?? resolveDefaultPosition({ defaultPosition: carried });
+  }
+
+  /**
+   * C-015 phase 6 (6.2 / 6.3 / 6.4) — **the `FILL` + `CLIP` for ONE plate of one item.**
+   *
+   * Everything the arithmetic needs is resolved HERE, because only the bridge holds
+   * it: the channel raster (`ChannelSettingsStore.rasterFor` — which falls back to the
+   * reference frame, so it is never absent), the operator's override, and the
+   * template's carried `resolution` + `defaultPosition`. The arithmetic itself is
+   * `liveSourceFit` in `@cg/shared-schema` — the ONE implementation (6.2a), shared
+   * with the page's own placement terms and pinned to the page's composition by
+   * 6.2b's contract test.
+   *
+   * `sourceAspect` is passed in rather than resolved here: it comes from the
+   * ASSIGNED catalog entry through §3a's chain, which is the caller's to walk
+   * (a plate with no assignment refuses the take before any geometry is computed —
+   * 6.7).
+   */
+  liveSourceFitFor(input: {
+    channel: number;
+    itemId: string;
+    rect: { x: number; y: number; width: number; height: number };
+    sceneResolution: { width: number; height: number };
+    carriedDefaultPosition?: Position | undefined;
+    sourceAspect: number | null;
+    /**
+     * `C-028` — the RESOLVED fit mode (`resolvePlateFitMode`). Passed in for the same
+     * reason `sourceAspect` is: it comes from a chain — the operator's per-assignment
+     * override over the author's declaration — that is the caller's to walk.
+     */
+    fitMode?: LiveFitMode | undefined;
+  }): LiveSourceFit {
+    return liveSourceFit({
+      rect: input.rect,
+      sceneResolution: input.sceneResolution,
+      raster: this.#channelSettings.rasterFor(input.channel),
+      position: this.#effectivePosition(input.itemId, input.carriedDefaultPosition),
+      sourceAspect: input.sourceAspect,
+      fitMode: input.fitMode,
+    });
+  }
+
+  /**
+   * C-015 phase 6 (task 6.0) — **THE ASSEMBLY, HALF ONE: decide everything this
+   * item's plates need, and touch NOTHING.**
+   *
+   * ── WHY THIS TASK EXISTS AT ALL ────────────────────────────────────────────
+   *
+   * Phase 6 part 1 built every COMPONENT — the verbs (6.1), the arithmetic
+   * (6.2/6.2a/6.2b/6.4), the fit policy and its refusal (6.3), the unassigned
+   * refusal (6.7), teardown (6.6) — and **nothing enumerated the call site that
+   * strings them together**, so a declared plate put no picture on air. That was a
+   * gap in the TASK LIST rather than an omission by a session: 6.1 says "build the
+   * verbs", 6.2 "build the arithmetic", and no item said "call them". This method
+   * and {@link #seatLiveLayers} are that call site.
+   *
+   * ── THE SPLIT: DECIDE, THEN ACT ────────────────────────────────────────────
+   *
+   * Every refusal is reachable from here, where the wire has not been touched:
+   *
+   *   - a plate with no assignment          → `live-source-unassigned` (6.7)
+   *   - an `expectedAspect` the source contradicts → `live-source-aspect-mismatch` (6.3)
+   *   - no declared Live Source band        → `live-source-no-layer-range`
+   *   - a band with no room                 → `live-source-no-layer`
+   *
+   * A refused take must mutate nothing, which is why this runs BEFORE the take
+   * applies its intent — the same shape as the `rehearsing` / `unknown-item` /
+   * `disconnected` refusals it sits beside.
+   *
+   * ── WHAT AN ABSENT CARRIER DOES, AND WHY IT IS NOT A REFUSAL ───────────────
+   *
+   * `liveSourceCarrierState` has three answers and only `'declared'` seats
+   * anything. `'none'` is a template with no plates. `'unknown'` is a template
+   * imported before the carrier existed — and it is deliberately NOT a take
+   * refusal: nothing here can tell whether such a template has holes, the great
+   * majority have none, and refusing every pre-carrier template's take would take
+   * a station's whole existing rundown off air on upgrade. The operator is warned
+   * where the warning can be acted on (the template picker marks the row as
+   * needing a re-import), which is the same place the spec puts it.
+   */
+  /**
+   * 🔴 **§12.6 — THE ONE PREDICATE: is another item carrying a MULTI-BOX template already
+   * on air on this channel?**
+   *
+   * The client's requirement is *"a switch between the multi-box layouts, with exactly ONE
+   * active at a time, so the operator cannot make a mistake"* (`design.md` §0.1). §8 measured
+   * that two multi-box templates on air together is reachable TODAY, by two doors — a take
+   * (`#planLiveSeating` allocates a second template's plates AROUND the first's rather than
+   * refusing) and a restore (`#decidePendingRestores` adopts every retained on-air item with
+   * no cap). There is no mutual-exclusion primitive anywhere in the tree to build the rule
+   * out of, so this is it.
+   *
+   * ── ONE PREDICATE, TWO CALL SITES, AND WHY THAT IS THE WHOLE DECISION ───────
+   *
+   * Restore **never passes through `take()`**, so the refusal has two sites by necessity.
+   * `CLAUDE.md` golden rule 6 is written about exactly this shape: the second site must CALL
+   * this, never re-derive the condition locally, because *"a second local copy is how a name
+   * comes to lie about what it tests"*.
+   *
+   * ⚠ **It is deliberately NOT `hasLivePlates`.** `deps.hasLivePlates`
+   * (`apps/runtime/src/renderer/features/layers/layerRowActions.ts:655`) is a RENDERER fact
+   * about one row's template DECLARING plates. This is a BRIDGE fact about the on-air SET.
+   * §8 offers that name as the tree's nearest existing shape, not as the predicate; reusing
+   * it for a different condition is the failure golden rule 6 forbids.
+   *
+   * ── THE THREE TERMS, EACH ANSWERED BY THE ONE THING THAT OWNS IT ────────────
+   *
+   * - **"on air"** — {@link isOnAirStatus}, the canonical status predicate, reused rather
+   *   than re-spelled. Its own comment says unknown must count as on air in every gate
+   *   whose failure mode is acting on a live graphic. This is such a gate.
+   * - **"on this channel"** — `#slots`, the single source of where an item's template lives.
+   *   Two multi-box templates on DIFFERENT channels do not compete for one output.
+   * - **"multi-box"** — {@link multiBoxCount} below.
+   *
+   * Returns the INCUMBENT rather than a boolean, because the refusal has to be able to name
+   * what is already on air (`design.md` §12.6's refusal-family discipline). A bare `true`
+   * would send the operator hunting.
+   */
+  #multiBoxItemOnAirOnChannel(
+    channel: number,
+    exceptItemId: string,
+  ): { itemId: string; templateId: string; boxes: number } | null {
+    for (const item of this.#reconciler.snapshot()) {
+      if (item.itemId === exceptItemId) continue;
+      if (!isOnAirStatus(item)) continue;
+      if (this.#slots.get(item.itemId)?.channel !== channel) continue;
+      const boxes = this.#multiBoxCount(channel, item.templateId);
+      if (boxes > 1) return { itemId: item.itemId, templateId: item.templateId, boxes };
+    }
+    return null;
+  }
+
+  /**
+   * How many BOXES a template declares — 0 when it declares none, and 0 when nothing can
+   * say.
+   *
+   * A box IS a Live Source plate (`design.md` §0.5: `plateId` IS the `routeKey`); an
+   * arrangement positions box INSTANCES and does not change how many there are. So the
+   * count is the carrier's declaration length, and `> 1` is what "multi-box" means.
+   *
+   * ⚠ **`'unknown'` counts as 0, and that is the same call `#planLiveSeating` already
+   * makes** for the same reason, written up in its header: a template imported before the
+   * carrier existed cannot be read, the great majority have no holes, and treating them as
+   * multi-box would refuse a station's whole existing rundown on upgrade. Such a template
+   * also seats NO plates at all, so it is not an incumbent whose boxes this rule protects.
+   * The operator is warned where the warning can be acted on — the template picker marks
+   * the row as needing a re-import.
+   */
+  /*
+    ⭐ §14 (LOOKS) phase 3 — VERIFIED UNCHANGED, AND HERE IS THE DRIFT TO REFUSE.
+
+    Under LOOKS the carrier's `sources` IS the multi-frame group's declaration list —
+    source-keyed, one entry per declared source — so this already counts the GROUP and never
+    the retired arrangements. Nothing had to move.
+
+    🔴 What a later reader will be tempted to do is count the ACTIVE LOOK's rects instead
+    ("only one box is showing, so this is not a multi-box template"). That is wrong, and the
+    failure is delayed rather than immediate: a row parked on a solo look would stop being an
+    incumbent, a second multi-box template would be allowed on air beside it, and the
+    collision would arrive later — when somebody switched the first row back to six boxes,
+    with both templates already playing. Exclusivity is a property of what a template CAN put
+    on the channel, which is its declaration, and a look switch must never change the answer.
+  */
+  #multiBoxCount(channel: number, templateId: string): number {
+    // `CHANNEL-TEMPLATES-01` — the declaration of the version `channel` lists.
+    const template = this.#templates.getOn(channel, templateId);
+    if (template === null) return 0;
+    if (liveSourceCarrierState(template) !== 'declared') return 0;
+    return template.liveSources?.sources.length ?? 0;
+  }
+
+  /**
+   * §12.6 — the refusal itself, in the refusal family's words, or `null` when the item may
+   * proceed.
+   *
+   * Both call sites get the SAME sentence from here, so the two doors cannot describe one
+   * rule differently. It names BOTH halves — what is already on air and what was refused —
+   * because a refusal that names neither is a dead end at the moment the operator is under
+   * time pressure.
+   */
+  /**
+   * 🔴 **§14.5 / `tasks.md` 7.5 — THE ONE REFUSAL TRIGGER LOOKS HAS: A LOOK GROUP THAT
+   * AUTHORS ZERO LOOKS.**
+   *
+   * §12.9.1's count-shaped triggers — over-lit, absent-count, all-off — did not move here;
+   * they RETIRED. The picker offers only authored looks and always marks exactly one, so
+   * each of those states became unrepresentable rather than defended against. What remains
+   * is the state the operator cannot get out of because the AUTHOR never put anything in: a
+   * group with no looks resolves NO rects, so no plate has geometry, nothing seats, and the
+   * row goes to air as the background alone behind a designed layout of holes that will
+   * never fill.
+   *
+   * 🔴 **ABSENT IS NOT EMPTY, AND CONFUSING THEM WOULD BREAK EVERY PRE-LOOKS TEMPLATE.**
+   * `buildTemplateLiveSources` spreads `looks` only when the scene HAS a look group
+   * (`collectLookCarrier` returns `null` otherwise), so `undefined` means "authored before
+   * LOOKS, or against the arrangement carrier" — a template that works perfectly and must
+   * never be refused. `[]` is the positive statement "this group authors none". Gating on
+   * `.length === 0` alone would take a station’s whole pre-carrier rundown off air on
+   * upgrade, the same trap `#multiBoxCount`’s own header warns about.
+   *
+   * Deliberately NOT gated on the source count either: a one-source group with no looks is
+   * broken for the identical reason, and a `> 1` test would make the refusal depend on a
+   * fact that has nothing to do with why it refuses.
+   */
+  #refuseNoLooksAuthored(
+    channel: number,
+    templateId: string,
+  ): { errorCode: string; message: string } | null {
+    const looks = this.#templates.getOn(channel, templateId)?.liveSources?.looks;
+    if (looks === undefined || looks.length > 0) return null;
+    return {
+      errorCode: 'looks-none-authored',
+      message:
+        `"${templateId}" declares live sources in a multi-frame group but authors no looks, ` +
+        `so no plate has any geometry and every box would go to air empty — open it in the ` +
+        `Designer and add at least one look`,
+    };
+  }
+
+  #refuseSecondMultiBox(
+    itemId: string,
+    templateId: string,
+    channel: number,
+  ): { errorCode: string; message: string } | null {
+    // Only a multi-box arrival can collide: a lower-third over a live 3-box is ordinary
+    // stacking, not the crosstalk this refuses.
+    //
+    // ⚠ `templateId` is a PARAMETER rather than looked up from the reconciler, because the
+    // restore door asks this question BEFORE the item exists there. A lookup would answer
+    // `undefined` at that site and silently let every restore through — the refusal would
+    // be present, wired, and dead on the door that has no other cover.
+    if (this.#multiBoxCount(channel, templateId) <= 1) return null;
+    const incumbent = this.#multiBoxItemOnAirOnChannel(channel, itemId);
+    if (incumbent === null) return null;
+    return {
+      errorCode: 'multibox-already-on-air',
+      message:
+        `exactly one multi-box template may be on air per channel: "${incumbent.templateId}" ` +
+        `(${String(incumbent.boxes)} boxes, item "${incumbent.itemId}") is already on air on ` +
+        `channel ${String(channel)} — take it off air first`,
+    };
+  }
+
+  /**
+   * 🔴 **SESSION BM — WHICH PRODUCERS THIS ITEM NEEDS, AND WHICH FRAME PUNCHES EACH.**
+   *
+   * ── WHAT CHANGED, AND WHY THE OLD SHAPE COULD NOT EXPRESS IT ────────────────
+   *
+   * This used to seat ONE LAYER PER DECLARED PLATE shown by the active look. That was
+   * correct while a plate's producer was a property of the plate: `routeKey` → assignment →
+   * one catalog entry, the same in every look. Once the operator may say _"solo will show
+   * studio-3 while 2-box shows studio-1"_, one plate has TWO producers depending on the
+   * look, and a plate-keyed seat cannot hold both.
+   *
+   * So the seat moved onto the INPUT: **one producer per DISTINCT RESOLVED INPUT, per item**
+   * ({@link resolveLookBindings}, which carries the full argument and the four resolution
+   * levels). Two consequences are worth stating here because they are what the rest of this
+   * method is shaped by:
+   *
+   * 1. **The seat set is the union over EVERY look, not just the active one.** That is what
+   *    makes a preset real: an input bound only to a look nobody is showing is seated,
+   *    muted and PARKED (rendering nothing — `parkedFit`, `B-154`), so entering that look
+   *    costs a `MIXER FILL` and no `PLAY`. It is also why the band can now be exhausted by
+   *    an ASSIGNMENT rather than only by a take.
+   * 2. **It does not grow the way `Σ|look members|` would.** Two looks showing the same
+   *    input share one seat. The owner's real template — 3-box `{s1,s2,s3}`, 2-box
+   *    `{s1,s2}`, solo `{s3}` — needs THREE producers, exactly what it needed before.
+   *
+   * ⚠ **PLATE ↔ SEAT IS STILL 1:1 WITHIN ONE LOOK, and that is not luck — it is what §6.2's
+   * refusal buys.** Every consumer that reads a record by its plate (`swapLiveSource`,
+   * `setPlateVolume`, the operator's layer table) leans on that, so the refusal is
+   * load-bearing rather than tidy.
+   */
+  #planLiveSeating(
+    itemId: string,
+    slot: CommandSlot,
+    /**
+     * The look being ENTERED — the one whose frames punch. `undefined` for a carrier that
+     * authors no looks, which `lookPlateRects` already answers for.
+     *
+     * 🔴 **THE LOOK ID, NOT A RECT MAP.** This used to take the desired `{plate → rect}`
+     * alongside, and the two had to agree: a caller resolving rects from one look while the
+     * bindings resolved from another would seat one look's producers behind another look's
+     * holes — the exact divergence `tasks.md` 7.9 was about, reachable from a second
+     * direction. The rects are a pure function of the carrier and this id, so there is now
+     * one input and nothing to disagree with.
+     */
+    lookId: string | undefined,
+    /**
+     * WHICH frames an unresolvable binding may refuse this action over.
+     *
+     * `'entering-look'` — the TAKE. Every frame of the look being entered is answered here,
+     * where a refusal costs nothing.
+     *
+     * 🔴 **RENAMED FROM `'all-declarations'`, AND THE BEHAVIOUR CHANGED WITH IT (§2.9).** It
+     * used to answer for every plate of every look the template could reach, so that a plate
+     * one picker click from the screen could not refuse DURING a live switch with the
+     * previous look already leaving. `tasks.md` 7.9 removed that reason: a PLAN-refused
+     * switch leaves nothing behind and the page is never told, so the previous look is NOT
+     * leaving and the refusal is clean. (`B-174` moved the page-tell ahead of the fills, so
+     * a WIRE-delivered refusal can now arrive after the page moved — that path re-tells the
+     * previous look; every refusal decided HERE still fires with the page untouched, which
+     * is the property this scope rests on.) Refusing a take because a look nobody is showing has
+     * a hole would block air for a non-reason, so it no longer does; the hole is surfaced in
+     * CG Control and refuses at the moment somebody tries to SWITCH into it.
+     *
+     * `'already-live'` — a LIVE switch or swap. The row is on air and the operator is
+     * usually repairing something. Only a frame that must be seated ANEW may refuse: one
+     * this look does not show cannot, and — the case that matters most — neither can one
+     * that is ALREADY ON SCREEN.
+     */
+    scope: 'entering-look' | 'already-live',
+    /**
+     * SESSION BP — where LEVEL 2 comes from. See {@link LevelTwoSource}, including why this
+     * is a parameter of its own rather than read off `scope`.
+     */
+    levelTwo: LevelTwoSource,
+  ): LiveSeatingPlan {
+    const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
+    // `CHANNEL-TEMPLATES-01` — the carrier of the version the row's channel lists.
+    const template = this.#templates.getOn(slot.channel, templateId);
+    const carrier = template === null ? undefined : template.liveSources;
+    if (
+      template === null ||
+      carrier === undefined ||
+      liveSourceCarrierState(template) !== 'declared'
+    )
+      return {
+        ok: true,
+        placements: [],
+        parked: [],
+        resolved: new Map(),
+        offFrame: new Set(),
+        declared: new Set(),
+        unresolved: new Set(),
+        // A template with no live-source carrier has no level 2 to freeze. `{}` here is the
+        // EMPTY freeze, not the absent one, and it is the honest answer: this row's level 2
+        // is "nothing", permanently, and pinning it costs nothing.
+        resolvedFrom: {},
+        // `B-178` — no plates, so nothing to report. Empty, never absent.
+        fitProvenance: [],
+      };
+
+    /*
+      🔴 THE ONE RESOLUTION, for EVERY look — not just the one being entered.
+
+      The seat set has to be the union or a preset is not a preset, and the collisions and
+      the band arithmetic below are questions about the same union. Asking a second time,
+      per look, is how the four levels would come to be applied in two orders.
+    */
+    /*
+      SESSION BP — level 2 comes from `#assignmentsFor`, which answers the FROZEN snapshot
+      for a row that has one. The seat set, the collisions and the band arithmetic below are
+      all questions about the same union, so they must all be asked of the same level 2.
+    */
+    const resolvedFrom = this.#assignmentMapFor(itemId, templateId, levelTwo, slot.channel);
+    /*
+      🔴 `PLAYOUT-SOURCES-01` — ONLY SEATABLE ENTRIES CAN RESOLVE A FRAME. An entry the Playout
+      stopped offering, one it marks unavailable, and one that is unusable (its rules, or the route
+      gate) are KEPT in the catalogue so their bindings keep their names — and here they resolve to
+      nothing, so they can never reach the producer builder: no `PLAY … route://` is ever built for
+      a gated input. The refusal below names what happened, from the full catalogue.
+    */
+    const seatableCatalog: SourceCatalog = {
+      ...this.#sourceCatalog,
+      // `ROUTE-PLATES-01` — and only on a channel the entry may be shown on (v1.3 rule 1), and
+      // `PLAYOUT-FEATURES-01` B (`B-298`) — never on the channel whose own output it is.
+      sources: this.#sourceCatalog.sources.filter(
+        (s) =>
+          sourceSeatable(s) && sourceShowableOn(s, slot.channel) && !sourceLoopsOn(s, slot.channel),
+      ),
+    };
+    const bindings = resolveLookBindings({
+      templateId,
+      carrier,
+      assignments: this.#assignmentsFor(itemId, templateId, levelTwo, slot.channel).assignments,
+      channel: slot.channel,
+      catalog: seatableCatalog,
+      bindings: this.#lookSourceBindings.get(itemId),
+      overrides: this.#sourceOverrides.get(itemId),
+      argumentOf: (source) => this.#builder.sourceArgument(source.producer),
+    });
+    /*
+      ⭐ `C-028` — THE OPERATOR'S FIT-MODE OVERRIDES, from the SAME level 2 everything
+      above was resolved against.
+
+      Read off `#assignmentsFor` rather than from a parallel map, because that is the ONE
+      door for this row's assignments (SESSION BP's note above) and a second source of
+      "how does this plate show its input" would eventually disagree with this one about a
+      plate on air. Filtered by `templateId` exactly as `resolvePlateAssignments` filters,
+      so a row cannot pick up another template's override for a same-named plate.
+    */
+    const fitOverrides = new Map<string, LiveFitMode>();
+    for (const a of this.#assignmentsFor(itemId, templateId, levelTwo, slot.channel).assignments) {
+      if (a.templateId !== templateId || a.fitMode === undefined) continue;
+      fitOverrides.set(a.plateId, a.fitMode);
+    }
+    const desired = lookPlateRects(carrier, lookId);
+    const entering = framesOfLook(bindings, lookId);
+
+    /*
+      WHICH FRAMES MAY REFUSE THIS ACTION — see `scope`. A plate ALREADY PUNCHED is a working
+      picture and may never refuse: its assignment vanishing under it is not a reason to
+      refuse the operator's repair of a different box, nor to tear it down.
+    */
+    const punchedAlready = new Set(
+      (this.#liveLayers.get(itemId) ?? []).filter((r) => r.held !== true).map((r) => r.sourceId),
+    );
+    const unresolved = new Set<string>();
+    const mustResolve: LiveSourceDeclaration[] = [];
+    for (const declaration of carrier.sources) {
+      const plateId = declaration.sourceId;
+      if (desired[plateId] === undefined) continue;
+      if (entering.has(plateId)) continue;
+      // This frame of the ENTERED look resolved to nothing.
+      unresolved.add(plateId);
+      if (scope === 'entering-look' || !punchedAlready.has(plateId)) mustResolve.push(declaration);
+    }
+    if (mustResolve.length > 0) {
+      /*
+        The REFUSAL's wording is `resolvePlateAssignments`'s and is asked of it rather than
+        rebuilt here: it distinguishes never-assigned from assigned-to-a-retired-source, names
+        every plate in one sentence, and is already the vocabulary the operator sees at every
+        other door. Only the MODEL moved to the binding resolver; the sentence did not.
+      */
+      const refusal = resolvePlateAssignments({
+        templateId,
+        declarations: mustResolve,
+        // SESSION BP — the SAME level 2 the resolver above used, or the refusal would name
+        // a plate as unassigned that the plan resolved (or, worse, stay silent about one it
+        // did not). `#assignmentsFor` is the one door.
+        assignments: this.#assignmentsFor(itemId, templateId, levelTwo, slot.channel),
+        catalog: this.#sourceCatalog,
+        overrides: this.#effectiveOverridesFor(itemId, lookId),
+        // `ROUTE-PLATES-01` — so an entry this row's channel may not show is named as such.
+        channel: slot.channel,
+        // `B-308` — numbered from the WHOLE declaration; `mustResolve` is a subset of it.
+        plates: carrier.sources,
+      });
+      if (!refusal.ok) {
+        return {
+          ok: false,
+          errorCode: refusal.errorCode,
+          message: refusal.message,
+          ...(refusal.refused !== undefined ? { refused: refusal.refused } : {}),
+        };
+      }
+    }
+
+    /*
+      ONE ENTRY PER SEAT, in binding order. A seat is PUNCHED when the entered look has a
+      frame for it and that frame's hole lands on the frame; otherwise it is PARKED — seated,
+      muted, rendering nothing — which is §12.4's hold, now reached by a plate that has never
+      been on screen as well as by one leaving.
+    */
+    const resolved = new Map<string, SourceDefinition>();
+    const declared = new Set<string>();
+    const offFrame = new Set<string>();
+    /*
+      `B-178` — each frame's resolution WITH WHERE IT CAME FROM, for the operator-facing report.
+
+      🔴 A MAP keyed by plateId, not an array, and the reason is the one `C-028`'s own
+      accumulator used to state here: ONE plateId can own TWO SEATS. A level-3 per-look binding
+      (`swapLiveSource(item, plate, source, lookId)`) points one plate at a different input in
+      another look, and `resolveLookBindings` emits seats looks-major — so a foreign look's
+      frame can be visited AFTER the punched one, and an unguarded write would report the plate
+      under a look nobody is showing. **The punched seat wins, and a parked seat only fills a
+      gap** (the `rect !== undefined` test below).
+    */
+    const fitProvenance = new Map<string, PlateFitReport>();
+    const seated: {
+      plateId: string;
+      producerArg: string;
+      producer: SourceProducer;
+      source: LivePlatePlacement['source'];
+      fit: LivePlatePlacement['fit'];
+      held: boolean;
+      playback?: MediaPlayback;
+    }[] = [];
+
+    for (const seat of bindings.seats.values()) {
+      declared.add(seat.producerArg);
+      resolved.set(seat.producerArg, seat.source);
+      // `MEDIA-PLATES-01` — a clip's playback travels with each of its seats, read ONCE here.
+      const clip =
+        seat.source.producer.kind === 'media' ? { playback: mediaPlaybackOf(seat.source) } : {};
+      const punch = seat.frames.find((f) => f.lookId === lookId);
+      /*
+        The REPRESENTATIVE frame names a parked seat for the ledger and the operator's table.
+        Deterministic — the first look in authored order that binds this input — so two
+        reconciles of the same state produce the same name.
+      */
+      const frame = punch ?? (seat.frames[0] as (typeof seat.frames)[number]);
+      const rect = punch === undefined ? undefined : desired[punch.plateId];
+
+      // 6.3 — the fit aspect through §3a's chain, where the author's assertion is VALIDATED
+      // against the ASSIGNED source. Per FRAME, because two looks may crop one input
+      // differently and may assert different shapes for it.
+      /*
+        `C-028` — the mode, resolved BEFORE the aspect because the aspect's refusal is
+        conditional on it. Per FRAME for the same reason the aspect is: two looks may fit one
+        input differently.
+
+        ⭐ `B-178` — **THE AUTHORED HALF COMES FROM THE FRAME'S OWN LOOK, not from the
+        declaration.** It read `frame.declaration.fitMode`, and under a look group that field
+        has no writer anywhere in the product — so every plate of every look-group template
+        resolved to the `contain` default however the author had set it, and the operator got
+        no signal. `lookPlateFits` is the exact sibling of the `lookPlateRects` call two
+        methods down: one function of the carrier, answering per look, with the pre-LOOKS
+        declaration as its fallback.
+
+        Per FRAME is now load-bearing rather than merely consistent: `frame.lookId` is what
+        selects the box, and the mode describes how the picture sits in THAT box.
+      */
+      const fitMode = resolvePlateFitMode(
+        fitOverrides.get(frame.plateId),
+        lookPlateFits(carrier, frame.lookId)[frame.plateId],
+      );
+      const aspect = resolvePlateAspect({
+        plateId: frame.plateId,
+        plateLabel: plateLabel(carrier.sources, frame.plateId),
+        source: frame.source,
+        expectedAspect: frame.declaration.expectedAspect,
+        fitMode: fitMode.mode,
+      });
+      if (!aspect.ok) {
+        /*
+          A contradicted aspect refuses only where an unresolvable binding would. A seat
+          already up is a working picture, and an author's assertion disagreeing with a
+          since-edited mapping is not a reason to refuse the operator's repair of another box.
+
+          ⚠ NEW STATE, and it is (B′)'s own: one INPUT can be punched by different plates in
+          different looks, and those declarations may assert DIFFERENT `expectedAspect`s —
+          something `looks.ts` calls unrepresentable, which was true while a plate had one
+          producer. The contradiction is per FRAME, so it refuses the look that asserts it and
+          leaves the others alone.
+        */
+        if (rect !== undefined && (scope === 'entering-look' || !punchedAlready.has(frame.plateId)))
+          return { ok: false, errorCode: aspect.errorCode, message: aspect.message };
+        unresolved.add(frame.plateId);
+        continue;
+      }
+      /*
+        `C-028` — RECORDED HERE, off the same `aspect` and `fitMode` the geometry below
+        uses, and BEFORE the parked/punched split so a parked seat's facts travel too.
+
+        Placed after the refusal rather than before it on purpose: a frame that refused
+        has no fit, and telling the page about a plate the plan did not seat would put a
+        hole where nothing is going to be filled.
+      */
+      // 🔴 THE PUNCHED SEAT WINS — see the accumulator's own note above for why one plateId
+      // can arrive twice and why a parked seat may only fill a gap.
+      if (rect !== undefined || !fitProvenance.has(frame.plateId)) {
+        /*
+          ⭐ `B-178` half two — **THE PROVENANCE, KEPT so a human can be told.** `contain` is both
+          the shipped default and a legitimate authored choice, so the mode alone is not evidence
+          that anything the author said arrived. Recorded here, off the same resolution the wire
+          uses, and reported by {@link #reportPlateFits} once the plan is applied.
+
+          Inside the same guard, so the readout names each plate ONCE and names the seat that is
+          actually on screen — a line listing one plateId twice with two answers would be the
+          confusion this signal exists to remove.
+        */
+        fitProvenance.set(frame.plateId, {
+          plateId: frame.plateId,
+          mode: fitMode.mode,
+          from: fitMode.from,
+        });
+      }
+
+      if (rect === undefined) {
+        // PARKED — bound by some other look only. Its size comes from the look that DOES
+        // bind it, so the record still says how big the box will be when it arrives.
+        seated.push({
+          plateId: frame.plateId,
+          producerArg: seat.producerArg,
+          producer: seat.source.producer,
+          source: sourceLabelOf(seat.source),
+          fit: parkedFit(this.#parkedSize(itemId, slot, carrier, frame, aspect.aspect)),
+          held: true,
+          ...clip,
+        });
+        continue;
+      }
+
+      const fit = this.liveSourceFitFor({
+        channel: slot.channel,
+        itemId,
+        rect,
+        sceneResolution: carrier.resolution,
+        carriedDefaultPosition: carrier.defaultPosition,
+        sourceAspect: aspect.aspect,
+        fitMode: fitMode.mode,
+      });
+      /*
+        6.4 — a hole ENTIRELY outside the scene rect has an empty mask.
+
+        🔴 UNDER (B′) THIS PARKS THE SEAT RATHER THAN DROPPING IT. Before, an off-frame plate
+        got no producer at all, because the plate WAS the seat and nothing else could want it.
+        Now the same input may be bound by another look that shows it perfectly well, so
+        dropping the seat would tear down a producer a picker click is about to need. Parked
+        is the honest disposition: nothing renders, and the seat survives.
+      */
+      if (fit.clip === null) {
+        offFrame.add(frame.plateId);
+        /*
+          🔴 WHETHER IT STILL GETS A SEAT DEPENDS ON WHO ELSE WANTS THE INPUT, and the split
+          keeps BOTH shipped rules true instead of choosing between them.
+
+          The original rule was "seat NO PRODUCER AT ALL — allocating a layer for a producer
+          that will never be sent would burn one out of a band that has to hold every other
+          box", and it is still right when this frame is the ONLY thing binding the input:
+          nothing can show it until the row's position moves back.
+
+          But the release policy has always HELD a plate that goes off-frame while seated, and
+          under (B′) another look may bind the same input and show it perfectly well. Dropping
+          the seat there would tear down a producer one picker click is about to need — so it
+          parks instead, which is what a seat no visible frame punches means everywhere else
+          in this method.
+        */
+        if (seat.frames.length === 1) continue;
+        seated.push({
+          plateId: frame.plateId,
+          producerArg: seat.producerArg,
+          producer: seat.source.producer,
+          source: sourceLabelOf(seat.source),
+          fit: parkedFit({ width: fit.fill.width, height: fit.fill.height }),
+          held: true,
+          ...clip,
+        });
+        continue;
+      }
+      seated.push({
+        plateId: frame.plateId,
+        producerArg: seat.producerArg,
+        producer: seat.source.producer,
+        source: sourceLabelOf(seat.source),
+        fit: { fill: fit.fill, clip: fit.clip },
+        held: false,
+        ...clip,
+      });
+    }
+
+    // The EMPTY look is valid and carries an empty map — background alone. It is not an early
+    // exit from the reconcile: everything the item has seated is still released or parked by
+    // the policy in `#applyLivePlates`, which is the difference between a look with no plates
+    // and a template with none.
+    if (seated.length === 0)
+      return {
+        ok: true,
+        placements: [],
+        parked: [],
+        resolved,
+        offFrame,
+        declared,
+        unresolved,
+        resolvedFrom,
+        fitProvenance: [...fitProvenance.values()],
+      };
+
+    // `PLATE-BAND-01` — the band IN FORCE: declared, or a Playout-linked station's default.
+    const range = this.#plateBand();
+    if (range === undefined) {
+      return {
+        ok: false,
+        errorCode: LIVE_PLATE_NO_RANGE,
+        message:
+          `this template has ${String(seated.length)} live plate(s), but no Live Source layer ` +
+          `band is declared on this installation — there is nowhere to put a producer. ` +
+          `Declare the band in CG Control's source settings, then take again.`,
+      };
+    }
+
+    /*
+      RE-USE THE LAYER A SEAT IS ALREADY ON, and this is not an optimisation.
+
+      A re-take of an item that still owns its layers must land on the SAME coordinates.
+      Moving a producer would leave the old layer's one running with nobody's name on it — the
+      ledger (which teardown walks) would now name the new layer, so the old picture would sit
+      on air until somebody noticed it by eye.
+
+      🔴 KEYED ON THE PRODUCER, NOT THE PLATE. That is (B′)'s identity: the thing that must
+      not move is the PRODUCER's coordinate. Keying on the plate would re-seat an input whose
+      punching frame merely changed name across a look switch — the visible re-acquire §12.4
+      chose "held" to avoid, arriving through the back door.
+    */
+    const currentLayer = new Map<string, number>();
+    /*
+      🔴 AND THE LAYER A PLATE'S OUTGOING SEAT IS ON — which is what keeps `R-048`'s
+      substitution a REPLACE IN PLACE (`B-126`) now that identity is the producer.
+
+      Moving the identity onto the input made an arriving producer a seat with no history:
+      `currentLayer` cannot know it, so it would take a FRESH layer and the dead feed's layer
+      would be cleared afterwards. Two costs, both real — the band needs a spare layer for a
+      repair that used to need none (on a band sized to the template, the repair is REFUSED),
+      and the swap stops being the in-place replace its whole contract is written around.
+
+      So a plate whose seat is LEAVING ENTIRELY hands its layer to whatever that plate is
+      about to show. "Leaving entirely" is the load-bearing half: an input still bound by
+      another look keeps its producer and therefore keeps its layer, so this can never hand
+      out a coordinate something of ours is still using.
+    */
+    const departingLayerOfPlate = new Map<string, number>();
+    for (const record of this.#liveLayers.get(itemId) ?? []) {
+      if (record.slot.channel !== slot.channel) continue;
+      currentLayer.set(record.producer, record.slot.layer);
+      if (!declared.has(record.producer))
+        departingLayerOfPlate.set(record.sourceId, record.slot.layer);
+    }
+    const preferred = seated.map(
+      (s) => currentLayer.get(s.producerArg) ?? departingLayerOfPlate.get(s.plateId),
+    );
+    /*
+      🔴 `ours` IS THE LAYERS THIS PLAN WILL OCCUPY — **NOT** EVERY LAYER THE ITEM OWNS.
+
+      Under (B′) the plan covers every seat the item needs, PARKED ONES INCLUDED, so this set
+      is now nearly always the whole ledger — but the distinction still has to be drawn from
+      `preferred` rather than from the ledger, and the reason is the one session BC's review
+      found: a record the plan does NOT cover (an input no look binds any more, about to be
+      torn down) must not be handed out as free while its producer is still on it. A fresh
+      `PLAY` onto it would destroy that producer with no `CLEAR` and leave the ledger naming
+      one slot twice.
+    */
+    const ours = new Set(preferred.filter((layer): layer is number => layer !== undefined));
+    // A layer carrying a bound template is not free either. `#slots` is that fact's single
+    // source, exactly as `#declaredLayerClass` is for the three DECLARED classes.
+    const bound = new Set<number>();
+    for (const s of this.#slots.values()) if (s.channel === slot.channel) bound.add(s.layer);
+
+    const layers = allocateLiveLayers({
+      range,
+      preferred,
+      // ⚠ OUR OWN ledgered layers count as AVAILABLE — for this item, and only for the seats
+      // this plan is actually placing (see `ours` above).
+      isAvailable: (layer) =>
+        ours.has(layer) ||
+        (this.#declaredLayerClass(slot.channel, layer) === null && !bound.has(layer)),
+    });
+    if (layers === null) {
+      return {
+        ok: false,
+        errorCode: LIVE_PLATE_NO_LAYER,
+        message: liveBandExhaustedMessage({
+          needed: seated.length,
+          range,
+          channel: slot.channel,
+        }),
+      };
+    }
+
+    // `ROUTE-PLATES-01` rule 5 — a Playout route carries the epoch its `route://H-L` was read in.
+    const epoch = this.#sourceCatalog.inputsEpoch;
+    const allocated = seated.map((s, i) => ({
+      slot: { channel: slot.channel, layer: layers[i] as number },
+      plateId: s.plateId,
+      producerArg: s.producerArg,
+      producer: s.producer,
+      source: s.source,
+      fit: s.fit,
+      held: s.held,
+      ...(epoch !== undefined && isPlayoutRoute({ origin: s.source.origin, producer: s.producer })
+        ? { epoch }
+        : {}),
+      ...(s.playback !== undefined && { playback: s.playback }),
+    }));
+    /*
+      SPLIT AFTER ALLOCATION, and only after — a parked seat holds its layer exactly as a
+      punched one does, so both have to be in the same allocation or a preset would be handed
+      a layer somebody else is already on. What differs is only what goes on the WIRE.
+    */
+    return {
+      ok: true,
+      resolved,
+      offFrame,
+      declared,
+      unresolved,
+      placements: allocated.filter((p) => !p.held),
+      parked: allocated.filter((p) => p.held),
+      resolvedFrom,
+      fitProvenance: [...fitProvenance.values()],
+    };
+  }
+
+  /**
+   * ⭐ `B-178` — **SAY WHICH FIT EACH PLATE IS RUNNING, AND WHETHER ANYONE ASKED FOR IT.**
+   *
+   * ── THE FAILURE THIS EXISTS TO END ──────────────────────────────────────────
+   *
+   * The owner set two plates side by side, one `contain` and one `cover`, exported, took it on
+   * the plant — and both went to air `contain`. Nothing anywhere said so. The mode reached the
+   * wire correctly-shaped and simply wrong, because `contain` is BOTH the shipped default and a
+   * legitimate authored choice: reading `mode: "contain"` off a payload dump proves nothing
+   * about whether the author was heard. Diagnosing it took a plant walk, a `.vcg` unpack and a
+   * hand comparison of two `MIXER FILL` rects.
+   *
+   * 🔴 **The line goes to stderr at TAKE, beside the refusals, because a log is the artefact a
+   * human was reading when this bug was found.** ⚠ Stated precisely, because the loose version
+   * is not true: the payload and geometry that exposed `B-178` came from **CasparCG's own server
+   * log**, not from the bridge's stderr. What the evidence supports is that the person debugging
+   * a wrong picture reads LOGS — and of the two, this is the one that can name a mode's
+   * provenance at all, because only the bridge knows it. A signal in a place nobody opens is the
+   * defect one level up, so the claim is kept to what was observed.
+   *
+   * ── ⚠ WHY IT IS A READOUT AND NOT A WARNING ─────────────────────────────────
+   *
+   * The first draft raised a ⚠ whenever any plate fell through to the default, and it fired on
+   * essentially every take: most templates author no fit at all, and for them the default is
+   * simply correct. **A warning that is usually wrong is how a signal stops being read** — and
+   * this line exists precisely because the previous signal (none) was not read. So it states
+   * facts and gives no advice: the diagnostic power is the word `default` appearing where the
+   * author expected `authored`, which is the whole inference the owner had to make by hand.
+   *
+   * ⚠ **It is a LOG LINE and deliberately not a badge on the operator's row.** `B-143` already
+   * records that three per-plate facts want a row-level home and asks that the first of them
+   * build it deliberately rather than bolting on a private surface. This does not pre-empt that;
+   * it puts the fact where the person debugging a wrong picture is already looking.
+   */
+  #reportPlateFits(itemId: string, report: readonly PlateFitReport[]): void {
+    if (report.length === 0) return;
+    const shown = report.map((r) => `${r.plateId}=${r.mode} (${r.from})`).join(', ');
+    process.stderr.write(`[caspar-bridge] ${itemId} live-plate fit — ${shown}\n`);
+  }
+
+  /**
+   * 🔴 `B-308` — **A ROW'S PLATE IN THE OPERATOR'S WORDS: `Plate N`**, its position among the
+   * template's declared plates — the template version the row's channel lists — through
+   * `@cg/shared-ipc`'s `plateLabel`, the numbering the console's swap dialog, Inspector and row line
+   * use. Every sentence this bridge says about a plate names it by this; the id stays in the payload
+   * and in a log line's detail. `undefined` for a plate the template does not declare.
+   */
+  #plateLabelOf(itemId: string, plateId: string): string | undefined {
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    const slot = this.#slots.get(itemId);
+    if (templateId === undefined || slot === undefined) return undefined;
+    return plateLabel(
+      this.#templates.getOn(slot.channel, templateId)?.liveSources?.sources,
+      plateId,
+    );
+  }
+
+  /**
+   * 🔴 **§6.2 / §2.7 — THE DOOR A BINDING CHANGE IS REFUSED AT: HERE, IN CG CONTROL, WHILE
+   * THE OPERATOR IS WATCHING — never at the take and never on air.**
+   *
+   * Two refusals, one door, because they are the two ways a binding can be impossible and
+   * the operator meets both at the same moment:
+   *
+   * - **§6.2** — two frames of ONE look pointed at ONE input. One seat, so one of the two
+   *   frames goes to air empty. {@link seatCollisionMessage} carries why no export check
+   *   can catch it.
+   * - **§2.7** — the band cannot hold the resulting seat set. Demand is now the number of
+   *   DISTINCT INPUTS bound across the item's looks, so PRESETTING raises it: the band can
+   *   be exhausted by an assignment, which it never could before. Answered by running the
+   *   real planner against the prospective maps rather than by counting here, so there is
+   *   one allocator and the answer cannot drift from what the take would do.
+   *
+   * ⚠ **PROSPECTIVE, AND IT MUTATES NOTHING.** The maps are passed in rather than written
+   * first, so a refused binding leaves no trace — `tasks.md` 7.9's lesson, and this method
+   * is a second writer into the same area.
+   */
+  #refuseBindingChange(
+    itemId: string,
+    slot: CommandSlot,
+    next: {
+      overrides?: Record<string, string> | undefined;
+      bindings?: LookSourceBindings | undefined;
+    },
+  ): { reason: string; message: string } | null {
+    const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
+    const template = this.#templates.getOn(slot.channel, templateId);
+    const carrier = template === null ? undefined : template.liveSources;
+    if (template === null || carrier === undefined) return null;
+
+    const prospective = resolveLookBindings({
+      templateId,
+      carrier,
+      // SESSION BP — the FROZEN level 2 for a row that has one. A prospective plan built on
+      // the live store would refuse (or accept) a binding change against an assignment the
+      // row is not resolving from, which is the collision check answering about a different
+      // seat set than the reconcile below it will build.
+      assignments: this.#assignmentsFor(itemId, templateId, 'pinned', slot.channel).assignments,
+      channel: slot.channel,
+      catalog: this.#sourceCatalog,
+      bindings: next.bindings,
+      overrides: next.overrides,
+      argumentOf: (source) => this.#builder.sourceArgument(source.producer),
+    });
+    const collision = prospective.collisions[0];
+    if (collision !== undefined) {
+      // `B-309` — the sentence names the look and the plates in the operator's words; the ids go here.
+      process.stderr.write(
+        `[caspar-bridge] ${itemId}: refused (live-source-duplicate) — plates ` +
+          `${collision.plateIds.map((id) => `"${id}"`).join(', ')} would both show ` +
+          `${collision.producerArg}` +
+          `${collision.lookId === undefined ? '' : ` in look "${collision.lookId}"`}\n`,
+      );
+      return {
+        reason: 'live-source-duplicate',
+        message: seatCollisionMessage(collision, carrier),
+      };
+    }
+    /*
+      🔴 `PLAYOUT-FEATURES-01` B (`B-298`) and `B-299` — A NEW BINDING THIS ROW'S CHANNEL MAY NOT SHOW: the
+      channel's own output (it would loop), or a Playout route whose `compatibleChannels` do not name the
+      channel (contract v1.3 rule 1). Refused HERE, from the prospective maps, before anything is written
+      or sent: the take's resolver names both for a plate it must resolve, but a swap or an UPDATE of a
+      plate already punched never reaches that question — the planner resolves such a plate from the
+      showable entries alone, the new one is not among them, and the swap was ACCEPTED with nothing sent
+      and the old picture left on air (`B-299`, measured). The same clauses as the take's.
+
+      ⚠ Only a binding that is NEW or CHANGED against the one in force is asked: an unchanged binding is
+      never refused for what became of its entry since (`unbindableChange`'s doctrine), so an UPDATE of a
+      row's texts is not blocked by a mark the Playout added to its input after it was bound.
+    */
+    const inForce = resolveLookBindings({
+      templateId,
+      carrier,
+      assignments: this.#assignmentsFor(itemId, templateId, 'pinned', slot.channel).assignments,
+      channel: slot.channel,
+      catalog: this.#sourceCatalog,
+      bindings: this.#lookSourceBindings.get(itemId),
+      overrides: this.#sourceOverrides.get(itemId),
+      argumentOf: (source) => this.#builder.sourceArgument(source.producer),
+    });
+    const frameKey = (frame: {
+      lookId: string | undefined;
+      plateId: string;
+      source: { id: string };
+    }) => `${frame.lookId ?? ''}\u001f${frame.plateId}\u001f${frame.source.id}`;
+    const held = new Set(inForce.frames.map(frameKey));
+    for (const frame of prospective.frames) {
+      if (held.has(frameKey(frame))) continue;
+      // `B-308` — the plate is `Plate N` and the source's name sits in its own isolate.
+      const plate = plateLabel(carrier.sources, frame.plateId) ?? 'A plate';
+      if (sourceLoopsOn(frame.source, slot.channel)) {
+        const words = ownOutputWords(frame.source.name, slot.channel);
+        return {
+          reason: SOURCE_OWN_OUTPUT_CODE,
+          message: `${plate}: “${isolateText(words.name)}”${words.rest}`,
+        };
+      }
+      if (!sourceShowableOn(frame.source, slot.channel)) {
+        const words = notShowableWords(frame.source.name, slot.channel);
+        return {
+          reason: LIVE_PLATE_SOURCE_NOT_SHOWABLE,
+          message: `${plate}: “${isolateText(words.name)}”${words.rest}`,
+        };
+      }
+    }
+
+    /*
+      The band question, asked of the PLANNER. Applied and restored around the call because
+      the planner reads the runtime's maps — the same write-then-roll-back shape
+      `swapLiveSource` has always used for the reconcile, kept to one spelling.
+    */
+    const restoreOverrides = this.#sourceOverrides.get(itemId);
+    const restoreBindings = this.#lookSourceBindings.get(itemId);
+    this.#applyBindingMaps(itemId, next.overrides, next.bindings);
+    const plan = this.#planLiveSeating(
+      itemId,
+      slot,
+      this.activeLookId(itemId),
+      'already-live',
+      'pinned',
+    );
+    this.#applyBindingMaps(itemId, restoreOverrides, restoreBindings);
+    if (!plan.ok && plan.errorCode === LIVE_PLATE_NO_LAYER) {
+      const range = this.#plateBand();
+      return {
+        reason: plan.errorCode,
+        message:
+          range === undefined
+            ? plan.message
+            : liveBandExhaustedMessage({
+                needed: prospective.seats.size,
+                range,
+                channel: slot.channel,
+                where: 'assignment',
+              }),
+      };
+    }
+    return null;
+  }
+
+  /**
+   * 🔴 **SESSION BM-2 — THE ONE TRANSACTION THAT MOVES A ROW'S INPUT BINDINGS.**
+   *
+   * Refuse → write → reconcile → roll back on failure → publish. Both writers call it:
+   * `swapLiveSource` (one plate, one scope) and `update` (the operator's whole staged set,
+   * with the texts). They were one method's worth of ordering that the second writer would
+   * have had to reproduce, and the ordering is not incidental — every step exists because
+   * getting it wrong puts a wrong picture on air:
+   *
+   *   - **REFUSE FIRST, from PROSPECTIVE maps.** Nothing is written and nothing is sent, so
+   *     a refused change records nothing (`tasks.md` 7.9's rule, which this is the second
+   *     writer into).
+   *   - **WRITE BEFORE RECONCILING.** The planner resolves from these maps, so the
+   *     prospective value has to be in place for the reconcile to see it.
+   *   - **ROLL BACK THE MAPS, NOT THE WIRE, ON FAILURE.** `#applyLivePlates` already leaves
+   *     the layers in their honest state and says so; what must not survive is a RECORDED
+   *     binding the plant never took.
+   *   - **PUBLISH LAST.** A row must never announce a binding that did not land.
+   *
+   * ⚠ It does NOT tell the page. That is the caller's, and it is where the two differ:
+   * `swapLiveSource` deliberately tells it nothing (`R-048` sends only its own producer's
+   * commands), while `update` sends the `CG UPDATE` **after** this returns ok — BD's
+   * fills-first-page-last-and-only-on-success, which is why the page half cannot live here.
+   *
+   * ⚠ **`B-174` reversed that order for the LOOK SWITCH ONLY** (page first, mixer held one
+   * frame — the measured skew is a property of a GEOMETRY CUT the eye watches both halves
+   * of). This binding path keeps fills-first deliberately: its `CG UPDATE` carries text and
+   * bindings, not a hole move, so there is no visible page/mixer seam to align — and its
+   * failure semantics ("a refused change records nothing, page untold") stay the simple
+   * ones. If a skew is ever MEASURED on this path, align it the same way, at the same
+   * `beforeApply` seam — do not invent a second spelling of the hold.
+   */
+  /**
+   * 🔴 **`B-161` / `B-216` — DOES THIS ROW OWN LIVE LAYERS RIGHT NOW?** The question a
+   * configuration verb must ask before it is allowed to touch one — and the ONE predicate every
+   * door asks it through: `update`'s binding transaction, `swapLiveSource`, `setActiveLook`, and
+   * a volume RAISE. Golden rule 6: a second spelling of this question at any door is how two
+   * doors came to answer one row two ways (`B-216`).
+   *
+   * TWO ways to own them, and they are the two axes the owner named (`UPDATE-INFORCE-02` §2):
+   *
+   * - **on air** — {@link isOnAirStatus}, the ONE canonical status predicate, REUSED here
+   *   rather than re-derived. Status is the truth about what the operator SEES. An on-air row
+   *   with an EMPTY ledger (taken on the empty look, or every plate a `media` clip that §12.4's
+   *   named fallback tore down) is still unambiguously on air, which is why the ledger alone
+   *   was never enough — `setActiveLook`'s old note, kept here where the predicate lives.
+   * - **the LEDGER holds seats for it** — `#liveLayers`, the truth about what the bridge OWNS: a
+   *   structural fact it wrote when it sent the `PLAY`, and the one thing `B-145`'s boot
+   *   adoption restores while the row's status is not. Those producers are on their layers,
+   *   composited on the channel, whatever any status claims — so a configuration change on
+   *   that row re-points something genuinely on air, and PANIC already scopes itself by this
+   *   same fact.
+   *
+   * 🔴 **REHEARSE IS NOT IN IT, AND THIS REVERSES `B-161`'s SECOND CLAUSE.** `B-161` wrote
+   * `on air OR rehearsing`, on the argument that a rehearsing row "owns its plates on PVW". It
+   * does not. PVW is a BROWSER-side render of the retained page (`R-022`: *"nothing is ever sent
+   * to CasparCG"*); `enterRehearse` sends at most one `MIXER VOLUME 0` to the TEMPLATE layer and
+   * seats nothing. So a rehearsing, never-taken row owns no live layer — and with rehearse in the
+   * predicate an UPDATE on it reconciled and SEATED its plates: four `PLAY`s, four `VOLUME 0`,
+   * eight `FILL`/`CLIP`, measured at the wire (`ownership-is-the-ledger.integration.test.ts`) —
+   * `B-161`'s own defect, reached through the flag `B-161` added. A rehearsing row that DOES hold
+   * seats (adopted at boot, then put on PVW) is reached by the ledger half, for the seats' sake.
+   *
+   * ⚠ Both halves, read once, here. Not the status alone (the adopted-seats row would be
+   * refused a re-point its pictures visibly need); not the ledger alone (see the first bullet).
+   *
+   * Everything else — `idle`, `loaded`, a row that has been taken out, a row on PVW with nothing
+   * seated — owns nothing, so a binding change for it is pure state and the next take is what
+   * puts it on air.
+   */
+  #ownsLiveSeats(itemId: string): boolean {
+    // `FIELD-FIXES-01-A` — the two halves are SPELLED in `@cg/shared-schema` now, where the
+    // console's PLAY and the mock's take ask the same question; this reads the bridge's own
+    // copy of each fact and hands them over.
+    return ownsLiveSeats(
+      this.#reconciler.get(itemId),
+      (this.#liveLayers.get(itemId) ?? []).length > 0,
+    );
+  }
+
+  async #applyBindingTransaction(
+    itemId: string,
+    slot: CommandSlot,
+    next: {
+      overrides: Record<string, string> | undefined;
+      bindings: LookSourceBindings | undefined;
+    },
+  ): Promise<{ ok: boolean; reason?: string; message?: string }> {
+    const refusal = this.#refuseBindingChange(itemId, slot, next);
+    if (refusal !== null) return { ok: false, ...refusal };
+
+    const restoreOverrides = this.#sourceOverrides.get(itemId);
+    const restoreBindings = this.#lookSourceBindings.get(itemId);
+    this.#applyBindingMaps(itemId, next.overrides, next.bindings);
+
+    /*
+      🔴 **`B-161` — A CONFIGURATION VERB IS NEVER A PLAYOUT VERB.**
+
+      The owner, on the plant: he STOPPED several plates, SWAPPED their inputs and pressed
+      UPDATE only — no play, no take — and **the boxes went to AIR: the videos played with no
+      template above them.** No background, no strokes, none of the page's chrome, because no
+      page had been taken. Measured at the wire on a `loaded` row: four `PLAY`s, four
+      `MIXER VOLUME 0` and eight `MIXER FILL`/`CLIP`, sizing them into the look's geometry.
+
+      `UPDATE` puts values **IN FORCE**; only a **take** puts content **ON AIR**. So the
+      bindings above have already landed in STATE — that is the verb's whole job, and the next
+      take seats them — and a row that owns no live layers stops here, before anything can
+      reach one.
+
+      ⚠ **THE GATE IS AT THE ROW, NEVER AT THE LOOK OR THE VISIBLE HOLE.** On a row that IS
+      live this returns early for nothing and the reconcile below runs exactly as before,
+      UNION pre-seat and all — every look's inputs stay seated, including the looks that are
+      not punched. That pre-seating is what makes a switch pure `MIXER FILL`; narrowing it to
+      the punched look would put a `PLAY` back inside a switch and reintroduce `B-155` case 3,
+      which session BT closed on `4777b724`. A gate that changes the pre-seat SET is the wrong
+      gate, and `live-look-reconcile.integration.test.ts`'s `neighbour 1` asserts the whole set
+      rather than the one box a reader would think to look at.
+
+      ⚠ **AND IT IS NOT `isOnAirStatus` ALONE — the other half is the LEDGER, not the rehearse
+      flag (`B-216`).** `B-161` first wrote `on air OR rehearsing` here, and `neighbour 2`
+      pinned it: an UPDATE on a rehearsing, never-taken row went on SEATING its plates — four
+      `PLAY`s on a row nobody had taken, this file's own defect reached through the flag added
+      to fix it. A rehearsing row owns nothing on the channel (PVW is a browser render); a row
+      whose seats survived a restart owns them whatever its status says. Hence
+      {@link #ownsLiveSeats}, which asks the question this decision actually turns on, and
+      which `setActiveLook` and `swapLiveSource` now ask too — one predicate, three doors.
+    */
+    if (!this.#ownsLiveSeats(itemId)) {
+      this.#applySourceOverride(itemId, next.overrides ?? {}, next.bindings);
+      return { ok: true };
+    }
+
+    const reconciled = await this.reconcileLivePlates(itemId, {
+      // The row may be ON AIR. A failure must not black the plates that are working; see
+      // {@link reconcileLivePlates}.
+      mode: 'live',
+    });
+    if (!reconciled.ok) {
+      this.#applyBindingMaps(itemId, restoreOverrides, restoreBindings);
+      return {
+        ok: false,
+        ...(reconciled.errorCode !== undefined && { reason: reconciled.errorCode }),
+        ...(reconciled.message !== undefined && { message: reconciled.message }),
+      };
+    }
+    this.#applySourceOverride(itemId, next.overrides ?? {}, next.bindings);
+    return { ok: true };
+  }
+
+  /** Set or clear both binding maps for one item, without publishing. */
+  #applyBindingMaps(
+    itemId: string,
+    overrides: Record<string, string> | undefined,
+    bindings: LookSourceBindings | undefined,
+  ): void {
+    if (overrides === undefined || Object.keys(overrides).length === 0)
+      this.#sourceOverrides.delete(itemId);
+    else this.#sourceOverrides.set(itemId, overrides);
+    if (bindings === undefined || Object.keys(bindings).length === 0)
+      this.#lookSourceBindings.delete(itemId);
+    else this.#lookSourceBindings.set(itemId, bindings);
+  }
+
+  /**
+   * 🔴 **THE EFFECTIVE `{plate → catalog id}` FOR ONE LOOK — levels 3 and 4, flattened.**
+   *
+   * `resolvePlateAssignments` takes a single per-plate override map, and under (B′) two
+   * levels feed it. Flattened HERE, once, so the refusal path and the binding resolver
+   * cannot disagree about which of them wins — the emergency patch does, everywhere
+   * (`live-look-bindings.ts` carries the argument).
+   */
+  /**
+   * 🔴 **SESSION BP — THE ONE PLACE LEVEL 2 IS READ FOR A ROW: its frozen snapshot if it
+   * has one, the live store if it does not.**
+   *
+   * Every resolver that needs the template assignment for a specific ITEM comes through
+   * here — the seating plan, the refusal path's `resolvePlateAssignments`, and the
+   * prospective plan `#refuseBindingChange` builds. `this.#sourceAssignments` is read
+   * directly ONLY by the store's own accessors (`sourceAssignments()` /
+   * `setSourceAssignments`), which are answering a question about the INSTALLATION rather
+   * than about a row.
+   *
+   * ⚠ **A second reader is how the freeze would come to be half-applied**, and §6's stop
+   * rule names that outcome as worse than today's single consistent wrong answer: some
+   * switches resolving frozen and others live is a row whose picture depends on which verb
+   * the operator happened to press.
+   *
+   * The frozen map is STRICT and complete for level 2 — a plate absent from it is
+   * unassigned for this run and does NOT fall through to the live store. See the schema for
+   * why a partial freeze would reopen the multi-station case for exactly those plates.
+   */
+  #assignmentsFor(
+    itemId: string,
+    templateId: string,
+    levelTwo: LevelTwoSource,
+    /**
+     * 🔴 `CHANNEL-SOURCES-01` decision 2 — the row's channel. The live store answers the defaults
+     * IN FORCE ON IT ({@link assignmentsOnChannel}), so a change on one channel never reaches a row
+     * on another. A frozen snapshot is already this row's own.
+     */
+    channel: number,
+  ): SourceAssignments {
+    const frozen = levelTwo === 'fresh' ? undefined : this.#frozenAssignments.get(itemId);
+    if (frozen === undefined) return assignmentsOnChannel(this.#sourceAssignments, channel);
+    return {
+      assignments: Object.entries(frozen).map(([plateId, sourceId]) => ({
+        templateId,
+        plateId,
+        sourceId,
+      })),
+    };
+  }
+
+  /**
+   * 🔴 **SESSION BP — THE THAW: this row is off air, so level 2 resolves LIVE again.**
+   *
+   * ONE method, called by the two verbs that take a row off air and bring its plates down —
+   * `out` (CLEAR, producer destroyed) and `stopItem` (outro, producer resident). They are
+   * two spellings of the same fact and a second inline `delete` in either is how the rule
+   * would come to differ between them (golden rule 6). `remove` deletes it with everything
+   * else the item owns, in the one place that already does that.
+   *
+   * 🔴 **ONLY WHEN THE COMMAND LANDED.** A refused or failed teardown means the graphic may
+   * still be ON AIR, and thawing there would hand `B-155` back the exact window this feature
+   * closes: an edit lands in the store, the operator's next look press applies it, and the
+   * previous guest flashes on a row nobody believes is live. Keeping the pin while we cannot
+   * prove the row is off is the conservative direction, and it costs nothing — the next
+   * successful `take` re-freezes, and the next successful `out` thaws.
+   */
+  #thawAssignment(itemId: string, landed: boolean): void {
+    if (!landed) return;
+    this.#frozenAssignments.delete(itemId);
+  }
+
+  /** The level-2 answer in force for one item, flattened to `{plate → catalog id}`. */
+  #assignmentMapFor(
+    itemId: string,
+    templateId: string,
+    levelTwo: LevelTwoSource,
+    /** `CHANNEL-SOURCES-01` — the row's channel, as for {@link #assignmentsFor}. */
+    channel: number,
+  ): Record<string, string> {
+    const frozen = levelTwo === 'fresh' ? undefined : this.#frozenAssignments.get(itemId);
+    if (frozen !== undefined) return { ...frozen };
+    const map: Record<string, string> = {};
+    for (const a of assignmentsOnChannel(this.#sourceAssignments, channel).assignments) {
+      if (a.templateId === templateId) map[a.plateId] = a.sourceId;
+    }
+    return map;
+  }
+
+  #effectiveOverridesFor(
+    itemId: string,
+    lookId: string | undefined,
+  ): Record<string, string> | undefined {
+    return effectiveOverridesForLook(
+      lookId,
+      this.#lookSourceBindings.get(itemId),
+      this.#sourceOverrides.get(itemId),
+    );
+  }
+
+  /**
+   * The size a PARKED seat's box records — the fit it will have in the look that binds it.
+   *
+   * Parked geometry renders nothing whatever its size ({@link parkedFit} moves the box off
+   * the raster), so this is for the LEDGER's honesty rather than for the wire: a reader of
+   * the layer table sees the box this input is waiting to fill, not a zero. A frame whose
+   * hole is off-frame in its own look has no fit at all and records a zero, which is the
+   * true answer for it.
+   *
+   * ⚠ `B-178` — **the MODE is resolved here too, from the parked frame's OWN look.** It read no
+   * mode at all, so the recorded box was always the `contain` one; a plate parked in a look that
+   * authored `cover` reported a box narrower than the one it will actually fill. Harmless on the
+   * wire (parked geometry renders nothing) and a lie in the ledger, which is the one thing this
+   * method exists to keep honest. Resolved through the same `lookPlateFits` the punched path
+   * uses, against the same `frame.lookId` the rect above comes from — so the size and the shape
+   * can never describe different looks.
+   */
+  #parkedSize(
+    itemId: string,
+    slot: CommandSlot,
+    carrier: NonNullable<TemplateInfo['liveSources']>,
+    frame: { lookId: string | undefined; plateId: string },
+    sourceAspect: number | null,
+  ): { width: number; height: number } {
+    const rect = lookPlateRects(carrier, frame.lookId)[frame.plateId];
+    if (rect === undefined) return { width: 0, height: 0 };
+    const fit = this.liveSourceFitFor({
+      channel: slot.channel,
+      itemId,
+      rect,
+      sceneResolution: carrier.resolution,
+      carriedDefaultPosition: carrier.defaultPosition,
+      sourceAspect,
+      fitMode: lookPlateFits(carrier, frame.lookId)[frame.plateId],
+    });
+    return { width: fit.fill.width, height: fit.fill.height };
+  }
+
+  /**
+   * `multibox-layout-switch` §14 (LOOKS) phase 3 — **which LOOK is this item showing.**
+   *
+   * `undefined` when the template authors none — a pre-LOOKS template, or one whose
+   * carrier predates the field. That is a THIRD answer and not "the first look": a
+   * template with no looks has one fixed set of rects, and pretending it has a look would
+   * make `#desiredPlateRects` answer from an empty rect map and release every plate.
+   *
+   * An item that has never switched resolves to the AUTHORED DEFAULT (`defaultLookId`),
+   * because exactly one look is always active (§14.5): `#activeLooks` records a DEPARTURE
+   * from that default, so a fresh take needs no write to enter the right one. The final
+   * `?? looks[0]` is the same tolerant read `defaultLookOf` makes — a carrier whose
+   * `defaultLookId` names nothing is a broken import, and refusing to show anything at all
+   * would be a worse answer than showing the first look.
+   */
+  #activeLookOf(itemId: string): TemplateLook | undefined {
+    const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
+    const carrier = this.#templateOfItem(itemId, templateId)?.liveSources;
+    if (carrier === undefined) return undefined;
+    /*
+      🔴 `B-151` — THE FALLBACK CHAIN MOVED TO `@cg/shared-ipc`'s `activeLookOf`, and this
+      method is now the bridge's ITEM-KEYED door onto it rather than a second copy of it.
+
+      It read exactly right and was still a liability: PVW's placeholder overlay needed the
+      same answer, could not call a private method on a process it does not run in, and so
+      grew its own idea of the layout — which was to draw every declared source at once.
+      Putting the rule on the CARRIER means the bridge, the page and the console all resolve
+      the look from one function. What stays here is the only part that is genuinely the
+      bridge's: which item, and what this bridge has recorded for it.
+    */
+    return activeLookOf(carrier, this.#activeLooks.get(itemId));
+  }
+
+  /** §14 phase 3 — the look this item is showing, for a caller that only needs the id. */
+  activeLookId(itemId: string): string | undefined {
+    return this.#activeLookOf(itemId)?.id;
+  }
+
+  /**
+   * 🔴 **`tasks.md` 7.9 — WRITE "which look this row is on", and the ONE precondition for
+   * calling it: THE PAGE ALREADY AGREES.**
+   *
+   * `#activeLooks` is read by `#desiredPlateRects`, which is what every reconcile — the take,
+   * the switch, **and `swapLiveSource`** — resolves its rects from. So the map is not a record
+   * of what the operator ASKED for; it is a record of **which look's holes the page is
+   * punching**, and every write has to be able to justify that claim. There are exactly two
+   * ways to earn it, and they are the only call sites:
+   *
+   *   1. {@link #tellPageLook} succeeded — the page was told, in so many words;
+   *   2. there is no page to disagree — an off-air row with nothing seated, or a row whose
+   *      producer is gone. Both re-enter through `#sendAdd`, which puts `#activeLookOf` in the
+   *      `CG ADD` payload unconditionally, so the next build enters this look by construction.
+   *
+   * The restore path writes the map directly and is the deliberate third case: it re-applies a
+   * look that was published — therefore already told — before the bridge restarted.
+   */
+  #recordActiveLook(itemId: string, lookId: string): void {
+    this.#activeLooks.set(itemId, lookId);
+    /*
+      🔴 **PUBLISH IT. `stackSnapshot()` being correct is NOT the same as a browser knowing.**
+
+      `#published()` recomputes the look on every read, so a PULL was always right — which is
+      exactly why this was easy to miss and why the test that first covered it (reading
+      `stackSnapshot()`) passed while the console would have been stuck. The browser learns
+      about item state ONLY from `stackChanged`, and `#markDirty` is the one thing that emits
+      it. Without this line an operator presses a look, the fills move on air, and the picker
+      goes on marking the OLD one until some unrelated change happens to publish.
+
+      ⚠ The offline mock had it right from the start (`setActiveLook` → `#emitStack()`), which
+      inverted the usual risk: the mock was MORE correct than the bridge, so the E2E passed too.
+      A parity test is not a substitute for asking whether the real path publishes.
+    */
+    this.#markDirty(itemId);
+  }
+
+  /**
+   * 🔴 **`tasks.md` 6.7 / 7.9 — TELL THE PAGE WHICH LOOK TO PUNCH, and record it IF AND ONLY IF
+   * the telling landed.**
+   *
+   * The two used to be separate statements at one call site, and that is the whole of `7.9`:
+   * the record was written first and kept through every refusal, so a switch the wire never
+   * performed still moved `#desiredPlateRects` — and the next reconcile from ANY caller
+   * (`swapLiveSource`, in the report that found it) seated the new look's fills behind the old
+   * look's holes. Nobody had asked for a look change; the fills moved anyway.
+   *
+   * Fusing them is what makes that unrepresentable rather than merely unlikely. The record is a
+   * SIDE EFFECT of the successful send, so there is no second statement for a future caller to
+   * forget, and no window in which the map claims a look the page has not been given.
+   * `design.md` §6/§12.2 — the hole the page punches and the hole the bridge fills are ONE
+   * computation — now holds by construction of the writer rather than by the discipline of
+   * each caller.
+   *
+   * ⚠ **`B-174` amended one sentence of the old argument: there IS now one revert to
+   * remember, and it is a SECOND CALL to this same writer, not a second statement.** Under
+   * the mixer hold the page is told BEFORE the fills move, so a fit the server then refuses
+   * leaves the page punching a look the fills never entered. `setActiveLook`'s rollback
+   * re-tells the PREVIOUS look through this function — the record follows that send exactly
+   * as it followed the first, so the fused invariant ("the map names what the page is
+   * punching") survives the reorder untouched; what changed is only WHICH look the page ends
+   * on when the wire refuses mid-switch.
+   *
+   * ⚠ Bounded by the same B-070 rule `update()` states: `CG UPDATE` needs a live PRODUCER, and
+   * real CasparCG 403s it on an empty layer. A row whose producer was destroyed has no page to
+   * tell, which is case 2 of {@link #recordActiveLook} and is handled by the caller.
+   */
+  /**
+   * 🔴 `SELF-STOP-24` — mint this take's token and tell the RESIDENT page about it, carrying
+   * the row's look in the same command when it has one.
+   *
+   * ⚠ **THE MINT HAPPENS BEFORE THE SEND, AND THAT ORDER IS THE SAFE ONE.** Minting only on
+   * success would leave the map holding the PREVIOUS token — which the page also still holds —
+   * so a report from the finished run would match and stop the run that just started. Minting
+   * first means a failed tell leaves the page holding a token that names nothing: its reports
+   * are ignored, the row simply cannot self-stop this run, and that is exactly the documented
+   * degrade (`C-013`: "behaviour degrades to today's").
+   *
+   * ⚠ **A failed tell does NOT refuse the take** — the caller reports it instead, which is
+   * `B-191`'s rule for the look and is if anything clearer here: the graphic is mid-way to air,
+   * and a take the operator was told did not happen while the wire had already moved is a
+   * larger failure than a run that cannot report its own end.
+   *
+   * 🔴 `LOGO-LOOP-01` (`B-322`) — **AND IT CARRIES THE ROW'S RECORDED PASS TIMING.** A count set
+   * while the row was stopped is only recorded, and this tell is the next take on this route; it
+   * used to carry the token and the look and no timing, so the page re-ran the last count it had
+   * been told. The control comes from {@link #takeControl}, the same helper `#sendAdd` uses, so
+   * the two routes cannot disagree about what a take tells its page. It adds no command: the
+   * timing rides the `CG UPDATE` this take already sent.
+   */
+  async #tellPageTake(
+    itemId: string,
+    slot: CommandSlot,
+  ): Promise<{ ok: boolean; lookId?: string; errorCode?: string; pageGone?: true }> {
+    const control = this.#takeControl(itemId, this.#reconciler.get(itemId)?.templateId);
+    const lookId = control.look;
+    const told = await this.#send(
+      this.#builder.updateTake(slot, control),
+      this.#nextSeq(),
+      'urgent',
+    );
+    if (!told.ok) {
+      return {
+        ok: false,
+        ...(lookId !== undefined && { lookId }),
+        ...(told.errorCode !== undefined && { errorCode: told.errorCode }),
+        // `DONGLE-RECOVER-01` — see `PAGE_NOT_ON_LAYER_CODE`: the primary has no CG producer there.
+        ...(told.errorCode === PAGE_NOT_ON_LAYER_CODE && told.onPrimary && { pageGone: true }),
+      };
+    }
+    // The look half's side effect, unchanged: `#activeLooks` names the look the page is
+    // punching at, and it becomes true the moment the page has been told.
+    if (lookId !== undefined) this.#recordActiveLook(itemId, lookId);
+    return { ok: true };
+  }
+
+  async #tellPageLook(
+    itemId: string,
+    slot: CommandSlot,
+    lookId: string,
+  ): Promise<{ ok: boolean; errorCode?: string }> {
+    /*
+      🔴 **`single-clock-look-switch` — ONE ARGUMENT NOW, and that is the whole of what a page
+      needs to be told.**
+
+      This send used to carry two more things, and both were about a MASK. `C-028`'s fit facts
+      let the page compute the same fit the bridge did, so its holes landed where the picture
+      would; `SKEW-INTERSECT-01`'s `from` narrowed those holes to `outgoing ∩ entering` while
+      the two clocks disagreed. The page has no holes now — it is composited BELOW its plates —
+      so it needs neither, and the only `fitPictureToBox` that reaches air is the one behind
+      `MIXER FILL` / `CLIP`.
+
+      ⚠ **The look id itself is unchanged and still matters**: the page flips its own per-look
+      DECORATION on it. What changed is that it no longer has to land on any particular frame,
+      because nothing composited over a picture depends on when it arrives.
+    */
+    const told = await this.#send(
+      this.#builder.updateLook(slot, lookId),
+      this.#nextSeq(),
+      'urgent',
+    );
+    if (!told.ok)
+      return { ok: false, ...(told.errorCode !== undefined && { errorCode: told.errorCode }) };
+    this.#recordActiveLook(itemId, lookId);
+    return { ok: true };
+  }
+
+  /**
+   * `B-174` — **the mixer hold for one look switch, in ms: the configured value, else ONE
+   * CHANNEL FRAME of the channel's observed video mode, else one frame of the plant's
+   * `1080i5000` while the mode is unread.**
+   *
+   * One frame is what `SKEW-COUNT-01` measured the page lagging by (holes 1–3 fields after
+   * the fills; wall-clock-constant across modes, so the RIGHT hold genuinely differs per
+   * mode — 40 ms at `1080i5000`, 20 ms at `1080p5000` — which is why the default derives
+   * from the OBSERVED mode rather than compiling either number in). The residual after a
+   * one-frame hold is ±1 field of CLOCK QUANTISATION — the page's paint clock against the
+   * channel tick — which no fixed offset can remove.
+   *
+   * The observed mode is readable at all because `B-189` is fixed in the same change: until
+   * then every real install's mode read failed and this would have fallen back forever.
+   */
+  #lookMixerHoldMsFor(channel: number): number {
+    return this.#lookMixerHoldMs ?? this.#channelFrameMsFor(channel);
+  }
+
+  /**
+   * ONE CHANNEL FRAME of a channel's observed video mode, in ms, or
+   * {@link LOOK_MIXER_HOLD_FALLBACK_MS} while the mode is unread.
+   *
+   * Factored out because three quantities are counted in this unit and a second spelling of
+   * "one frame of the observed mode" is how one of them would come to answer for a mode the
+   * others had stopped believing (golden rule 6, one layer down).
+   *
+   * The observed mode is readable at all because `B-189` is fixed: until then every real
+   * install's mode read failed and every caller here would have fallen back forever.
+   */
+  #channelFrameMsFor(channel: number): number {
+    const observed = this.#channelSettings
+      .state()
+      .observed.find((reading) => reading.channel === channel);
+    if (observed !== undefined) {
+      const period = videoModeFramePeriodMs(observed.mode);
+      if (period !== null) return period;
+    }
+    return LOOK_MIXER_HOLD_FALLBACK_MS;
+  }
+
+  /**
+   * `multibox-layout-switch` §14.5 / `tasks.md` 6.1 — **SWITCH A ROW TO A DIFFERENT LOOK,
+   * while it is on air.**
+   *
+   * The door stage E's look picker calls. A look switch is TWO mutations on two machines:
+   * the bridge moves the producers' `MIXER FILL`/`CLIP` (the reconcile), and the PAGE flips
+   * which look's instance is visible and re-punches its holes (`@cg/template-runtime`'s own
+   * `setActiveLook`). Both halves are here — 🔴 **PAGE FIRST since `B-174`: plan, tell the
+   * page, hold one channel frame, then move the fills** (the order note at the body says
+   * why, with the measurement) — and the transport between them is the reserved `__cg` key
+   * on a `CG UPDATE` (`tasks.md` 6.7 — this method's header used to say the transport did
+   * not exist, which stopped being true when 6.7 landed).
+   *
+   * 🔴 **AND THE ORDER OF THE THIRD STEP — recording it — IS THE SUBJECT OF `tasks.md` 7.9.**
+   * The record is written by {@link #tellPageLook} as a side effect of the page being
+   * successfully told, never up front, so a refused switch leaves the row on the look the
+   * page genuinely shows — under `B-174` that includes the rollback's revert tell, whose
+   * success moves the record BACK. The long note at the old write site says why that
+   * reverses a decision this method shipped with; read it before moving the write back.
+   *
+   * An OFF-AIR item with nothing seated is a legal target, exactly as `swapLiveSource`'s
+   * is: the look is recorded, nothing is sent, and the next take enters it. Deliberately not
+   * gated on reachability in that case — it is a list edit, not an on-air action. ⚠ The test
+   * is the row's STATUS, never an empty ledger: an on-air row can have an empty ledger (the
+   * empty look; every plate a torn-down clip), and treating that as "not on air" told the
+   * operator a switch had succeeded while every hole stayed dark.
+   */
+  /**
+   * 🔴 `TIMING-WIRE-22` (c) — SET ONE ROW'S PASS TIMING.
+   *
+   * A CONFIGURATION verb (golden rule 10): it sends no `PLAY`, seats nothing, un-mutes nothing
+   * and fills nothing. It changes what the graphic already on the channel will do next, and on
+   * a row that owns no live seats it does nothing but record the intent for the next take.
+   *
+   * 🔴 **THE GATE IS `#ownsLiveSeats`, THE ONE PREDICATE** — not `isOnAirStatus` alone and never
+   * the rehearse flag. A row whose seats survived a bridge restart while its status did not
+   * (`B-145` boot adoption) holds producers that are on the channel and must be told; a
+   * REHEARSING row owns nothing (PVW is a browser render). Same door as `update`,
+   * `swapLiveSource` and `setActiveLook`, for the reason `B-216` settled.
+   *
+   * 🔴 **A REFUSED SET RECORDS NOTHING.** `#passTimings` is written only after the send is
+   * accepted — the contract `swapLiveSource` and `setActiveLook` both keep, and for the reason
+   * `7.9` gives: an intent left behind by a failed send is not inert. It is what `#sendAdd`
+   * reads into the next take's payload, so recording a refused count would arm a later,
+   * unrelated action to apply a number nobody agreed to. The console therefore goes on
+   * displaying what air is actually doing, which is §2's rule.
+   *
+   * ⚠ NO NEW REFUSAL CONDITION. The two reasons it can answer — `unknown-item` and
+   * `amcp-error` — both already exist on this surface with those spellings.
+   */
+  /**
+   * 🔴 `TIMING-WIRE-22` — THE ONE PLACE the stored override becomes a wire payload, and the one
+   * place the two names meet.
+   *
+   * The row's stored field is `repeat`, because it overrides the template's `PlayoutSchema.repeat`
+   * and a field should be named after what it displaces. The wire member is `passes`, because
+   * what crosses to a RUNNING page is the operator's instruction — passes remaining from now,
+   * `0` legal — which is a different quantity from an authored total.
+   *
+   * Two names for two meanings is honest; two names meeting SILENTLY is not, which is why the
+   * conversion is a named function called from both send sites rather than an object literal
+   * spelled out twice.
+   */
+  static #wireTiming(stored: StackItemTimingOverride): CgPassTiming {
+    return {
+      ...(stored.repeat !== undefined && { passes: stored.repeat }),
+      ...(stored.delayMs !== undefined && { delayMs: stored.delayMs }),
+    };
+  }
+
+  async setPassTiming(
+    itemId: string,
+    timing: { passes?: number | 'infinite' | undefined; delayMs?: number | undefined },
+  ): Promise<{ ok: boolean; reason?: string; message?: string }> {
+    /*
+      🔴 `DELTA B · R3` — EVERY OUTCOME OF THIS VERB IS RECORDED, and the log could not answer
+      "who set that count, and when" until it was. That question cost an afternoon on the plant
+      when a logo played one pass and closed: every other per-row verb the operator can press
+      was already in the log, and this one was the hole.
+
+      ⚠ **RECORDED THROUGH `#recordOutcome`, NOT `#audited`** — the `templateImport` precedent.
+      The wrapper is bounded to `T extends { accepted: boolean }` and this verb answers
+      `{ ok, reason?, message? }`, so it shares no shape with it. What it DOES share is
+      `#recordOutcome`, which is where the `{ detail, verdict } → AuditEntry` mapping lives —
+      one mapping, two call shapes, rather than a second mapping for a second shape.
+    */
+    const asked: AuditEntry['timing'] = {
+      ...(timing.passes !== undefined ? { passes: timing.passes } : {}),
+      ...(timing.delayMs !== undefined ? { delayMs: timing.delayMs } : {}),
+    };
+    const item = this.#reconciler.get(itemId);
+    const slot = this.#slots.get(itemId);
+    if (item === null || slot === undefined) {
+      // No `#itemDetail` here: there is no item to read a template or a slot from, and a
+      // record naming ids it never resolved would be worse than one naming only what it knows.
+      this.#recordOutcome(
+        'set-pass-timing',
+        { itemId, timing: asked },
+        { outcome: 'failed', errorCode: 'unknown-item' },
+      );
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    /*
+      A call that states nothing is a no-op rather than a refusal: nothing was asked for, so
+      nothing failed, and answering `false` would put a refusal on the surface for a press the
+      operator never made.
+
+      ⚠ AND IT WRITES NO ROW — the precedent the retired `redelivery` set (`B-141`). It answers
+      `ok: true`, so an "audit every accepted call" reading would log it; a log with a row for a
+      press nobody made is a log people stop reading.
+    */
+    if (timing.passes === undefined && timing.delayMs === undefined) return { ok: true };
+    const detail: AuditDetail = { ...this.#itemDetail(itemId), timing: asked };
+    const next: StackItemTimingOverride = {
+      ...this.#passTimings.get(itemId),
+      ...(timing.passes !== undefined && { repeat: timing.passes }),
+      ...(timing.delayMs !== undefined && { delayMs: timing.delayMs }),
+    };
+    /*
+      An off-air row REACHES NOTHING, so recording the intent IS the whole action — the same
+      shape `setActiveLook`'s case 2 has, and what makes the next take carry it on EITHER route:
+      the re-ADD's payload (`#sendAdd`) or, for a producer a `stop` left resident, the tell
+      before its `CG PLAY` (`#tellPageTake`). Both build from `#takeControl` (`LOGO-LOOP-01`).
+    */
+    /*
+      `PASSES-CYCLE-ONLY-26` — **AND A TEMPLATE WHOSE MODE IS NOT `loop-cycle` REACHES NOTHING
+      EITHER**, for a different reason than the off-air row above but by the same route.
+
+      The off-air case reaches nothing because there is no producer; this one because the count
+      has nowhere useful to land — the only cyclic scope is a nested decoration, and steering it
+      is the defect this item exists to remove. Recording it is still the whole action: the
+      value is the operator's, and a re-authored template would honour it.
+
+      ⚠ The verb keeps its contract. It answers `ok`, writes its audit row, and refuses nothing
+      — a refusal here would put a sentence on the surface for a control the operator can no
+      longer even see.
+    */
+    if (!this.#ownsLiveSeats(itemId) || !this.#admitsPassTiming(itemId, item?.templateId)) {
+      this.#passTimings.set(itemId, next);
+      this.#markDirty(itemId);
+      // An accepted set that reached no wire is still a set: the next take carries it, so the
+      // log must show it or the count appears on air with nothing accounting for it.
+      this.#recordOutcome('set-pass-timing', detail, { outcome: 'ok' });
+      return { ok: true };
+    }
+    // `command` is destructured now — `B-209`: a refusal records the AMCP line it came back
+    // on, beside the code. Every sibling impl carries it up for exactly this.
+    const { ok, errorCode, command } = await this.#send(
+      this.#builder.updatePassTiming(slot, CasparRuntime.#wireTiming(next)),
+      this.#nextSeq(),
+      'normal',
+    );
+    if (!ok) {
+      this.#recordOutcome('set-pass-timing', detail, {
+        outcome: errorCode === AMCP_TIMEOUT_CODE ? 'timeout' : 'failed',
+        errorCode: errorCode ?? 'amcp-error',
+        ...(command !== undefined ? { command } : {}),
+      });
+      return {
+        ok: false,
+        reason: errorCode ?? 'amcp-error',
+        message: 'CasparCG did not accept the timing change. The row keeps the timing on air.',
+      };
+    }
+    this.#passTimings.set(itemId, next);
+    this.#markDirty(itemId);
+    this.#recordOutcome('set-pass-timing', detail, { outcome: 'ok' });
+    return { ok: true };
+  }
+
+  async setActiveLook(
+    itemId: string,
+    lookId: string,
+  ): Promise<{ ok: boolean; reason?: string; message?: string; refusalOnRow?: true }> {
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    const slot = this.#slots.get(itemId);
+    if (templateId === undefined || slot === undefined) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    const looks = this.#templates.getOn(slot.channel, templateId)?.liveSources?.looks ?? [];
+    const look = looks.find((l) => l.id === lookId);
+    if (look === undefined) {
+      return {
+        ok: false,
+        reason: 'unknown-look',
+        message: `This template has no look called "${lookId}".`,
+      };
+    }
+    /*
+      🔴 **NOTHING IS RECORDED HERE. `tasks.md` 7.9, and the reversal of a decision this method
+      shipped with — read the whole note before restoring the old spelling.**
+
+      It used to write `#activeLooks` at this line, BEFORE the reconcile, and KEEP the write
+      through every refusal below, on a defensible-sounding argument: _"the look is what the
+      operator asked this row to show; a failed AMCP send is a fact about the wire."_ The
+      argument is wrong about what the map IS. `#desiredPlateRects` resolves from it, and
+      `swapLiveSource` reconciles against `#desiredPlateRects` — so an "intent" left here is
+      not inert. It is the DESIRED GEOMETRY of every later reconcile, and `swapLiveSource`
+      sends no `updateLook`. A switch refused at any door below therefore armed the next
+      source swap to seat the NEW look's fills behind the OLD look's holes: a designed layout
+      with the boxes in the wrong holes, arriving from an action that never mentioned looks.
+
+      That is precisely the crosstalk §14 exists to abolish, so the map's meaning is settled
+      the other way: **it records which look the PAGE is punching, and it is written only by
+      {@link #recordActiveLook}, whose two preconditions are stated on it.**
+
+      ⚠ **The old argument's remaining half — "rolling the intent back would leave the next
+      take entering the OLD look with nothing anywhere saying why" — INVERTS under the picker.**
+      There is now something saying why, and it is the loudest thing on the row: the segment
+      never moves. A refused switch leaves the picker marking the look that is genuinely on
+      air, and the refusal arrives as a toast. It was the OLD behaviour that said nothing —
+      the picker moved to a look the air had not entered, which is exactly the "on-air readout
+      that is not backed" defect Stage E fixed in two other places on this same row.
+
+      This is also simply the contract `swapLiveSource` has always kept, thirty lines of
+      comment apart: _"a refused swap records nothing."_ Two verbs on one row now answer a
+      refusal the same way, rather than two ways (golden rule 6's spirit — one rule, one
+      spelling).
+    */
+    /*
+      🔴 `B-155` §B — THE WHOLE ON-AIR BRANCH RUNS UNDER THE ITEM'S LIVE-SEAT LOCK
+      (see {@link #withLiveSeatLock}): from the on-air read through the page flip to the
+      HELD fills (`B-174`) is ONE critical section, so a swap or an update arriving
+      mid-switch runs after the fills have landed too and therefore plans against the
+      look the row has fully entered. The reads below (`#reconciler`, `#liveLayers`) are
+      inside the lock for the same reason the plan is — read on the near side of a
+      queue, they could describe a row a queued action has since changed.
+    */
+    return this.#withLiveSeatLock(itemId, async () => {
+      /*
+      🔴 "DOES THIS ROW OWN LIVE LAYERS" IS ASKED OF THE ONE PREDICATE — `B-216`.
+
+      This door used to carry its own spelling — `on air, or the ledger is non-empty` — while
+      `update`'s binding transaction and `swapLiveSource` asked `on air, or rehearsing`. The
+      spellings agreed everywhere but one cell: a row whose seats survived a bridge restart
+      while its status did not (`B-145` boot adoption). There this door moved the plates and
+      the other two refused, and the record could not say which was right. Now all three ask
+      {@link #ownsLiveSeats}, whose header says why BOTH halves (status and ledger) are needed
+      and why rehearse is neither.
+
+      What survives from this door's old note, and is now argued at the predicate: an EMPTY
+      ledger is NOT "off air". `registerLiveLayers` DELETES an item's entry when its record
+      list is empty, and two ordinary on-air paths reach that state — a row taken on the EMPTY
+      look (valid, background alone), and a row whose plates were all `media` clips that
+      §12.4's named fallback tore down on the way out of a look. Both are unambiguously on air
+      by STATUS, which is what keeps them reconciling; under a ledger-only spelling such a row
+      was told `ok` while NOTHING was sent — every hole in a populated look stayed empty, the
+      reachability refusal below was skipped too, and only a re-take repaired it: 6.7's
+      "designed layout with a hole in it" reached with no refusal and no message.
+
+      Golden rule 6, in the file that lectures about it 300 lines up: reuse the ONE canonical
+      predicate rather than deriving a second local spelling. An off-air row with no seats has
+      nothing to reconcile, so recording the look really is the whole action there.
+    */
+      if (!this.#ownsLiveSeats(itemId)) {
+        /*
+          Case 2 of `#recordActiveLook`: nothing is seated and nothing reaches the plant —
+          `B-151`'s pin, which the rehearse control's safety rests on. Recording it IS the
+          whole action HERE.
+
+          ⚠ **`B-191` — what makes that safe is the TAKE, not this line, and case 2's own
+          justification used to overstate it.** It said the look is carried into the next
+          build by `#sendAdd`'s payload, which is true after `out` (the producer is destroyed)
+          and FALSE after `stop` (the producer stays resident, so the take skips the re-ADD
+          and sends a bare `CG PLAY` carrying nothing). The look was recorded against a build
+          that never happened, and the row came up with its holes on the old look and its
+          pictures on the new one. The repair is in `#takeImpl`, where BOTH routes into air
+          converge and where telling a page is a playout verb's business — see it there.
+        */
+        this.#recordActiveLook(itemId, lookId);
+        return { ok: true };
+      }
+      if (this.#noServerReachable()) {
+        return {
+          ok: false,
+          reason: 'disconnected',
+          // 7.9 — it says the look was NOT changed, because now it was not. The old sentence
+          // ("the look was recorded but the live sources were not moved") described the very
+          // half-state this method no longer leaves behind.
+          message:
+            'Not connected to CasparCG — the look was not changed, and nothing was queued. ' +
+            'Reissue it once the server is back.',
+        };
+      }
+      /*
+      The PROSPECTIVE look, passed explicitly rather than read back out of a map this method
+      has deliberately not written (7.9). The rects the reconcile seats and the id the page is
+      told below are now the same `look` object travelling through one call, which is what
+      `design.md` §6/§12.2 asks for and what routing them through shared mutable state was
+      quietly costing.
+    */
+      /*
+        🔴 `B-166` — `'switch'`, not `'live'`. A look switch is ONE GEOMETRY across every plate,
+        so a failure part-way through must put the boxes back rather than leave the row in a
+        shape no look authored while every surface reports the switch was refused. The PLAN is
+        byte-identical to `'live'`'s (same `already-live` scope, same `pinned` level 2, same
+        UNION pre-seat) — only what a failure MEANS differs. See `#applyLivePlates`.
+      */
+      /*
+      🔴 `B-174` — **THE ORDER: plan → tell the page → HOLD one channel frame → move the
+      fills.** This REVERSES a decision the old text here called "tell it LAST", and the
+      measurement is what reversed it.
+
+      The page's holes were landing 1–3 FIELDS (20–60 ms) after the fills — visible to the
+      naked eye on the plant, measured to the frame by `tools/skew-harness`: the page's half
+      is quantised to its own paint clock, so it ALWAYS trails a fills-first order by about
+      a frame. Telling the page first and holding the `MIXER FILL`/`CLIP` batch one channel
+      frame (`#lookMixerHoldMsFor` — configurable, derived from the observed mode by
+      default) lands the two halves together. The hold delays the mixer's APPLICATION only:
+      the page's notification moves EARLIER (it no longer waits for the fills' ACKs), which
+      is what makes this a closing of the gap rather than a shifting of both halves.
+
+      🔴 **What survives of the old order's safety argument — each clause, re-earned:**
+
+      - **"never tell the page about a look a reconcile refused"** — every refusal the
+        bridge can detect WITHOUT applying (plan-time: unknown look, unresolvable source,
+        collision, band) fires before `beforeApply`, so the page is untouched by all of
+        them. The one refusal that only the wire can deliver — CasparCG refusing a `MIXER`
+        line it has already been sent — now arrives after the page moved, and is answered
+        by the rollback below RE-TELLING the previous look through the same fused writer:
+        the page does not END on a look the switch did not perform. ⚠ Where that revert tell
+        is ITSELF refused there is nothing left to put the page back with, so the record
+        follows the PAGE — the thing the audience can see — and the message says exactly
+        that; the next reconcile converges the fills onto it. (On real 2.5.0 a `MIXER
+        FILL` on any owned layer answers `202`; the wire-time refusal is a defensive path,
+        exercised in anger only by `B-166`'s injected mock.)
+      - **"a lost `CG UPDATE` leaves the page on a coherent previous look"** — STRONGER
+        now: a refused tell aborts the reconcile before ANY geometry command, so the fills
+        never move either. The old order left moved fills under unmoved holes there.
+
+      Both halves still ride ONE connection's urgent lane, and the whole span — plan, tell,
+      hold, fills — sits inside `#withLiveSeatLock`, so no OTHER GATED VERB can interleave
+      into the window the hold opens: a swap or an update arriving mid-switch runs after it
+      (`B-155` §B). The switch as a whole lands one hold later than it used to, which nobody
+      can compare against; the two halves landing TOGETHER is the entire point.
+
+      🔴 **The lock does NOT exclude the EMERGENCY verbs, and the hold is what makes that
+      worth stating here.** `take`, `out`, `stopItem`, `clearLayer` and `clearAll` are
+      DELIBERATELY un-gated ({@link #withLiveSeatLock}, and the panic note on `clearAll`) —
+      an emergency verb must never queue behind the thing it may be repairing. Before the
+      hold, that race was a microtask-narrow suffix of the apply; the hold turns it into a
+      deterministic ≈40 ms window in which a row can be taken off air between the plan and
+      its first fill. So the hook RE-ASKS, after the hold, whether the row still owns its
+      live seats, and abandons the apply if it does not — the window this change opened is
+      closed by the change that opened it, rather than being left for the next reader to
+      discover from a re-lit producer on a row the operator had just cleared (`B-161`'s
+      shape). The re-ask is a BEFORE/AFTER comparison, deliberately not a new gate: a row
+      that did not own seats to begin with is untouched by it, so the off-air/stopped path
+      keeps its existing behaviour exactly.
+
+      ⚠ Bounded by the same B-070 rule `update()` states: `CG UPDATE` needs a live PRODUCER,
+      and real CasparCG 403s it on an empty layer. A row whose template producer was
+      destroyed has nothing to tell — case 2 of {@link #recordActiveLook} — so the hook
+      skips both the tell and the hold, and the look is recorded after the apply lands, for
+      the next take's re-ADD path to carry into the rebuilt page.
+    */
+      const previousLookId = this.activeLookId(itemId);
+      let pageTold = false;
+      /*
+      🔴 **GOLDEN RULE 7 — ONE READING OF `#loaded` DECIDES BOTH THE TELL AND THE RECORD.**
+
+      The old order read it once, after the apply, and that single evaluation chose between
+      "tell the page" and "record it for the next `CG ADD` to carry". The reorder put a tell,
+      a hold and the whole apply between the two uses — and `#loaded` is written by paths
+      that deliberately do NOT hold the seat lock: `take`'s `B-039` pre-roll re-ADD adds to
+      it, `out`/`remove` delete from it, and the session-healthy reconnect handler CLEARS it
+      with no operator action at all. Read twice, a flip inside that window returns `ok` with
+      the look neither told nor recorded (false→true), or records a look on a row `remove`
+      has just forgotten (true→false). One reading, captured where the decision is made.
+    */
+      let pageLoaded = false;
+      const reconciled = await this.reconcileLivePlates(itemId, {
+        mode: 'switch',
+        lookId: look.id,
+        beforeApply: async () => {
+          pageLoaded = this.#loaded.has(itemId);
+          if (!pageLoaded) return { ok: true };
+          const told = await this.#tellPageLook(itemId, slot, lookId);
+          if (!told.ok) {
+            return {
+              ok: false,
+              errorCode: told.errorCode ?? 'amcp-error',
+              message:
+                'CasparCG refused the look command — nothing was changed: the holes and the ' +
+                'fills are both still on the previous look. Re-issue the switch.',
+            };
+          }
+          pageTold = true;
+          const ownedSeats = this.#ownsLiveSeats(itemId);
+          const heldSeats = this.#liveLayers.has(itemId);
+          /*
+            🔴 **`single-clock-look-switch` — THE HOLD STAYS, AND ITS LEAD IS GONE.**
+
+            The hold aims the fills at the page's commit and is `B-174`'s, unchanged: a page
+            still has per-look DECORATION to flip, and a switch that moved the pictures a frame
+            before the page redrew its furniture would show the old furniture over the new
+            layout. What went with the mask is the LEAD — a further channel frame bought only to
+            get a NARROWED MASK provably in force before the fills moved. With no mask there is
+            nothing to get in force early.
+
+            ⚠ The default is untouched. `--look-mixer-hold-ms` still resolves the same way and
+            still defaults to one channel frame of the observed mode.
+          */
+          const holdMs = this.#lookMixerHoldMsFor(slot.channel);
+          if (holdMs > 0) await sleepMs(holdMs);
+          /*
+            The re-ask the note above promises, asked as a BEFORE→AFTER transition on the two
+            facts the plan rests on: the row owns live seats, and the ledger still holds the
+            records the plan was computed against. Only a row that HAD them and lost them
+            aborts — a row that never owned seats is not gated by this at all, so the
+            off-air/stopped path keeps its behaviour byte for byte.
+
+            Losing the ledger entry is precisely what `teardownLiveLayers` does (`out`,
+            `stopItem`, `clearAll`'s loop, `remove`), and nothing in an ordinary switch
+            touches it: the apply has not run, and every other ledger writer is either this
+            apply or gated by the same lock. Without this, an `out` landing inside the hold
+            left the apply re-`PLAY`ing the whole union pre-seat onto the layers that `out`
+            had just cleared, and `registerLiveLayers` resurrecting a ledger for a row the
+            stack believes idle — `B-161`'s shape, reached with no take.
+          */
+          if (
+            (ownedSeats && !this.#ownsLiveSeats(itemId)) ||
+            (heldSeats && !this.#liveLayers.has(itemId))
+          ) {
+            return { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
+          }
+          return { ok: true };
+        },
+      });
+      if (reconciled.ok) {
+        if (!pageLoaded) this.#recordActiveLook(itemId, lookId);
+        // `LOOK-SWITCH-01` — a switch that LANDED withdraws the line a refused one left.
+        this.#retireTakeRefusal(itemId);
+        return { ok: true };
+      }
+      /*
+        🔴 `LOOK-SWITCH-01` / `B-273` — A REFUSED PLATE IS SAID ON THE ROW, in `FIELD-FIXES-01`'s
+        one line (`takeRefusalLine`: the row, the source, what the refusal means), in that
+        channel's view only — the same record a refused take writes, so the row and its
+        Inspector say it and no banner repeats it (`refusalOnRow`). Only a refusal that NAMES a
+        plate is recorded: one about the page, the look or the link keeps its own surface.
+      */
+      const onRow = (): { refusalOnRow?: true } => {
+        if (reconciled.refused === undefined) return {};
+        this.#recordTakeRefusal(itemId, {
+          code: reconciled.errorCode ?? 'amcp-error',
+          ...(reconciled.command !== undefined && { command: reconciled.command }),
+          plateId: reconciled.refused.plateId,
+          sourceId: reconciled.refused.source.id,
+          sourceName: reconciled.refused.source.name,
+          ...(reconciled.refused.source.origin !== undefined
+            ? { sourceOrigin: reconciled.refused.source.origin }
+            : {}),
+        });
+        return { refusalOnRow: true };
+      };
+      if (!pageTold) {
+        // Plan-time refusal, the switch's pre-seat refused a plate, or the tell itself was
+        // refused: nothing anywhere moved.
+        return {
+          ok: false,
+          ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
+          ...(reconciled.message === undefined ? {} : { message: reconciled.message }),
+          ...onRow(),
+        };
+      }
+      /*
+      The row was taken off air INSIDE the hold (the re-ask above). Nothing was applied, so
+      there is no geometry to roll back — only the page to put back, and its own message to
+      report: blaming CasparCG for a refusal that never happened would send the operator
+      looking at the server for an out THEY pressed. If the page has already been torn down
+      with the row, the tell simply fails and the record stays on the look it last landed —
+      which the next take re-plans from anyway.
+    */
+      if (reconciled.errorCode === 'not-live') {
+        if (previousLookId !== undefined) await this.#tellPageLook(itemId, slot, previousLookId);
+        return {
+          ok: false,
+          reason: 'not-live',
+          ...(reconciled.message === undefined ? {} : { message: reconciled.message }),
+        };
+      }
+      /*
+      🔴 The wire refused a geometry command AFTER the page moved. `#applyLivePlates`'s
+      `'switch'` branch has already put every fill back (`B-166`'s all-or-nothing); this is
+      the page's half of the same rollback: re-tell the PREVIOUS look, through the same
+      fused writer, so the record follows whichever tell last landed. `fitsOverride` is
+      deliberately absent — `#plateFits` was never rewritten (the apply did not land), so
+      the map still carries the outgoing look's fits, which are exactly what a page being
+      put back must punch with.
+    */
+      const reverted =
+        previousLookId === undefined
+          ? { ok: false as const }
+          : await this.#tellPageLook(itemId, slot, previousLookId);
+      return {
+        ok: false,
+        ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
+        ...onRow(),
+        message: reverted.ok
+          ? 'CasparCG refused the switch part-way; everything was put back — the row is ' +
+            'still on its previous look. Re-issue the switch.'
+          : `CasparCG refused the switch, and the graphic could not be put back: its holes ` +
+            `are on "${lookId}" while the pictures kept the previous geometry. The row is ` +
+            `recorded on the look the page shows; re-issue the switch to converge.`,
+      };
+    });
+  }
+
+  /**
+   * 🔴 **`B-155` §B (`tasks.md` 7.15) — ONE LIVE RECONCILE AT A TIME PER ITEM, so a
+   * producer change can never interleave into a switch's plan-to-page-flip window.**
+   *
+   * ── THE HOLE THIS CLOSES, WHICH IS THE LAST RESIDUAL PATH §A FOUND ──────────────
+   *
+   * The bridge dispatches WebSocket requests without awaiting the previous one
+   * (`bridge.ts` — `void handleMessage(...)`; the actor-context note there names two
+   * browsers interleaving as a design fact). Sequentially, the switch is safe by its own
+   * ordering (since `B-174`: page told, mixer HELD one frame, fills moved — with a
+   * deliberate hold inside the window, which makes this lock MORE load-bearing, not
+   * less). INTERLEAVED, that ordering is no longer one ordering: a `swapLiveSource` or
+   * an `update` arriving while a `setActiveLook` is parked on an AMCP ack — or now on
+   * the hold itself — plans against a look mid-transition (`#activeLooks` is written
+   * when the page is told — `tasks.md` 7.9) and against a ledger `#applyLivePlates` has
+   * not yet rewritten, so its `PLAY` and its `MIXER FILL` at stale geometry can land
+   * between the switch's page flip and its held fills — a producer change inside a
+   * moving hole, which is `B-155`'s shape arriving by concurrency instead of by the
+   * (closed) assignment lurk. And the two actions' final
+   * `registerLiveLayers` writes are each computed from the SAME `previous` snapshot, so
+   * whichever finishes last erases the other's records: golden rule 7's two-reads-with-
+   * an-await-between, at the ledger instead of at a boolean.
+   *
+   * ── WHAT IS GATED, AND WHAT IS DELIBERATELY NOT ─────────────────────────────────
+   *
+   * Gated: the three LIVE doors — `setActiveLook`, `swapLiveSource`, and `update`'s
+   * binding transaction — each around its whole read-plan-send-record span, page flip
+   * included. NOT gated: `take` and `out`. The take is the OPERATOR'S REPAIR VERB and
+   * must never queue behind the thing it may be repairing — a wedged switch holding this
+   * lock must not be able to hold the row off air; the take's own mode already
+   * re-asserts every seat unconditionally and rolls back on failure, which is what makes
+   * that safe. The restore path runs at boot, before any door can be called.
+   *
+   * ── WHY THIS IS A PROVEN NO-OP ON THE COMMON PATH ───────────────────────────────
+   *
+   * Sequential calls chain onto an already-resolved promise: same commands, same order,
+   * same everything — pinned by the golden-sequence test in `live-look-reconcile`
+   * (`B-155 §B — the common path's exact wire sequence`), which asserts the full ordered
+   * line list of a plain switch and was green before this lock existed.
+   */
+  readonly #liveSeatQueues = new Map<string, Promise<unknown>>();
+
+  async #withLiveSeatLock<T>(itemId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.#liveSeatQueues.get(itemId) ?? Promise.resolve();
+    const run = prev.then(fn);
+    // The stored tail swallows the failure so one refused action cannot poison the
+    // queue for every later one; `run` itself still rejects to the caller.
+    const tail = run.catch(() => undefined);
+    this.#liveSeatQueues.set(itemId, tail);
+    try {
+      return await run;
+    } finally {
+      if (this.#liveSeatQueues.get(itemId) === tail) this.#liveSeatQueues.delete(itemId);
+    }
+  }
+
+  /**
+   * `multibox-layout-switch` `design.md` §4 / `tasks.md` 6.1 — **THE ONE RECONCILE:
+   * bring the seated live-plate set of a RUNNING row into line with a freshly-resolved
+   * DESIRED set.**
+   *
+   * §4's whole argument, in one method. A **look switch** changes _which plates are
+   * visible and where_; a **source swap** changes _what one plate shows_; a **take** is
+   * the same thing against an empty prior set. All three are one question — "which
+   * producer is behind which hole, at what geometry" — and the tree used to answer it in
+   * two places that each knew half of it (`#seatLiveLayers`: every plate, take only;
+   * `swapLiveSource`: one plate, live). `swapLiveSource` already argued the case one level
+   * down — _"a swap that resolved plates its own way would be a second spelling"_ — and
+   * this is that argument applied one level up, so the switch never becomes a third path.
+   *
+   * ── THE INPUT: `desired` IS THE ACTIVE LOOK'S `{routeKey → rect}` ────────────────
+   *
+   * Nothing here reads a layout, an arrangement or a look object. It takes a rect map and
+   * reconciles against it, which is what lets the take, the switch and the swap share it
+   * without any of them learning the others' vocabulary. 🔴 **A source ABSENT from the map
+   * is absent from the look** — the carrier never emits a zero-area rect
+   * (`collectLookCarrier`), so absence is the ONLY spelling of "not shown here", and it is
+   * what triggers §12.4's release.
+   *
+   * ── WHY IT IS A DELTA AND NOT A RE-SEAT ─────────────────────────────────────────
+   *
+   * 🔴 **A plain look switch must issue NO `PLAY` AT ALL.** A `PLAY` creates a fresh
+   * producer: on the plant a route re-acquires visibly, so a switch that re-seated would
+   * be the very re-acquire §12.4 chose "held" to avoid. Every plate whose seat is
+   * unchanged — same layer, same producer — gets `MIXER FILL`/`CLIP` and nothing else. The
+   * seat is preserved by construction rather than by a special case: `#planLiveSeating`
+   * prefers the layer a plate is already on, and a held plate is still in the ledger, so
+   * it is still preferred.
+   *
+   * ── THE TWO MODES — ONE FACT, READ ONCE, GATING BOTH BEHAVIOURS ─────────────────
+   *
+   * `mode` says what the ACTION IS, not what it should do, because two behaviours follow
+   * from the same fact and letting a caller set them independently is how they would come
+   * to disagree (golden rule 7's shape: one condition, read once).
+   *
+   * - `'take'` — **the row is being put on air, from nothing.**
+   *   - _Seats every plate._ 🔴 `FIELD-FIXES-01-A` Decision 2: a take reaches this only for a
+   *     row that owns no seats — `#takeImpl` refuses a row that is on air, unsettled, or whose
+   *     ledger holds seats — so there is no prior seat to re-assert. (It used to be argued here
+   *     that a re-take was the operator's repair verb; on a DeckLink that re-`PLAY` fails by
+   *     construction, `B-177`, and the rollback took working pictures off air.)
+   *   - _Undoes what it seated on failure._ Nothing is on air yet, and the failure modes
+   *     are a producer with no geometry (a guest blown up across the programme, unmasked)
+   *     and a fill without its clip (renders nothing at all — `design.md` §3). A layer in
+   *     either state is worse than a layer left black, so every layer this action put a
+   *     producer on comes down — through the one rule (`refusal-cleanup.ts`) — and the take is
+   *     refused.
+   * - `'live'` — **a switch or a swap on a row ALREADY ON AIR.**
+   *   - _Delta only._ 🔴 A plate whose seat has not changed gets NO `PLAY`. Re-seating
+   *     would create a fresh producer, and on the plant a route re-acquires visibly — the
+   *     very re-acquire §12.4 chose "held" to avoid. This is what makes a look switch move
+   *     holes and fits and nothing else.
+   *   - _Undoes only the plate that failed._ Rolling back would mean blacking plates that
+   *     are working, to punish a plate that is not. Destructive only if this action CREATED
+   *     the plate: a REPLACE that failed left the previous producer on the layer untouched,
+   *     which is `B-126`'s rule and is exactly what `swapLiveSource` promises the operator.
+   */
+  async reconcileLivePlates(
+    itemId: string,
+    opts: {
+      /**
+       * 🔴 **`B-166`/`B-167` — `'switch'` PLANS EXACTLY AS `'live'` AND FAILS DIFFERENTLY.**
+       *
+       * Three actions, and the mode names WHICH ACTION IT IS rather than what it should do —
+       * the rule this argument already carried for two. A look SWITCH is not a source SWAP,
+       * and the difference is entirely in what a failure means:
+       *
+       * - a SWAP is about ONE plate, so undoing only that plate is the whole action undone;
+       * - a SWITCH is ONE GEOMETRY across every plate, and a partial one belongs to no look
+       *   at all. Undoing "only the failed plate" leaves the row in a shape nobody authored,
+       *   while every surface says the switch did not happen (`B-166`).
+       *
+       * ⚠ **The PLAN is identical for `'live'` and `'switch'` and MUST stay identical.** Both
+       * resolve `'already-live'` + `'pinned'` below, so the UNION PRE-SEAT is untouched —
+       * every look's inputs stay seated, including the looks that are not punched. Narrowing
+       * that set would put a `PLAY` back inside a switch and reintroduce `B-155` case 3. A
+       * change here that alters the pre-seat SET is the wrong change.
+       */
+      mode: 'take' | 'live' | 'switch';
+      /**
+       * The look being ENTERED. Omit for the one this row is already showing.
+       *
+       * 🔴 **THIS REPLACED A `desired` RECT MAP, and the replacement is the point.** The
+       * caller used to pass the rects and the plan resolved the BINDINGS itself, so a caller
+       * that resolved rects from one look while the bindings came from another would seat one
+       * look's producers behind another look's holes. The rects are a pure function of the
+       * carrier and this id, so there is now one input and nothing left to disagree.
+       */
+      lookId?: string | undefined;
+      /**
+       * 🔴 `B-174` — **the seam between "will this reconcile succeed" and "apply it".**
+       *
+       * Runs AFTER the plan has validated (every plan-time refusal has already fired,
+       * without this hook ever being called) and BEFORE the first wire command of the
+       * apply. `setActiveLook` is its one caller and passes the page-tell + the mixer
+       * hold, so the page starts painting the new holes while the fills wait one channel
+       * frame — the measured skew (`tools/skew-harness`: holes 1–3 fields late) closed at
+       * the ONE injection point every switch-mode command already flows through, rather
+       * than by a second code path (`B-100`/`P-012`: a copy is how orders drift apart).
+       *
+       * Receives no argument: the page is told the LOOK ID and nothing else
+       * (`single-clock-look-switch` — the fit facts went with the mask that consumed them).
+       *
+       * A refusal from the hook aborts the reconcile with NOTHING applied: no fill has
+       * moved, no producer has been touched by the apply. (Plan-mandated SEATING also
+       * has not happened yet — a parked preset missing its producer stays missing until
+       * the apply, exactly as a refused plan leaves it.)
+       */
+      beforeApply?: () => Promise<{ ok: boolean; errorCode?: string; message?: string }>;
+    },
+  ): Promise<{
+    ok: boolean;
+    errorCode?: string;
+    message?: string;
+    /** `B-209` — the refused line; and `LOOK-SWITCH-01` — the plate and source it named. */
+    command?: string;
+    refused?: {
+      readonly plateId: string;
+      readonly source: {
+        readonly id: string;
+        readonly name: string;
+        readonly origin?: 'input' | 'media';
+      };
+    };
+  }> {
+    const slot = this.#slots.get(itemId);
+    if (slot === undefined) return { ok: false, errorCode: 'unknown-item' };
+    const planReconcile = () =>
+      this.#planLiveSeating(
+        itemId,
+        slot,
+        opts.lookId ?? this.activeLookId(itemId),
+        opts.mode === 'take' ? 'entering-look' : 'already-live',
+        // SESSION BP — a take resolves level 2 afresh; every other reconcile reads the pin.
+        opts.mode === 'take' ? 'fresh' : 'pinned',
+      );
+    const refusePlan = (failed: Extract<ReturnType<typeof planReconcile>, { ok: false }>) => {
+      // `PLAYOUT-SOURCES-01` — a switch into an entry the Playout stopped offering names its plate,
+      // so the row says it in `FIELD-FIXES-01`'s one line (`setActiveLook`'s `onRow`).
+      const refused = failed.refused;
+      return {
+        ok: false as const,
+        errorCode: failed.errorCode,
+        message: failed.message,
+        ...(refused !== undefined
+          ? {
+              refused: {
+                plateId: refused.plateId,
+                source: {
+                  id: refused.source.id,
+                  name: refused.source.name,
+                  ...(refused.source.origin !== undefined ? { origin: refused.source.origin } : {}),
+                },
+              },
+            }
+          : {}),
+      };
+    };
+    let plan = planReconcile();
+    if (!plan.ok) return refusePlan(plan);
+    /*
+      🔴 `ROUTE-PLATES-01` rule 5 — as at the take: a Playout route this reconcile will seat is sent
+      only from a confirmed epoch (one bounded read if none yet; a moved epoch re-plans). And a HELD
+      route plate this reconcile shows again must be of the epoch in force — one of another epoch
+      names a holder that may no longer be its input's, so the action is refused, all or nothing,
+      and the row says the plate is waiting. A route plate left on screen as it is sends nothing.
+    */
+    const routeSeat = planSeatsPlayoutRoute(plan);
+    if (routeSeat !== undefined) {
+      const epochBefore = this.#sourceCatalog.inputsEpoch;
+      if (!(await this.#ensureRouteEpoch()))
+        return routeWaitingRefusal(routeSeat, this.#plateLabelOf(itemId, routeSeat.plateId));
+      if (this.#sourceCatalog.inputsEpoch !== epochBefore) {
+        plan = planReconcile();
+        if (!plan.ok) return refusePlan(plan);
+      }
+      const prior = new Map((this.#liveLayers.get(itemId) ?? []).map((r) => [r.producer, r]));
+      const staleReturn = plan.placements.find((p) => {
+        if (!placementIsPlayoutRoute(p)) return false;
+        const record = prior.get(p.producerArg);
+        return record?.held === true && record.epoch !== this.#sourceCatalog.inputsEpoch;
+      });
+      if (staleReturn !== undefined)
+        return routeWaitingRefusal(staleReturn, this.#plateLabelOf(itemId, staleReturn.plateId));
+    }
+    /*
+      🔴 `LOOK-SWITCH-01` / `B-273` — A SWITCH SEATS WHAT ITS LOOK NEEDS BEFORE `beforeApply` TELLS
+      THE PAGE ANYTHING ({@link #preSeatSwitch}). A refused plate refuses the switch HERE, with the
+      page untouched and nothing on air changed; accepted, the seats ride into the apply, which
+      reveals them in the switch's one commit instead of `PLAY`ing inside it.
+    */
+    let preSeated: ReadonlyMap<string, SeatResult> | undefined;
+    if (opts.mode === 'switch') {
+      // Read BEFORE the pre-seat: its awaits are a window an emergency verb can land in.
+      const ownedBefore = this.#ownsLiveSeats(itemId);
+      const heldBefore = this.#liveLayers.has(itemId);
+      const pre = await this.#preSeatSwitch(itemId, plan);
+      if (!pre.ok) return pre.refusal;
+      preSeated = pre.seats;
+      /*
+        🔴 THE PREROLL ({@link PRE_SEAT_PREROLL_HOLDS}): a plate this switch seated runs HIDDEN for
+        three holds before the page is told, so its producer has its own picture by the reveal —
+        measured, 3 runs in 10 revealed a media clip before its first frame. A switch that seated
+        nothing waits for nothing.
+      */
+      if ([...pre.seats.values()].some((seat) => seat.outcome === 'landed')) {
+        const preroll = PRE_SEAT_PREROLL_HOLDS * this.#lookMixerHoldMsFor(slot.channel);
+        if (preroll > 0) await sleepMs(preroll);
+      }
+      /*
+        🔴 AND THE ROW MAY HAVE LEFT THE AIR MEANWHILE. `out`, `stopItem` and `clearAll` are
+        un-gated by design (an emergency verb never queues behind what it repairs), and the
+        pre-seat and its preroll are awaits between the plan and the page tell. Before them, that
+        span was synchronous. A row taken off air inside it must not reach the apply, which would
+        reveal the pre-seated plates and register a ledger for a row with no page — `B-161`'s
+        shape. So the same BEFORE → AFTER re-ask `beforeApply` makes after its hold is made here,
+        and what the pre-seat started comes back off.
+      */
+      if (
+        (ownedBefore && !this.#ownsLiveSeats(itemId)) ||
+        (heldBefore && !this.#liveLayers.has(itemId))
+      ) {
+        await this.#undoPreSeat(preSeated);
+        return { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
+      }
+    }
+    if (opts.beforeApply !== undefined) {
+      const gate = await opts.beforeApply();
+      if (!gate.ok) {
+        // Nothing of the switch reaches air: what its pre-seat started comes back off.
+        await this.#undoPreSeat(preSeated);
+        return {
+          ok: false,
+          ...(gate.errorCode === undefined ? {} : { errorCode: gate.errorCode }),
+          ...(gate.message === undefined ? {} : { message: gate.message }),
+        };
+      }
+    }
+    const applied = await this.#applyLivePlates(itemId, plan, opts.mode, preSeated);
+    return applied;
+  }
+
+  /**
+   * C-015 phase 6 (task 6.0) — **THE ASSEMBLY, HALF TWO: put the pictures on the
+   * layers, and record what was actually sent** — now the SEND half of the §4
+   * reconcile above.
+   *
+   * ⚠ **WHY THE RECONCILE IS TWO HALVES A CALLER CAN USE SEPARATELY, rather than one
+   * call the take also makes.** The take's ordering is an on-air constraint, written up
+   * at both of its call sites: it DECIDES before the pre-roll `CG ADD` (so a refusal
+   * costs nothing and mutates nothing) and SENDS one command before the `CG PLAY` (so a
+   * guest's picture is never on the programme channel while the operator cues ahead).
+   * Collapsing those into one call would move the refusal AFTER the `CG ADD` had already
+   * replaced the stage — a mutation on a take the operator was told did not happen. So
+   * the take calls `#planLiveSeating` and this, in that order, with its own work between;
+   * `reconcileLivePlates` is the same two halves composed for callers with no such
+   * constraint. There is ONE planner and ONE applier, and no third path.
+   *
+   * Per plate SEATED, in one batch on one connection:
+   *
+   *   1. `PLAY <ch>-<layer> <producer>` — {@link CommandBuilder.playSource};
+   *   2. `MIXER <ch>-<layer> VOLUME 0` — **6.5, immediately after and before the
+   *      layer can be composited.** The producer does not exist before the `PLAY`,
+   *      so "same batch" is the strongest guarantee available here; this is the
+   *      half of the audio rule that belongs to creation itself rather than to a
+   *      later step (design.md §7);
+   *   3. `MIXER … FILL` + `MIXER … CLIP` — {@link CommandBuilder.mixerFit}, which
+   *      emits both from one geometry so they can never be set apart.
+   *
+   * A plate whose seat is UNCHANGED gets step 3 alone, and only when the geometry
+   * actually moved — see the delta note on {@link reconcileLivePlates}.
+   *
+   * The ledger is written with `sourceArgument` — the SAME function `playSource`
+   * uses — so `producer` records what went on the wire rather than a second
+   * formatting of the same config.
+   *
+   * ── THE FAILURE PATH, WHICH IS THE PART WORTH READING ──────────────────────
+   *
+   * 🔴 **Under `'take'`, any failure rolls back EVERY layer this action
+   * touched, including one the item already owned.** The instinct is to keep a
+   * previously-on-air box up, and it is wrong for a take: the half-placed layer comes
+   * down and the take is refused, for the reasons on {@link reconcileLivePlates}.
+   *
+   * The record is pushed BEFORE its send is awaited, deliberately: from the moment
+   * a `PLAY` leaves this process a producer may be on that layer, so a rollback
+   * that walked only the ACKED sends would leave a live picture nobody owns and
+   * nothing would ever clear it.
+   *
+   * On refusal the ledger is restored to the layers this action never reached, so
+   * it keeps naming exactly the coordinates that still carry a producer of
+   * ours — which is what the R-009 sweep, the quarantine and the clear refusal all
+   * read.
+   */
+  /**
+   * 🔴 **`B-199` — NO STAGED CHANGE OUTLIVES ITS BATCH.**
+   *
+   * ── WHAT IS BEING GUARDED, MEASURED ON THE PLANT ────────────────────────────
+   *
+   * `B-198` made a seating batch atomic by staging every `MIXER` line and committing once.
+   * That opens a window between the first `DEFER` and the `COMMIT`, and a batch that THROWS
+   * inside it reaches neither of the normal commit points. Three measurements say what that
+   * costs, and the first is the one that decides:
+   *
+   * - **A dropped connection does NOT clear the staging area.** Staged on one socket,
+   *   destroyed it, reconnected, and a `COMMIT` from the NEW connection applied the dead
+   *   one's change. A crashed bridge leaves a landmine. ⚠ This wrapper cannot reach that
+   *   case — its commit is SENT on every exit but a dead socket does not carry it — so a
+   *   link that dies mid-batch is `B-221`'s subject: {@link #flushOrphanedStaging} commits
+   *   the orphan on the next healthy connection and makes the same repair as below.
+   * - **The hang branch:** on air stays the OUTGOING geometry, indefinitely (5 s measured,
+   *   nothing half-applied) — until an unrelated later batch commits and flushes the stale
+   *   half WITH it. The wrong geometry then arrives attached to an action that had nothing to
+   *   do with it, which is the least diagnosable failure of the three.
+   * - **The commit-anyway branch:** plate 1 on the new geometry and plate 2 on the old — a
+   *   shape no look authored, persisting until something else moves it.
+   *
+   * ── WHY THE THIRD IS THE ONE TO CHOOSE ──────────────────────────────────────
+   *
+   * It is bounded, immediate, and attached to the action that caused it, so it is the only
+   * one an operator can attribute — and it is REPAIRABLE, which the other two are not: the
+   * ledger was never rewritten (`registerLiveLayers` is past the throw), so it still describes
+   * the geometry the row was on, and re-emitting that puts the picture back where the console
+   * says it is. `B-166`'s rollback is the same move on the failure-code path.
+   *
+   * So this wrapper commits whatever is staged and then re-asserts the ledger's geometry,
+   * un-deferred, one line at a time — a repair path does not need to be atomic, and going
+   * through `DEFER` here would need a commit of its own inside a path that is already
+   * unwinding.
+   *
+   * ⚠ **IT IS A WRAPPER AND NOT A `try` INSIDE THE METHOD** because the method has two
+   * callers (`#takeImpl` and `reconcileLivePlates`) and both must be covered; a guard either
+   * of them could be added without would be one somebody eventually is.
+   */
+  async #applyLivePlates(
+    itemId: string,
+    plan: LivePlateApplyPlan,
+    mode: 'take' | 'live' | 'switch',
+    preSeated?: ReadonlyMap<string, SeatResult>,
+  ): Promise<LivePlateApplyResult> {
+    try {
+      return await this.#applyLivePlatesUnguarded(itemId, plan, mode, preSeated);
+    } finally {
+      // Staged at this point ⇒ the batch did NOT reach either of its own commit points, i.e.
+      // it threw. `#commitStagedMixer` is idempotent, so the ordinary paths cost nothing here.
+      const abandoned = this.#stagedMixerChannel !== null;
+      await this.#commitStagedMixer();
+      if (abandoned) await this.#reassertLedgerGeometry(itemId);
+    }
+  }
+
+  /**
+   * `B-198` — apply everything this process staged on the channel, ONCE.
+   *
+   * Idempotent by draining the field, so every exit path can call it without a second commit
+   * splitting the batch the first one just closed. A commit is channel-wide and applies
+   * whatever ANY connection has staged, so it is issued only when we have staged something.
+   */
+  async #commitStagedMixer(): Promise<MixerCommitOutcome> {
+    if (this.#stagedMixerChannel === null) return { landed: true };
+    const channel = this.#stagedMixerChannel;
+    this.#stagedMixerChannel = null;
+    return this.#sendMixerCommit(channel);
+  }
+
+  /**
+   * 🔴 `B-221` — send ONE `MIXER <ch> COMMIT` and remember whether it LANDED.
+   *
+   * The one place the answer to "is the server's staging area clear?" is written. `ok` alone
+   * is not it: in mirror-sync a backup-only success acks `ok` while the primary — the server
+   * whose staging area the batch filled — never saw the commit, which is the same `ok &&
+   * onPrimary` gate the adoption bookkeeping uses for the same reason. Anything short of a
+   * primary ack — a dead socket, a timeout on a hung server, a refusal — leaves the channel
+   * ORPHANED, and {@link #flushOrphanedStaging} finishes the job when a connection exists to
+   * finish it on. Conservative on purpose, like arming the accumulator BEFORE the send: a
+   * commit we cannot prove arrived is a commit we assume did not.
+   */
+  async #sendMixerCommit(channel: number): Promise<MixerCommitOutcome> {
+    const sent = await this.#send(this.#builder.mixerCommit(channel), this.#nextSeq(), 'urgent');
+    const landed = sent.ok && sent.onPrimary;
+    if (!landed) this.#orphanedMixerChannel = channel;
+    // `LOOK-SWITCH-01` — the seat step reads this: a hide whose commit did not land is not a
+    // hide, and no `PLAY` may follow it. The code and the line ride along for its refusal.
+    return {
+      landed,
+      ...(sent.errorCode !== undefined && { errorCode: sent.errorCode }),
+      ...(sent.command !== undefined && { command: sent.command }),
+    };
+  }
+
+  /**
+   * 🔴 `B-221` — **a batch whose commit died with the link is committed on the next link,
+   * and the picture put back where the ledger says it is.**
+   *
+   * ── THE PATH `B-199`'S `finally` CANNOT CLOSE ────────────────────────────────
+   *
+   * `B-199` guards the defer→commit window against a THROW: the commit sits in a `finally`
+   * and is sent on every exit path. What a `finally` cannot do is deliver. When the socket
+   * dies between the first `DEFER` and the `COMMIT`, every send after the death fails at
+   * once — the batch's own commit, the guard's commit, the rollback — and the lines that
+   * were acked BEFORE it are already in the server's queue. Measured on the plant (`B-199`):
+   * a change staged on a destroyed socket was applied by a commit from a new one. So the
+   * orphan waits, indefinitely, for the next `COMMIT` on the channel — a later take of ANY
+   * row on it — and lands with that action, on layers that action did not touch.
+   *
+   * ── WHAT THIS DOES, AND WHY THIS ORDER ──────────────────────────────────────
+   *
+   * On the primary's next `healthy`, if a commit is on record as undelivered: commit it —
+   * applying the partial batch, which is `B-199`'s commit-anyway decision for `B-199`'s
+   * reasons (bounded, immediate, attributable, REPAIRABLE) — and then re-assert the ledger's
+   * geometry for every row seated on that channel, un-deferred, so the partial geometry
+   * stands for one round trip rather than until the next unrelated take. The commit comes
+   * first because the repair is un-deferred: sent before the commit it would be applied at
+   * once and then overwritten by the orphan the commit flushes. Nothing here is sent unless
+   * this process staged something and failed to commit it — an empty staging area of ours
+   * is never swept, for the cross-connection reason `#commitStagedMixer` gives.
+   *
+   * A commit that fails AGAIN (the link flapped) re-orphans the channel through the same
+   * helper, so the next `healthy` tries again; the repair is skipped then, because it
+   * would not land either.
+   *
+   * ⚠ **WHAT THIS CANNOT REACH — process death.** The flag lives in this process. A bridge
+   * that is killed mid-batch takes the flag with it, and the next start has no way to know
+   * the server is holding an orphan short of committing unconditionally on connect — which
+   * sweeps whatever any other client has staged, the cross-connection exposure `B-198`
+   * bounded. That is an owner decision and is filed under `B-221`, not made here.
+   */
+  async #flushOrphanedStaging(): Promise<void> {
+    const channel = this.#orphanedMixerChannel;
+    if (channel === null) return;
+    this.#orphanedMixerChannel = null;
+    if (!(await this.#sendMixerCommit(channel)).landed) return;
+    for (const [itemId, records] of this.#liveLayers) {
+      if (!records.some((record) => record.slot.channel === channel)) continue;
+      // Under the row's seat lock so the repair cannot interleave with a switch or swap
+      // that arrived with the link; a take is unlocked by design and re-asserts every seat
+      // it owns anyway.
+      await this.#withLiveSeatLock(itemId, () => this.#reassertLedgerGeometry(itemId));
+    }
+  }
+
+  /**
+   * `B-221` then `LOOK-SWITCH-01`, in that order, when the primary comes (back) to `healthy`: the
+   * orphan flush first, exactly as before; then, on a NEW connection, our full mixer state.
+   */
+  async #mixerStateOnHealthy(newConnection: boolean): Promise<void> {
+    await this.#flushOrphanedStaging();
+    if (newConnection) await this.#resendLiveMixerState();
+    // `ROUTE-PLATES-01` rule 5 — then D10 again, bounded, for the route plates the ledger holds.
+    if (newConnection) await this.#routeEpochAfterReconnect();
+  }
+
+  /**
+   * 🔴 `LOOK-SWITCH-01` — **AFTER EVERY AMCP RECONNECT, THE FIRST `DEFER` SET CARRIES OUR FULL
+   * DESIRED MIXER STATE — of our own plate layers, never one below the floor.**
+   *
+   * The Playout's core team (`PLAYOUT-CG-RESPONSE-V13-STATE` §3.2, fact 3): the deferred list is
+   * ONE per channel, shared by every connection, and it outlives a dropped one; a core restart
+   * resets every layer's transform. Nothing re-sent our mixer state after a reconnect (`design.md`
+   * §0.4), so a plate could come back hidden-but-audible — a batch that died after staging a
+   * returning plate's `VOLUME` left the volume applied by the orphan flush and the picture parked by
+   * its repair — until a take re-muted it.
+   *
+   * So each row the ledger holds is re-sent whole, under its own seat lock (a switch or a swap that
+   * arrived with the link runs after it): `FILL` + `CLIP` as recorded, the volume AS TODAY'S CODE
+   * COMPUTES IT (a held or parked plate muted, every other its recorded intent, which a landed
+   * silence has already lowered), and `OPACITY 1` — every settled plate is revealed; hidden is only
+   * ever a moment inside one action. All `DEFER`, then that row's one `MIXER <ch> COMMIT`, back to
+   * back. ONLY layers in CG's bands ({@link isInCgBands}, 50 and up): 1–49 is the playout server's,
+   * and nothing is ever sent there. An empty ledger sends nothing at all.
+   *
+   * ⚠ It reaches the primary through the one seam (`#send`): in `mirror-sync` the backup receives
+   * the same lines. A reconnect of the BACKUP alone re-sends nothing — that needs a send to one
+   * session, which this seam does not have, and is filed rather than built (`design.md` §1).
+   */
+  async #resendLiveMixerState(): Promise<void> {
+    for (const itemId of [...this.#liveLayers.keys()]) {
+      await this.#withLiveSeatLock(itemId, async () => {
+        const records = (this.#liveLayers.get(itemId) ?? []).filter((r) =>
+          isInCgBands(r.slot.layer),
+        );
+        for (const channel of new Set(records.map((r) => r.slot.channel))) {
+          for (const record of records.filter((r) => r.slot.channel === channel)) {
+            const volume = wireVolumeOf(record);
+            for (const line of [
+              ...this.#builder.mixerFit(record.slot, { fill: record.fill, clip: record.clip }),
+              // `PLAYOUT-SOURCES-01` §1.I — a Playout input's declared volume is re-set by a ramp.
+              this.#builder.mixerVolume(
+                record.slot,
+                volume,
+                plateVolumeFrames(record.origin, volume),
+              ),
+              // `ROUTE-PLATES-01` — a held Playout route stays hidden; every other plate is shown.
+              this.#builder.mixerOpacity(record.slot, wireOpacityOf(record)),
+            ]) {
+              this.#stagedMixerChannel = channel;
+              await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
+            }
+          }
+          await this.#commitStagedMixer();
+        }
+      });
+    }
+  }
+
+  /**
+   * `B-199` — put every layer the LEDGER still names back on the geometry it names.
+   *
+   * Reached only from the guard above, after a batch threw. The ledger is the record of what
+   * the console believes is on air; re-emitting it is what makes the picture agree with the
+   * sentence again. Failures are ignored on purpose — this is already the unwind path, and
+   * the next reconcile re-plans from the same ledger.
+   */
+  async #reassertLedgerGeometry(itemId: string): Promise<void> {
+    for (const record of this.#liveLayers.get(itemId) ?? []) {
+      for (const line of this.#builder.mixerFit(record.slot, {
+        fill: record.fill,
+        clip: record.clip,
+      })) {
+        await this.#send(line, this.#nextSeq(), 'urgent');
+      }
+    }
+  }
+
+  /**
+   * 🔴 `FIELD-FIXES-01-A` — **THE ONE PLACE A LAYER IS CLEARED AFTER A REFUSAL.**
+   *
+   * Every clean-up that follows a refused operation comes here — the take's rollback, the dropped
+   * preset, the live/switch teardown of the failed plate, and the graphic a refused take added —
+   * and the answer is {@link mayClearAfterRefusal}'s, never a local one: a layer is cleared only
+   * if this operation put a producer on it, and never if one of ours was on it before.
+   *
+   * A PLATE goes with its mixer (`CLEAR` + `MIXER CLEAR`, the pair every plate teardown sends).
+   * The GRAPHIC goes the way `out()` takes it: the `CLEAR`, the adoption that proves on the
+   * primary, and `B-253`'s mixer reset of a bank layer we have just emptied.
+   *
+   * Answers whether a `CLEAR` was acknowledged, so a caller's ledger keeps naming a layer whose
+   * `CLEAR` did not land — a producer of ours may still be on it.
+   */
+  async #clearAfterRefusal(
+    slot: CommandSlot,
+    seat: RefusalSeat,
+    what: 'plate' | 'page',
+  ): Promise<boolean> {
+    if (!mayClearAfterRefusal(seat)) return false;
+    const cleared = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+    if (what === 'plate') {
+      await this.#resetPlateMixerIfCleared(slot, cleared);
+    } else {
+      if (cleared.ok && cleared.onPrimary) this.#markAdoptedOnPrimary(slot);
+      await this.#resetEmptiedLayerMixer(slot, cleared);
+    }
+    return cleared.ok;
+  }
+
+  /**
+   * 🔴 `LOOK-SWITCH-01` — **THE SEAT STEP: EVERY PRODUCER AN ACTION STARTS IS STARTED HIDDEN, AND
+   * SHOWN ONLY IN THAT ACTION'S ONE COMMIT.**
+   *
+   * ── WHY ────────────────────────────────────────────────────────────────────
+   *
+   * Mixer state is the LAYER's, not the producer's (2.5.0 `stage.cpp` keeps `tweens_` apart from
+   * `layers_`), so a producer `PLAY`ed on a layer is drawn at whatever transform the layer holds,
+   * from its first frame. On a fresh layer — or one a teardown's `MIXER CLEAR` put back — that is
+   * full frame, opaque and at full volume until the action's commit lands its fit (`design.md`
+   * §0.1 case B). The Playout's core team gave the pattern (`PLAYOUT-CG-RESPONSE-V13-STATE` §3.2):
+   * hide and mute first — `OPACITY 0`, `VOLUME 0` and the fit, as `DEFER` — then ONE
+   * `MIXER <ch> COMMIT`, waiting for its `202`; THEN the `PLAY`; the reveal (`OPACITY 1` and the
+   * plate's volume) rides the action's one commit. Showing is `OPACITY`, not `PLAY`.
+   *
+   * ── WHAT IS NEVER HIDDEN ───────────────────────────────────────────────────
+   *
+   * 🔴 **A LAYER A PRODUCER OF OURS IS ON.** A `PLAY` there is a REPLACE in place (`R-048`'s swap,
+   * `B-126`) and the layer's transform is already that plate's box, so the new producer inherits
+   * the right geometry. Hiding it first would take the working picture OFF AIR before the replace
+   * is known to land, and a refused `PLAY` would leave it off air — `B-126`'s destructive-before-
+   * constructive window, and `FIELD-FIXES-01-A`'s rule (a refused `PLAY` never clears a layer that
+   * held a working producer) under another name. So `hide` is decided per seat by the caller, from
+   * the ledger it read once (`oursBefore`).
+   *
+   * ── WHAT IT ANSWERS ────────────────────────────────────────────────────────
+   *
+   * Per seat, what its `PLAY`'s reply said. It stops at the first REQUIRED seat that did not land —
+   * the seats after it are never tried, exactly as the applier's loop never tried them — and goes
+   * on past a refused PRESET, which its action drops (session BM). A hide that did not land (a line
+   * refused, or the commit not acked on the primary) sends NO `PLAY` at all: every seat answers
+   * `refused` with `sent: false`, so its action is refused having seated nothing.
+   */
+  async #seatPlates(requests: readonly SeatRequest[]): Promise<Map<string, SeatResult>> {
+    const results = new Map<string, SeatResult>();
+    if (requests.length === 0) return results;
+    if (requests.some((r) => r.hide || mutedInPlace(r))) {
+      let hideFailure: { errorCode: string; command?: string } | undefined;
+      hide: for (const request of requests) {
+        const { placement } = request;
+        const lines = request.hide
+          ? [
+              this.#builder.mixerOpacity(placement.slot, 0),
+              this.#builder.mixerVolume(placement.slot, CREATED_MUTED_VOLUME),
+              ...this.#builder.mixerFit(placement.slot, placement.fit),
+            ]
+          : mutedInPlace(request)
+            ? [this.#builder.mixerVolume(placement.slot, CREATED_MUTED_VOLUME)]
+            : [];
+        for (const line of lines) {
+          this.#stagedMixerChannel = placement.slot.channel;
+          const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
+          if (sent.ok) continue;
+          hideFailure = {
+            errorCode: sent.errorCode ?? 'amcp-error',
+            ...(sent.command !== undefined && { command: sent.command }),
+          };
+          break hide;
+        }
+      }
+      /*
+        ONE commit, sent whatever happened above: a staged change nobody commits is applied by
+        whoever commits next (`B-198`). Our `DEFER`s and their `COMMIT` go out back to back, outside
+        any `BEGIN` (fact 3), and the reply is awaited — it arrives after the transforms are
+        installed (`AMCPCommandsImpl.cpp` 865–869), so every `PLAY` below starts hidden.
+      */
+      const committed = await this.#commitStagedMixer();
+      if (hideFailure === undefined && !committed.landed) {
+        hideFailure = {
+          errorCode: committed.errorCode ?? 'amcp-error',
+          ...(committed.command !== undefined && { command: committed.command }),
+        };
+      }
+      if (hideFailure !== undefined) {
+        for (const r of requests) {
+          results.set(r.placement.producerArg, {
+            placement: r.placement,
+            outcome: 'refused',
+            sent: false,
+            hidden: false,
+            ...hideFailure,
+          });
+        }
+        await this.#restoreInPlaceMutes(requests.filter(mutedInPlace));
+        return results;
+      }
+    }
+    for (const r of requests) {
+      const sent = await this.#startSeatProducer(r.placement);
+      // `ROUTE-PLATES-01` — a route names its own outcome when its `LOADBG` landed (`loaded`).
+      const outcome = sent.outcome ?? outcomeOf(sent);
+      results.set(r.placement.producerArg, {
+        placement: r.placement,
+        outcome,
+        sent: true,
+        hidden: r.hide,
+        ...(sent.playedArg !== undefined && { playedArg: sent.playedArg }),
+        ...(sent.routePlayedAt !== undefined && { routePlayedAt: sent.routePlayedAt }),
+        ...(sent.backupRefused !== undefined && { backupRefused: sent.backupRefused }),
+        ...(sent.errorCode !== undefined && { errorCode: sent.errorCode }),
+        ...(sent.command !== undefined && { command: sent.command }),
+      });
+      if (outcome !== 'landed' && !r.optional) break;
+    }
+    /*
+      `PLAYOUT-SOURCES-01` §1.I — an in-place mute whose replace did NOT happen gives the working
+      producer its volume back: its `PLAY` was refused, or never tried (a seat before it stopped the
+      step). A `PLAY` whose reply never came may have landed, so that layer stays silent until its
+      reveal or the operator — the safe direction.
+    */
+    await this.#restoreInPlaceMutes(
+      requests.filter((r) => {
+        if (!mutedInPlace(r)) return false;
+        const seat = results.get(r.placement.producerArg);
+        return seat === undefined || foregroundUnchanged(seat.outcome);
+      }),
+    );
+    return results;
+  }
+
+  /**
+   * `PLAYOUT-SOURCES-01` §1.I — give back the volume an in-place mute ({@link mutedInPlace}) took
+   * from the producer that stayed on the layer: its ledger record's volume as today's code computes
+   * it ({@link wireVolumeOf} — held or parked is silent, so nothing is sent), ramped when that
+   * producer is itself a Playout input.
+   */
+  async #restoreInPlaceMutes(requests: readonly SeatRequest[]): Promise<void> {
+    for (const { placement } of requests) {
+      const wanted = adoptionKey(placement.slot);
+      let record: LiveLayerRecord | undefined;
+      for (const records of this.#liveLayers.values()) {
+        record = records.find((r) => adoptionKey(r.slot) === wanted) ?? record;
+      }
+      if (record === undefined) continue;
+      const volume = wireVolumeOf(record);
+      if (volume <= CREATED_MUTED_VOLUME) continue;
+      await this.#send(
+        this.#builder.mixerVolume(record.slot, volume, plateVolumeFrames(record.origin, volume)),
+        this.#nextSeq(),
+        'urgent',
+      );
+    }
+  }
+
+  /**
+   * `LOOK-SWITCH-01` — start ONE seat's producer: the one place the seat step does.
+   *
+   * ⭐ **`ROUTE-PLATES-01`: a `route` plate's `LOADBG` → `PLAY` pair (≥ 40 ms, ≤ 200 ms apart) goes
+   * HERE and nowhere else.** It is inside the seat step, so the plate is already hidden, and a
+   * refusal of either half is answered exactly like a refused `PLAY`.
+   */
+  async #startSeatProducer(placement: LivePlatePlacement): Promise<{
+    ok: boolean;
+    errorCode?: string;
+    command?: string;
+    playedArg?: string;
+    routePlayedAt?: number;
+    /** A route's own reading of what its failure left on the layer (`loaded`); else from the reply. */
+    outcome?: SeatOutcome;
+    /** `PLAYOUT-FEATURES-01` A — server B was sent nothing for this clip, and why. */
+    backupRefused?: BackupRefusalReason;
+  }> {
+    // `ROUTE-PLATES-01` — a Playout route is started by its own pair, here and nowhere else.
+    if (placementIsPlayoutRoute(placement)) return this.#startRouteProducer(placement);
+    // `MEDIA-PLATES-01` §1.B — a clip whose Loop is on is played with `LOOP`; one that is not freezes
+    // on its last frame at its end (2.5.0's ffmpeg producer — nothing more is needed for that).
+    const play = { loop: placement.playback?.loop === true };
+    // 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — server B's OWN line for a clip, read off the backup lookup's
+    // cache (never awaited): B's own path, or nothing at all with the reason for the row.
+    const backup = this.#backupPlayFor(placement, play);
+    const sendOptions = backup.serverB === undefined ? {} : { serverB: backup.serverB };
+    const withBackup = <T extends object>(
+      result: T,
+    ): T & { backupRefused?: BackupRefusalReason } =>
+      backup.refused === undefined ? result : { ...result, backupRefused: backup.refused };
+    const first = await this.#send(
+      this.#builder.playSource(placement.slot, placement.producer, play),
+      this.#nextSeq(),
+      'urgent',
+      sendOptions,
+    );
+    /*
+      🔴 `PLAYOUT-SOURCES-01` §1.C — **THE ONE RETRY.** A Playout media item's `clip` moves between
+      its cache and its original, so a `PLAY` answered `404` may be a path that was right a moment
+      ago. ONE `ids=` read, bounded at 1.5 s; if the item's `clip` changed, the `PLAY` is sent ONCE
+      more with the fresh path, and whatever that answers is the seat's answer — never a second
+      retry. Otherwise the first refusal stands, and the action fails as `FIELD-FIXES-01-A` decided.
+      The only Playout read inside a verb, and only on its failure path (ADR 0010 rule 14).
+    */
+    const freshen = this.#freshMediaClip;
+    if (
+      first.ok ||
+      first.errorCode !== 'amcp-404' ||
+      freshen === null ||
+      placement.producer.kind !== 'media' ||
+      placement.source.origin !== 'media'
+    ) {
+      return withBackup(first);
+    }
+    const fresh = await freshen(placement.source.id, placement.producer.file);
+    if (fresh === null) return withBackup(first);
+    const producer = { ...placement.producer, file: fresh };
+    const retried = await this.#send(
+      this.#builder.playSource(placement.slot, producer, play),
+      this.#nextSeq(),
+      'urgent',
+      sendOptions,
+    );
+    // The ledger records the argument actually SENT — asked of the one formatter, never re-spelt.
+    return withBackup({ ...retried, playedArg: this.#builder.sourceArgument(producer) });
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` — **CONTRACT v1.3 RULE 4 (C2, as corrected): A PLAYOUT ROUTE'S `LOADBG` →
+   * `PLAY` PAIR.** Inside the seat step, so the layer is already hidden and muted, committed, `202`
+   * received — and nowhere else.
+   *
+   * - `LOADBG <ch>-<L> "route://H-L"`, then the bare `PLAY <ch>-<L>` no sooner than
+   *   {@link ROUTE_LOADBG_MIN_MS} after the `LOADBG`'s reply (the holder queues a fresh frame) and no
+   *   later than {@link ROUTE_LOADBG_MAX_MS} after the `LOADBG` left (a preloaded route holds the
+   *   frame it was loaded with, and a cold one can air one black frame). A missed window drops that
+   *   `LOADBG` — a fresh one replaces it — once; missed twice, the seat is refused like a refused
+   *   `PLAY`, and `FIELD-FIXES-01-A` decides the rest.
+   * - Both lines carry the placement's epoch to the send seam, which refuses them unless it is the
+   *   current, confirmed one (rule 5), and both reach the PRIMARY ONLY, never journaled (C4).
+   * - A CUT: no transition word, and never inside `BEGIN…COMMIT` (nothing here uses one).
+   */
+  async #startRouteProducer(placement: LivePlatePlacement): Promise<{
+    ok: boolean;
+    errorCode?: string;
+    command?: string;
+    routePlayedAt?: number;
+    outcome?: SeatOutcome;
+  }> {
+    const clock = this.#routeClock;
+    // A seat with no epoch still goes through the seam, which refuses `''` as stale: one door.
+    const routeEpoch = placement.epoch ?? '';
+    const loadLine = this.#builder.loadBackground(placement.slot, placement.producer);
+    /*
+      Once a `LOADBG` has landed, a failure after it is `loaded`, not `refused`: the foreground is as
+      it was, and a producer of THIS operation sits in the background (`refusal-cleanup.ts`). A reply
+      that never came stays `unknown` — the `PLAY` may have promoted it.
+    */
+    let backgroundLoaded = false;
+    const afterLoad = (sent: { ok: boolean; errorCode?: string }): SeatOutcome | undefined => {
+      if (!backgroundLoaded) return undefined;
+      const outcome = outcomeOf(sent);
+      return outcome === 'refused' ? 'loaded' : outcome;
+    };
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const loadedAt = clock.now();
+      const loaded = await this.#send(loadLine, this.#nextSeq(), 'urgent', { routeEpoch });
+      if (!loaded.ok) {
+        const outcome = afterLoad(loaded);
+        return outcome === undefined ? loaded : { ...loaded, outcome };
+      }
+      backgroundLoaded = true;
+      const playAt = clock.now() + ROUTE_LOADBG_MIN_MS;
+      if (playAt - loadedAt <= ROUTE_LOADBG_MAX_MS) {
+        await sleepUntil(clock, playAt);
+        // The sleep itself may have overrun the window: asked again, right before the PLAY.
+        if (clock.now() - loadedAt <= ROUTE_LOADBG_MAX_MS) {
+          const playedAt = clock.now();
+          const played = await this.#send(
+            this.#builder.playLoaded(placement.slot),
+            this.#nextSeq(),
+            'urgent',
+            { routeEpoch },
+          );
+          const outcome = played.ok ? undefined : afterLoad(played);
+          return {
+            ...played,
+            routePlayedAt: playedAt,
+            ...(outcome !== undefined && { outcome }),
+          };
+        }
+      }
+      process.stderr.write(
+        `[caspar-bridge] plate "${placement.plateId}": its route could not be played within ` +
+          `${String(ROUTE_LOADBG_MAX_MS)} ms of its LOADBG (${String(Math.round(clock.now() - loadedAt))} ms)` +
+          `${attempt === 1 ? '; a fresh LOADBG replaces it' : '; the seat is refused'}.\n`,
+      );
+    }
+    return {
+      ok: false,
+      errorCode: ROUTE_WINDOW_MISSED_CODE,
+      command: summarizeWireLine(loadLine),
+      // Both `LOADBG`s landed and no `PLAY` was sent: ours is in the background, nothing else moved.
+      outcome: 'loaded',
+    };
+  }
+
+  /**
+   * 🔴 `LOOK-SWITCH-01` / `B-273` — **A SWITCH SEATS WHAT ITS LOOK NEEDS BEFORE THE PAGE IS TOLD.**
+   *
+   * The owner's decision (2026-09-27): a look switch is all-or-nothing. If a plate the new look
+   * needs is refused, the page never moves and nothing on air changes; so the plate has to be
+   * seated — and its refusal known — BEFORE the page's `CG UPDATE`, and seated hidden, or it would
+   * be on air at full frame before the switch (`design.md` §0.1 case B, §3).
+   *
+   * What it seats is exactly what the applier would otherwise `PLAY` inside the switch
+   * ({@link isSeatUnchanged}, the one spelling): a preset dropped at the take, a `media` plate
+   * released when it left a look — every entered-look placement, and every fresh PRESET, whose
+   * producer the ledger does not hold on that layer. ⚠ **Except a layer a producer of ours is on**:
+   * a `PLAY` there REPLACES a picture that may be on air in the look being left (after a catalog
+   * re-point, `B-155`'s lurk), and it cannot be hidden without taking that picture off air first
+   * ({@link #seatPlates}). That one keeps today's in-switch path.
+   *
+   * On a refused REQUIRED seat it undoes only what it seated, through the one rule
+   * (`mayClearAfterRefusal`), and answers the refusal naming the plate and its source: no page
+   * `UPDATE` and no further `MIXER COMMIT` follow. A refused PRESET is left for the applier's
+   * drop, as ever.
+   */
+  async #preSeatSwitch(
+    itemId: string,
+    plan: LivePlateApplyPlan,
+  ): Promise<
+    | { readonly ok: true; readonly seats: ReadonlyMap<string, SeatResult> }
+    | { readonly ok: false; readonly refusal: LivePlateApplyResult }
+  > {
+    const previous = this.#liveLayers.get(itemId) ?? [];
+    const priorByProducer = new Map(previous.map((r) => [r.producer, r] as const));
+    const oursBefore = this.#liveLayerKeys();
+    const requests: SeatRequest[] = [];
+    for (const placement of [
+      ...plan.placements,
+      ...plan.parked.filter((p) => !priorByProducer.has(p.producerArg)),
+    ]) {
+      if (isSeatUnchanged('switch', priorByProducer.get(placement.producerArg), placement))
+        continue;
+      if (oursBefore.has(adoptionKey(placement.slot))) continue;
+      requests.push({ placement, hide: true, optional: placement.held });
+    }
+    let seats: Map<string, SeatResult>;
+    try {
+      seats = await this.#seatPlates(requests);
+    } finally {
+      // `B-199`'s rule for this step too: a throw inside the hide leaves nothing staged.
+      await this.#commitStagedMixer();
+    }
+    const failed = requests.find((r) => {
+      const seat = seats.get(r.placement.producerArg);
+      return !r.optional && seat !== undefined && seat.outcome !== 'landed';
+    });
+    if (failed === undefined) return { ok: true, seats };
+    await this.#undoPreSeat(seats);
+    const seat = seats.get(failed.placement.producerArg);
+    return {
+      ok: false,
+      refusal: {
+        ok: false,
+        errorCode: seat?.errorCode ?? 'amcp-error',
+        message:
+          `the look was NOT changed — CasparCG refused the source "${failed.placement.source.name}" ` +
+          `for a box the new look shows, before anything moved. Nothing on air changed.`,
+        ...(seat?.command !== undefined && { command: seat.command }),
+        refused: { plateId: failed.placement.plateId, source: failed.placement.source },
+      },
+    };
+  }
+
+  /**
+   * `LOOK-SWITCH-01` — take back off what a pre-seat started, through the one rule: a seat whose
+   * `PLAY` was refused put nothing there; one that landed (or went unanswered) is cleared. Never
+   * a layer one of ours held before — the pre-seat seats no such layer.
+   */
+  async #undoPreSeat(seats: ReadonlyMap<string, SeatResult> | undefined): Promise<void> {
+    for (const seat of seats?.values() ?? []) {
+      if (!seat.sent) continue;
+      await this.#clearAfterRefusal(
+        seat.placement.slot,
+        { outcome: seat.outcome, heldBefore: false },
+        'plate',
+      );
+    }
+  }
+
+  async #applyLivePlatesUnguarded(
+    itemId: string,
+    plan: LivePlateApplyPlan,
+    mode: 'take' | 'live' | 'switch',
+    preSeated?: ReadonlyMap<string, SeatResult>,
+  ): Promise<LivePlateApplyResult> {
+    const { placements, parked, resolved, offFrame, declared, unresolved } = plan;
+    const previous = this.#liveLayers.get(itemId) ?? [];
+    if (placements.length === 0 && parked.length === 0 && previous.length === 0)
+      return { ok: true };
+    /*
+      🔴 `FIELD-FIXES-01-A` — EVERY LAYER A PRODUCER OF OURS WAS ON WHEN THIS ACTION BEGAN, any
+      row's, read ONCE here before anything below rewrites a ledger. It is the Rule's
+      `heldBefore` (`refusal-cleanup.ts`): a layer in this set is never cleared after a refusal.
+    */
+    const oursBefore = this.#liveLayerKeys();
+
+    /*
+      6.5f / 6.9c — THE PLATE'S AUDIO INTENT, READ FROM `#plateVolumes` AND NOT FROM
+      THE PREVIOUS LEDGER.
+
+      The intent belongs to the PLATE, so a re-seat carries it: a plate the operator
+      deliberately raised must not go silent because its item was re-taken, and a
+      plate nobody raised is born muted, which is the rule.
+
+      🔴 It used to be read off `previous` — the ledger records for this item — and
+      that was wrong in exactly the case the rule exists for. The ledger is
+      destroyed by teardown, so a CLEAR followed by a re-take dropped the intent
+      and re-muted the plate with nothing anywhere saying it had happened. The
+      intent map outlives both, which is also what lets retention carry it.
+    */
+    const intent = this.#plateVolumes.get(itemId) ?? {};
+    const key = (record: { slot: CommandSlot }): string => adoptionKey(record.slot);
+    const same = (a: NormalizedRect, b: NormalizedRect): boolean =>
+      a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+    /*
+      🔴 KEYED ON THE PRODUCER, NOT THE PLATE (session BM). The prior record for a seat is
+      the one carrying the same INPUT — that is the seat's identity, and it is what must not
+      be re-`PLAY`ed. Keying on the plate would find no prior for an input whose punching
+      frame changed name across a look switch and re-seat a producer that never moved: a
+      visible re-acquire on air, which is precisely what §12.4 chose "held" to avoid.
+    */
+    const priorByProducer = new Map(previous.map((r) => [r.producer, r] as const));
+    const priorBySlot = new Map(previous.map((r) => [adoptionKey(r.slot), r] as const));
+
+    /** The ledger this action is building — seated plates first, then the held ones. */
+    const next: LiveLayerRecord[] = [];
+    /** Records this action actually sent a `PLAY` for — the rollback set. */
+    const touched: LiveLayerRecord[] = [];
+    /**
+     * 🔴 `B-166` — the plates whose GEOMETRY this action moved, with the fit they had BEFORE.
+     *
+     * The switch's rollback set, and deliberately a different set from {@link touched}: that
+     * one holds plates we CREATED and undoing it destroys a producer, while this one holds
+     * plates that were already on air and undoing it is a re-fit. Re-emitting a `MIXER
+     * FILL`/`CLIP` is non-destructive by construction — no `out`, no `MIXER CLEAR`, nothing
+     * torn down — which is what makes an all-or-nothing switch safe where an all-or-nothing
+     * SWAP would not be (`B-126`).
+     */
+    const moved: { slot: CommandSlot; fill: NormalizedRect; clip: NormalizedRect }[] = [];
+    /** Plates this action un-muted on the way out of HELD — re-muted by the same rollback. */
+    const unmuted: CommandSlot[] = [];
+    /**
+     * `ROUTE-PLATES-01` — Playout routes this action un-hid on the way out of HELD — re-hidden too.
+     * `MEDIA-PLATES-01` — and held clips ({@link hiddenWhenHeld}, the one question).
+     */
+    const unhidden: CommandSlot[] = [];
+    /** `MEDIA-PLATES-01` — hidden-paused clips this action `RESUME`d on the way out of HELD. */
+    const resumed: CommandSlot[] = [];
+    /**
+     * `MEDIA-PLATES-01` §1.C — the seats this action HOLDS whose clip is set to `pause`: each is sent
+     * its `PAUSE` right after the switch's one commit has hidden it (a `PAUSE` cannot be `DEFER`red —
+     * it is not a `MIXER` line — so it follows the commit, and the clip is never seen to stop).
+     */
+    const pauseWhenHidden = new Set<string>();
+    let failure: string | undefined;
+    let failedPlate:
+      | {
+          record: LiveLayerRecord;
+          /** The record for this SEAT (same producer), if we already had one. */
+          prior: LiveLayerRecord | undefined;
+          /**
+           * 🔴 **The record that was on this SLOT — a DIFFERENT question from {@link prior},
+           * and the one the destructive step turns on.**
+           *
+           * They used to be the same record, because identity was the plate and a plate never
+           * changed layer within an action. Under (B′) identity is the PRODUCER, so a
+           * substitution (`R-048`, the whole reason the failure path is this careful) arrives
+           * as a seat with NO history at all — its `prior` is `undefined` — while the layer
+           * underneath it is very much ours and carrying a working picture.
+           *
+           * Asking `prior === undefined` there answered "nothing of ours was on this slot", the
+           * `CLEAR`ed the operator's dead-but-visible feed on a repair that had merely been
+           * refused: `B-126`'s window, re-opened from a direction the plate-keyed code could
+           * not have. The question the comment below always MEANT to ask is about the slot.
+           */
+          priorOnSlot: LiveLayerRecord | undefined;
+          /** Did this plate send a `PLAY` at all (a re-seat), or only geometry (a re-fit)? */
+          reseat: boolean;
+          playLanded: boolean;
+          /**
+           * `FIELD-FIXES-01-A` — what the reply said about THIS seat's producer (the Rule's
+           * input): a `PLAY` refused 4xx put nothing on the layer; a line refused AFTER the
+           * `PLAY` means the `PLAY` landed; no usable reply leaves it unknown.
+           */
+          outcome: SeatOutcome;
+          /** The placement, so a refused TAKE can name the plate and its source. */
+          placement: LivePlatePlacement;
+          /** The refused line as `#send` summarised it (`B-209`) — for the record, never the sentence. */
+          command: string | undefined;
+        }
+      | undefined;
+
+    /*
+      🔴 SESSION BM — A PRESET IS SEATED HERE, WITH THE PUNCHED SEATS, AND NOWHERE ELSE.
+
+      A parked seat that ALREADY has a record is handled by the release policy at the bottom
+      (it is simply a seat this look does not punch — §12.4's hold, unchanged). A parked seat
+      with NO record is a producer this item has never put up: the operator preset a look
+      nobody is showing. It needs the same `PLAY` every other seat needs, so it goes through
+      the same loop — one seating path, one rollback, one failure vocabulary.
+    */
+    const freshParked = parked.filter((p) => !priorByProducer.has(p.producerArg));
+
+    /*
+      🔴 `LOOK-SWITCH-01` — **THE SEAT STEP RUNS FIRST, before this batch stages a single line.**
+
+      Every plate this action must `PLAY` is started HIDDEN ({@link #seatPlates}): its hide commit
+      therefore cannot split the batch below, and its reveal rides the batch's one commit with every
+      other plate's move. A switch has already run the step BEFORE the page was told (`preSeated`,
+      from `reconcileLivePlates`); only what that did not seat — a replace in place — is seated here.
+      The order of `toSeat` is the loop's own order, so "the seats after a refused one were never
+      tried" means the same thing in both.
+    */
+    const toSeat: SeatRequest[] = [];
+    for (const placement of [...placements, ...freshParked]) {
+      if (isSeatUnchanged(mode, priorByProducer.get(placement.producerArg), placement)) continue;
+      if (preSeated?.has(placement.producerArg) === true) continue;
+      toSeat.push({ placement, hide: !oursBefore.has(key(placement)), optional: placement.held });
+    }
+    const seats = new Map<string, SeatResult>(preSeated ?? []);
+    for (const [producerArg, seat] of await this.#seatPlates(toSeat)) seats.set(producerArg, seat);
+    /*
+      🔴 A TAKE STAGES NOTHING ONCE ONE OF ITS REQUIRED SEATS IS REFUSED. Its reveals would ride the
+      failure path's commit below (`B-198`: a failed batch is committed, never left staged) and put
+      the plates that DID land on air — on a channel whose graphic is never played — until the
+      rollback cleared them: `B-161`'s videos with no template above them, for a frame or two. So a
+      refused take only builds its records, and the rollback clears what it seated, still hidden.
+      (`'live'` keeps its partial apply, and a switch's required seats were refused before the page
+      was told, in `#preSeatSwitch`.)
+    */
+    const takeRefused =
+      mode === 'take' &&
+      toSeat.some((r) => {
+        const seat = seats.get(r.placement.producerArg);
+        return !r.optional && seat !== undefined && seat.outcome !== 'landed';
+      });
+    /*
+      🔴 `ROUTE-PLATES-01` rule 4 (C2) — THE REVEAL GOES ONE OR TWO TICKS AFTER A ROUTE'S `PLAY`, so
+      its stale first frame and the first tick after it pass hidden. A take reveals in the very next
+      batch, so it waits here until {@link ROUTE_REVEAL_AFTER_PLAY_MS} after the latest route `PLAY`;
+      a switch's pre-seated routes already ran hidden through its preroll, and the wait is spent.
+      Nothing waits when no route was played, or when nothing will be revealed.
+    */
+    /*
+      `PLAYOUT-FEATURES-01` C — and "one or two ticks" is a whole tick at the ROUTE'S OWN RATE: each
+      route's wait is two of its channel ticks, never under 80 ms (`routeRevealDelayMs`), and the reveal
+      waits for the latest of them.
+    */
+    const revealAt = Math.max(
+      Number.NEGATIVE_INFINITY,
+      ...[...seats.values()].map((s) =>
+        s.routePlayedAt === undefined
+          ? Number.NEGATIVE_INFINITY
+          : s.routePlayedAt +
+            routeRevealDelayMs(
+              s.placement.producer.kind === 'route' ? s.placement.producer.videoMode : undefined,
+            ),
+      ),
+    );
+    if (!takeRefused && Number.isFinite(revealAt)) {
+      await sleepUntil(this.#routeClock, revealAt);
+    }
+
+    /**
+     * `B-198` — has this batch staged anything? The `COMMIT` after the loop is sent ONLY if it
+     * has, and that condition is not tidiness: a commit is channel-wide and applies whatever is
+     * staged by ANY connection, so one issued over an empty batch of ours could apply a half
+     * built batch of somebody else's. We commit our own work or we say nothing.
+     *
+     * It carries the CHANNEL rather than a boolean, and takes it from the plate whose line was
+     * actually staged: the commit has to name the channel those `FILL`s were sent on, and
+     * re-deriving it from the item's slot afterwards would be a second answer to a question
+     * this loop already had in hand.
+     */
+    for (const placement of [...placements, ...freshParked]) {
+      const prior = priorByProducer.get(placement.producerArg);
+      const priorSlotRecord = priorBySlot.get(adoptionKey(placement.slot));
+      const producer = placement.producerArg;
+      /*
+        🔴 THE DELTA'S ONE QUESTION: is this plate already sitting where it needs to be,
+        showing what it needs to show? Layer AND producer, both — the layer alone would
+        re-fit a plate whose source had been swapped underneath it, and the producer alone
+        would leave a plate re-fitted on a layer it no longer occupies.
+
+        `held` is deliberately NOT part of this comparison. A held plate IS seated; that is
+        the whole point of holding it, and all coming back costs is the fit and its volume.
+
+        ⚠ Asked ONLY under `'live'`. A take re-asserts unconditionally — see the mode note
+        on {@link reconcileLivePlates}: the ledger cannot tell a healthy producer from one
+        the server has destroyed, so the repair verb must send rather than reason.
+
+        `LOOK-SWITCH-01` — ONE spelling ({@link isSeatUnchanged}), shared with the switch's
+        pre-seat, which must seat exactly the plates this loop would otherwise `PLAY`.
+      */
+      const seatUnchanged = isSeatUnchanged(mode, prior, placement);
+      // `PLAYOUT-SOURCES-01` §1.C — the argument the seat step actually played: the one retry
+      // may have played a media item's fresh `clip` instead of the placement's.
+      const playedArg = seatUnchanged ? undefined : seats.get(producer)?.playedArg;
+      /*
+        🔴 `MEDIA-PLATES-01` §1.C — A CLIP A LOOK HID AND PAUSED IS `RESUME`d AS A LOOK SHOWS IT, from
+        the same frame. Only a `hidden` pause: one the OPERATOR pressed stays paused whatever the looks
+        do, until they press Play or Restart.
+      */
+      const resumeOnReveal =
+        seatUnchanged &&
+        prior !== undefined &&
+        prior.held === true &&
+        prior.transport?.paused === 'hidden';
+
+      const record: LiveLayerRecord = {
+        slot: placement.slot,
+        sourceId: placement.plateId,
+        // `'fill'` for every producer form this change can seat. A fill+key PAIR is
+        // two layers, and seating it is C-027 — the role is recorded rather than
+        // assumed so the ledger is already shaped for it. A `decklink` mapping's
+        // `keyDevice` is stored and NOT sent (the Sources modal says so in the
+        // operator's own words); until C-027 lands, every record here is a fill.
+        role: 'fill',
+        producer: playedArg ?? producer,
+        fill: placement.fit.fill,
+        clip: placement.fit.clip,
+        // `??`, never `||`: a plate whose recorded intent IS 0 must resolve to 0
+        // rather than falling through to the default that happens to equal it —
+        // the two agree today, and a future non-zero default would make the bug
+        // appear in a line nobody edited.
+        // 🔴 `PLAYOUT-FEATURES-01` C — the playlist output's box is 0, whatever intent was armed:
+        // every line that reads this record (the reveal, an unhold, a reconnect's re-send) sends 0.
+        intendedVolume: isPlaylistOutput(placement.source)
+          ? CREATED_MUTED_VOLUME
+          : (intent[placement.plateId] ?? CREATED_MUTED_VOLUME),
+        ...(isPlaylistOutput(placement.source) && { audioLocked: true as const }),
+        // `PLAYOUT-SOURCES-01` §1.I — a later raise reaches this layer from the record alone.
+        ...(placement.source.origin !== undefined && { origin: placement.source.origin }),
+        // `ROUTE-PLATES-01` rule 5 — the epoch of the route actually running: the prior one for a
+        // seat this action does not re-`PLAY`, the placement's for one it does.
+        ...(() => {
+          if (!placementIsPlayoutRoute(placement)) return {};
+          const epoch = seatUnchanged ? prior?.epoch : placement.epoch;
+          return epoch === undefined ? {} : { epoch };
+        })(),
+        /*
+          🔴 A FRESH PARK STARTS `held: false` AND IS CORRECTED TO WHAT LANDED.
+
+          The flag records that the MUTE landed, never that we meant it — the same discipline
+          the release policy keeps, and for the same reason: a preset whose `MIXER VOLUME` was
+          refused would otherwise latch as held and never be retried, leaving a voice on air
+          from a box that is not on screen. It under-claims on failure, which costs a
+          redundant `VOLUME 0` and nothing else.
+        */
+        ...(placement.held && { held: false }),
+        /*
+          `MEDIA-PLATES-01` — a clip's state AS SENT: a fresh `PLAY` carries the Loop setting and
+          plays; a seat this action does not re-`PLAY` keeps the loop it has and who paused it —
+          except the pause the `RESUME` below takes back (corrected again if it is refused).
+        */
+        ...(placement.producer.kind === 'media' && {
+          transport:
+            seatUnchanged && prior !== undefined
+              ? {
+                  loop: prior.transport?.loop ?? false,
+                  ...(!resumeOnReveal &&
+                    prior.transport?.paused !== undefined && { paused: prior.transport.paused }),
+                }
+              : { loop: placement.playback?.loop === true },
+        }),
+        /*
+          🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — SERVER B WAS SENT NOTHING FOR THIS CLIP, and why: the row
+          says so in one line, and a transport verb to it reaches the primary only. The prior's verdict for
+          a seat this action does not re-`PLAY`; this `PLAY`'s for one it does.
+        */
+        ...(() => {
+          const reason = seatUnchanged
+            ? prior?.backupRefused?.reason
+            : seats.get(producer)?.backupRefused;
+          return reason === undefined
+            ? {}
+            : { backupRefused: { reason, name: placement.source.name } };
+        })(),
+      };
+      const recordIndex = next.length;
+
+      const lines: string[] = [];
+      if (seatUnchanged && prior !== undefined) {
+        /*
+          🔴 `B-166` — REMEMBER WHAT THIS PLATE LOOKED LIKE BEFORE WE MOVED IT.
+
+          Captured HERE, at the only point the prior fit is in hand next to the decision to
+          change it. A rollback that re-derived "where was it?" from the ledger later would be
+          reading a map this action is in the middle of rewriting — and the record it would
+          find is the ATTEMPTED one, which is exactly the lie `B-167` is made of.
+        */
+        if (!same(prior.fill, record.fill) || !same(prior.clip, record.clip)) {
+          moved.push({ slot: placement.slot, fill: prior.fill, clip: prior.clip });
+        }
+        if (prior.held === true) unmuted.push(placement.slot);
+        if (prior.held === true && hiddenWhenHeld(prior)) unhidden.push(placement.slot);
+        if (resumeOnReveal) resumed.push(placement.slot);
+      }
+      if (seatUnchanged && prior !== undefined) {
+        // 6.4 — THE FIT, RE-DERIVED PER LOOK. Emitted only when the geometry actually
+        // moved, so an unchanged plate costs the wire nothing; but when it moved this is
+        // the ONLY thing that moves it, and getting it wrong is a wrong CROP on a picture
+        // that is otherwise perfectly on air — `MIXER FILL` survives a producer swap, so
+        // nothing downstream would correct it and nothing would look broken.
+        if (!same(prior.fill, record.fill) || !same(prior.clip, record.clip)) {
+          lines.push(...this.#builder.mixerFit(placement.slot, placement.fit));
+        }
+        // A plate coming back from HELD was muted by the hold, so its intent has to be
+        // re-asserted or a deliberately-raised source returns silent — the same fault
+        // 6.9c names for the swap, arriving by the look switch instead.
+        if (prior.held === true) {
+          // `PLAYOUT-SOURCES-01` §1.I — a Playout input comes back by a ramp, never a jump.
+          lines.push(
+            this.#builder.mixerVolume(
+              placement.slot,
+              record.intendedVolume,
+              plateVolumeFrames(record.origin, record.intendedVolume),
+            ),
+          );
+          // `ROUTE-PLATES-01` (C2) — a held Playout route was hidden, not only parked: showing it
+          // again is ONLY the reveal — no new `PLAY`, it never stopped playing.
+          // `MEDIA-PLATES-01` — and so was a held clip ({@link hiddenWhenHeld}).
+          if (hiddenWhenHeld(prior)) lines.push(this.#builder.mixerOpacity(placement.slot, 1));
+          /*
+            `MEDIA-PLATES-01` §1.C — the `RESUME` goes LAST in this plate's lines: after its staged
+            reveal and just before the action's one commit shows it, so the clip runs hidden for as
+            little as the batch allows. It cannot be `DEFER`red (not a `MIXER` line); a refusal is
+            this plate's failure like any other line's, and the switch's rollback pauses it again.
+          */
+          if (resumeOnReveal) lines.push(this.#builder.resume(placement.slot));
+        }
+      }
+      /*
+        🔴 WHETHER THE `PLAY` LANDED IS A FACT THE FAILURE PATH CANNOT RECONSTRUCT LATER, so it
+        is carried from the ONLY moment it was knowable — the seat step's reply (`LOOK-SWITCH-01`:
+        every `PLAY` now goes out there, hidden, before this batch stages anything).
+
+        If the `PLAY` was acked and a `MIXER` after it was not, the layer carries the NEW producer
+        while the reveal did not land — and a failure path that assumed "a failed re-seat left the
+        previous producer alone" would write the PREVIOUS producer into the ledger and pin the
+        wrong feed on air with nothing anywhere disagreeing. A re-fit sends no producer at all, so
+        there is nothing to have landed.
+      */
+      const reseat = !seatUnchanged;
+      const seat = reseat ? seats.get(producer) : undefined;
+      const playLanded = seat?.outcome === 'landed';
+      if (reseat) {
+        // A `PLAY` that left this process may have made a producer: the take's rollback set.
+        if (seat?.sent === true) touched.push(record);
+        if (playLanded) {
+          /*
+            🔴 `LOOK-SWITCH-01` — THE REVEAL, in this action's one commit: `OPACITY 1` and the
+            plate's volume AS TODAY'S CODE COMPUTES IT — never a fixed 1. A seat that was not
+            hidden (a replace in place) was not given its fit by the seat step either, so the fit
+            rides here as it always did. `lines[1]` is the volume, as it always was.
+
+            🔴 A PARKED SEAT IS MUTED ON THE WIRE WHATEVER THE PLATE'S INTENT SAYS. The record
+            keeps the intent so the plate comes back at the volume the operator chose, but a
+            producer nobody can see must not be audible in the meantime — and a plate the
+            operator had deliberately raised in an earlier look is exactly the case where seating
+            it at its recorded intent would put a live voice on air from an empty box.
+
+            🔴 `PLAYOUT-SOURCES-01` §1.I — a Playout input's declared volume is RE-APPLIED here, after
+            it is seated silent, and by a ramp ({@link plateVolumeFrames}); its default is 0, so an
+            input nobody raised stays silent.
+          */
+          const revealVolume = placement.held ? CREATED_MUTED_VOLUME : record.intendedVolume;
+          lines.push(
+            // `ROUTE-PLATES-01` (C2) — a parked Playout route stays hidden until a look shows it.
+            // `MEDIA-PLATES-01` — and so does a parked clip.
+            this.#builder.mixerOpacity(
+              placement.slot,
+              placement.held &&
+                (placementIsPlayoutRoute(placement) || record.transport !== undefined)
+                ? 0
+                : 1,
+            ),
+            this.#builder.mixerVolume(
+              placement.slot,
+              revealVolume,
+              plateVolumeFrames(record.origin, revealVolume),
+            ),
+            ...(seat?.hidden === true ? [] : this.#builder.mixerFit(placement.slot, placement.fit)),
+          );
+        }
+      }
+
+      next.push(record);
+      let landed = 0;
+      if (reseat && !playLanded) {
+        // The seat step's `PLAY` for this plate did not land — refused, unanswered, or never
+        // sent because its hide did not land. What the reply said is the Rule's input.
+        failure = seat?.errorCode ?? 'amcp-error';
+        failedPlate = {
+          record,
+          prior,
+          priorOnSlot: priorSlotRecord,
+          reseat,
+          playLanded,
+          outcome: seat?.outcome ?? 'refused',
+          placement,
+          command: seat?.command,
+        };
+      }
+      for (const line of failure === undefined && !takeRefused ? lines : []) {
+        /*
+          🔴 `B-198` — **EVERY `MIXER` LINE OF THIS BATCH IS STAGED, NOT APPLIED.**
+
+          `deferMixer` returns a `PLAY` untouched and appends ` DEFER` to a `MIXER`, so the
+          whole batch goes through one call and a `MIXER` added to `lines` later is deferred by
+          construction. Nothing here reaches the picture until the `COMMIT` below, which is
+          what makes a switch's fills land on ONE channel frame however far apart their ACKs
+          are — and they are far apart, because this loop awaits each one.
+
+          ⚠ The await stays. It is what carries the per-line failure handling below (`landed`,
+          `playLanded`, and the rollback that reads them), and with the batch staged the gap it
+          leaves no longer costs anything on air.
+
+          Urgent lane: seating runs inside a take, and a take does not queue behind a load.
+        */
+        if (line.startsWith('MIXER ')) this.#stagedMixerChannel = placement.slot.channel;
+        const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
+        if (sent.ok) {
+          landed += 1;
+          continue;
+        }
+        failure = sent.errorCode ?? 'amcp-error';
+        failedPlate = {
+          record,
+          prior,
+          priorOnSlot: priorSlotRecord,
+          reseat,
+          playLanded,
+          // Every line here is a `MIXER` after the seat step: a re-seat's `PLAY` had landed, and a
+          // re-fit never changed the producer — so what is on the layer is ours either way.
+          outcome: 'landed',
+          placement,
+          command: sent.command,
+        };
+        break;
+      }
+      // The mute is `lines[1]` for a fresh seat, so two landed lines is what confirms it.
+      // See the note on the record's `held` above: it names what happened, not what we meant.
+      if (placement.held && failure === undefined && landed >= 2) {
+        next[recordIndex] = { ...record, held: true };
+        // `MEDIA-PLATES-01` — a PRESET clip set to `pause` waits, hidden and paused, for the look
+        // that shows it; it is paused after the commit, like every clip a look hides.
+        if (placement.playback?.whenHidden === 'pause') pauseWhenHidden.add(key(record));
+      }
+      if (failure !== undefined && placement.held) {
+        /*
+          🔴 **A PRESET MUST NEVER FAIL THE ACTION THAT WAS NOT ABOUT IT.**
+
+          Eager pre-seating means a take now sends a `PLAY` for inputs NO look on screen
+          needs, so a dead or mis-configured input bound only to a look nobody is showing
+          could refuse the whole take — the graphic never reaches air because of a box the
+          operator was not asking for. That is precisely the harm §2.9 rejects at the
+          ASSIGNMENT door, arriving instead through the wire, and it must not be reachable
+          from either direction.
+
+          So a parked seat that will not seat is DROPPED and the action continues. The
+          coordinate is cleared first when a producer of this action may be on it — a `PLAY`
+          that left this process may have taken effect even when its ack did not, and an
+          unmasked producer is a guest blown up across the programme — and through the ONE
+          rule (`FIELD-FIXES-01-A`): a `PLAY` the server refused put nothing there, and a layer
+          one of ours held before is never cleared. Nothing is lost: the look that needs this
+          input will try again when it is entered, and refuse THERE — legibly, to an operator
+          who is asking for that look.
+        */
+        await this.#clearAfterRefusal(
+          placement.slot,
+          {
+            outcome: failedPlate?.outcome ?? 'unknown',
+            heldBefore: oursBefore.has(key(placement)),
+          },
+          'plate',
+        );
+        next.pop();
+        const dropped = touched.indexOf(record);
+        if (dropped >= 0) touched.splice(dropped, 1);
+        // `PLAYOUT-SOURCES-01` §1.E — a stream argument can carry credentials; never printed.
+        // A log line: the plate's id, with its `Plate N` beside it (`B-308`).
+        const plate = this.#plateLabelOf(itemId, placement.plateId);
+        process.stderr.write(
+          `[caspar-bridge] ${itemId}: could not pre-seat "${placement.plateId}"` +
+            `${plate === undefined ? '' : ` (${plate})`} ` +
+            `(${redactUrlCredentials(placement.producerArg)}) for a look that is not on screen: ` +
+            `${redactUrlCredentials(String(failure))}\n`,
+        );
+        failure = undefined;
+        failedPlate = undefined;
+        continue;
+      }
+      if (failure !== undefined) break;
+    }
+
+    /*
+      🔴 `B-198` — **THE COMMIT, AFTER EVERY PLATE HAS STAGED AND BEFORE ANY ROLLBACK.**
+
+      ── 🔴 WHY THE FAILURE PATH COMMITS HERE AND THE GOOD PATH DOES NOT ─────────
+
+      A staged change nobody commits HANGS — measured: 1500 ms with no commit left it
+      unapplied, and it would then be applied by whatever commits next, ours or anyone's, at a
+      moment nothing chose. So a failed batch must not be left staged, and every branch below
+      this line either returns or rolls back with un-deferred commands.
+
+      Committing it applies the part that landed, which is exactly the state a failed batch
+      reaches today without `DEFER` — and `B-166`'s rollback below is written for precisely
+      that state and runs unchanged. Failing to commit would be a NEW failure mode.
+
+      ⚠ **THE GOOD PATH DELIBERATELY DOES NOT COMMIT HERE.** The off-frame PARK below is part
+      of the same switch — those are the plates LEAVING, and on the owner's own fixture the
+      departing box is exactly what drew over the arriving plate. Committing before they stage
+      would split the batch at the one seam the defect lives in. Its commit is at the end,
+      after everything this switch moves has been staged.
+    */
+    if (failure !== undefined) await this.#commitStagedMixer();
+
+    if (failure !== undefined) {
+      if (mode === 'take') {
+        /*
+          🔴 `FIELD-FIXES-01-A` DECISION 1 — ALL OR NOTHING, AND ONLY WHAT THIS TAKE PUT THERE.
+
+          The take has already stopped at the first refused plate (the loop's `break`: no later
+          plate is tried) and its graphic's `CG PLAY` is never sent (`#takeImpl` returns on
+          this). Undoing it is now ONE rule applied per seat, not a blanket: a seat whose `PLAY`
+          LANDED is cleared, because this take put that producer there; the seat whose `PLAY`
+          was REFUSED is not, because the server left that layer exactly as it was; and a layer
+          one of ours held before the take is never cleared at all. The blanket used to clear
+          the refused seat too — which, on a re-take of a row already on air, was the `CLEAR`
+          that took a working picture off air (`FIELD-FIXES-01` §0.5).
+        */
+        const ledger = new Map(previous.map((r) => [key(r), r] as const));
+        for (const record of touched) {
+          const outcome = record === failedPlate?.record ? failedPlate.outcome : 'landed';
+          const cleared = await this.#clearAfterRefusal(
+            record.slot,
+            { outcome, heldBefore: oursBefore.has(key(record)) },
+            'plate',
+          );
+          // The ledger names what is on each layer NOW: nothing after a clear; our new producer
+          // where one landed and was not cleared; and, where the `PLAY` was refused, whatever was
+          // there before — still there, because the server did not touch the layer.
+          if (cleared) ledger.delete(key(record));
+          else if (!foregroundUnchanged(outcome)) ledger.set(key(record), record);
+        }
+        this.registerLiveLayers(itemId, [...ledger.values()]);
+        return { ok: false, errorCode: failure, ...refusalOf(failedPlate) };
+      }
+      if (mode === 'switch') {
+        /*
+          🔴 **`B-166`/`B-167` — A REFUSED SWITCH PUTS THE GEOMETRY BACK. ALL OR NOTHING.**
+
+          ── WHY THE SWITCH GETS A ROLLBACK THE SWAP IS RIGHT TO REFUSE ──────────────
+
+          The `'live'` branch below declines to roll back, and its reasoning is correct FOR A
+          SWAP: the row is on air, and blacking working boxes to punish a failing one is the
+          opposite of what the operator needs. A SWITCH is a different action. It is ONE
+          geometry across every plate, so "undo only the failed plate" does not leave the row
+          on the old look or the new one — it leaves it in a shape **no look authored**, while
+          the picker, the published stack and the toast all say the switch did not happen.
+          That is `B-166`: the operator is told it did not happen, and three of the four things
+          on air moved.
+
+          ── WHY THIS IS SAFE, WHICH IS THE WHOLE REASON IT IS POSSIBLE ─────────────
+
+          🔴 **A plain switch issues NO `PLAY`.** Every punched plate is already seated by the
+          union pre-seat, so `seatUnchanged` holds and the only traffic is `MIXER FILL`/`CLIP`
+          (and a `MIXER VOLUME` for a plate leaving HELD). Undoing that means re-emitting the
+          PRIOR fit: no `out`, no `MIXER CLEAR`, no producer destroyed, nothing taken off air.
+          It is a geometry restore, and `B-126`'s rule — never `CLEAR` before a repair — is not
+          engaged at all.
+
+          ⚠ A plate this action genuinely `PLAY`ed is NOT re-fitted: 🔴 `LOOK-SWITCH-01` — one
+          seated on a layer nothing of ours was on (the switch's pre-seat, hidden) comes back OFF,
+          through the one rule, just below; one that REPLACED a producer of ours in place keeps
+          its producer (`B-126` forbids the destructive step) and is settled by the honest-ledger
+          path. Both are rare by construction — a `PLAY` inside a switch is `B-155` case 3, which
+          the union pre-seat exists to prevent, and a refusal after the pre-seat is a `MIXER`
+          line refused, which real 2.5.0 does not do on a layer it owns.
+
+          ── AND THIS IS WHAT CLOSES `B-167` ────────────────────────────────────────
+
+          The lying ledger record — the ATTEMPTED geometry kept for a plate whose `MIXER FILL`
+          was refused — is not an independent bug. It is the RESIDUE of a partial apply that
+          was never undone. Put the geometry back and write `previous` back verbatim, and the
+          next press computes a real delta against the truth instead of `same() === true`, so
+          it either works or refuses again. **A guaranteed no-op that answers `ok` stops being
+          representable**, rather than being defended against.
+
+          ⚠ Under `B-174`'s order the page HAS usually been told by the time a fill can
+          refuse (the tell precedes the held fills), so restoring the fills is HALF the
+          rollback: `setActiveLook` re-tells the previous look when this branch reports the
+          refusal, and the record follows that send. The two agree again at the END — which
+          is the definition of "the switch did not happen" — with a transient, hold-bounded
+          window in which the holes led the fills.
+        */
+        for (const m of moved) {
+          // Line by line, the same way every other `mixerFit` on this path is sent — the pair
+          // is FILL then CLIP and each is its own command. A refused line here is not retried:
+          // the next reconcile re-sends both, and under-claiming is the safe direction.
+          for (const line of this.#builder.mixerFit(m.slot, { fill: m.fill, clip: m.clip })) {
+            await this.#send(line, this.#nextSeq(), 'urgent');
+          }
+        }
+        for (const slot of unmuted) {
+          await this.#send(
+            this.#builder.mixerVolume(slot, CREATED_MUTED_VOLUME),
+            this.#nextSeq(),
+            'urgent',
+          );
+        }
+        // `ROUTE-PLATES-01` (C2) — and a held Playout route goes back to hidden, as it was.
+        for (const slot of unhidden) {
+          await this.#send(this.#builder.mixerOpacity(slot, 0), this.#nextSeq(), 'urgent');
+        }
+        // `MEDIA-PLATES-01` — and a clip this switch `RESUME`d goes back to paused, as it was.
+        const repaused = new Set<string>();
+        for (const slot of resumed) {
+          const sent = await this.#send(this.#builder.pause(slot), this.#nextSeq(), 'urgent');
+          if (sent.ok) repaused.add(adoptionKey(slot));
+        }
+        /*
+          🔴 AND THE RECORDS FOLLOW THE WIRE. Not the other way round.
+
+          The wire has just been put back, so a record still carrying the ATTEMPTED geometry
+          would be the `B-167` lie re-created by the very code that exists to end it. Each
+          restored plate's record goes back to its prior fill/clip — and to `held`, because a
+          plate we un-muted on the way out of HELD has just been re-muted above.
+
+          ⚠ THIS DELIBERATELY DOES NOT RETURN. Everything below — the teardown of a plate this
+          action CREATED and could not play, and the honest-ledger rules for the failed plate —
+          is correct as it stands and is reused verbatim. A `PLAY` that left this process may
+          have made a producer, and one left unmasked at FULL FRAME is a guest blown up across
+          the programme; an early return here would have skipped that, which is exactly the
+          regression `live-look-reconcile`'s "blacks nothing that was working" test caught.
+        */
+        const restoredSlots = new Set(moved.map((m) => adoptionKey(m.slot)));
+        for (const [i, rec] of next.entries()) {
+          if (!restoredSlots.has(key(rec))) continue;
+          const was = priorByProducer.get(rec.producer);
+          if (was === undefined) continue;
+          next[i] = {
+            ...rec,
+            fill: was.fill,
+            clip: was.clip,
+            ...(was.held === true ? { held: true } : {}),
+          };
+        }
+        for (const [i, rec] of next.entries()) {
+          if (!repaused.has(key(rec)) || rec.transport === undefined) continue;
+          next[i] = { ...rec, transport: { ...rec.transport, paused: 'hidden' } };
+        }
+        /*
+          🔴 `LOOK-SWITCH-01` — **ALL OR NOTHING REACHES THE PLATES THIS SWITCH SEATED, TOO.**
+
+          They were seated hidden, but the failure path's commit above applied whatever reveal had
+          already been staged for them, so a box of the NEW look would stand over the OLD one the
+          page is being put back to. Each comes back off through the one rule: cleared because this
+          switch put it there on a layer nothing of ours was on — never a layer one of ours held
+          before (a replace in place keeps its producer: `B-126`, and the honest-ledger rules below
+          settle it). The failed plate itself is left to those rules too.
+        */
+        const createdCleared = new Set<string>();
+        for (const rec of touched) {
+          if (rec === failedPlate?.record) continue;
+          const cleared = await this.#clearAfterRefusal(
+            rec.slot,
+            { outcome: 'landed', heldBefore: oursBefore.has(key(rec)) },
+            'plate',
+          );
+          if (cleared) createdCleared.add(key(rec));
+        }
+        for (let i = next.length - 1; i >= 0; i -= 1) {
+          const rec = next[i];
+          if (rec !== undefined && createdCleared.has(key(rec))) next.splice(i, 1);
+        }
+      }
+      /*
+        LIVE — undo the ONE plate that failed and leave every other plate exactly as it is.
+        The row is on air; blacking working boxes to punish a failing one is the opposite of
+        what the operator needs in that minute.
+
+        ── THE TWO QUESTIONS, AND THE ONE FACT THAT ANSWERS BOTH ────────────────────
+
+        This branch used to ask "did this PLATE have a prior record?" and use the answer for
+        everything. That is the wrong axis twice over:
+
+        - It is not "did this ACTION create the producer that is on this SLOT". A plate that
+          MOVED layers (the band was re-declared under an on-air row — `setSourceCatalog`
+          permits that) has a prior record on a DIFFERENT slot, so the old spelling read
+          "replace" and left a freshly-created, UNMASKED producer on the new layer that the
+          ledger did not name. Nothing would ever clear it.
+        - It is not "is the previous producer still on the layer". That is true only when the
+          `PLAY` itself was refused. When the `PLAY` was ACKED and the `MIXER` after it was
+          not, the layer carries the NEW producer — and writing the PRIOR record back pinned
+          the wrong feed on air with the ledger, the published state and the operator all
+          agreeing about the wrong thing.
+
+        So the destructive step and the ledger entry are both decided from ONE evaluation of
+        the same fact, read once (golden rule 7): did this action put a producer on a slot
+        that nothing of ours already occupied?
+      */
+      const failed = failedPlate;
+      const replacedInPlace = failed !== undefined && failed.priorOnSlot !== undefined;
+      let tornDown = false;
+      if (failed !== undefined && failed.reseat) {
+        /*
+          Through the ONE rule (`FIELD-FIXES-01-A`, `refusal-cleanup.ts`). Where nothing of ours
+          was on this slot before this action, there is no previous picture to protect and
+          `B-126` does not apply — yet a producer of this action may be there: a `PLAY` that
+          landed, or one whose reply never came, with its `MIXER FILL`/`CLIP` refused or unsent,
+          which is a live input at FULL FRAME with no mask — a guest blown up across the
+          programme, worse on air than black. That is cleared. A `PLAY` the server REFUSED put
+          nothing there, so nothing is cleared; and a slot one of ours held before (a replace in
+          place) is never cleared, whatever the reply said.
+        */
+        tornDown = await this.#clearAfterRefusal(
+          failed.record.slot,
+          { outcome: failed.outcome, heldBefore: oursBefore.has(key(failed.record)) },
+          'plate',
+        );
+      }
+
+      /*
+        WHAT THE LEDGER KEEPS FOR THE FAILED PLATE — decided from what actually reached the
+        layer, because the ledger's whole job is to name what is on air.
+
+        The sends for one plate go out in a fixed order and the loop stops at the FIRST
+        refusal, which makes the state after a failure knowable rather than guessed:
+
+        - **A re-seat whose `PLAY` was refused.** Nothing after it was sent either, so the
+          layer still carries exactly what it carried before — producer AND geometry. The
+          PRIOR record is the honest entry, and no `CLEAR` precedes anything (`B-126`): the
+          operator is told the plate is still on its previous source, and it is.
+        - **A re-seat whose `PLAY` LANDED.** The layer now carries the NEW producer even
+          though the `MIXER` after it was refused. Writing the prior record back would pin the
+          wrong feed on air with the ledger, the published state and the operator all agreeing
+          about something that is not true. The record this action built is kept.
+        - **A re-fit (no `PLAY` at all).** The producer never changed; a `FILL` or `CLIP` was
+          refused, so the geometry is partially applied and is not the prior geometry either.
+          The ATTEMPTED record is kept so that re-issuing the same switch computes a real
+          delta and REPAIRS it — reverting to the prior geometry made the retry a no-op and
+          left the plate black.
+      */
+      /*
+        🔴 `B-167` — AND A SWITCH'S FAILED RE-FIT REVERTS TOO, because the switch just put its
+        geometry back on the wire.
+
+        A re-fit has `reseat === false`, so the first clause never fires for it, and the
+        `'live'` reasoning above is right that keeping the ATTEMPTED record makes a retry
+        compute a real delta — **for a swap, which does not restore anything**. Under a
+        `'switch'` the wire has been restored, so keeping the attempted record would make the
+        record and the wire disagree, and the re-press would compute `same()` against a
+        geometry that is no longer there. That is `B-167` exactly, and this is where it would
+        come back.
+      */
+      const revertToPrior =
+        failed !== undefined &&
+        replacedInPlace &&
+        ((failed.reseat && !failed.playLanded) || (mode === 'switch' && !failed.reseat));
+      // `FIELD-FIXES-01-A` — a `PLAY` refused onto a slot nothing of ours was on leaves that slot
+      // as it was: empty of ours, so the ledger must not name it (and the Rule cleared nothing).
+      const nothingLanded =
+        failed !== undefined &&
+        failed.reseat &&
+        foregroundUnchanged(failed.outcome) &&
+        !replacedInPlace;
+      const settledFailed =
+        failed === undefined || tornDown || nothingLanded
+          ? []
+          : revertToPrior && failed.priorOnSlot !== undefined
+            ? [failed.priorOnSlot]
+            : [failed.record];
+      /*
+        Every other record this action built stands, unioned by SLOT with what we already
+        owned — nothing may leave the ledger while a producer of ours may still be on it,
+        because the ledger is the only thing teardown and the R-009 sweep walk. Plates after
+        the failing one were never processed, a moved plate's vacated layer is still ours, and
+        the release policy never ran; all of those coordinates come back through `stranded`.
+
+        ⚠ A moved plate is transiently in the ledger TWICE, under one `sourceId` on two slots.
+        That is deliberate and is the safe direction — ownership of both coordinates outlives
+        a dead socket, and the next successful reconcile's slot-keyed sweep clears the vacated
+        layer.
+
+        🔴 THE ORDER IS THE ITEM'S PREVIOUS ORDER, with genuinely new slots appended. Record
+        ORDER is not a behaviour this change may alter — callers index the list — and it also
+        carries a meaning worth keeping: `priorByPlate` and `currentLayer` are last-wins Maps,
+        so for a plate that appears twice the LATER entry wins, and appending the new slot
+        after the old one makes the freshly settled record the one the next reconcile reads
+        as `prior`.
+      */
+      const settled = next
+        .filter((r) => failed === undefined || r.producer !== failed.record.producer)
+        .concat(settledFailed);
+      const bySlot = new Map<string, LiveLayerRecord>();
+      for (const r of previous) bySlot.set(key(r), r);
+      for (const r of settled) bySlot.set(key(r), r);
+      if (tornDown && failed !== undefined) bySlot.delete(key(failed.record));
+      const ordered: LiveLayerRecord[] = [];
+      const placedSlots = new Set<string>();
+      for (const r of previous) {
+        const k = key(r);
+        const held = bySlot.get(k);
+        if (held === undefined || placedSlots.has(k)) continue;
+        ordered.push(held);
+        placedSlots.add(k);
+      }
+      for (const [k, r] of bySlot) if (!placedSlots.has(k)) ordered.push(r);
+      this.registerLiveLayers(itemId, ordered);
+
+      /*
+        THE HONEST SENTENCE. When the `PLAY` landed and only what followed it was refused, the
+        new source IS on air — possibly mis-cropped or at the wrong volume — and a caller that
+        told the operator "nothing changed, it is still on its previous source" would be
+        describing a row that no longer exists.
+      */
+      if (failed !== undefined && failed.playLanded && !tornDown) {
+        return {
+          ok: false,
+          errorCode: failure,
+          // `B-308` — the plate is `Plate N`; its id stays in `refusalOf`'s payload.
+          message:
+            `${this.#plateLabelOf(itemId, failed.record.sourceId) ?? 'The plate'} IS now on its ` +
+            `new source, but CasparCG refused the command that followed it, so its geometry or ` +
+            `volume may be wrong. Nothing was cleared — re-issue the change to correct it.`,
+          ...refusalOf(failed),
+        };
+      }
+      if (mode === 'switch') {
+        /*
+          🔴 `B-166` — THE SENTENCE SAYS THE ROW DID NOT MOVE, because now it did not.
+
+          The old one said the look was refused while three of the four things on air had
+          changed, which is the half-state this whole fix removes. This one is a statement
+          about STATE the operator can act on: the boxes are back, nothing was cleared, and
+          the graphic is on the look it was on before they pressed.
+        */
+        return {
+          ok: false,
+          errorCode: failure,
+          message:
+            `the look was NOT changed — CasparCG refused one of its plates, so every box was ` +
+            `put back where it was and the graphic is still on the previous look. Nothing was ` +
+            `cleared and nothing is on air that was not before. Fix the source, then re-issue.`,
+          ...refusalOf(failed),
+        };
+      }
+      return { ok: false, errorCode: failure, ...refusalOf(failed) };
+    }
+
+    /*
+      §12.4 / 6.5 — THE RELEASE POLICY, for every plate the desired set does not place.
+
+      HELD by default: the producer stays seated on its band layer, muted and idle, so
+      switching back is a cut. It stops being VISIBLE because the page stops punching its
+      hole — a different mutation on a different machine, which is why the record survives
+      with `held` set rather than being dropped.
+
+      The fallback is NAMED and OBSERVABLE rather than implicit (`releaseLivePlate`), and it
+      splits on two independent axes: a plate the template no longer DECLARES has no look
+      that could bring it back, and a `media` clip set to `restart` when hidden is torn down
+      so it plays from the beginning (`MEDIA-PLATES-01` — a `pause` or `continue` clip is held,
+      hidden, and a `pause` one paused after the commit below).
+    */
+    /*
+      🔴 KEYED ON THE PRODUCER (session BM) — "is THIS SEAT on screen", not "is this plate".
+
+      A look switch can move an input from one frame to another (2-box's `l-2` and solo's
+      `l-1` both showing studio-3). Keyed on the plate, the seat would look released on every
+      such switch and be torn down and re-`PLAY`ed — the visible re-acquire §12.4 exists to
+      prevent. Keyed on the producer, the only records that reach this loop are seats the
+      entered look does not punch, which is exactly what the policy is about.
+
+      ⚠ A FRESH preset never reaches here: it has no previous record and was seated in the
+      loop above. What reaches here is a seat that EXISTS and is not punched — parked (§12.4's
+      hold), or torn down when no look binds its input any more.
+    */
+    const placed = new Set(placements.map((p) => p.producerArg));
+    /*
+      A seat REPLACED IN PLACE is not a release, and must not be announced as one. When a
+      plate is re-pointed, the arriving producer takes the departing one's layer (see
+      `departingLayerOfPlate`), so the old record's coordinate is already carrying our new
+      picture. Calling `releaseLivePlate` for it would emit "its producer was cleared rather
+      than held" about a layer nothing cleared, and would then mute and park the layer the
+      repair just put on air.
+    */
+    const seatOnSlot = new Map<string, string>();
+    for (const p of [...placements, ...parked]) seatOnSlot.set(adoptionKey(p.slot), p.producerArg);
+    const releases: LivePlateRelease[] = [];
+    for (const record of previous) {
+      if (placed.has(record.producer)) continue;
+      // A DIFFERENT seat now holds this coordinate ⇒ replaced in place, not released. Its own
+      // seat continuing on it (a park) is not that, and must fall through to be parked.
+      const taker = seatOnSlot.get(key(record));
+      if (taker !== undefined && taker !== record.producer) continue;
+      /*
+        🔴 UNRESOLVABLE IS NOT A DISPOSITION. This plate is declared and seated; we simply
+        could not say which catalog entry is behind it — usually because a live action only
+        resolves what it must put on screen. It keeps its record, its layer, its geometry and
+        its audio exactly as they are. Muting it would silence a box that is on screen;
+        tearing it down would destroy a working picture over a missing fact.
+      */
+      if (unresolved.has(record.sourceId)) {
+        next.push(record);
+        continue;
+      }
+      const entry = resolved.get(record.producer);
+      const release = releaseLivePlate({
+        itemId,
+        plateId: record.sourceId,
+        source: entry,
+        // From the CARRIER, never from what this plan happened to resolve — see the note on
+        // `declared`. A live action resolves only the plates going on screen, so a held
+        // plate is routinely absent from `resolved` while being very much still declared.
+        /*
+          🔴 "DOES ANY LOOK STILL BIND THIS INPUT" (session BM) — not "is this plate still
+          declared". A re-point that leaves an input bound by NO look is a seat nothing can
+          bring back without a new binding, which would seat it afresh anyway; holding it
+          would strand a producer on a band layer for a binding nobody has. It subsumes the
+          old question: a plate the template no longer declares binds nothing either.
+        */
+        stillDeclared: declared.has(record.producer),
+        offFrame: offFrame.has(record.sourceId),
+        // `B-308` — the sentence names the plate `Plate N`; its id stays in the release's payload.
+        plateLabel: this.#plateLabelOf(itemId, record.sourceId),
+      });
+      releases.push(release);
+      if (release.disposition !== 'held') continue;
+      /*
+        🔴 `held` RECORDS THAT THE MUTE LANDED, NOT THAT WE INTENDED IT.
+
+        The mute is what makes a hidden plate silent, and `held: true` is also the latch that
+        stops it being re-sent on a later switch. Committing the latch without looking at the
+        send meant one refused `MIXER VOLUME` left a plate the operator cannot see AUDIBLE on
+        air — a voice from a box that is not on screen — and every subsequent switch skipped
+        the mute because the record already said held. Nothing would ever retry it.
+
+        So the send is awaited and its result decides the flag. A plate whose mute was refused
+        stays `held: false` in the ledger: it is still seated and still off-screen, and the
+        very next reconcile tries the mute again. The flag under-claims on failure, which is
+        the safe direction — the only thing it costs is a redundant `VOLUME 0` later.
+      */
+      let muted = record.held === true;
+      // Mute on the way out, once — a plate held across two switches must not re-send it —
+      // and unconditionally under a take, which re-asserts every layer it owns for the
+      // repair reason above.
+      if (record.held !== true || mode === 'take') {
+        // `B-198` — staged, like every other `MIXER` this switch sends. See `commitStaged`.
+        this.#stagedMixerChannel = record.slot.channel;
+        const sent = await this.#send(
+          this.#builder.deferMixer(this.#builder.mixerVolume(record.slot, CREATED_MUTED_VOLUME)),
+          this.#nextSeq(),
+          'urgent',
+        );
+        muted = sent.ok;
+        /*
+          🔴 `ROUTE-PLATES-01` (C2) — A HELD PLAYOUT ROUTE IS ALSO HIDDEN: `OPACITY 0`, staged with
+          the mute, and still PLAYING — never `PAUSE`, and `BLEND` is left at normal. It rides the
+          same latch as the mute, and `held` claims both landed or neither.
+
+          `MEDIA-PLATES-01` §1.C — and so is a held CLIP ({@link hiddenWhenHeld}): hiding a clip is
+          always `OPACITY 0` + the mute, in this same staged step. A `pause` clip is paused as well,
+          after the commit below; a `continue` clip is not, and runs on hidden.
+        */
+        if (muted && hiddenWhenHeld(record)) {
+          this.#stagedMixerChannel = record.slot.channel;
+          const hidden = await this.#send(
+            this.#builder.deferMixer(this.#builder.mixerOpacity(record.slot, 0)),
+            this.#nextSeq(),
+            'urgent',
+          );
+          muted = hidden.ok;
+        }
+      }
+      /*
+        🔴 `B-154` — AND PARK THE GEOMETRY, because muting a held plate silences it and does
+        NOT hide it.
+
+        The mute above is the audio half and it was, until this bug, the whole of the hold.
+        A held producer kept the `FILL`/`CLIP` of the look it left and went on rendering into
+        that cell, which is invisible only while the page covers it — and the page does not,
+        as soon as the ACTIVE look punches a hole overlapping it. Six-box → solo put five
+        held feeds inside the solo box. {@link parkedFit} carries the full argument, including
+        why the FILL is what moves.
+
+        SENT ONCE, on the same latch and for the same reason as the mute — a plate held
+        across two switches must not re-send it — and unconditionally under a take, which
+        re-asserts every layer it owns. The RECORD keeps what was actually sent (the ledger's
+        standing contract), which is also what makes the return trip work: the delta at the
+        top of this method compares the parked fit against the real one, finds it moved, and
+        re-emits the real geometry. Recording the real fit while sending the parked one would
+        make coming back a silent no-op — the plate would stay invisible for good.
+      */
+      const parked = parkedFit(record.fill);
+      let fitParked = isParkedFit(record.fill);
+      if (!fitParked || mode === 'take') {
+        fitParked = true;
+        for (const line of this.#builder.mixerFit(record.slot, parked)) {
+          // `B-198` — the PARK is the departing half of the switch, so it stages with the
+          // arriving half and lands on the same frame. This is the seam the defect lived in.
+          this.#stagedMixerChannel = record.slot.channel;
+          const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
+          if (sent.ok) continue;
+          // Under-claims on failure, the same safe direction the mute takes: the next
+          // reconcile re-sends both. A refused `CLIP` after an acked `FILL` still renders
+          // nothing — that is why the FILL is the half that moves.
+          fitParked = false;
+          break;
+        }
+      }
+      next.push({
+        ...record,
+        held: muted,
+        ...(fitParked && { fill: parked.fill, clip: parked.clip }),
+      });
+      /*
+        `MEDIA-PLATES-01` §1.C — A HELD CLIP SET TO `pause` IS PAUSED once the commit has hidden it:
+        on the way out, once (a clip already paused is left alone), and again under a take, which
+        re-asserts every layer it owns. Only a hold that LANDED — a clip whose hide was refused is
+        not frozen where it may still be seen.
+      */
+      if (
+        muted &&
+        record.transport !== undefined &&
+        entry !== undefined &&
+        entry.producer.kind === 'media' &&
+        mediaPlaybackOf(entry).whenHidden === 'pause' &&
+        (record.transport.paused === undefined || mode === 'take')
+      ) {
+        pauseWhenHidden.add(key(record));
+      }
+    }
+
+    /*
+      🔴 `B-198` — **THE COMMIT FOR THE WHOLE SWITCH, and this is the only place it can be.**
+
+      AFTER the arriving plates and the departing (parked) ones have both staged, so the two
+      halves land on ONE channel frame — which is the entire fix. BEFORE the clearing sweep
+      below, because that sweep's `MIXER … CLEAR` is sent un-deferred and applies at once: a
+      commit after it would re-apply a staged `FILL` onto a layer it had just reset.
+    */
+    await this.#commitStagedMixer();
+
+    /*
+      🔴 `MEDIA-PLATES-01` §1.C — **THE `PAUSE`s, RIGHT AFTER THE COMMIT THAT HID THEIR CLIPS.** In the
+      same batch as the hole moving, as close to its commit as a non-`MIXER` verb can be: a `PAUSE`
+      is applied the moment it arrives, so sent before the commit it would freeze a clip still on
+      screen; sent here, the clip stops a frame or two after it vanished, and nobody sees it stop.
+      The record says `hidden` only when the `PAUSE` landed; a refused one is tried again at the
+      next reconcile that still holds it. An OPERATOR's pause keeps its name — a take re-sends it.
+
+      ⚠ The ledger is written FIRST: the send seam lets a `PAUSE` reach only a coordinate the ledger
+      names as a clip of ours (`amcp-guard.ts`'s `clipOn`), and a PRESET clip this take seated is
+      not in it until now. The pauses that landed are written after.
+    */
+    this.registerLiveLayers(itemId, next);
+    let paused = false;
+    for (const [i, rec] of next.entries()) {
+      if (!pauseWhenHidden.has(key(rec)) || rec.transport === undefined) continue;
+      const sent = await this.#send(this.#builder.pause(rec.slot), this.#nextSeq(), 'urgent');
+      if (sent.ok) {
+        paused = true;
+        next[i] = {
+          ...rec,
+          transport: { ...rec.transport, paused: rec.transport.paused ?? 'hidden' },
+        };
+      }
+    }
+    if (paused) this.registerLiveLayers(itemId, next);
+
+    /*
+      THE ONE SWEEP THAT CLEARS. A layer this item owned and no longer does — torn down by
+      the policy above, or left behind because a plate moved to a different layer (a
+      re-imported template, a re-declared band). It is ours, it still has our producer on
+      it, and nothing else will ever come for it: the ledger no longer names it, so teardown
+      will not reach it and the R-009 sweep will not reclaim it (it is not an orphan; it is
+      ours). Cleared LAST, after the ledger already names the layers that must survive.
+
+      🔴 Keyed on the SLOT, not on the plate, and that is what makes it total: hold, teardown
+      and a layer move all reduce to "is this coordinate still in the ledger", so no
+      disposition can invent a fourth way to leave a producer stranded.
+    */
+    const kept = new Set(next.map(key));
+    for (const record of previous) {
+      if (kept.has(key(record))) continue;
+      const cleared = await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
+      // `LOOK-SWITCH-01` — the mixer is reset only once the layer holds nothing: see
+      // {@link #resetPlateMixerIfCleared}.
+      await this.#resetPlateMixerIfCleared(record.slot, cleared);
+    }
+    // Announced AFTER the wire and the ledger agree, so a subscriber that reads the ledger
+    // on this event sees the state the sentence describes.
+    for (const release of releases) this.livePlateReleased.emit(release);
+    return { ok: true };
+  }
+
+  /**
+   * R-048 / C-015 phase 6 (6.9 / 6.9a / 6.9b / 6.9c) — **POINT ONE PLATE AT A
+   * DIFFERENT SOURCE, WHILE THE TEMPLATE IS ON AIR.**
+   *
+   * The case is a client requirement: a three-plate template is on air, one input
+   * drops, and that plate goes black while the other two are fine. The operator
+   * repoints the dead one without taking the graphic off air and without
+   * disturbing its neighbours.
+   *
+   * `sourceId === null` clears the override and puts the plate back on the
+   * template's assignment — the same path, run with one fewer substitution. An
+   * emergency patch the operator cannot undo is its own trap.
+   *
+   * ── WHAT IT IS NOT ─────────────────────────────────────────────────────────
+   *
+   * 🔴 **A PER-ITEM OVERRIDE. The template's ASSIGNMENT and the installation's
+   * CATALOG are both untouched** — the same shape as the position override, and
+   * for a sharper reason: the assignment is shared by every row carrying that
+   * template and the catalog is installation-wide, so writing back would make one
+   * operator's 20:59 emergency into tomorrow's configuration.
+   *
+   * 🔴 **A REPLACE, NEVER A CLEAR-THEN-ADD.** `PLAY` on the occupied layer
+   * substitutes the producer in place. A `CLEAR` followed by a `PLAY` that fails
+   * is the `B-126` window arriving during an emergency: a destructive step
+   * committed before the constructive one was known to succeed, leaving the
+   * operator with a BLACK plate where they had a merely-dead one. On failure the
+   * previous producer stays, the ledger is unchanged, the override is NOT
+   * recorded, and the row is told — a state that claimed the new source while the
+   * layer carried the old would be worse than the failure.
+   *
+   * ⚠ **THAT SUBSTITUTION IS UNVERIFIED ON THE PRODUCTION 2.5.0 (task 6.9a).** The
+   * mock models `PLAY` on an occupied layer as a replace, so the tests prove this
+   * code is self-consistent and prove NOTHING about the server. It rides with
+   * §3b's `DEFER`/`COMMIT` question and 6.3a's `CLIP` probe — all AMCP probes on
+   * the same build. (This used to say "the plant's 2.3.2"; production is 2.5.0
+   * `69e8ad5` and the 2.3.2 at `D:\programs\CasparCG` is RETIRED and must never be
+   * probed — `tools/caspar-amcp-probe/README.md`, `assertProductionBuild`.)
+   *
+   * ── THE THREE THINGS THAT TRAVEL WITH IT ───────────────────────────────────
+   *
+   * 1. **The FIT (6.9b), in the same action.** The new source may carry a different
+   *    format, so crop-to-fill re-derives through §3a's chain — including its
+   *    refusal, so a substitution the author's `expectedAspect` contradicts is
+   *    refused rather than silently cropping a face. Not a second operator step:
+   *    under pressure a second step is a step that does not happen.
+   * 2. **The AUDIO INTENT (6.9c).** Every bridge-created producer is born muted,
+   *    so a deliberately-raised plate would go SILENT at the moment the operator
+   *    was fixing it. The intent belongs to the PLATE (`LiveLayerRecord.intendedVolume`),
+   *    not to the producer instance, and the swap re-asserts it.
+   * 3. **The OVERRIDE ITSELF, across a bridge restart (6.9d)** — carried by the
+   *    published state into the browser's retention, which is where `#positions`
+   *    already goes.
+   *
+   * An item with no live layers seated yet is a legal target: the override is
+   * recorded, nothing is sent, and the next take resolves through it.
+   */
+  async swapLiveSource(
+    itemId: string,
+    plateId: string,
+    sourceId: string | null,
+    /**
+     * Session BM — **WHICH LOOK this binding is for. Omit for EVERY look.**
+     *
+     * Omitted is `R-048` unchanged: the emergency patch, which applies everywhere because a
+     * dead input is dead in every look. Given, it is the deliberate per-look composition —
+     * _"solo will show studio-3"_ — which the emergency still outranks. One verb rather than
+     * two, because it is one question at two scopes and a second verb would be a second path
+     * into the same reconcile.
+     */
+    lookId?: string,
+  ): Promise<{ ok: boolean; reason?: string; message?: string }> {
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    const itemSlot = this.#slots.get(itemId);
+    if (templateId === undefined || itemSlot === undefined) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    const template = this.#templates.getOn(itemSlot.channel, templateId);
+    const declaration = template?.liveSources?.sources.find((s) => s.sourceId === plateId);
+    if (declaration === undefined) {
+      return {
+        ok: false,
+        reason: 'unknown-plate',
+        message: `This template has no live plate called "${plateId}".`,
+      };
+    }
+    /*
+      `PLAYOUT-SOURCES-01` — a swap is a NEW binding, so it passes the one rule every binding door
+      asks (`unbindableChange`), with nothing held to compare against: never an id the catalogue
+      does not hold, never an unusable entry (the route gate included), never one the Playout no
+      longer offers. The same sentences as every other door, and no id in them (golden rule 11).
+    */
+    if (sourceId !== null) {
+      const refusal = unbindableChange([{ key: plateId, sourceId }], [], this.#sourceCatalog);
+      if (refusal !== null) return { ok: false, reason: refusal.code, message: refusal.message };
+    }
+
+    /*
+      🔴 `B-155` §B — EVERYTHING FROM THE MAP READS DOWN RUNS UNDER THE ITEM'S LIVE-SEAT
+      LOCK (see {@link #withLiveSeatLock}). A swap arriving while a look switch is parked
+      on an AMCP ack used to plan against the OUTGOING look and the PRE-SWITCH ledger —
+      its `PLAY` + `MIXER FILL` at the old look's geometry landing between the switch's
+      fills and its page flip. Queued, it plans against the look the page is actually
+      punching. The map reads are inside the lock so a queued swap composes with the
+      overrides the action ahead of it recorded, not with a snapshot from before it.
+    */
+    return this.#withLiveSeatLock(itemId, async () => {
+      /*
+      WHICH MAP THIS WRITES — the only place the two scopes diverge. Everything downstream
+      (the refusal, the reconcile, the rollback, the publish) treats them identically,
+      because they are the same edit at two scopes.
+    */
+      const current = this.#sourceOverrides.get(itemId) ?? {};
+      const currentBindings = this.#lookSourceBindings.get(itemId) ?? {};
+      const next: Record<string, string> = { ...current };
+      const nextBindings: Record<string, Record<string, string>> = { ...currentBindings };
+      if (lookId === undefined) {
+        if (sourceId === null) delete next[plateId];
+        else next[plateId] = sourceId;
+      } else {
+        const forLook: Record<string, string> = { ...(currentBindings[lookId] ?? {}) };
+        if (sourceId === null) delete forLook[plateId];
+        else forLook[plateId] = sourceId;
+        // An EMPTY per-look map is no binding at all, for the same reason an empty override
+        // map is: keeping one would publish a row as composed when it is back on its defaults.
+        if (Object.keys(forLook).length === 0) delete nextBindings[lookId];
+        else nextBindings[lookId] = forLook;
+      }
+
+      /*
+      🔴 §6.2 / §2.7 — REFUSED HERE, BEFORE ANYTHING IS WRITTEN OR SENT.
+
+      Both refusals are about the binding the operator just asked for, so they belong at the
+      moment they asked — in CG Control, with nothing on air disturbed. Reaching them at the
+      take instead would refuse a graphic on the way to air over a choice made minutes
+      earlier; reaching them during the reconcile would already have written the override.
+    */
+      const refusal = this.#refuseBindingChange(itemId, itemSlot, {
+        overrides: next,
+        bindings: nextBindings,
+      });
+      if (refusal !== null) return { ok: false, ...refusal };
+      /*
+      ⚠ `#applyBindingTransaction` asks this again, and that is not golden rule 7's hazard.
+      Rule 7 is about a condition read TWICE WITH AN AWAIT BETWEEN, where the second read can
+      disagree with the first and a destructive step has already run on the first. Here both
+      reads are synchronous, over the same immutable inputs, with nothing mutated between —
+      and the check has to live in the transaction regardless, because its OTHER caller
+      (`update`) has no earlier door. What this one buys is the RECORD-ONLY path below, which
+      never reaches the transaction at all and must still be refused.
+    */
+
+      /*
+        `B-216` — THE ONE PREDICATE, HERE TOO. This door used to ask "is anything seated?" of
+        the ledger alone, then hand the transaction a row it would gate a SECOND way (on air
+        or rehearsing) — the third spelling of one question, and the reason `PATCH-BX-01`'s
+        probe found a swap on a rehearsing row silent while an UPDATE on the same row seated
+        four producers. On a row the bridge owns nothing of — not on air, nothing seated, on
+        PVW or not — recording the override IS the whole action; the next take resolves
+        through it. Deliberately not gated on reachability: this is a list edit, exactly like
+        setting a position on an idle row.
+      */
+      if (!this.#ownsLiveSeats(itemId)) {
+        this.#applySourceOverride(itemId, next, nextBindings);
+        return { ok: true };
+      }
+
+      if (this.#noServerReachable()) {
+        return {
+          ok: false,
+          reason: 'disconnected',
+          message:
+            'Not connected to CasparCG — the swap was refused, not queued. Reissue it once the ' +
+            'server is back.',
+        };
+      }
+
+      /*
+      🔴 §4 / 6.3 — THE SWAP IS A CALLER OF THE ONE RECONCILE, NOT A PEER OF IT.
+
+      This method used to resolve, fit, `PLAY`, re-assert and re-ledger one plate itself,
+      beside a seating path that did the same for all of them. Its own comment argued
+      against exactly that shape one level down — a swap that resolved plates its own way
+      would be a second spelling of "which producer is behind this hole" — and `design.md`
+      §4 applies the argument one level up: the layout switch must not become a third path
+      either, so all three go through `reconcileLivePlates`.
+
+      Everything the old body did survives, because the reconcile does it for every plate:
+      the resolution through `resolvePlateAssignments` WITH this override, the fit
+      re-derived from §3a's chain (6.9b), the plate's audio intent re-asserted onto the new
+      producer (6.9c), the ledger rewritten from what was actually sent — and the REPLACE
+      with no `CLEAR` in front of it, which under the reconcile is simply what "the seat
+      changed" means (`B-126`). The neighbours are untouched because their seats did not
+      change, not because this method walks around them.
+
+      THE OVERRIDE IS WRITTEN FIRST, AND ROLLED BACK ON REFUSAL. The resolver reads
+      `#sourceOverrides`, so the prospective value has to be in place for the reconcile to
+      resolve through it — and the contract this method has always kept is that a refused
+      swap records nothing. Written through the raw map rather than `#applySourceOverride`
+      so a refusal never publishes a substitution that did not happen.
+    */
+      // THE ORDERING LIVES IN ONE PLACE — see {@link #applyBindingTransaction}.
+
+      /*
+      🔴 **`tasks.md` 7.9 — THIS CALL IS WHERE THE DEFECT SURFACED, AND IT IS DELIBERATELY
+      UNCHANGED. Do not add an `updateLook` here.**
+
+      The reported shape was: a refused look switch left an intent behind, and this reconcile
+      — resolving from the same `#desiredPlateRects` — completed it, seating the new look's
+      fills while the page went on punching the old look's holes. The obvious repair is to
+      make the swap carry the look too, so both halves always move together. It was
+      considered and REJECTED, for two reasons:
+
+        - It treats the symptom. The divergence was created by `setActiveLook` recording a
+          look the page had not been given; with that write fused to the successful telling
+          (see {@link #tellPageLook}), `#activeLooks` names the look the page is punching at
+          all times, so this reconcile resolving from it is not merely safe — it is the only
+          thing that could be right.
+        - It would put a NEW failure mode on the emergency verb. R-048 exists for 20:59, one
+          input dead, one plate to repoint. A `CG UPDATE` appended to that would have to
+          either fail a swap that actually succeeded, or be ignored — and an ignored send is
+          the seed of the next divergence. The swap earns its coherence by reading state that
+          cannot be wrong, not by sending a second command to correct state that can.
+
+      So R-048's on-air behaviour is UNCHANGED by 7.9: a swap still sends exactly its own
+      producer's `PLAY` + `MIXER`, and still tells the page nothing.
+    */
+      const applied = await this.#applyBindingTransaction(itemId, itemSlot, {
+        overrides: next,
+        bindings: nextBindings,
+      });
+      if (applied.ok) return { ok: true };
+      return {
+        ok: false,
+        reason: applied.reason ?? 'amcp-error',
+        // `B-308` — the plate in the operator's words; the request carried its id.
+        message:
+          applied.message ??
+          `CasparCG refused the substitution, so ` +
+            `${plateLabel(template?.liveSources?.sources, plateId) ?? 'the plate'} is still on ` +
+            `its previous source. Nothing was cleared.`,
+      };
+    });
+  }
+
+  /**
+   * Store (or drop) an item's binding maps and publish the change.
+   *
+   * An EMPTY map is no binding at all, not a binding of nothing: keeping one would publish
+   * `sourceOverride: {}` and make a row that is back on its template assignment look
+   * substituted. Both maps take the same rule, from one place — {@link #applyBindingMaps}.
+   */
+  #applySourceOverride(
+    itemId: string,
+    next: Record<string, string>,
+    bindings?: LookSourceBindings | undefined,
+  ): void {
+    this.#applyBindingMaps(itemId, next, bindings ?? this.#lookSourceBindings.get(itemId));
+    this.#markDirty(itemId);
+  }
+
+  /**
+   * C-015 phase 6 (6.5 / 6.9c) — **the EXPLICIT RECORDED INTENT that raises a
+   * plate's audio, and the only thing that may.**
+   *
+   * The rule is that every producer the bridge creates is created muted and audio
+   * is raised only by an explicit intent NAMING THE LAYER. This is that intent for
+   * a Live Source plate: it is recorded against the PLATE in the ledger, so it
+   * survives a swap (6.9c) and a re-seat, and it is asserted on the wire
+   * immediately so the operator hears the result of their own action.
+   *
+   * ── 6.5f — WHAT THIS RECORDS, AND WHY THERE IS ONLY ONE OF IT ─────────────
+   *
+   * It writes `#plateVolumes` — the INTENT — and, when a producer is already
+   * seated, asserts it on the wire immediately so the operator hears the result of
+   * their own action rather than discovering it at the next take.
+   *
+   * 🔴 **IT DOES NOT ADD AN UNMUTE PATH.** The seating path already asserts each
+   * plate's intent on every take, unconditionally, from this same map — that is
+   * the plate's exact analogue of `take()`'s unconditional `INTENDED_VOLUME`
+   * re-assert, and it is the mechanism the mute half defers to. This method feeds
+   * that mechanism; it does not duplicate it. A second spelling of "what volume
+   * should this layer have" is the `B-100` / `P-012` failure this project has now
+   * paid for five times.
+   *
+   * ⚠ **A VOLUME OF `0` IS A LEGITIMATE AUTHORED VALUE** — "the operator muted this
+   * plate" — and is recorded exactly like any other. It is NOT the absent case,
+   * which means "nobody has said" and is what a fresh plate inherits. Every read
+   * tests `=== undefined`, never truthiness.
+   *
+   * IT WORKS ON A ROW THAT IS NOT ON AIR. There is no producer to command, so
+   * nothing is sent and the intent simply stands — the next take carries it. That
+   * is what makes it possible to arm a plate's audio BEFORE the take instead of
+   * having to catch it afterwards, which is the whole operator complaint the mute
+   * rule creates.
+   *
+   * ── 🔴 GOLDEN RULE 10 — **THE GATE LIVES HERE, AND HERE ONLY** ────────────
+   *
+   * Setting a volume is a **CONFIGURATION** verb. `UPDATE` puts values IN FORCE; only a
+   * **take** puts content ON AIR. So on a row that owns no live seats this records the
+   * intent and sends NOTHING — see the gate in the body for the full argument.
+   *
+   * It is gated in THIS method rather than in each caller because every audio path in the
+   * product funnels through here: `stack.set-plate-volume` (one plate) and
+   * `stack.set-plate-volumes` (the map behind FADER / ON-OFF / SOLO / PANIC). `B-161`'s own
+   * rule is *"gate the one path the verbs share rather than making two paths agree"*, and a
+   * fifth verb added later inherits this by construction instead of by remembering.
+   */
+  async setLivePlateVolume(
+    itemId: string,
+    plateId: string,
+    volume: number,
+  ): Promise<{ ok: boolean; reason?: string; sent?: boolean }> {
+    /*
+      THE PLATE MUST BE ONE THIS BRIDGE CAN ACCOUNT FOR — and there are TWO ways to account
+      for one, not one.
+
+      The DECLARATION is what lets an intent be armed BEFORE anything is seated: the ledger is
+      empty until the take, so a ledger-only check would refuse the whole
+      arm-before-the-take affordance the mute rule exists to preserve.
+
+      🔴 **A SEATED LEDGER RECORD IS THE SECOND WAY, and it is not belt-and-braces.** The
+      ledger is keyed by `itemId` and adopted from disk at boot, so it can legitimately hold
+      records for an item the reconciler no longer carries — a STRANDED live layer, which is
+      `B-145`'s whole subject: *"the layers stay lit and nothing in the product can name them"*.
+      With the declaration check alone, `this.#reconciler.get(itemId)` answers null for such a
+      row, `declared` is undefined, and EVERY audio verb refuses it `unknown-plate` — including
+      the emergency silence. A producer the bridge itself seated would be the one thing the
+      panic button could not reach.
+
+      A record is proof enough: the bridge only writes one when it sent the `PLAY` that seated
+      that plate. And it widens nothing dangerous, because the gate below is what decides
+      whether anything is SENT — a stranded row owns no live seats, so a RAISE on it still
+      records intent and emits nothing.
+    */
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    const declared =
+      templateId === undefined ? undefined : this.#templateOfItem(itemId, templateId);
+    const plate = declared?.liveSources?.sources.find((x) => x.sourceId === plateId);
+    const seated = (this.#liveLayers.get(itemId) ?? []).some((r) => r.sourceId === plateId);
+    if (plate === undefined && !seated) return { ok: false, reason: 'unknown-plate' };
+    // `Number.isFinite` first: `NaN >= 0` is false, so a NaN would otherwise fall
+    // through the range test and be recorded as an intent nothing can assert.
+    if (!Number.isFinite(volume) || volume < 0 || volume > 1)
+      return { ok: false, reason: 'invalid-volume' };
+    /*
+      🔴 `PLAYOUT-FEATURES-01` C (`R-075`, the Playout's rule 3) — A BOX SHOWING THE PLAYOUT'S PLAYLIST
+      OUTPUT IS NEVER RAISED. Its route carries the programme sound again, added to the Playout's own
+      layer (≈ +6 dB, no normalisation). Refused HERE — the one door ON, a fader, SOLO and the batch all
+      pass — whether the plate is seated (its record is locked) or only bound (its intent would be armed
+      for the take). A silence is never refused. The seat writes 0 whatever the intent says, so even an
+      intent recorded before this rule existed cannot reach the wire.
+    */
+    if (volume > CREATED_MUTED_VOLUME && this.#plateAudioLocked(itemId, plateId)) {
+      return { ok: false, reason: PLAYLIST_AUDIO_LOCKED_CODE };
+    }
+
+    /*
+      🔴 **THE PUNCHED RECORD FIRST (session BM), because a plate can now label TWO of them.**
+
+      Under (B′) a plate's frame may resolve to a different input in a different look, so the
+      ledger can hold one record for the seat this plate PUNCHES and another for a seat it is
+      merely the representative of — both labelled with this plate id. A bare `find` would
+      take whichever came first and could raise the volume of a producer nobody can see while
+      leaving the one on screen silent. The on-screen seat is the one the operator means.
+    */
+    const records = this.#liveLayers.get(itemId) ?? [];
+    const record =
+      records.find((r) => r.sourceId === plateId && r.held !== true) ??
+      records.find((r) => r.sourceId === plateId);
+    /*
+      🔴 A HELD PLATE IS NOT ASSERTED ON THE WIRE — the intent is recorded and applied when a
+      look brings the plate back.
+
+      §12.4's hold is "muted and idle": the producer is seated but the active look punches no
+      hole for it, so the operator cannot see it. Asserting a raise onto that layer would put
+      a VOICE ON AIR from a box that is not on screen — and the hold's mute is a one-shot, so
+      nothing would ever take it back down.
+
+      Recording the intent alone is exactly right and needs no new mechanism: the intent
+      belongs to the PLATE (6.5f), `#plateVolumes` outlives the ledger, and the reconcile
+      re-asserts it at the moment it un-holds the plate. So the operator can arm a held
+      source's audio before switching to the look that shows it — which is the same
+      before-the-take affordance the mute rule already exists to preserve.
+    */
+    /*
+      🔴 **`B-161` / GOLDEN RULE 10 — A CONFIGURATION VERB IS NEVER A PLAYOUT VERB.**
+
+      `UPDATE` puts values IN FORCE; only a **take** puts content ON AIR. Raising a plate's
+      audio is the same kind of statement: it says how loud this plate SHOULD be, and the
+      row's next take — or the reconcile that already re-asserts every plate's intent — is
+      what carries it to the layer.
+
+      🔴 **THE COUPLING THAT MAKES THIS NECESSARY, and it is one field wide.** The seat is
+      written at `record.intendedVolume` and re-asserted whenever that seat is (re)built. So
+      a plate raised on a row that owns no live seats would be **seated AUDIBLE** by whatever
+      seated it next — a guest's microphone reaching air through a verb nobody associates
+      with playout. That is `B-161`'s shape exactly, arriving on the audio axis instead of
+      the picture one.
+
+      ⚠ **`#ownsLiveSeats`, NOT `isOnAirStatus` — and NOT the rehearse flag either (`B-216`).**
+      A row whose seats survived a restart while its status did not (`B-145` boot adoption)
+      holds producers that are genuinely on the channel: a raise there reaches a real layer,
+      and an operator pressing ON for a guest they can see is exactly that case. A rehearsing
+      row with nothing seated has no layer to reach and records the intent for the take; a
+      rehearsing row WITH adopted seats is reached for the seats' sake — which is when an
+      operator checks a guest's level before air.
+
+      ⚠ **A record can no longer exist while this is false.** `out` and `stopItem` tear plates
+      down and release the ledger, and `exitRehearse` never seated any. The state this text
+      used to name — "plates seated, owned by neither test" — was the boot-adoption window
+      wearing `exitRehearse`'s name, and under the ledger axis a seated plate IS owned.
+
+      ⚠ **BOTH HALVES of the send path are skipped — the wire AND the ledger's as-sent copy.**
+      Writing `intendedVolume` for a command that was never sent is the standing lie the
+      failed-send path below already refuses to tell, and it is the very field the coupling
+      above rides.
+
+      ⚠ **WHAT IS NOT SKIPPED IS THE INTENT.** `#plateVolumes` is written exactly as before,
+      so arming a plate's audio ahead of the take still works. That is the affordance the mute
+      rule exists to preserve and this gate must not take it away.
+
+      ── 🔴 THE GATE IS DIRECTIONAL, AND THAT IS RULE 10 READ EXACTLY RATHER THAN RELAXED ──
+
+      **A SILENCE IS NEVER GATED.** Golden rule 10's own words are: *"A row that does not
+      already own live layers must produce **no `PLAY`, no un-mute and no fill**"*. A
+      `MIXER … VOLUME 0` is none of those three. It creates no producer, punches no hole, moves
+      no fill, un-holds nothing, and cannot make one frame or one sample reach air. The only
+      thing it can do is take a sound OFF air.
+
+      🔴 **AND GATING IT WAS A DEFECT IN ITS OWN RIGHT, not a conservative choice.** The window
+      the gate exists for — a row whose seats survived a restart while its status did not
+      (`B-145`; the record once blamed `exitRehearse` for it, wrongly) — is a window in which
+      a guest can be genuinely AUDIBLE. Refusing to lower the volume there
+      meant OFF, a fader dragged to zero, and the panic button all recorded an intent and left
+      the microphone open, while the console reported `ok`. That is the same class of lie
+      `B-122` names: an operator told the escape hatch worked while the thing is still on air.
+
+      So the gate asks the question it is actually for — *can this command put content on air?*
+      — instead of the proxy *is this row live?*. A raise still needs `#ownsLiveSeats`; a
+      silence never does.
+    */
+    const silencing = volume <= CREATED_MUTED_VOLUME;
+    let sent = false;
+    if (
+      record !== undefined &&
+      record.held !== true &&
+      (silencing || this.#ownsLiveSeats(itemId))
+    ) {
+      if (this.#noServerReachable()) return { ok: false, reason: 'disconnected' };
+      // `PLAYOUT-SOURCES-01` §1.I — a raise of a Playout input RAMPS; a silence (and PANIC) is
+      // immediate, as it always was.
+      const ack = await this.#send(
+        this.#builder.mixerVolume(record.slot, volume, plateVolumeFrames(record.origin, volume)),
+        this.#nextSeq(),
+        'urgent',
+      );
+      if (!ack.ok) return { ok: false, reason: ack.errorCode ?? 'amcp-error' };
+      sent = true;
+      // The ledger's copy is what was SENT, so it is updated only after the send
+      // LANDED. A ledger claiming a volume the layer never received would be
+      // re-asserted onto every future swap, spreading one failed command into a
+      // standing lie about what is audible.
+      this.registerLiveLayers(
+        itemId,
+        records.map((r) =>
+          // The SLOT, so the update lands on the record the send actually addressed — the
+          // same reason the lookup above prefers the punched one.
+          adoptionKey(r.slot) === adoptionKey(record.slot) ? { ...r, intendedVolume: volume } : r,
+        ),
+      );
+    }
+
+    this.#plateVolumes.set(itemId, { ...this.#plateVolumes.get(itemId), [plateId]: volume });
+    this.#markDirty(itemId);
+    /*
+      🔴 **`sent` — THE WRITER SAYS WHETHER IT REACHED THE WIRE, so no caller has to work it
+      out.** `silenceAllLivePlates` reports how many plates it actually silenced ON AIR as
+      against how many it merely recorded, and the only honest source for that is the code that
+      made the decision. A caller re-deriving it from `held` and `#ownsLiveSeats` would be a
+      second copy of this gate — golden rule 6 — and would drift the day the gate changes,
+      which is exactly what just happened to it.
+    */
+    return { ok: true, sent };
+  }
+
+  /** The audio intent for one item's plates, or `undefined` when none is recorded. */
+  livePlateVolumes(itemId: string): LivePlateVolumes | undefined {
+    return this.#plateVolumes.get(itemId);
+  }
+
+  // ─────────── `MEDIA-PLATES-01` — a clip's transport, its Loop on air, and its clock ───────────
+
+  /**
+   * The catalogue entry a clip's record was seated from: the `media` entry whose argument is the one
+   * the ledger recorded as SENT — asked of the one formatter, never re-spelt.
+   */
+  #mediaEntryOf(record: LiveLayerRecord): SourceDefinition | undefined {
+    return this.#sourceCatalog.sources.find(
+      (s) =>
+        s.producer.kind === 'media' && this.#builder.sourceArgument(s.producer) === record.producer,
+    );
+  }
+
+  /**
+   * 🔴 `MEDIA-PLATES-01` §1.D — **PLAY/PAUSE AND RESTART FOR ONE MEDIA PLATE OF AN ON-AIR ROW.**
+   *
+   * - `pause` — `PAUSE`: the clip holds its frame, and stays paused whatever the looks do (an
+   *   OPERATOR pause, which a look showing it again does not undo) until Play or Restart.
+   * - `play` — `RESUME`, from the frame it holds. (A clip frozen at its end stays there: Restart is
+   *   the press that plays it again.)
+   * - `restart` — `CALL <ch>-<L> SEEK 0`, the cleanest restart 2.5.0 has (no new producer, nothing
+   *   re-seated, and it works on a clip frozen at its end), then `RESUME` — except for a clip a look
+   *   has hidden and paused, which is rewound and waits, paused, for the look that shows it.
+   *
+   * REFUSED WITH NOTHING SENT for a row that is not on air, a plate that is not seated, and a plate
+   * whose seat is not a clip — a live input has no transport. The permission (operator, the row's
+   * channel) and the lock are the gate's, before this is reached; every outcome is audited with the
+   * clip's name. Under the row's seat lock, so a look switch cannot interleave with the press.
+   */
+  async mediaPlateTransport(
+    itemId: string,
+    plateId: string,
+    action: MediaPlateTransportAction,
+  ): Promise<{
+    ok: boolean;
+    reason?: 'not-media' | 'not-seated' | 'not-on-air' | 'amcp-error';
+    message?: string;
+  }> {
+    const result = await this.#withLiveSeatLock(itemId, async () => {
+      const records = this.#liveLayers.get(itemId) ?? [];
+      // The PUNCHED record first, as the volume verb does: one plate can label two seats.
+      const record =
+        records.find((r) => r.sourceId === plateId && r.held !== true) ??
+        records.find((r) => r.sourceId === plateId);
+      const detail: AuditDetail = {
+        ...this.#itemDetail(itemId),
+        ...(record !== undefined && { slot: record.slot }),
+        media: {
+          name: (record === undefined ? undefined : this.#mediaEntryOf(record)?.name) ?? plateId,
+          transport: action,
+          plateId,
+        },
+      };
+      const refuse = (
+        reason: 'not-media' | 'not-seated' | 'not-on-air',
+        message: string,
+      ): { ok: false; reason: typeof reason; message: string } => {
+        this.#recordOutcome('media-transport', detail, { outcome: 'failed', errorCode: reason });
+        return { ok: false, reason, message };
+      };
+      const item = this.#reconciler.get(itemId);
+      if (item === null || !isOnAirStatus(item)) {
+        return refuse('not-on-air', 'This row is not on air. Nothing was sent.');
+      }
+      if (record === undefined)
+        return refuse('not-seated', 'Nothing is seated here. Nothing was sent.');
+      const transport = record.transport;
+      if (transport === undefined) {
+        return refuse('not-media', 'This plate is not a clip. Nothing was sent.');
+      }
+      const lines =
+        action === 'pause'
+          ? [this.#builder.pause(record.slot)]
+          : action === 'play'
+            ? [this.#builder.resume(record.slot)]
+            : [
+                this.#builder.seekFrame(record.slot, 0),
+                ...(transport.paused === 'hidden' ? [] : [this.#builder.resume(record.slot)]),
+              ];
+      for (const line of lines) {
+        const sent = await this.#send(line, this.#nextSeq(), 'urgent');
+        if (sent.ok) continue;
+        this.#recordOutcome('media-transport', detail, {
+          outcome: sent.errorCode === AMCP_TIMEOUT_CODE ? 'timeout' : 'failed',
+          errorCode: sent.errorCode ?? 'amcp-error',
+          ...(sent.command !== undefined ? { command: sent.command } : {}),
+        });
+        return {
+          ok: false as const,
+          reason: 'amcp-error' as const,
+          message: 'CasparCG did not accept it. The clip is as it was.',
+        };
+      }
+      // The ledger follows what LANDED: who paused it, if anyone, now. Patched on the ledger as it
+      // is NOW — a take (unlocked by design) may have rewritten it while the sends were out.
+      const paused: 'hidden' | 'operator' | undefined =
+        action === 'pause'
+          ? 'operator'
+          : action === 'restart' && transport.paused === 'hidden'
+            ? 'hidden'
+            : undefined;
+      this.#patchTransport(itemId, [adoptionKey(record.slot)], (t) => ({
+        loop: t.loop,
+        ...(paused !== undefined && { paused }),
+      }));
+      this.#recordOutcome('media-transport', detail, { outcome: 'ok' });
+      return { ok: true as const };
+    });
+    this.#publishMediaState();
+    return result;
+  }
+
+  /**
+   * 🔴 `MEDIA-PLATES-01` §1.A — **A BOUND CLIP'S TWO PLAYBACK SETTINGS, STATION-WIDE.** Written on
+   * the clip's bound-media reference by the store's writer (which republishes the catalogue), then
+   * the one live half: a `loop` change reaches every clip of that media already seated AT ONCE —
+   * `CALL <ch>-<L> LOOP 1|0`, which 2.5.0 applies to a playing clip (measured). `whenHidden` needs
+   * nothing sent: it is read the next time a look hides the plate. Audited with the clip's NAME.
+   *
+   * A clip whose `CALL … LOOP` is refused keeps its ledger `loop` as it was — the console shows what
+   * the clip is DOING — and takes the setting at its next seating; the setting itself is saved.
+   */
+  async setMediaPlayback(
+    mediaId: string,
+    playback: MediaPlayback,
+  ): Promise<{ ok: boolean; reason?: 'unknown-media'; message?: string }> {
+    const written = this.#writeMediaPlayback?.(mediaId, playback) ?? null;
+    if (written === null) {
+      this.#recordOutcome(
+        'set-media-playback',
+        {},
+        { outcome: 'failed', errorCode: 'unknown-media' },
+      );
+      return {
+        ok: false,
+        reason: 'unknown-media',
+        message: 'That clip is not bound on this station. Nothing was changed.',
+      };
+    }
+    const entry = this.#sourceCatalog.sources.find(
+      (s) => s.id === mediaId && s.producer.kind === 'media',
+    );
+    const arg = entry === undefined ? undefined : this.#builder.sourceArgument(entry.producer);
+    for (const itemId of [...this.#liveLayers.keys()]) {
+      await this.#withLiveSeatLock(itemId, async () => {
+        const landed: string[] = [];
+        for (const r of this.#liveLayers.get(itemId) ?? []) {
+          if (r.transport === undefined || r.producer !== arg || r.transport.loop === playback.loop)
+            continue;
+          const sent = await this.#send(
+            this.#builder.setLoop(r.slot, playback.loop),
+            this.#nextSeq(),
+            'urgent',
+          );
+          if (sent.ok) {
+            landed.push(adoptionKey(r.slot));
+            continue;
+          }
+          process.stderr.write(
+            `[caspar-bridge] “${written.name}”: CasparCG refused the loop change on ` +
+              `${String(r.slot.channel)}-${String(r.slot.layer)} (${sent.errorCode ?? 'amcp-error'}); ` +
+              `it applies from the clip's next seating\n`,
+          );
+        }
+        this.#patchTransport(itemId, landed, (t) => ({ ...t, loop: playback.loop }));
+      });
+    }
+    this.#recordOutcome(
+      'set-media-playback',
+      { media: { name: written.name, loop: playback.loop, whenHidden: playback.whenHidden } },
+      { outcome: 'ok' },
+    );
+    this.#publishMediaState();
+    return { ok: true };
+  }
+
+  /** `MEDIA-PLATES-01` — does the ledger hold a media clip of ours on this coordinate? (The seam asks.) */
+  #holdsClip(channel: number, layer: number): boolean {
+    for (const records of this.#liveLayers.values()) {
+      for (const r of records) {
+        if (r.transport !== undefined && r.slot.channel === channel && r.slot.layer === layer) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * `MEDIA-PLATES-01` — rewrite the clip transport of the records on `slots` (adoption keys), on the
+   * ledger as it stands NOW. A slot that is no longer a clip of this item — torn down while a send
+   * was out — is left alone: the ledger names what is on air, and a stale copy written back would
+   * name a layer that was cleared.
+   */
+  #patchTransport(
+    itemId: string,
+    slots: readonly string[],
+    patch: (
+      transport: NonNullable<LiveLayerRecord['transport']>,
+    ) => NonNullable<LiveLayerRecord['transport']>,
+  ): void {
+    if (slots.length === 0) return;
+    const wanted = new Set(slots);
+    const records = this.#liveLayers.get(itemId) ?? [];
+    if (!records.some((r) => r.transport !== undefined && wanted.has(adoptionKey(r.slot)))) return;
+    this.registerLiveLayers(
+      itemId,
+      records.map((r) =>
+        r.transport !== undefined && wanted.has(adoptionKey(r.slot))
+          ? { ...r, transport: patch(r.transport) }
+          : r,
+      ),
+    );
+  }
+
+  /**
+   * `MEDIA-PLATES-01` §1.A — **THE BOUND-MEDIA STORE'S WRITER, handed in by the bridge** (the
+   * Playout's store is built after the runtime), like the media freshener. `null` — no Playout media
+   * — means no clip's settings can be set.
+   */
+  setMediaPlaybackWriter(
+    write: ((sourceId: string, playback: MediaPlayback) => { readonly name: string } | null) | null,
+  ): void {
+    this.#writeMediaPlayback = write;
+  }
+
+  /**
+   * 🔴 `MEDIA-PLATES-01` §1.E — **EVERY SEATED MEDIA PLATE'S TRANSPORT STATE**, by channel then layer.
+   *
+   * `remainingMs` is the server's own report — `file/time` from the primary's OSC, fresh within the
+   * occupancy window — and is ABSENT whenever there is no such report: never estimated from when a
+   * `PLAY` was sent. `ended` likewise needs the report (a clip that is not looping, standing at its
+   * length). `paused` and `loop` are the ledger's, which records what was SENT.
+   */
+  mediaPlateStates(): MediaPlateState[] {
+    const clipTimes = this.#adapter.primarySession.osc.clipTimes;
+    const now = Date.now();
+    const rows: MediaPlateState[] = [];
+    for (const [itemId, records] of this.#liveLayers) {
+      for (const record of records) {
+        const transport = record.transport;
+        if (transport === undefined) continue;
+        const time = clipTimes.read(
+          record.slot.channel,
+          record.slot.layer,
+          this.#occupancyStaleMs,
+          now,
+        );
+        const left = time === null ? undefined : Math.max(0, time.total - time.elapsed);
+        rows.push({
+          itemId,
+          plateId: record.sourceId,
+          channel: record.slot.channel,
+          layer: record.slot.layer,
+          ...(left !== undefined && { remainingMs: Math.round(left * 1000) }),
+          paused: transport.paused !== undefined,
+          ended: left !== undefined && !transport.loop && left <= CLIP_END_MARGIN_S,
+          loop: transport.loop,
+        });
+      }
+    }
+    return rows.sort((a, b) => a.channel - b.channel || a.layer - b.layer);
+  }
+
+  /**
+   * Push {@link mediaPlateStates} when what the console SHOWS changed — compared in the whole
+   * seconds it displays, so a countdown costs one push a second and a paused clip costs none.
+   */
+  #publishMediaState(): void {
+    const states = this.mediaPlateStates();
+    const shown = JSON.stringify(
+      states.map((s) => ({
+        ...s,
+        remainingMs: s.remainingMs === undefined ? null : Math.ceil(s.remainingMs / 1000),
+      })),
+    );
+    if (shown === this.#mediaStateShown) return;
+    this.#mediaStateShown = shown;
+    this.mediaStateChanged.emit(states);
+  }
+
+  /**
+   * 🔴 **PANIC — SILENCE EVERY LIVE PLATE THIS BRIDGE HOLDS A SEAT FOR. `clearAll`'s sibling,
+   * and built to the same rule for the same reason.**
+   *
+   * ── THE SCOPE IS THE LEDGER, AND STATUS IS NOT ASKED ────────────────────────
+   *
+   * ⭐ **`B-122`, applied one verb along.** Clear-All used to gate on believed status and
+   * therefore *"gated the emergency control on exactly the values that may be wrong in the
+   * emergency"* — with every item reading `idle` it sent nothing and reported success. This
+   * verb's first cut had the same shape one layer up: PANIC's scope was resolved in the
+   * BROWSER from `isOnAir(item)`, so **a row in the boot-adoption window (`B-145`) — plates
+   * seated, potentially audible, status not on air — was never silenced by the panic button.**
+   * (The record first called that window `exitRehearse`'s; it is not — rehearse seats
+   * nothing, `B-216`.)
+   *
+   * The scope is now the LEDGER: every plate the bridge itself seated, whatever any status
+   * claims. That is a structural fact — the bridge wrote each record when it sent the `PLAY`
+   * that seated the plate — and a structural fact cannot be wrong in the way a status can.
+   *
+   * ⚠ **AND IT LIVES HERE, NOT IN THE RENDERER, for a reason beyond tidiness.** The browser's
+   * copy of the ledger is a snapshot that may not have ARRIVED; a panic button scoped from it
+   * would silently address nothing at exactly the moment `useLiveLayers` was still loading, and
+   * report success for it. The authority is where the ledger is.
+   *
+   * ── 🔴 THIS DOES NOT WEAKEN GOLDEN RULE 10, AND HERE IS WHY ─────────────────
+   *
+   * Rule 10 stops a CONFIGURATION verb from putting content **ON AIR** — its own words are
+   * *"no `PLAY`, no un-mute and no fill"*. PANIC does none of those three: it only ever LOWERS
+   * a volume, on layers that already exist, and it **seats nothing, un-holds nothing, fills
+   * nothing and creates nothing**. There is no state of the plant in which sending
+   * `MIXER … VOLUME 0` puts a frame or a sample on air that was not already there.
+   *
+   * That is why it is safe for it to reach a row `#ownsLiveSeats` calls false, and it is not an
+   * exemption bolted on for this verb: the gate inside {@link setLivePlateVolume} is
+   * DIRECTIONAL, so a silence is never gated there either and OFF behaves the same way. Written
+   * out because *"PANIC ignores `#ownsLiveSeats`"* reads like the very defect rule 10 exists to
+   * stop, and the next reader will otherwise flag it — or, worse, "fix" it.
+   *
+   * ── 🔴 HELD PLATES: INTENT RECORDED, NOTHING SENT ───────────────────────────
+   *
+   * A held plate is seated but the active look punches no hole for it, and §12.4's hold is
+   * *"muted and idle"* — so it is **already silent** and there is nothing for a panic to take
+   * off air. Sending to it would be traffic for no effect. What matters is that its recorded
+   * intent goes to `0` like every other, because the reconcile that eventually UN-holds it
+   * asserts that intent — so a plate silenced during a panic stays silent when its look comes
+   * back, instead of returning at whatever it was before. This is the existing held rule
+   * inherited rather than a second one written for PANIC.
+   *
+   * ── ORDER: EVERY INTENT FIRST, THEN THE WIRE ────────────────────────────────
+   *
+   * `setLivePlateVolume` writes `#plateVolumes` on its own, but the LOOP below is what makes
+   * the property hold across plates: because every plate's target is the same `0`, a reconcile
+   * that interleaves mid-panic re-asserts intents that are already zero and converges on
+   * silence by itself. That is why this verb needs no `#withLiveSeatLock` — where a SOLO's
+   * cross-plate statement can be torn in half by a look switch, a PANIC's cannot be, and an
+   * emergency verb must not queue behind the thing it may be repairing (`clearAll` and `take`
+   * are un-gated for that same reason).
+   *
+   * ── THE REPORT ─────────────────────────────────────────────────────────────
+   *
+   * It counts what ACTUALLY went and it NAMES the rows — under a ledger scope those can be rows
+   * the operator would not have predicted, which is the most useful thing this report can say.
+   * `ok` is true only when something was owed AND all of it landed, so no shape of no-op can
+   * come back dressed as a success.
+   *
+   * ⚠ **`silenced` and `recorded` are DIFFERENT NUMBERS and both are wanted.** A HELD plate is
+   * recorded and not sent, because it is already silent; a plate on a row with nothing seated
+   * behind it likewise. Collapsing them into one "attempted" would need a caveat to be read
+   * correctly, and a number that needs a caveat is worse than two that do not. `ok` deliberately
+   * turns on `recorded`, not on `silenced`: a ledger of entirely HELD plates is a complete
+   * success with zero sends.
+   */
+  async silenceAllLivePlates(): Promise<PanicReport> {
+    // 🔴 A16 — UNSCOPED: every row the ledger holds a seat for, on every channel.
+    return this.#silenceLedger(() => true);
+  }
+
+  /**
+   * 🔴 `MULTI-CHANNEL-01` §2 C — **PANIC FOR ONE CHANNEL**: every plate the ledger holds a seat for
+   * on the rows wholly on `channel` ({@link #withinChannel}), and nothing on any other channel.
+   *
+   * A NEW verb beside {@link silenceAllLivePlates}, never a parameter on it (`R-062`): the owner's
+   * 2026-09-23 decision is that the operator's PANIC silences the channel on screen and a
+   * separate, explicit control silences every channel. The same loop, the same writer, the same
+   * ledger scope and the same report — only the SCOPE differs, so the two cannot come to disagree
+   * about what a silence is (`B-122` and golden rule 10 hold here exactly as they do there).
+   */
+  async silenceChannelLivePlates(channel: number): Promise<PanicReport> {
+    return this.#silenceLedger((itemId) => this.#withinChannel(itemId, channel));
+  }
+
+  /**
+   * THE ONE PANIC LOOP, for both scopes. Everything the note on {@link silenceAllLivePlates}
+   * argues — the ledger scope, the directional writer, intent-before-wire, the report — lives
+   * here once; the two verbs supply WHICH ledger rows are in scope and nothing else.
+   */
+  async #silenceLedger(inScope: (itemId: string) => boolean): Promise<PanicReport> {
+    // A SNAPSHOT of the ledger's keys first: `setLivePlateVolume` calls `registerLiveLayers`,
+    // which mutates the map we would otherwise be iterating.
+    const entries = [...this.#liveLayers.entries()]
+      .filter(([itemId]) => inScope(itemId))
+      .map(([itemId, records]) => [itemId, [...records]] as const);
+    const rows: { itemId: string; plates: number }[] = [];
+    const failed: { itemId: string; plateId: string; reason: string }[] = [];
+    let silenced = 0;
+    let recorded = 0;
+
+    for (const [itemId, records] of entries) {
+      // Deduplicated: a fill+key pair puts the SAME `sourceId` on two records, and silencing
+      // a plate twice is one statement sent twice.
+      const plateIds = [...new Set(records.map((r) => r.sourceId))];
+      if (plateIds.length === 0) continue;
+      rows.push({ itemId, plates: plateIds.length });
+      for (const plateId of plateIds) {
+        // ONE writer. The gate, the held rule, the ledger discipline and the intent write are
+        // all its — this loop supplies the SCOPE and nothing else.
+        const verdict = await this.setLivePlateVolume(itemId, plateId, CREATED_MUTED_VOLUME);
+        if (!verdict.ok) {
+          failed.push({ itemId, plateId, reason: verdict.reason ?? 'unknown' });
+          continue;
+        }
+        recorded += 1;
+        // `sent` comes FROM the writer, never re-derived here — see its own note.
+        if (verdict.sent === true) silenced += 1;
+      }
+    }
+
+    // Nothing owed is not a success — `B-122`'s acceptance, restated for audio. An empty
+    // ledger reports `ok: false` with zeros rather than a completed panic over nothing.
+    return { ok: recorded > 0 && failed.length === 0, silenced, recorded, rows, failed };
+  }
+
+  /**
+   * 🔴 `B-257` — **THE CHANNELS PANIC WOULD REACH, right now: every channel the ledger holds a
+   * seat on.** The SAME map {@link silenceAllLivePlates} walks, so the lock judges the reach
+   * PANIC will actually have rather than a second idea of it.
+   *
+   * ⚠ It does NOT scope PANIC and must not be used to. PANIC stays unscoped (A16, CLAUDE.md's
+   * floor): what it silences is still the whole ledger. The one reader is the lock, which asks a
+   * different question — whether a covered-set lock should refuse this press at all.
+   */
+  liveLedgerChannels(): readonly number[] {
+    // `FIELD-FIXES-01` K — the ONE definition, which the console's silence controls ask too.
+    return ledgerChannels(this.liveLayersState());
+  }
+
+  /**
+   * `add-multibox-audio` — **A MAP OF PLATE VOLUMES FOR ONE ROW, APPLIED AS ONE ACTION.**
+   *
+   * ── WHY THIS EXISTS BESIDE {@link setLivePlateVolume} ──────────────────────
+   *
+   * Two of the four operator gestures are **CROSS-PLATE STATEMENTS**: SOLO says _"this plate
+   * and NONE of its siblings"_, PANIC says _"none of them"_. A sequence of single-plate calls
+   * cannot make either statement — it makes N statements that happen to be adjacent, and the
+   * row is briefly in a state nobody asked for between any two of them.
+   *
+   * 🔴 **IT IS NOT A SECOND WRITER, and that is the whole of its implementation.** Every
+   * entry goes through {@link setLivePlateVolume} — the same refusals, the same held-plate
+   * rule, the same golden-rule-10 gate, the same ledger discipline. A second spelling of
+   * _"what volume should this layer have"_ is the `B-100` / `P-012` class, and on the audio
+   * axis a divergence is INVISIBLE until air, because audio is the one property of a graphic
+   * an operator cannot see.
+   *
+   * ── 🔴 THE LOCK, AND WHY THIS VERB TAKES ONE WHERE ITS SINGLE-PLATE SIBLING
+   *      DOES NOT ────────────────────────────────────────────────────────────
+   *
+   * Held ONCE, around the WHOLE map (see {@link #withLiveSeatLock}). Not per entry — per
+   * entry would serialise each send against a switch and still lose the cross-plate property,
+   * which is the only reason the lock is here.
+   *
+   * It closes two windows, both of them golden rule 7's two-reads-with-an-await:
+   *
+   *   1. **STALE-INTENT CLOBBER.** `#applyLivePlates` reads `#plateVolumes` at PLAN time and
+   *      asserts it at SEAT time. A reconcile that planned before our write and seats after
+   *      it sends the OLD volume — leaving the plate silent while the published intent says
+   *      otherwise. One `await` wide for a single plate; N awaits wide for a map.
+   *   2. **HALF-APPLIED SOLO.** A look switch interleaving between the raise and the mutes
+   *      leaves two plates audible, with neither the ledger nor the intent map recording it.
+   *
+   * ⚠ **The `take`/`out` exemption does NOT extend to this verb, and the difference is the
+   * point.** Those two are exempt because a wedged switch must never be able to hold a row
+   * OFF AIR — the take is the operator's repair verb. An audio verb queueing behind a switch
+   * is CORRECT: the switch's own tail re-asserts every plate's intent from `#plateVolumes`,
+   * so the result converges either way, and the queued verb lands on the seats that actually
+   * exist rather than on the ones that were there when it was pressed. And PANIC is not made
+   * unsafe by waiting — the status-blind emergency remedy is `CLEAR ALL` / the row's own
+   * CLEAR, neither of which this lock gates, and both of which take the audio with the layer.
+   *
+   * ── ⚠ PER-PLATE OUTCOMES, NEVER ONE AVERAGED BOOLEAN ───────────────────────
+   *
+   * A SOLO across four plates can land three and be refused on the fourth. One `ok: false`
+   * would say the action failed while three plates had moved; one `ok: true` would hide the
+   * plate that did not. `results` carries a verdict per plate; `ok` is true only when every
+   * entry landed.
+   *
+   * ⚠ **APPLIED IN A STABLE ORDER** (`Object.keys` insertion order, which is the caller's),
+   * so a failure is reproducible and a wire trace reads the same way twice. SOLO's callers
+   * put the RAISE first, so a map that dies half-way has silenced siblings rather than
+   * raised ones — the safe direction.
+   */
+  async setLivePlateVolumes(
+    itemId: string,
+    volumes: Readonly<Record<string, number>>,
+  ): Promise<{ ok: boolean; results: { plateId: string; ok: boolean; reason?: string }[] }> {
+    const entries = Object.entries(volumes);
+    // An EMPTY map is a no-op that succeeded, not a failure: PANIC over a row whose
+    // template declares no plates has nothing to say and must not report a problem.
+    if (entries.length === 0) return { ok: true, results: [] };
+    return this.#withLiveSeatLock(itemId, async () => {
+      const results: { plateId: string; ok: boolean; reason?: string }[] = [];
+      for (const [plateId, volume] of entries) {
+        const verdict = await this.setLivePlateVolume(itemId, plateId, volume);
+        results.push({
+          plateId,
+          ok: verdict.ok,
+          ...(verdict.reason !== undefined && { reason: verdict.reason }),
+        });
+      }
+      return { ok: results.every((r) => r.ok), results };
+    });
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` C — is this plate's audio LOCKED at 0: a seat of it shows the Playout's playlist
+   * output (its record's `audioLocked`), or — nothing seated yet — it resolves to that output in any look
+   * of the row as the maps stand now.
+   */
+  #plateAudioLocked(itemId: string, plateId: string): boolean {
+    const records = this.#liveLayers.get(itemId) ?? [];
+    if (records.some((r) => r.sourceId === plateId && r.audioLocked === true)) return true;
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    const slot = this.#slots.get(itemId);
+    if (templateId === undefined || slot === undefined) return false;
+    const carrier = this.#templates.getOn(slot.channel, templateId)?.liveSources;
+    if (carrier === undefined) return false;
+    const plan = resolveLookBindings({
+      templateId,
+      carrier,
+      assignments: this.#assignmentsFor(itemId, templateId, 'pinned', slot.channel).assignments,
+      channel: slot.channel,
+      catalog: this.#sourceCatalog,
+      bindings: this.#lookSourceBindings.get(itemId),
+      overrides: this.#sourceOverrides.get(itemId),
+      argumentOf: (source) => this.#builder.sourceArgument(source.producer),
+    });
+    return plan.frames.some((f) => f.plateId === plateId && isPlaylistOutput(f.source));
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` C — does the ledger hold a LOCKED seat (the playlist output's box) on this
+   * coordinate? The send seam's backstop: no `VOLUME` above 0 ever reaches it.
+   */
+  #audioLockedOn(channel: number, layer: number): boolean {
+    for (const records of this.#liveLayers.values()) {
+      if (
+        records.some(
+          (r) => r.audioLocked === true && r.slot.channel === channel && r.slot.layer === layer,
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` C (the Playout's rule 2) — is this coordinate a Playout PLAYOUT LAYER L, the one
+   * a playlist output's `route://N-L` reads? Read from D10's playlist rows, never assumed. No command of
+   * ours may ever address it (`amcp-guard.ts`).
+   */
+  #isPlayoutPlaylistLayer(channel: number, layer: number): boolean {
+    return this.#sourceCatalog.sources.some(
+      (s) =>
+        isPlaylistOutput(s) &&
+        s.producer.kind === 'route' &&
+        s.producer.channel === channel &&
+        s.producer.layer === layer,
+    );
+  }
+
+  /** Is this exact coordinate a bridge-owned Live Source layer? */
+  #isLiveLayer(channel: number, layer: number): boolean {
+    return this.#liveLayerKeys().has(adoptionKey({ channel, layer }));
+  }
+
+  /**
+   * R-028 (6.5) — **WHICH DECLARED CLASS A LAYER BELONGS TO. THE ONE SPELLING.**
+   *
+   * The model has THREE declared classes, and the danger 6.5 exists for is not
+   * that any one of them is implemented wrongly — each has had exactly one source
+   * of truth for a while — it is that **nothing enumerated the LIST**. A narrowing
+   * written against two of three is not a bug review catches; it is a
+   * correct-looking test that silently forbids the missing class. So the list
+   * lives here, once, and every arm DELEGATES to that class's existing single
+   * source rather than re-deriving it (golden rule 6):
+   *
+   *   `playout`      — the reserved range from install config (`#reservedSet`).
+   *                   Declared as SOMEBODY ELSE'S. Channel-agnostic: a layer
+   *                   NUMBER is reserved, because the playout team owns the
+   *                   number across the machine.
+   *   `live-source`  — a coordinate in the bridge's OWN ledger
+   *                   (`#liveLayerKeys`). Declared as OURS, and the only class
+   *                   that is a runtime record rather than a static range —
+   *                   which is exactly what makes it ownable at all (C-015).
+   *   `operator-row` — a layer of the declared bank (`LayerManager.isFixed`).
+   *                   Declared as the operator's TERRITORY.
+   *
+   * ⚠ **"Declared" is NOT a synonym for "not an orphan", and reading it that way
+   * is the mistake this function is shaped to prevent.** The three classes make
+   * three DIFFERENT claims, and the consumer decides what each is worth:
+   * `playout` says the layer is not ours to touch, `live-source` says we put that
+   * producer there ourselves, and `operator-row` says only that the operator may
+   * USE this layer — it says nothing about what is on it right now. Returning a
+   * bare boolean here would have collapsed all three into the strongest one.
+   *
+   * Order is deliberate and matters where the sets could overlap. `playout` first
+   * because the reservation is absolute (the validator refuses a bank that
+   * intersects it, so this is defence in depth); `live-source` before
+   * `operator-row` because a ledgered coordinate is a fact about a producer we
+   * seated, which outranks a fact about a range.
+   */
+  #declaredLayerClass(
+    channel: number,
+    layer: number,
+  ): 'playout' | 'live-source' | 'operator-row' | null {
+    if (this.#reservedSet.has(layer)) return 'playout';
+    if (this.#isLiveLayer(channel, layer)) return 'live-source';
+    if (this.#layers.isFixed({ channel, layer })) return 'operator-row';
+    return null;
+  }
+
+  /**
+   * Record the Live Source layers an item owns. **Bookkeeping ONLY — this sends
+   * no AMCP and creates no producer.**
+   *
+   * Phase 6.1's `playSource` is what will seat an actual producer and call this
+   * with what it sent; the ledger is phase 5's because OWNERSHIP is phase 5's.
+   * Keeping the write path here (rather than inventing it inside a phase-6 verb)
+   * is what lets the three doors be wired and REGRESSION-TESTED before any verb
+   * exists to fill them — which is the whole point of landing ownership first.
+   *
+   * Replaces the item's previous records wholesale: a re-seat re-states what the
+   * item owns rather than accumulating stale coordinates.
+   */
+  registerLiveLayers(itemId: string, records: readonly LiveLayerRecord[]): void {
+    // FIRST-HAND: this call records what the bridge itself just sent, so whatever this
+    // item's coordinates were adopted-unconfirmed, they are confirmed now. Cleared for
+    // the RELEASE case too — a forgotten record cannot be unverified.
+    this.#clearUnverified(itemId);
+    if (records.length === 0) {
+      this.#liveLayers.delete(itemId);
+      this.#publishLiveLayers();
+      return;
+    }
+    this.#liveLayers.set(itemId, [...records]);
+    this.#publishLiveLayers();
+  }
+
+  /** Drop every unverified mark this item holds. See {@link #unverifiedLive}. */
+  #clearUnverified(itemId: string): void {
+    for (const record of this.#liveLayers.get(itemId) ?? [])
+      this.#unverifiedLive.delete(adoptionKey(record.slot));
+  }
+
+  /**
+   * B-145 — announce the ledger so it can be persisted.
+   *
+   * Called from the ONE write path and the ONE release path, for the reason
+   * {@link releaseLiveLayers} already gives about its own body: a rule with four
+   * implementations is a rule that drifts. If a future change adds a third way to mutate
+   * the ledger, it goes through those two — not around them.
+   */
+  #publishLiveLayers(): void {
+    this.liveLayersChanged.emit(this.#liveLayers);
+    // `ROUTE-PLATES-01` C4 — a row whose answer to "is the backup without its live boxes" moved is
+    // republished, so its line comes and goes with the seat and not with the next unrelated publish.
+    const unmirrored = new Set(
+      [...this.#liveLayers.keys()].filter((id) => this.#backupUnmirrored(id)),
+    );
+    for (const id of unmirrored) if (!this.#backupUnmirroredItems.has(id)) this.#markDirty(id);
+    for (const id of this.#backupUnmirroredItems) if (!unmirrored.has(id)) this.#markDirty(id);
+    this.#backupUnmirroredItems = unmirrored;
+    // `PLAYOUT-FEATURES-01` A — and a row whose list of clips B was sent nothing for moved, likewise.
+    const noCopy = new Map(
+      [...this.#liveLayers.keys()]
+        .map((id) => [id, JSON.stringify(this.#backupNoCopy(id))] as const)
+        .filter(([, list]) => list !== '[]'),
+    );
+    for (const [id, list] of noCopy)
+      if (this.#backupNoCopyItems.get(id) !== list) this.#markDirty(id);
+    for (const id of this.#backupNoCopyItems.keys()) if (!noCopy.has(id)) this.#markDirty(id);
+    this.#backupNoCopyItems = noCopy;
+  }
+
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **THE CLIPS OF THIS ROW SERVER B WAS SENT NOTHING FOR**, one per plate,
+   * from the ledger's records (`backupRefused`), in seat order. Empty with no server B.
+   */
+  #backupNoCopy(itemId: string): {
+    plateId: string;
+    name: string;
+    reason: NonNullable<LiveLayerRecord['backupRefused']>['reason'];
+  }[] {
+    if (this.#config.servers.B === undefined) return [];
+    const out: {
+      plateId: string;
+      name: string;
+      reason: NonNullable<LiveLayerRecord['backupRefused']>['reason'];
+    }[] = [];
+    for (const r of this.#liveLayers.get(itemId) ?? []) {
+      if (r.backupRefused === undefined || out.some((o) => o.plateId === r.sourceId)) continue;
+      out.push({ plateId: r.sourceId, name: r.backupRefused.name, reason: r.backupRefused.reason });
+    }
+    return out;
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` / contract v1.3 C4 — **DOES THE BACKUP CARRY THIS ROW WITHOUT ITS LIVE
+   * BOXES?** A backup is declared and the row's seats include a Playout route, which is never
+   * mirrored (`#send`'s `mirror: false`). Every other plate mirrors as it always has.
+   */
+  #backupUnmirrored(itemId: string): boolean {
+    return (
+      this.#config.servers.B !== undefined &&
+      (this.#liveLayers.get(itemId) ?? []).some(isPlayoutRouteRecord)
+    );
+  }
+
+  /**
+   * Forget an item's Live Source layers (teardown). Bookkeeping only.
+   *
+   * ⚠ **THE ONE SPELLING OF “forget this item's live layers”, and every site now
+   * goes through it.** It had three inline copies of its own body
+   * (`#liveLayers.delete(itemId)`) beside it and no production caller at all, so it
+   * was a named rule with four implementations — found by the standing
+   * extend-the-list-forget-the-mutator sweep in session AH, which is exactly the
+   * drift that rule predicts. A future release that has to do more than delete (an
+   * audit line, a publish) would otherwise have been added to one of the four.
+   */
+  releaseLiveLayers(itemId: string): void {
+    this.#liveLayers.delete(itemId);
+    this.#publishLiveLayers();
+  }
+
+  /**
+   * C-015 phase 6 (task 6.6) — **TEAR DOWN an item's Live Source layers: clear the
+   * producer AND reset the mixer, then release the ledger.**
+   *
+   * 🔴 **THE `MIXER … CLEAR` IS NOT TIDINESS, AND OMITTING IT IS THE BUG.** Mixer
+   * state belongs to the CHANNEL'S MIXER, not to the producer, so it survives both
+   * the `CLEAR` on the line above and a `CG REMOVE` (measured on hardware, and the
+   * same fact R-022's rehearse volume restore is built on). A teardown that clears
+   * only the producer leaves a `FILL` **and a `CLIP`** on that layer, waiting for
+   * whatever the bridge puts there next.
+   *
+   * Of the two, the inherited **`CLIP` is far worse**: a stale `FILL` puts the next
+   * graphic in the wrong PLACE, which somebody sees and reports, whereas a stale
+   * `CLIP` makes an otherwise-correct graphic **INVISIBLE** — with a `202` on the
+   * wire, nothing in any log, and an operator staring at a layer that reports a
+   * healthy producer and shows nothing.
+   *
+   * ORDER: the `CLEAR` first, then the `MIXER CLEAR`. The producer goes before its
+   * geometry so there is never a window in which a live picture is on the layer with
+   * its mask already reset — which would flash the un-masked, oversized crop-to-fill
+   * rect across the frame.
+   *
+   * THE LEDGER IS RELEASED LAST, and only after the sends. Releasing it first would
+   * hand the layer back to the R-009 orphan sweep (DOOR 1's boundary case) while a
+   * producer of ours is still on it — the sweep would then surface our own live layer
+   * as a reclaimable orphan for the moment between.
+   *
+   * Best-effort per layer: one failing send must not strand the rest, exactly as
+   * `removeAll` does not let one stuck item strand the graphics behind it.
+   */
+  async teardownLiveLayers(itemId: string): Promise<void> {
+    const records = this.#liveLayers.get(itemId);
+    if (records === undefined || records.length === 0) {
+      // Still release: an empty entry is bookkeeping to drop, not a no-op to skip.
+      this.releaseLiveLayers(itemId);
+      return;
+    }
+    for (const record of records) {
+      const cleared = await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
+      // `LOOK-SWITCH-01` — and the mixer only once the producer is gone (the method below).
+      await this.#resetPlateMixerIfCleared(record.slot, cleared);
+    }
+    this.releaseLiveLayers(itemId);
+  }
+
+  /**
+   * 🔴 `LOOK-SWITCH-01` — **A PLATE LAYER'S MIXER IS RESET ONLY ONCE ITS `CLEAR` HAS LANDED.**
+   *
+   * `MIXER <ch>-<layer> CLEAR` resets the WHOLE transform — opacity 1, volume 1, full frame
+   * (`AMCPCommandsImpl.cpp` 1371–1381; `stage.cpp` 271, 276). On a layer that still holds a plate —
+   * seated hidden, held (muted, parked off-raster), or anything a `CLEAR` did not remove — it
+   * REVEALS and UN-MUTES it at full frame: the Playout core team's fact 5 ("never `MIXER <ch>-<L>
+   * CLEAR` on a layer holding a seated, hidden plate"). The three sites that can meet one
+   * (`design.md` §0.4: the refusal clean-up, the end-of-apply sweep and this teardown) send their
+   * `CLEAR` first; each resets the mixer HERE, and only when that `CLEAR` was acked on the primary.
+   * A `CLEAR` that did not land leaves the producer AND its mixer exactly as they were: a stale
+   * transform on a layer the next seat hides again anyway, never a plate revealed at full frame.
+   */
+  async #resetPlateMixerIfCleared(
+    slot: CommandSlot,
+    cleared: { readonly ok: boolean; readonly onPrimary: boolean },
+  ): Promise<void> {
+    if (!cleared.ok || !cleared.onPrimary) return;
+    await this.#send(this.#builder.mixerClear(slot), this.#nextSeq(), 'urgent');
+  }
+
+  /**
+   * 🔴 **B-145 — ADOPT a persisted ledger at boot, corrected by what the server actually
+   * has.**
+   *
+   * The persisted file knows the NAMES this bridge gave those layers — the `itemId`, the
+   * symbolic `sourceId`, the fill/key `role` — none of which the server was ever told, so
+   * no amount of server reading re-derives them. The server knows the TRUTH about which
+   * layers still carry a producer. `reconcileLiveLayers` resolves the two, and **its result
+   * becomes the ledger**: one authority, with the file as an input to it rather than a
+   * second answer consulted later.
+   *
+   * ⚠ **`observe` is INJECTED rather than read from a socket here**, mirroring
+   * `fixed-layers-store.ts`'s `slotOccupancy` option. It keeps "what is on this layer" out
+   * of "what does the ledger say", so the rule is testable without a server and the caller
+   * stays free to source occupancy from `INFO` (measured to report per-layer producers and
+   * to drop a layer as soon as it is cleared) or from the OSC tap.
+   *
+   * Returns the adoption so the caller can REPORT what the server contradicted. A record
+   * dropped here means a producer went away while the bridge was down; that is a fact worth
+   * printing, not a silent correction.
+   */
+  adoptLiveLayers(
+    persisted: LiveLayerLedger,
+    observe: (slot: CommandSlot) => LiveLayerOccupancy,
+  ): LiveLayerAdoption {
+    const adoption = reconcileLiveLayers({ persisted, observe });
+    this.#liveLayers.clear();
+    for (const [itemId, records] of adoption.adopted) this.#liveLayers.set(itemId, [...records]);
+    // The adoption already computed WHICH records it could not confirm; recorded here
+    // rather than re-derived, so the wire and the boot banner cannot disagree about how
+    // much of the ledger is a file claim.
+    this.#unverifiedLive = new Set(adoption.unverified.map((r) => adoptionKey(r.slot)));
+    this.#publishLiveLayers();
+    return adoption;
+  }
+
+  /**
+   * 🔴 **`B-227` — THE LEDGER MUST NOT OUTLIVE WHAT IT DESCRIBES: correct it on RECONNECT,
+   * by the same evidence and the same function that correct it at BOOT.**
+   *
+   * ── THE DEFECT ──────────────────────────────────────────────────────────────
+   *
+   * CasparCG restarts under a running bridge. The reconnect samples occupancy once, finds
+   * every layer silent, and {@link Reconciler.reconcileOnReconnect} resets each played row to
+   * `idle` — correct, and untouched. But nothing corrected `#liveLayers`, which went on naming
+   * the Live Source layers this bridge had seated, with producers that no longer existed.
+   *
+   * {@link #ownsLiveSeats} is `on air OR the ledger holds seats`, so on a row the reconciler
+   * had just reset the ledger ALONE kept the answer TRUE. That is golden rule 10's gate, and
+   * with it stuck true an UPDATE on a stopped row re-enters the binding reconcile and SEATS:
+   * `PLAY`s onto the empty band, `MIXER VOLUME`s, `FILL`/`CLIP`s — video on air with no
+   * template above it, on a row the console shows stopped. `B-161`'s defect, reached through a
+   * stale belief instead of through the rehearse flag.
+   *
+   * ── WHY IT WAS NEVER JOINED — a missed join, not a deliberate intent record ──
+   *
+   * The dates settle it. `reconcileOnReconnect` is `B-086`'s (`f82e9e68`, 2026-07-15) and
+   * lives in the Reconciler, which knows an item's TEMPLATE slot and has never heard of a
+   * ledger. The ledger's types are 2026-08-10 (`7e595ac5`). `reconcileLiveLayers` — **the ONE
+   * spelling of "correct the ledger's claim by the server's evidence"** — is `B-145`'s
+   * (`229885cd`, 2026-08-18), and it was wired to the BOOT door only. So the identical
+   * physical event (CasparCG came back with empty layers) was reconciled against the ledger
+   * when met at boot and not when met at reconnect. Nobody chose that; the reconnect path
+   * simply predates the thing it needed to correct.
+   *
+   * Hence: the same function, from the same sample, at the second door. Golden rule 6 — a
+   * second local spelling of the three-valued rule here is how the two doors would drift.
+   *
+   * ── THE `heard` GATE IS THE POSITIVE CONTROL, AND IT IS LOAD-BEARING ────────
+   *
+   * 🔴 Called ONLY from inside the branch that has already proven the OSC tap is HEARING
+   * (`hasFreshOsc`). From a blind tap, silence is evidence of nothing whatsoever (`B-101`,
+   * `B-053`) — and dropping seats there is the INVERSE fault, and the worse one: the console
+   * would forget producers that are genuinely on the channel, and could then neither re-point
+   * nor tear them down. A blinked socket is the same distinction from the other side: the
+   * server kept its producers, so they come back `occupied` and every record is KEPT.
+   *
+   * ⚠ Because the caller has proven the tap is hearing, `observe` is two-valued here — real
+   * CasparCG never reports a layer `empty`, so silence IS the empty signal (`B-053`), the
+   * identical inference `reconcileOnReconnect` makes from this same set one line below. The
+   * three-valued rule's `unknown` arm belongs to boot, where occupancy may be unknowable; it
+   * cannot be reached from here, and that is a property of the call site rather than a
+   * narrowing of the rule.
+   *
+   * ⚠ Written through {@link registerLiveLayers} — the ONE write path — so the drop persists
+   * (`bridge.ts` writes `bridge-live-layers.json` on every `liveLayersChanged`) and reaches
+   * the operator's LIVE PLATES list, instead of leaving the file to describe a plant that no
+   * longer matches it. It also clears each touched item's `unverified` marks, which is right
+   * for the same reason the drop is: a record we have just OBSERVED occupied is no longer an
+   * unconfirmed file claim.
+   *
+   * Returns what it dropped, for the caller to REPORT — the seats that were on air until the
+   * server took them away. That is the signal `RESTART-NOTICE-01` §B surfaces, and it exists
+   * only here, at the instant before the reconciler's publish turns it into `cleared`.
+   */
+  #reconcileLedgerOnReconnect(occupiedKeys: ReadonlySet<string>): readonly DroppedLiveLayer[] {
+    if (this.#liveLayers.size === 0) return [];
+    const adoption = reconcileLiveLayers({
+      persisted: this.#liveLayers,
+      observe: (slot) => (occupiedKeys.has(adoptionKey(slot)) ? 'occupied' : 'empty'),
+    });
+    if (adoption.dropped.length === 0) return [];
+    // Only the items that actually lost a record are rewritten: an untouched item must not
+    // emit a `liveLayersChanged` that says nothing, and must not have its marks cleared.
+    for (const itemId of new Set(adoption.dropped.map((d) => d.itemId))) {
+      this.registerLiveLayers(itemId, adoption.adopted.get(itemId) ?? []);
+    }
+    return adoption.dropped;
+  }
+
+  // ─────────── `B-225` — AIR WAS EMPTIED UNDER US: the notice and the one press ───────────
+
+  /**
+   * 🔴 **RAISE the standing notice from what the reconnect just measured.**
+   *
+   * `reset` is what the caller has already narrowed to TWO conditions, and both are needed:
+   * the row was ON AIR immediately before the reconnect, **and** `reconcileOnReconnect` reset
+   * it because its layer had gone silent.
+   *
+   * 🔴 **THE FIRST CONDITION IS NOT REDUNDANT, AND ASSUMING IT WAS IS THE BUG THIS PARAGRAPH
+   * EXISTS TO STOP SOMEBODY RE-INTRODUCING.** The obvious reading — "the reconcile only
+   * touches `played` records, so its output is already the on-air set" — is FALSE, and it was
+   * this session's first spelling until a test caught it. `played` means *a `PLAY` was sent
+   * and has not been retracted*, and **`out` does not retract it**: `stop` sets
+   * `played = false` (`reconciler.ts:661`), the `out` intent (`:675-687`) deliberately does
+   * not, because `idle` is the out's unevidenced TARGET rather than an observation. So a row
+   * the operator CLEARED an hour ago is still `played: true`, is inside the reset set, and
+   * without the status filter would be offered back — a graphic the operator deliberately
+   * took off air, put back by one press, which is `B-109` exactly.
+   *
+   * The filter is `isOnAirStatus` — the ONE canonical predicate, reused, never re-derived —
+   * **minus `exiting`**. That subtraction is a separate question rather than a second
+   * spelling of the predicate: `exiting` means a CLEAR the operator asked for is IN FLIGHT,
+   * so the row is on air only in the sense that it has not finished leaving. Restoring it
+   * would act against a command already given.
+   *
+   * ⚠ **A NEW RECONNECT REPLACES A STANDING NOTICE; IT DOES NOT MERGE INTO ONE.** Merging
+   * looks kinder — rows from an earlier notice that were never put back would stay listed —
+   * and it is wrong, because the carried-over rows are no longer BACKED by the measurement.
+   * Between two reconnects the operator may have cleared one of them deliberately; a merged
+   * list cannot tell that row from one the server took, so it would offer to put a
+   * deliberately-emptied row back on air. The offer must be provable, so the notice says
+   * exactly what THIS reconnect took away. Rows that drop off are not lost — they are on the
+   * stack, idle, and an ordinary take puts any of them back.
+   *
+   * ⚠ Emits nothing when nothing came off air, and in particular does NOT clear a standing
+   * notice: an ordinary healthy reconnect with an empty stack has no opinion about a notice
+   * raised by an earlier one.
+   */
+  #raiseEmptiedAir(
+    reset: readonly StackItemState[],
+    dropped: readonly DroppedLiveLayer[],
+    newConnection: boolean,
+  ): void {
+    if (reset.length === 0) return;
+    const notice: EmptiedAirNotice = {
+      at: new Date().toISOString(),
+      rows: reset.map((item) => ({
+        itemId: item.itemId,
+        templateId: item.templateId,
+        ...(item.slot !== undefined
+          ? { slot: { channel: item.slot.channel, layer: item.slot.layer } }
+          : {}),
+      })),
+      seatsDropped: dropped.length,
+      // `CENTRAL-BRIDGE-01` (D4) — each seat's channel, so a console told only its own channels
+      // is told only its own seats.
+      seatChannels: dropped.map((d) => d.record.slot.channel),
+      newConnection,
+    };
+    this.#emptiedAir = notice;
+    this.emptiedAirChanged.emit(notice);
+    /*
+      `RESTART-NOTICE-01` §C.2 — THE ONE LINE. The bridge's stderr is the only record any of
+      this leaves on the host, and until now a reconnect that emptied air left none at all.
+      Written here rather than in a logger because this is the moment the facts exist.
+    */
+    process.stderr.write(
+      `[caspar-bridge] air emptied under us: ${String(notice.rows.length)} row(s) were on air ` +
+        `and their layers are silent on ${newConnection ? 'a NEW AMCP connection' : 'the same AMCP connection'}; ` +
+        `${String(notice.seatsDropped)} live-source seat(s) dropped from the ledger. ` +
+        `Nothing was re-seated — the operator decides.\n`,
+    );
+  }
+
+  /**
+   * Drop one row from the standing notice — **the ONE narrowing point, and every route that
+   * makes a row un-offerable goes through it.**
+   *
+   * Called when the row goes back ON AIR by any door (the one press restores through the
+   * ordinary `take`, so an operator's own take is the same event) and when it is REMOVED. A
+   * notice that went on naming a row already back on air would be the same defect as the
+   * ledger that outlived its producers — a surface confidently describing a plant that has
+   * moved on.
+   */
+  #retireFromEmptiedAir(itemId: string): void {
+    const notice = this.#emptiedAir;
+    if (notice === null) return;
+    const rows = notice.rows.filter((r) => r.itemId !== itemId);
+    if (rows.length === notice.rows.length) return;
+    this.#emptiedAir = rows.length === 0 ? null : { ...notice, rows };
+    this.emptiedAirChanged.emit(this.#emptiedAir);
+  }
+
+  // ─────────── `RELEASE-091-01` (DELTA B, B1) — A LAYER OF OURS CLEARED FROM OUTSIDE ───────────
+
+  /** The layers cleared outside CG Control, still to be said. */
+  clearedOutside(): readonly ClearedOutsideLayer[] {
+    return [...this.#clearedOutside];
+  }
+
+  /**
+   * 🔴 **EVERY LAYER THIS BRIDGE HOLDS ON AIR**: each on-air item's page layer (the canonical
+   * `isOnAirStatus`, minus `exiting` — a CLEAR the operator asked for is in flight — and minus a take
+   * still in flight, `B-332`) and every seat in the live-layer ledger. Grouped by channel.
+   */
+  #heldOnAirLayers(): Map<number, Set<number>> {
+    const out = new Map<number, Set<number>>();
+    const add = (channel: number, layer: number): void => {
+      let set = out.get(channel);
+      if (set === undefined) {
+        set = new Set();
+        out.set(channel, set);
+      }
+      set.add(layer);
+    };
+    for (const item of this.#reconciler.snapshot()) {
+      if (!isOnAirStatus(item) || item.status === 'exiting' || item.slot === undefined) continue;
+      // `B-332` — nor a TAKE still in flight: its layer is silent until its own ADD lands, and asked
+      // about meanwhile, the take was reset mid-flight and lost its re-ADD (`CG PLAY` onto nothing).
+      if (item.status === 'playing' && item.pending) continue;
+      add(item.slot.channel, item.slot.layer);
+    }
+    for (const records of this.#liveLayers.values()) {
+      for (const r of records) add(r.slot.channel, r.slot.layer);
+    }
+    return out;
+  }
+
+  /**
+   * 🔴 `B-292` — **OSC SILENCE ON A LAYER WE HOLD ON AIR IS A QUESTION, NEVER "STILL PLAYING".**
+   *
+   * CasparCG 2.5 erases a cleared layer and simply stops reporting it (`stage.cpp` `clear`), so a row
+   * whose page — or a seat whose plate — another AMCP client, the Playout or the core itself cleared
+   * went on reading ON AIR: the bridge turned a row idle only on an explicit `empty` the core never
+   * sends. Every {@link SILENCE_CHECK_MS}, a layer of ours that has reported nothing for
+   * {@link SILENT_LAYER_MS} while its CHANNEL still ticks is asked about — ONE `INFO` read per
+   * silence, from the primary, never a channel-wide poll. Whole-channel silence asks nothing: that is
+   * a link or a channel question, not a layer's (golden rule 8 — probe the axis you judge).
+   *
+   * Sends nothing but that read, and never puts anything back.
+   */
+  #questionSilentLayers(): void {
+    const session = this.#adapter.primarySession;
+    if (session.state !== 'healthy') return;
+    const now = Date.now();
+    const occupancy = session.osc.occupancy;
+    this.#retireHeardAgain(occupancy, now);
+    // WHEN to ask is the pure rule in `silent-layer-question.ts`; this only asks.
+    const decision = silentLayersToAsk({
+      held: this.#heldOnAirLayers(),
+      readings: {
+        lastTickFor: (channel) => session.osc.channelTicks.lastTickFor(channel),
+        lastProducerAt: (channel, layer) => occupancy.lastProducerAt(channel, layer),
+      },
+      asked: this.#silenceAsked,
+      reading: this.#silenceReading,
+      now,
+    });
+    this.#silenceAsked = decision.asked;
+    for (const [channel, silent] of decision.ask) {
+      this.#silenceReading.add(channel);
+      void this.#askStage(session, channel, silent).finally(() => {
+        this.#silenceReading.delete(channel);
+      });
+    }
+  }
+
+  /**
+   * One `INFO` read of the silent layers' channel, and what it proves. Built by
+   * `CommandBuilder.info`, whose type cannot carry a layer: CasparCG 2.5 ignores an
+   * `INFO <ch>-<layer>`'s layer and answers with the whole channel (`BRIDGE-TRUTH-01` §3,
+   * `info-readers.test.ts`), so the channel form is the same reply spelled truthfully — and one read
+   * answers every silent layer on it. PRIMARY only (its OSC went silent) and never journaled; `low`,
+   * so an operator's take is never queued behind a question.
+   */
+  async #askStage(
+    session: ServerSession,
+    channel: number,
+    silent: readonly number[],
+  ): Promise<void> {
+    let xml: string | null = null;
+    try {
+      const label = this.#adapter.currentPrimary;
+      const result = await this.#adapter.send(this.#builder.info(channel), {
+        priority: 'low',
+        timeoutMs: 2000,
+        mirror: false,
+      });
+      // A failover meanwhile makes the answer about another server…
+      if (result.winner !== label) return;
+      const response = result.response;
+      xml =
+        response.kind === 'ok-line'
+          ? response.data
+          : response.kind === 'ok-multi'
+            ? response.lines.join('\n')
+            : null;
+    } catch {
+      return; // no answer proves nothing; the next silence asks again
+    }
+    // …and so does one since it landed.
+    if (xml === null || session !== this.#adapter.primarySession) return;
+    const onStage = stageLayersOfInfo(xml);
+    if (onStage === null) return;
+    const held = this.#heldOnAirLayers().get(channel) ?? new Set<number>();
+    // Still ours, still silent, and not on the stage: cleared from outside.
+    const gone = silent.filter(
+      (layer) =>
+        held.has(layer) &&
+        !onStage.has(layer) &&
+        (session.osc.occupancy.lastProducerAt(channel, layer) ?? 0) <= Date.now() - SILENT_LAYER_MS,
+    );
+    if (gone.length > 0) this.#layersClearedOutside(session, channel, gone);
+  }
+
+  /**
+   * The layers CasparCG has just said are gone: the rows on them leave ON AIR through the same reset
+   * a reconnect uses, the ledger drops their seats through the same reconcile, the taps stop
+   * remembering their producers, and the notice names each one. NOTHING is re-sent to CasparCG and
+   * nothing is put back on air: the operator decides.
+   */
+  #layersClearedOutside(session: ServerSession, channel: number, layers: readonly number[]): void {
+    const keys = new Set(layers.map((layer) => adoptionKey({ channel, layer })));
+    for (const layer of layers) session.osc.noteCleared(channel, layer);
+    this.#reconciler.markLayersEmptied(keys);
+    /*
+      B-039, as `#reconcileClearedSlot` does for the operator's own clear: the producer is GONE, so
+      the operator's re-take must RE-ADD. Left in `#loaded`, the take `CG PLAY`s the emptied layer —
+      nothing renders, and the row reads ON AIR over a layer that is never heard again: `B-292`
+      itself, reached through its own remedy (measured before this line: `CG 2-99 PLAY 0`, no ADD).
+    */
+    for (const [itemId, slot] of this.#slots) {
+      if (!keys.has(adoptionKey(slot))) continue;
+      this.#loaded.delete(itemId);
+      this.#takeRefusals.delete(itemId);
+    }
+    if (this.#liveLayers.size > 0) {
+      const adoption = reconcileLiveLayers({
+        persisted: this.#liveLayers,
+        observe: (slot) => (keys.has(adoptionKey(slot)) ? 'empty' : 'occupied'),
+      });
+      for (const itemId of new Set(adoption.dropped.map((d) => d.itemId))) {
+        this.registerLiveLayers(itemId, adoption.adopted.get(itemId) ?? []);
+      }
+    }
+    const at = new Date().toISOString();
+    /*
+      `PLAYOUT-FEATURES-01` D — the Playout's OWN license rule clears an unlicensed channel after its
+      current item, every minute (`CLEAR <channel>`, LICENSE §4). When D4 says so for this channel as
+      the layer is found gone, the notice names it; otherwise it stays "outside CG Control".
+    */
+    const byLicense = this.#unlicensed(channel);
+    const rest = this.#clearedOutside.filter(
+      (e) => !(e.channel === channel && layers.includes(e.layer)),
+    );
+    this.#clearedOutside = [
+      ...rest,
+      ...layers.map((layer) => ({
+        channel,
+        layer,
+        at,
+        ...(byLicense ? { cause: 'playout-license' as const } : {}),
+      })),
+    ].slice(-20);
+    this.clearedOutsideChanged.emit(this.clearedOutside());
+    for (const layer of layers) {
+      process.stderr.write(
+        `[caspar-bridge] layer ${String(channel)}-${String(layer)} was cleared outside CG Control ` +
+          `(it went silent and INFO no longer lists it)` +
+          `${byLicense ? ' — D4 reads the channel unlicensed: the Playout cleared it' : ''}` +
+          ` — its row is off air; nothing was re-sent\n`,
+      );
+    }
+  }
+
+  /** A layer said cleared that reports a producer again (a new take, or anyone's) is no longer news. */
+  #retireHeardAgain(occupancy: OscOccupancyTap, now: number): void {
+    if (this.#clearedOutside.length === 0) return;
+    const kept = this.#clearedOutside.filter((e) => {
+      const seen = occupancy.lastProducerAt(e.channel, e.layer);
+      return seen === null || now - seen >= SILENT_LAYER_MS || seen <= Date.parse(e.at);
+    });
+    if (kept.length === this.#clearedOutside.length) return;
+    this.#clearedOutside = kept;
+    this.clearedOutsideChanged.emit(this.clearedOutside());
+  }
+
+  /** `B-225` — the standing notice, or `null`. */
+  emptiedAir(): EmptiedAirNotice | null {
+    return this.#emptiedAir;
+  }
+
+  /**
+   * Dismiss the notice without restoring anything. Bridge-side so two browsers cannot
+   * disagree about whether the console is still reporting empty air. Changes nothing on the
+   * wire: the rows stay on the stack, idle, and a take puts any of them back.
+   *
+   * 🔴 `CENTRAL-BRIDGE-01` (D4) — `holds` is the dismissing principal's channels (`null`: every
+   * channel). A console is told only its own channels' rows and seats, so its dismissal reaches
+   * only those: what stays is the rest of the notice, for the console that holds it.
+   */
+  dismissEmptiedAir(holds: ((channel: number) => boolean) | null = null): { ok: boolean } {
+    const notice = this.#emptiedAir;
+    if (notice === null) return { ok: false };
+    if (holds === null) {
+      this.#emptiedAir = null;
+      this.emptiedAirChanged.emit(null);
+      return { ok: true };
+    }
+    const rows = notice.rows.filter((r) => r.slot !== undefined && !holds(r.slot.channel));
+    if (rows.length === notice.rows.length) return { ok: false };
+    const seatChannels = notice.seatChannels?.filter((c) => !holds(c));
+    this.#emptiedAir =
+      rows.length === 0
+        ? null
+        : {
+            ...notice,
+            rows,
+            ...(seatChannels !== undefined
+              ? { seatChannels, seatsDropped: seatChannels.length }
+              : {}),
+          };
+    this.emptiedAirChanged.emit(this.#emptiedAir);
+    return { ok: true };
+  }
+
+  /**
+   * 🔴 **THE ONE PRESS — put the named rows back, and only rows the notice can prove.**
+   *
+   * The owner's decision (2026-09-05) was *detect and say*, not restore automatically,
+   * because **an unattended machine must not put a graphic on air.** So nothing in this class
+   * calls this method: it is reachable only from `air.restore-emptied`, which is reachable
+   * only from a control the operator pressed. There is no timer, no reconnect hook and no
+   * page-load path into it, and there must never be one.
+   *
+   * ⭐ **Each row is re-taken through the ORDINARY {@link take}**, never a private re-seat.
+   * That is what makes the restore inherit every refusal a take already owns — reachability,
+   * the `R-022` rehearse interlock, §12.6 multi-box exclusivity, live-plate seating and the
+   * pre-roll `CG ADD` a restarted server needs (`B-054`) — instead of growing a second
+   * spelling of "put this row on air" that would drift from the first (golden rule 6). It is
+   * also why a successful row leaves the notice without this method saying so: `take` retires
+   * it through {@link #retireFromEmptiedAir}.
+   *
+   * REFUSALS, each named rather than folded into a bare count (`B-108`'s rule):
+   *
+   * - not in the standing notice, or no notice at all → `unknown-item`. The notice IS the
+   *   evidence; a row outside it has no proof it was ever taken away, and acting on that is
+   *   how a deliberately-cleared row would come back.
+   * - gone from the stack since the notice was raised → `unknown-item`.
+   * - its template is no longer registered → `unknown-template`. **DEFENCE IN DEPTH, and
+   *   named as such: it is unreachable through the public verbs today**, because
+   *   {@link templateRemove} refuses `in-use` while any stack row references the template —
+   *   that invariant, not this guard, is what actually answers the case. The guard stays
+   *   because the failure it prevents is the silent one: a take whose `CG ADD` fetches a
+   *   template the serve endpoint no longer has renders a BLACK layer that reports a healthy
+   *   producer. `emptied-air-notice.integration.test.ts` pins the invariant, so relaxing
+   *   `templateRemove` reddens there rather than quietly arming this path.
+   * - anything the take itself refuses → its own code, or `refused` when it is one this
+   *   surface does not enumerate.
+   *
+   * ⚠ **A SECOND RESTART LANDING MID-RESTORE is why the write-back is stamped.** The takes are
+   * awaited one at a time, so a reconnect during them raises a NEW notice. The refusal
+   * write-back therefore compares the standing notice's `at` against the one this call was
+   * answering, and writes nothing if they differ — the newer measurement is the one that
+   * describes the plant now, and must not be overwritten with verdicts about the old set.
+   * `at` is the identity and not the object reference on purpose: {@link #retireFromEmptiedAir}
+   * rewrites the object on every success while keeping the stamp, which is exactly the
+   * "same notice, narrowed" case the check must let through.
+   */
+  async restoreEmptiedAir(itemIds: readonly string[]): Promise<{
+    restored: number;
+    results: { itemId: string; ok: boolean; reason?: EmptiedAirRefusal }[];
+  }> {
+    const notice = this.#emptiedAir;
+    const offered = new Set((notice?.rows ?? []).map((r) => r.itemId));
+    const results: { itemId: string; ok: boolean; reason?: EmptiedAirRefusal }[] = [];
+    for (const itemId of itemIds) {
+      if (!offered.has(itemId)) {
+        results.push({ itemId, ok: false, reason: 'unknown-item' });
+        continue;
+      }
+      const item = this.#reconciler.get(itemId);
+      if (item === null) {
+        results.push({ itemId, ok: false, reason: 'unknown-item' });
+        continue;
+      }
+      if (this.#templateOfItem(itemId, item.templateId) === null) {
+        results.push({ itemId, ok: false, reason: 'unknown-template' });
+        continue;
+      }
+      const verdict = await this.take(itemId);
+      results.push(
+        verdict.accepted
+          ? { itemId, ok: true }
+          : { itemId, ok: false, reason: emptiedAirRefusalFor(verdict.errorCode) },
+      );
+    }
+    // The successes have already left the notice through `take`. What is written back is why
+    // the rest did not — and only onto the notice this call was answering (see the header).
+    const failures = new Map(
+      results.filter((r) => !r.ok).map((r) => [r.itemId, r.reason ?? 'refused']),
+    );
+    if (notice !== null && this.#emptiedAir !== null && failures.size > 0) {
+      const current = this.#emptiedAir;
+      if (current.at === notice.at) {
+        this.#emptiedAir = {
+          ...current,
+          rows: current.rows.map((r) => {
+            const refusal = failures.get(r.itemId);
+            return refusal === undefined ? r : { ...r, refusal };
+          }),
+        };
+        this.emptiedAirChanged.emit(this.#emptiedAir);
+      }
+    }
+    return { restored: results.filter((r) => r.ok).length, results };
+  }
+
+  /**
+   * The ledger itself, as a defensive copy.
+   *
+   * ⚠ **ITS DOC USED TO SAY "for tests and for phase 6's re-emission", AND THAT
+   * WAS TRUE FOR LONG ENOUGH TO BE A DEFECT.** For the whole of `B-145`'s
+   * persistence work this accessor had no production caller at all: the ledger
+   * survived a restart, every teardown and repoint door read it by `itemId` — and
+   * nothing could SHOW it, so an adopted layer was controllable but invisible, and
+   * `B-145` acceptance 1 was half unmet with the item ticked. That is the
+   * written-but-unreachable class this repo has now filed four times.
+   *
+   * It has a production caller: {@link liveLayersState}, which projects it onto
+   * `liveLayers.state` for the operator's LIVE PLATES list. Keep one.
+   */
+  liveLayers(): ReadonlyMap<string, readonly LiveLayerRecord[]> {
+    return new Map([...this.#liveLayers].map(([id, rs]) => [id, [...rs]]));
+  }
+
+  /**
+   * `B-145` acceptance 1, display half (`tasks.md` 2.8) — **the ledger as the
+   * operator's LIVE PLATES list.**
+   *
+   * Reads through the public {@link liveLayers} rather than walking `#liveLayers`,
+   * and projects through the ONE `projectLiveLayers`, which is also what the push
+   * path in `bridge.ts` calls. So the pull and the push cannot disagree about the
+   * shape or the order of a row, and this method adds no second flattening of its
+   * own — it is the wire's name for a fact that already had exactly one.
+   *
+   * ⚠ **NOT `playoutLayersState`'s shape, and the difference is the point.** That
+   * one reports what the OSC tap OBSERVES on somebody else's reserved layers, with
+   * an honest `unknown` arm, because observation is the only access we have to
+   * them. These layers are OURS: the ledger is what this bridge seated, already
+   * resolved against the server's `INFO` at boot. There is nothing to observe and
+   * no `unknown` to report — a coordinate the server contradicted was DROPPED and
+   * never reaches here.
+   */
+  liveLayersState(): LiveLayerState[] {
+    return projectLiveLayers(this.liveLayers(), (_itemId, record) =>
+      this.#unverifiedLive.has(adoptionKey(record.slot)),
     );
   }
 
@@ -2396,9 +12580,28 @@ export class CasparRuntime {
     // mode at all, reported `unreadable` forever, and so silently lost the
     // mismatch check — on exactly the installs the C-018 recon was about.
     if (isLiveState(session.state)) {
+      const primaryLabel = this.#adapter.currentPrimary;
+      // C-029 — the DECLARED half of the output check: one `INFO CONFIG` per connection,
+      // asked again next tick only while it has not answered at all. Same axis, same gate,
+      // same reasons as the mode read below.
+      if (
+        !this.#declaredConsumers.has(primaryLabel) &&
+        !this.#configReadInFlight.has(primaryLabel)
+      ) {
+        void this.#readServerConfig(primaryLabel);
+      }
       for (const channel of this.#declaredChannels()) {
         if (this.#modeReadFrom.get(channel) === this.#adapter.currentPrimary) continue;
         void this.#readChannelMode(channel);
+      }
+      // C-029 — the RUNNING half rides the mode read's reply; this is only the slow
+      // re-read that lets the alarm CLEAR without a reconnect (a hand-typed `ADD` in the
+      // console, a consumer that came up late). Stamped at SEND time so a slow reply
+      // cannot double-send, and first armed by the first ingest, never before it.
+      const lastRead = this.#outputReadAt.get(primaryLabel);
+      if (lastRead !== undefined && Date.now() - lastRead >= this.#outputRecheckMs) {
+        this.#outputReadAt.set(primaryLabel, Date.now());
+        for (const channel of this.#declaredChannels()) void this.#readChannelOutputs(channel);
       }
       // R-022 — re-assert every declared row's intended volume, once, as soon as a
       // server is first reachable. A bridge that died mid-rehearse left a MUTED
@@ -2433,13 +12636,16 @@ export class CasparRuntime {
       this.#pendingRestore.size > 0 &&
       session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs)
     ) {
-      const occupiedKeys = new Set(
-        session.osc.occupancy
-          .occupied(this.#occupancyStaleMs)
-          .map((o) => `${String(o.channel)}:${String(o.layer)}`),
+      // `CENTRAL-BRIDGE-01` — a row restored ON AIR over an empty layer is said, as at a reconnect.
+      this.#raiseEmptiedAir(
+        this.#decidePendingRestores(this.#observedProducers(session), true),
+        [],
+        false,
       );
-      void this.#decidePendingRestores(occupiedKeys, true);
     }
+
+    // `DESKTOP-APPS-01-D` j — a stray whose layer is now empty (or not ours) is dropped.
+    this.#pruneStrays();
 
     // C-014 — keep the allocation quarantine in step with what the tap sees;
     // the same tick that surfaces orphans withdraws foreign layers from the
@@ -2452,15 +12658,79 @@ export class CasparRuntime {
     // healthy playout graphic as reclaimable and invite the operator to clear
     // live automation output. Exclusion, not ownership — the bridge neither
     // owns nor watches these layers; it just declares them off limits.
+    /*
+      🔴 `CHANNEL-AUTHORITY-01` — **AND ONLY ON A CHANNEL THIS STATION OPERATES.**
+
+      CasparCG's OSC reports EVERY channel the server runs — the partner Playout's programme
+      output, its preview channels, anything — and the sweep used to take all of it as
+      candidates. So on a channel-2 station, every html graphic the Playout had on channel 1
+      surfaced in the orphan strip as "on air but not on your stack", with a CLEAR beside it:
+      measured, that CLEAR reached the wire as `CLEAR 1-20`. The request gate now refuses such a
+      clear; this is the half that stops the console OFFERING it, because a control the bridge
+      then refuses is a control that should not have been drawn (absent, never greyed).
+
+      ⚠ A different rule from the reserved-layer exclusion above it, and kept beside it rather
+      than merged: that one is a layer NUMBER declared somebody else's on our channel; this is a
+      whole CHANNEL that was never ours. `#isDeclaredChannel` is the one predicate.
+    */
     const occupied = session.osc.occupancy
       .occupied(this.#occupancyStaleMs)
-      .filter((o) => !this.#reservedSet.has(o.layer));
+      .filter((o) => this.#isDeclaredChannel(o.channel))
+      .filter((o) => this.#declaredLayerClass(o.channel, o.layer) !== 'playout');
     const owned = new Set<string>();
     for (const slot of this.#slots.values()) {
       owned.add(`${String(slot.channel)}:${String(slot.layer)}`);
     }
     /*
-     * BANK LAYERS ARE NO LONGER EXCLUDED — the exclusion's own premise expired.
+     * C-015 phase 5 (R-009) — DOOR 1 of 3: Live Source layers are OWNED, so they
+     * are never orphan candidates.
+     *
+     * This is ownership, not exclusion — the opposite of the reserved-range
+     * filter above. The bridge PUT this producer here and knows the coordinate
+     * from its own ledger; the reserved range is a fence away from a layer the
+     * bridge neither owns nor watches. Both end in "not an orphan", by different
+     * arguments, and conflating them is how one of them later gets deleted as a
+     * duplicate.
+     *
+     * Why it cannot be left to the kind test: a live producer is `route` /
+     * `decklink` / `ndi`, never `html`, so nothing about producer KIND rescues
+     * it — R-009's doctrine is "declared, never detected" (`design.md` §4), and
+     * this is the declaration. Without it the sweep surfaces a live guest box as
+     * reclaimable and invites the operator to clear a face off air.
+     *
+     * ⭐ R-028 (6.2/6.5) — THE NARROWING IS DONE, and it is done against the ONE
+     * class list (`#declaredLayerClass`) rather than against two hand-written
+     * membership tests. Each class gets the treatment its own CLAIM justifies,
+     * which is why the list returns a class and not a boolean:
+     *
+     *   `playout`      → filtered out of the candidates entirely, above. Not ours,
+     *                    never surfaced: an html playout graphic is
+     *                    indistinguishable from ours on the wire, so surfacing it
+     *                    would invite the operator to clear live automation output.
+     *   `live-source`  → OWNED (this line). We seated that producer and know the
+     *                    coordinate from our own ledger.
+     *   `operator-row` → deliberately NOT excluded — see the note below, which is
+     *                    the one place the three classes are treated differently
+     *                    and the reason it is argued rather than asserted.
+     *
+     * DOOR 1 in `tests/live-source-ownership.integration.test.ts` fails if this
+     * line is dropped, which is what protects it through any later rewrite.
+     */
+    for (const key of this.#liveLayerKeys()) owned.add(key);
+    /*
+     * 🔴 THE ONE CLASS THAT IS DECLARED AND STILL A CANDIDATE — read this before
+     * "finishing" the narrowing.
+     *
+     * R-028 task 6.2 says the sweep's candidates become "layers nobody declared",
+     * and taken literally that would exclude the operator bank too. It must not,
+     * and the reason is that DECLARED and OWNED are different facts. An operator
+     * row declares that the layer is the operator's to USE; it says nothing about
+     * what is on it. A bank layer carrying an item WE bound is already `owned`
+     * above through `#slots`, so what remains here is exactly "a producer on the
+     * operator's own layer that we did not put there" — which is the definition of
+     * an orphan, on the one surface whose owner can actually deal with it.
+     *
+     * BANK LAYERS WERE ONCE EXCLUDED, and the exclusion's own premise expired.
      *
      * It read: "fixed slots are excluded from the orphan surface: the fixed
      * bank's PERMANENT row is its occupancy surface, and a bank fenced from
@@ -2511,29 +12781,37 @@ export class CasparRuntime {
    *
    * The reserved set is channel-agnostic (a layer NUMBER is reserved), so the
    * rows are reported on the bridge's own channel — the one it drives.
+   *
+   * 🔴 `CHANNEL-AUTHORITY-01` — **"the one it drives" is `#declaredChannels()`, and it used to
+   * be the constant `DEFAULT_CHANNEL`.** On a channel-2 station this tab listed and OBSERVED
+   * channel 1 — a partner Playout's programme output — and its CLEAR sent
+   * `playoutLayers.clear { channel: 1 }`, measured at the wire as `CLEAR 1-60`. The rows are now
+   * reported on every channel the station declares, which with one bank is exactly one channel
+   * and the same number of rows as before.
    */
   playoutLayersState(): PlayoutLayerState[] {
     if (this.#reservedLayers.length === 0) return [];
     const session = this.#adapter.primarySession;
     const hearing =
       session.state === 'healthy' && session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
-    const producerByLayer = new Map<number, string>();
+    const producerBySlot = new Map<string, string>();
     if (hearing) {
       for (const o of session.osc.occupancy.occupied(this.#occupancyStaleMs)) {
-        if (o.channel === DEFAULT_CHANNEL) producerByLayer.set(o.layer, o.producer);
+        producerBySlot.set(`${String(o.channel)}:${String(o.layer)}`, o.producer);
       }
     }
-    return [...this.#reservedLayers]
-      .sort((a, b) => a - b)
-      .map((layer) => {
-        const producer = producerByLayer.get(layer);
+    const layers = [...this.#reservedLayers].sort((a, b) => a - b);
+    return this.#declaredChannels().flatMap((channel) =>
+      layers.map((layer) => {
+        const producer = producerBySlot.get(`${String(channel)}:${String(layer)}`);
         const observed: PlayoutLayerState['observed'] = !hearing
           ? { kind: 'unknown' }
           : producer !== undefined
             ? { kind: 'producer', producer }
             : { kind: 'empty' };
-        return { channel: DEFAULT_CHANNEL, layer, observed };
-      });
+        return { channel, layer, observed };
+      }),
+    );
   }
 
   /** Publish the playout-layer state ONLY when it differs (the orphan-tracker precedent). */
@@ -2704,11 +12982,75 @@ export class CasparRuntime {
     }
     const slot: CommandSlot = { channel, layer };
     const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+    if (!ok) return { ok: false, reason: 'amcp-error' };
     // Adoption marking mirrors `clearLayer`: a CLEAR we executed on the current
     // primary is an adoption, so the bookkeeping stays consistent with the other two
     // clear paths. It is bookkeeping ONLY — it is never a precondition above.
-    if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
-    return ok ? { ok: true } : { ok: false, reason: 'amcp-error' };
+    if (onPrimary) this.#markAdoptedOnPrimary(slot);
+    // `B-253` — and the mixer residue goes with the producer (see out()).
+    await this.#resetEmptiedLayerMixer(slot, { ok, onPrimary });
+    // B-125 — AFTER the clear landed, never before it. See `#reconcileClearedSlot`.
+    this.#reconcileClearedSlot(slot);
+    return { ok: true };
+  }
+
+  /**
+   * B-125 — the layer was just CLEARed by a LAYER-addressed command; make the
+   * ITEM bookkeeping say so.
+   *
+   * ── THE RACE THIS CLOSES ────────────────────────────────────────────────────
+   *
+   * The operator's row routes CLEAR on `item === null` **at click time**. If a
+   * load + take binds an item to that layer in the instant between the render
+   * that saw an empty row and the click that acted on it, the UNBOUND branch
+   * fires and destroys a producer the stack item still believes is resident —
+   * without going through `out()`, which is where that belief is normally
+   * retired. Two things are then left lying:
+   *
+   *   - `#loaded` still holds the item, and it is what `take()`'s B-039 pre-roll
+   *     reads to decide whether to re-`CG ADD`. Stale, the next take sends a bare
+   *     `CG PLAY` onto an EMPTY layer: accepted on the wire, nothing on air. This
+   *     half never self-heals, on any install.
+   *   - the published STATUS keeps claiming `loaded`/on-air. On a hearing plant
+   *     the occupancy tap observes `empty` and `freshTruth` derives `idle` within
+   *     a TTL; on an OSC-LESS install (B-094 / B-101) that correction never comes
+   *     and the row lies until the operator hits REMOVE.
+   *
+   * ── 🔴 THE FIX THAT WAS CONSIDERED AND REJECTED — DO NOT REPROPOSE IT ───────
+   *
+   * Refusing the clear when the layer is owned. It reads like the safe answer and
+   * it is the wrong one: it reintroduces dependence on **the very bookkeeping this
+   * escape hatch exists to bypass**. The hatch is reached precisely when `#slots`
+   * and the status are what is wrong, so a guard that consults them fails exactly
+   * when it is needed. The clear stays unconditional; the bookkeeping catches up.
+   *
+   * ── WHY NO SECOND `CLEAR` IS SENT ──────────────────────────────────────────
+   *
+   * Reusing `out(itemId)` would be the obvious reuse, and it would put a second,
+   * redundant `CLEAR` for the same coordinate on an air-affecting lane. There is
+   * nothing left to destroy: the caller only reaches here on an ACKED clear of
+   * this exact slot. So the intent is applied as an `immediate` out — the flag
+   * that has existed on the `out` intent since the Reconciler was written and
+   * finally has its caller: `intentStatus` lands directly on the terminal `idle`
+   * with no `settle` and no pending ack, because the command it describes has
+   * ALREADY been sent and acked. Nothing is claimed here that the wire has not
+   * already confirmed.
+   *
+   * ⚠ Call this ONLY after a clear that succeeded. On a refusal the layer was
+   * never touched, and reconciling would knock a perfectly resident producer's
+   * row back to `idle` — the exact inverse of the defect, produced by its fix.
+   */
+  #reconcileClearedSlot(slot: CommandSlot): void {
+    for (const [itemId, owned] of this.#slots) {
+      if (owned.channel !== slot.channel || owned.layer !== slot.layer) continue;
+      // B-039 — the producer is destroyed, so a later take must re-ADD rather
+      // than `CG PLAY` an empty layer. The slot stays RESERVED (the item is
+      // still on the stack, idle) exactly as it does after `out()`.
+      this.#loaded.delete(itemId);
+      // `FIELD-FIXES-01` B — a cleared row no longer carries its refusal line.
+      this.#takeRefusals.delete(itemId);
+      this.#reconciler.applyIntent({ kind: 'out', itemId, immediate: true }, this.#nextSeq());
+    }
   }
 
   /**
@@ -2730,6 +13072,10 @@ export class CasparRuntime {
    * cannot license a CLEAR — which also covers the B-094 AMCP-alive/OSC-dead
    * install, where every layer would otherwise read clearable blind.
    *
+   * ⚠ `B-292` (`RELEASE-091-01` DELTA B, B3) NARROWS the `html` rule INSIDE the three bands
+   * (50–99, `inAnyLayerBand`): there a fresh non-`html` observation clears too, because plates made
+   * `html` no longer the only kind this system places. Outside them the paragraph above stands.
+   *
    * Touches no slots and no OSC interest (it owns neither); a CLEAR executed
    * on the current primary counts as adoption (consistent with out/remove).
    * The warning resolves via the next sweep's observed empty — never
@@ -2738,7 +13084,10 @@ export class CasparRuntime {
   async clearLayer(
     channel: number,
     layer: number,
-  ): Promise<{ ok: boolean; reason?: 'owned' | 'foreign' | 'reserved' | 'amcp-error' }> {
+    // The reason type comes from `LAYER_CLEAR_REASONS` rather than being spelled
+    // out again here: ONE canonical list, so a reason cannot exist on the wire
+    // and be unrepresentable in the implementation (or the reverse).
+  ): Promise<{ ok: boolean; reason?: LayerClearReason }> {
     // R-028 / C-015 — a DECLARED playout layer is never clearable, from any
     // caller. The R-015 `html` discriminator below cannot protect it: a
     // playout template graphic IS an html producer, and that
@@ -2752,15 +13101,49 @@ export class CasparRuntime {
         return { ok: false, reason: 'owned' };
       }
     }
+    /*
+     * C-015 phase 5 (R-015) — DOOR 3 of 3: a Live Source layer is refused with
+     * its OWN reason, so the operator is told what the layer is.
+     *
+     * ⚠ MUST PRECEDE the `html` test below. A live producer is never `html`, so
+     * without this it would be refused as `foreign` — the right outcome carried
+     * by the wrong statement. `foreign` means "provably not ours"; this layer is
+     * emphatically ours. It is not `owned` either: that reason means a stack
+     * item's TEMPLATE is here, and this coordinate is not in `#slots` at all.
+     *
+     * ⚠ C-015 asked for an EXEMPTION here — "the bridge may CLEAR what it owns"
+     * — and applying that as worded is backwards: `clearLayer` is the
+     * operator-facing `layers.clear` door ONLY, so an exemption would make Live
+     * Source layers operator-CLEARABLE, inverting the protection. The bridge
+     * needs no exemption to clear what it owns: its own teardown calls
+     * `#builder.out(slot)` directly and never routes through here. Refusal with
+     * a distinct reason is the decision (`design.md` §4, C5).
+     */
+    if (this.#isLiveLayer(channel, layer)) {
+      return { ok: false, reason: 'live-source' };
+    }
     const observed = this.#adapter.primarySession.osc.occupancy
       .occupied(this.#occupancyStaleMs)
       .find((o) => o.channel === channel && o.layer === layer);
-    if (observed === undefined || observed.producer !== 'html') {
+    /*
+      🔴 `RELEASE-091-01` (DELTA B, B3, `B-292`) — **R-015 NARROWED INSIDE OUR BANDS, by the owner.**
+      R-015's premise was that this system only ever places `html` — true when it was written, and not
+      since plates: a plate seated in 60–79 is `ffmpeg`, `route`, `ndi` or `decklink`, and one left
+      there by another station, a lost ledger or a crashed session had no surface that could clear it
+      (station B's CLEAR left station A's plates on air). So inside CG's bands (50–99, the canonical
+      `inAnyLayerBand`, which the strip's CLEAR reads too) a layer that is observed fresh, not
+      reserved, not a stack item's and not in this bridge's ledger may be cleared whatever its
+      producer. Everything else stands: outside the bands a non-`html` producer is still `foreign`,
+      and NO fresh observation still licenses nothing.
+    */
+    if (observed === undefined || (observed.producer !== 'html' && !inAnyLayerBand(layer))) {
       return { ok: false, reason: 'foreign' };
     }
     const slot: CommandSlot = { channel, layer };
     const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
     if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
+    // `B-253` — within our band only; an orphan outside it is somebody else's mixer.
+    await this.#resetEmptiedLayerMixer(slot, { ok, onPrimary });
     return ok ? { ok: true } : { ok: false, reason: 'amcp-error' };
   }
 
@@ -2771,9 +13154,32 @@ export class CasparRuntime {
    * semantics): layer-ordered, no command burst, and a per-item failure
    * doesn't abort the rest (`remove` drops the item regardless). The
    * sanctioned path to unblock a server reconfiguration.
+   *
+   * `MULTI-CHANNEL-01` §2 B — with a `channel`, the items wholly on it and nothing else
+   * ({@link #withinChannel}); the all-or-nothing refusal below is decided over THAT set. Bare,
+   * every item, exactly as before.
    */
-  async removeAll(): Promise<{ ok: boolean; removed: number }> {
-    const items = this.#reconciler.snapshot();
+  async removeAll(channel?: number): Promise<{ ok: boolean; removed: number; errorCode?: string }> {
+    const items = this.#reconciler
+      .snapshot()
+      .filter((item) => channel === undefined || this.#withinChannel(item.itemId, channel));
+    /*
+      🔴 `R-017` — REFUSED ALL-OR-NOTHING, decided BEFORE the first removal.
+
+      The check runs over the whole snapshot first rather than per item inside the loop,
+      and that ordering is the requirement rather than a style choice: a loop that refused
+      as it went would remove every idle row it reached before meeting the live one, and
+      answer `{ ok: false }` on a stack it had already half-emptied. The operator would be
+      told the action did not happen, and it would have.
+
+      ONE predicate with the single verb — `#removeRefusal`, not a second reading — so the
+      bulk and the row can never disagree, including about `B-212`'s exemption: a stack whose
+      only on-air item is an orphan outside the bank is still removable in bulk, because that
+      item has no row to take it off air from.
+    */
+    if (items.some((item) => this.#removeRefusal(item.itemId) !== null)) {
+      return { ok: false, removed: 0, errorCode: REMOVE_ON_AIR_CODE };
+    }
     for (const item of items) {
       await this.remove(item.itemId);
     }
@@ -2802,21 +13208,63 @@ export class CasparRuntime {
    * burst. A per-item failure does not abort the rest — a stuck item must not strand the
    * graphics behind it on air.
    *
-   * The status predicate mirrors the row's Clear gating exactly (everything that is not
-   * `idle` or `loaded`), so this IS "press Clear on every row where Clear is enabled".
+   * ⭐ **B-122 — THE STATUS PREDICATE IS GONE, AND MUST NOT COME BACK UNDER ANOTHER NAME.**
+   *
+   * It used to mirror the row's Clear gating (everything not `idle`/`loaded`), which sounds
+   * like consistency and is in fact the defect: it gated the emergency control on **exactly
+   * the values that may be wrong in the emergency**. With every item wrongly reading `idle`
+   * this sent nothing and returned `{ ok: true, cleared: 0 }` — the operator told the escape
+   * hatch worked while the graphic was still on air. A success report for a no-op is worse
+   * than a disabled button, because a disabled button tells the truth.
+   *
+   * The owner's decision (2026-08-12): a clear goes to EVERY item holding a bound slot,
+   * regardless of believed status, INCLUDING rows the model believes are merely `loaded`.
+   * Losing a cued row is the ACCEPTED COST — an emergency control must not depend on the
+   * bookkeeping whose failure is the emergency.
+   *
+   * The one filter that remains is about OWNERSHIP, not belief: an item with no slot holds no
+   * layer of ours, so there is nothing for us to clear. That is a structural fact, it cannot
+   * be wrong in the way a status can, and it is what keeps this per-LAYER (see above).
+   *
+   * ⚠ **A Live Source layer is REFUSED, not cleared** (C-015 phase 5 — the third ownership
+   * class). Broadening this verb must not let it reach a class that was just fenced off at
+   * `clearLayer`: a bulk button that cuts a guest's face off air without ever naming it is
+   * the hazard phase 5 exists to prevent. The check reuses `#isLiveLayer` — the ONE
+   * flattening of the ledger every ownership door reads — so it cannot drift from the others.
+   *
+   * The report distinguishes what was SENT from what LANDED from what was never addressed,
+   * so no shape of no-op can come back as a success (B-122's acceptance).
+   *
+   * `MULTI-CHANNEL-01` §2 B — with a `channel`, the bound items wholly on it and nothing else
+   * ({@link #withinChannel}): still every one of them, whatever it believes (B-122 is untouched —
+   * the scope narrows by CHANNEL, never by status). Bare, every bound item, exactly as before.
    */
-  async clearAll(): Promise<{ ok: boolean; cleared: number }> {
-    const clearable = this.#reconciler
+  async clearAll(channel?: number): Promise<{
+    ok: boolean;
+    cleared: number;
+    attempted: number;
+    refused: { itemId: string; reason: LayerClearReason }[];
+  }> {
+    const bound = this.#reconciler
       .snapshot()
-      .filter(
-        (i) =>
-          i.status !== 'idle' && i.status !== 'loaded' && this.#slots.get(i.itemId) !== undefined,
-      );
-    for (const item of clearable) {
+      .filter((item) => channel === undefined || this.#withinChannel(item.itemId, channel))
+      .map((item) => ({ itemId: item.itemId, slot: this.#slots.get(item.itemId) }))
+      .filter((c): c is { itemId: string; slot: CommandSlot } => c.slot !== undefined);
+    const refused: { itemId: string; reason: LayerClearReason }[] = [];
+    let attempted = 0;
+    let cleared = 0;
+    for (const { itemId, slot } of bound) {
+      if (this.#isLiveLayer(slot.channel, slot.layer)) {
+        refused.push({ itemId, reason: 'live-source' });
+        continue;
+      }
+      attempted += 1;
       // → `CLEAR <ch>-<layer>` for THIS item's own slot. Never a channel-wide clear.
-      await this.out(item.itemId);
+      if ((await this.out(itemId)).accepted) cleared += 1;
     }
-    return { ok: true, cleared: clearable.length };
+    // Nothing owed is not a success. `attempted > 0` is what stops an empty
+    // stack — or a stack of nothing but refusals — reporting a completed clear.
+    return { ok: attempted > 0 && cleared === attempted, cleared, attempted, refused };
   }
 
   /**
@@ -2829,21 +13277,41 @@ export class CasparRuntime {
    * between a clean end-of-segment and every lower-third snapping to black at
    * once.
    *
-   * Deliberately built exactly like `clearAll`: the SAME candidate predicate
-   * (anything not idle/loaded that actually holds a slot — so nothing is sent
-   * for an item that owns no layer), the SAME sequential loop through the
-   * per-item verb rather than a burst, and the SAME "a failure does not abort
-   * the rest" property — one stuck graphic must never strand the ones behind it
-   * on air. Reusing `stopItem` means the C-012 semantics (`#loaded` and
-   * `#adopted` untouched, so a later take RESUMES rather than re-ADDs) can never
-   * drift between the single and bulk paths.
+   * Built like `clearAll` in SHAPE — the same sequential loop through the
+   * per-item verb rather than a burst, and the same "a failure does not abort
+   * the rest" property, because one stuck graphic must never strand the ones
+   * behind it on air. Reusing `stopItem` means the C-012 semantics (`#loaded`
+   * and `#adopted` untouched, so a later take RESUMES rather than re-ADDs) can
+   * never drift between the single and bulk paths.
+   *
+   * ⭐ **THE CANDIDATE PREDICATES NOW DIFFER, DELIBERATELY (B-122).** This one
+   * still asks the status (anything not idle/loaded that holds a slot);
+   * `clearAll` no longer asks it at all. That is not drift — the two verbs
+   * answer different questions:
+   *
+   *   - Clear-All is an EMERGENCY control, so it must not depend on the
+   *     bookkeeping whose failure is the emergency. It clears every bound slot.
+   *   - Stop-All is a PROGRAMME control. `CG STOP` asks a template to run its
+   *     authored outro, which is meaningless for a row that was never PLAYed —
+   *     an `idle` or `loaded` item has no outro to run and nothing to leave. The
+   *     status is the right question here because it is not the axis under
+   *     suspicion; a wrong `idle` costs a graceful exit, never a stranded
+   *     graphic, and CLEAR ALL sits beside it as the remedy that ignores it.
+   *
+   * ⚠ Do not "restore consistency" by copying either predicate onto the other.
+   *
+   * `MULTI-CHANNEL-01` §2 B — with a `channel`, the same candidates wholly on it
+   * ({@link #withinChannel}). Bare, exactly as before.
    */
-  async stopAll(): Promise<{ ok: boolean; stopped: number }> {
+  async stopAll(channel?: number): Promise<{ ok: boolean; stopped: number }> {
     const stoppable = this.#reconciler
       .snapshot()
       .filter(
         (i) =>
-          i.status !== 'idle' && i.status !== 'loaded' && this.#slots.get(i.itemId) !== undefined,
+          i.status !== 'idle' &&
+          i.status !== 'loaded' &&
+          this.#slots.get(i.itemId) !== undefined &&
+          (channel === undefined || this.#withinChannel(i.itemId, channel)),
       );
     for (const item of stoppable) {
       await this.stopItem(item.itemId);
@@ -2851,7 +13319,124 @@ export class CasparRuntime {
     return { ok: true, stopped: stoppable.length };
   }
 
-  async remove(itemId: string): Promise<{ accepted: boolean }> {
+  /**
+   * 🔴 `B-301` — **DISMISS A ROW'S ERROR** (`stack.dismiss-error`). The reconciler drops the error ack
+   * and the row reads the status it settled to; every console is told through the ordinary state push.
+   * Nothing is sent to CasparCG and nothing about the row's layer, binding or air changes, so it is not
+   * an audited act. Refused `unknown-item` / `not-in-error`, changing nothing.
+   */
+  dismissError(itemId: string): {
+    accepted: boolean;
+    errorCode?: 'not-in-error' | 'unknown-item';
+  } {
+    if (this.#reconciler.get(itemId) === null)
+      return { accepted: false, errorCode: 'unknown-item' };
+    if (this.#reconciler.dismissError(itemId) === null) {
+      return { accepted: false, errorCode: 'not-in-error' };
+    }
+    // The row's one-line refusal is that same error's sentence: dismissed with it.
+    this.#retireTakeRefusal(itemId);
+    return { accepted: true };
+  }
+
+  async remove(
+    itemId: string,
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+    const verdict = await this.#audited('remove', this.#itemDetail(itemId), (detail) =>
+      this.#removeImpl(itemId, detail),
+    );
+    // `B-225` — a removed row can never be put back, so it must stop being offered.
+    if (verdict.accepted) this.#retireFromEmptiedAir(itemId);
+    return verdict;
+  }
+
+  /**
+   * 🔴 `R-017` — MAY THIS ITEM BE REMOVED RIGHT NOW? The ONE place the answer is decided,
+   * asked by `remove` and by `removeAll`, so the single and the bulk verb can never
+   * disagree about one row.
+   *
+   * TWO conditions, and the second is what keeps the refusal from stranding anybody:
+   *
+   * - **on air or unsettled** — {@link isOnAirStatus}, the shared predicate the ROW's own
+   *   REMOVE button reads. Not a second list, not a widened one: the UI gate and this
+   *   refusal are the same function object, which is what makes them provably agree.
+   * - **AND the item sits on a DECLARED OPERATOR ROW** — so the console is showing it and
+   *   STOP and CLEAR are reachable on that row. That is the remedy the refusal names, and a
+   *   refusal whose remedy is unreachable is a trap.
+   *
+   * ⚠ **THE EXEMPTION IS `B-212`, MEASURED ON THE PLANT, AND IT IS NOT TIDINESS.** An item
+   * on a layer outside the declared bank has NO ROW: nothing shows it, so there is no STOP
+   * and no CLEAR to press. The template picker's own remedy for exactly that case promises
+   * in words that it works on air — _"if it is on air, it comes off"_ — and it issues this
+   * verb. Refusing there would leave the incident's own shape with Remove-All disabled, the
+   * per-item remove refused, and no row-level verb reachable: no remedy at all. So the gate
+   * asks a STRUCTURAL question about the slot, never a second status question.
+   */
+  #removeRefusal(itemId: string): { errorCode: string; message: string } | null {
+    const item = this.#reconciler.get(itemId);
+    if (item === null || item === undefined) return null;
+    if (!isOnAirStatus(item)) return null;
+    if (this.#removeExempt(itemId)) return null;
+    const slot = this.#slots.get(itemId);
+    /*
+      Unreachable in practice — an item with no slot is exempt above — but the message names
+      the layer, so the narrowing is expressed rather than asserted with a `!`.
+    */
+    if (slot === undefined) return null;
+    return {
+      errorCode: REMOVE_ON_AIR_CODE,
+      message:
+        `That row is on air, so removing it would clear layer ${String(slot.layer)} and drop the ` +
+        `item — and neither can be undone. Take it off air first: STOP runs the template's outro ` +
+        `and keeps it loaded, CLEAR cuts it immediately.`,
+    };
+  }
+
+  /**
+   * 🔴 **`B-228` — THE TWO EXEMPTIONS, EXTRACTED SO THEY CAN BE PUBLISHED.**
+   *
+   * They were inline in {@link #removeRefusal} and therefore invisible to every surface: the
+   * renderer could see `isOnAirStatus` (shared) and `binding.restoreBlocked` (published), and
+   * could not see the declared-layer question at all. So REMOVE ALL gated on the bare
+   * predicate and withheld a press this method would have let through — the UI↔wire
+   * disagreement `#removeRefusal`'s own header forbids, arrived at by leaving half its answer
+   * unreachable.
+   *
+   * ⚠ **ONE BODY, TWO READERS, AND THAT IS THE POINT.** `#removeRefusal` asks it to decide, and
+   * `#published` asks it to SAY so on the wire (`StackItemState.removeExempt`). A second copy
+   * for the publish path — "just the restore-blocked half, the renderer knows the rest" — is
+   * exactly how this defect was built the first time.
+   *
+   * - **A RESTORE-BLOCKED row** (`R-021` stage 4 d1): its layer is held by a producer provably
+   *   NOT OURS, so the item's air claim — seeded from the browser's retention across the
+   *   reconnect — is one this bridge already knows to be false. Nothing of ours is on that
+   *   layer and REMOVE would destroy nothing. d1 says in as many words that CLEAR and REMOVE
+   *   are the two verbs a blocked row keeps, "the block is what they exist to resolve".
+   * - **An item on NO DECLARED OPERATOR ROW** (`B-212`, measured on the plant): nothing shows
+   *   it, so there is no STOP and no CLEAR to press. The refusal names a remedy that would not
+   *   exist, and a refusal whose remedy is unreachable is a trap. A STRUCTURAL question about
+   *   the slot, never a second status question.
+   */
+  #removeExempt(itemId: string): boolean {
+    if (this.#restoreBlocked.has(itemId)) return true;
+    const slot = this.#slots.get(itemId);
+    if (slot === undefined) return true;
+    return this.#declaredLayerClass(slot.channel, slot.layer) !== 'operator-row';
+  }
+
+  async #removeImpl(
+    itemId: string,
+    detail: AuditDetail,
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+    // `R-017` — BEFORE the reconciler is touched, so a refusal mutates nothing at all.
+    // Every other refusal door in this file keeps that discipline for the same reason: a
+    // decline that has already dropped the row from the stack is not a decline.
+    // `auditVerdict` reads the RESULT's own code on a non-accepted answer, which is right
+    // here: this is a PLAN-time refusal, not a `wireFailure` — nothing was sent to fail.
+    const refusal = this.#removeRefusal(itemId);
+    if (refusal !== null) {
+      return { accepted: false, errorCode: refusal.errorCode, message: refusal.message };
+    }
     const slot = this.#slots.get(itemId);
     // Drop it from the stack immediately (UI responsiveness), then best-effort
     // clear the slot on the server.
@@ -2859,10 +13444,41 @@ export class CasparRuntime {
     this.#loaded.delete(itemId);
     // R-011 — the override dies with the ITEM (a re-used itemId starts clean).
     this.#positions.delete(itemId);
+    // R-048 (6.9) — and so does the live-source override, by the same rule: a
+    // re-used itemId must not inherit somebody else's emergency substitution.
+    this.#sourceOverrides.delete(itemId);
+    // Session BM — and the per-look composition, by the identical rule. A re-used itemId
+    // inheriting one would put a previous show's inputs behind this show's looks.
+    this.#lookSourceBindings.delete(itemId);
+    // SESSION BP — and the FROZEN level 2, by the same rule. A re-used itemId inheriting one
+    // would resolve a brand-new row against a retired show's assignment, and the take that
+    // should have re-frozen it would instead find the pin already there.
+    this.#frozenAssignments.delete(itemId);
+    // 6.5f — and the audio intent. A re-used itemId inheriting a RAISED plate is
+    // the worst of the three: it puts a microphone on air that nobody asked for.
+    this.#plateVolumes.delete(itemId);
+    // §14 (LOOKS) phase 3 — and the active look, by the same rule as the three above: a
+    // re-used itemId must enter its template's AUTHORED default, never the look some
+    // earlier row happened to leave behind.
+    this.#activeLooks.delete(itemId);
+    // `C-028` — and its plate fits, by that same rule. A re-used itemId carrying the
+    // PREVIOUS template's aspects would tell its page to punch holes for a picture that is
+    // not there: the stale-mask failure `clearLiveSourceMask` exists for, arriving from the
+    // bridge instead of from the page.
     // B-092 — a restore awaiting its occupancy decision dies with the item too:
     // the operator removed it, so there is nothing left to adopt or re-ADD (the
     // urgent CLEAR below is the removal's own, and it is unconditional).
+    // R-021 stage 4 — and so does its `restore-blocked` marker, or the row would
+    // publish a block for an item that no longer exists.
     this.#pendingRestore.delete(itemId);
+    this.#restoreBlocked.delete(itemId);
+    // `FIELD-FIXES-01` B — and its refusal line: a re-used itemId starts with none.
+    this.#takeRefusals.delete(itemId);
+    // C-015 phase 6 (6.0/6.6) — the plates die with the item, and BEFORE its own
+    // CLEAR for `out()`'s reason. Unconditional on `slot`: the ledger is keyed by
+    // itemId, so an item whose slot was already released can still own live
+    // layers, and those are precisely the ones nothing else would ever reach.
+    await this.teardownLiveLayers(itemId);
     if (slot !== undefined) {
       this.#slots.delete(itemId);
       this.#removeInterest(slot);
@@ -2874,13 +13490,31 @@ export class CasparRuntime {
       // survives on the primary is the R-009 sweep's to surface (as a
       // regular, clearable orphan) once the primary is observable again.
       this.#resolveOwnedOccupancy(slot);
-      const { ok, onPrimary } = await this.#send(
+      const { ok, onPrimary, errorCode } = await this.#send(
         this.#builder.out(slot),
         this.#nextSeq(),
         'urgent',
       );
       // A CLEAR executed on the CURRENT PRIMARY counts as adoption (see out()).
       if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
+      // `B-253` — and the mixer residue goes with the producer (see out()).
+      await this.#resetEmptiedLayerMixer(slot, { ok, onPrimary });
+      /*
+        🔴 B-141 — THE ONE VERB WHOSE RESPONSE CANNOT CARRY ITS OWN OUTCOME.
+
+        `remove` answers `{ accepted: true }` unconditionally, and that is right for
+        the CALLER: the row is off the stack whatever the wire did, and the layer is
+        deallocated either way. But this CLEAR is best-effort, and a failed one
+        leaves a graphic ON AIR with its row gone from every browser — precisely the
+        state someone asks about the next day, and the one an `ok` row would deny.
+
+        So the failure is handed to the WRAPPER rather than to the response: the
+        contract the SPA depends on is untouched, and the log still says what
+        happened. This is the only sanctioned use of `wireFailure`; anywhere else it
+        would be a way to contradict a result, which is the habit `auditVerdict`
+        exists to prevent.
+      */
+      if (!ok) detail.wireFailure = errorCode ?? 'amcp-error';
     }
     return { accepted: true };
   }
@@ -2930,6 +13564,17 @@ export class CasparRuntime {
 
   async #applyConfig(next: ConnectionConfig): Promise<SetConfigResult> {
     // 1. On-air gate — bridge-authoritative (the UI mirrors it; races lose here).
+    /*
+      🔴 `R-017` / `operator-surface` §6 — IT NAMES CLEAR-ALL, and Remove-All is now the
+      wrong answer twice over. This gate counts what is ON AIR, so taking everything off air
+      is the whole remedy — emptying the stack was always more than it asked for, and it costs
+      the operator every row's fields and overrides. And since R-017, Remove-All is DISABLED by
+      exactly the condition this sentence reports, so naming it would point at a greyed button.
+
+      `B-212` reached the same rule one layer down on 2026-09-04, from a plant incident, and
+      `packages/shared-ipc/tests/template-references.test.ts` pins it there as a test whose name
+      is the policy: "the sweeping remedy is not the one to steer toward".
+    */
     const unsettled = this.#onAirCount();
     if (unsettled > 0) {
       return {
@@ -2937,7 +13582,7 @@ export class CasparRuntime {
         reason: 'on-air-block',
         message:
           `${String(unsettled)} item(s) are on air or unsettled — ` +
-          `Remove All (or Out each item) first.`,
+          `Clear All takes them off air and keeps the rows.`,
       };
     }
 
@@ -2966,7 +13611,11 @@ export class CasparRuntime {
       sessions,
       initialPrimary: 'A',
       autoFailoverEnabled: next.autoFailoverEnabled,
+      // 🔴 `B-316` — every road to server B asks this, and only this.
+      serverBLine: (line) => this.#serverBLine(line),
     });
+    // `B-313` — the hold outlives the rebuild.
+    this.#adapter.setHeld('B', this.#serverBHeld);
     this.#wireAdapter();
     for (const slot of this.#slots.values()) this.#addInterest(slot);
     this.#loaded.clear();
@@ -2985,7 +13634,7 @@ export class CasparRuntime {
       this.ownedOccupancyChanged.emit([]);
     }
 
-    // 5. Template serve — re-derive from the new primary's locality; the only
+    // 5. Template serve — re-derive from the new server SET's locality; the only
     //    realistically fallible step (bind conflict). Retry ONCE on safe
     //    loopback-ephemeral options; if that also fails, land on the new
     //    config with serving down (loads fail loudly via the serve guards).
@@ -2993,7 +13642,21 @@ export class CasparRuntime {
     //    (#servingDesired, set once by startServing()) — never on the
     //    transient `listening`, which reads false during any in-flight
     //    teardown and previously let a concurrent apply skip this step.
-    this.#serveOptions = deriveServeOptions(next.servers.A.host, this.#serveOverride);
+    //
+    //    B-162 — this path re-derives with the SAME rule as construction, from
+    //    the same `configuredCasparHosts` helper. It is the door nobody was
+    //    watching: a bridge booted all-loopback and then given a remote backup
+    //    through the settings dialog reaches exactly the broken state by apply
+    //    alone, with no restart to make anyone suspicious.
+    //
+    //    C-024 — and it re-derives through the SAME three-layer merge as construction, reading the
+    //    serve address out of `next`. This is the line that makes the panel work at all: an apply
+    //    carrying a new `templateServeHost` puts it in force on the RUNNING bridge, with no
+    //    restart, because template serving is already torn down and rebuilt here.
+    this.#serveOptions = deriveServeOptions(
+      configuredCasparHosts(next),
+      resolveServeOverride(storedServeOverride(next), this.#serveOverride),
+    );
     let serveError: string | null = null;
     if (this.#servingDesired) {
       try {
@@ -3015,10 +13678,10 @@ export class CasparRuntime {
 
     // 6. Connect + surface: every client sees the new config and fresh health.
     this.#sessions.A.start();
-    this.#sessions.B?.start();
-    this.#audit.unshift({
-      ts: new Date().toISOString(),
-      actor: 'operator',
+    // `B-313` — a held server B stays unconnected until its guard releases it.
+    if (!this.#serverBHeld) this.#sessions.B?.start();
+    this.#recordAudit({
+      actor: operatorActor(),
       action: 'reconnect',
       server: 'primary',
       outcome: serveError === null ? 'ok' : 'failed',
@@ -3043,11 +13706,75 @@ export class CasparRuntime {
           `Control WebSocket remains loopback-bound.\n`,
       );
     }
+    // B-162 — the CORRECTNESS complement of the warning above. That one asks
+    // "did you mean to expose this?"; this one says a configured server will get
+    // NO GRAPHICS, which nothing else reports: the `CG ADD` succeeds, the
+    // journal records success and health stays green.
+    // `B-326` — judged against this machine's own addresses: the list Station setup's chips show.
+    const own = detectServeHostCandidates();
+    const unreachable =
+      serve === null ? [] : hostsUnableToFetchTemplates(configuredCasparHosts(next), serve, own);
+    if (unreachable.length > 0 && serve !== null) {
+      process.stderr.write(templateServeUnreachableWarning(unreachable, serve, own));
+    }
     return {
       ok: true,
       ...(serve !== null
-        ? { templateServe: { serveHost: serve.serveHost, port: serve.port, exposed } }
+        ? {
+            templateServe: {
+              serveHost: serve.serveHost,
+              port: serve.port,
+              exposed,
+              unreachable: [...unreachable],
+              elsewhere: servesFromAnotherMachine(serve.serveHost, own),
+            },
+          }
         : {}),
+    };
+  }
+
+  /**
+   * `C-024` — **the serve address IN FORCE, plus why: what a flag is masking, and what this
+   * machine's interfaces are.**
+   *
+   * The panel edits the STORED value (`connections.config`); this answers what is actually in
+   * effect. They are deliberately two reads, because the difference between them is exactly the
+   * thing an operator must be able to see — a panel showing a stored host the bridge is not using
+   * is this product's worst defect class, and precedence puts it one `--flag` away at all times.
+   *
+   * `flagOverrides` is computed from the flag layer alone ({@link #serveOverride}), never from the
+   * resolved options: the resolved host tells you WHAT is in force, not WHY, and a surface that
+   * inferred "a flag must be set" from a mismatch would be wrong every time the derivation and the
+   * store happened to differ.
+   */
+  templateServeInfo(): {
+    serveHost: string;
+    port: number;
+    exposed: boolean;
+    unreachable: readonly string[];
+    elsewhere: boolean;
+    flagOverrides: { serveHost?: string; port?: number };
+    candidates: readonly string[];
+  } {
+    const serve = this.templateServe;
+    const options = serve ?? this.#serveOptions;
+    const exposed = options.bindHost !== '127.0.0.1' && options.bindHost !== 'localhost';
+    const own = detectServeHostCandidates();
+    return {
+      serveHost: options.serveHost,
+      port: options.port,
+      exposed,
+      // B-162's ONE predicate, never a second local spelling of "who can reach us".
+      unreachable: hostsUnableToFetchTemplates(configuredCasparHosts(this.#config), options, own),
+      // `B-326` — the same judgement, said as WHY: the host in force names another machine.
+      elsewhere: servesFromAnotherMachine(options.serveHost, own),
+      flagOverrides: {
+        ...(this.#serveOverride.serveHost !== undefined
+          ? { serveHost: this.#serveOverride.serveHost }
+          : {}),
+        ...(this.#serveOverride.port !== undefined ? { port: this.#serveOverride.port } : {}),
+      },
+      candidates: own,
     };
   }
 
@@ -3059,7 +13786,7 @@ export class CasparRuntime {
    * `error`/`disconnected` rest states don't.
    */
   #onAirCount(): number {
-    return this.#reconciler.snapshot().filter((i) => isOnAirStatus(i.status, i.pending)).length;
+    return this.#reconciler.snapshot().filter(isOnAirStatus).length;
   }
 
   health(): ConnectionHealth {
@@ -3080,11 +13807,40 @@ export class CasparRuntime {
       // declared server, so another box's OSC cannot make this look healthy.
       // Deliberately not a second, divergent source of truth.
       const heardAt = session.osc.occupancy.lastOscTrafficAt;
+      /*
+        🔴 R-058 — WHICH OF THIS SERVER'S CHANNELS ARE PRODUCING FRAMES, decided HERE.
+
+        The bridge owns the judgement, not the renderer: the staleness call needs the tick
+        clock and this session's own reconnect history, and a renderer re-deriving it from
+        timestamps would be a second authority on one question. `B-171` is what that costs —
+        the renderer's own copy of "can a command reach CasparCG" disagreed with the bridge's
+        canonical predicate and won, because it was the one attached to the button.
+
+        ⚠ The list carries only channels this session has HEARD tick. A channel we have never
+        heard is ABSENT rather than `false`, so "alarmed without ever having ticked" cannot be
+        published at all — see `OscChannelTickTap` and `ChannelTickSchema` for why that is
+        structural rather than a check someone has to remember.
+      */
+      /*
+        🔴 `B-315` — and only the channels this station SERVES (`CENTRAL-BRIDGE-01` rule 7). A channel
+        heard before the first declaration and not served since keeps its last tick in the tap — the
+        transport drops its OSC before the tap — so it would age into "not producing" on a healthy
+        core. The ONE served-channel rule, read here as the transport reads it.
+      */
+      const channels = session.osc.channelTicks
+        .channels(this.#channelTickStaleMs)
+        .filter((tick) => this.#servesOscChannel(tick.channel));
+      // C-029 — the kept verdicts, whatever the state: `outputVerdictOf` decides the arm.
+      const outputs = [...(this.#outputChecks.get(label)?.values() ?? [])].sort(
+        (a, b) => a.channel - b.channel,
+      );
       return {
         label,
         state,
         amcpAxisOk: state === 'healthy',
         ...(heardAt !== null ? { oscFreshAt: new Date(heardAt).toISOString() } : {}),
+        ...(channels.length > 0 ? { channels } : {}),
+        ...(outputs.length > 0 ? { outputs } : {}),
       };
     };
     const primarySession = this.#sessions[cur];
@@ -3097,7 +13853,37 @@ export class CasparRuntime {
       currentPrimary: cur,
       strategy: this.#config.strategy,
       ...(this.#lastFailover !== undefined ? { lastFailover: this.#lastFailover } : {}),
+      ...(this.#amcpAwaitsSignIn && !this.#amcpEverUp ? { amcpAwaitsSignIn: true as const } : {}),
     };
+  }
+
+  /**
+   * 🔴 `DESKTOP-APPS-01-B` B1.1 — **AMCP WAITS FOR A STATION-ADMIN.** The bridge sets it at boot
+   * when it authenticates against a Playout (a 2.8.54 Playout refuses AMCP to a machine it has not
+   * trusted) and clears it on the first `station-admin` sign-in (which is what trusts it). Health
+   * then carries `amcpAwaitsSignIn` for as long as AMCP has not been up, and the console states it
+   * instead of raising the link alarm. It changes nothing on the wire: the reconnect loop runs as
+   * it always does.
+   */
+  setAmcpAwaitsSignIn(waiting: boolean): void {
+    if (this.#amcpAwaitsSignIn === waiting) return;
+    this.#amcpAwaitsSignIn = waiting;
+    this.healthChanged.emit(this.health());
+  }
+
+  /**
+   * `DESKTOP-APPS-01-B` B1.3 — every declared session retries promptly for `windowMs` (see
+   * `ServerSession.retryPromptly`): the ONE reconnect loop each already runs, told to hurry.
+   */
+  retryAmcpPromptly(windowMs: number): void {
+    this.#sessions.A.retryPromptly(windowMs);
+    this.#sessions.B?.retryPromptly(windowMs);
+  }
+
+  #noteAmcpUp(): void {
+    if (this.#amcpEverUp) return;
+    this.#amcpEverUp = true;
+    if (this.#amcpAwaitsSignIn) this.healthChanged.emit(this.health());
   }
 
   /**
@@ -3106,91 +13892,242 @@ export class CasparRuntime {
    */
   async failover(): Promise<{ ok: boolean; newPrimary: ServerLabel }> {
     const ok = await this.#adapter.failover('manual');
-    return { ok, newPrimary: this.#adapter.currentPrimary };
+    const newPrimary = this.#adapter.currentPrimary;
+    // B-141 — `server` records which machine is primary AFTER the switch, which
+    // is the fact someone reading the log the next day is actually asking about.
+    this.#recordAudit({
+      actor: operatorActor(),
+      action: 'failover',
+      server: newPrimary === 'A' ? 'primary' : 'backup',
+      outcome: ok ? 'ok' : 'failed',
+    });
+    return { ok, newPrimary };
   }
 
   // ── lock / templates / audit / settings / update (in-memory stubs) ──
   lockState(): LockState {
     return this.#lock;
   }
-  engage(pin: string): { ok: boolean } {
+  /**
+   * Engage the lock. `channels` is `B-257`'s covered set — the ENGAGER's channels, captured by
+   * the caller at this moment — and ABSENT means every channel, which is the lock as it always
+   * was (auth OFF, or an engager holding `'*'`).
+   *
+   * ⚠ **ONE LOCK AT A TIME, refused here and not only at the gate.** An every-channel lock
+   * refuses a second engage at the gate (`lock.engage` is an intent), so on that path this
+   * branch is unreachable. A COVERED-SET lock does not refuse a principal who holds none of its
+   * channels, and that principal's engage reaches this method — where replacing `#lock` would
+   * change the PIN, and the scope, under the operator who engaged first.
+   */
+  engage(pin: string, channels?: readonly number[]): { ok: boolean } {
+    if (this.#lock.engaged) {
+      this.#recordAudit({
+        actor: operatorActor(),
+        action: 'lock-engage',
+        outcome: 'failed',
+        errorCode: 'already-engaged',
+      });
+      return { ok: false };
+    }
+    /*
+      A covered-set lock covering NOTHING restricts nobody and would still hold the one lock
+      slot, so every other operator's engage would be refused for a lock that locks nothing.
+      Refused instead: an engager who holds no channel here has nothing of theirs to lock.
+    */
+    if (channels !== undefined && channels.length === 0) {
+      this.#recordAudit({
+        actor: operatorActor(),
+        action: 'lock-engage',
+        outcome: 'failed',
+        errorCode: 'no-channel-held',
+      });
+      return { ok: false };
+    }
     this.#lockPin = pin;
-    this.#lock = { engaged: true, reason: 'operator', engagedAt: new Date().toISOString() };
+    this.#lock = {
+      engaged: true,
+      reason: 'operator',
+      engagedAt: new Date().toISOString(),
+      ...(channels !== undefined ? { channels: [...new Set(channels)].sort((a, b) => a - b) } : {}),
+    };
     this.lockChanged.emit(this.#lock);
+    // B-141 — the PIN is never recorded, only that the lock was engaged.
+    this.#recordAudit({ actor: operatorActor(), action: 'lock-engage', outcome: 'ok' });
     return { ok: true };
   }
   release(pin: string): { ok: boolean; reason?: 'pin-mismatch' | 'not-engaged' } {
-    if (!this.#lock.engaged) return { ok: false, reason: 'not-engaged' };
-    if (this.#lockPin !== pin) return { ok: false, reason: 'pin-mismatch' };
+    if (!this.#lock.engaged) {
+      this.#recordAudit({
+        actor: operatorActor(),
+        action: 'lock-release',
+        outcome: 'failed',
+        errorCode: 'not-engaged',
+      });
+      return { ok: false, reason: 'not-engaged' };
+    }
+    if (this.#lockPin !== pin) {
+      // A REFUSED release is the entry that matters most here — it is the one an
+      // operator would later ask about.
+      this.#recordAudit({
+        actor: operatorActor(),
+        action: 'lock-release',
+        outcome: 'failed',
+        errorCode: 'pin-mismatch',
+      });
+      return { ok: false, reason: 'pin-mismatch' };
+    }
     this.#lock = { engaged: false };
     this.#lockPin = null;
     this.lockChanged.emit(this.#lock);
+    this.#recordAudit({ actor: operatorActor(), action: 'lock-release', outcome: 'ok' });
     return { ok: true };
   }
 
-  templateGet(templateId: string): TemplateInfo | null {
-    return this.#templates.get(templateId);
-  }
-  templateList(): TemplateInfo[] {
-    return this.#templates.list();
-  }
   /**
-   * B-038 Phase 2 — register a template AND retain its browser-produced
-   * self-contained HTML, keyed by id. Re-import replaces both. The HTML is held,
-   * not served yet (Phase 3 serves it over HTTP; Phase 4 `CG ADD`s its URL).
+   * 🔴 `CHANNEL-TEMPLATES-01` — a template as `channel` lists it. With no channel, the
+   * station-wide reading: every listed template once, at the version the lowest channel listing
+   * it has (what a caller that names no channel always saw).
    */
+  templateGet(templateId: string, channel?: number): TemplateInfo | null {
+    return channel === undefined
+      ? this.#templates.getAny(templateId)
+      : this.#templates.getOn(channel, templateId);
+  }
+  /** `channel`'s template list, in list order; with no channel, the station-wide reading. */
+  templateList(channel?: number): TemplateInfo[] {
+    return channel === undefined ? this.#templates.listAll() : this.#templates.listOn(channel);
+  }
   /**
-   * R-028 part B — the reconciliation policy, enforced here because this is
-   * where a removal actually happens.
+   * B-038 Phase 2 — register a template AND retain its browser-produced self-contained HTML.
    *
-   * An operator's import (no `redelivery` flag) always wins and clears the
-   * tombstone. A reconnect RE-DELIVERY is ignored when the id is either:
+   * 🔴 `CHANNEL-TEMPLATES-01` — ON ONE CHANNEL. An import lists the template on `channel` and on
+   * no other; a RE-IMPORT (the same id, new content) moves `channel`'s list to the new version
+   * and every other channel keeps the version it lists. The version is stored once however many
+   * channels list it. With no channel (a caller that predates the lists), every declared channel.
    *
-   *   - deliberately REMOVED — otherwise any browser still holding a local copy
-   *     resurrects it on its next reconnect, and a page reload is enough. The
-   *     removal was an operator decision on the catalogue of record; a stale
-   *     browser must not undo it;
-   *   - ALREADY HELD — the bridge's copy is the catalogue of record and may be
-   *     newer than the re-delivering browser's, so an older local copy must not
-   *     overwrite it.
-   *
-   * Both cases answer `registered: true` (the template IS available, which is
-   * all the caller needs) with `skipped: true` for honesty.
+   * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **AN OPERATOR'S IMPORT IS THE ONLY KIND THERE IS.** R-028
+   * part B's reconnect RE-DELIVERY (a console replaying its whole library on every connect, with
+   * tombstones so it could not resurrect a removal) is gone: the bridge keeps the library for
+   * every console, and the socket refuses a frame that says it is a re-delivery.
    */
   templateImport(
     template: TemplateInfo,
     html: string,
-    redelivery = false,
-  ): { registered: boolean; templateId: string; skipped?: boolean } {
-    if (redelivery) {
-      if (this.#removedTemplateIds.has(template.templateId)) {
-        return { registered: false, templateId: template.templateId, skipped: true };
-      }
-      // NOTE — an id the bridge ALREADY holds is deliberately NOT skipped.
-      //
-      // An earlier draft kept the bridge's copy ("the catalogue of record is
-      // newer"), which quietly REVERSED B-085's documented local-wins policy:
-      // a browser that fixed a template while offline would reconnect, be
-      // ignored, and the STALE html would keep going to air with no signal
-      // that the correction never landed. Nothing here can tell which copy is
-      // newer — `TemplateInfo` carries no version — so the safe direction is
-      // the documented one, and the tombstone above is the narrower fix that
-      // part A actually asked for (stop RESURRECTION, not stop repair).
-    } else {
-      // An operator re-importing a previously removed template revives it.
-      this.#removedTemplateIds.delete(template.templateId);
+    channel?: number,
+  ): { registered: boolean; templateId: string } {
+    /*
+      B-141 — THE FIFTEENTH ACTION, and the one the change's own bookkeeping had
+      lost: `import` is neither in the seven playout verbs nor among the three
+      named as having no bridge operation. It HAS one, right here.
+
+      Recorded outside `#audited`: this method is SYNCHRONOUS and answers
+      `{ registered }` rather than `{ accepted }`, so it shares no shape with the
+      wrapper. What it does share is `#recordOutcome` — the mapping lives in one
+      place even though the call shapes are two.
+    */
+    const detail: AuditDetail = { templateId: template.templateId };
+    let result: { registered: boolean; templateId: string };
+    try {
+      result = this.#templateImportImpl(template, html, channel);
+    } catch (err) {
+      this.#recordOutcome('import', detail, { outcome: 'failed', errorCode: 'internal-error' });
+      throw err;
     }
-    const result = this.#templates.import(template, html);
-    // R-028 (o1) — every browser converges on the same catalogue.
-    this.templatesChanged.emit(this.#templates.list());
-    // A re-import can change the template's display name — the rows naming it
-    // must follow (published through the same change-compare as always).
-    this.#publishFixedStateIfChanged();
+    this.#recordOutcome('import', detail, { outcome: 'ok' });
     return result;
   }
-  /** The retained HTML for a template id, or `null` (the Phase 3 serve seam). */
-  templateHtml(templateId: string): string | null {
-    return this.#templates.html(templateId);
+
+  #templateImportImpl(
+    template: TemplateInfo,
+    html: string,
+    channel: number | undefined,
+  ): { registered: boolean; templateId: string } {
+    const templateId = template.templateId;
+    const targets: readonly number[] = channel === undefined ? this.#declaredChannels() : [channel];
+    const wasListed = targets.some((c) => this.#templates.hasOn(c, templateId));
+    const { changed } = this.#templates.importOn(targets, template, html);
+    if (changed.length > 0) {
+      // R-028 (o1) — every browser converges on the same catalogue.
+      this.templatesChanged.emit(this.#templates.listAll());
+      this.templatesActed.emit({
+        act: wasListed ? 'reimport' : 'import',
+        ...templateActNaming(template),
+        channel: channel ?? null,
+        actor: operatorActor(),
+      });
+      // A re-import can change the template's display name — the rows naming it
+      // must follow (published through the same change-compare as always).
+      this.#publishFixedStateIfChanged();
+    }
+    return { registered: targets.length > 0, templateId };
+  }
+
+  /**
+   * The retained HTML for a template, or `null` — of the version `channel` lists; with no
+   * channel, of the station-wide reading's version.
+   */
+  templateHtml(templateId: string, channel?: number): string | null {
+    const page = this.templatePage(templateId, channel);
+    return page.ok ? page.html : null;
+  }
+
+  /**
+   * 🔴 `RELEASE-091-01` §1 (`B-288`) — **THE PAGE THIS BRIDGE SERVES CASPARCG, for PVW**: the HTML of
+   * the version `channel` lists (no channel: the station-wide reading's) — the bytes
+   * `/template/<id>~<version>` returns — or why there is none: the list does not hold the template
+   * (`not-listed`), or it does and the store has no file for that version (`no-file`). A read.
+   */
+  templatePage(
+    templateId: string,
+    channel?: number,
+  ): { ok: true; html: string } | { ok: false; reason: TemplatePageRefusal } {
+    const versionId =
+      channel === undefined
+        ? this.#templates.versionAny(templateId)
+        : this.#templates.versionOn(channel, templateId);
+    if (versionId === null) return { ok: false, reason: 'not-listed' };
+    const html = this.#templates.htmlOf(versionId);
+    return html === null ? { ok: false, reason: 'no-file' } : { ok: true, html };
+  }
+
+  /**
+   * 🔴 `CHANNEL-TEMPLATES-01` decision 4 — **THE CHANNELS A TEMPLATE REQUEST THAT NAMES NO CHANNEL
+   * WOULD CHANGE**, for the permission gate and a channel-scoped lock: an import lists the
+   * template on every declared channel; a removal takes it off every channel listing it. A
+   * request that NAMES its channel is judged on that one, like every other channel-bearing
+   * request (`channelsForRequest`'s case (a)).
+   */
+  templateActionFootprint(
+    action: 'import' | 'remove',
+    req: { templateId?: string; template?: TemplateInfo },
+  ): readonly number[] {
+    if (action === 'remove') {
+      return req.templateId === undefined ? [] : this.#templates.channelsListing(req.templateId);
+    }
+    return req.template === undefined ? [] : this.#declaredChannels();
+  }
+
+  /**
+   * 🔴 `CHANNEL-TEMPLATES-01` — **THE TEMPLATE A ROW USES: the version ITS channel lists.** The
+   * one item-keyed door onto the per-channel lists, for every reader that holds an item rather
+   * than a slot. A row with no layer sits on no channel, so it reads the station-wide entry —
+   * which is what it would be loaded from again, on whichever row names it.
+   */
+  #templateOfItem(itemId: string, templateId: string): TemplateInfo | null {
+    const channel = this.#slots.get(itemId)?.channel;
+    return channel === undefined
+      ? this.#templates.getAny(templateId)
+      : this.#templates.getOn(channel, templateId);
+  }
+
+  /**
+   * `C-031` — the registry's boot hydration, for the CLI's boot line: how many
+   * templates were loaded from the persist directory, how many persisted files were
+   * skipped as unusable, and the directory. A later import changes the registry,
+   * not this: it records what BOOT found, which is the question a restart raises.
+   */
+  get templateProvenance(): { loaded: number; skipped: number; dir: string | null } {
+    return { ...this.#templateProvenance };
   }
 
   /**
@@ -3199,50 +14136,477 @@ export class CasparRuntime {
    * The predicate is deliberately "any reference", not "any ON-AIR reference" (the R-010
    * gate's shape). Removal never takes a graphic off air — CasparCG already pulled the
    * self-contained HTML into CEF — so the damage is invisible at the click and deferred:
-   * `load()` and `take()`'s B-039 re-ADD both guard on `#templates.has(...)` and would
+   * `load()` and `take()`'s B-039 re-ADD both guard on the row's channel listing it and would
    * refuse with `unknown-template` forever, and `setPosition`'s re-ADD would silently stop
    * re-ADDing. An `idle`/`loaded` row is poisoned exactly as badly as an on-air one, so
-   * both block. Removing the referencing items (stack.remove / Remove-All) is the unblock
-   * path — the same one R-010 points at.
+   * both block. Removing the referencing items (`stack.remove`, or the picker's per-item
+   * remedy) is the unblock path.
+   *
+   * ⚠ `operator-surface` §6 DELETED the "same one R-010 points at" clause rather than
+   * rewording it: R-010's remedy is now CLEAR-ALL, which leaves every row on the stack, so
+   * every reference survives it and this refusal would repeat forever. The two paths are
+   * genuinely different now. See the same note on `TemplateReferenceSchema`.
+   *
+   * 🔴 `CHANNEL-TEMPLATES-01` — **ON ONE CHANNEL.** With a `channel`, the template leaves that
+   * channel's list and no other, refused while a row ON THAT CHANNEL holds it (the gate, per
+   * channel: a row on another channel resolves through its own channel's list and is not
+   * poisoned by this one's). Its stored version is removed only when no channel lists it and no
+   * row holds it. With no channel, it leaves every channel, refused while ANY row holds it — the
+   * station-wide removal it always was.
    */
-  templateRemove(templateId: string): {
+  templateRemove(
+    templateId: string,
+    channel?: number,
+  ): {
     ok: boolean;
     reason?: 'in-use' | 'unknown-template';
     message?: string;
+    references?: TemplateReference[];
   } {
-    if (!this.#templates.has(templateId)) {
+    /*
+      🔴 `B-260` (a) — every template mutation writes a row, and a removal is the mutation that
+      can poison every row referencing the template. It wrote NOTHING before this, so the record
+      could not say who emptied the catalogue. A refused removal is recorded too, with its
+      reason, as the other operator verbs' refusals are.
+    */
+    const verdict = this.#templateRemoveImpl(templateId, channel);
+    this.#recordOutcome(
+      'template-remove',
+      { templateId },
+      verdict.ok
+        ? { outcome: 'ok' }
+        : { outcome: 'failed', errorCode: verdict.reason ?? 'refused' },
+    );
+    return verdict;
+  }
+
+  #templateRemoveImpl(
+    templateId: string,
+    channel: number | undefined,
+  ): {
+    ok: boolean;
+    reason?: 'in-use' | 'unknown-template';
+    message?: string;
+    references?: TemplateReference[];
+  } {
+    const targets =
+      channel === undefined
+        ? this.#templates.channelsListing(templateId)
+        : this.#templates.hasOn(channel, templateId)
+          ? [channel]
+          : [];
+    if (targets.length === 0) {
       return {
         ok: false,
         reason: 'unknown-template',
-        message: `Template “${templateId}” is not registered.`,
+        message:
+          channel === undefined
+            ? `Template “${templateId}” is not registered.`
+            : `Template “${templateId}” is not on CH ${String(channel)}.`,
       };
     }
 
-    const referencing = this.#reconciler
+    /*
+      `B-212` — WHERE each referencing item is, not merely how many there are. The layer
+      is read from `#slots` (the bridge's own binding, the same map `#itemDetail` reads
+      for the audit record); an item with no slot is reported as such rather than
+      dropped, because it blocks the station-wide removal exactly as much as one on a
+      layer does. The wording is the ONE shared spelling in `@cg/shared-ipc`, resolved
+      against this bridge's bank so a row is named as the operator's table names it.
+
+      `CHANNEL-TEMPLATES-01` — a removal from ONE channel is refused by that channel's rows
+      only. An item with no layer sits on no channel: it takes its template from whichever
+      row next names it, whose own channel's list is checked then.
+    */
+    const references: TemplateReference[] = this.#reconciler
       .snapshot()
-      .filter((i) => i.templateId === templateId).length;
-    if (referencing > 0) {
+      .filter((i) => i.templateId === templateId)
+      .flatMap((i) => {
+        const slot = this.#slots.get(i.itemId);
+        if (channel !== undefined && slot?.channel !== channel) return [];
+        return [
+          {
+            itemId: i.itemId,
+            ...(slot !== undefined && { slot: { channel: slot.channel, layer: slot.layer } }),
+          },
+        ];
+      });
+    if (references.length > 0) {
       return {
         ok: false,
         reason: 'in-use',
-        message: `${String(referencing)} stack item(s) still use this template — remove them (or Remove All) first.`,
+        // `MULTI-CHANNEL-01` — the whole set: each reference is named from its own channel's bank.
+        message: describeTemplateReferences(references, this.fixedLayerBanks()),
+        references,
       };
     }
 
-    this.#templates.remove(templateId);
-    // R-028 part B — remember the removal, so a browser that still holds a
-    // local copy cannot resurrect it by reconnecting (see `templateImport`).
-    this.#removedTemplateIds.add(templateId);
+    // `B-300` — the name the operator knew it by, read while it is still listed.
+    const removed =
+      channel === undefined
+        ? this.#templates.getAny(templateId)
+        : this.#templates.getOn(channel, templateId);
+    // `CENTRAL-BRIDGE-01` (`B-294`) — no tombstone: R-028 part B kept one so a console's reconnect
+    // re-delivery could not bring a removed template back, and a console re-delivers nothing now.
+    this.#templates.removeFrom(targets, templateId);
     // R-028 (o1) — every browser converges on the same catalogue.
-    this.templatesChanged.emit(this.#templates.list());
+    this.templatesChanged.emit(this.#templates.listAll());
+    this.templatesActed.emit({
+      act: 'remove',
+      ...(removed === null ? { templateId } : templateActNaming(removed)),
+      channel: channel ?? null,
+      actor: operatorActor(),
+    });
     return { ok: true };
   }
 
-  auditRecent(limit = 200, action?: AuditEntry['action'], actor?: string): AuditEntry[] {
+  /**
+   * B-141 — the PRE-STATE of an item, as the audit record must name it.
+   *
+   * Read BEFORE the operation runs, deliberately: `remove` deletes the slot and
+   * `out` empties the layer, so reading afterwards would record the layer the item
+   * is on NOW (none) instead of the one the operator acted on.
+   */
+  #itemDetail(itemId: string): AuditDetail {
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    const slot = this.#slots.get(itemId);
+    return {
+      itemId,
+      ...(templateId !== undefined ? { templateId } : {}),
+      ...(slot !== undefined ? { slot } : {}),
+    };
+  }
+
+  /**
+   * ⭐ **B-141 — RUN AN OPERATOR ACTION SO THAT IT CANNOT RETURN WITHOUT ITS AUDIT
+   * LINE.**
+   *
+   * The seven playout verbs have between three and eight exits each — every
+   * refusal is its own `return` — so "remember to append before each one" is a
+   * rule that holds until the next branch is added. This makes it structural
+   * instead: the PUBLIC method is nothing but this wrapper, the real body is a
+   * private impl it calls exactly once, and every path out of that impl —
+   * including a THROW — passes through here. The same move as B-139: an API that
+   * cannot be called wrong beats a call site that happens to be correct today.
+   *
+   * Three properties it exists to guarantee, each of which the naive
+   * append-at-the-end would have broken:
+   *
+   *   1. **The outcome is DERIVED from the answer** (`auditVerdict`), never
+   *      assumed from position. A refused take records `failed` with the code that
+   *      refused it, not `ok`.
+   *   2. **The entry is written where the outcome is KNOWN**, so `ts` — stamped by
+   *      `#recordAudit` at the moment of the append — is the outcome's time, and
+   *      file order is OUTCOME order rather than invocation order. Two concurrent
+   *      takes appear in the order they finished, which is the order air saw.
+   *      ⚠ **This half of the guarantee is NOT ours alone**: it also needs
+   *      `AuditWriter` to CHAIN its appends, because `#recordAudit` is
+   *      fire-and-forget and two concurrent `write`s complete in either order.
+   *      That was missing at first and CI caught it — a refusal landed ahead of
+   *      the accepted action that preceded it, on a tree where Windows agreed.
+   *   3. **It cannot fail the operation.** `#recordAudit` is fire-and-forget and
+   *      swallows the writer's rejection; a full disk surfaces through
+   *      `auditHealth().lastError` and the station stays on air. The contrast with
+   *      the config stores is deliberate and is stated at `#auditWriter`: those
+   *      files are PRECONDITIONS for correct playout, so an unusable one is a hard
+   *      boot failure. An audit entry is a RECORD OF what happened, and nothing
+   *      downstream reads it to decide what to send.
+   */
+  async #audited<T extends { accepted: boolean; errorCode?: string; command?: string }>(
+    action: AuditEntry['action'],
+    detail: AuditDetail,
+    run: (detail: AuditDetail) => Promise<T>,
+  ): Promise<T> {
+    let result: T;
+    try {
+      result = await run(detail);
+    } catch (err) {
+      // A THROW IS AN OUTCOME TOO. Without this, the one exit that never reaches a
+      // `return` would be the one exit with no record — and an action that blew up
+      // mid-flight is more interesting to whoever reads the log than one that
+      // refused cleanly, not less. The error is re-thrown untouched.
+      this.#recordOutcome(action, detail, { outcome: 'failed', errorCode: 'internal-error' });
+      throw err;
+    }
+    this.#recordOutcome(action, detail, auditVerdict(detail, result));
+    return result;
+  }
+
+  /**
+   * B-141 — the ONE place a `{ detail, verdict }` pair becomes an `AuditEntry`.
+   *
+   * Shared by `#audited` and by the synchronous `templateImport`, so the two call
+   * SHAPES cannot drift into two mappings.
+   */
+  #recordOutcome(
+    action: AuditEntry['action'],
+    detail: AuditDetail,
+    verdict: { outcome: AuditEntry['outcome']; errorCode?: string; command?: string },
+  ): void {
+    this.#recordAudit({
+      actor: operatorActor(),
+      action,
+      ...(detail.itemId !== undefined ? { itemId: detail.itemId } : {}),
+      ...(detail.templateId !== undefined ? { templateId: detail.templateId } : {}),
+      // The SAME stamping `assignSlot` uses — the coordinate is the primary's. A
+      // second convention for "which machine is this layer on" is how one rule
+      // comes to have two spellings.
+      ...(detail.slot !== undefined
+        ? {
+            slot: {
+              channel: detail.slot.channel,
+              layer: detail.slot.layer,
+              server: 'primary' as const,
+            },
+          }
+        : {}),
+      outcome: verdict.outcome,
+      ...(verdict.errorCode !== undefined ? { errorCode: verdict.errorCode } : {}),
+      // `B-209` — the refused line, beside the code it was refused with.
+      ...(verdict.command !== undefined ? { command: verdict.command } : {}),
+      // `R3` — what a `set-pass-timing` press asked for. Absent on every other action.
+      ...(detail.timing !== undefined ? { timing: detail.timing } : {}),
+      // `MEDIA-PLATES-01` — the clip a playback setting or a transport press was about.
+      ...(detail.media !== undefined ? { media: detail.media } : {}),
+    });
+  }
+
+  /**
+   * 🔴 `C-037` — **RECORD A SIGN-IN OR A SIGN-OUT.** The one audit append the BRIDGE makes
+   * directly rather than through a playout verb.
+   *
+   * It exists because these two rows answer a question none of the others can: every other row
+   * says what was done to air, and these say who was at the console and from when. A next-day
+   * question about a take reads that take's `actor`; a question about why that name appears at
+   * all reads these.
+   *
+   * ⚠ **The parameter type is NARROW on purpose.** It cannot express a slot, an item or an
+   * outcome other than `ok`, so this cannot quietly become a second general-purpose append
+   * beside `#recordOutcome` — which is how one rule comes to have two spellings. It carries no
+   * token, no `jti` and no credential: the record keeps who and when, and nothing replayable.
+   */
+  recordIdentityEvent(entry: {
+    action: 'sign-in' | 'sign-out';
+    actor: string;
+    actorSub: string;
+    actorNameTruncated?: true;
+  }): void {
+    this.#recordAudit({ ...entry, outcome: 'ok' });
+  }
+
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (D7, rule 8) — **A STATION ADMIN SIGNED CG BRIDGE IN, OR TRIED.** Written
+   * inside the admin's own request, so the actor, `actorSub` and the console machine are that
+   * admin's. NARROW for `recordIdentityEvent`'s reason, and narrower still: it has no parameter a
+   * password or a token could travel in.
+   */
+  recordBridgeSignIn(entry: {
+    outcome: 'ok' | 'failed';
+    errorCode?: string;
+    /** `RELEASE-0112-01` — `backup`: CG Bridge signed in on the backup engine (absent: the primary). */
+    server?: 'backup';
+  }): void {
+    this.#recordAudit({ action: 'bridge-sign-in', actor: operatorActor(), ...entry });
+  }
+
+  /**
+   * `RELEASE-0113-01` (`R-089`) — **A STATION ADMIN SET THE BACKUP CHANNEL ENTRIES**, or tried: the entries
+   * as asked, inside the admin's own request (so the actor and the console machine are that admin's).
+   */
+  recordBackupChannels(entry: {
+    outcome: 'ok' | 'failed';
+    backupChannels: readonly { channel: number; backupChannel: number }[];
+  }): void {
+    this.#recordAudit({
+      action: 'set-backup-channels',
+      actor: operatorActor(),
+      server: 'backup',
+      outcome: entry.outcome,
+      backupChannels: entry.backupChannels.map((e) => ({
+        channel: e.channel,
+        backupChannel: e.backupChannel,
+      })),
+    });
+  }
+
+  /**
+   * 🔴 `C-038` — **A COMMAND WAS REFUSED BECAUSE OF WHO ASKED.** The one writer.
+   *
+   * `outcome: 'failed'` because that is what happened to the request; the ACTION says why.
+   * The channel that was refused rides `detail` so a dispute can be settled from the log
+   * without a second source — `R-028`'s rule that the real number stays visible, one surface
+   * over.
+   *
+   * ⚠ Called from the gate, which runs OUTSIDE `runAsActor`, so the actor is passed
+   * explicitly rather than read from the ALS store. `#recordAudit` stamps `actorSub` from the
+   * context when it can and the caller's value wins — here the caller always has one.
+   */
+  recordAuthzRefusal(entry: {
+    actor: string;
+    actorSub: string;
+    channel: string;
+    casparChannel?: number;
+  }): void {
+    const { actor, actorSub, channel, casparChannel } = entry;
+    this.#recordAudit({
+      action: 'refused',
+      actor,
+      actorSub,
+      outcome: 'failed',
+      refused: { channel, ...(casparChannel !== undefined ? { casparChannel } : {}) },
+    });
+  }
+
+  /**
+   * B-141 — record ONE auditable action. Fire-and-forget, by contract.
+   *
+   * Never awaited by a caller and never able to refuse one: see the note on
+   * `#audit`. The writer keeps its own error state, which `auditHealth` exposes
+   * so the panel can tell "failing" from "empty" — the distinction the old
+   * "No audit entries yet." could not make.
+   */
+  #recordAudit(entry: Omit<AuditEntry, 'ts'> & { ts?: string }): void {
+    /*
+      🔴 `C-037` / ADR 0010 rule 3 — **THE VERIFIED `sub` IS STAMPED HERE, AT THE ONE PLACE A
+      ROW BECOMES AN `AuditEntry`, and not at the seven call sites that name the actor.**
+
+      Seven sites would be seven chances to forget, and the eighth arrives next month — which is
+      the same argument `actor-context.ts` gives for ALS over a threaded parameter, one level
+      down. Stamped BEFORE the spread, so a caller that states its own `actorSub`
+      (`recordIdentityEvent` does) wins and this is only the default.
+
+      ⚠ Absent, never `undefined`-valued, when there is no proven identity — auth off, or an
+      append the bridge made outside a request. `exactOptionalPropertyTypes` would refuse the
+      other spelling, which is the type system saying the same thing: "no id" and "an id that is
+      nothing" are not the same fact.
+    */
+    const verifiedSub = operatorSub();
+    // `CENTRAL-BRIDGE-01` (`R-068`) — and the console machine, stamped the same way.
+    const consoleAddress = operatorConsoleAddress();
+    const row: AuditEntry = {
+      ...(verifiedSub !== null ? { actorSub: verifiedSub } : {}),
+      ...(consoleAddress !== null ? { consoleAddress } : {}),
+      ...entry,
+      ts: entry.ts ?? new Date().toISOString(),
+    } as AuditEntry;
+    // The in-memory tail is kept in BOTH modes: with no writer it is the only
+    // record, and with one it keeps `auditRecent` answering during the window
+    // before the first flush.
+    this.#audit.unshift(row);
+    if (this.#audit.length > 500) this.#audit.length = 500;
+    this.#auditSeq += 1;
+    // `R-083` — an open Log shows it at once (scoped per console by its channel).
+    this.auditAppended.emit(row);
+    if (this.#auditWriter === null) return;
+    void this.#auditWriter.append(row).catch(() => {
+      // Swallowed DELIBERATELY. The writer has already recorded the failure in
+      // `lastError` / `errorCount` and emitted `error`; re-throwing here would
+      // reject the caller's operation, which is exactly what must not happen.
+    });
+  }
+
+  /**
+   * B-141 — what the operator surface needs to tell three empty states apart:
+   * no writer configured, a writer that is failing, and genuinely empty.
+   */
+  auditHealth(): {
+    configured: boolean;
+    path: string | null;
+    errorCount: number;
+    lastError: string | null;
+  } {
+    return {
+      configured: this.#auditWriter !== null,
+      path: this.#auditLogPath,
+      errorCount: this.#auditWriter?.errorCount ?? 0,
+      lastError: this.#auditWriter?.lastError?.message ?? null,
+    };
+  }
+
+  async auditRecent(
+    limit = 200,
+    action?: AuditEntry['action'],
+    actor?: string,
+  ): Promise<AuditEntry[]> {
+    if (this.#auditLogPath !== null) {
+      try {
+        return await readRecentEntries({
+          filePath: this.#auditLogPath,
+          limit,
+          ...(action !== undefined ? { action } : {}),
+          ...(actor !== undefined ? { actor } : {}),
+        });
+      } catch {
+        // A read failure is reported through `auditHealth`, never as an empty
+        // log — "nothing here" and "I could not look" must not look the same.
+      }
+    }
     let rows = this.#audit;
     if (action !== undefined) rows = rows.filter((r) => r.action === action);
     if (actor !== undefined) rows = rows.filter((r) => r.actor === actor);
     return rows.slice(0, limit);
+  }
+
+  /**
+   * 🔴 `CONSOLE-POLISH-01` (`R-083`) — **ONE PAGE OF THE RECORD**, newest first: up to
+   * {@link AUDIT_PAGE_SIZE} rows before `cursor` that pass `filter` (`auditMatches`, worded as the
+   * console words a row: this station's banks and its template list) AND `visible` (the asking
+   * console's channel grant). Both are asked of every row BEFORE the page is cut, so a scoped console
+   * gets a full page of what it may see — `audit.recent` scoped after its limit.
+   *
+   * With no record file (no `--audit-log-path`), the in-memory tail is paged, its cursor counting rows
+   * since start so a row recorded between two pages shifts nothing.
+   */
+  async auditPage(
+    cursor: AuditCursor | undefined,
+    filter: AuditFilter,
+    visible: (entry: AuditEntry) => boolean,
+  ): Promise<{ entries: AuditEntry[]; next: AuditCursor | null }> {
+    const naming: AuditNaming = {
+      bank: this.fixedLayerBanks(),
+      templateLabel: (templateId) => {
+        const template = this.#templates.getAny(templateId);
+        return template === null ? null : templateDisplayName(template);
+      },
+    };
+    const accept = (entry: AuditEntry): boolean =>
+      visible(entry) && auditMatches(entry, filter, naming);
+    if (this.#auditLogPath !== null && cursor?.file !== MEMORY_AUDIT_CURSOR) {
+      try {
+        return await readAuditPage({
+          filePath: this.#auditLogPath,
+          ...(cursor !== undefined ? { cursor } : {}),
+          limit: AUDIT_PAGE_SIZE,
+          accept,
+        });
+      } catch (err) {
+        /*
+          🔴 `B-310` — a record that rotated across every read of the page is a read that FAILED, said
+          as one: the in-memory tail is only the rows since this start, and paged in its place it would
+          be a wrong page (or an empty one) under a cursor that no longer walks the record.
+        */
+        if (err instanceof AuditRecordMovedError) throw err;
+        // A read failure is reported through `auditHealth`; the in-memory tail still answers.
+      }
+    }
+    // The tail is newest first: row `i` is the `(#auditSeq - 1 - i)`th recorded.
+    const before = cursor?.file === MEMORY_AUDIT_CURSOR ? cursor.before : this.#auditSeq;
+    const entries: AuditEntry[] = [];
+    let i = Math.max(0, this.#auditSeq - before);
+    for (; i < this.#audit.length && entries.length < AUDIT_PAGE_SIZE; i++) {
+      const entry = this.#audit[i];
+      if (entry !== undefined && accept(entry)) entries.push(entry);
+    }
+    return {
+      entries,
+      next:
+        i < this.#audit.length ? { file: MEMORY_AUDIT_CURSOR, before: this.#auditSeq - i } : null,
+    };
+  }
+
+  /** `R-083` — every kept file of the record, newest first, for the logs download; none without one. */
+  async auditFiles(): Promise<AuditFile[]> {
+    return this.#auditLogPath === null ? [] : auditFiles(this.#auditLogPath);
   }
 
   /** R-034 — the station's split delimiters (disk-persisted, shared by every browser). */
@@ -3297,9 +14661,13 @@ export class CasparRuntime {
    * prevent. Every assignment the new catalog orphans is dropped and RETURNED,
    * so the caller can name at the moment of deletion which templates referenced
    * it; those plates then read as unassigned and their take refuses naming the
-   * plate. The prune is `@cg/shared-ipc`'s, the SAME one the boot path uses —
-   * two spellings of "which assignments does this catalog orphan" is how they
-   * come to disagree.
+   * plate. The prune is `@cg/shared-ipc`'s — two spellings of "which assignments
+   * does this catalog orphan" is how they come to disagree.
+   *
+   * ⚠ `PLAYOUT-SOURCES-01` §1.F — **NO ROUTE REACHES THIS ANY MORE.** `sources.set-config` carries the
+   * plate band only ({@link setSourceBand}), and the station's sources are the Playout's, applied by
+   * {@link setResolvedSourceCatalog}, which never prunes. This remains the in-process door for an
+   * EXPLICIT catalogue (tests, embedders), where a hand-made list is still the whole truth.
    */
   setSourceCatalog(next: SourceCatalog): {
     ok: boolean;
@@ -3307,10 +14675,7 @@ export class CasparRuntime {
     message?: string;
     droppedAssignments?: TemplateSourceAssignment[];
   } {
-    const verdict = checkSourceCatalog(next, {
-      fixedBank: this.#fixedBank,
-      reservedLayers: this.#reservedLayers,
-    });
+    const verdict = checkSourceCatalogAgainstBanks(next, this.#fixedBanks, this.#reservedLayers);
     if (!verdict.ok) return verdict;
     this.#sourceCatalog = next;
     this.sourceCatalogChanged.emit(next);
@@ -3330,33 +14695,334 @@ export class CasparRuntime {
    * An assignment naming a source this installation does not define is REFUSED
    * here rather than pruned: the product's own surface cannot produce one, so a
    * caller that does is stale or hand-written, and silently dropping its request
-   * would report a success the caller did not get. The LOAD path prunes instead,
-   * and `pruneAssignmentsForCatalog`'s docstring records why the two doors
-   * answer differently.
+   * would report a success the caller did not get. ⚠ `PLAYOUT-SOURCES-01` — the
+   * LOAD path no longer prunes either: a binding whose entry is gone is kept, and
+   * only an operator removes one (ADR 0010 rule 14).
    */
   setSourceAssignments(next: SourceAssignments): {
     ok: boolean;
     reason?: SourcesSetAssignmentsReason;
     message?: string;
   } {
-    const verdict = checkSourceAssignments(next, { catalog: this.#sourceCatalog });
-    if (!verdict.ok) return verdict;
+    // No plate twice — the shape rule, whatever the catalogue holds.
+    const shape = checkSourceAssignments(next, { catalog: null });
+    if (!shape.ok) {
+      // `B-309` — the sentence carries no id; the ids go to the log.
+      process.stderr.write(
+        `[caspar-bridge] source defaults refused (${shape.reason})` +
+          `${shape.detail === undefined ? '' : `: ${shape.detail}`}\n`,
+      );
+      return { ok: false, reason: shape.reason, message: shape.message };
+    }
+    /*
+      🔴 `PLAYOUT-SOURCES-01` — ONLY A NEW OR CHANGED BINDING MUST BE BINDABLE. One left as it was
+      passes whatever became of its entry (an input the Playout dropped, a hand-made `src-*` id that
+      now reads unassigned): only an operator action removes a binding, and a dropped input must not
+      make every other edit to the defaults impossible.
+    */
+    // `CHANNEL-SOURCES-01` — a binding is new or changed ON ITS CHANNEL (station-wide is its own key).
+    const keyed = (a: TemplateSourceAssignment): { key: string; sourceId: string } => ({
+      key: `${String(a.channel ?? '*')}\u0000${a.templateId}\u0000${a.plateId}`,
+      sourceId: a.sourceId,
+    });
+    const refusal = unbindableChange(
+      next.assignments.map(keyed),
+      this.#sourceAssignments.assignments.map(keyed),
+      this.#sourceCatalog,
+    );
+    if (refusal !== null) return { ok: false, reason: refusal.code, message: refusal.message };
     this.#sourceAssignments = next;
     this.sourceAssignmentsChanged.emit(next);
     return { ok: true };
   }
 
   /**
+   * 🔴 `PLAYOUT-SOURCES-01` — **THE CATALOGUE THE PLAYOUT'S READS BUILT.** Set as-is and published:
+   * no validation (the builder already listed what fails as `unusable`) and — the point — NO PRUNE.
+   * An entry that went away is still in it, `unavailable`, and a binding to it is kept (ADR 0010
+   * rule 14). `pruneAssignmentsForCatalog` never runs on this door.
+   */
+  setResolvedSourceCatalog(next: SourceCatalog): void {
+    if (JSON.stringify(next) === JSON.stringify(this.#sourceCatalog)) return;
+    const epochBefore = this.#sourceCatalog.inputsEpoch;
+    this.#sourceCatalog = next;
+    this.sourceCatalogChanged.emit(next);
+    // `ROUTE-PLATES-01` rule 5 — a read that MOVED the epoch: every route plate resolved from another
+    // one names a holder layer that may no longer be its input's.
+    if (next.inputsEpoch !== epochBefore) this.#flagStaleRoutePlates(next.inputsEpoch);
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 — **THE BOUNDED D10 RE-READ, handed in by the bridge** (the Playout's
+   * reader is built after the runtime). `null` — no Playout reader — confirms nothing, so no Playout
+   * route is ever sent.
+   */
+  setInputsConfirmer(
+    confirm:
+      | ((
+          timeoutMs: number,
+        ) => Promise<{ readonly ok: true; readonly epoch?: string } | { readonly ok: false }>)
+      | null,
+  ): void {
+    this.#confirmInputs = confirm;
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 — **IS `epoch` THE ONE A ROUTE MAY BE SENT FROM?** The catalogue's,
+   * confirmed by a D10 read on the primary's CURRENT connection. Anything else is stale or unknown,
+   * and a route of a stale or unknown epoch is never sent.
+   *
+   * ⚠ And only while server A is the primary (C4). The holder lives on the Playout's one core (their
+   * answer S1), which this station declares as A; `route://H-L` names a channel OF THAT CORE, so on
+   * the backup after a failover it would name the backup's own channel H — something else, or
+   * nothing. A route is never sent to the backup: not mirrored, and not as its new primary either.
+   */
+  #routeEpochIsCurrent(epoch: string | undefined): boolean {
+    const confirmed = this.#routeEpochConfirmed;
+    return (
+      epoch !== undefined &&
+      this.#adapter.currentPrimary === 'A' &&
+      confirmed !== null &&
+      confirmed.generation === this.#amcpGeneration &&
+      confirmed.epoch === epoch &&
+      this.#sourceCatalog.inputsEpoch === epoch
+    );
+  }
+
+  /** `ROUTE-PLATES-01` rule 5 — one bounded D10 read; answers whether it confirmed an epoch. */
+  async #confirmRouteEpoch(): Promise<boolean> {
+    const confirm = this.#confirmInputs;
+    if (confirm === null) return false;
+    const generation = this.#amcpGeneration;
+    const read = await confirm(ROUTE_EPOCH_READ_MS);
+    // A reconnect while the read was out: it confirms nothing about the connection now in force.
+    if (!read.ok || read.epoch === undefined || generation !== this.#amcpGeneration) return false;
+    this.#routeEpochConfirmed = { generation, epoch: read.epoch };
+    return true;
+  }
+
+  /**
+   * `ROUTE-PLATES-01` rule 5 — before a route is seated: the epoch in force if it is already
+   * confirmed on this connection, else one bounded read to confirm it. `false` = no route may be sent.
+   */
+  async #ensureRouteEpoch(): Promise<boolean> {
+    if (this.#routeEpochIsCurrent(this.#sourceCatalog.inputsEpoch)) return true;
+    return (
+      (await this.#confirmRouteEpoch()) &&
+      this.#routeEpochIsCurrent(this.#sourceCatalog.inputsEpoch)
+    );
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 — **A ROUTE PLATE OF ANOTHER EPOCH WAITS, AND SAYS SO.** It keeps its
+   * layer and nothing is sent for it — no route of a stale epoch is ever re-sent — and its row says,
+   * in `FIELD-FIXES-01`'s one line, `Bed 59 · Plate 1: waiting for the Playout's input list.` It is
+   * seated again only from a fresh D10 of the current epoch, by the restore the bridge already has:
+   * the operator's take (or PUT BACK ON AIR, which is one).
+   */
+  #flagStaleRoutePlates(epoch: string | undefined): void {
+    for (const [itemId, records] of this.#liveLayers) {
+      const stale = records.find(
+        (r) => isPlayoutRouteRecord(r) && (epoch === undefined || r.epoch !== epoch),
+      );
+      if (stale !== undefined) this.#recordRouteWaiting(itemId, stale);
+    }
+  }
+
+  /**
+   * `ROUTE-PLATES-01` §1.E — does a SEATED plate of ours sit on this layer right now? The ledger
+   * names it and no `CLEAR` of ours has landed on it since (a teardown sends its `MIXER CLEAR` only
+   * after its `CLEAR` landed, while the ledger still names the layer).
+   */
+  #holdsSeatedPlate(slot: CommandSlot): boolean {
+    const key = adoptionKey(slot);
+    if (this.#emptiedLayers.has(key)) return false;
+    for (const records of this.#liveLayers.values()) {
+      if (records.some((r) => adoptionKey(r.slot) === key)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * `ROUTE-PLATES-01` rule 5 — a take refused because no epoch could be confirmed for its route
+   * plate: before any AMCP, the row says it in its one line, and nothing was sent.
+   */
+  #refuseRouteWaiting(itemId: string, placement: LivePlatePlacement): TakeVerdict {
+    this.#recordTakeRefusal(itemId, {
+      code: ROUTE_WAITING_CODE,
+      plateId: placement.plateId,
+      sourceId: placement.source.id,
+      sourceName: placement.source.name,
+      sourceOrigin: 'input',
+    });
+    const message = routeWaitingMessage(this.#plateLabelOf(itemId, placement.plateId));
+    // The log line keeps the id beside the sentence, for a technician (`B-308`).
+    process.stderr.write(
+      `[caspar-bridge] take refused for ${itemId} (plate "${placement.plateId}"): ${message}\n`,
+    );
+    return { accepted: false, errorCode: ROUTE_WAITING_CODE, message, refusalOnRow: true };
+  }
+
+  /** `ROUTE-PLATES-01` — the row's one line for a route plate that waits, and one log line. */
+  #recordRouteWaiting(itemId: string, record: LiveLayerRecord): void {
+    this.#recordTakeRefusal(itemId, {
+      code: ROUTE_WAITING_CODE,
+      plateId: record.sourceId,
+      sourceOrigin: 'input',
+    });
+    // A log line: it keeps the plate's id, with its `Plate N` beside it (`B-308`).
+    const plate = this.#plateLabelOf(itemId, record.sourceId);
+    process.stderr.write(
+      `[caspar-bridge] ${itemId}: plate "${record.sourceId}"${plate === undefined ? '' : ` (${plate})`} ` +
+        `waits for the Playout's input list (its route belongs to epoch ` +
+        `${record.epoch ?? 'unknown'}); nothing is sent for it.\n`,
+    );
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 (C3) — **AFTER AN AMCP RECONNECT, D10 AGAIN, BOUNDED.** Only when the
+   * ledger holds a route plate. A read that fails, or confirms another epoch, leaves each such plate
+   * waiting ({@link #flagStaleRoutePlates}); a read that confirms the plates' own epoch changes
+   * nothing — the reconnect restores them exactly as today (mixer state only, never a `PLAY`).
+   */
+  async #routeEpochAfterReconnect(): Promise<void> {
+    const anyRoute = [...this.#liveLayers.values()].some((records) =>
+      records.some(isPlayoutRouteRecord),
+    );
+    if (!anyRoute) return;
+    const confirmed = await this.#confirmRouteEpoch();
+    this.#flagStaleRoutePlates(confirmed ? this.#sourceCatalog.inputsEpoch : undefined);
+  }
+
+  /**
+   * 🔴 `PLAYOUT-SOURCES-01` §1.C — **THE ONE RETRY'S READ, handed in by the bridge** (the Playout's
+   * reader is built after the runtime). `null` — no Playout media — means no retry at all.
+   */
+  setMediaFreshener(
+    read: ((sourceId: string, played: string) => Promise<string | null>) | null,
+  ): void {
+    this.#freshMediaClip = read;
+  }
+
+  /**
+   * `PLAYOUT-SOURCES-01` §1.F — **THE PLATE BAND, the one catalogue fact CG Control still owns.**
+   * Validated against every declared bank and the reserved layers (the same function the boot path
+   * calls), applied to the catalogue in force, published. Cascades nothing.
+   */
+  setSourceBand(range: LiveSourceLayerRange | undefined): {
+    ok: boolean;
+    reason?: SourcesSetConfigReason;
+    message?: string;
+  } {
+    const verdict = checkSourceCatalogAgainstBanks(
+      { sources: [], ...(range !== undefined ? { layerRange: range } : {}) },
+      this.#fixedBanks,
+      this.#reservedLayers,
+    );
+    if (!verdict.ok) return verdict;
+    const next: SourceCatalog = { ...this.#sourceCatalog };
+    if (range === undefined) delete next.layerRange;
+    else next.layerRange = range;
+    this.#sourceCatalog = next;
+    this.sourceCatalogChanged.emit(next);
+    return { ok: true };
+  }
+
+  /**
+   * 🔴 `PLATE-BAND-01` — **THE PLATE BAND IN FORCE, and where it came from**: the declared band, or —
+   * on a station linked to the Playout that declares none — the plate band 60–79 unless this station's
+   * own config claims a layer there, or none. `@cg/shared-ipc`'s {@link plateBandInForce} decides, over
+   * this runtime's declared band, link, banks, reservation and policy AS THEY ARE NOW, so a bank change
+   * moves it with no second copy to update. Published beside the catalogue (`sources.config`) and read
+   * by the CLI's boot line; never written into the station's config.
+   */
+  plateBandInForce(): PlateBandInForce | null {
+    return plateBandInForce({
+      declared: this.#sourceCatalog.layerRange,
+      playoutLinked: this.#playoutLinked,
+      banks: this.#fixedBanks,
+      reservedLayers: this.#reservedLayers,
+      policyRanges: Object.values(this.#layerPolicy),
+    });
+  }
+
+  /**
+   * The band a take seats plates in — {@link plateBandInForce}'s range, or `undefined` when none is
+   * in force. The seating plan, the binding-change check and the own-layer test all read THIS.
+   */
+  #plateBand(): LiveSourceLayerRange | undefined {
+    return this.plateBandInForce()?.range;
+  }
+
+  /**
    * R-030 — the channels this install DECLARES.
    *
-   * The fixed bank is the only channel authority the install has (the SPA's
+   * The fixed banks are the only channel authority the install has (the SPA's
    * `ChannelScope` reads the same fact), and channel 1 is the documented default
    * when no bank is declared — `FixedLayerBankSchema`'s own default, not a second
-   * guess invented here. When the channel list eventually arrives from an API,
-   * THIS is the one function that changes.
+   * guess invented here.
+   *
+   * 🔴 `MULTI-CHANNEL-01` — **EVERY BANK'S CHANNEL, in channel order.** It returned only the one
+   * bank's channel; it now returns the channel of each declared bank, and every door that asks
+   * "does this station operate channel N" — the station fence, the restore fence, the orphan
+   * sweep, the playout rows, the lock scope, the permitted strip, the mode and output reads, the
+   * settings store — reads the plural through THIS function and {@link #isDeclaredChannel}, never
+   * a second copy of the list (golden rule 6). With one bank the answer is exactly what it was.
    */
   #declaredChannels(): number[] {
-    return [this.#fixedBank?.channel ?? DEFAULT_CHANNEL];
+    if (this.#fixedBanks.length > 0) return this.#fixedBanks.map((bank) => bank.channel);
+    // `DESKTOP-APPS-01-D` j — a station still in first-run has declared nothing yet.
+    if (this.#declaresNothingWithoutBank) return [];
+    return [DEFAULT_CHANNEL];
+  }
+
+  /**
+   * 🔴 `CHANNEL-AUTHORITY-01` — **DOES THIS STATION OPERATE `channel`? The ONE answer.**
+   *
+   * Membership in {@link #declaredChannels}, and nothing else: not a grant (a principal may be
+   * permitted a channel this station does not drive — the test Playout's `cg-op2` holds the
+   * Playout's own programme channel), not a catalogue row, not a server observation. Every door
+   * that asks "may this station write to channel N" asks THIS — the request gate's `not-declared`
+   * refusal, the restore door's `not-declared` skip, the orphan sweep's candidates, the playout
+   * tab's rows and the channel-settings store — so none of them can come to hold a second copy of
+   * the list that agrees today (golden rule 6). Two of them did, before this: the restore fence
+   * read the bank directly and let everything through with no bank, and the settings store kept
+   * the list it was handed at boot.
+   */
+  #isDeclaredChannel(channel: number): boolean {
+    return this.#declaredChannels().includes(channel);
+  }
+
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` rule 7 — **DOES THIS BRIDGE TAKE IN `channel`'S OSC?** A declared channel,
+   * or any channel while none is declared (first-run asks about a channel before it declares it).
+   * The ONE answer the transport filter and {@link channelOccupancy} both read: a channel whose OSC
+   * is dropped must never be judged from the tap, or its occupancy reads "empty" for want of data.
+   */
+  #servesOscChannel(channel: number): boolean {
+    const declared = this.#declaredChannels();
+    return declared.length === 0 || declared.includes(channel);
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` §1.E — **DOES THIS STATION'S OWN CONFIG DECLARE THIS LAYER?** A bank row
+   * (the beds included — one union, `LayerManager.isFixed`), the Live Source band in force, or a
+   * dynamic policy range; on a declared channel; never a reserved (playout) layer. The send seam's
+   * guard reads it for C5's "`CLEAR <ch>-<L>` only on your own layers (50 to 99)".
+   *
+   * CONFIG, not bookkeeping — the same discipline {@link clearLayer} keeps: a stale ledger that
+   * names a layer the station no longer declares (a plate seated at 30 before the 2026-09-14
+   * re-cut) does not become "ours" by having been recorded. On every station that can boot these
+   * all lie inside 50–99, so there the rule is the contract's, word for word; a configuration built
+   * past the boot, as the suite's legacy fixtures are, keeps today's wire.
+   */
+  #isOwnConfiguredLayer(channel: number, layer: number): boolean {
+    if (!this.#isDeclaredChannel(channel) || this.#reservedSet.has(layer)) return false;
+    if (this.#layers.isFixed({ channel, layer })) return true;
+    // `PLATE-BAND-01` — the band IN FORCE: a default band's plates are ours to clear like a declared one's.
+    const band = this.#plateBand();
+    if (band !== undefined && layer >= band.start && layer <= band.end) return true;
+    return Object.values(this.#layerPolicy).some(([low, high]) => layer >= low && layer <= high);
   }
 
   /** R-030 — the configured raster(s) plus what `INFO <channel>` reported. */
@@ -3427,6 +15093,48 @@ export class CasparRuntime {
   }
 
   /**
+   * `B-236` — adopt the server's raster over a contradicting config, unless something is
+   * ON AIR. Returns what changed, or null.
+   *
+   * ── WHY THE GATE, WHEN THE PRE-STATE IS ALREADY BROKEN ──────────────────────
+   *
+   * A standing mismatch means every graphic on the channel is ALREADY mis-placed, so the
+   * instinct is that correcting it can only help. It cannot, mid-show, and the reason is
+   * that the raster reaches air by TWO routes with different timings. The template gets it
+   * once, at `CG ADD`, baked into `?cw=&ch=`; a Live Source plate gets it every time
+   * `liveSourceFitFor` recomputes, which a look switch does with pure `MIXER FILL` and no
+   * re-ADD. Adopt under a live row and the next switch fills the plate against the NEW
+   * raster while the template above it still holds the OLD one — the plate leaves its own
+   * template's box, on air, mid-shot. Uniformly mis-placed is a worse picture than correct;
+   * it is a better picture than coming apart.
+   *
+   * Reuses `#onAirCount` — the SAME predicate `setChannelSettings` and R-010's `setConfig`
+   * read, never a second local list of what counts as live (golden rule 6). Fails closed:
+   * `unconfirmed` / `pending` count as on air.
+   *
+   * ⚠ **This is NOT the operator refusal `setChannelSettings` performs, and the difference
+   * is which way the value moves.** That one refuses a new CLAIM of unknown truth. This one
+   * declines, for now, to delete a claim already known false. So there is no message and no
+   * refusal shape: nothing was asked for, and nothing is owed an answer.
+   *
+   * ⭐ **The window this leaves open, stated rather than papered over.** The mode read is
+   * ONE-SHOT per (channel, primary), so a deferral is retried only when the next reading
+   * arrives — a reconnect, a failover or a restart. An install that has never adopted and
+   * whose bridge restarts mid-show therefore keeps the wrong raster until the show ends.
+   * That is the state it was already in, so nothing regresses; it is simply not yet closed.
+   * Closing it means retrying when air clears, and what would justify building that is a
+   * measurement on the plant of whether a mid-show adopt really does separate a plate from
+   * its template — the thing this gate is currently assuming on argument alone.
+   */
+  #adoptChannelRaster(channel: number): AdoptedRaster | null {
+    if (this.#onAirCount() > 0) return null;
+    const adopted = this.#channelSettings.adoptObserved(channel);
+    if (adopted === null) return null;
+    process.stderr.write(adoptionNotice(adopted));
+    return adopted;
+  }
+
+  /**
    * R-030 — read the channel's REAL video mode off the server and compare it
    * with what config claims.
    *
@@ -3448,18 +15156,38 @@ export class CasparRuntime {
    */
   async #readChannelMode(channel: number): Promise<void> {
     try {
-      // `target: 'primary'` — the geometry that matters is the channel currently
-      // ON AIR, and under a mirror strategy the default `'both'` fans out and can
-      // return the BACKUP's reply as the winner. That would attribute B's video
-      // mode to the live channel, which is the wrong machine's answer to the
-      // question actually being asked.
-      const result = await this.#adapter.send(`INFO ${String(channel)}`, {
+      // `B-287` — under `mirror-sync` this read fans out to both servers, and when the
+      // primary fails and the backup answers, `result.winner` is the BACKUP. That is why
+      // every fact below is filed under `result.winner`, never under whoever was primary:
+      // the geometry that matters is the machine that actually answered. (A `target:
+      // 'primary'` option once sat here believing it prevented the fan-out; the adapter
+      // never read it, and it was deleted — `FOLLOWUPS-01` C.)
+      const result = await this.#adapter.send(this.#builder.info(channel), {
         priority: 'low',
-        target: 'primary',
       });
       const response = result.response;
-      if (response.kind !== 'ok-multi') return;
-      const mode = parseVideoModeFromInfo(response.lines.join('\n'));
+      /*
+        🔴 `B-189` — REAL CasparCG answers `INFO <channel>` with `201 INFO OK` plus ONE
+        payload chunk (bare `\n` inside it), which the parser classifies `ok-line`. This
+        used to accept `ok-multi` ALONE, so every real reply was discarded here, the latch
+        below never set, the sweep re-sent `INFO` forever, and `rasterVerdict` answered
+        `unreadable` on every real install — R-030's whole check disarmed. It was green in
+        every suite because `@cg/amcp-mock` answered `ok-multi`, i.e. the mock spoke this
+        line's expectation rather than the server's dialect (the reply shape is captured
+        verbatim in `channel-settings.test.ts`; the mock now speaks it). Both kinds are
+        accepted: a reply's framing class must not decide whether a fact is recorded.
+      */
+      const xml =
+        response.kind === 'ok-line'
+          ? response.data
+          : response.kind === 'ok-multi'
+            ? response.lines.join('\n')
+            : null;
+      if (xml === null) return;
+      // C-029 — the RUNNING consumers ride this same reply, BEFORE the mode parse: an
+      // unreadable mode must not cost the output check its reading.
+      this.#ingestChannelInfo(result.winner, channel, xml);
+      const mode = parseVideoModeFromInfo(xml);
       if (mode === null) return;
       // Attributed to the server that actually ANSWERED, never to whoever was
       // primary when the send started: a failover mid-flight would otherwise
@@ -3471,20 +15199,152 @@ export class CasparRuntime {
         mode,
         raster: videoModeRaster(mode) ?? null,
       });
-      if (!changed) return;
+      const adopted = this.#adoptChannelRaster(channel);
+      // Adoption runs BEFORE the publish, so a mismatch the console corrects in the same
+      // breath never reaches a browser: the red banner must not flash for one frame on
+      // every boot of a non-1080 install and then vanish.
+      if (!changed && adopted === null) return;
       this.#announceChannelSettings(channel);
     } catch {
       // See above: an unreadable mode stays absent, never guessed.
     }
   }
 
-  settingsGet(): Settings {
-    return this.#settings;
+  /**
+   * `C-029` — the DECLARED half: `INFO CONFIG`, once per connection.
+   *
+   * Sent the way the mode read is sent — through the adapter, `low` priority, filed under the
+   * server that answered — and for the same reasons. Latches on ANY `201` reply: a reply that is not a
+   * configuration (an older build, a different dialect) is recorded as `null` and NOT
+   * re-asked, because asking again would not make it one; only a refusal or a timeout
+   * leaves the latch unset so the next tick tries again. Keyed by the server that ANSWERED.
+   */
+  async #readServerConfig(label: ServerLabel): Promise<void> {
+    this.#configReadInFlight.add(label);
+    try {
+      const result = await this.#adapter.send('INFO CONFIG', { priority: 'low' });
+      const response = result.response;
+      const xml =
+        response.kind === 'ok-line'
+          ? response.data
+          : response.kind === 'ok-multi'
+            ? response.lines.join('\n')
+            : null;
+      if (xml === null) return;
+      this.#declaredConsumers.set(result.winner, parseDeclaredConsumersFromConfig(xml));
+      for (const channel of this.#declaredChannels()) {
+        this.#recomputeOutputCheck(result.winner, channel);
+      }
+    } catch {
+      // Unreadable stays absent and is asked again next tick — never guessed.
+    } finally {
+      this.#configReadInFlight.delete(label);
+    }
   }
-  settingsSet(patch: Partial<Settings>): Settings {
-    this.#settings = { ...this.#settings, ...patch };
-    this.settingsChanged.emit(this.#settings);
-    return this.#settings;
+
+  /**
+   * `C-029` — the slow re-read of one channel's RUNNING consumers. The first reading rides
+   * the mode read's own reply (`#readChannelMode` → `#ingestChannelInfo`); this exists only
+   * so the alarm can clear or fire without a reconnect.
+   */
+  async #readChannelOutputs(channel: number): Promise<void> {
+    try {
+      const result = await this.#adapter.send(this.#builder.info(channel), { priority: 'low' });
+      const response = result.response;
+      const xml =
+        response.kind === 'ok-line'
+          ? response.data
+          : response.kind === 'ok-multi'
+            ? response.lines.join('\n')
+            : null;
+      if (xml === null) return;
+      this.#ingestChannelInfo(result.winner, channel, xml);
+    } catch {
+      // A missed re-read keeps the previous verdict; the next interval tries again.
+    }
+  }
+
+  /** `C-029` — record what an `INFO <channel>` reply says is RUNNING, then re-judge. */
+  #ingestChannelInfo(label: ServerLabel, channel: number, xml: string): void {
+    const running = parseRunningConsumersFromInfo(xml);
+    // No `<output>` at all is "could not check", never an empty channel.
+    if (running === null) return;
+    let byChannel = this.#runningConsumers.get(label);
+    if (byChannel === undefined) {
+      byChannel = new Map();
+      this.#runningConsumers.set(label, byChannel);
+    }
+    byChannel.set(channel, { running, at: new Date().toISOString() });
+    if (!this.#outputReadAt.has(label)) this.#outputReadAt.set(label, Date.now());
+    this.#recomputeOutputCheck(label, channel);
+  }
+
+  /**
+   * `C-029` — the verdict for one server's one channel, from the two halves, published
+   * only when its CONTENT changes (a re-read that agrees refreshes `observedAt` in place
+   * and is carried by the next health emit rather than forcing one).
+   *
+   * The stderr line fires on the TRANSITION into `missing` and once when it clears —
+   * `#announceChannelSettings`'s shape, so a settled fault cannot bury the next one.
+   */
+  #recomputeOutputCheck(label: ServerLabel, channel: number): void {
+    const declaredAll = this.#declaredConsumers.get(label);
+    if (declaredAll === undefined) return; // the declaration has not been read yet
+    const observed = this.#runningConsumers.get(label)?.get(channel);
+    if (observed === undefined) return; // the channel has not been read yet
+    const declared =
+      declaredAll === null
+        ? null
+        : (declaredAll.find((d) => d.channel === channel)?.consumers ?? []);
+    // `DESKTOP-APPS-01-D` g — an absence `INFO` cannot prove is UNKNOWN, never MISSING.
+    const { missing, unknown } =
+      declared === null ? { missing: [], unknown: [] } : judgeConsumers(declared, observed.running);
+    let byChannel = this.#outputChecks.get(label);
+    if (byChannel === undefined) {
+      byChannel = new Map();
+      this.#outputChecks.set(label, byChannel);
+    }
+    const previous = byChannel.get(channel);
+    const next: ChannelOutputCheck = {
+      channel,
+      declared,
+      running: observed.running,
+      missing,
+      ...(unknown.length > 0 ? { unknown } : {}),
+      observedAt: observed.at,
+    };
+    byChannel.set(channel, next);
+    const changed =
+      previous === undefined ||
+      JSON.stringify({ ...previous, observedAt: '' }) !==
+        JSON.stringify({ ...next, observedAt: '' });
+    if (changed) {
+      const wasMissing = (previous?.missing.length ?? 0) > 0;
+      if (missing.length > 0 && !wasMissing) {
+        process.stderr.write(describeMissingOutput(label, next));
+      } else if (unknown.length > 0 && (previous?.unknown ?? []).length === 0) {
+        process.stderr.write(describeUnknownOutput(label, next));
+      } else if (missing.length === 0 && wasMissing) {
+        process.stderr.write(
+          `[caspar-bridge] channel ${String(channel)} output on server ${label} is running again ` +
+            `(${observed.running.map((r) => r.kind).join(', ')}).\n`,
+        );
+      }
+      this.healthChanged.emit(this.health());
+    }
+    /*
+      🔴 `FOLLOWUPS-01` A (the owner, 2026-09-28) — a missing consumer is REPORTED and never
+      created. `--create-missing-consumers` and its `ADD` path are retired: a consumer `ADD` on a
+      programme channel is one of the Playout's C5 commands we never send, and the send seam
+      refuses one anyway (`amcp-guard.ts`). Nothing here sends anything.
+    */
+  }
+
+  /** `C-029` — the checks as the health snapshot carries them, for tests and diagnostics. */
+  outputChecksState(label: ServerLabel = this.#adapter.currentPrimary): ChannelOutputCheck[] {
+    return [...(this.#outputChecks.get(label)?.values() ?? [])].sort(
+      (a, b) => a.channel - b.channel,
+    );
   }
 
   updateRequest(
@@ -3547,13 +15407,41 @@ export class CasparRuntime {
     // window where a just-arrived foreign producer gets allocated over. Same
     // sample, same predicate, run synchronously before the scan.
     this.#reconcileForeignQuarantine();
+    /*
+      🔴 `CHANNEL-AUTHORITY-01` — **ON THE CHANNEL THIS STATION DECLARES, not on a constant.**
+
+      This read `DEFAULT_CHANNEL` (1) whatever the bank said. The shipped policy is empty, so a
+      stock station never reaches here; a deployment that declares its own ranges does, and on a
+      channel-2 station its take went out as `CLEAR 1-10`, `MIXER 1-10 VOLUME 0`, `CG 1-10 ADD`,
+      `CG 1-10 PLAY` — measured, and the 2026-09-22 incident's exact shape through a door that
+      names no channel at all.
+
+      ⚠ The FIRST declared channel, because a station declares one (one bank, one channel, v1). A
+      second declared channel makes "which channel does a dynamic load mean" a question the load
+      itself has to answer — `R-062` gap 1 — and must not be settled here by picking one.
+
+      🔴 `MULTI-CHANNEL-01` — **SO IT IS NOT: A STATION THAT DECLARES TWO CHANNELS REFUSES A LOAD
+      THAT NAMES NONE.** `stack.load` carries no coordinate, and picking the first declared
+      channel would put a graphic on a channel the operator may not be looking at — the same
+      shape as the incident above, one channel along. The load is refused (`load()` reports
+      `no-layer`) and nothing is sent; a row's own load (`fixedLayers.load`) names its coordinate
+      and is unaffected. With one declared channel this is exactly what it was.
+    */
+    const declared = this.#declaredChannels();
+    if (declared.length > 1) {
+      throw new Error(
+        `a load that names no channel cannot be placed on a station that declares ` +
+          `${String(declared.length)} channels`,
+      );
+    }
+    const channel = declared[0] ?? DEFAULT_CHANNEL;
     try {
-      return this.#layers.allocate(templateId, DEFAULT_CHANNEL);
+      return this.#layers.allocate(templateId, channel);
     } catch (err) {
       // Unknown template type → fall back to the `custom` range. An exhausted
       // range (OutOfLayersError) propagates to the caller as a failed load.
       if (err instanceof UnknownTemplateTypeError) {
-        return this.#layers.allocate('custom', DEFAULT_CHANNEL);
+        return this.#layers.allocate('custom', channel);
       }
       throw err;
     }
@@ -3594,10 +15482,50 @@ export class CasparRuntime {
   }
 
   /**
+   * 🔴 `BRIDGE-TRUTH-01` §2 / `B-253` — **RESET THE MIXER OF A LAYER THIS BRIDGE HAS JUST
+   * EMPTIED: `MIXER <ch>-<layer> CLEAR`.**
+   *
+   * `CLEAR` destroys the PRODUCER and leaves the MIXER: CasparCG's `clear_command` erases the
+   * layer, `mixer_clear_command` erases its transform, and a layer's state export iterates the
+   * layers alone, so `INFO` cannot show what is left. A load stops after its muted `CG ADD`
+   * (`#sendAdd`), so a cleared row's layer keeps `VOLUME 0` — and the next producer on it that
+   * does not come through our take (which re-asserts `VOLUME 1`) plays silent. Measured by the
+   * Playout team on a 2.5.0-based core, `stage.cpp` unmodified: `VOLUME 0` → `CLEAR` → still `0`
+   * → `MIXER CLEAR` → `1`.
+   *
+   * ── TWO GUARDS, BOTH REQUIRED — the reset discards the WHOLE transform ────────
+   *
+   *   1. **Only a layer we have just EMPTIED** — the `CLEAR` must have landed on the current
+   *      primary, the same test `#markAdoptedOnPrimary` uses for "provably cleared". On an
+   *      occupied layer the reset would discard a deliberate volume, fill, clip or blend under a
+   *      live producer. ⚠ Under mirror-sync the reset fans out to the backup too, and the adapter
+   *      reports one winner rather than a per-server outcome — so a backup whose own `CLEAR`
+   *      failed would have its producer's mixer reset. The same exposure the plate teardown's
+   *      `MIXER CLEAR` has always had; named, not closed.
+   *   2. **Never past our own band** — inside A declared bank (`#layers.isFixed`, keyed on the
+   *      whole coordinate, so `MULTI-CHANNEL-01`'s second bank is inside and an undeclared
+   *      channel's layer 99 is not). An orphan cleared through `layers.clear` outside every bank
+   *      is somebody else's layer, and so is a playout layer (`playoutClear` does not call this).
+   *
+   * The adopt-`CLEAR` in `#adoptLayer` does not call this either: its layer is re-occupied at
+   * once by our own muted `CG ADD`, so the residue this removes cannot outlive it there.
+   * Safe on an already-reset layer — `tweens_.erase` of an absent key removes nothing.
+   */
+  async #resetEmptiedLayerMixer(
+    slot: CommandSlot,
+    cleared: { ok: boolean; onPrimary: boolean },
+  ): Promise<void> {
+    if (!cleared.ok || !cleared.onPrimary) return;
+    if (!this.#layers.isFixed(slot)) return;
+    await this.#send(this.#builder.mixerClear(slot), this.#nextSeq(), 'urgent');
+  }
+
+  /**
    * B-056 — a CLEAR for this layer executed on the CURRENT PRIMARY: mark it
    * adopted (reconnect-reconciliation bookkeeping, unchanged) AND resolve any
-   * owned-slot occupancy warning — the primary's layer state is now provably
-   * clean. Shared by every adoption-marking site (adopt / out / remove /
+   * owned-slot occupancy warning — the primary's layer provably has NO PRODUCER
+   * (`BRIDGE-TRUTH-01` §3: not "clean" — a `CLEAR` leaves the mixer, which is
+   * `#resetEmptiedLayerMixer`'s subject). Shared by every adoption-marking site (adopt / out / remove /
    * operator clearLayer) so "adopted" and "provably cleared" can never drift.
    */
   #markAdoptedOnPrimary(slot: CommandSlot): void {
@@ -3663,7 +15591,28 @@ export class CasparRuntime {
     if (session.state !== 'healthy') return;
 
     const foreign = new Map<string, { slot: CommandSlot; producer: string }>();
+    const live = this.#liveLayerKeys();
     for (const occ of session.osc.occupancy.occupied(this.#occupancyStaleMs)) {
+      /*
+       * C-015 phase 5 (C-014) — DOOR 2 of 3: a bridge-owned Live Source layer is
+       * not foreign, so it is never quarantined from allocation.
+       *
+       * ⚠ THIS TEST IS FIRST, BEFORE THE `html` TEST BELOW, AND THE ORDER IS THE
+       * TASK. The `html` test is a KIND heuristic stating "only html can be
+       * ours", which is precisely what a bridge-owned NON-html layer defeats: a
+       * live producer reports `route` / `decklink` / `ndi`, so it falls straight
+       * through that test into `foreign` and gets quarantined — the layer the
+       * bridge is about to composite a guest onto, fenced off from allocation by
+       * the bridge itself.
+       *
+       * Consulting the DECLARATION before the detection is R-009's own doctrine
+       * ("declared, never detected", `design.md` §4). Placed after the kind test
+       * it would still skip today — but only because live producers happen never
+       * to be `html`, which makes the correctness of this door depend on a fact
+       * about a different one. Ownership is not a kind question, and this line
+       * does not ask a kind question.
+       */
+      if (live.has(adoptionKey(occ))) continue;
       if (occ.producer === 'html') continue;
       foreign.set(adoptionKey(occ), {
         slot: { channel: occ.channel, layer: occ.layer },
@@ -3679,9 +15628,11 @@ export class CasparRuntime {
       if (this.#layers.isAllocated(slot)) continue;
       this.#layers.quarantine(slot);
       // The one line whoever wonders why a layer is being skipped will grep for.
+      // `PLAYOUT-SOURCES-01` §1.E / v1.3 §3.3 — an OSC producer string is reduced to its KIND
+      // before it is printed: what a layer holds, never where it reads from.
       process.stderr.write(
         `[caspar-bridge] layer ${String(slot.channel)}-${String(slot.layer)} quarantined from ` +
-          `allocation: a foreign producer (${producer}) is on it. It will not be allocated or ` +
+          `allocation: a foreign producer (${oscProducerKind(producer)}) is on it. It will not be allocated or ` +
           `cleared; it returns to the pool when the producer leaves.
 `,
       );
@@ -3742,14 +15693,194 @@ export class CasparRuntime {
     line: string,
     seq: number,
     priority: 'urgent' | 'normal',
-  ): Promise<{ ok: boolean; onPrimary: boolean; errorCode?: string }> {
+    options: {
+      /**
+       * `ROUTE-PLATES-01` — this line is a PLAYOUT ROUTE's `LOADBG`/`PLAY`, resolved from this epoch.
+       * It is sent only while that is the current, confirmed epoch (rule 5), and to the primary
+       * only, never journaled (C4). Absent on every other line — a hand-made `route://` included.
+       */
+      readonly routeEpoch?: string;
+      /**
+       * `ROUTE-PLATES-01` §0.6 — the ONE door that addresses a channel this station does not
+       * declare: {@link takeStrayOffAir}, on our own recorded stray's exact coordinate (never in
+       * 1–49). The guard lets that coordinate through; nothing else is exempt. The prompt stopped
+       * this door's removal and left it to the owner, so it is kept — and named — rather than
+       * silently closed by the guard.
+       */
+      readonly strayTarget?: CommandSlot;
+      /**
+       * `PLAYOUT-FEATURES-01` A (`B-286`) — the line SERVER B gets instead (its own clip), or `null`: B is sent
+       * nothing (the adapter's `SendOptions.serverB`). Absent on every line but a clip's `PLAY`.
+       */
+      readonly serverB?: string | null;
+    } = {},
+  ): Promise<{ ok: boolean; onPrimary: boolean; errorCode?: string; command?: string }> {
+    /*
+      `B-198` TEST-ONLY — the fault injector. Ahead of the write, so the delay lands BETWEEN
+      one plate's `MIXER` lines and the next plate's, exactly as a scheduling hiccup would.
+      The boundary is a CHANGE OF TARGET: `MIXER 1-30 …` followed by `MIXER 1-31 …`. A plate's
+      own `FILL`/`CLIP` pair is left alone, because the reported event did not separate those.
+    */
+    /*
+      🔴 `B-221` — **THE INVARIANT AT THE SEAM: a staged line cannot leave this process
+      unless the accumulator that will commit it is armed for its channel.**
+
+      Every `MIXER … DEFER` on the wire is a promise that a `MIXER <ch> COMMIT` follows, and
+      the only thing that keeps that promise is `#stagedMixerChannel`: the batch's own
+      commit, the failure-path commit and `B-199`'s `finally` all read it and send nothing
+      when it is `null`. So the one way to write an unbalanced batch is to stage a line
+      without arming it — a new staging site that forgets the assignment, or a hand-built
+      `${line} DEFER` that bypasses `deferMixer` — and that mistake is silent by
+      construction: the server acks the line, the commit is skipped because nothing was
+      recorded, and the change waits in the server for whatever commits next.
+
+      Checked HERE and not in a helper, because a helper can be bypassed and this seam
+      cannot: every AMCP line passes through it (`B-209`'s argument for the same spot).
+      Thrown BEFORE the write, so the unbalanced line never reaches the server; thrown
+      BEFORE `#send`'s `try`, so it escapes loudly instead of becoming `{ ok: false }`;
+      and inside the batch it is `B-199`'s guard that catches it — commits what WAS armed
+      and puts the ledger back — so the failure is refused to the operator rather than
+      landing on air.
+
+      ⚠ Blind by design to a batch that arms correctly on a path with no commit at all, to a
+      commit that is sent but not delivered (that is `#flushOrphanedStaging`'s subject, and
+      a shape, not a delivery, is what a seam can check), and to anything another client
+      stages. Named in `B-221`.
+    */
+    if (line.endsWith(' DEFER')) {
+      const channel = Number(line.split(' ')[1]?.split('-')[0]);
+      if (!Number.isInteger(channel) || this.#stagedMixerChannel !== channel) {
+        throw new Error(
+          `INVARIANT (B-221): a MIXER line was staged with no armed commit for its channel ` +
+            `(armed: ${String(this.#stagedMixerChannel)}) — it would never be committed. ` +
+            `Line: ${summarizeWireLine(line)}`,
+        );
+      }
+    }
+    /*
+      🔴 `ROUTE-PLATES-01` §1.E — **THE GUARD AT THE SEAM: a line this station may never send does
+      not leave the process.** Contract v1.3 rule 3 and the Playout's C5 additions, asked of the one
+      pure function (`amcp-guard.ts`): a target that is not a declared programme channel (the
+      Playout's holder and guard channels never are), a whole-channel `CLEAR`, a channel-wide `MIXER
+      CLEAR`, `SWAP`, `SET MODE`, a consumer `ADD`/`REMOVE`, a `CLEAR` outside 50–99, a `MIXER
+      CLEAR` under a seated plate, a `route://` with no layer. And rule 5: a Playout route's line is
+      sent only from the current, confirmed epoch. A refusal is answered like a refused command —
+      the caller's refusal path runs — logged, and NOTHING is sent.
+    */
+    /*
+      🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — SERVER B HAS NO COPY AND IS THE PRIMARY (after a failover): the
+      clip cannot be played there, and B is never sent a path it has not listed. Refused like a refused
+      `PLAY`, with nothing sent.
+    */
+    if (options.serverB === null && this.#adapter.currentPrimary === 'B') {
+      this.#clearExpiry(seq);
+      this.#reconciler.applyAck(seq, false, BACKUP_NO_COPY_CODE);
+      return {
+        ok: false,
+        onPrimary: false,
+        errorCode: BACKUP_NO_COPY_CODE,
+        command: summarizeWireLine(line),
+      };
+    }
+    /*
+      🔴 `B-316` — SERVER B IS THE PRIMARY (after a failover) AND HAS NO LINE FOR THIS ONE: no backup channel
+      in force for its channel, a `route://`, or a line its guard refuses. Refused like a refused command,
+      with its own code, and NOTHING is sent — the adapter would refuse it too, but as a thrown error.
+    */
+    if (this.#adapter.currentPrimary === 'B') {
+      const onB = this.#serverBVerdict(options.serverB ?? line);
+      if ('refused' in onB) {
+        this.#clearExpiry(seq);
+        this.#reconciler.applyAck(seq, false, onB.refused);
+        return {
+          ok: false,
+          onPrimary: false,
+          errorCode: onB.refused,
+          command: summarizeWireLine(line),
+        };
+      }
+    }
+    const refusal =
+      options.routeEpoch !== undefined && !this.#routeEpochIsCurrent(options.routeEpoch)
+        ? {
+            code: ROUTE_EPOCH_STALE_CODE,
+            reason:
+              `a route of epoch ${options.routeEpoch === '' ? 'unknown' : options.routeEpoch} is ` +
+              `not the Playout's current, confirmed one (rule 5)`,
+          }
+        : amcpLineRefusal(line, {
+            isDeclaredChannel: (channel) =>
+              this.#isDeclaredChannel(channel) || channel === options.strayTarget?.channel,
+            seatedPlateOn: (channel, layer) => this.#holdsSeatedPlate({ channel, layer }),
+            isOwnLayer: (channel, layer) =>
+              this.#isOwnConfiguredLayer(channel, layer) ||
+              (channel === options.strayTarget?.channel && layer === options.strayTarget.layer),
+            playoutRoute: options.routeEpoch !== undefined,
+            // `MEDIA-PLATES-01` — `PAUSE` / `RESUME` / `CALL` only where the ledger holds a clip of ours.
+            clipOn: (channel, layer) => this.#holdsClip(channel, layer),
+            // `PLAYOUT-FEATURES-01` C — never the Playout's playout layer L; never a raise on the box.
+            playoutLayerOn: (channel, layer) => this.#isPlayoutPlaylistLayer(channel, layer),
+            audioLockedOn: (channel, layer) => this.#audioLockedOn(channel, layer),
+          });
+    if (refusal !== null) {
+      this.#clearExpiry(seq);
+      this.#reconciler.applyAck(seq, false, refusal.code);
+      process.stderr.write(
+        `[caspar-bridge] 🔴 not sent — ${refusal.reason}: ${redactUrlCredentials(summarizeWireLine(line))}\n`,
+      );
+      return {
+        ok: false,
+        onPrimary: false,
+        errorCode: refusal.code,
+        command: summarizeWireLine(line),
+      };
+    }
+    // `ROUTE-PLATES-01` — from the moment a producer command leaves, its layer may hold a producer.
+    const producerSlot = producerTargetOf(line);
+    if (producerSlot !== null) this.#emptiedLayers.delete(adoptionKey(producerSlot));
+    /*
+      `B-199` TEST-ONLY — die mid-batch. Thrown BEFORE the write and before `#send`'s own
+      `try`, so it escapes the way a real defect would rather than being converted into the
+      `{ ok: false }` every wire failure becomes. Only a STAGED line counts, so the throw is
+      guaranteed to land inside the defer→commit window the guard exists for.
+    */
+    if (this.#throwAfterMixerLines > 0 && line.endsWith(' DEFER')) {
+      this.#mixerLinesSent += 1;
+      if (this.#mixerLinesSent > this.#throwAfterMixerLines) {
+        throw new Error(
+          `TEST-ONLY fault injector: died after ${String(this.#throwAfterMixerLines)} MIXER lines`,
+        );
+      }
+    }
+    if (this.#mixerLineDelayMs > 0 && line.startsWith('MIXER ')) {
+      const target = line.split(' ')[1] ?? '';
+      if (this.#lastMixerTarget !== null && this.#lastMixerTarget !== target) {
+        await sleepMs(this.#mixerLineDelayMs);
+      }
+      this.#lastMixerTarget = target;
+    }
     try {
-      const result = await this.#adapter.send(line, { priority });
+      // `ROUTE-PLATES-01` C4 — a Playout route reaches the primary only, and is never journaled.
+      // `PLAYOUT-FEATURES-01` A — a clip's `PLAY` carries server B's own line; a transport verb to a
+      // clip server B was sent nothing for reaches the primary only (B's layer holds nothing of ours).
+      const result = await this.#adapter.send(
+        line,
+        options.routeEpoch !== undefined || this.#primaryOnlyTransport(line)
+          ? { priority, mirror: false }
+          : options.serverB !== undefined
+            ? { priority, serverB: options.serverB }
+            : { priority },
+      );
       // A response ARRIVED, so the B-044 bounded timeout no longer applies —
       // and the ack below settles the intent either way (B-070: a failed ack
       // settles too), so no expiry is needed to rescue it.
       this.#clearExpiry(seq);
       const ok = result.response.kind !== 'err';
+      // `ROUTE-PLATES-01` §1.E — a `CLEAR` that LANDED on the primary emptied its layer.
+      const clearedSlot = clearTargetOf(line);
+      if (clearedSlot !== null && ok && result.winner === this.#adapter.currentPrimary) {
+        this.#emptiedLayers.add(adoptionKey(clearedSlot));
+      }
       // B-070 — surface the REAL AMCP code so a refusal can explain itself
       // (`stack.update` used to answer a bare `{ accepted: false }`, which the
       // Inspector could only render as the generic "Not accepted.").
@@ -3759,11 +15890,26 @@ export class CasparRuntime {
         ok,
         onPrimary: result.winner === this.#adapter.currentPrimary,
         ...(errorCode !== undefined && { errorCode }),
+        /*
+          `B-209` — THE LINE THE CODE CAME BACK ON, carried out with the code. This is
+          the one place every AMCP command passes through, so it is the one place the
+          answer can be paired with what was asked: a caller that returns
+          `{ accepted: false, errorCode }` from here has the line in hand and only has
+          to keep it. Fourteen `amcp-404`s on 2026-09-04 recorded no verb because
+          nothing had ever kept it — the bridge prints no exchange and the audit
+          kept only the code.
+        */
+        ...(errorCode !== undefined && { command: summarizeWireLine(line) }),
       };
-    } catch {
+    } catch (err) {
       this.#clearExpiry(seq);
-      this.#reconciler.applyAck(seq, false, 'amcp-send-failed');
-      return { ok: false, onPrimary: false, errorCode: 'amcp-send-failed' };
+      // §8 / `AMCP_TIMEOUT_CODE` — "it timed out" and "it never left" point at two
+      // different machines, so they get two codes. Every other throw keeps the old
+      // spelling: a code is worth minting only when it changes where the operator
+      // goes to look.
+      const errorCode = err instanceof AmcpTimeoutError ? AMCP_TIMEOUT_CODE : 'amcp-send-failed';
+      this.#reconciler.applyAck(seq, false, errorCode);
+      return { ok: false, onPrimary: false, errorCode, command: summarizeWireLine(line) };
     }
   }
 
@@ -3794,7 +15940,7 @@ export class CasparRuntime {
     templateId: string,
     fields: FieldValues,
     seq: number,
-  ): Promise<{ ok: boolean; errorCode?: string }> {
+  ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
     // fix-setconfig-serve-restart — the loud-failure contract: when serving
     // is INTENDED for this process but the server is down, a load must fail
     // with a clear reason (mirroring the unknown-template guard) — NEVER
@@ -3804,8 +15950,49 @@ export class CasparRuntime {
       this.#reconciler.applyAck(seq, false, 'template-serve-down');
       return { ok: false, errorCode: 'template-serve-down' };
     }
+    /*
+      🔴 `CHANNEL-TEMPLATES-01` — **THE VERSION THE ROW'S CHANNEL LISTS, AT ITS OWN SERVE KEY.**
+
+      Every door into this chokepoint has already checked the row's channel lists the template;
+      this refuses rather than guess if one ever has not, because the only other answer is a
+      version ANOTHER channel lists. The key is the bare template id for a template with one
+      version — every station on the day of the upgrade — so the `CG ADD` line is exactly the one
+      it always was; only a second version alive beside the first is served at `<id>~<version>`.
+
+      ⚠ **PINNED WHILE THE ADD IS IN FLIGHT, HELD ONCE IT LANDS.** CasparCG fetches the page after
+      the command, so a re-import on this channel mid-take must not collect the version being
+      fetched (the pin, in memory); and a page on air keeps its record and its path whatever any
+      list does afterwards, until the row's next ADD of another version or its removal from the
+      stack (the hold, persisted). A refused ADD moves no hold: whatever is on the layer is what
+      the row held before.
+    */
+    const versionId = this.#templates.versionOn(slot.channel, templateId);
+    const serveKey = versionId === null ? null : this.#templates.serveKeyOf(versionId);
+    if (versionId === null || serveKey === null) {
+      this.#reconciler.applyAck(seq, false, 'unknown-template');
+      return { ok: false, errorCode: 'unknown-template' };
+    }
+    this.#templates.pin(versionId);
+    try {
+      const sent = await this.#sendAddServed(itemId, slot, templateId, fields, seq, serveKey);
+      if (sent.ok) this.#templates.hold(itemId, versionId);
+      return sent;
+    } finally {
+      this.#templates.unpin(versionId);
+    }
+  }
+
+  /** {@link #sendAdd}'s wire half, for a version already resolved and pinned. */
+  async #sendAddServed(
+    itemId: string,
+    slot: CommandSlot,
+    templateId: string,
+    fields: FieldValues,
+    seq: number,
+    serveKey: string,
+  ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
     let templateArg = this.#templateServer.listening
-      ? this.#templateServer.urlFor(templateId)
+      ? this.#templateServer.urlFor(serveKey)
       : templateId;
     // R-011 — a stored operator position rides the RESOLVED served URL's
     // query (the single permitted touch in the B-064 serve path: the guard
@@ -3837,13 +16024,139 @@ export class CasparRuntime {
       params.push(`cw=${String(raster.width)}`, `ch=${String(raster.height)}`);
       templateArg += `?${params.join('&')}`;
     }
-    const { ok, errorCode } = await this.#send(
-      this.#builder.load(slot, templateArg, fields),
+    /*
+      C-015 phase 6 (6.5 / 6.5a / 6.5b / 6.5c) — MUTE BEFORE THE ADD, ON THE WIRE.
+
+      THE RULE: every producer the bridge creates is created MUTED, and audio is
+      raised only by an explicit recorded intent naming the layer (design.md §7,
+      widened by the owner in §12.4 from a Live Source rule to THE rule). This is
+      the `CG ADD` half; `#seatLiveLayers` is the `playSource` half.
+
+      🔴 **THE ORDER IS THE WHOLE THING, AND IT IS THE OPPOSITE OF `playSource`'s.**
+      A bare `CG ADD` puts the template's audio on the channel on 2.5.0 — measured
+      at 0.24 s (R-029) — so ADD-then-mute is the same leak, merely shorter: _"an
+      implementation that gets the order wrong looks correct in every test that does
+      not listen"_ (R-042). For `playSource` the mute cannot precede the command
+      because the producer does not exist until the `PLAY`; here it can, and MIXER
+      state is CHANNEL state that survives `CLEAR` and `CG REMOVE`
+      (`command-builder.ts`, measured), which is what makes muting a layer before
+      anything is on it legal at all.
+
+      A FAILED MUTE DOES NOT PROCEED TO THE ADD. That is R-042's own acceptance and
+      it is the honest reading: the mute is not a courtesy step around the load, it
+      is the condition under which loading is safe. Failing closed costs the
+      operator a load; failing open costs a station audio on air that nobody asked
+      for and no UI shows.
+
+      ⭐ **ONE PLACE, FOUR SITES.** This is the single emit chokepoint for `CG ADD`
+      and it has exactly four callers — `#loadOnto` (the dynamic `load()`; the fixed
+      `loadFixed` is LIST-ONLY and emits nothing), `#decidePendingRestores` (B-121's
+      uncovered reconnect path), `setPosition`'s re-ADD, and `take()`'s B-039
+      pre-roll. Muting here closes all four by construction, which is why the rule
+      needed one implementation and not three guards. `live-add-mute.integration.test.ts`
+      pins each site individually on the wire, because a chokepoint that acquires a
+      caller who bypasses it is exactly how this class comes back.
+
+      ⚠ **IT RIDES ITS OWN SEQ.** The `seq` argument belongs to the LOAD intent; a
+      `MIXER` ack settling it would report the load complete before the ADD had even
+      been sent.
+
+      ⚠ **THE UNMUTE HALF IS NOT REBUILT HERE.** `take()` re-asserts
+      `INTENDED_VOLUME` unconditionally on every take, and that re-assert IS the
+      "explicit recorded intent" this rule names. A second unmute path would be the
+      `B-100` / `P-012` one-rule-two-spellings failure this project has now paid for
+      five times.
+    */
+    const muted = await this.#send(
+      this.#builder.mixerVolume(slot, CREATED_MUTED_VOLUME),
+      this.#nextSeq(),
+      'normal',
+    );
+    if (!muted.ok) {
+      this.#reconciler.applyAck(seq, false, ADD_MUTE_FAILED);
+      // `B-209` — the MIXER line that was refused, not the ADD that never went.
+      return {
+        ok: false,
+        errorCode: ADD_MUTE_FAILED,
+        ...(muted.command !== undefined && { command: muted.command }),
+      };
+    }
+    /*
+      `tasks.md` 6.7 — THE ACTIVE LOOK RIDES THE `CG ADD` PAYLOAD TOO, and this is the
+      second half of the same gap rather than a nicety.
+
+      A fresh build enters the template's AUTHORED DEFAULT look — the page decides that for
+      itself, synchronously, before anything can tell it otherwise. The bridge, meanwhile,
+      seats whatever look the row is RECORDED on (`#desiredPlateRects` → `#activeLookOf`),
+      which after a switch is not the default. So a row switched to a solo look and then
+      taken again — `out` destroys the producer, the next take re-ADDs — would come back with
+      the FILLS on solo and the HOLES on the default: the same divergence a switch used to
+      have, arriving by a different verb.
+
+      Attached at this ONE chokepoint, so the initial load and B-039's re-ADD cannot disagree,
+      and attached UNCONDITIONALLY for a template that has looks rather than only when the
+      look is non-default: "both halves driven off the same id" should be true of a plain take
+      as well, not merely of the cases we predicted.
+    */
+    /*
+      ⭐ `C-028` — THE PLATE FIT FACTS RIDE THE SAME PAYLOAD, at the same ONE chokepoint
+      and for the same argument the look does.
+
+      The page punches its holes; the bridge fills them. Both are `fitPictureToBox`, so
+      they are one computation — but only while both are fed the same aspect and the same
+      mode, and NEITHER is in the scene: the aspect comes from the ASSIGNED source
+      (`D-147` puts it above the author's declaration) and the mode from the operator's
+      override. A page that was never told derives them from the element instead, which is
+      two aspects for one hole — `B-149` exactly.
+
+      Attached UNCONDITIONALLY for a template that has plates, like the look, so a plain
+      take carries them as surely as a re-take after a switch does. `withCgControl`
+      declines to attach an empty control object, so a plateless non-LOOKS template's
+      payload is byte-for-byte what it is today.
+    */
+    /*
+      🔴 `TIMING-WIRE-22` (d) — AND THE PASS TIMING RIDES IT TOO, for the same argument again.
+
+      A fresh build snapshots its count from the template's AUTHORED `repeat` at `play()`. The
+      operator's override lives only in `#passTimings`, so without this every re-ADD — a take
+      after an `out` or a clear, and the re-ADD half of a restore — would put the graphic back on
+      the authored count with the console still showing the operator's. Attaching it at the one
+      chokepoint means a plain take carries it as surely as a restore does.
+
+      ⚠ A take after a `stop` is NOT a re-ADD: the producer stays resident and the take tells it
+      instead (`#tellPageTake`). This note once listed it here, and that route carried no timing
+      until `LOGO-LOOP-01` (`B-322`). Both routes now build their control from `#takeControl`.
+
+      ⚠ Absent when the row has no override, and `withCgControl` declines to attach an empty
+      control object, so an ordinary row's payload is byte-for-byte what it was.
+    */
+    /*
+      🔴 `SELF-STOP-24` — AND THE TAKE TOKEN RIDES IT, at the same one chokepoint and for a
+      reason the look and the timing do not have.
+
+      This is the page's ARMING KEY. Without a token the served page opens no connection at all
+      (`completion-ping.ts`), so attaching it here is what turns the completion channel on — and
+      attaching it only here is what keeps it off for a `.vcg` dropped into CasparCG by hand and
+      for the Designer's own preview, neither of which passes through this method.
+
+      ⚠ Minted UNCONDITIONALLY, like the look and for the same argument: a fresh page is a fresh
+      run whether or not anything else about the row changed, and a page carrying the PREVIOUS
+      page's token could report a run that is already over.
+    */
+    // `LOGO-LOOP-01` — built by the one helper the resident route's tell uses too.
+    const control: CgControl = this.#takeControl(itemId, templateId);
+    const addFields = withCgControl(fields, control);
+    const { ok, errorCode, command } = await this.#send(
+      this.#builder.load(slot, templateArg, addFields),
       seq,
       'normal',
     );
     if (ok) this.#loaded.add(itemId);
-    return { ok, ...(errorCode !== undefined && { errorCode }) };
+    return {
+      ok,
+      ...(errorCode !== undefined && { errorCode }),
+      ...(command !== undefined && { command }),
+    };
   }
 
   /**
@@ -3859,6 +16172,237 @@ export class CasparRuntime {
       if (s.channel === slot.channel && s.layer === slot.layer) return itemId;
     }
     return undefined;
+  }
+
+  /**
+   * 🔴 `C-038` — **WHICH CHANNELS THIS ITEM TOUCHES. The ONE resolver.**
+   *
+   * The permission gate asks THIS and nothing else, so "which channel is that command on"
+   * has a single answer that cannot drift from what the verb then does (golden rule 6).
+   *
+   * ⚠ **BOTH LEDGERS, UNIONED — `#slots` alone is not the answer.** `#slots` says where the
+   * item's TEMPLATE lives; `#liveLayers` says where its live-source PLATES were seated, and
+   * the doc on `#liveLayers` is explicit that it is a separate ownership class kept
+   * deliberately BESIDE `#slots`. A plate can sit on a coordinate the template does not, and
+   * several of them can. A gate reading only `#slots` would authorise a volume change
+   * against a channel the producer is not on — the shape of golden rule 8, one map over.
+   *
+   * ⭐ **AN EMPTY RESULT MEANS "NOTHING HERE TO AUTHORISE", NOT "REFUSE".** `slot` is
+   * optional and the state is deliberately reachable: `restore` brings a row back with no
+   * layer at all, and eleven of the fourteen item verbs already refuse such a row
+   * `unknown-item` on their own. The three that do not — `remove`, `set-position` and the
+   * plate-volume pair before anything is seated — touch no channel and nothing on air, so
+   * refusing them would take away behaviour that works today and call it safety. The caller
+   * applies the ROLE check and stops; see the change's `design.md` §4 for the per-verb table.
+   */
+  channelsForItem(itemId: string): readonly number[] {
+    const channels = new Set<number>();
+    const slot = this.#slots.get(itemId);
+    if (slot !== undefined) channels.add(slot.channel);
+    for (const record of this.#liveLayers.get(itemId) ?? []) channels.add(record.slot.channel);
+    return [...channels];
+  }
+
+  /**
+   * `R-030` — the channels this install declares, for the permission gate and for the
+   * console's permitted-channel strip. The public face of `#declaredChannels`, which stays
+   * the ONE place the answer is derived.
+   */
+  declaredChannels(): readonly number[] {
+    return this.#declaredChannels();
+  }
+
+  /**
+   * `CENTRAL-BRIDGE-01` (`C-046`) — each declared server's OSC as its last handshake left it:
+   * `subscribed`, `refused` (the core answered otherwise), `unbound` (no socket), or absent before the
+   * first handshake. `/health` reports it.
+   */
+  oscStatus(): ReadonlyMap<ServerLabel, 'subscribed' | 'refused' | 'unbound'> {
+    return this.#oscStatus;
+  }
+
+  /**
+   * `CHANNEL-AUTHORITY-01` — the public face of `#isDeclaredChannel`, for the request gate's
+   * station fence. Delegates rather than re-testing membership, so the gate and the restore door
+   * cannot answer "does this station operate channel N" differently.
+   */
+  isDeclaredChannel(channel: number): boolean {
+    return this.#isDeclaredChannel(channel);
+  }
+
+  /**
+   * 🔴 `MULTI-CHANNEL-01` — **WHICH CHANNELS A NEW SET OF BANKS WOULD CHANGE**: every channel
+   * ADDED, EDITED or REMOVED against the set in force, in channel order. The permission gate and
+   * the lock read this for `fixedLayers.set-banks` (`channelsForRequest`), so a bank sent back
+   * exactly as it is costs its channel nothing, and a channel taken away is judged as an act on
+   * that channel. Compared by the canonical JSON of each bank — the same bytes the file holds.
+   */
+  bankChangeFootprint(next: readonly FixedLayerBank[]): readonly number[] {
+    const touched = new Set<number>();
+    for (const bank of next) {
+      const before = this.#bankFor(bank.channel);
+      if (before === null || JSON.stringify(before) !== JSON.stringify(bank)) {
+        touched.add(bank.channel);
+      }
+    }
+    for (const before of this.#fixedBanks) {
+      if (bankForChannel(next, before.channel) === null) touched.add(before.channel);
+    }
+    return [...touched].sort((a, b) => a - b);
+  }
+
+  /**
+   * 🔴 `PLATE-BAND-01` (the owner, 2026-09-28) — **WHICH CHANNELS A NEW SET OF SOURCE DEFAULTS WOULD
+   * CHANGE**, against the set in force: every channel whose defaults, as `assignmentsOnChannel` reads
+   * them, differ. The permission gate and the lock read this for `sources.set-assignments`
+   * (`channelsForRequest`), as they read {@link bankChangeFootprint} for `set-banks` — so Source defaults
+   * obey the channel grant, a channel's defaults sent back as they were cost it nothing (the console
+   * sends the whole set), and a principal is refused only for a channel whose defaults it changes.
+   */
+  assignmentChangeFootprint(next: SourceAssignments): readonly number[] {
+    return channelsWhoseDefaultsDiffer(this.#sourceAssignments, next, this.#declaredChannels());
+  }
+
+  /**
+   * 🔴 `SELF-STOP-24` — a fresh token for this row's current take, retiring its previous one.
+   *
+   * 128 random bits, hex. Unguessable matters here in a way it does not for most ids in this
+   * process: the template server binds a ROUTABLE interface whenever any configured CasparCG is
+   * remote, so this token is the only thing standing between the LAN and a stop on a live row.
+   * A counter or a timestamp would be a stop anybody on the network could ask for.
+   */
+  /**
+   * 🔴 `PASSES-CYCLE-ONLY-26` (owner, 2026-09-16) — **MAY THIS ROW'S PASS TIMING REACH THE
+   * PAGE AT ALL?**
+   *
+   * The console now offers the pass controls only under mode `loop-cycle`. That alone does not
+   * make the rule true of AIR: a count set while the controls WERE visible is still in
+   * `#passTimings`, and `#sendAdd` attaches whatever is there to every take. So the plant's
+   * news ticker would go on receiving a count for its blinking dot — invisibly, with no surface
+   * left to explain it.
+   *
+   * ⚠ **THIS GATES THE WIRE, NEVER THE RECORD.** "No silent migration of stored data": the
+   * value stays where the operator put it, and if the template is ever re-authored as a
+   * `loop-cycle` graphic their number is still theirs. What changes is that it does not cross.
+   *
+   * ⚠ The predicate itself is `templateAdmitsPassTiming` in `@cg/shared-ipc`, shared with the
+   * console's Inspector and its press/PVW builder. Three machines, one spelling (golden rule 6).
+   */
+  #admitsPassTiming(itemId: string, templateId: string | undefined): boolean {
+    if (templateId === undefined) return false;
+    return templateAdmitsPassTiming(this.#templateOfItem(itemId, templateId)?.playout);
+  }
+
+  /**
+   * 🔴 `LOGO-LOOP-01` (`B-322`) — **WHAT A TAKE TELLS ITS PAGE, on BOTH routes into air. The ONE
+   * spelling.**
+   *
+   * There are two routes and each sends its control in a different command: a take that rebuilds
+   * the page puts it in the `CG ADD` payload (`#sendAdd`), and a take of a RESIDENT producer —
+   * after a `stop` — puts it in the `CG UPDATE` before the `CG PLAY` (`#tellPageTake`). The look
+   * reached both routes (`B-191`) and so did the token (`SELF-STOP-24`), each fixed separately;
+   * the recorded pass timing reached the first only. The owner's logo, stopped and set to
+   * `Until stop`, came back with the count it had been told on air, while the console and this
+   * bridge's record both said `Until stop`.
+   *
+   * So the members are built HERE and both routes call it (golden rule 6): the look from
+   * `#activeLookOf`, the timing from {@link #wireTiming} gated by {@link #admitsPassTiming}, and a
+   * fresh token. A third member added later reaches both routes or neither.
+   *
+   * ⚠ Absent members are absent, never defaulted: a row with no override carries no `timing`, so
+   * its wire is what it was. And it MINTS — call it once per take.
+   */
+  #takeControl(itemId: string, templateId: string | undefined): TakeControl {
+    const activeLook = this.#activeLookOf(itemId);
+    // `PASSES-CYCLE-ONLY-26` — a recorded count crosses only for a template whose stated mode
+    // is `loop-cycle`. See `#admitsPassTiming`: the record keeps it either way.
+    const passTiming = this.#admitsPassTiming(itemId, templateId)
+      ? this.#passTimings.get(itemId)
+      : undefined;
+    return {
+      ...(activeLook !== undefined && { look: activeLook.id }),
+      ...(passTiming !== undefined && { timing: CasparRuntime.#wireTiming(passTiming) }),
+      take: this.#mintTakeToken(itemId),
+    };
+  }
+
+  #mintTakeToken(itemId: string): string {
+    const token = randomBytes(16).toString('hex');
+    this.#takeTokens.set(itemId, token);
+    return token;
+  }
+
+  /**
+   * 🔴 `SELF-STOP-24` / `C-013` — **THE RECEIPT. A served page has reported that its own run
+   * finished; decide whether that is still true, and if so end the row the way STOP does.**
+   *
+   * Returns whether the report was acted on. The route turns that into `204` or `404`; the page
+   * never reads either (see `completion-ping.ts`), so the answer exists for the record and for
+   * the tests, not for the sender.
+   *
+   * ── TWO CONDITIONS, READ ONCE ─────────────────────────────────────────────────────────────
+   *
+   * A report acts only when the token names a LIVE take AND the row is still on air. Matching
+   * SPENDS the token whatever happens next, which is what makes the mirrored plant produce one
+   * stop: the primary's page and the backup's page are the SAME page fetched from the SAME URL,
+   * so both report the same run, and the second finds nothing.
+   *
+   * The state half is what handles the operator race without a second list of invalidation
+   * sites — see {@link #completionMayStop}.
+   *
+   * ── WHY THE STOP IS NOT AWAITED ───────────────────────────────────────────────────────────
+   *
+   * It is an AMCP round trip, and holding the HTTP response open for it would put a template's
+   * own fetch inside the socket set `TemplateHttpServer.stop()` waits on — B-064's bound, paid
+   * for by a request nobody reads. The outcome is recorded where outcomes belong: the audit row
+   * `stopItem` already writes.
+   */
+  #onTemplateComplete(take: string): boolean {
+    let owner: string | undefined;
+    for (const [itemId, token] of this.#takeTokens) {
+      if (token === take) {
+        owner = itemId;
+        break;
+      }
+    }
+    if (owner === undefined) return false;
+    // SPENT on a match, before any decision below. A report that arrives too late has still
+    // consumed the run it named — the next one is a different take with a different token.
+    this.#takeTokens.delete(owner);
+    if (!this.#completionMayStop(owner)) return false;
+    /*
+      🔴 THE SAME INTERNAL STOP THE OPERATOR'S BUTTON RUNS, through the same audited wrapper.
+
+      Not a copy of it, and not `#stopItemImpl` directly: `stopItem` is where the audit row, the
+      parked-restore retirement, the link-down refusal, the live-plate teardown and the thaw all
+      live, and every one of them is as true of a template's stop as of an operator's. A second
+      path would be the one-rule-two-spellings failure this tree keeps paying for, on the path to
+      air (golden rule 6).
+    */
+    void runAsTemplate(() => this.stopItem(owner)).catch(() => undefined);
+    return true;
+  }
+
+  /**
+   * 🔴 `SELF-STOP-24` — may a completion report still take this row off air?
+   *
+   * `isOnAirStatus` is the canonical predicate and it is asked here rather than re-derived —
+   * with ONE named exclusion on top of it.
+   *
+   * ⚠ **`exiting` is EXCLUDED, and that is the operator race.** `isOnAirStatus` counts
+   * `exiting` as on air, correctly: the picture has not gone yet. But `exiting` means a
+   * departure is ALREADY under way — the operator pressed STOP, or OUT — and a completion
+   * report landing in that window would send a second command for one departure. The spec's
+   * wording is "one stop, no error", and this is where that is true.
+   *
+   * ⚠ Everything else falls out of the status without a second list: a row already stopped is
+   * `loaded`, a row taken out is `idle`, and neither is on air.
+   */
+  #completionMayStop(itemId: string): boolean {
+    const item = this.#reconciler.get(itemId);
+    if (item === null || item === undefined) return false;
+    if (item.status === 'exiting') return false;
+    return isOnAirStatus(item);
   }
 
   #markDirty(itemId: string): void {
@@ -3877,4 +16421,22 @@ export class CasparRuntime {
 /** Key for the per-process layer-adoption set (reconnect-reconciliation). */
 function adoptionKey(slot: CommandSlot): string {
   return `${String(slot.channel)}:${String(slot.layer)}`;
+}
+
+/**
+ * `B-225` — a `take` refusal, expressed in the notice's own vocabulary.
+ *
+ * ⚠ **The fall-through is `refused`, never the raw code, and that is deliberate.** `take` can
+ * refuse for reasons this surface does not enumerate (multi-box exclusivity, a live band with
+ * no room, an AMCP error), and each is a real refusal the operator must see reported as one.
+ * Widening `EMPTIED_AIR_REFUSALS` every time a take grows a code would make this list a second
+ * copy of the take's — the drift golden rule 6 is about — so the narrow list carries the
+ * outcomes this surface can SAY something specific about, and everything else is honestly
+ * `refused` rather than silently dropped.
+ */
+function emptiedAirRefusalFor(errorCode: string | undefined): EmptiedAirRefusal {
+  const known: readonly string[] = EMPTIED_AIR_REFUSALS;
+  return errorCode !== undefined && known.includes(errorCode)
+    ? (errorCode as EmptiedAirRefusal)
+    : 'refused';
 }

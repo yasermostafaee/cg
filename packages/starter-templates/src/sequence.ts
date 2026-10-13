@@ -268,7 +268,7 @@ export const sequenceScene: Scene = {
   frameRate: FPS,
   safeAreas: { title: 10, action: 5 },
   frameRange: { in: 0, out: 122 },
-  background: 'transparent',
+  editorBackdrop: 'transparent',
   layers: [],
   compositions: [
     {
@@ -278,7 +278,7 @@ export const sequenceScene: Scene = {
       frameRange: { in: 0, out: 122 },
       lifecycle: { outPoint: 60 },
       playout: { mode: 'auto-out', holdSource: 'content-driven' },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         layer('L-full', 'Frame', [
           {
@@ -305,7 +305,7 @@ export const sequenceScene: Scene = {
       frameRange: { in: 0, out: 110 },
       lifecycle: { outPoint: 60, contentStart: 55 },
       playout: { mode: 'auto-out', holdSource: 'content-driven' },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [layer('L-strap', 'Strap', strapChildren)],
     },
   ],

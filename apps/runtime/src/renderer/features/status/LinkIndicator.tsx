@@ -2,6 +2,7 @@ import { useLink } from '../../hooks/useLink.js';
 import { colors, cssVars } from '../../theme.js';
 import type { BridgeLinkStatus } from '../../../shared/runtime-bridge.js';
 import type { CasparReach } from '../../ui/reachWording.js';
+import { Tag } from '../../ui/Tag.js';
 
 interface Visual {
   color: string;
@@ -56,7 +57,7 @@ function visual(status: BridgeLinkStatus, reach: CasparReach): Visual {
         return {
           /*
             NO HUE — primary ink against the bar's muted base, and the weight in
-            `StatusBar` carries the rest. This was the emerald `#10B981`, which is
+            `StatusBar` carries the rest. This was `--r-success`, which is
             the ON-AIR green family at a different weight, and a glance at green in
             the footer can read as "something is on air". Green means air on the
             layer table and sky means READY; the status bar reports TRANSPORT
@@ -107,7 +108,18 @@ function visual(status: BridgeLinkStatus, reach: CasparReach): Visual {
       };
     case 'disconnected':
       return {
-        color: colors.error,
+        /*
+          PHASE 2A — the pill's two halves take the two halves of the error red.
+
+          The ● is a graphic and is judged at the 3.0 contrast floor, so it keeps
+          the owner's `rgb(255 28 28)` — the loud mark. The SENTENCE is text and is
+          judged at 4.5, which that red does not clear on this bar, so it takes the
+          error TEXT role. Same fault, two weights; `dotColor` is stated explicitly
+          here rather than left to the fallback below precisely because the two are
+          no longer the same value.
+        */
+        dotColor: colors.errorMark,
+        color: colors.errorText,
         text: 'DISCONNECTED — reconnecting…',
         title: 'Lost the bridge connection; commands are rejected until it reconnects',
       };
@@ -150,7 +162,7 @@ export function LinkIndicator({
   const status = useLink();
   const v = visual(status, reach);
   return (
-    <span className="cg-pill" role="status" aria-label="Bridge link" title={v.title}>
+    <Tag className="cg-pill" role="status" aria-label="Bridge link" title={v.title}>
       {/*
         THE DOT MAY CARRY A HUE THE LABEL MAY NOT (owner: «فقط دایره کنار bridge
         live … رو سبز کن»). A green WORD in the footer is what could be glanced at
@@ -165,9 +177,15 @@ export function LinkIndicator({
 
         It falls back to the label's own colour, so the fault states keep a dot
         that agrees with their words rather than a green one contradicting them.
+
+        ⚠ PHASE 2A — `disconnected` now sets `dotColor` too, and NOT to disagree
+        with its word: the dot takes the error MARK red and the sentence the error
+        TEXT red, which are two weights of one fault chosen against two different
+        contrast floors (3.0 for a graphic, 4.5 for text). The fallback still covers
+        every other fault state, where one value clears both.
       */}
       <span style={{ color: v.dotColor ?? v.color }}>●</span>
       <span style={{ color: v.color }}>{v.text}</span>
-    </span>
+    </Tag>
   );
 }

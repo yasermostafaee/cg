@@ -14,7 +14,7 @@ function makeScene(): Scene {
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 100 },
-    background: 'transparent',
+    editorBackdrop: 'transparent',
     layers: [],
     fields: [
       { id: 'f0', label: 'Title', required: true, type: 'text', default: 'Hello', maxLength: 100 },
@@ -142,6 +142,21 @@ describe('ExporterSingleFile', () => {
     // ships in the exported single-file HTML and on-air matches the preview.
     expect(html).toContain('"holdOverrides"');
     expect(html).toContain('"seq-1":false');
+  });
+});
+
+describe('ExporterSingleFile — B-129 the editor backdrop never reaches the artifact', () => {
+  it('embeds a scene whose backdrop is transparent, from a scene that had a colour', () => {
+    // The artifact side of the split, on the OTHER exporter — asserted here as well as
+    // in `@cg/vcg-format` because two exporters that disagree about this is exactly the
+    // failure the ONE shared helper exists to prevent.
+    const scene: Scene = { ...makeScene(), editorBackdrop: '#123456' };
+    return makeExporter()
+      .produce(scene)
+      .then(({ html }) => {
+        expect(html).not.toContain('#123456');
+        expect(html).toContain('"editorBackdrop":"transparent"');
+      });
   });
 });
 
@@ -753,5 +768,80 @@ describe('ExporterSingleFile — D-149 image fit width / height', () => {
       expect(html).not.toContain('fit-width');
       expect(html).not.toContain('fit-height');
     }
+  });
+});
+
+/**
+ * ⭐ Task 1.5e — the frame survives the SINGLE-FILE exporter (the `.vcg` half is
+ * pinned in `packages/vcg-format/tests/roundtrip.test.ts`).
+ *
+ * The artifact CEF loads is this HTML, and it does not carry a pre-rendered plate:
+ * the scene is inlined as a JS literal and `CG.createRuntime(scene, { mode: 'output'
+ * … })` builds the DOM at load. So the round-trip assertion here is about the
+ * EMBEDDED SCENE — if the stroke is not in that literal, no border can exist on air,
+ * whatever `buildScene` would have done with it.
+ *
+ * Maps `specs/designer-live-source/spec.md`:
+ *   - "A Live Source may carry a FRAME, and the frame never enters the hole"
+ */
+describe('1.5e — a Live Source FRAME reaches the single-file artifact', () => {
+  function framedScene(stroke?: unknown): Scene {
+    return {
+      ...makeScene(),
+      layers: [
+        {
+          id: 'L1',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'live-a',
+              name: 'Guest box',
+              type: 'video-placeholder',
+              transform: {
+                position: { x: 300, y: 200 },
+                size: { w: 640, h: 360 },
+                scale: { x: 1, y: 1 },
+                rotation: 0,
+                anchor: { x: 0, y: 0 },
+              },
+              opacity: 1,
+              visible: true,
+              locked: false,
+              zIndex: 0,
+              routeKey: 'guest-1',
+              ...(stroke !== undefined ? { stroke } : {}),
+            },
+          ],
+        },
+      ],
+    } as unknown as Scene;
+  }
+
+  /** The inlined `var scene = …` literal, parsed back out of the artifact. */
+  function embeddedScene(html: string): Scene {
+    const m = /var scene = (\{[\s\S]*?\});\n/.exec(html);
+    if (m?.[1] === undefined) throw new Error('no inlined scene literal in the artifact');
+    return JSON.parse(m[1].replace(/\u003c/g, '<')) as Scene;
+  }
+
+  it('the inlined scene carries the stroke, so the plate can paint its frame on air', async () => {
+    const { html } = await makeExporter().produce(framedScene({ width: 6, color: '#ff8800' }));
+    const el = embeddedScene(html).layers[0]?.children[0] as { stroke?: unknown } | undefined;
+    expect(el?.stroke).toEqual({ width: 6, color: '#ff8800' });
+  });
+
+  it('a ZERO width survives as a stored state rather than being dropped', async () => {
+    const { html } = await makeExporter().produce(framedScene({ width: 0, color: '#00ff00' }));
+    const el = embeddedScene(html).layers[0]?.children[0] as { stroke?: unknown } | undefined;
+    expect(el?.stroke).toEqual({ width: 0, color: '#00ff00' });
+  });
+
+  it('an UNFRAMED plate inlines with no stroke key at all', async () => {
+    const { html } = await makeExporter().produce(framedScene());
+    const el = embeddedScene(html).layers[0]?.children[0] as Record<string, unknown> | undefined;
+    expect(el && 'stroke' in el).toBe(false);
   });
 });

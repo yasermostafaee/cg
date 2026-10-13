@@ -126,8 +126,13 @@ describe('delimiterStore (bridge-owned)', () => {
     bridge.delimiters.set = () => Promise.reject(new Error('unknown channel: delimiters.set'));
 
     const refusal = await addDelimiter('tab', '\\t');
-    expect(refusal).toMatch(/bridge is older/i);
-    expect(refusal).toMatch(/restart/i);
+    expect(refusal).toMatch(/older build/i);
+    expect(refusal).toMatch(/restarted/i);
+    // `B-152` — and the wire identifier is GONE. This is the assertion that matters: the
+    // sentence may be reworded, but a channel name reaching a broadcast surface is the
+    // defect, and it is the same defect whatever words surround it.
+    expect(refusal).not.toContain('delimiters.set');
+    expect(refusal).not.toMatch(/unknown channel/i);
     // And nothing was adopted locally: a private list in one browser is exactly
     // what putting this on the bridge was meant to prevent.
     expect(listDelimiters().some((d) => d.value === '\\t')).toBe(false);

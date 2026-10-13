@@ -1,6 +1,38 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Unsubscribe } from '../../shared/runtime-bridge.js';
+import type { AuthSessionState, Unsubscribe } from '../../shared/runtime-bridge.js';
 import { useLink } from './useLink.js';
+
+/**
+ * 🔴 `DELTA-MULTI-CHANNEL-01-A` A4 — **CAN THIS CONSOLE BE ANSWERED AT ALL?** Not while the bridge
+ * has said it authenticates and nobody is signed in (`signed-out`), nor after a session ended
+ * (`expired`): every read would be refused. Anything else — auth off, signed in, or not known yet
+ * — may ask.
+ */
+function answerable(state: AuthSessionState): boolean {
+  return state.kind !== 'signed-out' && state.kind !== 'expired';
+}
+
+function useAnswerable(): boolean {
+  const [value, setValue] = useState(() => answerable(window.cg.auth.state()));
+  useEffect(() => {
+    setValue(answerable(window.cg.auth.state()));
+    return window.cg.auth.onStateChanged((state) => setValue(answerable(state)));
+  }, []);
+  return value;
+}
+
+/**
+ * 🔴 `DELTA-MULTI-CHANNEL-01-A` A3 / A4 — **MAY THE CONSOLE READ FROM THE BRIDGE NOW?** A usable
+ * link, and a console the bridge will answer. The station-wide stores that pull once and then live
+ * on pushes (`initSources`, `initDelimiters`) start on THIS: a pull refused before the first
+ * sign-in used to leave them empty for the life of the page, because the bridge withholds pushes
+ * from a socket nobody has signed in on and a sign-in pushes nothing by itself.
+ */
+export function useBridgeReadable(): boolean {
+  const link = useLink();
+  const canAsk = useAnswerable();
+  return link !== 'disconnected' && canAsk;
+}
 
 /**
  * Hold a bridge snapshot and keep it live: pull it whenever the link is usable, and
@@ -47,6 +79,31 @@ import { useLink } from './useLink.js';
 export interface BridgeSnapshot<T> {
   readonly value: T;
   readonly ready: boolean;
+  /**
+   * 🔴 `DELTA A` §A2 — **THE FIRST PULL WAS ANSWERED, AND THE ANSWER WAS A REFUSAL.**
+   *
+   * `ready` alone cannot tell "the bridge has not answered yet" from "the bridge said no", and
+   * a surface that renders only `!ready` says _Loading…_ for both — which is a surface
+   * asserting a state that is not in force, the `MODAL-TRUTH-01` Part B class. The owner met
+   * it: a refused read left the layer list on "Loading the layer list… Waiting for the bridge
+   * to send the declared rows." permanently, on a console that was signed in.
+   *
+   * Cleared the moment anything arrives, so a retry that succeeds simply stops saying it.
+   *
+   * 🔴 `DELTA-MULTI-CHANNEL-01-A` A4 — **THE RE-REQUEST IS HERE NOW, and the reason it was not
+   * is recorded so it is not re-litigated.** It had been placed "where the principal is
+   * established", `WebSocketRuntime`'s resync — which re-pulls exactly three snapshots (stack,
+   * health, lock). Every other read a console made before its FIRST sign-in stayed refused for the
+   * life of the page: the owner's layer list read "The layer list was refused…" until a reload,
+   * and the plural bank read behind it, so the console believed it drove one channel and withheld
+   * the every-channel PANIC. Completing that re-pull would have meant a second list of every
+   * snapshot channel, in a file that knows none of these hooks — the drift golden rule 6 forbids.
+   * This hook is the one place every snapshot passes. So: a snapshot is not asked for while the
+   * console cannot be answered (signed out, or its session ended), and is asked for the moment it
+   * can. `window.cg.auth` is in every stub's path as a result; stubs are COMPLETED
+   * (`fillBridgeStub`), never loosened.
+   */
+  readonly failed: boolean;
 }
 
 export function useBridgeSnapshot<T>(
@@ -81,7 +138,9 @@ export function useBridgeSnapshotState<T>(
   // stack, a later disconnect does not make that knowledge un-arrive, and clearing
   // it would re-open the bootstrap window on every blip.
   const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
   const link = useLink();
+  const canAsk = useAnswerable();
   // Bumped by every push. A pull that resolves with a stale generation lost the race
   // against a publish and is dropped.
   const generation = useRef(0);
@@ -92,6 +151,7 @@ export function useBridgeSnapshotState<T>(
         generation.current += 1;
         setValue(next);
         setReady(true);
+        setFailed(false);
       }),
     [subscribe],
   );
@@ -101,6 +161,12 @@ export function useBridgeSnapshotState<T>(
     // back to a usable link re-runs this effect and pulls then. B-092 — unless the caller
     // opted in because this snapshot has a browser-local answer that needs no bridge.
     if (link === 'disconnected' && !pullWhileDisconnected) return;
+    /*
+      A4 — a live link on which nobody is signed in would refuse the read, and the sign-in is what
+      re-runs this effect (`canAsk` turns true). Disconnected, a browser-local answer (B-092) needs
+      nobody's sign-in, so the opt-in above still pulls.
+    */
+    if (link !== 'disconnected' && !canAsk) return;
     let cancelled = false;
     const pulledAt = generation.current;
     void fetchSnapshot().then(
@@ -108,17 +174,26 @@ export function useBridgeSnapshotState<T>(
         if (!cancelled && generation.current === pulledAt) {
           setValue(next);
           setReady(true);
+          setFailed(false);
         }
       },
       () => {
-        // The link dropped between the check above and the round-trip landing. Nothing to
-        // report and nothing to retry here — reconnecting re-runs this effect.
+        /*
+          🔴 `DELTA A` §A2 — SAY THAT IT WAS ANSWERED, even though the answer was no.
+
+          This used to be silent, on the reasoning that a dropped link re-runs the effect. That
+          covers a DROP and not a REFUSAL: a read refused for want of a principal leaves the
+          link perfectly live, so nothing re-ran and the surface sat on "Loading…" forever.
+          The flag is what lets the surface say what happened; `auth` in the dependency list is
+          what makes the retry happen when the principal arrives.
+        */
+        if (!cancelled && generation.current === pulledAt) setFailed(true);
       },
     );
     return () => {
       cancelled = true;
     };
-  }, [fetchSnapshot, link, pullWhileDisconnected]);
+  }, [fetchSnapshot, link, pullWhileDisconnected, canAsk]);
 
-  return { value, ready };
+  return { value, ready, failed };
 }

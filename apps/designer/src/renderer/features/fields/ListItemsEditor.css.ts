@@ -47,6 +47,15 @@ export const dwellInput = style({
 });
 
 /**
+ * `PERSIAN-DIGITS-01` — a number cell whose text can never be a number: the danger edge, with the
+ * sentence on the box's tooltip. Declared AFTER the two input styles so it wins on equal
+ * specificity.
+ */
+export const inputInvalid = style({
+  borderColor: colors.danger,
+});
+
+/**
  * D-083 — a sequence item is TWO lines: a top control line (kind picker + dwell +
  * reorder/remove) and the VALUE on its own full-width line below, so a long headline
  * stays readable in the narrow inspector panel.
@@ -94,6 +103,15 @@ export const seqBindKey = style({
   padding: '0.15rem 0.35rem',
   fontSize: '0.68rem',
   outline: 'none',
+});
+
+/**
+ * `TEXT-DIGITS-01` — a bound item's Digits choice, at the end of its data-key line: sized to its
+ * words so the key keeps the rest of the line (the look is the shared `Select` primitive's).
+ */
+export const seqBindDigits = style({
+  flex: 'none',
+  width: '6.2rem',
 });
 
 export const addRow = style({

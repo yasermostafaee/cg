@@ -1,29 +1,56 @@
+import { useState } from 'react';
+import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
+import { ArrowLeftRight, Lock, TriangleAlert } from 'lucide-react';
+import {
+  backupMappedSummary,
+  ENGINE_LABEL,
+  ENGINE_SERVER,
+  engineChipText,
+  engineNeedsAttention,
+  engineStateText,
+  stoppedChannelsOf,
+  type BackupChannelsState,
+  type EngineLine,
+  type EngineSessions,
+} from '@cg/shared-ipc';
 import { useConnections } from '../../hooks/useConnections.js';
 import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
-import { useLock } from '../../hooks/useLock.js';
+import { useLock, useLockCoverage } from '../../hooks/useLock.js';
+import { EngageLockDialog } from '../lock/EngageLockDialog.js';
 import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
-import { normalizeDigits } from '../../ui/NumericInput.js';
-import { usePrompt } from '../../ui/useDialog.js';
+import { Icon } from '../../ui/Icon.js';
 import { LinkIndicator } from './LinkIndicator.js';
+import { IdentityIndicator } from './IdentityIndicator.js';
+import { ReadOnlyIndicator } from './ReadOnlyIndicator.js';
+import { SignOutButton } from '../auth/SignOutButton.js';
+import { Tag } from '../../ui/Tag.js';
 
-interface Props {
-  onOpenAudit?: () => void;
-  /** R-010 — opens the server connection settings panel. */
-  onOpenSettings?: () => void;
-  /**
-   * D-137 / C-015 — opens the Live Source mapping.
-   *
-   * Beside SERVERS, and that placement is the point: both are INSTALLATION
-   * config that decides what a command does when it reaches CasparCG, and this
-   * one is the surface without which a template declaring a live source cannot
-   * be taken at all. It is not a per-row or per-field concern, so it does not
-   * belong beside a control the way the delimiter gear does.
-   */
-  onOpenSources?: () => void;
-}
+/**
+ * 🔴 `AUDIT-CLOSE-01` B1 — THIS BAR NO LONGER TAKES THE TWO DOORS, and the record of what they
+ * were is kept because deleting an argument is how it gets re-made.
+ *
+ * `onOpenAudit` and `onOpenSettings` were props here; both doors are in the app header now
+ * (`features/shell/AppHeader.tsx`), which is where the reference draws them.
+ *
+ * ── `onOpenSources` WAS ALREADY GONE, AND ITS ARGUMENT IS RECORDED, NOT DELETED ───
+ *
+ * There was a SOURCES button here, and its own note argued for keeping it: _"this is the
+ * section the operator opens most, and the surface without which a template declaring a live
+ * source cannot be taken at all"_. That is still true, and the owner overruled it
+ * (`STATION-CHROME-02` §1): three doors into one room is confusion, not a shortcut.
+ *
+ * ⚠ The DEEP-LINK MECHANISM is untouched — `openStationSetup(section)` still lands on a named
+ * tab, and the two entry points that are genuinely BESIDE the thing they configure keep it:
+ * the Inspector's delimiter gear, and the Layers panel's empty state.
+ *
+ * What this bar carries now is STATUS — plus the two controls the reference's own bar draws
+ * nowhere, so there was no reference decision to move them by: the manual FAILOVER (guard item
+ * 17, the remedy for the pill beside it) and the LOCK (whose PIN is ephemeral and belongs with
+ * the engage, `STATION-CHROME-01` §7).
+ */
 
 const styles = {
   bar: {
@@ -79,7 +106,24 @@ const styles = {
   healthDot: { color: cssVars['--r-success'] },
   backup: { color: colors.textMuted },
   failed: { color: colors.offline },
-  failedHard: { color: colors.error },
+  /**
+   * A server that is DOWN, as a WORD — `OFFLINE`, and the `NO SERVER — SIMULATED`
+   * line. PHASE 2A: text is judged at the 4.5 floor and this clears it (9.53:1 on
+   * this bar). The LED beside the word is a MARK and takes `failedHardDot`.
+   */
+  failedHard: { color: colors.errorText },
+  /**
+   * …and the same fault as the ●/○ LED. The owner's `rgb(255 28 28)` — the value
+   * `RUNTIME-FIX-0904` chose, kept byte for byte by Phase 2A and judged at the 3.0
+   * graphic floor a dot answers to.
+   *
+   * ⚠ It exists so the dot and the word can be two weights of the SAME fault rather
+   * than one value chosen for whichever job shouts loudest. `healthDotStyle` is the
+   * only thing that may read it — B-081's rule that the light and the label must
+   * never contradict each other is enforced by that one function, and a second
+   * reader is how the two would drift apart.
+   */
+  failedHardDot: { color: colors.errorMark },
   ok: { color: colors.text, fontWeight: 700 },
   // B-081 — the look of health we CANNOT currently verify: muted, never a confident color.
   stale: { color: colors.textMuted },
@@ -130,9 +174,27 @@ const UNKNOWN: SessionLabel = { text: 'UNKNOWN', style: styles.stale };
  * Only a genuine HEALTHY gets the green LED; every other state — degraded,
  * offline, unknown, stale, connecting — takes the label's own colour, so the two
  * halves of the pill physically cannot disagree.
+ *
+ * ⚠ PHASE 2A ADDS A SECOND EXCEPTION, AND IT IS NOT A HOLE IN THE RULE ABOVE.
+ * A down server's LED takes `failedHardDot` where its word takes `failedHard`.
+ * That is the SAME fault in two weights, not two claims: a dot is a graphic judged
+ * at the 3.0 contrast floor and a word is text judged at 4.5, and one red could
+ * not clear both on this palette. The rule the paragraph above protects — the light
+ * and the label may never say different THINGS — is untouched, and it is still
+ * enforced here rather than at the two call sites.
  */
 function healthDotStyle(label: SessionLabel): { color: string } {
-  return label.style === styles.ok ? styles.healthDot : label.style;
+  if (label.style === styles.ok) return styles.healthDot;
+  if (label.style === styles.failedHard) return styles.failedHardDot;
+  return label.style;
+}
+
+/**
+ * `SERVERS-SIMPLIFY-01` (T2) — a server's state in THIS bar's own word, for Station setup's `CasparCG A` fact
+ * row: one spelling of the state, read in two places, never a second map of it.
+ */
+export function serverStateWord(state: string): string {
+  return sessionLabel(state).text;
 }
 
 function sessionLabel(state: string): SessionLabel {
@@ -199,6 +261,46 @@ function noOscTitle(label: string): string {
   );
 }
 
+/**
+ * 🔴 **`R-058` — REACHABLE IS NOT WORKING. The sentence for a channel that has STOPPED
+ * producing frames.**
+ *
+ * The owner's 2026-08-23 incident: a `<decklink>` consumer in `casparcg.config` for a device
+ * the machine did not have. CasparCG started, AMCP connected, and this bar read
+ * **BRIDGE LIVE + PRIMARY A HEALTHY** while the channel produced nothing at all — not even on
+ * the `<screen />` consumer. Every signal the console had was about REACHABILITY, and every
+ * one of them was true.
+ *
+ * ⚠ **It sends the operator somewhere, and it stops short of what it cannot see.** This
+ * chip reads the OSC axis only: it knows the channel ticked and stopped, not why. Since
+ * `C-029` the bridge DOES read what `casparcg.config` declares (`INFO CONFIG` exposes it) and
+ * the OUTPUT MISSING banner names a declared consumer that never started — so the sentence
+ * points there for that case, and for the other (every consumer started, one stopped later)
+ * it still says only what is true: the log has the reason, this surface does not.
+ *
+ * ⚠ **It says the server is UP**, for the same reason `noOscTitle` does: the fault is inside
+ * CasparCG, and an operator who restarts a playout box over this takes working channels off
+ * air to fix one.
+ */
+function deadChannelTitle(label: string, channels: readonly number[]): string {
+  const which =
+    channels.length === 1
+      ? `Channel ${String(channels[0])} on server ${label} was producing frames and has STOPPED.`
+      : `Channels ${channels.join(', ')} on server ${label} were producing frames and have STOPPED.`;
+  return (
+    `${which} AMCP on ${label} is still answering, so the server is UP and reachable — this ` +
+    'is not a connection failure and restarting the playout machine would take working ' +
+    'channels off air to fix it. ' +
+    'Nothing this channel is asked to play will appear on its output while this shows. ' +
+    "Check CasparCG's own log and the channel's consumers — a consumer that cannot start " +
+    '(a device that is not present, a format it will not take) stops the channel without ' +
+    'failing any command. ' +
+    'If the OUTPUT MISSING banner is showing, it names the declared consumer that is not ' +
+    'running; if it is not, every declared consumer started and one has stopped since, which ' +
+    'only the log can see.'
+  );
+}
+
 /** Hung off a deaf server's pill: its reading covers the command path only. */
 const AMCP_ONLY_TITLE =
   'AMCP only — no OSC is arriving from this server, so this reading covers the command ' +
@@ -212,10 +314,52 @@ function staleTitle(state: string): string {
   );
 }
 
+/**
+ * 🔴 `RELEASE-0112-01` (`R-085`) — the engines whose CG Bridge session needs a person, as chips: a
+ * signed-in, waiting or unconfigured engine is the absence of an alarm, as health is in this bar.
+ */
+function engineChips(
+  engines: EngineSessions | null | undefined,
+): { server: 'A' | 'B'; line: EngineLine }[] {
+  if (engines === null || engines === undefined) return [];
+  const lines = [engines.primary, ...(engines.backup !== null ? [engines.backup] : [])];
+  return lines
+    .filter((line) => engineNeedsAttention(line.state))
+    .map((line) => ({ server: ENGINE_SERVER[line.engine], line }));
+}
+
+/** `RELEASE-0113-01` — the count's ink by its tone: the alarm when none is mapped, the warning when some. */
+const MAPPED_TONE_STYLE = {
+  ok: { color: colors.textMuted },
+  warn: { color: colors.pending, fontWeight: 700 },
+  alarm: { color: colors.errorText, fontWeight: 700 },
+} as const;
+
 /** Bottom-of-window status bar (Phase 6 §2). Never hidden, never re-flows. */
-export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props = {}): JSX.Element {
+export function StatusBar({
+  engines,
+  backupChannels,
+}: {
+  /**
+   * `RELEASE-0112-01` (`R-085`) — each engine's CG Bridge session, handed down by the shell (a prop,
+   * not a subscription: this bar's dom specs stub only the connection channels — see `CONSOLE-MATCH-03`
+   * below). Absent: no engine chip.
+   */
+  engines?: EngineSessions | null;
+  /**
+   * 🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — where each channel's lines go on the backup engine, handed down
+   * by the shell as `engines` is. Absent or no server B: no count.
+   */
+  backupChannels?: BackupChannelsState | null;
+}): JSX.Element {
   const health = useConnections();
+  // `C-038` — the lock and FAILOVER are both `operator` class and both UNSCOPED, so they
+  // ask the ROLE and never the channel. See `useHoldsOperatorRole`.
+  const holdsOperator = useHoldsOperatorRole();
   const lock = useLock();
+  const lockCoverage = useLockCoverage().kind;
+  /** §7 — is the engage form open? */
+  const [engaging, setEngaging] = useState(false);
   const link = useLink();
   const simulated = link === 'offline-mock';
   // B-081 — the link that DELIVERS health is down, so every reading below is unverifiable.
@@ -228,17 +372,18 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
    */
   const casparReach = resolveCasparReach(link, health);
   // Above the loading early return: a hook cannot be called conditionally.
-  const { prompt, promptDialog } = usePrompt();
 
   if (health === null) {
     return (
       <footer style={styles.bar} aria-label="Status bar">
         <LinkIndicator reach={casparReach} />
+        <IdentityIndicator />
+        <ReadOnlyIndicator />
         {/* Nothing has answered yet. While the link is down that is not "loading" — there
             is nobody to load from (B-080/B-081). */}
-        <span className="cg-pill" style={stale ? styles.stale : undefined}>
+        <Tag className="cg-pill" style={stale ? styles.stale : undefined}>
           {stale ? 'SERVER HEALTH UNKNOWN' : 'Loading…'}
-        </span>
+        </Tag>
       </footer>
     );
   }
@@ -249,6 +394,23 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
   const backupDeaf =
     !stale && !simulated && health.backup !== undefined && isDeafToServer(health.backup);
 
+  /*
+    🔴 R-058 — REACHABLE BUT PRODUCING NOTHING, read from the ONE authority.
+
+    `stoppedChannelsOf` lives in `@cg/shared-ipc` beside `isServerReachable`, not here: the
+    question is the same class and a second local copy is how a name comes to lie about what
+    it tests (golden rule 6). The bridge already DECIDED which channels are stale — this only
+    reads the verdict, which is `B-171`'s lesson applied before it could bite again.
+
+    ⚠ Silence is not proof, and the schema is what enforces it: a channel appears in
+    `health.*.channels` only once it has TICKED, so a `ticking: false` can only ever be said
+    about a channel that proved it ticks. An OSC-less install publishes an EMPTY list and
+    lights nothing — no rule here has to remember that.
+  */
+  const primaryDead = stale || simulated ? [] : stoppedChannelsOf(health.primary);
+  const backupDead =
+    stale || simulated || health.backup === undefined ? [] : stoppedChannelsOf(health.backup);
+
   // …and while a server is deaf, its pill STOPS ASSERTING. Leaving a confident green
   // HEALTHY beside the amber warning is the exact shape this repo has already
   // diagnosed twice (B-081, R-006): two contradictory claims, same size, same row —
@@ -256,9 +418,19 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
   // already means "health we cannot currently verify", and the warning carries the
   // attribution. The state WORD is unchanged (it is the FSM's, and still true on the
   // AMCP axis); only its confidence is withdrawn.
+  /*
+    🔴 R-058 — A STOPPED CHANNEL MUTES THE PILL TOO, for the reason stated directly above
+    for deafness, and this is the case that reason was written about.
+
+    The owner read `PRIMARY A HEALTHY` in confident green while the channel produced nothing.
+    That is B-081's and R-006's shape exactly — two claims of different sizes, and the
+    reassuring one wins — and it is the whole complaint. The state WORD stays, because it is
+    the FSM's and is still true on the AMCP axis; only its CONFIDENCE is withdrawn, and the
+    attribution goes on the chip beside it.
+  */
   const primary = stale
     ? UNKNOWN
-    : primaryDeaf
+    : primaryDeaf || primaryDead.length > 0
       ? { ...sessionLabel(health.primary.state), style: styles.stale }
       : sessionLabel(health.primary.state);
   // B-046 — `backup` is absent under a declared single-server config: render
@@ -269,24 +441,40 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
       ? null
       : stale
         ? UNKNOWN
-        : backupDeaf
+        : backupDeaf || backupDead.length > 0
           ? { ...sessionLabel(health.backup.state), style: styles.stale }
           : sessionLabel(health.backup.state);
 
+  /*
+   * 🔴 `CONSOLE-MATCH-03` §5 — THE FOUR UNICODE GLYPHS ARE GONE FROM THIS BAR.
+   *
+   * `⚠`, `⇄` and `🔒` were literal characters in the copy. CLAUDE.md's design-system rule is
+   * flat about it — _"ALL icons go through the shared `Icon` component … Do NOT introduce new
+   * Unicode-glyph icons"_ — and these predate the rule rather than argue with it. They are not
+   * a style complaint either: a text glyph takes the FONT's shape, so `⚠` renders as a
+   * different mark on a machine with a different emoji font and `🔒` renders in COLOUR,
+   * which on a bar whose whole grammar is "colour means state" is the one thing an icon here
+   * must not do. `Icon` inherits `currentColor`, so each mark now wears its own element's
+   * state colour and changes with it.
+   */
   return (
     <footer style={styles.bar} aria-label="Status bar">
       <LinkIndicator reach={casparReach} />
+      <IdentityIndicator />
+      <ReadOnlyIndicator />
       {simulated ? (
         // R-006 — in test mode there is no server to describe. The per-server pills used to
         // read "PRIMARY A HEALTHY" in green here, straight from the mock's seed, which is
         // the claim that convinced the operator a graphic was on air. Say the true thing.
-        <span className="cg-pill" aria-label="Server status">
-          <span style={styles.failedHard}>⚠ NO SERVER — SIMULATED</span>
-        </span>
+        <Tag className="cg-pill" aria-label="Server status">
+          <span style={styles.failedHard}>
+            <Icon icon={TriangleAlert} size={11} /> NO SERVER — SIMULATED
+          </span>
+        </Tag>
       ) : (
         <>
           {/* B-081 — while `stale`, the whole pill mutes: the green ● dot is a claim too. */}
-          <span
+          <Tag
             className="cg-pill"
             {...(stale
               ? { title: staleTitle(health.primary.state) }
@@ -313,9 +501,9 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
               PRIMARY {health.primary.label}
             </span>{' '}
             <span style={primary.style}>{primary.text}</span>
-          </span>
+          </Tag>
           {health.backup !== undefined && backup !== null ? (
-            <span
+            <Tag
               className="cg-pill"
               {...(stale
                 ? { title: staleTitle(health.backup.state) }
@@ -338,12 +526,54 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
               <span style={healthDotStyle(backup)}>○</span>{' '}
               <span style={styles.backup}>BACKUP {health.backup.label}</span>{' '}
               <span style={backup.style}>{backup.text}</span>
-            </span>
+            </Tag>
           ) : (
-            <span className="cg-pill">
+            <Tag className="cg-pill">
               <span style={styles.backup}>○ NO BACKUP</span>
-            </span>
+            </Tag>
           )}
+          {/*
+            🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — HOW MANY CHANNELS REACH THE BACKUP, beside its pill. A
+            channel with no backup channel sends the backup NOTHING, so the count is a fact about air after a
+            failover: the alarm ink when none is mapped, the warning when some are not. Words only; which
+            channel and why is in each channel's own view. While the link is down it cannot be read: nothing.
+          */}
+          {(() => {
+            const mapped =
+              stale ||
+              health.backup === undefined ||
+              backupChannels === null ||
+              backupChannels === undefined
+                ? null
+                : backupMappedSummary(backupChannels);
+            return mapped === null ? null : (
+              <Tag className="cg-pill" data-backup-mapped={mapped.tone}>
+                <span style={MAPPED_TONE_STYLE[mapped.tone]}>{mapped.text}</span>
+              </Tag>
+            );
+          })()}
+          {/*
+            🔴 `RELEASE-0112-01` (`R-085`) — AN ENGINE'S CG BRIDGE SESSION, BESIDE ITS SERVER: a chip
+            for an engine that needs a person (a sign-in, a license, an approval, an engine that does
+            not answer, a core another CG Bridge drives), keyed to that engine's server label, the full
+            sentence on its title. Station-wide, so it lives here and not on a channel. While the link
+            is down the bridge's word cannot be read, and nothing is said.
+          */}
+          {!stale &&
+            engineChips(engines).map(({ server, line }) => (
+              <Tag
+                key={line.engine}
+                className="cg-pill"
+                title={`${ENGINE_LABEL[line.engine]}: ${engineStateText(line)}`}
+                aria-label={`${ENGINE_LABEL[line.engine]}: ${engineStateText(line)}`}
+                data-engine-chip={line.engine}
+                data-engine-state={line.state}
+              >
+                <span style={styles.noOsc}>
+                  <Icon icon={TriangleAlert} size={11} /> {engineChipText(server, line.state)}
+                </span>
+              </Tag>
+            ))}
           {/* B-094 — a SEPARATE indicator, deliberately not a pill STATE.
               The pill's vocabulary mirrors the session state machine exactly, and
               "answering AMCP but inaudible" is an orthogonal axis, not another
@@ -354,90 +584,202 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
               BOTH, where a pill state would be overwritten by DEGRADED at exactly
               the moment the operator most needs the explanation. */}
           {primaryDeaf && (
-            <span
+            <Tag
               className="cg-pill"
               title={noOscTitle(health.primary.label)}
               aria-label={`No OSC from server ${health.primary.label}`}
             >
-              <span style={styles.noOsc}>⚠ NO OSC FROM {health.primary.label}</span>
-            </span>
+              <span style={styles.noOsc}>
+                <Icon icon={TriangleAlert} size={11} /> NO OSC FROM {health.primary.label}
+              </span>
+            </Tag>
           )}
           {backupDeaf && health.backup !== undefined && (
-            <span
+            <Tag
               className="cg-pill"
               title={noOscTitle(health.backup.label)}
               aria-label={`No OSC from server ${health.backup.label}`}
             >
-              <span style={styles.noOsc}>⚠ NO OSC FROM {health.backup.label}</span>
-            </span>
+              <span style={styles.noOsc}>
+                <Icon icon={TriangleAlert} size={11} /> NO OSC FROM {health.backup.label}
+              </span>
+            </Tag>
+          )}
+          {/*
+            🔴 R-058 — REACHABLE BUT PRODUCING NOTHING, beside its sibling and never instead
+            of it. The two are different faults with different remedies: NO OSC means we
+            cannot SEE this server's channels; this means we can see them and they have
+            STOPPED. Both can be true at once on a mirror pair, and neither suppresses the
+            other.
+
+            It is a chip on this bar and NOT a banner. `ConnectionBanner` owns "nothing can
+            reach air" and renders only while the link is NOT live — its own header makes
+            that a promise: *"When the link is live this renders nothing: no banner is itself
+            the signal that the Runtime can actually reach air."* An operator has been taught
+            that. Rendering a banner while the link IS live would spend that learned signal,
+            and a per-CHANNEL, per-SERVER fact does not fit a surface that is singular by
+            design.
+          */}
+          {primaryDead.length > 0 && (
+            <Tag
+              className="cg-pill"
+              title={deadChannelTitle(health.primary.label, primaryDead)}
+              aria-label={`Server ${health.primary.label} is not producing frames on ${
+                primaryDead.length === 1 ? 'channel' : 'channels'
+              } ${primaryDead.join(', ')}`}
+            >
+              <span style={styles.noOsc}>
+                ⚠ {health.primary.label} NOT PRODUCING · CH {primaryDead.join(', ')}
+              </span>
+            </Tag>
+          )}
+          {backupDead.length > 0 && health.backup !== undefined && (
+            <Tag
+              className="cg-pill"
+              title={deadChannelTitle(health.backup.label, backupDead)}
+              aria-label={`Server ${health.backup.label} is not producing frames on ${
+                backupDead.length === 1 ? 'channel' : 'channels'
+              } ${backupDead.join(', ')}`}
+            >
+              <span style={styles.noOsc}>
+                ⚠ {health.backup.label} NOT PRODUCING · CH {backupDead.join(', ')}
+              </span>
+            </Tag>
           )}
           {/* The strategy is CONFIG, not health — it does not go stale with the link. */}
-          <span className="cg-pill">{health.strategy}</span>
+          <Tag className="cg-pill">{health.strategy}</Tag>
         </>
       )}
+      {/*
+        ⚠ `CONSOLE-MATCH-03` §5 — THE REFERENCE'S `CH 1 · News` IS DELIBERATELY NOT HERE, and
+        this note exists so the next reader meets the decision instead of the absence.
+
+        It was built and then taken out again. Two reasons, and the second is the one that
+        settles it:
+
+          1. **This console already names the channel twice** — the header's channel tablist,
+             and the `CH N` scope label `§2` put at the head of the bulk verbs, which is where
+             it actually qualifies a press. The reference needs it down here because its
+             channel is a `<select>` at the far end of a bar with no scope label anywhere
+             else. A third copy on a bar the operator reads for FAULTS earns nothing.
+          2. **It cost this leaf a bridge subscription.** Reading the declared bank here meant
+             `useFixedBankState` inside the status bar, and the status bar is mounted by eight
+             dom specs that stub `window.cg` with the connection channels only — 43 of them
+             went red on `onConfigChanged` of undefined. That is not a test problem to paper
+             over: it is the tests correctly reporting that a bar about SERVER HEALTH had
+             grown a dependency on the LAYER BANK. If the channel ever does belong here it
+             comes down as a prop from the shell, which already holds it.
+      */}
       <span style={styles.spacer} />
-      <AsyncButton
-        variant="caution"
-        aria-label="Manual failover"
-        disabled={health.backup === undefined}
-        title={
-          health.backup === undefined
-            ? 'No backup configured'
-            : `Switch primary to ${health.currentPrimary === 'A' ? 'B' : 'A'}`
-        }
-        run={() =>
-          window.cg.connections.failover({ reason: 'manual' }).then((r) => ({ accepted: r.ok }))
-        }
-      >
-        ⇄ FAILOVER
-      </AsyncButton>
-      {onOpenSettings !== undefined && (
-        <Button onClick={onOpenSettings} aria-label="Open server settings">
-          SERVERS
-        </Button>
-      )}
-      {onOpenSources !== undefined && (
-        <Button onClick={onOpenSources} aria-label="Open live sources">
-          SOURCES
-        </Button>
-      )}
-      {/* LOG, not AUDIT (owner). "Audit" names the FILE FORMAT the bridge writes;
-          "log" is what the operator is going to look at. The accessible name keeps
-          the fuller phrase, so a screen reader still says WHICH log this is. */}
-      {onOpenAudit !== undefined && (
-        <Button onClick={onOpenAudit} aria-label="Open audit log">
-          LOG
-        </Button>
-      )}
-      {lock.engaged ? (
-        <span style={styles.lock}>🔒 LOCKED</span>
-      ) : (
-        <Button
-          onClick={() => {
-            void (async () => {
-              // The native prompt let a too-short PIN through and this handler then dropped
-              // it on the floor — the operator pressed Lock, nothing happened, and nothing
-              // said why. The dialog now holds the rule itself: submit stays disabled until
-              // the PIN is long enough.
-              const pin = await prompt({
-                title: 'Lock the Runtime',
-                body: 'While locked, every on-air control is disabled until the PIN is re-entered.',
-                label: 'Lock PIN (4–64 characters)',
-                submitLabel: 'Lock',
-                type: 'password',
-                minLength: 4,
-              });
-              // R-020 — digits normalize to Latin BEFORE the PIN is stored, and
-              // LockOverlay normalizes the release PIN the same way, so the two
-              // ends of the comparison can never disagree about ۱۲۳۴ vs 1234.
-              if (pin !== null) await window.cg.lock.engage({ pin: normalizeDigits(pin) });
-            })();
-          }}
+      {holdsOperator && (
+        <AsyncButton
+          /*
+          R-055 — the DEFAULT variant, not `caution`.
+
+          `--r-caution` is a FAULT role in this bar — the header above says "amber
+          for a configuration problem, red for down" — and the `⚠ NO OSC` alarm two
+          elements to the left wears the same hex. FAILOVER is a manual ACTION, not
+          a fault, so colouring it spent the alarm colour on something that is not
+          alarming and made the real alarm quieter. Its three neighbours (SERVERS /
+          SOURCES / LOG) are already bare `Button`s; this now reads as one of them.
+          It keeps its disabled state and its `title`, which is where "why can I not
+          press this" actually belongs.
+        */
+          aria-label="Manual failover"
+          disabled={health.backup === undefined}
+          title={
+            health.backup === undefined
+              ? 'No backup configured'
+              : `Switch primary to ${health.currentPrimary === 'A' ? 'B' : 'A'}`
+          }
+          run={() =>
+            window.cg.connections.failover({ reason: 'manual' }).then((r) => ({ accepted: r.ok }))
+          }
         >
-          🔒 Lock…
+          <Icon icon={ArrowLeftRight} />
+          FAILOVER
+        </AsyncButton>
+      )}
+      {/*
+        `R-066` — the way out, beside the other manual actions and NOT beside the pill that
+        names the state. It renders nothing unless there is a session to leave; see its own
+        header for why a disabled SIGN OUT would be the wrong thing to draw.
+      */}
+      <SignOutButton />
+      {/*
+        🔴 `AUDIT-CLOSE-01` B1 — SETTINGS AND LOG MOVED TO THE APP HEADER.
+
+        Both doors are now in `features/shell/AppHeader.tsx`, which is where the reference
+        draws them, with their accessible names (`Open Station setup`, `Open audit log`) and
+        their titles unchanged — a relocation that renamed its controls would be a rewrite.
+        There is still exactly ONE of each in the app, which is what `station-setup.spec.ts`
+        §1 counts, page-wide.
+
+        ⚠ `STATION-CHROME-01` §2's rename (SERVERS → SETTINGS) and `STATION-CHROME-02` §1's
+        one-door decision are both intact and travelled with the button; nothing about which
+        tab it opens on changed.
+
+        ⚠ WHAT STAYED HERE, and why it is not an oversight: the manual FAILOVER control and
+        the LOCK. The reference's bar draws NEITHER, so there is no reference decision to
+        follow for either. Failover is deletion-guard item 17 and belongs beside the fault
+        states it answers — it is the remedy for the pill two elements to its left. The lock's
+        PIN is set fresh at every engage and is ephemeral (`#lockPin`, in memory), so the
+        button belongs where the engage is (`STATION-CHROME-01` §7).
+      */}
+      {lockCoverage === 'all' ? (
+        <span style={styles.lock}>
+          <Icon icon={Lock} size={11} /> LOCKED
+        </span>
+      ) : lock.engaged ? /*
+          🔴 `B-257` — A LOCK THAT DOES NOT COVER ALL OF THIS CONSOLE says nothing here, and the
+          engage is ABSENT: the bridge holds one lock at a time and refuses a second. A console
+          the lock reaches only in part reads that on the channel strip, beside the channel.
+        */ null : !holdsOperator /*
+          🔴 `C-038` — **A VIEWER GETS NO LOCK BUTTON AT ALL.**
+
+          The lock gates station OPERATION, so it belongs to whoever may operate the station:
+          a viewer who could engage it would obstruct an operator while holding no authority
+          over the console, and the PIN is a second, independent gate that does not change
+          that (ADR 0010 rule 3 — the PIN is a safety mechanism and never becomes identity).
+
+          ABSENT rather than disabled, per golden rule 13: a greyed-out Lock reads as "the
+          console is busy", which is not the fact.
+        */ ? null : (
+        /*
+          🔴 `STATION-CHROME-01` §7 — ENGAGING ASKS FOR THE PIN TWICE.
+
+          It used to be a one-field `prompt`, which meant a mistyped PIN locked the operator
+          out of a live console with no remedy short of restarting the bridge: the lock
+          refuses everything, the only way out is the PIN, and the PIN is whatever was typed.
+          `EngageLockDialog` confirms it and refuses to lock unless the two match — see its
+          own header for why this is the one form in the app that earns a confirmation field.
+
+          The button STAYS on the status bar: a PIN set fresh at every engage belongs where
+          the engage is, and it is ephemeral (`#lockPin`, in memory, nulled on release), so
+          there is no stored setting for a settings page to hold.
+        */
+        <Button onClick={() => setEngaging(true)}>
+          {/* The WORD keeps its own casing: `Button` upper-cases it in CSS, so changing the
+              source case buys no pixel and only breaks the three specs that read
+              `textContent`. Only the glyph moved. */}
+          <Icon icon={Lock} />
+          {/* 🔴 NO ELLIPSIS. `MODAL-CHROME-10` A §A2: the dots belong ONLY to a control that
+              opens a BROWSE WINDOW. This opens the in-app PIN dialog. Label only — the lock
+              still refuses everything and still asks for the PIN twice. */}
+          Lock
         </Button>
       )}
-      {promptDialog}
+      {engaging && (
+        <EngageLockDialog
+          onCancel={() => setEngaging(false)}
+          onEngage={(pin) => {
+            setEngaging(false);
+            // Already digit-normalised by the dialog, which is also where the two entries
+            // were compared — one normalisation, one place (R-020).
+            void window.cg.lock.engage({ pin });
+          }}
+        />
+      )}
     </footer>
   );
 }

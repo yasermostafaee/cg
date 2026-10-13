@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/runtime.js';
+import { E2E_PLAYOUT, test, expect, type PlayoutSeed } from './fixtures/runtime.js';
 
 /**
  * THE ASSERTION THE DIALOG WAVE OWED (DEBT.md:38, DEBT.md:2082).
@@ -27,7 +27,7 @@ import { test, expect } from './fixtures/runtime.js';
  * is written never to do.
  *
  * `Live sources` satisfies every property the debt actually requires, and one more:
- * its body genuinely scrolls once a few sources are defined (asserted below rather
+ * its body genuinely scrolls once the Playout lists a dozen inputs (asserted below rather
  * than assumed), its refusal comes from the REAL validator the bridge itself runs,
  * and it is the modal whose message the owner reported as illegible. The mechanism
  * under test is the primitive's, so it is the same mechanism either way.
@@ -44,6 +44,14 @@ import { test, expect } from './fixtures/runtime.js';
  * vacuous. Nothing else about the spec changed: the negative control, the Persian
  * neighbour and the scroll-position claim are all as they were.
  *
+ * ── ⚠ RE-POINTED AGAIN BY `PLAYOUT-SOURCES-01` ─────────────────────────────
+ *
+ * Nothing on the tab is DEFINED any more: the list is the Playout's inputs, read-only. So the
+ * rows come from a seeded Playout rather than from six Adds, and the refusal is the one control
+ * the tab still applies — the band, checked by the bridge's own rule. Both conditions were
+ * re-checked again, not assumed: the overflow assertion below still guards the first, and the
+ * band refusal is `checkSourceCatalogAgainstBanks`, the bridge's.
+ *
  * ── THE NEGATIVE CONTROL IS THE POINT ───────────────────────────────────────
  *
  * `toBeInViewport()` on a short dialog would pass for the broken code as easily as
@@ -53,56 +61,74 @@ import { test, expect } from './fixtures/runtime.js';
  * being in view while its old neighbours are not is the whole claim.
  */
 
-/** Enough defined sources that the dialog's body cannot fit on one screen. */
-const NAMES = ['Studio A', 'Studio B', 'Baku', 'Skype 1', 'Skype 2', 'Roving'];
+/**
+ * Enough inputs that the dialog's body cannot fit on one screen: the standard seven and five more,
+ * one of them carrying a real Persian name.
+ */
+const EXTRA = ['Baku', 'Skype 1', 'Skype 2', 'Roving', 'مهمان دو'];
+const MANY: PlayoutSeed = {
+  ...E2E_PLAYOUT,
+  inputs: {
+    inputs: [
+      ...E2E_PLAYOUT.inputs.inputs,
+      ...EXTRA.map((name, i) => ({
+        id: `extra-${String(i + 1)}`,
+        name,
+        producer: { kind: 'ndi', source: `GUEST-PC (Cam ${String(i + 1)})` },
+      })),
+    ],
+  },
+};
+test.use({ playoutSources: MANY });
 
 test('a refusal stays in the viewport when the modal body is scrolled away from it', async ({
   app,
 }) => {
   const page = app.page;
-  const dialog = page.getByRole('dialog', { name: 'Live sources' });
+  const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
-  await page.getByRole('button', { name: 'Open live sources' }).click();
+  await app.openStationSetupAt('Live sources');
   await expect(dialog).toBeVisible();
 
-  for (const name of NAMES) {
-    await dialog.getByLabel('New source name').fill(name);
-    await dialog.getByRole('button', { name: 'Add' }).click();
-  }
-  await expect(dialog.locator('[data-source-id]')).toHaveCount(NAMES.length);
+  await expect(dialog.locator('[data-source-input]')).toHaveCount(
+    E2E_PLAYOUT.inputs.inputs.length + EXTRA.length,
+  );
 
   /*
     PERSIAN SITS BESIDE IT. These strings are shown on a station whose operator
-    surface is Persian, and a source's NAME is free text — so one of the six
-    carries a real RTL name while the refusal below is Latin. If the message
+    surface is Persian, and an input's NAME is free text — the Playout operators' —
+    so several carry a real RTL name while the refusal below is Latin. If the message
     region's direction handling were wrong the two would fight for the same line
     box, and this is the spec that has a real layout engine to notice.
-
-    Addressed through the ENTRY, not through the field's accessible name: that
-    name is derived from the source's own name, so it changes under the locator
-    the moment the field is filled.
   */
-  const secondName = dialog.locator('[data-source-id]').nth(1).getByRole('textbox').first();
-  await secondName.fill('مهمان دو');
-  await expect(secondName).toHaveValue('مهمان دو');
+  await expect(dialog.getByText('مهمان دو')).toBeVisible();
 
-  const body = dialog.locator('[data-modal-body]');
+  /*
+    ⭐ `STATION-CHROME-01` §2 MOVED THE SCROLL CONTAINER, and this spec is where that shows.
+
+    Station setup is tabbed now: the modal's body holds the RAIL and the section PANE side by
+    side, and it must not scroll them together or the rail would slide away from the section
+    it names. So the pane scrolls and the body does not. The message region is unaffected and
+    that is the point — it lives OUTSIDE both, pinned above the footer, which is exactly the
+    property this spec exists to hold.
+  */
+  const body = dialog.locator('[data-station-pane]');
   const message = dialog.locator('[data-modal-message]');
 
-  // THE PRECONDITION, ASSERTED AND NOT ASSUMED: the body genuinely scrolls. A
-  // spec that quietly stopped scrolling — a narrower entry, a taller viewport —
-  // would keep passing while testing nothing at all.
+  // THE PRECONDITION, ASSERTED AND NOT ASSUMED: the pane genuinely scrolls. A spec that
+  // quietly stopped scrolling — a shorter list, a taller viewport — would keep passing while
+  // testing nothing at all.
   const overflow = await body.evaluate((el) => el.scrollHeight - el.clientHeight);
   expect(
     overflow,
-    'the dialog body must genuinely scroll for this spec to mean anything',
+    'the section pane must genuinely scroll for this spec to mean anything',
   ).toBeGreaterThan(80);
 
   // Refuse something. The band must be disjoint from the candidate bank, which the
   // mock seeds at 70 upward, so 50–75 reaches into it. This is the bridge's own
   // validator (`checkSourceCatalog`), not a stub.
-  await dialog.getByLabel('Live source band start layer').fill('50');
-  await dialog.getByLabel('Live source band end layer').fill('75');
+  await dialog.getByLabel('Live source band start layer').fill('60');
+  await dialog.getByLabel('Live source band end layer').fill('85');
   await dialog.getByRole('button', { name: 'Apply band' }).click();
   await expect(message).toBeVisible();
 
@@ -115,15 +141,25 @@ test('a refusal stays in the viewport when the modal body is scrolled away from 
 
   // ── the assertion the debt owed ────────────────────────────────────────────
   await expect(message).toBeInViewport({ ratio: 1 });
-  // …and the action row it is pinned to is still reachable, which is the other
-  // half of the same promise: a long message may not push Done off the bottom.
-  await expect(dialog.getByRole('button', { name: 'Done' })).toBeInViewport({ ratio: 1 });
+  /*
+    …and the action row it is pinned to is still reachable, which is the other half of the
+    same promise: a long message may not push the footer off the bottom.
+
+    ⚠ `B-240` — asserted on the FOOTER ITSELF, not on a button in it. This read
+    `getByRole('button', { name: 'Close' })`, and the Live sources tab has no footer button at
+    all now: dismissal moved to the dialog's ✕ (one job, one control, one name) and a
+    save-as-you-go section has nothing of its own to commit. The claim was never about a
+    particular word — it is that the pinned row survives a long message — so it is now made
+    against the row.
+  */
+  await expect(dialog.locator('.cg-modal-footer')).toBeInViewport({ ratio: 1 });
 
   // ── the negative control: this check can fail ──────────────────────────────
   // The last element INSIDE the scrolling body — where the refusal used to be
   // appended — is off-screen at this scroll position. So the message being in view
   // is a property of where it lives, not of the dialog being short.
   const lastInBody = body.locator('p').last();
+  await expect(lastInBody).toHaveCount(1);
   await expect(lastInBody).not.toBeInViewport();
 
   // The message did not steal the operator's place, either: it is a sibling of the

@@ -1,17 +1,23 @@
 import { useEffect, useRef } from 'react';
-import type {
-  AggregatedFields,
-  DynamicField,
-  FieldValue,
-  ListItem,
-  NestedFieldValues,
+import { writeDigitsInto } from '@cg/gesture';
+import {
+  fieldDigitsOf,
+  type AggregatedFields,
+  type DynamicField,
+  type FieldDigits,
+  type FieldValue,
+  type ListItem,
+  type NestedFieldValues,
 } from '@cg/shared-schema';
 import { Check, TriangleAlert } from 'lucide-react';
+import { latinNumerals, writeFieldDigits, type DigitSet } from '@cg/text-shaping';
 import { cx } from '../../cx.js';
+import { keyboardLanguage } from '../../keyboardLanguage.js';
 import { Button } from '../../ui/Button.js';
 import { Callout } from '../../ui/Callout.js';
 import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
+import { useTypedNumber } from '../../ui/typedNumber.js';
 import { ListItemsEditor } from './ListItemsEditor.js';
 import type { ListItemColumn } from './repeater-columns.js';
 import * as s from './PreviewFieldForm.css.js';
@@ -307,6 +313,61 @@ function FieldRow({
   );
 }
 
+/**
+ * `PERSIAN-DIGITS-01` — a `number` field's preview value, typed on the author's own keyboard.
+ *
+ * It was a native `type="number"` box, which drops every digit that is not ASCII before script
+ * sees it: measured in Chromium, `۱۲٫۵` typed here previewed as `0`. The box now keeps the text
+ * as typed, the one reader (`useTypedNumber`) decides the number, and only a NUMBER is handed on
+ * — so the template still receives a JSON number, exactly as it does on air. A text that can never
+ * be a number is refused in this form's own error line and changes nothing.
+ */
+function PreviewNumberInput({
+  className,
+  value,
+  onChange,
+  label,
+  digits,
+}: {
+  className: string;
+  value: number;
+  onChange: (v: FieldValue) => void;
+  label: string;
+  /** `TEXT-DIGITS-01` — the field's digits: the box shows and types the number in them. */
+  digits: DigitSet;
+}): JSX.Element {
+  const typed = useTypedNumber(value);
+  return (
+    <>
+      <input
+        className={cx(className, typed.refusal !== null && s.inputInvalid)}
+        type="text"
+        inputMode="decimal"
+        value={writeFieldDigits(typed.text, digits, 'number')}
+        onChange={(e) => {
+          const text = writeDigitsInto(
+            e.currentTarget,
+            e.nativeEvent,
+            digits,
+            keyboardLanguage,
+            'number',
+          );
+          const reading = typed.change(text);
+          if (reading.kind === 'number') onChange(reading.value);
+        }}
+        aria-label={label}
+        {...(typed.refusal !== null ? { 'aria-invalid': true } : {})}
+      />
+      {typed.refusal !== null && (
+        <span className={s.error} role="alert">
+          <Icon icon={TriangleAlert} size={14} />
+          {typed.refusal}
+        </span>
+      )}
+    </>
+  );
+}
+
 /** D-106 — a textarea that auto-grows to its content (compact when short, full when long). */
 function GrowTextarea({
   className,
@@ -315,6 +376,7 @@ function GrowTextarea({
   value,
   onChange,
   label,
+  digits,
 }: {
   className: string;
   rows: number;
@@ -322,6 +384,8 @@ function GrowTextarea({
   value: string;
   onChange: (v: FieldValue) => void;
   label: string;
+  /** `TEXT-DIGITS-01` — the field's digits: shown, and each digit written in them as it is typed. */
+  digits: FieldDigits;
 }): JSX.Element {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   useEffect(() => {
@@ -335,8 +399,10 @@ function GrowTextarea({
       ref={ref}
       className={cx(className, s.grow)}
       rows={rows}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
+      value={writeFieldDigits(value, digits)}
+      onChange={(e) =>
+        onChange(writeDigitsInto(e.currentTarget, e.nativeEvent, digits, keyboardLanguage))
+      }
       onKeyDown={(e) => {
         // D-106 — a single-line `text` field keeps single-line semantics: Enter
         // does not insert a newline (only `multiline` fields accept newlines).
@@ -371,21 +437,21 @@ function renderInput(
           value={asString(value)}
           onChange={onChange}
           label={label}
+          digits={fieldDigitsOf(field)}
         />
       );
-    case 'number':
+    case 'number': {
+      const numberDigits = fieldDigitsOf(field);
       return (
-        <input
+        <PreviewNumberInput
           className={cls}
-          type="number"
           value={typeof value === 'number' ? value : field.default}
-          min={field.min}
-          max={field.max}
-          step={field.step}
-          onChange={(e) => onChange(Number(e.target.value))}
-          aria-label={label}
+          onChange={onChange}
+          label={label}
+          digits={numberDigits === 'as-typed' ? 'latin' : numberDigits}
         />
       );
+    }
     case 'color':
       return (
         <input
@@ -446,6 +512,7 @@ function renderInput(
           // (A `list` field carries no own direction; the textarea inherits the form's reading order.)
           multiline={showDwell}
           columns={columns}
+          digits={fieldDigitsOf(field)}
           onChange={(items) => onChange(items)}
           appliedItems={appliedItems}
           onUpdateItem={onUpdateItem}
@@ -462,6 +529,7 @@ function renderInput(
           value={asString(value)}
           onChange={onChange}
           label={label}
+          digits={fieldDigitsOf(field)}
         />
       );
   }
@@ -510,7 +578,15 @@ export function validateField(field: DynamicField, value: FieldValue | undefined
   }
   if (field.pattern !== undefined && str !== '') {
     try {
-      if (!new RegExp(field.pattern).test(str)) return `Doesn't match ${field.pattern}`;
+      /*
+        `PERSIAN-DIGITS-01` — a pattern is written with Latin classes (`[0-9]`, `\d`), and the
+        author types on a Persian keyboard: the `Time (HH:MM)` preset refused `۲۱:۳۰`. So a value
+        is accepted when it matches as typed OR with its digits, `٫` and `٬` read as Latin. The
+        VALUE is not rewritten, and no stored pattern is — templates already exported carry the
+        old presets, and reading the value is the fix that reaches them.
+      */
+      const re = new RegExp(field.pattern);
+      if (!re.test(str) && !re.test(latinNumerals(str))) return `Doesn't match ${field.pattern}`;
     } catch {
       /* an invalid pattern is a field-config issue, not a value error */
     }

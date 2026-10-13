@@ -157,6 +157,9 @@ because some scene said `guest-1`.
    producer definition.
 2. **The ASSIGNMENTS** — each imported TEMPLATE gets, **per live plate**, a property whose
    value is one of those defined sources. **The operator assigns once, per template.**
+   ⚠ Amended 2026-09-28 (`CHANNEL-SOURCES-01` decision 2, `R-072`): once per template ON EACH
+   CHANNEL — the store is keyed (channel, template, plate), because a default set on one channel
+   changed another's.
 
 🔴 **The reasoning, recorded so it is not re-litigated.** Binding by NAME MATCH silently
 requires the **AUTHOR** to guess the installation's naming convention — which contradicts
@@ -238,6 +241,12 @@ SourceAssignmentsSchema = {
   assignments: Array<{ templateId: string, plateId: string, sourceId: string }>,
 }
 ```
+
+⚠ **Amended 2026-09-28 (`PLATE-BAND-01`, `openspec/changes/archive/2026-09-28-plate-band`).** `layerRange` is still the DECLARED
+band and the only one the file holds. But "never defaulted" no longer holds for a station linked to the
+Playout: with none declared it is given 60–79 unless its own config claims a layer there, because the
+contract fixes the plant's layers and a reservation in the band now turns the default off instead of failing
+a boot (`tasks.md` note 4's amendment). The default is computed (`plateBandInForce`) and never written.
 
 A **discriminated union on `kind`**, not a free string, so an unreachable producer form is a
 parse error at the boundary rather than an AMCP `400` at take time. `route` carries an
@@ -756,7 +765,48 @@ refuses the take before any of this (§2c, `tasks.md` 6.7).
 2. **the assigned source's explicit `aspect`** — the fallback where the format yields none, i.e.
    `AUTO` or a format outside the list above;
 3. **the element's `expectedAspect`** — the author's best guess, last;
-4. **neither side states anything** → still open, and still `tasks.md` 6.3's to settle.
+4. **neither side states anything** → ⭐ **DECIDED 2026-08-14: ASSUME THE HOLE'S OWN
+   ASPECT (no crop), and mark the result `assumed`. Not a refusal.** See below.
+
+### ⭐ 3a-i. DECIDED 2026-08-14 — step 4, the case where NEITHER side states an aspect
+
+The two candidates D-147 left open were: **assume the hole's own aspect (⇒ no crop)**, or
+**refuse the take with a distinct errorCode**. Adopted: **assume, and say that we assumed.**
+
+🔴 **THE ARGUMENT FROM THE CODE, WHICH IS ON ITS OWN SUFFICIENT: REFUSING WOULD OUTLAW
+`AUTO`.** `LIVE_SOURCE_FORMATS` includes `AUTO`, and `aspectForFormat` returns `null`
+for it **and for nothing else** — its own docstring calls it _"a request to the hardware, not
+a statement about the picture"_. An operator who selects `AUTO`, because the card negotiates
+or because the feed varies, has configured this system **correctly**. A refusal would make a
+first-class catalog value unusable, with nothing in the UI able to explain why. That is not a
+safety property; it is a bug wearing one.
+
+Three supporting reasons, in the order they weighed:
+
+1. **This design's refusals are for CONFLICT, not for ABSENCE.** The other two are a plate
+   with NO ASSIGNMENT (nothing to show at all) and an `expectedAspect` that DISAGREES with
+   the assigned source (two facts that contradict). Both are positive knowledge of a problem.
+   This is the absence of a cosmetic detail on a plate that is otherwise fully configured.
+2. **The harms are not comparable.** Assuming yields a picture that may be stretched — which
+   is exactly today's behaviour for every source, and what this whole feature improves on.
+   Refusing yields a **black box where a guest should be**, on a plate the operator correctly
+   assigned. Refusing a remedy because a detail is unknown is fail-STUCK, not fail-safe.
+3. **§3's ladder is written as DEGRADATION, not as a gate** — the fallback exists so the
+   feature is _"usable before every source is fully described"_, and D-147 made
+   `expectedAspect` optional precisely so an author who cannot see the feed _"is not forced
+   into a guess that can refuse a take on air"_. Refusing here would reintroduce that forced
+   guess at the installation end, one step further out.
+
+**THE HONESTY HALF, which is what makes assuming acceptable rather than merely convenient.**
+`resolvePlateAspect` returns `assumed: true` as its **own field**, not as `aspect === null`:
+the two answer different questions — `aspect` says what the geometry does, `assumed` says how
+much we KNOW — and a consumer needs both to say "fitted, unverified" rather than claiming a
+verified fit.
+
+⚠ **FLAGGED FOR THE OWNER, and cheap to reverse.** This is a judgement about which on-air
+failure is worse, and the owner may weigh a stretched face against a black box differently.
+`assumed` is the seam: it already carries the fact, so switching to a refusal is a change at
+`resolvePlateAspect` and its callers — not a redesign.
 
 🔴 **`expectedAspect` IS UNCHANGED BY THIS, and this sentence exists so a later reader does not
 collapse the two.** It remains the AUTHOR'S ASSERTION that the bridge VALIDATES the assigned source
@@ -787,7 +837,8 @@ R-021's own rationale **this plant runs several Runtime stations against one Cas
 `COMMIT` we send might apply **another controller's** deferred changes. That is the same class of
 harm the channel-scoped ban exists to prevent.
 
-**The question, answerable with `amcp-poke` on the plant's 2.3.2 and needing no capture card:**
+**The question, answerable with `amcp-poke` on the production 2.5.0 and needing no capture card
+(corrected 2026-08-22 — this said "the plant's 2.3.2", which is retired and must never be probed):**
 
 > Does `MIXER <ch> COMMIT` apply only the DEFERRING CONNECTION's queued changes, or every deferred
 > change on the channel?
@@ -864,6 +915,31 @@ is not a bug that shows up in review; it is a **silently correct-looking test** 
 third class. The reverse order (build Live Sources first, then narrow) would mean the sweep flags
 live guest boxes as orphans in the window between them, which is an operator being invited to clear
 a face off air.
+
+### ⭐ AMENDED 2026-08-12 (owner) — PHASE 5 LANDED FIRST, DELIBERATELY, AND THE ORDERING IS DISCHARGED BY SOMETHING STRONGER
+
+**Phase 5 shipped while R-028's section 6 was still entirely open (6.1–6.5 unchecked), with the
+owner's confirmation.** Recording why, because the table above says the opposite and a later reader
+finding that contradiction should find the answer with it rather than re-deriving it.
+
+The ordering guarded **two different hazards**, and they did not survive equally:
+
+1. **The silently correct-looking narrowing** — the real one. It is a hazard about a test that
+   passes while forbidding the third class, and the ordering addressed it by making the class exist
+   before anyone wrote the narrowing. **Phase 5 addresses it better: the class now exists AND is
+   pinned.** `tools/caspar-bridge/tests/live-source-ownership.integration.test.ts` holds the three
+   door tests, each verified to FAIL without its own line. A section-6 rewrite that narrows against
+   two classes no longer produces a green suite — it produces a red one, naming the door it broke.
+   **A loud failure is a stronger guarantee than an ordering**, because an ordering only works if
+   whoever writes the narrowing remembers it, and the test works whether they remember or not.
+2. **A live guest box on a reclaimable layer** — the on-air hazard. It **cannot occur before phase
+   6**: no verb seats a live producer (`playSource` is 6.1), so the ledger is empty in production
+   and every door is a no-op on a real bridge. There is no window to be inside.
+
+**The condition attached to this confirmation is NOT recorded here**, because nobody rewriting the
+sweep will be reading this file. It is written where R-028 will be read — at its own tasks 6.2 and
+6.5 — and it is that 6.2's rewrite must keep those three door tests **passing**, never rewrite them
+away. A guard nobody is told about is not a guard.
 
 ### The layer range — 10–59, freed by R-028's own 6.4
 
@@ -1265,6 +1341,18 @@ at all: the volume can be set on a layer before anything is on it.
 (`caspar-runtime.ts:3644`) is the single emit chokepoint, which is why the rule is implementable at
 one place; the guard question is nonetheless per-site and is pinned per-site by test:
 
+⚠ **ROW 1 WAS STALE WHEN THIS LANDED, 2026-08-14, and the correction is kept beside it rather than
+silently applied.** `#loadOnto` via `loadFixed` is **NOT** rehearse-guarded: the guard was REMOVED
+when LOAD became LIST-ONLY, which emits no AMCP at all — the stronger form, and `caspar-runtime.ts`
+argues it in place. What the row misses is the SECOND caller: the dynamic `load()` is not
+list-only, still emits, and never had a guard of its own. That is the site the mute actually
+closes. The same stale row is corrected in R-042 and B-121.
+
+⭐ **AND THE MUTE ITSELF IS AT ONE PLACE, WHICH IS WHY THE COLUMN IS ABOUT GUARDS.** `#sendAdd` is
+the single emit chokepoint, so "under this rule" below answers only the per-site GUARD question;
+every site inherits the mute whether or not it needs a guard. Site 3 is therefore "unchanged" in
+the sense that it still takes no guard, not in the sense that its wire traffic is unchanged.
+
 | #   | site                                         | today                                    | under this rule                                                     |
 | --- | -------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
 | 1   | `#loadOnto` (via `loadFixed`) `:1121`        | rehearse-guarded                         | guard stays; the mute makes the guard's job survivable (R-042)      |
@@ -1277,6 +1365,46 @@ one place; the guard question is nonetheless per-site and is pinned per-site by 
 arguing at length why it is in the play path rather than in a rehearse-exit step. That re-assert
 **is** the "explicit recorded intent" this rule names. Adding a second unmute path would be the
 `B-100`/`P-012` failure — one rule, two spellings.
+
+### ⭐ 7a. DECIDED 2026-08-14 — WHERE THE RAISE HALF LIVES (owner)
+
+The table above says audio is raised only by an **explicit recorded intent naming the layer**, and
+for a long time this design said nothing about where that intent is RECORDED. That silence was not
+neutral: it meant five sub-tasks enumerated the mute and none enumerated the raise, so every Live
+Source plate was permanently silent while the rule read as fully implemented.
+
+**DECISION — the control lives ON THE ROW, beside the source swap.**
+
+- Under pressure, on air, _"which source"_ and _"how loud"_ are one decision made in one place.
+  §9's 6.9e already requires the swap to be reachable in one or two actions from the row and
+  explicitly NOT behind a modal chain; the volume has the same emergency character and the same
+  argument applies unchanged.
+- 6.9c already establishes that the audio intent belongs to the **PLATE**, not to the producer
+  instance — which is precisely why it survives an on-air swap. A control expressing a plate-level
+  property belongs where the plate's other per-run property already is.
+
+**REJECTED, recorded so neither is re-proposed:**
+
+| placement              | why not                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| inside the SWAP dialog | turns a two-second adjustment into opening the swap flow, and couples two independent acts |
+| the PLAYOUT tab        | further from the operator's flow than the row they are already looking at                  |
+
+⚠ **The affordance is a dialog rather than an inline row control, and that is forced by the row
+rather than chosen.** A row carries a VARIABLE number of plates; the verb block is a fixed
+six-column grid whose sticky header prints a word above each glyph (`layerTable.ts`). A conditional
+inline control would misalign every header word from its button — which that file names as the
+DANGEROUS failure, because this product's STOP and CLEAR mean the opposite of the reference
+product's and the header word is what retires the misread. So `AUDIO` sits beside `SOURCE` in the
+row's own action set, which is as close to the row as a per-plate control can get.
+
+🔴 **THE INTENT IS RETAINED STATE, and this is the half that is easy to miss.** The mute half needs
+no memory — silence is what every producer is created with. The raise half is nothing BUT memory,
+and the bridge's ledger is process memory: it is destroyed by teardown and discarded on restart. So
+the intent lives in `#plateVolumes` and rides `RetainedStackItem.plateVolumes` on the OPEN axis
+beside `sourceOverride`. Without that, a CLEAR-then-retake or a momentary blip re-mutes a
+deliberately raised plate — the picture returns, the guest does not, and every console shows the row
+as normal.
 
 ### ⚠ What this rule does NOT close — stated, not silently widened
 
@@ -1480,6 +1608,132 @@ single-file page**, under that CEF, with the live layer visible behind it. **Rec
 not the expectation.** Until it is run, no mechanism is chosen — that is the whole point of listing
 two.
 
+### 🔴 SUPERSEDED WITHIN THE DAY — READ §9a-R BELOW FIRST
+
+The section immediately following recorded the owner's hand-run result of 2026-08-15 and drew the
+conclusion "the punch is not a CSS problem". **A scripted, pixel-asserted re-run the same day
+CONTRADICTED half of it: mechanism B was never actually tested, and once its defect is fixed it
+WORKS.** The original reading is kept in full because the correction is only legible beside it —
+and because mechanism A's half of it stands. Jump to **§9a-R** for the measured outcome.
+
+### THE RECON RAN 2026-08-15 (hand-run). BOTH MECHANISMS APPEARED TO FAIL.
+
+Run by the owner at the plant with `tools/live-source-punch-probe/`; the filled form is that kit's
+README and is the record. **The section above is left standing rather than rewritten**, because it
+is the reasoning that produced a correct measurement, and the value of "record the measurement, not
+the expectation" is only visible with the expectation still on the page.
+
+| mechanism                                 | criterion 1 — real transparency | criterion 2 — frame + shadow survive |
+| ----------------------------------------- | ------------------------------- | ------------------------------------ |
+| **A** — `mix-blend-mode: destination-out` | **FAIL**                        | **PASS**                             |
+| **B** — mask the backdrop                 | **FAIL** — ambiguous            | PASS (trivially — B erases nothing)  |
+
+**A failed decisively, and the cause is the exact risk this section named.** The erase HAPPENED
+inside the page — the backdrop's stripes vanished from both plate rects — but produced **opaque
+black, not alpha 0**, and CasparCG composited that black over the live layer. The table above says
+of this candidate: _"it erases within its stacking / isolation group, and what reaches the PAGE's
+root alpha depends on the isolation above it. That interaction is precisely the thing to measure,
+not to reason about."_ **That is what was measured, and it is what killed it.** Both alternative
+explanations were eliminated rather than assumed: `CLEAR 1-10` showed the video live and running,
+and the clip's letterboxing was computed against the plate rects and rejected.
+
+**B failed ambiguously and is recorded as ambiguous.** No visible effect at all — a signature that
+**cannot** distinguish "the mask applied and does not reach page alpha" from "the mask never applied
+at all". It is FAIL on the criterion; it is **not** evidence about masking as a technique. The
+overall conclusion does not lean on it: the rule was that both must fail, and A's failure is
+decisive on a modern engine.
+
+⭐ **The measurement was taken on Chromium 142 (CasparCG 2.5.0, `69e8ad5`), and the OWNER HAS SINCE
+SETTLED (2026-08-15) THAT THIS IS PRODUCTION: 2.3.2 is retired.** So this is not a result taken on
+the wrong machine that happens to generalise — **it is a production answer**, and the
+robust-downward argument, while true, is no longer needed to carry it.
+
+🔴 **Which makes every "measure on CasparCG 2.3.2 / CEF 71" instruction in this change STALE TEXT,
+not a fork to navigate** — this section's own heading above is one of them, and there are roughly
+two dozen. They are a warning that has outlived its truth, which is the defect class this project
+has been bitten by twice. A stale 2.3.2 install still exists at `D:\programs\CasparCG`; **no probe
+may be pointed at it**, or CEF-71 answers get recorded as production. Record the build string beside
+every result regardless: the next upgrade makes today's answers historical.
+
+**The requirement in "The requirement, stated plainly" above is UNCHANGED and still unmet.** What
+the measurement retires is the assumption that CSS can satisfy it **inside one CasparCG layer**.
+Per this kit's own rule, **§9b — the multi-box on a channel of its own — becomes the LIVE OPTION
+rather than the fallback**; see §9b.5, which is amended accordingly. Adoption remains gated on
+§12.5's four measurements and one owner question, and this run does not make that call.
+
+**One positive result survives and belongs to §9a.1, not here:** the erase was correctly SCOPED —
+an inner fill node erasing, an outer node carrying the frame and shadow — and criterion 2 passed.
+The frame was not eaten. Recorded on §9a.1.
+
+---
+
+### §9a-R ⭐ RE-MEASURED 2026-08-15, SCRIPTED AND PIXEL-ASSERTED — **MECHANISM B WORKS**
+
+Build `2.5.0 69e8ad5 Stable`, Chromium 142 — the production build. Harness:
+`tools/caspar-amcp-probe/bin/live-probe-lib.mjs` (one AMCP command at a time, every response code
+captured, AMCP `PRINT` read back and sampled as median patches at normalised coordinates).
+Diagnostics: `tools/live-source-punch-probe/mask-mode-diagnostic.html`.
+
+**THE PRIOR WAS WRONG ABOUT B, AND THE REASON IS A DEFECT IN THE PROBE, NOT IN THE BROWSER.**
+
+`punch-probe.html`'s `maskUri()` builds mechanism B's mask as an SVG whose own comment reads
+_"white keeps, black punches"_ — a white full-frame rect with BLACK rects at the plates. **That is
+LUMINANCE masking. CSS `mask-image` masks by ALPHA by default, and `#fff` and `#000` are both
+fully opaque.** So the mask applied perfectly and punched nothing: a no-op whose signature is
+indistinguishable from a mask that never applied — which is exactly what "no visible effect at
+all" recorded.
+
+Measured, entirely inside the page (a red sheet masked over a green sheet, so CasparCG's compositor
+is not involved and cannot confound the reading):
+
+| mode                                             | left plate | right plate | outside plates |
+| ------------------------------------------------ | ---------- | ----------- | -------------- |
+| **1** the probe's exact SVG, default mask-mode   | `#d00000`  | `#d00000`   | `#d00000`      |
+| **2** the SAME SVG + `mask-mode: luminance`      | `#00c000`  | `#00c000`   | `#d00000`      |
+| **3** holes as `fill-opacity="0"`, alpha masking | `#d00000`  | `#d00000`   | `#d00000`      |
+
+Mode 1 reproduces the null result exactly. Mode 2 punches both plate rects and leaves the backdrop
+intact between them. (Mode 3 also fails, and correctly so: the SVG composites internally, so a
+transparent rect over an opaque white rect is still opaque — the fix is the mask MODE, not the
+hole's colour.)
+
+**AND THE PUNCH REACHES THE PAGE'S ROOT ALPHA**, which is the property the feature actually needs
+and the one mechanism A could not deliver. With the page transparent, the masked backdrop over a
+flat colour producer on a lower CasparCG layer:
+
+| sample         | measured  | meaning                                          |
+| -------------- | --------- | ------------------------------------------------ |
+| left plate     | `#00ffff` | **the lower CasparCG layer, composited through** |
+| right plate    | `#00ffff` | same                                             |
+| outside plates | `#d00000` | the backdrop, intact                             |
+
+Validity gate: the lower layer was asserted visible BEFORE the reading. A first attempt used a
+still PNG that turned out black at the plate position; the gate VOIDED it rather than letting a
+black plate be read as a failed punch — which is precisely the failure mode this project has paid
+for twice.
+
+#### What this changes
+
+- 🔴 **"Neither mechanism passes" is WITHDRAWN.** Mechanism A fails, decisively and for the reason
+  §9a predicted. **Mechanism B PASSES criterion 1**, and passes criterion 2 by construction — it
+  erases nothing of the plate's own paint, so there is no stroke or shadow for it to eat (§9a.1's
+  asymmetry, now the deciding property rather than a footnote).
+- **The punch IS a CSS problem, and it is solved.** `design.md` §9b is **NOT forced**. It reverts
+  to what §9b always was on its merits: evaluated, recommended in principle, not adopted, gated on
+  §12.5. See §9b.5, whose promotion is withdrawn.
+- **1.5c is UNBLOCKED with a mechanism chosen by measurement** — masking the backdrop, with
+  `mask-mode: luminance` (and `-webkit-mask-source-type: luminance`) as a non-optional part of it.
+- **1.5h (passthrough) is alive again**, since it was only ever "the punch with nothing beneath it".
+- **§9a's table of trade-offs stands unchanged and is now load-bearing**: B's recorded cost is that
+  it COUPLES the backdrop to the plates — the backdrop must know where every plate is, recomputed
+  whenever one moves. That is the price of the mechanism that works, and 1.5c pays it.
+
+⚠ **What is NOT claimed.** This measured the mechanism, not the product: `buildLiveSource` emits no
+mask today (§9a's own DOM dump). And the diagnostic used ONE full-frame masked sheet; a real scene
+may nest the backdrop inside transforms and stacking contexts, which is where mechanism A's scope
+problem lived. **1.5c's assertion must still be taken against the EXPORTED artifact**, exactly as
+that task specifies.
+
 ### 9a.1 ⭐ AMENDED 2026-08-10 — the plate gains a STROKE, and it CONSTRAINS the punch
 
 **DECIDED 2026-08-10 (owner).** A Live Source may carry a **stroke (colour + width)**. It is the same
@@ -1518,16 +1772,52 @@ under their own frame.
 through `BoxStyleSchema` by shape / text / ticker / clock / sequence, and separately by `path`.
 🔴 **It has NO alignment notion — no inside / centre / outside anywhere.**
 
-**And it does not need one here.** Box kinds render a stroke as a CSS **`border`**
-(`scene-builder.ts:1133-1135`: `el.style.border = '<w>px <solid|dashed> <color>'`), and there is **no
-`box-sizing` reset anywhere in `@cg/template-runtime`** — so the CSS default `content-box` applies and
-the border is painted **OUTSIDE** the declared `width`/`height`. The declared rect stays the content
-box, which is exactly what `collectLiveSources` reads (`transform.size`).
+**And it does not need one here.** The element REUSES `StrokeSchema` unchanged; no alignment field is
+invented and no second stroke concept appears. If a later change adds an alignment notion for shapes,
+a Live Source offers only `outside` — for the reason above, not as a limitation of the control.
 
-**So: this element REUSES `StrokeSchema` unchanged and takes the OUTSIDE behaviour the existing
-renderer already produces. No alignment field is invented, and no second stroke concept appears.** If
-a later change adds an alignment notion for shapes, a Live Source offers only `outside` — for the
-reason above, not as a limitation of the control.
+#### ⭐ CORRECTED 2026-08-14 (session AC, on implementing 1.5e) — the OUTSIDE placement is DECLARED, not inherited
+
+**This paragraph originally said the outside placement came for free**, on this reasoning:
+
+> Box kinds render a stroke as a CSS `border`, and there is **no `box-sizing` reset anywhere in
+> `@cg/template-runtime`** — so the CSS default `content-box` applies and the border is painted
+> **OUTSIDE** the declared `width`/`height`.
+
+**Re-verified at HEAD before it was built on, and it does not hold. Two independent reasons, both
+measured, either one of which is enough to put the frame INSIDE the hole:**
+
+1. **No surface runs the CSS default.** The claim is true of the PACKAGE and false of every PAGE it
+   renders on. The shipped baseline stylesheet opens with `*{box-sizing:border-box}` —
+   `@cg/single-file-export`'s `cgCss`, the same bytes in every `.vcg`, in the single-file export and
+   in the Preview iframe — and the Designer canvas is reset identically by `@cg/ui`'s `theme.css`.
+   Under `border-box` a 6px border on a 640×360 plate leaves a **628×348** hole: the live picture
+   cropped 12px on each axis, silently, and §3's crop-to-fill computed for an area partly hidden
+   under the author's own frame. This is exactly the failure **constraint 1** forbids.
+2. **Declaring `content-box` fixes the SIZE and breaks the POSITION.** `left`/`top` place the BORDER
+   edge, so the content box — the hole — slides right and down by the stroke width. Measured in
+   Chromium with an 8px stroke: the hole moved from (5828, 3662) to (5836, 3670) while the export's
+   declaration still named the old rect. A negative-margin compensation is not a fix either: under
+   `transform: scale` with `transform-origin: 0 0` the required offset is `-scale × width`, so the
+   correction would have to track a value `collectLiveSources` composes separately — two spellings of
+   one geometry, which is the shape this repo keeps paying for (`B-100` / `P-012`).
+
+**The frame is therefore rendered as a CSS `outline`, not a `border`.** An outline is painted outside
+the border edge and occupies **no layout at all**, so the plate's box is exactly `transform` — the
+rect `collectLiveSources` reads and the overlap preflight compares — under any box model and any
+scale. The stroke SHORTHAND stays one implementation shared with the box kinds
+(`strokeShorthand` in `scene-builder.ts`, fed to `border` there and to `outline` here): the property
+differs by necessity, the stroke grammar does not.
+
+⚠ **The `border-box` reset is NOT a bug and must not be "fixed" globally.** Shapes and text have been
+authored against it since D-042 — their strokes paint inside their boxes and existing templates are
+drawn to that. A Live Source opts out for itself alone, because it is the one kind whose declared
+rect is a CONTRACT with another process rather than a drawing.
+
+⚠ **One consequence for 1.5d.** Chromium follows `border-radius` on an **outline** only from ~94,
+well above the CEF 71 baseline. Rounding the hole and the frame TOGETHER will therefore need its own
+answer rather than falling out of the punch — recorded here because 1.5d is where it will be looked
+for.
 
 #### Constraint 2 — 🔴 THE PUNCH MUST NOT ERASE WHAT THE ELEMENT PAINTS OUTSIDE ITS HOLE
 
@@ -1558,6 +1848,30 @@ feature.** Criterion 2 is not a refinement of criterion 1 — it is a second, in
 **The measurement has NOT been run and NO mechanism has been chosen** (§9a records both candidates
 precisely because the choice waits on it), so there is no settled decision to re-open here. This
 constraint arrives BEFORE the choice, which is the order that costs nothing.
+
+⭐ **MEASURED 2026-08-15 — CRITERION 2 PASSED, AND THIS IS THE ONE POSITIVE RESULT THE RUN
+PRODUCED.** The probe implemented exactly the scoping this section prescribes — the erase on an
+**inner fill node**, the frame and shadow on the **outer** node — and on the plant's CEF the frame
+came back **full width, unbroken, all the way around both plates, with the drop shadow intact**.
+The mechanism carrying it (`destination-out`) failed criterion 1 and is dead; **this finding is
+not**.
+
+**Why it outlives the mechanism, stated so it is not discarded with it.** Criterion 2 is about
+SCOPING an erase so that paint beside it survives — not about whether an erase reaches the page's
+root alpha. Those are different properties of different parts of the pipeline, which is exactly why
+this section insisted they were independent ways to fail. So the conclusion transfers: **whatever
+§9b turns into, the constraint this section places on a mechanism is satisfiable**, and no future
+design has to re-litigate whether a frame can survive an erase beside it.
+
+**The independence was also what made the run readable.** Mechanism A failed one criterion and
+passed the other, so the measurement says two distinct things rather than one muddled "it did not
+work". Had the two been collapsed into a single verdict, the surviving finding would have been lost
+inside the failure.
+
+⚠ **The SHADOW half is weaker evidence than the stroke half**, and the difference is worth keeping:
+the probe's shadow was its own CSS `box-shadow`, while the PRODUCT still has no shadow field at any
+of the three layers (schema, renderer, Inspector — see task 1.5e's scope note). This is evidence
+about the technique, not about a shipped feature.
 
 #### Two consequences, recorded where they will be looked for
 
@@ -1853,8 +2167,10 @@ installation with one channel gets today's model unchanged, and §4 is what make
 
 **The reason is C-020, and it is not a preference.** `docs/prd/caspar.md:775-826` establishes that
 this plant's **entire picture** reaches air over `<newtek-ivga />` into a TriCaster — the production
-config declares `<system-audio />` + `<newtek-ivga />` + `<screen />` and there is no Decklink card
-(`:803-806`) — that **2.4.0 removed the iVGA consumer** and 2.5.0 inherits the removal, that
+config declares `<system-audio />` + `<newtek-ivga />` + `<screen />` and so declares no Decklink
+CONSUMER (`:803-806`; corrected 2026-08-24 — this said "there is no Decklink card", and a card IS
+fitted, it is simply not the air path) — that **2.4.0 removed the iVGA consumer** and 2.5.0
+inherits the removal, that
 `Processing.AirSend.x64.dll` is **absent** from the 2.5.0 install, and that starting 2.5.0 against
 today's config stops output **entirely: the whole picture, not just audio**. C-020 is `high`,
 **deferred** pending the playout integration, and it **BLOCKS C-018**. The air path is the most
@@ -1912,6 +2228,44 @@ that is a real gap, and this closes it. It is **not** a reason to defer, narrow 
 measurement or the punch work: the single-channel installation has no dedicated channel to fall back
 to, and the mechanism choice is owed either way.
 
+⚠ **THE CONDITION LOOKED LIKE IT FIRED ON 2026-08-15, AND THEN DID NOT — PROMOTION WITHDRAWN THE
+SAME DAY.** The hand-run §9a measurement reported both mechanisms failing, and this section was
+briefly amended to make §9b the live option. **A scripted, pixel-asserted re-run showed mechanism B
+had never actually been tested** — its mask encoded holes in luminance while CSS masks by alpha, so
+it was a no-op — and once fixed, **B punches and the punch reaches root alpha** (§9a-R).
+
+**So this stays a FALLBACK, exactly as written above.** §9b is back to what it was on its merits:
+evaluated, recommended in principle, **not adopted**, gated on §12.5's four measurements and one
+owner question. Nothing about its content changed in either direction; what changed is that the
+trigger did not fire after all.
+
+🔴 **The near-miss is worth keeping, because the cost of getting it wrong was asymmetric and large.**
+For a few hours the design had adopted a whole second-channel architecture — with its two-artifact
+coupling, its export-format consequence and its "a single-channel plant has no answer at all" gap —
+on the strength of a null reading that was actually a bug in the measuring instrument. **A null
+result is the one kind of result that looks the same whether the mechanism failed or the probe
+did**, and this section's own trigger language ("IF the CEF measurement shows that…") is what made
+it so easy to fire. When a fallback's trigger is a NEGATIVE observation, the observation needs a
+positive control before it counts.
+
+**Three things this promotion does NOT do, each because the sentence above was careful:**
+
+- **It does not adopt §9b.** Adoption is still gated on §12.5's four measurements and one owner
+  question, all open. "Live option" means it is the candidate to evaluate, not the decision.
+- **It does not dissolve the single-channel problem.** The last sentence above is now the load-bearing
+  one: **a single-channel installation has no dedicated channel to fall back to.** §9b answers the
+  multi-box for a plant that can spare a channel. For one that cannot, the punch was the answer and
+  there is now no answer at all — that gap is REAL, is not closed by this promotion, and must not be
+  hidden by it.
+- **It does not make the two-artifact objection go away.** The owner's own objection above — two
+  geometries that can drift, and an export that must emit a backdrop artifact CasparCG can play,
+  which `proposal.md` currently rules out — is unchanged and is now on the critical path rather than
+  on a contingency branch.
+
+⚠ **What DID change about §9a's tasks:** 1.5c has no mechanism to implement and is re-scoped onto
+§9b; 1.5h's definition ("the punch with nothing beneath it") loses the thing it was made of and must
+be re-derived or dropped; 1.5d's blocker moves from 1.5c to §9b. See `tasks.md`.
+
 ### 9b.6 What this model does NOT change — so nobody reads it as a redesign
 
 | Unaffected                                                                 | Why                                                                                                                                                                  |
@@ -1945,19 +2299,21 @@ task moves until they land.**
 
 ## 10. Phasing — each phase landable and verifiable without capture hardware
 
-Only `route://` is provable on a dev machine (`route` needs no card; DECLINK has no card in this
-plant per C-020, and NDI is module-gated). Every phase below is verifiable with a looping media file
-plus two `route://` producers.
+Only `route://` is provable on a DEV MACHINE (`route` needs no card; a dev box has no DeckLink in
+it, and NDI is module-gated). Every phase below is verifiable with a looping media file plus two
+`route://` producers. ⭐ **Corrected 2026-08-24: this said "DECLINK has no card in this plant per
+C-020", which is false — the PLANT has a DeckLink SDI 4K.** The phasing argument is unaffected,
+because it was always about what a dev machine can prove, not about what the plant is fitted with.
 
-| Phase                                    | Content                                                                                                                         | Verifiable how                                                 |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| **1 — Schema + authoring**               | additive schema fields, the id refinement (§3), the creation path (C2), SMPTE bars behind the §9 mode seam, preflight codes     | unit + Designer E2E; no bridge                                 |
-| **2 — Declaration + carrier**            | `collectLiveSources`, `resolution` + `liveSources` on `TemplateInfo`, the ledger type, the `reservedLayers` comment corrections | unit + integration against the mock                            |
-| **3 — Mock**                             | §8's three additions                                                                                                            | the mock's own suite; **blocks phase 4**                       |
-| **4 — Mapping store + settings surface** | `SourceMappingStore`, `sources.*` channel, CG Control modal, boot validation                                                    | integration + DOM tests                                        |
-| **5 — Ownership**                        | `#liveLayers`, the three door exemptions, the `live-source` clear reason                                                        | integration against the mock — **only possible after phase 3** |
-| **6 — Producer + geometry + audio**      | `playSource` / `mixerFit` / `mixerClear`, the §6 chain, the §7 mute rule                                                        | integration; then the two-box `route://` demo on real hardware |
-| **7 — Hardware**                         | fill+key, DECKLINK, NDI                                                                                                         | **cannot be closed on this installation** — see §12.1          |
+| Phase                                    | Content                                                                                                                         | Verifiable how                                                       |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **1 — Schema + authoring**               | additive schema fields, the id refinement (§3), the creation path (C2), SMPTE bars behind the §9 mode seam, preflight codes     | unit + Designer E2E; no bridge                                       |
+| **2 — Declaration + carrier**            | `collectLiveSources`, `resolution` + `liveSources` on `TemplateInfo`, the ledger type, the `reservedLayers` comment corrections | unit + integration against the mock                                  |
+| **3 — Mock**                             | §8's three additions                                                                                                            | the mock's own suite; **blocks phase 4**                             |
+| **4 — Mapping store + settings surface** | `SourceMappingStore`, `sources.*` channel, CG Control modal, boot validation                                                    | integration + DOM tests                                              |
+| **5 — Ownership**                        | `#liveLayers`, the three door exemptions, the `live-source` clear reason                                                        | integration against the mock — **only possible after phase 3**       |
+| **6 — Producer + geometry + audio**      | `playSource` / `mixerFit` / `mixerClear`, the §6 chain, the §7 mute rule                                                        | integration; then the two-box `route://` demo on real hardware       |
+| **7 — Hardware**                         | fill+key, DECKLINK, NDI                                                                                                         | C-021, and no longer one verdict — see §12.1's 2026-08-24 correction |
 
 ---
 
@@ -1982,15 +2338,31 @@ decision (§12.4) was made at the same time. §12.3 remains open on its own term
 §9a.2's studio plate. They are recorded here rather than left in the prompt that carried them,
 because a prompt is ephemeral and the spec is the memory. **Do not re-open 12.1, 12.2 or 12.4.**
 
-### 12.1 C-015's acceptance on a plant with no Decklink card — DECIDED 2026-08-08
+### 12.1 C-015's acceptance is about ASSIGNMENT, not about capture hardware — DECIDED 2026-08-08
+
+> 🔴 **PREMISE CORRECTED 2026-08-24. The DECISION below stands unchanged; one FACT it was argued
+> from was wrong.** This section was titled _"C-015's acceptance on a plant with no Decklink card"_,
+> and the paragraph below concluded "this plant has no Decklink card" from C-020's reading of the
+> production config's CONSUMER list. A consumer list is not a hardware inventory. The plant has a
+> **DeckLink SDI 4K** (index `1`, persistent ID `23487013`); on 2026-08-24 the owner ran
+> `PLAY 1-10 DECKLINK DEVICE 1` on the production 2.5.0 and it initialised with real signal, and a
+> `<decklink>` consumer with `<device>23487013</device>` initialised on the same card at the same
+> time.
+>
+> **Why the decision is untouched.** It never rested on the card's absence — it rests on _"the
+> Designer never names a concrete device"_, which is true whatever is fitted to the playout box.
+> What DOES change is the accounting in "What is split OUT" below: the DECKLINK arm is no longer
+> parse-verified only. Corrected in full at `docs/prd/caspar.md`'s [[C-021]]; the outstanding
+> questions are `docs/recon/2026-08-25-decklink-model-walk.md`.
 
 **The question as it was asked.** C-015 makes real-hardware verification part of done
 (`docs/prd/caspar.md:405`, and the Notes at `:404`: _"On-air behavior throughout ⇒ real-hardware
-verification is part of done."_). But **this plant has no Decklink card** — C-020 records the config
-declares `<system-audio />` + `<newtek-ivga />` + `<screen />`, and fill+key reaches air over NewTek
-iVGA into a TriCaster (`docs/prd/caspar.md:753-754`). C-020 is itself **deferred** pending that
-integration. So the DECKLINK arm can only ever be parse-verified here, and fill+key cannot be
-validated at all.
+verification is part of done."_). The premise taken at the time was that **this plant has no
+Decklink card** — C-020 records the config declares `<system-audio />` + `<newtek-ivga />` +
+`<screen />`, and fill+key reaches air over NewTek iVGA into a TriCaster
+(`docs/prd/caspar.md:753-754`). C-020 is itself **deferred** pending that integration. So — on that
+premise — the DECKLINK arm could only ever be parse-verified here, and fill+key not validated at
+all. **See the correction above: the DECKLINK half of that conclusion is now void.**
 
 **DECIDED, in the owner's framing: the Designer never names a concrete device, so C-015's
 done-condition is about ASSIGNMENT, not about capture hardware.** A template declares **symbolic**
@@ -2004,11 +2376,12 @@ therefore narrows to two conditions, and **both are dischargeable on this plant*
 - **(b)** the two-box `route://` demo runs on the plant's real CasparCG **2.3.2**, which needs no
   capture card (§10, `tasks.md` 6.8).
 
-**What is split OUT, and where it went.** The DECKLINK and NDI arms are **parse-verified only** on
-this installation, and **fill+key cannot be validated here at all**. Those three are filed as their
-own item — **C-021** (`docs/prd/caspar.md`), `[!]` blocked on hardware, cross-referenced from C-015
-in both directions. They are not deleted from the product; they are moved to the item that can
-actually own a hardware debt.
+**What is split OUT, and where it went.** All three arms are filed as their own item — **C-021**
+(`docs/prd/caspar.md`), cross-referenced from C-015 in both directions. They are not deleted from
+the product; they are moved to the item that can actually own a hardware debt. As of 2026-08-24
+their standing DIFFERS and C-021 states each separately: **DECKLINK** is measured in its index form
+and no longer blocked, **NDI** is parse-verified only, and **fill+key** waits on a second SDI input
+being confirmed on the card (the seating code it would verify is split again, to **C-027**).
 
 🔴 **The consequence worth stating plainly, because it is what the decision buys: with that split,
 phases 1–6 carry NO undischargeable hardware debt.** The two mixer facts the geometry rests on —
@@ -2082,6 +2455,23 @@ CasparCG **2.3.2** with `node tools/spikes/amcp-poke/amcp-poke.mjs`, none needs 
 together they are one session's work — pair them, exactly as §3b pairs its own question with R-048's
 replace measurement.
 
+🔴 **PROMOTED TO THE CRITICAL PATH 2026-08-15, and NOT adopted — the two are different things.**
+§9a's punch measurement ran and both mechanisms failed, so §9b stopped being the contingency branch
+and became the live option (§9a's result section; §9b.5's amendment). **These four measurements and
+the owner question are what now stand between the change and its multi-box story** — they were
+optional-until-needed and they are needed. Nothing about their content changes; what changes is that
+deferring them defers the feature rather than a fallback.
+
+⚠ **Two corrections to this paragraph's own instructions, both from the 2026-08-15 run:**
+
+1. **The plant is on CasparCG 2.5.0 (`69e8ad5`, Chromium 142), not 2.3.2.** Confirm which server you
+   will be standing in front of before running M1–M4; several of these questions (M1's headroom in
+   particular) are version- and build-sensitive in a way §9a's punch failure was not.
+2. **Check any AMCP form in this document before typing it.** The punch probe's README shipped
+   `CG ADD 1-10 …` — verb before channel-layer — and every example returned `#400 ERROR` at the rack.
+   AMCP is `CG <ch>-<layer> <VERB> <flash> …`. That defect was in a doc, not in the product, and a
+   doc is exactly what M1–M4 are.
+
 #### M1 — does the machine have HEADROOM for a second channel?
 
 A second full HTML-rendering channel is not free: it is a second CEF instance plus that channel's
@@ -2153,7 +2543,7 @@ Adding a channel means editing that file and restarting CasparCG — **which is 
 integration boundary C-020 is deferred on, which makes "who changes it" a real question rather than a
 formality.
 
-### 12.6 ⭐ THE STUDIO PLATE (§9a.2) — TWO RECON QUESTIONS AND ONE OWNER QUESTION, ALL OPEN
+### 12.6 ⭐ THE STUDIO PLATE (§9a.2) — TWO RECON QUESTIONS OPEN; THE OWNER QUESTION IS ANSWERED
 
 **Added 2026-08-10 (A3).** §9a.2 chose the ROUTE mechanism for the owner's three-box layout and named
 `route://<channel>-<layer>` as the form that avoids the feedback trap. **Neither of the two facts that
@@ -2201,22 +2591,120 @@ and fast motion shows it as a visible lag between two views of the same studio.
 Record the consequence **with the measured figure beside it**, not as a general caution: "N frames"
 is a number an author can design around; "there may be some latency" is not.
 
-#### The OWNER QUESTION — which layer does CIAB put the studio picture on?
+#### ⭐ THE OWNER QUESTION — ANSWERED 2026-08-14, AND IT DISSOLVES THE TASK
 
-**This is not a recon item; no measurement in this repo can answer it and no code can discover it.**
-The route address in §9a.2 is `route://<channel>-<layer>`, and **`<layer>` is an installation fact
-owned by the playout system**: it is the layer CIAB — the plant's playout application — puts the main
-studio picture on.
+**The question was: which layer does CIAB put the studio picture on?** It was filed as `tasks.md`
+6.8c, as an installation fact only the plant could supply. **The owner's answer (2026-08-14) is
+that the question is malformed, in two independent ways — and the task is therefore DELETED rather
+than left open.** Both halves are recorded, because either one alone would have been enough and a
+later reader is likely to re-derive only the weaker of them.
 
-Without it:
+**1. THE STUDIO IS NOT SPECIAL.** A live source, to this system, is an ADDRESS mapped to a symbolic
+name. A `DECKLINK DEVICE 1`, an `NDI NAME "Baku"` (sent as `[NDI] "Baku"` since `PLAYOUT-SOURCES-01`)
+and a `route://1-2` carrying the studio are the
+same KIND of thing to every part of this design: the catalog defines them the same way, the
+assignment picker lists them the same way, `playSource` spells them from one union, and the fit
+chain reads a format off whichever it is. So 6.8c was asking the GENERAL question — _what addresses
+do this installation's sources have?_ — in a costume that made it look like a studio-specific
+installation fact needing its own answer. **That general question already has a home: `C-022`, the
+named live-source list.** It does not need a second one, and a second one is how a special case
+gets built for something that is not special.
 
-- the catalog entry for the studio plate **cannot be configured on this installation**. The schema
-  accepts the address (`SourceProducerSchema`'s `route` arm already carries `layer`), and the
-  SourcesModal already renders it, so nothing is BLOCKED in code — but the value the operator must
-  type is unknown, and a guess puts an arbitrary layer's picture inside a guest frame on air.
-- §9a.2's reserved-range paragraph cannot be checked against reality. It argues that reading a
-  reserved layer is not writing to it, which stands on its own; but whether the studio picture is
-  even IN the reserved 60–69 range, or somewhere else entirely, is part of the same unknown.
+**2. THE ADDRESS IS NOT FIXED.** The studio may arrive on 1-1, on 1-2, or on another layer
+altogether, CHOSEN AT THE MOMENT OF USE. There is no single value to write into a catalog entry,
+so even a perfect answer from CIAB would have been correct only until the next gallery decision.
+What a moment-chosen address needs is not a configured constant but a way to pick between
+candidates while on air — **which is exactly `R-048` / task 6.9**. The installation declares the
+candidate addresses as separate NAMED sources ("Studio A — 1-1", "Studio A — 1-2"), and the
+operator picks between them at take time, or swaps between them mid-show.
 
-**It is a question for the owner, to be put to CIAB.** Recorded here rather than resolved, because
-resolving it by assumption is precisely the failure mode this section exists to prevent.
+🔴 **THE CONSEQUENCE WORTH CARRYING: R-048 IS NOT A CONVENIENCE.** It reads like an emergency
+affordance — one input drops, patch around it — and it is also the ONLY mechanism by which a
+moment-chosen source is addressable at all on this installation. A reading of 6.9 as "nice to have
+in a failure" would under-weight it.
+
+🔴 **ADD NO STUDIO-SPECIFIC BEHAVIOUR ANYWHERE IN THE CODE.** No studio flag on a catalog entry, no
+studio branch in the fit chain, no studio arm in the producer union. A special case built now is
+one that has to be dug out later, and the whole force of the answer above is that there is nothing
+to special-case.
+
+**What is NOT dissolved:** §9a.2’s reserved-range paragraph still stands on its own (reading a
+reserved layer is not writing to it), and A3-R1 above is still open — whether a layer-scoped route
+delivers the producer’s own output or something already composited is a MEASUREMENT, and nothing
+here answers it.
+
+---
+
+### 9a-Z ⭐ WHICH ELEMENT CARRIES THE HOLES — settled by the owner, 2026-08-15
+
+§9a's mechanism B says "mask the backdrop". **The scene model has no `backdrop` concept**, and the
+question of which element carries the holes was open until the owner settled it:
+
+> **Mask by Z-ORDER, not by a declared role.** Each element is masked with the union of the rects of
+> the plates that sit **above it** in the scene's existing element order. Elements above all plates
+> are not masked at all. Elements whose rect intersects no plate above them need no mask. **Only
+> plates that actually have a live source punch** — an unassigned plate punches nothing, which
+> composes with 6.7's named refusal instead of putting black on air.
+
+**Why this rather than the two alternatives that were offered** (owner's reasoning, recorded as the
+specification):
+
+- **Nothing to forget.** It needs no new schema concept and no Designer control. _"A
+  declared-backdrop flag that someone forgets to set is a silent black plate on air — this project's
+  standing objection to guards that fail quietly."_
+- **It fixes the correctness bug in "mask everything below the plate".** A caption authored ABOVE a
+  guest box survives, because it is above the plate in z-order. _"Name supers over a live guest are
+  ordinary broadcast, not an edge case."_
+- **It degenerates correctly.** One backdrop under one plate is exactly the expected behaviour
+  today, with no special case.
+- **The information it needs already exists.** Z-order is in the scene; nothing new is modelled.
+
+⚠ **Two things to check when it is BUILT, deliberately not answered now:** whether the stage's own
+background — if that is a stage property rather than an element — falls inside or outside this rule;
+and whether N per-element masks cost anything measurable against one.
+
+#### 🔴 CORRECTED 2026-08-15 (owner) — the punch is UNCONDITIONAL, and the withdrawn clause
+
+§9a-Z as first written said _"only a plate that actually has a live source punches"_. **That clause
+is WITHDRAWN as unimplementable-in-place and redundant.**
+
+**The page punches for EVERY declared plate, unconditionally. The mask is a PURE FUNCTION OF THE
+SCENE.**
+
+**Why it could not stand.** Assignment is an INSTALLATION fact. The scene element carries only a
+symbolic `routeKey` (`LiveSourceIdSchema`) — there is no assignment field on it — and §2z states the
+split directly: the author names plates for the LAYOUT, the installation names the sources. The mask
+is baked into the exported single-file HTML at export time, before any installation is known. **The
+exported artifact cannot know the assignment and must not learn it.**
+
+**What prevents a sourceless hole is upstream, and it is a SINGLE authority: 6.7's take refusal**,
+which already covers both ways to be unassigned — never assigned, and an assignment the delete
+CASCADE removed (§2c). A hole therefore never reaches air unassigned, which is what makes the clause
+redundant as well as unimplementable.
+
+**Why runtime resolution was REJECTED — three costs, any one disqualifying:**
+
+1. it breaks the export's SELF-DESCRIPTION, which `D-150` deliberately built;
+2. it adds a mask MUTATOR, and UNIT B′ exists precisely because mutators get forgotten;
+3. it puts a SECOND AUTHORITY on "is this plate sourced" alongside 6.7 — one rule, derived twice, in
+   its purest form.
+
+⭐ **THE RULE THIS GENERALISES TO, and the one to apply when the next such clause is written: a
+condition belongs in the mask ONLY IF it can be evaluated from the SCENE ALONE.** Visibility,
+lifecycle range, geometry and z-order qualify. Assignment does not. **So the punch follows the
+plate's own VISIBILITY, not its assignment** — an element not currently rendered punches nothing,
+and that is a fact the page has.
+
+**The Designer preview needs NO special case, and adding one is a defect.** §9a-Z masks elements
+BELOW the plate; the plate itself is never masked, so it paints a placeholder in the Designer and
+paints nothing on air, and the placeholder sits over its own hole. **Do not add a "don't punch in
+preview" branch** — that is preview/air divergence by construction, which is the thing this whole
+section exists to prevent.
+
+⚠ **NAMED RESIDUAL — written down rather than left looking handled.** A plate whose source DIES, or
+whose assignment the delete CASCADE removes, **while it is already on air**, keeps its punched hole
+and shows whatever the layer then delivers. **6.7 does not cover that window and neither does the
+mask**: 6.7 gates the TAKE, and the mask is a function of the scene, so neither is watching a source
+that fails mid-run. It belongs to `R-048`'s operator swap (the remedy — repoint the plate on air)
+and to 6.9f's recorded out-of-scope (no automatic dead-input detection; `C-023`'s thumbnails give
+the operator eyes instead). It is a real gap, it is accepted, and it is not this section's to close.

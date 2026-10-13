@@ -12,9 +12,9 @@ import { test, expect, buildValidVcg } from './fixtures/runtime.js';
  * asserted in the unit tests, where it is cheaper and sharper.
  *
  * Why the retained page has to be stubbed: the offline mock retains no rendered
- * page (`templates.html` resolves `null` — deliberately, see
- * `createRuntimeBridge`), so PREVIEW would render its "unavailable in this
- * browser" text and no iframe would exist at all. The stub is a TEST-ONLY
+ * page (`templates.page` answers `unreachable` — deliberately, see
+ * `createRuntimeBridge`), so PREVIEW would render its one-line reason and no
+ * iframe would exist at all. The stub is a TEST-ONLY
  * override of one bridge method, not a change to what the mock honestly holds.
  */
 
@@ -52,8 +52,8 @@ function stubPage(marker: string): string {
 async function stubRetainedPage(page: Page): Promise<void> {
   await page.evaluate((html: string) => {
     (
-      window as unknown as { cg: { templates: { html: () => Promise<string> } } }
-    ).cg.templates.html = () => Promise.resolve(html);
+      window as unknown as { cg: { templates: { page: () => Promise<unknown> } } }
+    ).cg.templates.page = () => Promise.resolve({ kind: 'page', html, source: 'bridge' });
   }, stubPage('rehearsal'));
 }
 
@@ -68,6 +68,22 @@ async function rehearseRow(page: Page, layer: number): Promise<void> {
     .click();
 }
 
+/*
+ * 🔴 `MONITORS-01` — THE STRIP IS FOLDED AWAY WHEN THE CONSOLE BOOTS, and this file's
+ * subject lives inside it, so it is opened first.
+ *
+ * The default moved from SHOWN to HIDDEN because neither box was confidence monitoring:
+ * PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default), and PVW is a LOCAL browser
+ * render of the rehearsing rows (`R-022` — nothing is ever sent to CasparCG). None of
+ * that changes what this file proves, so the state each test was written against is
+ * established rather than its assertions being rewritten.
+ *
+ * `app.showMonitors()` asserts the strip is actually up before returning — see the
+ * fixture. Boot state itself is proved in `shell-chrome.spec.ts` §B4.
+ */
+test.beforeEach(async ({ app }) => {
+  await app.showMonitors();
+});
 test('every rehearsing row gets a frame, stacked by the REAL CasparCG layer', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -199,6 +215,149 @@ test('the checkerboard is NOT covered by a loaded frame', async ({ app }) => {
  * SELECTED row, and a composite that re-placed graphics nobody edited would be
  * its own defect.
  */
+/**
+ * 🔴 `CONSOLE-MATCH-03` §1 — THE STAMP THAT SAYS THIS PICTURE IS NOT AIR.
+ *
+ * `PROMPT.md` §0 lists `ILLUSTRATIVE COMPOSITE · LOCAL` among the handful of the reference's
+ * own strings that are TRUE FOR US and therefore stay: `R-022` is explicit that this render
+ * happens in the browser and reaches no channel. It is measured HERE and not in jsdom because
+ * every claim below is a box or a stacking order, and jsdom has no layout (golden rule 12c —
+ * a geometry assertion there passes against a surface of any shape at all).
+ */
+test('the stage stamps what it is, and no graphic can cover the stamp', async ({ app }) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const layer = await app.importVcg('a.vcg', await buildValidVcg('tpl-stamp'));
+  await stubRetainedPage(page);
+  await rehearseRow(page, layer);
+  await expect(frames(page)).toHaveCount(1);
+
+  const stamp = page.locator('[data-stage-illustration]');
+  await expect(stamp).toHaveCount(1);
+  await expect(stamp).toHaveText('ILLUSTRATIVE COMPOSITE · LOCAL');
+
+  /*
+    ABOVE the graphic, which is the whole point: a full-frame lower third would otherwise
+    paint over the one label saying this is not what is on air. Asserted as a real stacking
+    comparison against the frame's own z-index, not against a constant — `frameZIndex` may
+    grow its range and this must stay above whatever it becomes.
+  */
+  const stampZ = Number(await stamp.evaluate((el) => getComputedStyle(el).zIndex));
+  const frameZ = Number(
+    await frames(page)
+      .first()
+      .evaluate((el) => getComputedStyle(el).zIndex),
+  );
+  expect(stampZ).toBeGreaterThan(frameZ);
+
+  // …and it is IN the stage, at the bottom-left, rather than floating in the panel chrome.
+  const sBox = await stamp.boundingBox();
+  const fBox = await frames(page).first().boundingBox();
+  expect(sBox).not.toBeNull();
+  expect(fBox).not.toBeNull();
+  expect(sBox!.height, 'the stamp is laid out, not collapsed').toBeGreaterThan(0);
+  expect(sBox!.y + sBox!.height, 'it sits at the FOOT of the stage').toBeGreaterThan(
+    fBox!.y + fBox!.height / 2,
+  );
+
+  /*
+    🔴 AND THE HEAD COUNTS WHAT IS ON PVW, with the ROW NAMES relocated to the title — golden
+    rule 11's shape exactly: the sentence read under pressure is the count.
+  */
+  const count = page.locator('[data-pvw-count]');
+  await expect(count).toHaveText('1 layer on PVW');
+  expect(await count.getAttribute('title'), 'the rows are named in the title').not.toBeNull();
+});
+
+/**
+ * 🔴 `CONSOLE-LOOK-06` §2 + the owner's mid-session correction (2026-09-12):
+ * «safe-aria باید روی canvas بیافته و ظاهر دکمه اش هم بصورت توگل باشه. همچنین آیکون اینفو و
+ * نمایش توضیحات روی canvas نیاز نیست»
+ *
+ * Three claims, all of them geometry or paint, so all of them belong in a real engine —
+ * jsdom has no layout and would pass this against a surface of any shape (golden rule 12c).
+ */
+test('the safe-area guides land ON THE CANVAS, and the toggle looks pressed', async ({ app }) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const layer = await app.importVcg('a.vcg', await buildValidVcg('tpl-guides'));
+  await stubRetainedPage(page);
+  await rehearseRow(page, layer);
+  await expect(frames(page)).toHaveCount(1);
+
+  const toggle = page.getByRole('button', { name: 'Toggle safe-area guides' });
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('[data-pvw-guides]')).toHaveCount(0);
+
+  /*
+    THE PRESSED LOOK, read with the pointer OFF the control — the first version of this check
+    read it straight after the click and measured `:hover`, which is a different rule and was
+    green for the wrong reason.
+  */
+  const paint = async (): Promise<string> => {
+    await page.mouse.move(10, 890);
+    return toggle.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return `${cs.backgroundColor}|${cs.color}`;
+    });
+  };
+  const off = await paint();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  const on = await paint();
+  expect(on, 'a toggle that is ON must LOOK on, not only announce it').not.toBe(off);
+
+  /*
+    🔴 ON THE CANVAS. The guides must cover the scaled RASTER, not the fit box — the fit box
+    includes the black letterbox left over from fitting 16:9 into a panel of another aspect,
+    and guides drawn around that report title-safe wider than the frame. The CHECKER is
+    already sized to exactly the raster, so it is the reference box: same origin, same size.
+  */
+  const guides = page.locator('[data-pvw-guides]');
+  await expect(guides).toHaveCount(1);
+  const g = await guides.boundingBox();
+  const canvas = await page.locator('[data-rehearsal-checker]').boundingBox();
+  expect(g).not.toBeNull();
+  expect(canvas).not.toBeNull();
+  expect(g!.width, 'guides are not collapsed').toBeGreaterThan(0);
+  expect(Math.abs(g!.x - canvas!.x)).toBeLessThan(1.5);
+  expect(Math.abs(g!.y - canvas!.y)).toBeLessThan(1.5);
+  expect(Math.abs(g!.width - canvas!.width)).toBeLessThan(1.5);
+  expect(Math.abs(g!.height - canvas!.height)).toBeLessThan(1.5);
+
+  // …and off again, so it is never a one-way door.
+  await toggle.click();
+  await expect(page.locator('[data-pvw-guides]')).toHaveCount(0);
+});
+
+test('the info icon and its on-canvas description are gone, and the caveats moved to the stamp', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const layer = await app.importVcg('a.vcg', await buildValidVcg('tpl-nocaveat'));
+  await stubRetainedPage(page);
+  await rehearseRow(page, layer);
+  await expect(frames(page)).toHaveCount(1);
+
+  // Gone, both of them — the owner asked for neither on the canvas.
+  await expect(page.getByRole('button', { name: /rehearsal does not prove/i })).toHaveCount(0);
+  await expect(page.locator('#rehearsal-caveats')).toHaveCount(0);
+
+  /*
+    🔴 BUT `R-022`'s TWO CAVEATS ARE STILL STATED IN THE ITEM, which its acceptance requires:
+    they ride the stamp that already names what this render is, where they cost no picture.
+    Asserted on the CONTENT, not on the element's existence — a `title` that lost its text
+    would still pass a presence check.
+  */
+  const stamp = page.locator('[data-stage-illustration]');
+  await expect(stamp).toHaveText('ILLUSTRATIVE COMPOSITE · LOCAL');
+  const caveats = await stamp.getAttribute('title');
+  expect(caveats ?? '', 'the browser-vs-CEF caveat').toMatch(/not pixel-identical/i);
+  expect(caveats ?? '', 'the Live Source placeholder caveat').toMatch(/placeholder/i);
+});
+
 test('an applied position reaches the SELECTED row’s frame and no other', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -232,15 +391,41 @@ test('an applied position reaches the SELECTED row’s frame and no other', asyn
   // Select the edited row and apply a position.
   await app.selectStackRow('tpl-edited');
   const picker = app.inspector;
-  await expect(picker.getByRole('button', { name: 'Apply position' })).toBeEnabled();
+  await expect(picker.getByLabel('Position offset X')).toBeEnabled();
   await picker.getByRole('button', { name: 'Anchor top-left' }).click();
   await picker.getByLabel('Position offset X').fill('42');
   await picker.getByLabel('Position offset Y').fill('7');
-  await picker.getByRole('button', { name: 'Apply position' }).click();
+  // `INSPECTOR-DELTA` — the row's ONE Update commits the placement now.
+  await app.applyEdits();
 
-  // THE FIX: the override arrives at that page, spelled exactly as the bridge
-  // spells it onto CasparCG's served URL.
-  await expect.poll(async () => appliedOn('tpl-edited')).toEqual(['?pos=top-left&dx=42&dy=7']);
+  /*
+    🔴 THE FIX: the override arrives at that page, spelled exactly as the bridge spells it
+    onto CasparCG's served URL — asserted on the LAST value rather than on the only one.
+
+    ⚠ **WHY THE LIST GREW, and why that is the feature and not a leak.** This used to be a
+    single entry, because PVW saw the position only once it was APPLIED. The owner's call
+    (2026-09-14): «فقط در حالت pvw نیازه که با تغییر پوزیشن بدون اپدیت هم موقعیت در pvw تغییر
+    کنه بصورت لحظه‌ای و realtime، در حقیقت با onchange اینپوتها» — in PVW the placement must
+    follow the boxes as they are typed, with no UPDATE in between. So the anchor press and
+    each keystroke now reach the frame in turn (`?dx=0&dy=0`, `?dx=42&dy=0`, `?dx=42&dy=7`),
+    which is exactly what was asked for.
+
+    What must still be true is what this test was always about: the FINAL value is the one
+    the bridge would serve, and it lands on the SELECTED row's frame only.
+  */
+  await expect
+    .poll(async () => (await appliedOn('tpl-edited')).at(-1))
+    .toEqual('?pos=top-left&dx=42&dy=7');
+
+  /*
+    …and the realtime claim itself, asserted rather than merely tolerated: the frame was
+    handed the intermediate placements BEFORE the commit. Without this the test would pass
+    against a PVW that had gone back to waiting for UPDATE, which is the behaviour the owner
+    asked to change.
+  */
+  const seen = await appliedOn('tpl-edited');
+  expect(seen.length, 'PVW followed the boxes as they were typed').toBeGreaterThan(1);
+  expect(seen).toContain('?pos=top-left&dx=42&dy=0');
 
   // …and the other frame's document was never touched.
   expect(await appliedOn('tpl-untouched')).toEqual([]);
@@ -314,20 +499,38 @@ test('the scene is byte-identical after a position rehearsal', async ({ app }) =
 
   const servedBefore = await page.evaluate(() =>
     (
-      window as unknown as { cg: { templates: { html: (id: string) => Promise<string> } } }
-    ).cg.templates.html('tpl-bytes'),
+      window as unknown as {
+        cg: { templates: { page: (id: string) => Promise<{ kind: string; html?: string }> } };
+      }
+    ).cg.templates.page('tpl-bytes'),
   );
-  const stageBefore = await frames(page)
-    .first()
-    .evaluate((el) =>
-      (el as HTMLIFrameElement).contentDocument?.querySelector('.cg-stage')?.getAttribute('style'),
-    );
+  /*
+    🔴 POLLED, not read once. `frames(page)` having count 1 is a fact about the OUTER document —
+    the `<iframe>` element exists; its content document need not have parsed anything yet. Read once,
+    this came back `undefined` on a Linux runner and reddened the suite (run 34695547361).
+
+    It could not go VACUOUS — the `expect.poll` below waits on `.cg-stage`'s own attribute, so the
+    AFTER read is already guarded and `undefined === undefined` is unreachable. It is the left
+    operand that was unguarded. Establish the precondition, then assert (golden rule 12) — the
+    comparison itself is unchanged.
+  */
+  const readStage = async (): Promise<string | null | undefined> =>
+    frames(page)
+      .first()
+      .evaluate((el) =>
+        (el as HTMLIFrameElement).contentDocument
+          ?.querySelector('.cg-stage')
+          ?.getAttribute('style'),
+      );
+  await expect.poll(readStage).toEqual(expect.stringContaining('width'));
+  const stageBefore = await readStage();
 
   await app.selectStackRow('tpl-bytes');
   const picker = app.inspector;
   await picker.getByRole('button', { name: 'Anchor bottom-left' }).click();
   await picker.getByLabel('Position offset X').fill('-5');
-  await picker.getByRole('button', { name: 'Apply position' }).click();
+  // `INSPECTOR-DELTA` — the row's ONE Update commits the placement now.
+  await app.applyEdits();
   await expect
     .poll(async () =>
       frames(page)
@@ -348,17 +551,15 @@ test('the scene is byte-identical after a position rehearsal', async ({ app }) =
   // rather than arguing.
   const servedAfter = await page.evaluate(() =>
     (
-      window as unknown as { cg: { templates: { html: (id: string) => Promise<string> } } }
-    ).cg.templates.html('tpl-bytes'),
+      window as unknown as {
+        cg: { templates: { page: (id: string) => Promise<{ kind: string; html?: string }> } };
+      }
+    ).cg.templates.page('tpl-bytes'),
   );
-  expect(servedAfter).toBe(servedBefore);
+  expect(servedAfter).toEqual(servedBefore);
 
   // And the scene's own authored footprint — the stage's inline resolution — is
   // untouched. Only the placement moved.
-  const stageAfter = await frames(page)
-    .first()
-    .evaluate((el) =>
-      (el as HTMLIFrameElement).contentDocument?.querySelector('.cg-stage')?.getAttribute('style'),
-    );
+  const stageAfter = await readStage();
   expect(stageAfter).toBe(stageBefore);
 });

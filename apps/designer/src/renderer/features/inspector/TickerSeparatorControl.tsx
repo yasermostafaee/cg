@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Element, TickerElement } from '@cg/shared-schema';
+import type { Element, FieldDigits, TickerElement } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
 import { useAssets, useAssetUrl } from '../assets/useAssets.js';
 import { useSharedImages, useSharedImageUrl } from '../sharedLibrary/useSharedImages.js';
@@ -22,7 +22,14 @@ function stripExt(filename: string): string {
  * Text/Image toggle is UI state, and an image separator is only written once an
  * asset is picked (its `assetId` must be non-empty).
  */
-export function TickerSeparatorControl({ element }: { element: TickerElement }): JSX.Element {
+export function TickerSeparatorControl({
+  element,
+  digits,
+}: {
+  element: TickerElement;
+  /** `TEXT-DIGITS-01` — the ticker's Digits: a text separator is typed in them. */
+  digits: FieldDigits;
+}): JSX.Element {
   const id = element.id;
   const sep = element.separator;
   const imageSep = typeof sep === 'object' && sep !== null ? sep : null;
@@ -104,6 +111,7 @@ export function TickerSeparatorControl({ element }: { element: TickerElement }):
           label="text"
           value={typeof sep === 'string' ? sep : ''}
           resetKey={id}
+          digits={digits}
           onCommit={(s) =>
             designerStore.updateElement(id, {
               separator: s === '' ? undefined : s,

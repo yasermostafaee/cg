@@ -7,6 +7,21 @@ export const select = style({
   fontSize: '0.72rem',
 });
 
+/**
+ * ADR 0009 — a designer-owned value shown as a FACT (playout mode / hold source). It sits in
+ * the same column as the controls beside it and deliberately carries NONE of their chrome: no
+ * border, no background, no control padding. That absence is the whole point — a bordered box
+ * reads as a control, and a greyed bordered box reads as a control the operator failed to earn,
+ * when the truth is that the value is the template's to state and was never theirs to set.
+ * Full text colour, not muted: this is a live statement about the template, not disabled text.
+ */
+export const fact = style({
+  width: '100%',
+  fontSize: '0.72rem',
+  color: colors.text,
+  lineHeight: 1.35,
+});
+
 /** Compact numeric input (hold ms / repeat count). */
 export const num = style({
   width: '76px',

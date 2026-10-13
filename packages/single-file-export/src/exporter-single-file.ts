@@ -1,4 +1,10 @@
-import { playoutOf, type Element, type Scene, type TickerElement } from '@cg/shared-schema';
+import {
+  playoutOf,
+  withoutEditorBackdrop,
+  type Element,
+  type Scene,
+  type TickerElement,
+} from '@cg/shared-schema';
 import type { ExportIssue } from '@cg/shared-ipc';
 import {
   buildGddSchema,
@@ -376,7 +382,10 @@ function buildSingleFileHtml(parts: HtmlParts): string {
   const { scene, gdd, playout, cgCss, fontCss, cgJsIife, cgJsLottieIife, assetUrls, lottieAssets } =
     parts;
   // Escape `</` so scene text / GDD strings can't close the <script>/<style>.
-  const sceneLiteral = JSON.stringify(scene).replace(/</g, '\\u003c');
+  // B-129 — same rule as the `.vcg` exporter, same ONE helper: the embedded scene
+  // carries no editor backdrop, so the artifact cannot paint one even if a renderer
+  // forgot the mode check.
+  const sceneLiteral = JSON.stringify(withoutEditorBackdrop(scene)).replace(/</g, '\\u003c');
   const gddJson = JSON.stringify(gdd).replace(/</g, '\\u003c');
   const playoutJson = JSON.stringify(playout).replace(/</g, '\\u003c');
   const assetUrlsJson = JSON.stringify(assetUrls).replace(/</g, '\\u003c');
@@ -397,8 +406,26 @@ function buildSingleFileHtml(parts: HtmlParts): string {
          everything inlined. -->
     <!-- D-128 Phase 5 — media-src data: admits the base64-inlined <video> bytes;
          without it the artifact's own CSP would block the video it carries. -->
+    <!-- 🔴 SELF-STOP-24 / C-013 — connect-src 'self' is a DELIBERATE relaxation with a date on
+         it (the owner's decision, 2026-09-15), and it is the narrowest one that exists.
+
+         Until it, this policy named no connect-src at all, so it fell back to default-src
+         'none' and EVERY fetch/XHR/sendBeacon from a template was refused by the page itself —
+         in any engine. SECURITY.md states that as a shipped property and says not to relax it
+         without strong justification. The justification is C-017's own direction: the served
+         template reports its completion to the origin that served it, which is the only channel
+         out of CEF there is.
+
+         'self' is the bridge that served this page and nothing else. Over file:// — the
+         manually-dropped single-file artifact — the origin is opaque, so this reaches nothing,
+         which is exactly C-017's out-of-scope case.
+
+         ⚠ THE REAL GUARD IS NOT THIS LINE. The page opens no connection unless it was handed a
+         take token, and a token arrives only inside __cg, which only the bridge writes. A
+         template served by anything else never sends a byte. Widening this directive would be
+         the thing SECURITY.md forbids; narrowing the token would silently kill the feature. -->
     <meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; media-src data:;" />
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; media-src data:; connect-src 'self';" />
     <title>${escapeHtml(scene.name)}</title>
     <!-- CEF-compat: keep CSS within common CasparCG builds (CEF 63=2.2,
          71=2.3.x, 117=2.4.x) — avoid bleeding-edge properties. -->
@@ -424,6 +451,14 @@ ${playoutJson}
              zone rule that could fill its hole. Named, never inferred. */
           var runtime = CG.createRuntime(scene, { mode: 'output', assetUrls: ${assetUrlsJson}, lottieAssets: ${lottieAssetsJson} });
           CG.installCasparGlobals(runtime);
+          // 🔴 SELF-STOP-24 / C-013 — the completion channel out of CEF. Inert unless the
+          // bridge hands this page a take token (see completion-ping.ts), so a manually
+          // dropped artifact and the Designer's own preview open no connection at all.
+          //
+          // INSIDE the boot guard, like everything else here: B-066's lesson is that a boot
+          // throw dies silent — a blank page whose only trace is a mystifying CEF log line —
+          // so a reporter that failed to install must paint the visible "cg boot error" too.
+          if (CG.installCompletionPing) CG.installCompletionPing(runtime);
           // R-011 — output-only placement: operator query override (appended by
           // the bridge onto the served URL) ?? scene.defaultPosition ?? centered.
           // This boot script is the ONE page CasparCG loads; the Designer

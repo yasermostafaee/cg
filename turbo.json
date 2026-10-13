@@ -17,17 +17,50 @@
     "typecheck": {
       "dependsOn": ["^build"],
       "outputs": [],
-      "inputs": ["src/**", "tsconfig.json", "package.json"]
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "types/**",
+        "tsconfig.json",
+        "tsconfig.typecheck.json",
+        "vite.config.*",
+        "vitest.config.*",
+        "src-tauri/starting/**",
+        "package.json"
+      ]
     },
     "lint": {
       "dependsOn": ["@cg/eslint-config#build"],
       "outputs": [],
-      "inputs": ["src/**", ".eslintrc*", "eslint.config.*", "package.json"]
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "types/**",
+        "bin/**",
+        "scripts/**",
+        "src-tauri/**",
+        ".eslintrc*",
+        "eslint.config.*",
+        "package.json"
+      ]
     },
     "test": {
       "dependsOn": ["^build", "build"],
       "outputs": ["coverage/**"],
-      "inputs": ["src/**", "tests/**", "scripts/**", "vitest.config.*", "package.json"],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "bin/**",
+        "scripts/**",
+        "vitest.config.*",
+        "vite.config.*",
+        "package.json",
+        "src-tauri/tauri.conf.json",
+        "src-tauri/starting/**",
+        "index.html",
+        "brand/**",
+        "public/favicon.svg"
+      ],
       "passThroughEnv": [
         "VITEST_MAX_FORKS",
         "VITEST_MIN_FORKS",
@@ -61,6 +94,93 @@
         "VITEST_MIN_THREADS"
       ]
     },
+    "@cg/dev-station#test": {
+      "dependsOn": ["^build", "build"],
+      "outputs": ["coverage/**"],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "vitest.config.*",
+        "package.json",
+        "$TURBO_ROOT$/tools/caspar-bridge/bin/**",
+        "$TURBO_ROOT$/tools/caspar-bridge/tests/support/**"
+      ],
+      "passThroughEnv": [
+        "VITEST_MAX_FORKS",
+        "VITEST_MIN_FORKS",
+        "VITEST_MAX_THREADS",
+        "VITEST_MIN_THREADS"
+      ]
+    },
+    "@cg/release#test": {
+      "dependsOn": ["^build", "build"],
+      "outputs": ["coverage/**"],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "types/**",
+        "vitest.config.*",
+        "package.json",
+        "$TURBO_ROOT$/apps/runtime/package.json",
+        "$TURBO_ROOT$/apps/designer/package.json",
+        "$TURBO_ROOT$/tools/caspar-bridge/package.json",
+        "$TURBO_ROOT$/apps/runtime/src-tauri/tauri.conf.json",
+        "$TURBO_ROOT$/apps/designer/src-tauri/tauri.conf.json",
+        "$TURBO_ROOT$/apps/runtime/src-tauri/Cargo.toml",
+        "$TURBO_ROOT$/apps/designer/src-tauri/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/docs/release/**",
+        "$TURBO_ROOT$/apps/runtime/public/fonts/vazirmatn/**",
+        "$TURBO_ROOT$/apps/runtime/src-tauri/starting/start.js",
+        "$TURBO_ROOT$/apps/runtime/src/renderer/features/firstRun/**",
+        "$TURBO_ROOT$/apps/runtime/src/renderer/features/layers/layerRowActions.ts",
+        "$TURBO_ROOT$/apps/runtime/src/renderer/features/fixedLayers/useTemplatePicker.tsx",
+        "$TURBO_ROOT$/apps/runtime/src/renderer/features/shell/AppHeader.tsx",
+        "$TURBO_ROOT$/apps/runtime/src/renderer/features/audit/AuditPanel.tsx",
+        "$TURBO_ROOT$/apps/runtime/src/renderer/ui/Tabs.tsx",
+        "$TURBO_ROOT$/apps/designer/src/renderer/features/shell/LandingView.tsx",
+        "$TURBO_ROOT$/apps/designer/src/renderer/features/shell/TopToolbar.tsx",
+        "$TURBO_ROOT$/apps/designer/src/renderer/features/compositions/**",
+        "$TURBO_ROOT$/tools/caspar-bridge/src/connection-check.ts"
+      ],
+      "passThroughEnv": [
+        "VITEST_MAX_FORKS",
+        "VITEST_MIN_FORKS",
+        "VITEST_MAX_THREADS",
+        "VITEST_MIN_THREADS"
+      ]
+    },
+    "@cg/designer#test": {
+      "dependsOn": ["^build", "build"],
+      "outputs": ["coverage/**"],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "bin/**",
+        "scripts/**",
+        "vitest.config.*",
+        "vite.config.*",
+        "package.json",
+        "src-tauri/tauri.conf.json",
+        "src-tauri/Cargo.toml",
+        "src-tauri/starting/**",
+        "index.html",
+        "brand/**",
+        "public/favicon.svg",
+        "$TURBO_ROOT$/tools/release/src/release-version.mjs",
+        "$TURBO_ROOT$/apps/runtime/package.json",
+        "$TURBO_ROOT$/apps/runtime/src-tauri/tauri.conf.json",
+        "$TURBO_ROOT$/apps/runtime/src-tauri/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/tools/caspar-bridge/package.json"
+      ],
+      "passThroughEnv": [
+        "VITEST_MAX_FORKS",
+        "VITEST_MIN_FORKS",
+        "VITEST_MAX_THREADS",
+        "VITEST_MIN_THREADS"
+      ]
+    },
     "test:integration": {
       "dependsOn": ["^build", "@cg/amcp-mock#build"],
       "outputs": ["coverage/**"],
@@ -76,7 +196,8 @@
       "dependsOn": ["build", "@cg/amcp-mock#build"],
       "outputs": ["playwright-report/**", "test-results/**"],
       "inputs": ["src/**", "tests/e2e/**", "playwright.config.*"],
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["CG_E2E_WORKERS"]
     },
     "package": {
       "dependsOn": ["build"],

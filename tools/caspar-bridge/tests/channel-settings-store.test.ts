@@ -67,6 +67,28 @@ describe('ChannelSettingsStore', () => {
     expect(store.state().settings).toHaveLength(1);
   });
 
+  /*
+    🔴 `CHANNEL-AUTHORITY-01` — the guard asks the runtime's predicate AT CALL TIME. It used to
+    keep the list it was handed at boot, so a bank installed live on a bank-less bridge moved
+    every other door's answer and left this one refusing the new channel and accepting the old.
+  */
+  it('follows the declaration when it moves — the guard reads the predicate, not a boot copy', () => {
+    const store = new ChannelSettingsStore();
+    let declared: readonly number[] = [1];
+    store.hydrate(() => declared);
+    const raster = { width: 1280, height: 720 };
+
+    // Control: before the move, channel 2 is refused and channel 1 is accepted.
+    expect(store.set({ channel: 2, raster })?.reason).toBe('unknown-channel');
+    expect(store.set({ channel: 1, raster })).toBeNull();
+
+    declared = [2];
+    expect(store.set({ channel: 2, raster }), 'the new channel was refused').toBeNull();
+    expect(store.set({ channel: 1, raster })?.reason, 'the old channel still accepted').toBe(
+      'unknown-channel',
+    );
+  });
+
   it('degrades to the reference raster on an unusable file rather than refusing to boot', () => {
     const dir = tmpDir();
     fs.writeFileSync(path.join(dir, 'channel-settings.json'), '{ this is not json', 'utf8');
@@ -120,5 +142,92 @@ describe('ChannelSettingsStore', () => {
     store.observe({ channel: 1, mode: 'holographic', raster: null });
     expect(store.mismatchWarning(1)).toBeNull();
     expect(rasterVerdict(store.state(), 1)).toBe('unreadable');
+  });
+});
+
+/**
+ * `B-236` — ADOPTION: the stored raster's only writer.
+ *
+ * With the typed field gone (`STATION-CHROME-01` §4), the stored value defaulted to
+ * 1920×1080 and nothing in the console could ever change it — so an install whose channel
+ * is not 1080 carried a standing mismatch banner with no in-console remedy. Adoption is
+ * that writer: when config CONTRADICTS a raster the server actually reported, the server
+ * wins.
+ *
+ * 🔴 **`unreadable` must never adopt and must never read as agreement.** The two failures
+ * the check exists to tell apart are "config is wrong" and "the check could not be
+ * performed", and a gap that renders as a pass is the defect the whole feature removes. The
+ * gate is therefore the canonical `rasterVerdict` — never a local re-derivation of "did we
+ * get a number" (CLAUDE.md golden rule 6).
+ */
+describe('ChannelSettingsStore.adoptObserved — B-236', () => {
+  it('adopts the server’s raster over a contradicting config, and PERSISTS it', () => {
+    const dir = tmpDir();
+    const store = new ChannelSettingsStore(dir);
+    store.hydrate([1]);
+    store.observe({ channel: 1, mode: '720p5000', raster: { width: 1280, height: 720 } });
+    expect(rasterVerdict(store.state(), 1)).toBe('mismatch');
+
+    const adopted = store.adoptObserved(1);
+    expect(adopted).toEqual({
+      channel: 1,
+      mode: '720p5000',
+      from: { width: 1920, height: 1080 },
+      to: { width: 1280, height: 720 },
+    });
+    // The belief is corrected, so the check now agrees — and PLACEMENT follows it, which is
+    // the whole point: `rasterFor` is what rides `?cw=&ch=` onto air.
+    expect(rasterVerdict(store.state(), 1)).toBe('match');
+    expect(store.rasterFor(1)).toEqual({ width: 1280, height: 720 });
+
+    // Persisted, so the correction is in force from the NEXT boot's first served template
+    // rather than only after that boot's first `INFO` reply lands.
+    const reloaded = new ChannelSettingsStore(dir);
+    reloaded.hydrate([1]);
+    expect(reloaded.rasterFor(1)).toEqual({ width: 1280, height: 720 });
+  });
+
+  it('does NOT adopt an UNREADABLE mode, and the gap does not become agreement', () => {
+    const store = new ChannelSettingsStore();
+    store.hydrate([1]);
+    // The token was read; this build cannot map it. That is "the check is unavailable",
+    // which is a different fact from "config is wrong" and must not be repaired as one.
+    store.observe({ channel: 1, mode: 'holographic', raster: null });
+
+    expect(store.adoptObserved(1)).toBeNull();
+    expect(store.rasterFor(1)).toEqual({ width: 1920, height: 1080 });
+    expect(rasterVerdict(store.state(), 1)).toBe('unreadable');
+  });
+
+  it('does NOT adopt when the mode was never read at all', () => {
+    const store = new ChannelSettingsStore();
+    store.hydrate([1]);
+    expect(store.adoptObserved(1)).toBeNull();
+    expect(rasterVerdict(store.state(), 1)).toBe('unreadable');
+  });
+
+  it('is a no-op when config already AGREES, and on a channel with no claim to check', () => {
+    const store = new ChannelSettingsStore();
+    store.hydrate([1]);
+    store.observe({ channel: 1, mode: '1080i5000', raster: { width: 1920, height: 1080 } });
+    expect(store.adoptObserved(1)).toBeNull();
+    expect(rasterVerdict(store.state(), 1)).toBe('match');
+
+    // `unconfigured` — no settings entry, so there is no false claim to correct. Adopting
+    // here would invent one, and `rasterFor`'s reference-frame fallback is the answer.
+    store.observe({ channel: 9, mode: '720p5000', raster: { width: 1280, height: 720 } });
+    expect(store.adoptObserved(9)).toBeNull();
+    expect(store.state().settings.some((s) => s.channel === 9)).toBe(false);
+  });
+
+  it('does not write the file when there is nothing to adopt', () => {
+    const dir = tmpDir();
+    const store = new ChannelSettingsStore(dir);
+    store.hydrate([1]);
+    store.observe({ channel: 1, mode: 'holographic', raster: null });
+    expect(store.adoptObserved(1)).toBeNull();
+    // A store that persisted on every no-op would rewrite `channel-settings.json` on every
+    // sweep tick of every OSC-less install.
+    expect(fs.existsSync(path.join(dir, 'channel-settings.json'))).toBe(false);
   });
 });

@@ -1,6 +1,12 @@
 /**
- * B-098 — the PURE arithmetic behind the gate's test-parallelism bound: how many
- * vitest worker processes may the monorepo-wide run have in flight at once?
+ * B-098 / P-034 — the PURE arithmetic behind the gate's test-parallelism bound: how
+ * many worker processes may the monorepo-wide run have in flight at once?
+ *
+ * TWO halves, one rule. B-098 bounded the VITEST fan-out (`resolveTestBound` /
+ * `testWorkerEnv`); P-034 found the same defect on the one sibling script the bound was
+ * never applied to and added the PLAYWRIGHT half (`resolveE2eWorkers` /
+ * `e2eWorkerEnv`). They live in one module on purpose — a second copy of "how wide may
+ * this box run" is how the rule came to have two spellings in the first place.
  *
  * The bug this exists to close is CPU starvation, not a code defect. `pnpm gate` and
  * `pnpm test` both fan out through turbo, and NOTHING anywhere bounded the result:
@@ -168,4 +174,100 @@ export function applyConcurrencyFlag(args, concurrency) {
   const alreadySet = list.some((a) => a === '--concurrency' || a.startsWith('--concurrency='));
   if (alreadySet) return list;
   return [...list, `--concurrency=${concurrency}`];
+}
+
+/**
+ * Read a `--concurrency` the CALLER already wrote into the turbo argv, in either
+ * spelling, or `null` when there is none.
+ *
+ * The e2e bound below divides the worker budget by the task concurrency ACTUALLY in
+ * force, and `applyConcurrencyFlag` lets a caller's explicit value win — so the two
+ * have to agree on what that value is. Reading it here, from the same argv, is what
+ * keeps them from drifting: computing the divisor from `bound.taskConcurrency` while
+ * turbo ran on the caller's `--concurrency=1` would bound the wrong machine.
+ *
+ * @param {readonly string[]} args turbo argv as written in the package.json script
+ * @returns {number | null} the caller's concurrency, or null when unset/unusable
+ */
+export function readConcurrencyFlag(args) {
+  const list = [...args];
+  for (let i = 0; i < list.length; i += 1) {
+    const arg = list[i];
+    if (arg.startsWith('--concurrency=')) return toPositiveInt(arg.slice('--concurrency='.length));
+    if (arg === '--concurrency') return toPositiveInt(list[i + 1]);
+  }
+  return null;
+}
+
+/**
+ * P-034 — the E2E half of the same bound, and the reason this module grew one.
+ *
+ * `test` was routed through the bound; its sibling `test:e2e` was not, and a bare
+ * `turbo run test:e2e` therefore ran BOTH apps' Playwright tasks at once, each opening
+ * its own default pool. Measured on the 12-core reference box: `6 + 6 = 12` Chromium
+ * workers for 12 cores — 100% of the machine claimed by browsers alone, before the two
+ * `vite preview` servers, the two node parents and turbo itself. Every failure it
+ * produced was an animate-within-N-milliseconds assertion, in a set that MOVED between
+ * runs; that is starvation, not four brittle tests. One rule, two spellings — the same
+ * shape as B-098 one script over.
+ *
+ * The number is per TASK, because that is the unit turbo schedules, and the invariant
+ * mirrors the vitest one exactly:
+ *
+ *     taskConcurrency * workersPerTask <= workerBudget <= cores
+ *
+ * with one extra ceiling that the vitest side does not need: it may never exceed
+ * {@link defaultPlaywrightWorkers}. A run turbo schedules one task at a time would
+ * otherwise be handed the entire budget and run WIDER than it does today. The bound
+ * tightens or does nothing; it never widens.
+ *
+ * @param {unknown} cores available cores; anything unusable falls back to 1
+ * @param {unknown} taskConcurrency turbo tasks that may run at once
+ * @param {unknown} [override] operator escape hatch; clamped, so it can only tighten
+ * @returns {number} Playwright workers each e2e task may run, at least 1
+ */
+export function resolveE2eWorkers(cores, taskConcurrency, override) {
+  const detected = toPositiveInt(cores) ?? 1;
+  const concurrency = toPositiveInt(taskConcurrency) ?? 1;
+  const workerBudget = Math.max(1, Math.floor(detected * CORE_UTILISATION));
+
+  // This task's share of the budget when every concurrent slot holds an e2e task.
+  const share = Math.max(1, Math.floor(workerBudget / concurrency));
+  const capped = Math.min(share, defaultPlaywrightWorkers(detected));
+
+  const requested = toPositiveInt(override);
+  return requested === null ? capped : Math.min(requested, capped);
+}
+
+/**
+ * Playwright's OWN default worker count, reproduced here so the bound can refuse to
+ * exceed it: Playwright resolves `workers` to `'50%'` of the logical CPUs.
+ *
+ * Not a knob — a ceiling. See {@link resolveE2eWorkers} for why a bound that is allowed
+ * to widen is not a bound.
+ *
+ * @param {unknown} cores
+ * @returns {number} at least 1, so a single-core machine still runs
+ */
+export function defaultPlaywrightWorkers(cores) {
+  return Math.max(1, Math.floor((toPositiveInt(cores) ?? 1) * 0.5));
+}
+
+/**
+ * The environment that carries the per-task Playwright worker cap into every e2e task.
+ *
+ * ONE variable, not four: unlike vitest — whose min/max ends resolve independently and
+ * must both be named ({@link testWorkerEnv}) — Playwright takes a single `workers`
+ * value, and the pool sizes itself down to the work below it.
+ *
+ * ⚠ The name must ALSO be listed in the `test:e2e` task's `passThroughEnv` in
+ * `turbo.json`. Turbo runs in strict env mode by default and would otherwise filter it
+ * out before Playwright ever saw it — the bound would then be a silent no-op, which is
+ * the failure this repo already documents on the vitest side.
+ *
+ * @param {number} workersPerTask the per-task cap from {@link resolveE2eWorkers}
+ * @returns {Record<string, string>} env overrides to merge into the child environment
+ */
+export function e2eWorkerEnv(workersPerTask) {
+  return { CG_E2E_WORKERS: String(Math.max(1, toPositiveInt(workersPerTask) ?? 1)) };
 }

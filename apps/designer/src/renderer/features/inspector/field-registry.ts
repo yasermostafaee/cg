@@ -694,12 +694,49 @@ const UNIVERSAL_ONLY: readonly PropertyDescriptor[] = [...TRANSFORM, ...FILTER];
  *   on air. In `'author'` mode a filter would tint only the SMPTE bars, which is
  *   worse than useless: it shows the author an effect that reaches nothing.
  *
- * The Live Source Inspector says all of this once, in one line of prose, rather than
- * through a row of disabled controls that explain it repeatedly and forever.
+ * ⭐ `DESIGNER-FIX-0905` — **each withheld control now says WHY on itself.** This block
+ * used to end _"the Live Source Inspector says all of this once, in one line of prose,
+ * rather than through a row of disabled controls"_ — and that one line grew into the
+ * paragraph the owner photographed as _"long and small and unreadable"_, while the
+ * controls it explained were simply absent. The reasons live HERE, beside the subtraction
+ * that needs them ({@link withheldReason}), so the registry stays the one place that
+ * decides what is withheld AND what the author is told; the Transform section renders
+ * rotation and opacity disabled with the reason as their tooltip, and the Filter section
+ * header does the same. The mechanism behind all three is read once, behind the panel's
+ * `i`.
  */
 const LIVE_SOURCE_STATIC: readonly PropertyDescriptor[] = TRANSFORM.filter(
   (d) => d.property !== 'rotation' && d.property !== 'opacity',
 ).map((d) => ({ ...d, keyframeable: () => false }));
+
+/** The controls a kind may withhold with a stated reason: two transform rows and a section. */
+export type WithheldControl = 'rotation' | 'opacity' | 'filter';
+
+/**
+ * `DESIGNER-FIX-0905` — WHY a control is withheld for a kind, or `undefined` when it is
+ * offered. Written against what the code does NOW (`single-clock-look-switch`): the page
+ * carrying the plates is composited BELOW them, the picture is drawn by CasparCG into the
+ * plate's declared rect, and the plate itself paints nothing on air. No "hole" is punched
+ * any more, and none of these reasons may say one is.
+ */
+const WITHHELD: Partial<Record<Element['type'], Partial<Record<WithheldControl, string>>>> = {
+  'video-placeholder': {
+    rotation:
+      'Withheld on a live plate: CasparCG composites the picture into an axis-aligned box, so ' +
+      'a rotated plate would declare its bounding box and the picture would show outside the ' +
+      'frame you drew.',
+    opacity:
+      'Withheld on a live plate: the plate paints nothing on air — the picture is drawn by ' +
+      'CasparCG above the page, where nothing on the page can fade it.',
+    filter:
+      'Withheld on a live plate: a filter paints pixels and a plate paints none on air; on the ' +
+      'canvas it would only tint the bars.',
+  },
+};
+
+export function withheldReason(element: Element, control: WithheldControl): string | undefined {
+  return WITHHELD[element.type]?.[control];
+}
 
 // D-042 — the background-capable kinds (shape, text, ticker, clock, sequence) all
 // include the shared BOX_DESCS (stroke + border radius). Order keeps each section's

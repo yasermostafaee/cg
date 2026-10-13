@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { FIRST_ALLOCATABLE_LAYER } from '@cg/shared-ipc';
 
 /**
  * Layer slot allocator per Phase 5 §6.
@@ -9,14 +10,7 @@ import { EventEmitter } from 'node:events';
  * exists: partition the space by template type so operators can't
  * accidentally collide.
  *
- * Default policy (configurable per deployment):
- *
- *   logo-bug    : 90–99   (pinned, rarely dynamic)
- *   lower-third : 10–19
- *   ticker      : 20–29
- *   breaking    : 30–39
- *   fullscreen  : 50–59
- *   custom      : 60–69
+ * There is no built-in default policy any more — see {@link DEFAULT_LAYER_POLICY}.
  *
  * Allocation flow:
  *   1. allocate(templateType, channel) → first free slot in the range.
@@ -31,29 +25,87 @@ import { EventEmitter } from 'node:events';
 export type LayerPolicy = Record<string, [low: number, high: number]>;
 
 /**
- * The DYNAMIC allocation ranges, which must stay disjoint from the fixed candidate
- * bank — the disjointness is validated loudly at config time (`overlaps-policy`), never
- * adjudicated at Clear or allocation time.
+ * 🔴 **THE DYNAMIC ALLOCATION POLICY, AND IT IS NOW EMPTY BY DEFAULT (`LAYER-BANDS-16`,
+ * 2026-09-14). THE MAP IS THE POLICY.**
  *
- * `logo-bug` MOVED FROM 90–99 TO 40–49. The operator's candidate bank grew to 70–99 by
- * owner decision, and 90–99 was the only dynamic range inside it: leaving it there
- * would have meant either a bank the bridge refuses to boot with, or a `logo-bug` whose
- * every candidate layer is fenced by the bank and so can only ever raise
- * `OutOfLayersError`. 40–49 was the one unused decade, so this keeps dynamic allocation
- * working for the type rather than quietly retiring it.
+ * This used to carry six template-type ranges spanning 10-69 — `lower-third` at 10-19,
+ * `ticker` at 20-29, `breaking-news` at 30-39, `logo-bug` at 40-49, `fullscreen` at 50-59,
+ * `custom` at 60-69. The owner's re-cut of the layer map retired every one of them, and the
+ * reason is arithmetic rather than taste:
  *
- * Nothing else moved, and the reserved playout range (60–69, from install config) is
- * enforced separately by `reservedLayers` — a layer in a dynamic range can still be
- * fenced off by the reservation.
+ *   - **1-49 is LEFT FREE** for the playout server and anything else on the channel
+ *     (`FIRST_ALLOCATABLE_LAYER`). Five of the six ranges lived there, so five of the six
+ *     were allocations below the floor the owner just set.
+ *   - **50-99 is fully spoken for** by the three ROLE bands — beds, plates, templates. The
+ *     sixth range (`fullscreen`, 50-59) is now the bed band, and `custom` (60-69) sat inside
+ *     the plate band. There is nowhere left for a type-keyed range to live, because placement
+ *     is decided by a graphic's ROLE now and no longer by its declared `templateType`.
+ *
+ * ⚠ **THIS DOES CHANGE BEHAVIOUR, and saying so is the point — an earlier draft of this
+ * note claimed it changed nothing on air and was WRONG.** Two live paths allocated through
+ * here and now fail instead:
+ *
+ *   - `CasparRuntime.load()` — the plain `layers.load` verb — threw `UnknownTemplateTypeError`
+ *     into an honest failed load rather than placing a graphic;
+ *   - `#slotForRestore`'s fall-through, for a retained item whose coordinate is NOT a declared
+ *     row, which now returns `skip: 'no-layer'` with its reason reported.
+ *
+ * 🔴 **Both are IMPROVEMENTS under the new map, which is why the owner chose retirement over
+ * re-homing (decision, 2026-09-14).** Every range those paths could have allocated from lay
+ * in 10-69 — that is, in the span now left to the playout server. Retiring them turns "place
+ * this graphic on layer 10" into a refusal instead of a collision with somebody else's
+ * output, discovered on air. And the capability was already unreachable on a shipped station:
+ * the default bank DECLARES the whole template band, every one of whose layers is fenced from
+ * `allocate()` by construction, so `allocate()` there could only ever have raised
+ * `OutOfLayersError`.
+ *
+ * ⚠ **What did NOT change.** The operator's own load is `fixedLayers.load` → `bindFixed`, an
+ * exact coordinate onto a declared row, and never came through here (`apps/runtime/tests/
+ * noOperatorAllocation.test.ts` pins that). A live plate is placed by `allocateLiveLayers`
+ * against the declared band with the LEDGER as its ownership record — deliberately not through
+ * here (see `live-plate-seating.ts`'s own header for why one layer must not have two owners).
+ *
+ * ⚠ **`allocate()` IS NOT DEPRECATED AND NEITHER IS `LayerPolicy`.** A deployment (or a
+ * test) that wants type-keyed dynamic allocation passes its own `policy`, and every fence
+ * that reads the policy — `overlaps-policy` at config time, the `reservedLayers` check at
+ * allocation time — keeps working on it unchanged. What is gone is this project SHIPPING one
+ * that contradicts its own map. {@link assertPolicyAboveFloor} is the guard that says so.
+ *
+ * 🔴 **THE TYPE DOES NOT GO WITH THE RANGE.** `logo-bug`, `ticker` and the rest remain
+ * first-class `templateType`s in the scene schema (`packages/shared-schema/src/scene.ts`,
+ * mirrored in `packages/shared-ipc/src/channels/projects.ts`) and travel inside every `.vcg`.
+ * Emptying this map retires a PLACEMENT RULE, not a vocabulary — removing the types would
+ * break existing packages.
  */
-export const DEFAULT_LAYER_POLICY: LayerPolicy = {
-  'logo-bug': [40, 49],
-  'lower-third': [10, 19],
-  ticker: [20, 29],
-  'breaking-news': [30, 39],
-  fullscreen: [50, 59],
-  custom: [60, 69],
-};
+export const DEFAULT_LAYER_POLICY: LayerPolicy = {};
+
+/**
+ * 🔴 **The FLOOR guard for a policy: no dynamic range may allocate below
+ * {@link FIRST_ALLOCATABLE_LAYER}.**
+ *
+ * The band guard in `@cg/shared-ipc`'s `layer-bands.ts` holds the three ROLE bands to the
+ * floor. This is the same question asked of the OTHER allocator — a type-keyed policy — and
+ * it exists because that allocator's ranges are not part of the band map and so are not
+ * reached by the band guard. It runs over {@link DEFAULT_LAYER_POLICY} at module load, which
+ * is what makes re-adding `lower-third: [10, 19]` a red rather than a silent return to
+ * allocating on the playout server's layers.
+ */
+export function assertPolicyAboveFloor(
+  policy: LayerPolicy,
+  floor: number = FIRST_ALLOCATABLE_LAYER,
+): void {
+  for (const [templateType, [low, high]] of Object.entries(policy)) {
+    if (low < floor) {
+      throw new Error(
+        `the '${templateType}' dynamic range ${String(low)}-${String(high)} allocates below ` +
+          `layer ${String(floor)} — 1-${String(floor - 1)} is left free for the playout ` +
+          `server and anything else on the channel`,
+      );
+    }
+  }
+}
+
+assertPolicyAboveFloor(DEFAULT_LAYER_POLICY);
 
 export interface LayerSlot {
   readonly channel: number;
@@ -230,8 +282,21 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
    * actually ON, so it is the layer whose occupancy decides adopt-vs-re-ADD.
    * Re-allocating "some free layer" would consult the wrong layer's occupancy
    * and could ADD a second producer beside a live one. The range policy is
-   * deliberately NOT re-checked — the coordinate came from this allocator in a
-   * previous process, and honouring it is the whole point.
+   * deliberately NOT re-checked, and honouring the coordinate is the point.
+   *
+   * 🔴 **BUT NOT ON THE STRENGTH OF WHERE IT CAME FROM.** This said "the coordinate
+   * came from this allocator in a previous process" — a premise nothing here enforces
+   * and which was false when it mattered. `CHANNEL-RESOLUTION-01`: the coordinate came
+   * from a CONSOLE TAB that had been talking to a DIFFERENT STATION, and a bridge
+   * configured for channel 2 seated six producers onto channel 1 of a partner's live
+   * programme output because this method checks `fixed`, `reservedLayers` and
+   * occupancy — and never the CHANNEL.
+   *
+   * The channel fence lives at the caller (`CasparRuntime.#slotForRestore`, where the
+   * declared bank is known; a `LayerManager` is constructed with a fixed-slot SET and
+   * has no notion of "the station's channel" to compare against). It is named here
+   * because this docstring is what licensed the trust, and a sentence that grants trust
+   * on unverifiable provenance will license it again.
    *
    * R-021 — a FIXED slot always returns false here: exact-slot binding to a
    * fixed slot goes through {@link bindFixed}, never `reserve()` (a fixed slot

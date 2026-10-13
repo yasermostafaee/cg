@@ -1,4 +1,5 @@
 import type { SOURCES_SET_ASSIGNMENTS_REASONS, SOURCES_SET_CONFIG_REASONS } from '@cg/shared-ipc';
+import { BRIDGE_SKEW_MESSAGE, isBridgeSkewMessage } from '../../shared/bridgeSkew.js';
 
 /**
  * D-137 / C-015 — operator wording for a refused `sources.*` call, keyed off the
@@ -9,8 +10,9 @@ import type { SOURCES_SET_ASSIGNMENTS_REASONS, SOURCES_SET_CONFIG_REASONS } from
  * channel family keeps its own vocabulary, and folding them together blurs which
  * codes belong to which contract.
  *
- * These sentences carry the RULE; the bridge's `message` carries the SPECIFICS
- * (which name collided, which two ranges overlap) — the surface shows both.
+ * These sentences are the whole line an operator reads. `DELTA-MULTI-CHANNEL-01-A` A5 —
+ * the bridge's `message` used to ride beneath them as the "specifics"; it is written for
+ * the record, and no operator surface shows it under a sentence of ours any more.
  *
  * ── 🔴 AND THE TRANSPORT HALF, WHICH IS WHERE THE WIRE LEAKED ───────────────
  *
@@ -38,13 +40,19 @@ const CONFIG_MESSAGES = {
     'The live source layer band would overlap the operator’s candidate layers — the two must stay disjoint.',
   'overlaps-reserved':
     'The live source layer band would overlap the reserved playout range — the two must stay disjoint.',
+  'stream-scheme-not-allowed':
+    'That stream URL doesn’t start with an accepted scheme — use one of http, https, rtmp, rtmps, rtsp, srt, udp, rtp or mms.',
+  'low-bank-not-below-band':
+    'The graphics-bed rows must sit BELOW the live source layer band, and they do not — a bed is composited under the plates it declares, so a bed row at or above the band would draw its background over the live pictures. Move the band up, or the bed rows down.',
 } satisfies Record<SourcesSetConfigReason, string>;
 
 const ASSIGNMENT_MESSAGES = {
   'duplicate-plate':
     'That plate already has a source in this template — reload this page and set it again.',
-  'unknown-source':
-    'That source is no longer defined on this station — pick another, or define it again under Live sources.',
+  // `PLAYOUT-SOURCES-01` — the sources are the Playout's: nothing is "defined" on this station now.
+  'unknown-source': 'That source is not one the Playout offers — choose another.',
+  'source-unusable':
+    'That source cannot be bound — the Playout no longer offers it, or this station cannot play it. Choose another.',
 } satisfies Record<SourcesSetAssignmentsReason, string>;
 
 const MESSAGES: Readonly<Record<string, string>> = { ...CONFIG_MESSAGES, ...ASSIGNMENT_MESSAGES };
@@ -71,10 +79,17 @@ export function sourcesReasonMessage(reason: string | undefined): string | null 
  */
 export function sourcesTransportMessage(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
-  if (/unknown channel|invalid (request|response) for/i.test(raw)) {
+  /*
+    `B-152` — THE SHAPE TEST HAS ONE OWNER NOW (`shared/bridgeSkew.ts`), and what stays here
+    is only the sentence that is genuinely THIS family's: what a skewed bridge costs a LIVE
+    PLATE. The regex used to be spelled here and again in `delimiterStore`, and every other
+    channel had neither — which is how `unknown channel: stack.set-active-look` reached an
+    operator mid-show. The transport now words itself at the throw site, so this branch is
+    reached only when something hands us a raw string rather than a caught bridge error.
+  */
+  if (isBridgeSkewMessage(raw)) {
     return (
-      'This bridge is running an older build than this page — restart the bridge with a matching ' +
-      'build and this will save. Until then a template with a live plate cannot be taken, ' +
+      `${BRIDGE_SKEW_MESSAGE} Until then a template with a live plate cannot be taken, ` +
       'because nothing here can tell the bridge which source that plate uses.'
     );
   }

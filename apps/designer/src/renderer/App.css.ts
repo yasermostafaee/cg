@@ -2,8 +2,9 @@ import { style } from '@vanilla-extract/css';
 import { colors } from './theme.js';
 
 export const page = style({
+  // `B-263` — the chrome-only Persian face leads (`chromeFonts.css`, the note in `index.css`).
   fontFamily:
-    '"Exo 2", Inter, system-ui, -apple-system, "Segoe UI", Vazirmatn, "Noto Sans Arabic", sans-serif',
+    '"Vazirmatn Arabic", "Exo 2", Inter, system-ui, -apple-system, "Segoe UI", Vazirmatn, "Noto Sans Arabic", sans-serif',
   color: colors.text,
   background: colors.background,
   height: '100vh',

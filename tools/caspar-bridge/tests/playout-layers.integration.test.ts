@@ -4,7 +4,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-028 part B — the DELIBERATE playout clear, and everything it must refuse.
@@ -64,7 +64,12 @@ async function boot(): Promise<CasparRuntime> {
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS, reservedLayers: RESERVED },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: SWEEP_MS,
+      occupancyStaleMs: STALE_MS,
+      reservedLayers: RESERVED,
+    },
   );
   runtime.start();
   await runtime.startServing();

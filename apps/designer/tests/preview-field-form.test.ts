@@ -45,6 +45,28 @@ describe('PreviewFieldForm helpers', () => {
     ).toBeNull();
   });
 
+  /*
+    `PERSIAN-DIGITS-01` §2 — a pattern is written with Latin classes and the author types on a
+    Persian keyboard. Measured before this change: the `Time (HH:MM)` preset refused `۲۱:۳۰`.
+  */
+  it('a pattern accepts a value whose digits are Persian or Arabic-Indic', () => {
+    const time = textField({ pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' });
+    expect(validateField(time, '۲۱:۳۰')).toBeNull();
+    expect(validateField(time, '٢١:٣٠')).toBeNull();
+    expect(validateField(time, '21:30')).toBeNull();
+    const code = textField({ pattern: '^[A-Z0-9]{2,}$' });
+    expect(validateField(code, 'IRN۲')).toBeNull();
+    const decimal = textField({ pattern: '^\\d+\\.\\d+$' });
+    expect(validateField(decimal, '۱۲٫۵')).toBeNull();
+  });
+
+  it('…and still refuses what the pattern refuses, in any digit set (the control)', () => {
+    const time = textField({ pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' });
+    expect(validateField(time, '۲۱:۷۰')).toMatch(/match/);
+    expect(validateField(time, '21:70')).toMatch(/match/);
+    expect(validateField(textField({ pattern: '^[a-z]+$' }), '۱۲')).toMatch(/match/);
+  });
+
   it('does not validate non-text fields', () => {
     const num: DynamicField = { id: 'n', label: 'N', required: true, type: 'number', default: 0 };
     expect(validateField(num, 0)).toBeNull();

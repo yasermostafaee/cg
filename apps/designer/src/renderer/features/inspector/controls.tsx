@@ -5,10 +5,20 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { writeDigitsInto } from '@cg/gesture';
+import type { FieldDigits } from '@cg/shared-schema';
+import {
+  formatNumberLike,
+  readLocalizedNumber,
+  writeFieldDigits,
+  type DigitSet,
+} from '@cg/text-shaping';
+import { keyboardLanguage } from '../../keyboardLanguage.js';
 import { ColorPicker } from './ColorPopover.js';
 import { cx } from '../../cx.js';
 import { normalizeHexColor } from '../../color.js';
 import { Select } from '../../ui/Select.js';
+import { NOT_A_NUMBER } from '../../ui/typedNumber.js';
 import * as s from './controls.css.js';
 
 /**
@@ -141,6 +151,9 @@ export function fieldScrub(opts: ScrubOpts): {
       if (e.button !== 0) return;
       if ((e.target as Element).closest('button') !== null) return; // diamond
       const input = e.currentTarget.querySelector('input');
+      // A WITHHELD field (`disabled`) scrubs nothing: the gesture would commit a value the
+      // control has just said it cannot honour, through a path the disabled input never sees.
+      if (input?.disabled === true) return;
       if (input !== null && document.activeElement === input) return; // editing
       e.preventDefault();
       runScrubGesture({
@@ -180,9 +193,29 @@ interface NumberFieldProps {
    * burst is ONE undo entry; single selection omits it (relies on coalescing).
    */
   onCommitBoundary?: (() => void) | undefined;
+  /**
+   * `DESIGNER-FIX-0905` — the control is WITHHELD: shown, disabled, and carrying the
+   * reason on itself (as its tooltip) rather than in a paragraph elsewhere. A control
+   * that vanishes teaches nothing about why it is unavailable; one that stays and says
+   * why is the state the prose used to stand in for.
+   */
+  withheld?: string | undefined;
+  /**
+   * `PERSIAN-DIGITS-01` — `as-typed` for a TEMPLATE VALUE (a number field's default): the box
+   * keeps the author's digits and reads them through `@cg/text-shaping`'s one reader, and an
+   * impossible entry is refused in one line under the field. Chrome numbers keep the default.
+   */
+  digits?: 'latin' | 'as-typed' | undefined;
+  /**
+   * `TEXT-DIGITS-01` — a template value written in its FIELD's digits: the box shows the number in
+   * this set and writes each digit in it as it is typed (it is `as-typed`'s text box and one reader).
+   */
+  valueDigits?: DigitSet | undefined;
 }
 
 export function NumberField(props: NumberFieldProps): JSX.Element {
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const withheld = props.withheld !== undefined;
   const opts = {
     value: props.value,
     onCommit: props.onCommit,
@@ -195,12 +228,12 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
   const field = fieldScrub(opts);
   const hasUnit = props.suffix !== undefined;
   return (
-    <div className={s.row}>
+    <div className={cx(s.row, withheld && s.rowWithheld)} title={props.withheld}>
       <span
         className={s.label}
-        style={labelScrub.style}
-        onPointerDown={labelScrub.onPointerDown}
-        title="Drag to adjust"
+        style={withheld ? undefined : labelScrub.style}
+        onPointerDown={withheld ? undefined : labelScrub.onPointerDown}
+        title={withheld ? props.withheld : 'Drag to adjust'}
       >
         {props.label}
       </span>
@@ -209,7 +242,10 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
           on the left, and the diamond is pushed to the right edge. The multi
           editor uses the SAME primitive (D-053) — drag-scrub + live onChange —
           and just sets a history boundary on commit via `onCommitBoundary`. */}
-      <div className={cx('cg-field', s.scrubSurface)} onPointerDown={field.onPointerDown}>
+      <div
+        className={cx('cg-field', !withheld && s.scrubSurface)}
+        onPointerDown={field.onPointerDown}
+      >
         <RealtimeNumberInput
           value={props.value}
           onCommit={props.onCommit}
@@ -222,10 +258,20 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
           onCommitBoundary={props.onCommitBoundary}
           className={cx(hasUnit ? s.inputInnerAuto : s.inputInner, hasUnit && 'cg-num-unit')}
           ariaLabel={props.label}
+          disabled={withheld}
+          title={props.withheld}
+          digits={props.digits}
+          valueDigits={props.valueDigits}
+          onRefusal={setRefusal}
         />
         {hasUnit && <span className="cg-unit">{props.suffix}</span>}
         {props.trailing !== undefined && <span className={s.point}>{props.trailing}</span>}
       </div>
+      {refusal !== null && (
+        <span className={s.fieldRefusal} role="alert">
+          {refusal}
+        </span>
+      )}
     </div>
   );
 }
@@ -330,6 +376,19 @@ interface RealtimeNumberInputProps {
    * ONE undo entry; single selection omits it (relies on time-coalescing).
    */
   onCommitBoundary?: (() => void) | undefined;
+  /** `DESIGNER-FIX-0905` — a withheld input: disabled, with the reason as its tooltip. */
+  disabled?: boolean | undefined;
+  title?: string | undefined;
+  /**
+   * `PERSIAN-DIGITS-01` — `as-typed`: a TEMPLATE VALUE. The box is a text box (a `type="number"`
+   * box drops Persian digits before script sees them), it keeps the author's digits, and it
+   * commits what `@cg/text-shaping`'s one reader says the text means. Default `latin`: unchanged.
+   */
+  digits?: 'latin' | 'as-typed' | undefined;
+  /** `TEXT-DIGITS-01` — see {@link NumberFieldProps.valueDigits}; implies the `as-typed` text box. */
+  valueDigits?: DigitSet | undefined;
+  /** `as-typed` only: told the refusal sentence while the text can never be a number, else null. */
+  onRefusal?: ((message: string | null) => void) | undefined;
 }
 
 /**
@@ -346,33 +405,62 @@ interface RealtimeNumberInputProps {
  * as a draggable number with an `ew-resize` cursor.
  */
 export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Element {
+  const valueDigits = props.valueDigits;
+  const asTyped = props.digits === 'as-typed' || valueDigits !== undefined;
   // A "mixed" multi-selection field shows nothing (just the placeholder) until
   // the operator edits it — no value is coerced onto the differing elements.
   const display = props.mixed === true ? '' : formatNumberDisplay(props.value);
-  const [buf, setBuf] = useState(display);
+  /** `TEXT-DIGITS-01` — a template value's text in its field's digits (else unchanged). */
+  const inValueDigits = (text: string): string =>
+    valueDigits === undefined ? text : writeFieldDigits(text, valueDigits, 'number');
+  const [buf, setBuf] = useState(() => inValueDigits(display));
   const [editing, setEditing] = useState(false);
   const focused = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  /*
+    `as-typed` — the text the box shows once the value is settled: the author's own text while it
+    still MEANS the value, else the value written in the author's digits. `latin` keeps `display`.
+  */
+  const settled = (prev: string): string => {
+    if (!asTyped || props.mixed === true) return display;
+    const reading = readLocalizedNumber(prev);
+    if (reading.kind === 'number' && reading.value === props.value) return inValueDigits(prev);
+    return inValueDigits(formatNumberLike(Number(display), prev));
+  };
+  const report = (text: string): void => {
+    if (asTyped)
+      props.onRefusal?.(readLocalizedNumber(text).kind === 'invalid' ? NOT_A_NUMBER : null);
+  };
 
   useEffect(() => {
-    if (!focused.current) setBuf(display);
+    if (focused.current) return;
+    // `settled` reads the props `display` is derived from; `display` is the change that matters.
+    setBuf((prev) => settled(prev));
   }, [display]);
 
   return (
     <input
       ref={inputRef}
       className={props.className}
-      style={{ ...props.style, cursor: editing ? 'text' : 'ew-resize', touchAction: 'none' }}
-      type="number"
+      style={{
+        ...props.style,
+        cursor: props.disabled === true ? 'not-allowed' : editing ? 'text' : 'ew-resize',
+        touchAction: 'none',
+      }}
+      type={asTyped ? 'text' : 'number'}
+      {...(asTyped ? { inputMode: 'decimal' as const } : {})}
       value={buf}
       step={props.step}
       min={props.min}
       max={props.max}
       placeholder={props.placeholder}
       aria-label={props.ariaLabel}
+      {...(asTyped && readLocalizedNumber(buf).kind === 'invalid' ? { 'aria-invalid': true } : {})}
+      disabled={props.disabled}
+      title={props.title}
       onPointerDown={(e) => {
         // When an ancestor owns the gesture, do nothing here.
-        if (props.scrub === false) return;
+        if (props.scrub === false || props.disabled === true) return;
         // While editing, let the pointer place the caret / select text
         // as usual. Otherwise this press is either a click (focus to
         // type) or the start of a scrub — decided by whether it moves.
@@ -401,14 +489,38 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
       onBlur={() => {
         focused.current = false;
         setEditing(false);
-        setBuf(display);
+        // `as-typed` keeps the author's text while it means the value; an entry that is not a
+        // number was never committed, so it gives way to the value — and its refusal with it.
+        const next = settled(buf);
+        setBuf(next);
+        report(next);
         // D-053 — commits already fired live on each keystroke; close the undo
         // group here so the whole typed edit is ONE entry (multi only — single
         // passes nothing).
         props.onCommitBoundary?.();
       }}
       onChange={(e) => {
-        setBuf(e.target.value);
+        // TEXT-DIGITS-01 — a template value's digits are written in its field's set as typed.
+        const text =
+          valueDigits === undefined
+            ? e.target.value
+            : writeDigitsInto(
+                e.currentTarget,
+                e.nativeEvent,
+                valueDigits,
+                keyboardLanguage,
+                'number',
+              );
+        setBuf(text);
+        if (asTyped) {
+          // The one reader; only a NUMBER commits — a half-typed or impossible text commits nothing.
+          const reading = readLocalizedNumber(text);
+          report(text);
+          if (reading.kind === 'number' && reading.value !== props.value) {
+            props.onCommit(reading.value);
+          }
+          return;
+        }
         const n = Number(e.target.value);
         if (Number.isFinite(n) && n !== props.value) props.onCommit(n);
       }}
@@ -421,7 +533,7 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
           // Live model: keystrokes already applied; Escape just ends editing and
           // resyncs the buffer (parity with single — no separate discard). The
           // ensuing blur closes the undo group; Ctrl+Z reverts the whole edit.
-          setBuf(display);
+          setBuf(settled(buf));
           (e.target as HTMLInputElement).blur();
           return;
         }
@@ -438,7 +550,7 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
           if (Number.isNaN(next)) return;
           if (next !== props.value) {
             props.onCommit(next);
-            setBuf(formatNumberDisplay(next));
+            setBuf(asTyped ? formatNumberLike(next, buf) : formatNumberDisplay(next));
           }
         }
       }}
@@ -471,9 +583,35 @@ interface TextFieldProps {
    * the other (B-009). Defaults to the value alone (legacy behavior).
    */
   resetKey?: string;
+  /**
+   * ⭐ `B-188` — values OFFERED but not REQUIRED, through a native `<datalist>`.
+   *
+   * A `<select>` can only offer what already exists, which is the wrong shape for a field
+   * whose whole job is that typing something NEW is how it comes into existence (the Live
+   * Source id, once the multi-frame group stopped declaring a list). A datalist offers the
+   * existing values on focus and still accepts anything typed — one control, both jobs —
+   * and it degrades to a plain text box wherever it is unsupported.
+   *
+   * ⚠ Requires {@link datalistId} so two fields on screen cannot share one list.
+   */
+  suggestions?: readonly string[];
+  /** DOM id for the {@link suggestions} datalist. Must be unique on the page. */
+  datalistId?: string;
+  /**
+   * `TEXT-DIGITS-01` — the box edits TYPED TEXT (a field's Value, a ticker's separator): it shows the
+   * text in this Digits choice and writes each digit in it as it is typed, the caret kept, so what is
+   * edited looks like what goes on air. Absent: an ordinary text box (names, titles, a regex).
+   */
+  digits?: FieldDigits | undefined;
 }
 
 export function TextField(props: TextFieldProps): JSX.Element {
+  const listId =
+    props.suggestions === undefined || props.datalistId === undefined
+      ? undefined
+      : props.datalistId;
+  const digits = props.digits;
+  const shown = digits === undefined ? props.value : writeFieldDigits(props.value, digits);
   return (
     <div className={s.row}>
       <span className={s.label}>{props.label}</span>
@@ -481,15 +619,35 @@ export function TextField(props: TextFieldProps): JSX.Element {
         <input
           className={s.inputInner}
           type="text"
-          defaultValue={props.value}
+          defaultValue={shown}
           aria-label={props.ariaLabel}
+          list={listId}
           onFocus={(e) => e.currentTarget.select()}
-          onBlur={(e) => props.onCommit(e.target.value)}
+          onInput={
+            digits === undefined
+              ? undefined
+              : (e) => {
+                  writeDigitsInto(e.currentTarget, e.nativeEvent, digits, keyboardLanguage);
+                }
+          }
+          onBlur={(e) => {
+            // Focused and left with no edit is no edit, even when the stored text's digits differ
+            // from the choice it is shown in (`TEXT-DIGITS-01`, as the canvas's double-click edit).
+            if (digits !== undefined && e.target.value === shown) return;
+            props.onCommit(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
           key={`${props.label}-${props.resetKey ?? ''}-${props.value}`}
         />
+        {listId !== undefined && (
+          <datalist id={listId}>
+            {(props.suggestions ?? []).map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
+        )}
         {props.trailing}
       </div>
     </div>
@@ -505,17 +663,22 @@ interface SelectFieldProps<T extends string> {
   onCommit: (v: T) => void;
   /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
   trailing?: JSX.Element | undefined;
+  /** `DESIGNER-FIX-0905` — withheld: disabled, the reason as the control's tooltip. */
+  withheld?: string | undefined;
 }
 
 export function SelectField<T extends string>(props: SelectFieldProps<T>): JSX.Element {
+  const withheld = props.withheld !== undefined;
   return (
-    <div className={s.row}>
+    <div className={cx(s.row, withheld && s.rowWithheld)} title={props.withheld}>
       <span className={s.label}>{props.label}</span>
       <div className="cg-field">
         <Select
           className={s.inputInner}
           value={props.value}
           aria-label={props.label}
+          disabled={withheld}
+          title={props.withheld}
           onChange={(e) => props.onCommit(e.target.value as T)}
         >
           {props.options.map((o, i) => (
@@ -540,24 +703,35 @@ interface ColorFieldProps {
   resetKey?: string;
   /** D-049 — multi-selection "mixed" state: the selected elements differ on this colour. */
   mixed?: boolean;
+  /**
+   * `DESIGNER-FIX-0905` — the colour is WITHHELD for now (e.g. a frame at width 0): the
+   * swatch and hex stay visible but disabled, and the reason rides the control as its
+   * tooltip. The value is KEPT — that is the whole point of showing it dimmed rather than
+   * hiding it.
+   */
+  withheld?: string | undefined;
 }
 
 export function ColorField(props: ColorFieldProps): JSX.Element {
   const mixed = props.mixed === true;
+  const withheld = props.withheld !== undefined;
   const hex = mixed ? '' : props.value.replace(/^#/, '').toUpperCase();
   return (
-    <div className={s.row}>
+    <div className={cx(s.row, withheld && s.rowWithheld)} title={props.withheld}>
       <span className={s.label}>{props.label}</span>
       <div className="cg-field">
         <ColorPicker
           value={props.value}
           onChange={props.onCommit}
           ariaLabel={`${props.label} colour`}
+          disabled={withheld}
         />
         <input
           className={s.hexInput}
           type="text"
           defaultValue={hex}
+          disabled={withheld}
+          title={props.withheld}
           placeholder={mixed ? 'mixed' : undefined}
           onFocus={(e) => e.currentTarget.select()}
           onBlur={(e) => {

@@ -244,3 +244,66 @@ test.describe('reduced motion', () => {
     expect(frame.scanDisplay).toBe('none');
   });
 });
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` — **IN CG CONTROL'S WINDOW THE SPLASH MAKES ITS ENTRANCE.** The app bundles
+ * this page and shows it FIRST: there is no starting page before it any more, so nothing may skip the
+ * entrance there. `FIELD-FIXES-01` J once did, for a window that showed a starting page while its
+ * bridge started; that window is gone, and a skipped entrance there would now be the ONLY splash the
+ * operator sees, arriving already in place. Measured by each entrance's own timing in a real engine —
+ * jsdom runs no animation.
+ */
+test.describe('CENTRAL-BRIDGE-01 — the splash CG Control shows first', () => {
+  /** Each staged element's entrance, as the engine resolved it. */
+  async function entrances(
+    page: Page,
+  ): Promise<Record<string, { duration: string; opacity: string }>> {
+    return page.evaluate(() => {
+      const read = (selector: string): { duration: string; opacity: string } => {
+        const el = document.querySelector(selector);
+        if (el === null) throw new Error(`no element for ${selector}`);
+        const style = getComputedStyle(el);
+        return { duration: style.animationDuration, opacity: style.opacity };
+      };
+      return {
+        scene: read('.cg-splash__scene'),
+        wordmark: read('.cg-splash__wordmark'),
+        company: read('.cg-splash__company'),
+        tagline: read('.cg-splash__tagline'),
+        progress: read('.cg-splash__progress'),
+        foot: read('.cg-splash__foot'),
+      };
+    });
+  }
+
+  test('🔴 in the shell’s window the splash makes its entrance — nothing skips it', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      // The shell's IPC global, as CG Control's webview has it before any page script runs.
+      (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+        invoke: () => Promise.reject(new Error('no shell in this test')),
+      };
+    });
+    await armMockBoot(page);
+    await page.goto('/');
+    await expect(splash(page)).toBeVisible();
+    await expect(splash(page)).not.toHaveAttribute('data-continued', /.*/);
+    const played = await entrances(page);
+    for (const name of ['wordmark', 'company', 'tagline', 'progress', 'foot'] as const) {
+      expect(played[name]?.duration, `${name} makes its entrance`).not.toBe('0s');
+    }
+    expect(played.wordmark?.duration).toBe('1s');
+  });
+
+  test('CONTROL — in a browser the splash makes its entrance, as it always has', async ({
+    page,
+  }) => {
+    await armMockBoot(page);
+    await page.goto('/');
+    await expect(splash(page)).toBeVisible();
+    await expect(splash(page)).not.toHaveAttribute('data-continued', /.*/);
+    const wordmark = (await entrances(page)).wordmark;
+    expect(wordmark?.duration).toBe('1s');
+  });
+});

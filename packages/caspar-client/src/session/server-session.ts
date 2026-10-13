@@ -1,9 +1,12 @@
 import { EventEmitter } from 'node:events';
 import { AmcpTransport, type ParsedAmcpResponse } from '../amcp/transport.js';
 import { OscTransport } from '../osc/transport.js';
-import { CommandQueue } from '../queue/command-queue.js';
+import { CommandQueue, type AmcpExchange } from '../queue/command-queue.js';
 import { probeAmcpLiveness } from './amcp-probe.js';
 import { Backoff } from './backoff.js';
+
+/** The longest backoff wait inside a {@link ServerSession.retryPromptly} window. */
+export const PROMPT_RETRY_MS = 500;
 
 /**
  * Lifecycle per Phase 5 §2. Re-entering RESYNCING after every reconnect
@@ -27,6 +30,30 @@ export interface ServerSessionOptions {
   oscPort: number;
   /** OSC bind interface. Defaults to `'0.0.0.0'`. */
   oscBindHost?: string;
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` rule 7 (`C-046`) — **ASK THE CORE FOR OSC ON THE PORT THIS SESSION BOUND.**
+   *
+   * When true, every connection's handshake ends with `OSC SUBSCRIBE <the bound OSC port>`: the core
+   * then sends its whole OSC stream to `<this connection's address>:<port>` until the connection
+   * ends — so it is re-sent after every connect, before the resync drain, because the restart
+   * notice needs OSC inside that drain. On the Playout machine UDP `127.0.0.1:6250` belongs to the
+   * Playout's engine, so the bridge binds its own port and asks for it here rather than relying on
+   * the core's default per-client subscription to `6250`.
+   *
+   * A refusal (a core without the command) is REPORTED ({@link ServerSessionEvents.oscSubscription})
+   * and the handshake goes on: the session then hears whatever the core sends it by default, as it
+   * always did. Default `false` — the command is never sent unless asked for.
+   */
+  oscSubscribe?: boolean;
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`C-047`) — **READS THE OWNER WANTS BEFORE THIS CONNECTION IS DECLARED
+   * HEALTHY.** Called at the end of every handshake (after the subscribe) with a `read` that sends one
+   * line on THIS connection and resolves with its reply. Nothing but the handshake is on the
+   * connection yet, so what it learns cannot be overtaken by a command sent meanwhile — which is
+   * the whole reason it lives here rather than after `healthy`. A throw is swallowed: the reads are
+   * the owner's question, never a reason to fail the connection.
+   */
+  onHandshake?: (read: (line: string) => Promise<ParsedAmcpResponse>) => Promise<void>;
 
   /** Backoff config (Phase 5 §2: 250 → 500 → 1000 → 2000 → cap 4000). */
   initialBackoffMs?: number;
@@ -73,6 +100,28 @@ export interface ServerSessionEvents {
   healthy: [];
   disconnected: [info: { reason: string }];
   error: [err: Error];
+  /**
+   * 🔴 `RELEASE-091-01` (DELTA B) — **EVERY COMMAND ANY OF THIS SESSION'S QUEUES SETTLES**, and its
+   * reply. The queue is REPLACED on every reconnect cycle (a fresh transport + queue), so a listener
+   * on `session.queue` heard only the first connection's commands: the bridge's AMCP log (`B-276`)
+   * went silent after the first reconnect, and so would anything else listening there. The session
+   * outlives its queues, so it is where a listener belongs.
+   */
+  exchange: [e: AmcpExchange];
+  /**
+   * `CENTRAL-BRIDGE-01` (`C-046`) — what this connection's `OSC SUBSCRIBE` came to: `subscribed`
+   * (the core answered `202`), `refused` (it answered otherwise, or not in time — a core without the
+   * command), or `unbound` (the OSC socket is not bound, so there was no port to ask for).
+   */
+  oscSubscription: [
+    info: { port: number; outcome: 'subscribed' | 'refused' | 'unbound'; detail: string },
+  ];
+  /**
+   * 🔴 `B-295` — **THE OSC SOCKET COULD NOT BE BOUND.** Emitted beside `error`, once per failed
+   * attempt. AMCP is dialled anyway: OSC is the confirmation axis, and its absence is never a reason
+   * to leave the command axis down (golden rule 8). The bind is retried at the next reconnect cycle.
+   */
+  oscUnavailable: [info: { host: string; port: number; error: Error }];
 }
 
 /**
@@ -113,6 +162,10 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
   private readonly port: number;
   private readonly oscPort: number;
   private readonly oscBindHost: string;
+  private readonly oscSubscribe: boolean;
+  private readonly onHandshake:
+    | ((read: (line: string) => Promise<ParsedAmcpResponse>) => Promise<void>)
+    | undefined;
   private readonly oscDegradedAfterMs: number;
   private readonly oscDownAfterMs: number;
   private readonly watcherIntervalMs: number;
@@ -134,6 +187,10 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
   private running = false;
   private currentDelayResolve: (() => void) | null = null;
   private currentDelayTimer: NodeJS.Timeout | null = null;
+  /** True only while the loop sleeps its BACKOFF — never the resync drain, which is not a wait to cut. */
+  private inBackoff = false;
+  /** Until when {@link retryPromptly} holds each backoff to {@link PROMPT_RETRY_MS}. */
+  private promptUntil = 0;
 
   /** Resolved by the watcher when HEALTHY exits — drives the outer loop. */
   private healthyExitResolve: (() => void) | null = null;
@@ -145,6 +202,8 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
     this.port = opts.port;
     this.oscPort = opts.oscPort;
     this.oscBindHost = opts.oscBindHost ?? '0.0.0.0';
+    this.oscSubscribe = opts.oscSubscribe ?? false;
+    this.onHandshake = opts.onHandshake;
     this.oscDegradedAfterMs = opts.oscDegradedAfterMs ?? 3000;
     this.oscDownAfterMs = opts.oscDownAfterMs ?? 10000;
     this.watcherIntervalMs = opts.watcherIntervalMs ?? 500;
@@ -164,11 +223,19 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
 
     this.currentOsc = createOsc();
     this.currentAmcp = this.createAmcp();
-    this.currentQueue = this.createQueue(this.currentAmcp);
+    this.currentQueue = this.adoptQueue(this.createQueue(this.currentAmcp));
     this.backoff = new Backoff(opts.initialBackoffMs, opts.maxBackoffMs);
 
     this.currentOsc.on('events', this.onOscEvents);
     this.on('error', noop);
+  }
+
+  /** Forward a new cycle's queue's exchanges as the session's own ({@link ServerSessionEvents.exchange}). */
+  private adoptQueue(queue: CommandQueue): CommandQueue {
+    queue.on('exchange', (e) => {
+      this.emit('exchange', e);
+    });
+    return queue;
   }
 
   /** The current AMCP transport. Reference rotates after each reconnect cycle. */
@@ -198,6 +265,23 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
     void this.loop();
   }
 
+  /**
+   * `DESKTOP-APPS-01-B` B1.3 — **TRY AGAIN NOW, AND OFTEN, FOR A WHILE.**
+   *
+   * For `windowMs`, every backoff wait of THIS loop is held to {@link PROMPT_RETRY_MS}, and a wait
+   * already running is cut short so the next attempt starts at once. Used when something outside
+   * the link has just changed what the peer will accept — a Playout 2.8.54 opens AMCP to this
+   * machine a few seconds after a `station-admin` signs in — so the operator sees the link come up
+   * in seconds rather than at the next 4 s step.
+   *
+   * ⚠ It is a knob on the ONE reconnect loop, never a second loop: nothing here dials. A session
+   * that is up, or stopped, is not touched, and the resync drain is never cut.
+   */
+  retryPromptly(windowMs: number): void {
+    this.promptUntil = this.now() + windowMs;
+    if (this.inBackoff) this.cancelDelay();
+  }
+
   /** Tear down — closes transports, rejects pending queue items, ends the loop. */
   async stop(): Promise<void> {
     if (!this.running && this.currentState === 'disconnected') return;
@@ -212,19 +296,30 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
     this.transitionTo('disconnected', 'stop()');
   }
 
-  private async loop(): Promise<void> {
-    // OSC binds once for the session's lifetime.
-    if (!this.oscBound) {
-      try {
-        await this.currentOsc.listen(this.oscBindHost, this.oscPort);
-        this.oscBound = true;
-      } catch (err) {
-        this.emit('error', err instanceof Error ? err : new Error(String(err)));
-        return;
-      }
+  /**
+   * OSC binds once for the session's lifetime — attempted at the start of every cycle until it holds.
+   *
+   * 🔴 `B-295` — a failed bind is REPORTED and never ends the loop. It used to `return` here, so a
+   * session whose OSC port was taken never dialled AMCP at all, and said so to a no-op listener: on
+   * the Playout machine, where the engine holds UDP `127.0.0.1:6250`, the bridge sat disconnected
+   * with nothing in its log. The command axis does not wait for the confirmation axis.
+   */
+  private async bindOsc(): Promise<void> {
+    if (this.oscBound) return;
+    try {
+      await this.currentOsc.listen(this.oscBindHost, this.oscPort);
+      this.oscBound = true;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.emit('oscUnavailable', { host: this.oscBindHost, port: this.oscPort, error });
+      this.emit('error', error);
     }
+  }
 
+  private async loop(): Promise<void> {
     while (this.running) {
+      await this.bindOsc();
+      if (!this.running) break;
       try {
         this.transitionTo('connecting', 'reconnect cycle');
         await this.currentAmcp.connect(this.host, this.port);
@@ -260,15 +355,19 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
       this.stopWatcher();
       this.transitionTo('disconnected', 'cycle teardown');
 
-      const wait = this.backoff.nextDelay();
+      const backoffWait = this.backoff.nextDelay();
+      const wait =
+        this.now() < this.promptUntil ? Math.min(backoffWait, PROMPT_RETRY_MS) : backoffWait;
       this.emit('disconnected', { reason: `backoff ${String(wait)}ms` });
+      this.inBackoff = true;
       await this.delay(wait);
+      this.inBackoff = false;
       if (!this.running) break;
 
       // Fresh transport + queue for the next cycle. OSC stays bound.
       this.currentAmcp = this.createAmcp();
       this.currentAmcp.on('error', noop);
-      this.currentQueue = this.createQueue(this.currentAmcp);
+      this.currentQueue = this.adoptQueue(this.createQueue(this.currentAmcp));
     }
   }
 
@@ -286,6 +385,52 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
     });
     if (!isOk(info.response)) {
       throw new Error(`INFO handshake failed: code=${String(info.response.code)}`);
+    }
+    if (this.oscSubscribe) await this.subscribeOsc();
+    if (this.onHandshake !== undefined) {
+      const queue = this.currentQueue;
+      try {
+        await this.onHandshake(async (line) => {
+          const reply = await queue.enqueue(line, {
+            priority: 'urgent',
+            timeoutMs: this.infoTimeoutMs,
+          });
+          return reply.response;
+        });
+      } catch {
+        /* the owner's reads never fail the handshake */
+      }
+    }
+  }
+
+  /**
+   * `CENTRAL-BRIDGE-01` (`C-046`) — `OSC SUBSCRIBE <bound port>` on THIS connection, inside the
+   * handshake so the stream is flowing before the resync drain. Never throws: a refusal, a timeout or
+   * a dead link is reported and the handshake stands — a dead link is noticed by the socket's own
+   * close, exactly as before.
+   */
+  private async subscribeOsc(): Promise<void> {
+    const port = this.currentOsc.port;
+    if (!this.oscBound || port <= 0) {
+      this.emit('oscSubscription', { port, outcome: 'unbound', detail: 'no OSC socket is bound' });
+      return;
+    }
+    try {
+      const reply = await this.currentQueue.enqueue(`OSC SUBSCRIBE ${String(port)}`, {
+        priority: 'urgent',
+        timeoutMs: this.versionTimeoutMs,
+      });
+      this.emit('oscSubscription', {
+        port,
+        outcome: isOk(reply.response) ? 'subscribed' : 'refused',
+        detail: `code=${String(reply.response.code)}`,
+      });
+    } catch (err) {
+      this.emit('oscSubscription', {
+        port,
+        outcome: 'refused',
+        detail: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

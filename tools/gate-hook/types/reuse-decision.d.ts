@@ -17,8 +17,29 @@ declare module '*reuse-decision.mjs' {
     priorRunId: number | null;
   }
 
+  /**
+   * One entry of `workflow_runs`, as the guard reads it. Consumed as `unknown` so a
+   * shape the API never sent fails safe rather than throwing; this interface exists to
+   * name the fields the rule depends on.
+   */
+  export interface ReuseCandidateRun {
+    id?: number;
+    status?: string;
+    conclusion?: string | null;
+    /**
+     * The trigger. ONLY `'push'` is reusable: a `push` run tests the tree of that exact
+     * commit, while a `pull_request` run tests `refs/pull/N/merge`. Read POSITIVELY —
+     * absent, empty, or unrecognised is an uncertainty, never a permission.
+     */
+    event?: string;
+    html_url?: string;
+  }
+
   export interface ReuseInput {
-    /** `workflow_runs` for this workflow at this `head_sha`; anything else fails safe. */
+    /**
+     * `workflow_runs` for this workflow at this `head_sha` — see {@link ReuseCandidateRun}
+     * for the fields read. Anything else fails safe.
+     */
     runs: unknown;
     /** Jobs for a candidate run — `null`/`undefined` is an uncertainty, so it fails safe. */
     jobsFor: (runId: number) => unknown;

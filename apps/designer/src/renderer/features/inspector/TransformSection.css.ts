@@ -68,3 +68,14 @@ export const scrubSurface = style({
   touchAction: 'none',
   userSelect: 'none',
 });
+
+/**
+ * `DESIGNER-FIX-0905` — a WITHHELD field: present, dimmed as a whole, not a scrub surface.
+ * The reason rides the field as its tooltip; the dimming says "unavailable here" at a
+ * glance without the row disappearing.
+ */
+export const withheld = style({
+  opacity: 0.55,
+  cursor: 'not-allowed',
+  userSelect: 'none',
+});

@@ -141,6 +141,45 @@ row, this SHALL be the restore path's main rule rather than a corner case.
 - **WHEN** a declared row's layer cannot be reclaimed at restore **THEN** the item is NOT loaded
   elsewhere; the row reports the blocked state and nothing is sent to the wire
 
+### Requirement: There are THREE declared layer classes, and each makes a different claim
+
+The bridge SHALL recognise three DECLARED classes of layer, resolved through ONE canonical
+enumeration rather than by a membership test written per consumer: **operator rows** (the declared
+candidate bank), the **reserved playout range**, and **bridge-owned Live Source layers** (a
+bridge-owned ledger, not a static range). "Declared" SHALL NOT be treated as a synonym for "not an
+orphan": each class SHALL yield its own answer, and any narrowing of the R-009 orphan sweep SHALL
+be written against the complete list of three. A narrowing written against two of three is not
+detectable by review — it is a correct-looking absence that forbids the omitted class.
+
+`LayerManager.allocate()` SHALL keep existing and SHALL keep serving DECLARED, non-operator
+callers; what SHALL NOT exist is a caller that puts an OPERATOR graphic on air through it. The
+`LayerPolicy` ranges become DESCRIPTIVE: a `templateType` no longer selects a layer, and it
+SHALL remain a first-class scene `templateType` regardless of where — or whether — its range
+moves.
+
+#### Scenario: One sweep tick, three declared classes, three different answers
+
+- **WHEN** a producer the bridge did not create is observed on a bridge-owned Live Source layer,
+  on a declared playout layer, and on an UNBOUND operator row, in the same sweep **THEN** the
+  Live Source layer and the playout layer do NOT surface as orphans, and the unbound operator row
+  DOES — a row declares the layer is the operator's to use, not that something of ours is on it
+- **WHEN** an undeclared layer carries the same producer **THEN** it surfaces as an orphan, so the
+  sweep is demonstrably still running
+
+#### Scenario: Each class is refused for its own reason
+
+- **WHEN** an operator Clear is attempted on a layer of each declared class **THEN** each is
+  refused with the reason naming ITS class, never with another class's reason
+- **WHEN** the layer is outside every declared class **THEN** R-015's foreign refusal applies
+  exactly as before
+
+#### Scenario: Allocation is not the operator path, and is not retired
+
+- **WHEN** the operator's console is searched for a caller of the allocating load **THEN** none
+  exists, and the exact-slot row load is present in its place
+- **WHEN** a declared, non-operator caller allocates **THEN** it still succeeds across the freed
+  span, and the reserved playout range and the operator bank remain fenced
+
 ### Requirement: Existing dynamic-layer items are not moved at upgrade
 
 Upgrading to the row model SHALL NOT automatically relocate items that are already on dynamic

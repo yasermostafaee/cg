@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { LucideIcon } from 'lucide-react';
-import { colors } from '../theme.js';
+import { colors, cssVars } from '../theme.js';
 import { Icon } from './Icon.js';
 import { VARIANT_ACCENT, type ButtonVariant } from './Button.js';
 
@@ -62,7 +62,7 @@ const styles = {
     background: colors.panel,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.3rem',
-    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.45)',
+    boxShadow: cssVars['--r-shadow-menu'],
     padding: `${String(PADDING / 2)}px 0`,
     color: colors.text,
     fontSize: '0.85rem',
@@ -78,7 +78,7 @@ const styles = {
     outline: 'none',
   },
   itemDisabled: { opacity: 0.45, cursor: 'not-allowed' },
-  hover: { background: 'rgba(56, 189, 248, 0.16)' },
+  hover: { background: cssVars['--r-menu-hover-fill'] },
 } as const;
 
 /** One shared source with the buttons — see `VARIANT_ACCENT`. */

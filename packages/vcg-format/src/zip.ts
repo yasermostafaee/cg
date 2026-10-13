@@ -37,6 +37,21 @@ export async function writeZip(files: ReadonlyMap<string, Uint8Array>): Promise<
       compressionOptions: { level: 9 },
     });
   }
+  /*
+    🔴 **`B-190` — THE DIRECTORY ENTRIES JSZip CREATES BEHIND YOUR BACK CARRY THE WALL CLOCK.**
+
+    `zip.file('assets/image/x.png', …, { date })` pins the date of the FILE and silently
+    materialises `assets/` and `assets/image/` as directory entries stamped `new Date()`.
+    They sort FIRST, so the archive's very first local header held a live timestamp: two packs
+    of identical input differed whenever they fell either side of a DOS-time tick (2-second
+    resolution), which is a byte-identity guarantee that holds ~99 % of the time — the worst
+    kind. Found as a 1-in-N gate red on `project-package`'s "re-packing … is byte-identical".
+
+    So the pin is applied to EVERY entry the archive ends up containing, after the fact,
+    rather than at each `file()` call: the entries this loop reaches are the ones being
+    written, including the ones nobody asked for.
+  */
+  for (const entry of Object.values(zip.files)) entry.date = FIXED_DATE;
   const out = await zip.generateAsync({
     type: 'uint8array',
     platform: 'UNIX',

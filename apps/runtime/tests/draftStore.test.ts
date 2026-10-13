@@ -9,11 +9,26 @@ import {
   hasStaged,
   isFieldDirty,
   isItemDirty,
+  effectivePosition,
+  positionDraftOf,
   pruneDrafts,
   snapshotDraft,
   stageField,
+  stagePosition,
   stagedValue,
+  unstageField,
 } from '../src/renderer/features/inspector/draftStore.js';
+
+/**
+ * B-139 — an item that declares NO plates, said explicitly.
+ *
+ * `isItemDirty`'s plate baseline is required precisely so a caller cannot omit it
+ * and get a different question answered. These field-only cases must therefore
+ * STATE that there are no plates rather than leave it out — which is the whole
+ * distinction the fix draws, and a test that omitted it would document a call
+ * shape the API no longer allows.
+ */
+const NO_PLATES: ReadonlyMap<string, string | null> = new Map();
 
 /**
  * R-003 — the per-item draft overlay. These prove the staging contract: edits
@@ -49,19 +64,48 @@ describe('staging + effective value', () => {
     stageField(A, ['title'], 'two');
     expect(stagedValue(A, ['title'])).toBe('two');
   });
+
+  /*
+    `PERSIAN-DIGITS-01` — a number field whose text stops being a number WITHDRAWS its draft, so
+    an Update leaves that field as it is on air instead of sending the last prefix that parsed.
+  */
+  it('unstageField withdraws ONE field and leaves the item’s other drafts alone', () => {
+    stageField(A, ['score'], 12);
+    stageField(A, ['title'], 'kept');
+    stageField(A, ['home', 'score'], 3);
+    unstageField(A, ['score']);
+    expect(hasStaged(A, ['score'])).toBe(false);
+    expect(effectiveValue(A, ['score'], 5)).toBe(5);
+    expect(stagedValue(A, ['title'])).toBe('kept');
+    // A namespaced sibling of the same name is a different field.
+    expect(stagedValue(A, ['home', 'score'])).toBe(3);
+    expect(buildApplyPayload(A, { score: 5, title: 'x' })).toEqual({
+      score: 5,
+      title: 'kept',
+      home: { score: 3 },
+    });
+  });
+
+  it('unstageField on a field that was never staged changes nothing (the control)', () => {
+    stageField(A, ['title'], 'kept');
+    unstageField(A, ['score']);
+    unstageField(B, ['score']);
+    expect(snapshotDraft(A)).toEqual({ title: 'kept' });
+    expect(snapshotDraft(B)).toEqual({});
+  });
 });
 
 describe('dirty is honest (staged AND different from applied)', () => {
   it('a draft equal to the applied value is NOT dirty', () => {
     stageField(A, ['title'], 'same');
     expect(isFieldDirty(A, ['title'], 'same')).toBe(false);
-    expect(isItemDirty(A, { title: 'same' })).toBe(false);
+    expect(isItemDirty(A, { title: 'same' }, NO_PLATES)).toBe(false);
   });
 
   it('a draft differing from applied is dirty', () => {
     stageField(A, ['title'], 'new');
     expect(isFieldDirty(A, ['title'], 'old')).toBe(true);
-    expect(isItemDirty(A, { title: 'old' })).toBe(true);
+    expect(isItemDirty(A, { title: 'old' }, NO_PLATES)).toBe(true);
   });
 
   it('compares structured list values by structure, not identity', () => {
@@ -135,6 +179,107 @@ describe('discard + prune', () => {
   });
 });
 
+/**
+ * `RUNTIME-REDESIGN-01` PHASE 5 — the POSITION draft lives in the store, per item, so a
+ * selection round trip cannot lose it (it used to be `PositionPicker`'s own `useState`,
+ * keyed by item and therefore remounted — and emptied — on every selection change).
+ */
+describe('the position draft — kept per item, swept by prune, DROPPED by Discard', () => {
+  const DRAFT = { anchor: 'top-left' as const, x: '42', y: '-7' };
+  /** What the row has APPLIED, for the dirty comparison. */
+  const APPLIED_POSITION = { anchor: 'center' as const, offset: { x: 10, y: -20 } };
+
+  it('stages and reads back, per item', () => {
+    stagePosition(A, DRAFT);
+    expect(positionDraftOf(A)).toEqual(DRAFT);
+    expect(positionDraftOf(B)).toBeUndefined();
+  });
+
+  it('keeps the offsets AS TYPED — an in-progress "-" is not flattened to 0', () => {
+    stagePosition(A, { anchor: 'center', x: '-', y: '1.' });
+    expect(positionDraftOf(A)).toEqual({ anchor: 'center', x: '-', y: '1.' });
+  });
+
+  /**
+   * 🔴 **REVERSED BY THE OWNER, 2026-09-14 — and the assertion is INVERTED rather than
+   * deleted, because the behaviour it pinned is exactly the behaviour that changed.**
+   *
+   * It read: _"is NOT dropped by clearDraft (Discard) and does NOT make the item dirty —
+   * UPDATE does not send it"_, and that was correct while `Apply position` was the position's
+   * own control. «دکمه apply position فقط یه مرحله اضافیه و همون دکمه update باید
+   * پوزیشن رو هم اعمال کنه و همچنین discard هم روش کار کنه.»
+   *
+   * ⚠ The OLD test's own reasoning is what demands the new one: it existed so a chip could
+   * never point at an edit UPDATE would not send. UPDATE sends the position now, so the same
+   * rule inverts — a position that survived a Discard, or that left the bar reporting itself
+   * clean, would be the unapplied edit nobody can see.
+   */
+  it('🔴 IS dropped by clearDraft (Discard) and DOES make the item dirty — UPDATE sends it now', () => {
+    stagePosition(A, DRAFT);
+    stageField(A, ['title'], 'x');
+    // Dirty BEFORE the discard, and dirty BECAUSE of the position: the field is staged as
+    // `'x'` against an applied `'x'`, so only the position can be making this true.
+    expect(isItemDirty(A, { title: 'x' }, NO_PLATES, undefined, APPLIED_POSITION)).toBe(true);
+
+    clearDraft(A);
+    expect(hasStaged(A, ['title'])).toBe(false);
+    expect(positionDraftOf(A)).toBeUndefined();
+    expect(isItemDirty(A, { title: 'x' }, NO_PLATES, undefined, APPLIED_POSITION)).toBe(false);
+  });
+
+  /**
+   * ⚠ **A POSITION EQUAL TO THE APPLIED ONE IS NOT DIRTY**, and the comparison is on the
+   * VALUES a send would carry rather than on the typed strings. Without this, a box the
+   * operator typed and retyped back — or left as `-0` — would demand an UPDATE that changes
+   * nothing, which is how a dirty mark stops meaning anything.
+   */
+  it('a staged position identical to the applied one leaves the item clean', () => {
+    stagePosition(A, { anchor: APPLIED_POSITION.anchor, x: '10', y: '-20' });
+    expect(isItemDirty(A, {}, NO_PLATES, undefined, APPLIED_POSITION)).toBe(false);
+    stagePosition(A, { anchor: APPLIED_POSITION.anchor, x: '11', y: '-20' });
+    expect(isItemDirty(A, {}, NO_PLATES, undefined, APPLIED_POSITION)).toBe(true);
+  });
+
+  /**
+   * …and a half-typed box is not a move. `'-'`, `'1.'` and `''` are in-progress states the
+   * store keeps AS TYPED (the test above pins that); what a send carries for them is `0`, so
+   * that is what the dirty test has to compare, or the panel reports a move the wire would
+   * not make.
+   */
+  it('an in-progress offset compares as the number a send would carry', () => {
+    stagePosition(A, { anchor: APPLIED_POSITION.anchor, x: '', y: '-20' });
+    // `''` sends 0, and applied x is 10 — a real difference.
+    expect(isItemDirty(A, {}, NO_PLATES, undefined, APPLIED_POSITION)).toBe(true);
+    stagePosition(A, { anchor: APPLIED_POSITION.anchor, x: '10', y: '-' });
+    // `'-'` sends 0, and applied y is -20 — also a real difference, from the other box.
+    expect(isItemDirty(A, {}, NO_PLATES, undefined, APPLIED_POSITION)).toBe(true);
+  });
+
+  /**
+   * 🔴 PVW SEES THE STAGED MOVE, the air path does not — owner, 2026-09-14: the preview
+   * must follow the boxes with no UPDATE in between. `effectivePosition` is the position half
+   * of `buildApplyPayload` and exists for that one caller.
+   */
+  it('effectivePosition overlays the staged move, and is the applied value without one', () => {
+    expect(effectivePosition(A, APPLIED_POSITION)).toEqual(APPLIED_POSITION);
+    stagePosition(A, { anchor: 'bottom-right', x: '5', y: '' });
+    expect(effectivePosition(A, APPLIED_POSITION)).toEqual({
+      anchor: 'bottom-right',
+      offset: { x: 5, y: 0 },
+    });
+  });
+
+  it('is swept by pruneDrafts once the row has left the stack, and only then', () => {
+    stagePosition(A, DRAFT);
+    stagePosition(B, DRAFT);
+    pruneDrafts({ ready: false });
+    expect(positionDraftOf(A)).toEqual(DRAFT);
+    pruneDrafts(live(B));
+    expect(positionDraftOf(A)).toBeUndefined();
+    expect(positionDraftOf(B)).toEqual(DRAFT);
+  });
+});
+
 describe('buildApplyPayload — the one atomic update', () => {
   it('overlays every staged draft on the applied field-set', () => {
     const applied: FieldValues = { title: 'old', body: 'keep', count: 1 };
@@ -172,7 +317,7 @@ describe('drafts are per item', () => {
   it('staging on one item never affects another', () => {
     stageField(A, ['title'], 'a-draft');
     expect(hasStaged(B, ['title'])).toBe(false);
-    expect(isItemDirty(B, { title: 'anything' })).toBe(false);
+    expect(isItemDirty(B, { title: 'anything' }, NO_PLATES)).toBe(false);
   });
 });
 

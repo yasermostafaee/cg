@@ -1,9 +1,16 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { GripVertical, Plus, X } from 'lucide-react';
-import type { FieldValue, ListItem } from '@cg/shared-schema';
+import {
+  fieldDigitsOf,
+  type DynamicField,
+  type FieldValue,
+  type ListItem,
+} from '@cg/shared-schema';
+import { writeFieldDigits } from '@cg/text-shaping';
 import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
 import { AutoGrowTextarea } from '../../ui/AutoGrowTextarea.js';
+import { writeFieldText } from '../../ui/fieldDigitsInput.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import {
@@ -109,11 +116,17 @@ const styles = {
 
 export function ListFieldEditor({
   fieldId,
+  field = null,
   value,
   onStage,
   footer,
 }: {
   fieldId: string;
+  /**
+   * `TEXT-DIGITS-01` — the list field, for its Digits: each cell shows its text in them and writes
+   * each digit as it is typed. `null` (no resolved schema) writes nothing.
+   */
+  field?: DynamicField | null;
   value: FieldValue | undefined;
   /** Stage the whole structured array. A `ListItem[]` is a valid `FieldValue`. */
   onStage: (next: ListItem[]) => void;
@@ -203,9 +216,13 @@ export function ListFieldEditor({
                 text before its controls; the picture puts the cluster first. */}
             <AutoGrowTextarea
               className="cg-list-item__text"
-              value={itemText(item)}
+              value={writeFieldDigits(itemText(item), fieldDigitsOf(field))}
               aria-label={`${fieldId} item ${n}`}
-              onChange={(e) => onStage(setItemText(items, i, e.target.value))}
+              onChange={(e) =>
+                onStage(
+                  setItemText(items, i, writeFieldText(e.currentTarget, field, e.nativeEvent)),
+                )
+              }
             />
             <div className="cg-list-item__tools">
               {/*

@@ -8,8 +8,10 @@ import { CompositionActionBar } from './features/compositions/CompositionActionB
 import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { InspectorPanel } from './features/inspector/InspectorPanel.js';
 import { InputTooltip } from './features/shell/InputTooltip.js';
+import { DurationGuardDialog } from './features/addGuard/DurationGuardDialog.js';
 import { LandingView } from './features/shell/LandingView.js';
 import { Splitter } from './features/shell/Splitter.js';
+import { StorageNotice } from './features/shell/StorageNotice.js';
 import { TopToolbar } from './features/shell/TopToolbar.js';
 import { TransportBar } from './features/shell/TransportBar.js';
 import { StatusBar } from './features/status/StatusBar.js';
@@ -216,24 +218,16 @@ export function App(): JSX.Element {
   );
 
   // D-088 — the tab title reflects the open project + dirty state: `* name` dirty,
-  // `name` clean, `cg Designer` when nothing is open.
+  // `name` clean, and (`FIELD-FIXES-01` G) the product's name when nothing is open.
   const projectName = scene?.name ?? null;
   useEffect(() => {
     document.title =
-      projectName === null ? 'cg Designer' : dirty ? `* ${projectName}` : projectName;
+      projectName === null ? 'APASAI CG DESIGNER' : dirty ? `* ${projectName}` : projectName;
   }, [projectName, dirty]);
 
-  // D-088 — warn on tab-close / refresh while there are unsaved changes. The browser shows
-  // a generic prompt (custom text is ignored); arm the handler only when dirty.
-  useEffect(() => {
-    if (!dirty) return;
-    function onBeforeUnload(e: BeforeUnloadEvent): void {
-      e.preventDefault();
-      e.returnValue = '';
-    }
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [dirty]);
+  // D-088 — the warning on tab-close / refresh with unsaved changes lives in `CloseGuard`
+  // (`features/shell`), mounted beside this component: `D-162` puts it and CG Designer's
+  // window-close guard behind ONE predicate, `hasUnsavedChanges`.
   // The editing surface is the open composition (its own size / duration /
   // layers); null when nothing is open (→ empty state). Issues validate the
   // open composition, not the now-layerless project root.
@@ -528,6 +522,10 @@ export function App(): JSX.Element {
   if (view === 'landing' || scene === null) {
     return (
       <main className={s.page}>
+        {/* D-150 — mounted on the LANDING screen too: this is where an author decides
+            what to open, so it is the worst possible place to be quiet about which
+            storage root is live. */}
+        <StorageNotice />
         <LandingView />
         <InputTooltip />
       </main>
@@ -536,6 +534,7 @@ export function App(): JSX.Element {
 
   return (
     <main className={s.page}>
+      <StorageNotice />
       <div className={s.studioTop}>
         <TopToolbar scene={scene} projectPath={projectPath} />
       </div>
@@ -570,6 +569,10 @@ export function App(): JSX.Element {
                   editingTextId={editingTextId}
                   bindModeFieldId={bindModeFieldId}
                   showToolbar
+                  // `D-157` — the SAME live issue list the status bar and the action bar read, so
+                  // the canvas mark, the pill's count and the Export refusal can never disagree
+                  // about which boxes are blocking the export.
+                  issues={issues}
                 />
               </div>
               <TransportBar scene={editScene} />
@@ -606,6 +609,10 @@ export function App(): JSX.Element {
         </>
       )}
       <StatusBar scene={editScene ?? scene} issues={issues} />
+      {/* D-151 — the add-time duration guard's dialog: mounted ONCE here because several add
+          doors (assets panel, canvas drops, compositions panel) raise it; it renders only
+          while a guarded add is pending. */}
+      <DurationGuardDialog />
       {notice !== null && <Toast message={notice} />}
       <InputTooltip />
     </main>

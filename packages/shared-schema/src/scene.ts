@@ -7,6 +7,8 @@ import {
   ISODateSchema,
   ResolutionSchema,
 } from './primitives.js';
+import { ArrangementsSchema } from './arrangements.js';
+import { LookGroupsSchema } from './looks.js';
 import { ElementSchema, type Element } from './elements.js';
 import { DynamicFieldSchema } from './fields.js';
 import { FieldBindingSchema } from './bindings.js';
@@ -51,12 +53,61 @@ export type PlayoutMode = z.infer<typeof PlayoutModeSchema>;
 export const HoldSourceSchema = z.enum(['timed', 'content-driven']);
 export type HoldSource = z.infer<typeof HoldSourceSchema>;
 
+/**
+ * 🔴 `TIMING-BUILD-21` §3 — THE TWO TIMING DEFAULTS, STATED ONCE, HERE.
+ *
+ * Every consumer reads them through {@link repeatOf} / {@link delayMsOf} rather than
+ * restating `?? something` at its own call site. A default restated at three call sites is
+ * three chances for them to disagree, and this pair has already disagreed once: the
+ * controller privately defaulted `repeat` to ONE cycle while the schema said nothing, so a
+ * mode literally named `loop-cycle` played once.
+ */
+export const DEFAULT_REPEAT = 'infinite' as const;
+export const DEFAULT_DELAY_MS = 0;
+
 const PlayoutObjectSchema = z.object({
   mode: PlayoutModeSchema.default('manual'),
   /** Absent ⇒ 'timed' (resolved by `playoutOf` / the controller). */
   holdSource: HoldSourceSchema.optional(),
+  /**
+   * The hold WITHIN a pass — how long the composition sits parked at `outPoint` before the
+   * outro runs. ⚠ NOT the gap between passes; see {@link PlayoutObjectSchema.delayMs}.
+   */
   holdMs: z.number().min(0).optional(),
+  /**
+   * How many open/close passes `loop-cycle` runs. Absent ⇒ {@link DEFAULT_REPEAT}
+   * (`'infinite'`), read through {@link repeatOf}.
+   *
+   * ⚠ `min(1)` is deliberate and is NOT the operator's live value. This is the AUTHORED
+   * total — a designer asking for zero passes is asking for a graphic that never shows, which
+   * is a mistake rather than an intent. The operator's per-row override is a different
+   * quantity (passes REMAINING FROM NOW, where `0` is the legal instruction "out after this
+   * one") and carries its own floor — see `StackItemTimingOverrideSchema`.
+   */
   repeat: z.union([z.number().int().min(1), z.literal('infinite')]).optional(),
+  /**
+   * 🔴 THE GAP BETWEEN PASSES — dead air deliberately left between one pass ending and the
+   * next beginning, so a looped template breathes instead of restarting the instant it ends.
+   * Absent ⇒ {@link DEFAULT_DELAY_MS} (`0`, meaning no gap), read through {@link delayMsOf}.
+   *
+   * ⚠ **`delayMs` IS NOT `holdMs`, AND THE TWO MUST NEVER BE CONFLATED.** They are different
+   * spans on opposite sides of the outro, and swapping them is invisible until it is on air:
+   *
+   * ```text
+   *   intro → [ hold: holdMs ] → outro → [ delay: delayMs ] → intro → …
+   *            ^ WITHIN a pass             ^ BETWEEN passes
+   * ```
+   *
+   * `holdMs` is the graphic ON SCREEN, parked and readable. `delayMs` is the graphic GONE —
+   * the screen is clear. A value meant for one, put in the other, produces a graphic that
+   * lingers when it should be absent, or vanishes when it should be readable.
+   *
+   * ⚠ It never delays the FIRST showing (ADR 0009): an operator who presses Play and sees
+   * nothing presses again, and a press whose result is invisible is a press that gets
+   * repeated. A pre-roll delay is a separate, explicitly out-of-scope feature that would also
+   * need the row to SAY it is waiting, cancellably.
+   */
+  delayMs: z.number().min(0).optional(),
 });
 
 /**
@@ -118,7 +169,18 @@ function refineLifecycle(
   }
 }
 
-/** Categories of broadcast template. v1 set; `custom` is the escape hatch. */
+/**
+ * Categories of broadcast template. v1 set; `custom` is the escape hatch.
+ *
+ * ⭐ **R-028 (6.4) — THIS IS DESCRIPTIVE METADATA, AND IT NO LONGER SELECTS A LAYER.**
+ * These values once doubled as the key of `DEFAULT_LAYER_POLICY`'s allocation ranges. Under
+ * R-028 every operator graphic is placed on a DECLARED ROW by its exact coordinate, so a
+ * type no longer decides where anything lands — but the type STAYS, because a scene declares
+ * it about itself and it travels inside every `.vcg` ever exported. `logo-bug` is the one
+ * to watch: its allocation range moved (90–99 → 40–49) and is now descriptive, and someone
+ * reading that as "the type was retired" would break every package carrying it. The range
+ * moved; the type did not go with it. Same fact recorded beside the policy itself.
+ */
 export const TemplateTypeSchema = z.enum([
   'logo-bug',
   'lower-third',
@@ -156,7 +218,22 @@ export type Layer = z.infer<typeof LayerSchema>;
 export const PlayoutTargetSchema = z.enum(['casparcg']);
 export type PlayoutTarget = z.infer<typeof PlayoutTargetSchema>;
 
-export const CompositionSchema = z
+/**
+ * B-129 — the EDITOR's backdrop, and nothing else: a viewing aid that makes
+ * authored content legible while working.
+ *
+ * 🔴 **It is NEVER rendered to output and never travels in an exported package.**
+ * The name is the contract (golden rule 6) — it was called `background`, one field
+ * carrying two different facts ("let me see my white text" and "this graphic paints
+ * a background on air"), and the render path could not tell them apart, so an
+ * editor preference reached air as a full-frame card over live video.
+ *
+ * An authored background is a REAL ELEMENT — a full-frame rect, with a real entry
+ * in the scene, which renders unchanged. That is the only way to paint on air.
+ */
+const EditorBackdropSchema = z.union([z.literal('transparent'), HexColorSchema]);
+
+const CompositionObjectSchema = z
   .object({
     id: IdSchema,
     name: z.string(),
@@ -179,7 +256,8 @@ export const CompositionSchema = z
      * selector is deferred to a 2nd target (C-001).
      */
     playoutTarget: PlayoutTargetSchema.optional(),
-    background: z.union([z.literal('transparent'), HexColorSchema]),
+    /** B-129 — EDITOR affordance only; never rendered to output. See {@link EditorBackdropSchema}. */
+    editorBackdrop: EditorBackdropSchema,
     layers: z.array(LayerSchema),
     /**
      * D-025 — this composition's OWN dynamic fields + their bindings. Fields are
@@ -190,9 +268,54 @@ export const CompositionSchema = z
      */
     fields: z.array(DynamicFieldSchema).optional(),
     bindings: z.array(FieldBindingSchema).optional(),
+    /**
+     * 🔴 `multibox-layout-switch` (A′) — this composition's ARRANGEMENTS.
+     *
+     * ── WHY THEY LIVE HERE AND NOT ONLY ON THE SCENE ────────────────────────
+     *
+     * C1 put `arrangements` on {@link SceneSchema}, reasoning that an arrangement
+     * positions box INSTANCES so it belongs to the thing that contains them. That
+     * is right about the RUNTIME and wrong about AUTHORING, because this Designer
+     * has no root-scene editing surface at all: _"No 'main scene': editing always
+     * targets a composition"_ (`scene-doc.ts`, `editSceneOf`). With them only on
+     * the Scene, two compositions in one project would share one arrangement list
+     * and the second author to touch it would silently retune the first's boxes.
+     *
+     * So they sit here too, exactly as `resolution`, `frameRange`, `activeRange`,
+     * `lifecycle`, `playout`, `editorBackdrop`, `layers`, `fields` and `bindings`
+     * already do — and `editSceneOf` PROJECTS this composition's onto the working
+     * scene, which is the same one-way mechanism those nine use. It is a
+     * projection, not a second spelling: the Scene field is the projection's
+     * TARGET and the only thing `collectArrangements` ever reads.
+     *
+     * Optional, so every composition authored before the feature validates
+     * unchanged.
+     */
+    arrangements: ArrangementsSchema.optional(),
+    /**
+     * LOOKS (`design.md` §14, adopted 2026-08-19) — the multi-frame groups authored in
+     * this composition. Same two homes as `arrangements` and for the same reason: the
+     * composition is the authoring home, the scene is the projection the preflight, the
+     * exporter and the runtime read. Optional so everything authored before the feature
+     * validates unchanged. ⚠ A′'s `arrangements` beside it is COEXISTENCE, one session
+     * wide — phase 2 deletes arrangements (`tasks.md` §1b's deletion clause).
+     */
+    lookGroups: LookGroupsSchema.optional(),
   })
   .superRefine(refineLifecycle);
-export type Composition = z.infer<typeof CompositionSchema>;
+/**
+ * P-031 — NO legacy `background` → `editorBackdrop` shim any more.
+ *
+ * B-129 renamed the key and left a `z.preprocess` that accepted the old one. The
+ * owner's compatibility-floor decision (see `P-031` in `docs/prd/platform.md`)
+ * retires it: nothing has shipped, so no document in the world needs it, and a
+ * conversion nobody needs is debt that reads as safety. A document carrying
+ * `background` and no `editorBackdrop` now fails to parse — loudly, with zod
+ * naming the missing required key — which is the honest answer for a file that
+ * predates the current format.
+ */
+export const CompositionSchema = CompositionObjectSchema;
+export type Composition = z.infer<typeof CompositionObjectSchema>;
 
 const FontReferenceSchema = z.object({
   family: z.string().min(1),
@@ -290,8 +413,134 @@ export function resolveDefaultPosition(scene: {
   return scene.defaultPosition ?? CENTERED_POSITION;
 }
 
+/**
+ * ⭐ **C-015 phase 6 (task 6.2a) — THE OUTPUT-PLACEMENT ARITHMETIC, AND WHY IT MOVED
+ * HERE FROM `@cg/template-runtime`'s `position.ts`.**
+ *
+ * Deriving a Live Source's `MIXER FILL` bridge-side means this placement arithmetic
+ * now exists on BOTH sides of the seam — the page composes a CSS transform from it,
+ * the bridge composes a normalized rect from it. **If one changes and the other does
+ * not, NOTHING ERRORS: the live box simply slides off its hole on air.** There is no
+ * operator signal, because the hole is transparent, so the failure looks exactly like
+ * a mis-authored template.
+ *
+ * This repo solved this class once already, in this same code path, and wrote down
+ * why — the bridge calls `positionQuery` (just above) rather than formatting the
+ * query itself, because _"two spellings of one override is how a preview comes to
+ * place a graphic differently from air"_. This is the same remedy applied to the
+ * ARITHMETIC instead of to the string.
+ *
+ * `@cg/shared-schema` is the home because it is the only package all three sides
+ * already depend on — the page, the bridge and `@cg/vcg-format` — so the move adds
+ * no dependency anywhere. `@cg/template-runtime` re-exports every name below, so no
+ * page-side import churned.
+ *
+ * **What deliberately did NOT move:** `applyOutputPosition` and `resolveChannelRaster`
+ * touch `document` and `window`. They are the page's alone, and a schema package that
+ * reached for a DOM would be a worse problem than the one this solves.
+ *
+ * 🔴 **Guard 1 of two, and it is only half the fix.** Sharing these terms makes them
+ * impossible to diverge; it does NOT make their COMPOSITION agree, because one side
+ * emits CSS and the other emits AMCP and neither can share that step. Guard 2 is the
+ * contract test pinning the two compositions to each other over a table of rasters —
+ * including a non-16:9 one, since on 16:9 `s = 1` and `pad = (0,0)` and every term
+ * below collapses to identity (task 6.2b).
+ */
+
+/** A pixel raster — the reference frame, or a channel's real geometry. */
+export interface Raster {
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * R-030 — the REFERENCE frame every manifest offset and keyframe is authored
+ * against. Deliberately a CONSTANT and not the channel's raster: the anchor
+ * calculation stays expressed in reference pixels, and the channel's real geometry
+ * is applied afterwards as ONE uniform scale ({@link outputScale}).
+ */
+export const REFERENCE_FRAME: Raster = { width: 1920, height: 1080 };
+
+/**
+ * Anchor → fractional handle on both axes (0 = start, 0.5 = middle, 1 = end).
+ *
+ * EXPORTED now, where it was module-private in `position.ts`: the bridge needs the
+ * same nine pairs, and a second table of them is exactly the divergence 6.2a exists
+ * to prevent — nine literals are nine chances to transpose one.
+ */
+export const ANCHOR_FRACTIONS: Record<PositionAnchor, { ax: number; ay: number }> = {
+  'top-left': { ax: 0, ay: 0 },
+  'top-center': { ax: 0.5, ay: 0 },
+  'top-right': { ax: 1, ay: 0 },
+  'mid-left': { ax: 0, ay: 0.5 },
+  center: { ax: 0.5, ay: 0.5 },
+  'mid-right': { ax: 1, ay: 0.5 },
+  'bottom-left': { ax: 0, ay: 1 },
+  'bottom-center': { ax: 0.5, ay: 1 },
+  'bottom-right': { ax: 1, ay: 1 },
+};
+
+/**
+ * Where the scene-sized stage lands inside the reference frame:
+ * `x = ax*(frameW − sceneW) + offset.x`, likewise for y. A full-frame scene computes
+ * (0,0) — pixel-identical to the pre-positioning output.
+ *
+ * R-049 — the first parameter is `Pick<Scene, 'resolution'>` and not a full `Scene`: a
+ * WIDENING, because the body only ever read `resolution`, and because two callers do
+ * not hold a scene at all. PVW's Live Source placeholder has only the `resolution`
+ * the template carries on `TemplateInfo.liveSources`, and the bridge has the same.
+ * Requiring a full `Scene` would have forced them to fabricate one or — far worse —
+ * to write their own copy of two lines of arithmetic.
+ */
+export function outputTranslate(
+  scene: { resolution: { width: number; height: number } },
+  position: Position,
+  frame: Raster = REFERENCE_FRAME,
+): { x: number; y: number } {
+  const { ax, ay } = ANCHOR_FRACTIONS[position.anchor];
+  return {
+    x: ax * (frame.width - scene.resolution.width) + position.offset.x,
+    y: ay * (frame.height - scene.resolution.height) + position.offset.y,
+  };
+}
+
+/**
+ * R-030 — the ONE uniform scale mapping the reference frame onto a raster:
+ * `min(rasterW/refW, rasterH/refH)`.
+ *
+ * `min` — never a per-axis pair — is what makes this UNIFORM, and uniform is what
+ * keeps every anchor and offset calculation above correct unchanged. A non-16:9
+ * raster therefore LETTERBOXES rather than distorting.
+ *
+ * 🔴 **This is also the exact point where the page and `MIXER FILL` disagree, and the
+ * reason the contract test needs a non-16:9 case.** The page scales uniformly and
+ * pads; `FILL` normalizes PER AXIS and stretches. They agree only where `s = 1` and
+ * the pad is zero — i.e. only on 16:9. The bridge reproduces the page's transform
+ * exactly, which is what makes them agree on every raster.
+ */
+export function outputScale(raster: Raster, frame: Raster = REFERENCE_FRAME): number {
+  return Math.min(raster.width / frame.width, raster.height / frame.height);
+}
+
+/**
+ * The letterbox padding that centres the scaled reference frame in the raster.
+ * Exactly `{ x: 0, y: 0 }` whenever the raster's aspect matches the reference (every
+ * 16:9 channel), so it costs the common case nothing; on a 4:3 channel it is what
+ * puts the bars top-and-bottom instead of pinning the picture to a corner.
+ */
+export function outputLetterbox(
+  raster: Raster,
+  frame: Raster = REFERENCE_FRAME,
+): { x: number; y: number } {
+  const scale = outputScale(raster, frame);
+  return {
+    x: (raster.width - frame.width * scale) / 2,
+    y: (raster.height - frame.height * scale) / 2,
+  };
+}
+
 /** Scene — root of the editor's domain model. */
-export const SceneSchema = z
+const SceneObjectSchema = z
   .object({
     schemaVersion: z.literal(1),
     id: IdSchema,
@@ -333,7 +582,8 @@ export const SceneSchema = z
      * instance position is the D-119 Designer track.
      */
     defaultPosition: PositionSchema.optional(),
-    background: z.union([z.literal('transparent'), HexColorSchema]),
+    /** B-129 — EDITOR affordance only; never rendered to output. See {@link EditorBackdropSchema}. */
+    editorBackdrop: EditorBackdropSchema,
     layers: z.array(LayerSchema),
     fields: z.array(DynamicFieldSchema),
     bindings: z.array(FieldBindingSchema),
@@ -353,10 +603,52 @@ export const SceneSchema = z
      * referenced composition is deleted.
      */
     entryCompositionId: IdSchema.optional(),
+    /**
+     * `multibox-layout-switch` (A′, §12.9.10) — the template's ARRANGEMENTS: one ordered
+     * list of cell rects per authored count, each carrying the transition it is ENTERED
+     * with and its own per-element visibility opinions.
+     *
+     * Optional, so every scene authored before the feature validates and plays unchanged;
+     * absent and empty both mean "this template has no arrangements", and neither reaches
+     * any arrangement machinery.
+     *
+     * ⚠ On the SCENE and not on a composition. A box is a nested composition INSTANCE and
+     * an arrangement positions those instances — so arrangements belong to the thing that
+     * contains the instances, which is the scene. Putting them on a composition would make
+     * a box able to rearrange itself, which is not a state this feature has.
+     */
+    arrangements: ArrangementsSchema.optional(),
+    /** LOOKS (§14) — see the composition-side field; this is the projection/runtime home. */
+    lookGroups: LookGroupsSchema.optional(),
     metadata: SceneMetadataSchema,
   })
   .superRefine(refineLifecycle);
-export type Scene = z.infer<typeof SceneSchema>;
+export const SceneSchema = SceneObjectSchema;
+export type Scene = z.infer<typeof SceneObjectSchema>;
+
+/**
+ * B-129 — the scene as an EXPORTER must emit it: every backdrop forced transparent,
+ * on the scene and on every composition.
+ *
+ * ⚠ **This is DEFENCE IN DEPTH, not the guard.** The guard is the render path, which
+ * paints the backdrop only in `author` mode ({@link EditorBackdropSchema}). This makes
+ * the artifact unable to carry the value even if a future renderer forgot the mode
+ * check — belt to the render path's braces.
+ *
+ * ONE implementation, exported from here because BOTH exporters need it and two
+ * spellings of one rule is how the render path and the artifact come to disagree
+ * (golden rule 6).
+ */
+export function withoutEditorBackdrop(scene: Scene): Scene {
+  const compositions = scene.compositions?.map((c) =>
+    c.editorBackdrop === 'transparent' ? c : { ...c, editorBackdrop: 'transparent' as const },
+  );
+  return {
+    ...scene,
+    editorBackdrop: 'transparent',
+    ...(compositions === undefined ? {} : { compositions }),
+  };
+}
 
 /**
  * The effective active region (play / export / preview window) of a scene:
@@ -398,6 +690,157 @@ export function playoutOf(scene: Pick<Scene, 'playout' | 'lifecycle'>): Playout 
   if (scene.lifecycle === undefined && base.mode === 'manual') return { ...base, mode: 'static' };
   return base;
 }
+
+/**
+ * 🔴 `TIMING-BUILD-21` §3 — how many passes this playout runs. Absent ⇒ {@link DEFAULT_REPEAT}.
+ *
+ * THE ONE PLACE THAT ANSWERS IT. Before this existed the answer lived privately in
+ * `PlayoutController` as `repeat ?? 1`, so a stored `loop-cycle` with no explicit count played
+ * ONCE — a mode named "loop cycle" that did not loop. Reuse this rather than re-deriving; a
+ * second local copy is how a default comes to disagree with itself (golden rule 6).
+ *
+ * ⚠ BEHAVIOUR CHANGE, deliberate and owner-decided: a composition storing `loop-cycle` with no
+ * `repeat` now loops until `stop()` where it previously played once. The Designer never wrote
+ * `playout.repeat`, so that is every loop-cycle composition authored before `TIMING-BUILD-21`.
+ */
+export function repeatOf(playout: Pick<Playout, 'repeat'>): number | 'infinite' {
+  return playout.repeat ?? DEFAULT_REPEAT;
+}
+
+/**
+ * 🔴 `TIMING-BUILD-21` §3 — the gap BETWEEN passes in milliseconds. Absent ⇒
+ * {@link DEFAULT_DELAY_MS} (no gap). The one place that answers it; see {@link repeatOf}.
+ *
+ * ⚠ Not the hold WITHIN a pass — that is `holdMs`. See the field's own declaration for the
+ * diagram of which span is which.
+ */
+export function delayMsOf(playout: Pick<Playout, 'delayMs'>): number {
+  return playout.delayMs ?? DEFAULT_DELAY_MS;
+}
+
+/**
+ * 🔴 `TIMING-WIRE-22` — **THE TIMING A CONSOLE SHOULD STATE FOR A WHOLE TEMPLATE.**
+ *
+ * `playoutOf(scene)` answers for the scene ROOT, and for a real template that is the wrong
+ * question. Measured across all five starters: every one has `layers: []`, a set
+ * `entryCompositionId`, and a root that therefore resolves to `static` — while the timing that
+ * describes the graphic lives on the ENTRY COMPOSITION, and the `loop-cycle` that actually
+ * repeats is sometimes a level BELOW that again (`logo-bug`'s entry is `manual`; its
+ * `comp-logo-mark` child is the infinite loop).
+ *
+ * So one scope cannot answer both halves honestly, and this returns both:
+ *
+ *  - **`mode` / `holdSource` / `holdMs` — the ENTRY composition's.** That is what the ROW does:
+ *    "holds until stop", "outro after the hold". Reporting a looping child's mode here would
+ *    describe a piece of furniture rather than the graphic the operator took.
+ *  - **`loop` — the first LOOPING scope's authored count and gap**, depth-first from the entry,
+ *    or absent when nothing loops. That is the thing a pass count can act on, so it is the thing
+ *    whose defaults an override inherits from.
+ *
+ * ⚠ Reading the root instead is not a small error: it makes the console show `Static` for every
+ * template in existence and offer no pass control at all. That is how this was first written,
+ * and the screenshot is what caught it.
+ */
+export function templateTimingOf(scene: Scene): {
+  mode: PlayoutMode;
+  holdSource?: HoldSource;
+  holdMs?: number;
+  loop?: { repeat?: number | 'infinite'; delayMs?: number };
+} {
+  /*
+    🔴 **THE ROOT IS THE GRAPHIC.** An exported template's root IS the composition the designer
+    chose: the exporter flattens it there. Measured on the plant's own saved records
+    (`~/.cg-runtime/bridge-templates/*.json`, 2026-09-15) — `میان‌برنامه (روی آنتن)` has
+    `layers: 1` at the root with `playout {auto-out, content-driven}` and `lifecycle.outPoint 60`,
+    and its `compositions` holds only the three panels it nests.
+  */
+  const resolved = playoutOf(scene);
+
+  /*
+    🔴 **THE LOOPING SCOPES ARE THE ONES THE RUNTIME WOULD WIRE — reachable composition
+    INSTANCES, by the same rule `hasEffectiveHoldDrivers` walks.** A `compositions` entry is a
+    DEFINITION, not a scope: it becomes one only where a `composition` ELEMENT references it. So
+    a flat scan of `compositions` can name a scope that never plays, and `applyPassTiming` —
+    which walks the real scope tree — would then act on a different set than the display named.
+    One resolution, shared (golden rule 6).
+  */
+  const comps = scene.compositions ?? [];
+  const visited = new Set<string>();
+  const reachable: Composition[] = [];
+  const walk = (children: readonly Element[]): void => {
+    for (const el of children) {
+      if (el.visible === false) continue;
+      if (el.type === 'container') {
+        walk(el.children);
+        continue;
+      }
+      if (el.type === 'composition') {
+        if (visited.has(el.compositionId)) continue;
+        visited.add(el.compositionId);
+        const comp = comps.find((c) => c.id === el.compositionId);
+        if (comp === undefined) continue;
+        reachable.push(comp);
+        for (const layer of comp.layers) walk(layer.children);
+      }
+    }
+  };
+  for (const layer of scene.layers) walk(layer.children);
+
+  // The root first — it is the graphic — then its reachable instances in wiring order.
+  const loopSource =
+    resolved.mode === 'loop-cycle'
+      ? { playout: resolved }
+      : reachable
+          .map((c) => ({ playout: playoutOf(c) }))
+          .find((c) => c.playout.mode === 'loop-cycle');
+
+  return {
+    mode: resolved.mode,
+    // `DELTA B1.3` — a hold only EXISTS under the modes that run one. `manual` ends on `stop()`
+    // and `static` hard-cuts, so stating a hold source for either describes a phase that never
+    // happens. The same two modes the Designer's own hold select is offered for.
+    ...(resolved.holdSource !== undefined && MODES_WITH_A_HOLD.has(resolved.mode)
+      ? { holdSource: resolved.holdSource }
+      : {}),
+    ...(resolved.holdMs !== undefined ? { holdMs: resolved.holdMs } : {}),
+    ...(loopSource !== undefined
+      ? {
+          loop: {
+            ...(loopSource.playout.repeat !== undefined
+              ? { repeat: loopSource.playout.repeat }
+              : {}),
+            ...(loopSource.playout.delayMs !== undefined
+              ? { delayMs: loopSource.playout.delayMs }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * `DELTA B1.3` — the modes that actually run a hold, so a console does not state a hold source
+ * for `manual` (ends on `stop()`) or `static` (hard cut). Mirrors `TIMING_RELEVANT_MODES` in the
+ * Designer's preview, which gates the same question from the other side.
+ */
+const MODES_WITH_A_HOLD: ReadonlySet<PlayoutMode> = new Set<PlayoutMode>([
+  'auto-out',
+  'loop-cycle',
+]);
+
+/**
+ * 🔴 `DELTA B1.4` — THE DERIVATION VERSION OF `TemplateInfo.playout`.
+ *
+ * A record derived by an OLDER resolver is not merely old, it is WRONG: before 2026-09-15 this
+ * function read the ENTRY composition and fell back to `comps[0]` on a dangling id, so a
+ * per-composition export published the timing of whichever panel happened to be first — a clock
+ * panel's `static / timed` over a crawler that is `auto-out / content-driven`.
+ *
+ * Bump this whenever the derivation changes what it would answer for the same scene. A console
+ * that reads a record without the CURRENT version must show the re-import sentence instead of
+ * its facts: stale facts here are confidently wrong, which is the worst thing a console can be.
+ */
+export const TEMPLATE_TIMING_VERSION = 2;
 
 /**
  * B-032 — does this composition tree have any EFFECTIVE content hold driver: a `ticker` /
@@ -518,3 +961,25 @@ export function hasNextStep(
     });
   return root.layers.some((l) => walk(l.children));
 }
+
+/*
+ * 🔴 **`single-clock-look-switch` — THE BACKDROP-PUNCH MASK IS GONE, AND ITS ARGUMENT IS NOT
+ * REFUTED — ITS PREMISE IS REMOVED.**
+ *
+ * `MaskHole`, `LiveSourceMask` and `liveSourceMask` lived here from `C-015` / 1.5c. The
+ * reasoning they were built on was: _"The whole HTML page is ONE CasparCG layer, so painting
+ * nothing at a plate is necessary and not sufficient — the backdrop survives at the plate's
+ * rect and the live picture on the layer BELOW is never seen."_ Every word of that stayed
+ * true. What changed is that the page is no longer above the plates: a plate-bearing package
+ * loads onto the LOW bank and its pictures are composited on top of it, so there is nothing
+ * in front of them to punch through.
+ *
+ * ⚠ **Deleted rather than left behind a flag** (`P-031`: dead compatibility machinery is
+ * deleted, not left). With no holes there is nothing to intersect and nothing to punch, so a
+ * switch that turned the mask off would be a flag whose both positions do the same thing.
+ *
+ * The mask was never serialised into `.vcg` — it was computed in the browser, at build and at
+ * re-punch — so nothing about the package format changes with it. The `1.5b` plant probe and
+ * the `luminance`-vs-`alpha` finding it produced are recorded in `B-174`; they are history
+ * now rather than a live constraint.
+ */

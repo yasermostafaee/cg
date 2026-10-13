@@ -4,6 +4,7 @@
 // `@cg/ui/theme.css` (imported once per app entry point).
 
 export { chrome, spacing, radius, fontSize, fontStack, tokens } from './tokens.js';
+export { TAG_MARKER, tagProps, tag, type TagRole } from './tag.js';
 
 /**
  * Join truthy class names. Tiny `clsx` stand-in so feature code can compose

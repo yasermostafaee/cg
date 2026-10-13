@@ -2,6 +2,21 @@ name: PR
 
 on:
   pull_request:
+  # Manual re-run lever. Actions wedged on `dev` on 2026-08-26: run 32984155276
+  # came back `startup_failure`, `gh run rerun` reset it to `queued` with ZERO
+  # jobs, and it then held the `PR-refs/heads/dev` concurrency group so two later
+  # pushes produced no run at all. `gh run cancel` reported it "completed" while
+  # the API reported `queued`, and force-cancel returned HTTP 409 ("cannot cancel
+  # a workflow re-run that has not yet queued") — it is STILL unkillable. With no
+  # `workflow_dispatch` the only routes left were another push or waiting for the
+  # owner's `dev` -> `main` merge, so a Linux `e2e` debt sat undischarged with no
+  # way to pay it.
+  #
+  # A dispatch run classifies as neither `push` nor `pull_request`, so the
+  # `decide` step below takes its FAIL-SAFE branch (`code=true`) and `needs_e2e`
+  # keeps its `true` default: a manual run always runs BOTH heavy jobs. That is
+  # the correct behaviour for a recovery lever — it can only ever over-run.
+  workflow_dispatch:
   # `dev` is where ALL work lands (see CLAUDE.md "Branching"): there are no
   # per-change branches and no PRs, so without `dev` here CI fired only on the
   # owner's end-of-day merge to `main` — always AFTER the fact. This job graph
@@ -99,7 +114,7 @@ jobs:
       prior_run_url: ${{ steps.reuse.outputs.prior_run_url }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # paths-filter needs git history to diff push events; PRs use the API.
           fetch-depth: 0
@@ -210,7 +225,13 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -uo pipefail
-          runs_json="$(gh api "repos/$REPO/actions/workflows/pr.yml/runs?head_sha=$HEAD_SHA&per_page=20" 2>/dev/null || echo 'null')"
+          # `event=push` is DEFENCE IN DEPTH, not the guard. `reuse-decision.mjs`
+          # enforces `event === 'push'` on every candidate itself, and it must keep
+          # doing so — do NOT delete the check there because this query "already
+          # filters". The query is a server-side convenience that can be dropped,
+          # mistyped, or silently ignored by an API change; the pure function is the
+          # part that is unit-tested and cannot be.
+          runs_json="$(gh api "repos/$REPO/actions/workflows/pr.yml/runs?head_sha=$HEAD_SHA&event=push&per_page=20" 2>/dev/null || echo 'null')"
           printf '%s' "$runs_json" > runs.json
 
           cat > reuse.mjs <<'REUSE'
@@ -269,7 +290,7 @@ jobs:
         # was, per the standing instruction not to touch the PR path: paths-filter
         # uses the GitHub API for a PR, where no local base exists.
         if: github.event_name == 'pull_request'
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             code:
@@ -332,27 +353,33 @@ jobs:
     # Browser SPAs build + test cross-platform; no Electron means no Windows
     # requirement, so CI runs on Linux (faster + cheaper).
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # CLIENT-TEST-RELEASE-01 — 15 → 25 min, MEASURED. A push that changes a turbo
+    # `globalDependencies` file (pnpm-lock.yaml above all) misses every task's cache, and this
+    # job then runs the whole suite uncached: 15.0 min (run 36572555950, green by seconds),
+    # 15.3 min — cut off at the cap, which GitHub reports as "cancelled" (36577397241, attempt
+    # 1) — and 14.4 min (its re-run). A cached push takes 5–12 min. 25 leaves the uncached run
+    # ~60 % headroom, and a hung job still ends in bounded time.
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
       - name: Set up pnpm
         # Must come before setup-node so setup-node's pnpm cache works.
         # Version is read from package.json's `packageManager` field.
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
 
       - name: Cache Turbo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .turbo
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -391,25 +418,29 @@ jobs:
     # P-030 — and skip when this exact SHA already has a completed run that RAN it.
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.needs_e2e == 'true' && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # P-038 — the two suites' `globalTimeout`s must SUM under this with room for setup and the
+    # build; the arithmetic lives in `apps/runtime/playwright.config.ts`. 20 → 24 on 2026-09-24
+    # (`MULTI-CHANNEL-01`): the Runtime suite measured 7.9 of its 8.0. 24 → 30 on 2026-09-30
+    # (`CENTRAL-BRIDGE-01`): the Runtime suite ran out of its 10.0 (run 36661037161).
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
 
       - name: Cache Turbo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .turbo
           key: turbo-e2e-${{ runner.os }}-${{ github.sha }}
@@ -428,7 +459,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: pw-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
@@ -437,9 +468,93 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @cg/designer exec playwright install --with-deps chromium
 
+      # 🔴 `P-046` — A THIRD-PARTY APT INDEX MUST NOT DECIDE WHETHER THIS SUITE CAN RUN.
+      #
+      # Measured 2026-09-09 on `acf3cf1a`: this step failed TWICE, eleven minutes apart, with
+      # `E: Failed to fetch https://dl.google.com/linux/chrome-stable/deb/.../Packages.gz
+      # Hash Sum mismatch`. `apt-get update` treats ANY index failure as fatal, so
+      # `install-deps` exited 100, `Build` and `E2E` were both SKIPPED, and the job was red in
+      # 55 s having never run a test. `ci` was green on the same commit.
+      #
+      # The repo it choked on is Google's chrome-stable list, which the runner image adds and
+      # which THIS JOB DOES NOT USE: the suite runs Playwright's own bundled Chromium out of
+      # `~/.cache/ms-playwright`, never an apt-installed browser.
+      #
+      # ⚠ A PLAIN RETRY IS NOT ENOUGH, WHICH IS WHY THE ESCALATION IS HERE. A hash-sum
+      # mismatch is a stale artifact on a CDN edge, not a dropped packet — attempt 2 failed
+      # identically to attempt 1. So the first failure escalates to the thing that actually
+      # addresses the cause: drop the third-party lists and consult Ubuntu's archives, which
+      # are the only ones Playwright needs.
       - name: Install system deps for cached browser
         if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @cg/designer exec playwright install-deps chromium
+        run: |
+          set -uo pipefail
+          ok=0
+          for attempt in 1 2 3; do
+            echo "P-046: install-deps attempt ${attempt} of 3"
+            if pnpm --filter @cg/designer exec playwright install-deps chromium; then
+              ok=1
+              echo "P-046: install-deps SUCCEEDED on attempt ${attempt}"
+              if [ "${attempt}" != "1" ]; then echo "P-046: RETRY PATH EXERCISED"; fi
+              break
+            fi
+            echo "P-046: install-deps attempt ${attempt} FAILED"
+            if [ "${attempt}" = "1" ]; then
+              echo "P-046: ESCALATION EXERCISED - dropping third-party apt lists"
+              sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+                         /etc/apt/sources.list.d/microsoft-prod.list
+              sudo apt-get update || echo "P-046: apt-get update still unhappy after the drop"
+            fi
+            sleep $(( attempt * 10 ))
+          done
+          if [ "${ok}" = "0" ]; then
+            echo "P-046: TOLERATED after 3 failures - the launch probe below decides"
+            echo "::warning title=P-046::playwright install-deps failed three times. Every Chromium shared library is already in the runner image (measured: this step adds only NINE FONT packages), so the job continues to the launch probe, which fails loudly if the browser cannot start."
+          fi
+
+      # 🔴 `P-046` — THE POSITIVE CONTROL, AND THE REASON THE STEP ABOVE MAY TOLERATE ANYTHING.
+      #
+      # The deps step can now finish having installed nothing. This one cannot: it launches the
+      # very browser the suite will use and fails the job LOUDLY if it will not start or will
+      # not paint. That is the whole licence for the tolerance above — a tolerated apt failure
+      # is only acceptable behind a probe that proves the instrument, and without this the step
+      # would have converted "cannot run the suite" into "silently did not", which is the
+      # `P-029` hole this repo already closed.
+      #
+      # ⚠ NOT `continue-on-error`, here or above. Deliberately. It would re-open that hole.
+      #
+      # It runs on BOTH browser paths, cache hit or miss, because it is a statement about the
+      # browser rather than about how the browser arrived.
+      #
+      # ⚠ NO CHANNEL FALLBACK, deliberately — it mirrors `playwright.config.ts`'s own CI branch
+      # (`if (process.env.CI) return undefined;`), which pins the bundled Chromium and never
+      # auto-switches to a system browser. A probe that fell back to `channel: 'chrome'` could
+      # go green on a browser the suite will not use, which is the one way a positive control
+      # can lie. Proved both ways before it shipped: with no bundled browser it exits 1 naming
+      # the missing executable, and with one it prints the version and exits 0.
+      - name: Probe - the browser actually launches
+        working-directory: apps/designer
+        run: |
+          node --input-type=module -e "
+          import { chromium } from '@playwright/test';
+          try {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+            await page.setContent('<h1 id=probe>ok</h1>');
+            const text = await page.textContent('#probe');
+            const version = browser.version();
+            await browser.close();
+            if (text !== 'ok') {
+              console.error('P-046 probe: Chromium started but did not paint');
+              process.exit(1);
+            }
+            console.log('P-046 probe: Chromium ' + version + ' launched and painted OK');
+          } catch (err) {
+            console.error('P-046 probe FAILED - the suite cannot run on this browser:');
+            console.error(err && err.message ? err.message : err);
+            process.exit(1);
+          }
+          "
 
       - name: Build (workspace)
         run: pnpm build
@@ -449,7 +564,7 @@ jobs:
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: apps/designer/playwright-report/
@@ -464,15 +579,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm

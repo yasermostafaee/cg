@@ -148,25 +148,29 @@ bindings model, so a Runtime operator can set or change which source feeds it pe
 - **WHEN** the Runtime operator changes that field's value **THEN** the new id is what the runtime
   resolves for that take
 
-### Requirement: The authoring surfaces show SMPTE bars; both exports paint nothing
+### Requirement: The authoring surfaces show SMPTE bars; the HOLE paints nothing in either export
 
 The scene builder SHALL take an explicit render **mode**. In `author` mode a Live Source SHALL
 render procedural SMPTE-style colour bars — drawn as CSS or inline SVG, never a bundled bitmap —
 with its source id overlaid so multiple Live Sources stay distinguishable; a set poster image
 replaces the bars. It SHALL never render as an unmarked black box.
 
-In `output` mode a Live Source's region SHALL render **NOTHING**: fully transparent, zero painted
-pixels. Every boot site SHALL name its mode explicitly rather than inferring it.
+In `output` mode the region INSIDE a Live Source's declared rect SHALL render **NOTHING**: fully
+transparent, zero painted pixels. Every boot site SHALL name its mode explicitly rather than
+inferring it.
+
+The element MAY paint OUTSIDE that rect — see "A Live Source may carry a FRAME" below. "Paints
+nothing" is a statement about the HOLE, which is the contract, and not about the element.
 
 A Live Source SHALL be excluded from zone-override compilation in `output` mode, so no authored
 zone can paint the hole on air.
 
-#### Scenario: Bars on the authoring surfaces, nothing in the exports
+#### Scenario: Bars on the authoring surfaces, an empty hole in the exports
 
 - **WHEN** a Live Source is shown on the canvas or in the Designer preview **THEN** it renders SMPTE
   bars with its id label, or the poster when one is set
-- **WHEN** the scene is exported to `.vcg` or to single-file HTML **THEN** the Live Source's region
-  paints zero pixels
+- **WHEN** the scene is exported to `.vcg` or to single-file HTML **THEN** the region inside the
+  Live Source's declared rect paints zero pixels, and the element has no background and no children
 
 #### Scenario: An authored zone cannot fill the hole on air
 
@@ -208,6 +212,52 @@ each raise a preflight **error** — not a warning, because only an error blocks
 
 - **WHEN** two Live Sources overlap, or one exceeds the frame **THEN** preflight reports it against
   both elements
+
+### Requirement: A Live Source may carry a FRAME, and the frame never enters the hole
+
+A Live Source SHALL be able to carry an optional **stroke** — colour and width — authored in the
+Inspector. The field SHALL be the SHARED stroke shape already used by the box kinds, added ADDITIVELY so every
+stored scene keeps parsing with it absent, and it SHALL carry no alignment notion of its own.
+
+The frame SHALL be painted **entirely outside the declared rect**, on the template layer, in BOTH
+render modes. It is the one thing a Live Source paints on air.
+
+🔴 **The declared rect SHALL be unchanged by a stroke of any width — its position as well as its
+size.** The rect is a contract: the export declares it and CasparCG composites the live picture into
+exactly it, so a frame that moved or resized the hole would put the picture out of register with the
+frame drawn around it, with nothing in the Designer to show it. A stroke width of `0` SHALL mean NO
+FRAME with the colour retained — a stored state, not an absent one.
+
+Because the frame is outside the rect, it SHALL NOT affect the flattened rect the export declares,
+and it SHALL NOT affect the overlapping-plate preflight check, which reads the declared rect and
+only that. The same holds for any other paint an element places outside its rect, a drop shadow
+included.
+
+The frame SHALL survive the round trip through BOTH exporters.
+
+#### Scenario: A frame is authored on the plate and survives both exports
+
+- **WHEN** a Live Source is selected **THEN** the Inspector offers a frame colour and a frame width
+- **WHEN** the author sets a colour and a width **THEN** the plate renders that frame around itself
+  on the canvas
+- **WHEN** the scene is exported to `.vcg` or to single-file HTML and read back **THEN** the stroke
+  is present with the same width and colour
+- **WHEN** the author sets the width to `0` **THEN** no frame is painted and the colour is retained,
+  so raising the width again restores the frame the author chose
+
+#### Scenario: The frame does not move or resize the hole
+
+- **WHEN** a plate carries a frame of any width **THEN** the region the export declares for it has
+  the same position and the same size as it had with no frame
+- **WHEN** the page is rendered under the baseline stylesheet the artifact ships **THEN** the hole is
+  still exactly the authored rect, with the frame drawn outside it
+
+#### Scenario: Overlapping frames are not a fault; overlapping holes are
+
+- **WHEN** two plates are placed so their FRAMES overlap but their declared rects do not **THEN**
+  preflight reports no overlap error
+- **WHEN** two plates' declared rects overlap **THEN** preflight reports the overlap error against
+  both, whether or not either carries a frame
 
 ### Requirement: Each Live Source is independent, and the scene declares them for the runtime
 

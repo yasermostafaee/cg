@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-039 — the playout state model is PRESCRIPTIVE: the bridge chooses CG ADD vs
@@ -55,7 +55,11 @@ const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>سل
 it('load→take→out→take: load does not auto-play, out destroys, retake re-ADDs and renders', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
-  runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  runtime = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
@@ -97,7 +101,11 @@ it('load→take→out→take: load does not auto-play, out destroys, retake re-A
 it('a fresh take (item loaded but never played) plays without auto-play on load', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
-  runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  runtime = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);

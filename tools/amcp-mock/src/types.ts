@@ -87,8 +87,15 @@ export interface LayerState {
   producer: ProducerKind;
   /** Loaded file path (URL string). Only meaningful when `producer !== 'empty'`. */
   filePath: string;
-  /** Background "next-up" producer. CasparCG emits this on every framerate tick. */
-  backgroundProducer: 'empty' | 'html';
+  /**
+   * Background "next-up" producer. CasparCG emits this on every framerate tick.
+   *
+   * `ROUTE-PLATES-01` — `LOADBG` puts a producer here (a `route://H-L` above all: contract v1.3's
+   * rule 4 is `LOADBG`, at least 40 ms, then a bare `PLAY` that promotes it). `CLEAR` empties it.
+   */
+  backgroundProducer: ProducerKind;
+  /** `ROUTE-PLATES-01` — the argument the background producer was loaded with (`''` when empty). */
+  backgroundFilePath: string;
   /** Play/pause flag — `false` means playing. */
   paused: boolean;
   /**
@@ -127,6 +134,17 @@ export interface LayerState {
    */
   volume: number;
   /**
+   * `LOOK-SWITCH-01` — the layer's `MIXER <ch>-<layer> OPACITY <v>`. `1` is a fresh layer's value
+   * and `0` draws nothing (the real kernel draws nothing below 0.001).
+   *
+   * MODELLED BECAUSE A PLATE IS NOW SEATED HIDDEN: `OPACITY 0` is committed before its `PLAY` and
+   * `OPACITY 1` rides the action's one commit. A seat that forgot the reveal leaves a working
+   * producer invisible, and nothing else the mock carries would show it. Like `volume`, it
+   * SURVIVES `CLEAR` and `CG REMOVE` (it is the layer's, not the producer's), and `MIXER CLEAR`
+   * puts it back to `1`.
+   */
+  opacity: number;
+  /**
    * D-137 / C-015 — the layer's `MIXER … FILL` rect, channel-normalized.
    *
    * MODELLED BECAUSE `design.md` §6's ARITHMETIC IS OTHERWISE UNCHECKABLE
@@ -157,6 +175,31 @@ export interface LayerState {
    * graphic invisible with nothing on the wire explaining why.
    */
   clip: MixerRect;
+  /**
+   * `MEDIA-PLATES-01` — the media clip's clock, as CasparCG 2.5.0's ffmpeg producer keeps it
+   * (measured on the owner's core, 2026-09-28): it advances while playing, stops while paused, and
+   * at the end of a clip that is not looping it FREEZES on its last frame (`file/time` stays at the
+   * length) — never empty. With `loop` it wraps. `clipLengthS` is `undefined` when the mock was not
+   * told the file's length ({@link MockOptions.clipLength}): it then reports no `file/time`, as a
+   * server that does not report one — and the console must then show no number.
+   */
+  loop: boolean;
+  clipLengthS: number | undefined;
+  /** Seconds elapsed at {@link clipRunningSince}, or while paused. */
+  clipElapsedS: number;
+  /** The mock clock's `now()` (ms) when the clip last started running; `null` while paused. */
+  clipRunningSince: number | null;
+  /**
+   * 🔴 `RELEASE-091-01` (DELTA B, B2) — **WHETHER THE LAYER EXISTS ON THE CORE'S STAGE.** CasparCG
+   * 2.5 creates a stage layer when a producer is placed on it and ERASES it on `CLEAR`
+   * (`stage.cpp` `clear`: `layers_.erase(index)`); its OSC and its `INFO` entry are built from the
+   * layers that exist, so a cleared layer simply goes SILENT — it is never reported `empty`. A
+   * STOPPED layer still exists and reports `producer "empty"` (`layer.cpp` `stop`). Mixer state
+   * lives apart (`tweens_`) and survives a `CLEAR`, which is why this record is kept rather than
+   * deleted. The mock used to report every layer it had ever touched, `empty` included — the
+   * difference that let no test see a cleared layer of ours stay ON AIR (`B-292`).
+   */
+  onStage: boolean;
 }
 
 /** B-041 — why the mock's second-layer (html_cg_proxy → V8) emulation rejected a CG data arg. */
@@ -207,9 +250,113 @@ export interface MockOptions {
   tracePath?: string;
   /** Disable the OSC emitter loop. Useful for command-only tests. */
   disableOsc?: boolean;
+  /**
+   * 🔴 `B-331` — **`CLEAR <ch>-<layer>` IS ANSWERED BEFORE THE LAYER IS ERASED, as on a 2.5.0 core.**
+   * There `clear_command` QUEUES the erase (`stage->clear(index)` is an `executor_.begin_invoke`)
+   * and returns `202 CLEAR OK` without waiting for it, so a frame the channel composed before the
+   * erase still reports the page — over OSC, AFTER the reply. With this set, the mock answers at
+   * once and erases the layer only before the next command it handles (or a few ms later), sending
+   * one frame of the un-erased stage first. Absent, the erase is synchronous, as every mock before
+   * this one.
+   */
+  clearRepliesBeforeErase?: boolean;
+  /**
+   * `DESKTOP-APPS-01-B` — **WHICH MACHINES MAY SPEAK AMCP**, as a Playout 2.8.54 firewall decides
+   * it: called with a new connection's source address, and a `false` refuses that connection
+   * before a byte is read (a reset, which the connection check reads as `refused`). Absent admits
+   * everyone — every mock before this one. {@link MockHandle.setAdmission} replaces it later.
+   */
+  admit?: (sourceAddress: string) => boolean;
+  /**
+   * `MEDIA-PLATES-01` — a media file's length in seconds, as the core would know it once it opened
+   * the file; `undefined` when unknown. A file with a length gets a clip clock and reports
+   * `foreground/file/time` over OSC; one without reports none. The fake station answers from the
+   * fake Playout's media library (`durationMs`).
+   */
+  clipLength?: (file: string) => number | undefined;
+  /**
+   * `ROUTE-PLATES-01` — the clock each received command is stamped with
+   * ({@link MockHandle.receivedCommands}). Default `performance.now()`. A test that drives the
+   * bridge with a fake clock passes the SAME clock here, so the gap between two stamped lines is
+   * the gap the bridge waited.
+   */
+  now?: () => number;
+  /**
+   * `DEV-LOCAL-CASPAR-01` — the media scanner's library, which `CLS` lists. ABSENT = no scanner is
+   * running, and `CLS` answers `501`, as a stock 2.5.0 core does then (`AMCPCommandsImpl.cpp`
+   * `make_request`: `501 CLS FAILED`). {@link MockHandle.setMedia} replaces it later.
+   */
+  media?: readonly MockMediaFile[];
+  /** `DEV-LOCAL-CASPAR-01` — what `INFO PATHS` answers. Each part defaults ({@link MockPaths}). */
+  paths?: MockPaths;
+  /**
+   * `CENTRAL-BRIDGE-01` — **THE CORE'S DEFAULT PER-CLIENT SUBSCRIPTION.** When set, every AMCP
+   * connection is sent the OSC stream at `<its own address>:<this port>` for as long as it is open,
+   * as a stock core does with `<osc><default-port>` and `disable-send-to-amcp-clients` false. On the
+   * Playout's machine that port is 6250 and belongs to the Playout's engine, which is why a bridge
+   * there never binds it and asks for its own port with `OSC SUBSCRIBE`. Absent: no connection is
+   * sent anything it did not subscribe to (every mock before this one).
+   */
+  oscToAmcpClientsPort?: number;
+}
+
+/**
+ * `DEV-LOCAL-CASPAR-01` — ONE media file as CasparCG's media scanner lists it on `CLS`
+ * (`CasparCG/media-scanner` v1.3.4, the scanner the 2.5.0 Windows package ships: `src/ffmpeg.ts`
+ * `generateCinf`, `src/util.ts` `getId`). The mock prints each field exactly as the scanner does.
+ */
+export interface MockMediaFile {
+  /**
+   * The scanner's ID: the path under the media folder, its last extension removed, `/`-separated
+   * and UPPER-CASED — `NEWS/2026/CLIP ONE` for `news\2026\clip one.mp4`.
+   */
+  readonly id: string;
+  readonly type: 'MOVIE' | 'STILL' | 'AUDIO';
+  /** The file's size in bytes. */
+  readonly bytes: number;
+  /** Its modified time as the scanner prints it: `YYYYMMDDHHmmss`, the scanner machine's local time. */
+  readonly modified: string;
+  /** The frame count `generateCinf` computes: `floor(duration × den / num)`; `0` for a still. */
+  readonly frames: number;
+  /** The time base `num/den` — `1/25` for a 25 fps clip, `1001/30000` for 29.97, `0/1` for a still. */
+  readonly timebase: string;
+}
+
+/**
+ * `DEV-LOCAL-CASPAR-01` — the two folders `INFO PATHS` names (`AMCPCommandsImpl.cpp`
+ * `info_paths_command`), as a 2.5.0 core spells them.
+ */
+export interface MockPaths {
+  /** `media-path` exactly as the config writes it — the RELATIVE `media/` on a stock install. Default `media/`. */
+  readonly media?: string;
+  /**
+   * `initial-path`: the core's start folder with `/` appended — on Windows the folder keeps its
+   * backslashes (`D:\CasparCG/`). Default `C:\casparcg/`.
+   */
+  readonly initial?: string;
+}
+
+/** `ROUTE-PLATES-01` — one AMCP line as the mock received it, and when (its `now`). */
+export interface ReceivedCommand {
+  readonly at: number;
+  readonly line: string;
 }
 
 export interface MockHandle {
+  /**
+   * `ROUTE-PLATES-01` — every AMCP line received so far, in arrival order, each stamped with the
+   * mock's clock ({@link MockOptions.now}) — the timing tests' instrument (rule 4's `LOADBG` →
+   * `PLAY` window). Recorded before the line is parsed, so a refused line is on it too.
+   */
+  receivedCommands(): readonly ReceivedCommand[];
+  /**
+   * `DESKTOP-APPS-01-B` — replace the admission rule ({@link MockOptions.admit}); `null` admits
+   * everyone. Applies to connections made AFTER the call; an open one is left as it is, as a
+   * firewall that changes its allow list leaves an established connection.
+   */
+  setAdmission(admit: ((sourceAddress: string) => boolean) | null): void;
+  /** Connections refused by the admission rule so far — a refusal test's positive control. */
+  readonly refusedConnections: number;
   /** Bound AMCP port. Reflects the OS-assigned port when `amcpPort: 0`. */
   readonly amcpPort: number;
   /** Bound OSC source port. */
@@ -259,6 +406,20 @@ export interface MockHandle {
    */
   setLayerVolume(slot: LayerSlot, volume: number): void;
   /**
+   * `PLAYOUT-SOURCES-01` §3 — **the media files this server no longer has.** A `PLAY`/`LOAD` of a
+   * file named here answers `404 PLAY FAILED` and leaves the layer untouched, as the core answers
+   * a clip that is gone (`File not found.`). Test hook: the Playout's `clip` moves between its
+   * cache and its original, and the path a take held a moment ago can be the stale one. Replaces
+   * the whole set; `[]` clears it.
+   */
+  setMissingMedia(paths: readonly string[]): void;
+  /**
+   * `DEV-LOCAL-CASPAR-01` — replace the scanner's library that `CLS` lists; `null` stops the scanner
+   * (`CLS` answers `501` from then on). Test hook: a file dropped into the media folder appears on
+   * the next `CLS`, as the real scanner's watcher adds it.
+   */
+  setMedia(files: readonly MockMediaFile[] | null): void;
+  /**
    * B-038 — the last `CG ADD` seen on a slot: the template argument and the data
    * payload. Lets tests assert `CG ADD` carried a real URL + non-empty fields.
    * B-041 — `data` is what `window.update` would receive (post BOTH un-escape
@@ -287,8 +448,29 @@ export interface MockHandle {
   traceFlush(): Promise<void>;
   /** B-038/B-041 — the last `CG UPDATE` data payload seen on a slot (see `lastCgAdd`). */
   lastCgUpdate(slot: LayerSlot): CgDataResult | undefined;
+  /**
+   * `B-221` — how many `MIXER … DEFER` changes are staged on the channel and not yet
+   * committed. The observation a bridge test needs and cannot make from the wire: a
+   * `COMMIT` the bridge SENT over a dead socket never arrives, so "nothing is left
+   * staged" has to be read from the server's side of the seam.
+   */
+  stagedMixerCount(channel: number): number;
   /** Number of currently-connected AMCP clients. */
   readonly amcpClientCount: number;
+  /**
+   * `CENTRAL-BRIDGE-01` — every OSC destination now, one per endpoint: the predefined ones, and
+   * each live `OSC SUBSCRIBE` or per-client default subscription. Test instrument.
+   */
+  oscDestinations(): readonly { host: string; port: number }[];
+  /**
+   * `CENTRAL-BRIDGE-01` rule 3 — **A CORE RESTART.** A crash, «ریستِ پلی‌اوت» or an engine restart
+   * clears EVERY layer (50–99 included) and every connection; the core then refuses AMCP until it is
+   * up again (2–6 s on the Playout's machine). Modelled as: stop listening, drop every connection
+   * (and with it every subscription bound to one), empty the stage, the mixer queues and the
+   * received-template records, wait `downMs` (default 0) refusing connections, listen again on the
+   * same port. The command log ({@link receivedCommands}) is kept: it is the test's, not the core's.
+   */
+  restartCore(options?: { readonly downMs?: number }): Promise<void>;
   /** Shut down both servers and resolve when fully closed. */
   stop(): Promise<void>;
 }
@@ -296,11 +478,62 @@ export interface MockHandle {
 export type AmcpHandler = (
   req: AmcpRequest,
   ctx: HandlerContext,
+  /**
+   * `CENTRAL-BRIDGE-01` — the AMCP connection the line arrived on. Only a command whose effect is
+   * bound to its connection reads it (`OSC SUBSCRIBE`); every other handler ignores it. Optional so
+   * a test that wraps a built-in handler and delegates `(req, ctx)` keeps compiling; the server
+   * always passes it.
+   */
+  conn?: AmcpConnection,
 ) => AmcpResponse | Promise<AmcpResponse>;
 
+/**
+ * `CENTRAL-BRIDGE-01` — ONE AMCP connection, as a command handler sees it: the peer's address, and
+ * the objects whose lifetime is the connection's. CasparCG keeps both on its `client_connection`
+ * (`add_lifecycle_bound_object` / `remove_lifecycle_bound_object`): an `OSC SUBSCRIBE` is such an
+ * object, so the subscription ends when the connection does — which is why a client re-sends it
+ * after every reconnect.
+ */
+export interface AmcpConnection {
+  /** The peer's IPv4 address, `a.b.c.d` (a dual-stack `::ffff:` prefix removed). */
+  readonly remoteAddress: string;
+  /**
+   * Bind `release` to this connection under `key`: it runs when the connection ends, or when the
+   * key is bound again or unbound. A second bind of the same key releases the first, as the core's
+   * map of lifecycle objects replaces an entry.
+   */
+  bindLifecycle(key: string, release: () => void): void;
+  /** Release and forget the object under `key`; `false` when there was none. */
+  unbindLifecycle(key: string): boolean;
+}
+
 export interface HandlerContext {
+  /** `MEDIA-PLATES-01` — the mock clock (ms), the one {@link MockOptions.now} names. */
+  now(): number;
+  /**
+   * `CENTRAL-BRIDGE-01` — send the OSC stream to `host:port` until the returned release is called
+   * (`OSC SUBSCRIBE`). Reference-counted per endpoint, as the core's OSC client is.
+   */
+  subscribeOsc(host: string, port: number): () => void;
+  /** `MEDIA-PLATES-01` — a media file's length in seconds, when the mock was told it. */
+  clipLengthOf(file: string): number | undefined;
   /** Get a layer's current state (creates an `'empty'` entry on first read). */
   getLayer(slot: LayerSlot): LayerState;
+  /** `ROUTE-PLATES-01` — the layer if it was ever touched, WITHOUT allocating one (a refusal must not). */
+  peekLayer(slot: LayerSlot): LayerState | undefined;
+  /** `RELEASE-091-01` B2 — the channel's layers on the core's stage, lowest first: what `INFO` lists. */
+  stageLayers(channel: number): readonly LayerState[];
+  /** `B-331` — {@link MockOptions.clearRepliesBeforeErase}, as the mock was started. */
+  readonly clearRepliesBeforeErase: boolean;
+  /**
+   * `B-331` — queue a layer erase behind the reply, as the core's stage executor does. Queued erases
+   * run — after ONE OSC frame of the un-erased stage — before the next command is handled, or
+   * `CLEAR_ERASE_LAG_MS` later if none arrives: never after a later command, which the core's
+   * single executor also guarantees.
+   */
+  queueErase(erase: () => void): void;
+  /** `B-331` — run every queued erase now (the server calls it before each command). */
+  runQueuedErases(): void;
   /** Apply a partial update to a layer; emits OSC reflecting the new state. */
   setLayer(slot: LayerSlot, patch: Partial<Omit<LayerState, 'slot'>>): void;
   /**
@@ -327,6 +560,31 @@ export interface HandlerContext {
    * — the queued `play()` never flushed). Anything staler is ignored.
    */
   completeCgAdd(slot: LayerSlot, token: number, resolved: boolean): void;
+  /**
+   * `B-198` / `B-221` — STAGE a mixer change instead of applying it: `MIXER … DEFER`.
+   *
+   * Modelled the way CasparCG 2.5.0 actually keeps it (`AMCPCommandsImpl.cpp`,
+   * `transforms_applier::deferred_transforms_`): ONE queue per CHANNEL, owned by the
+   * server process rather than by the connection that staged into it, appended in
+   * arrival order and applied in that order by a `COMMIT`. The consequences that shape
+   * the bridge's guards fall out of that one structure and are what this hook exists to
+   * make checkable offline: a staged change is invisible to `layerState` until committed,
+   * a commit is channel-wide whatever layer token it names, the queue outlives the socket
+   * that filled it, and nothing but a commit ever empties it.
+   */
+  stageMixer(channel: number, apply: () => void): void;
+  /**
+   * `MIXER <ch> COMMIT` — apply every change staged on the channel, in order, and empty the
+   * queue. Returns how many changes were applied (0 for a commit over an empty queue, which
+   * the real server also answers `202`).
+   */
+  commitMixer(channel: number): number;
+  /** `PLAYOUT-SOURCES-01` — is this file one the server no longer has ({@link MockHandle.setMissingMedia})? */
+  isMissingMedia(file: string): boolean;
+  /** `DEV-LOCAL-CASPAR-01` — the scanner's library now, or `null` while no scanner is running. */
+  mediaFiles(): readonly MockMediaFile[] | null;
+  /** `DEV-LOCAL-CASPAR-01` — `INFO PATHS`' two folders, defaults applied. */
+  readonly paths: Required<MockPaths>;
   /** Channel count the mock was started with. */
   readonly channelCount: number;
 }

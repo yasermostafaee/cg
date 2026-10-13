@@ -15,6 +15,7 @@ import {
   TickerElementSchema,
   VideoElementSchema,
   VideoPlaceholderElementSchema,
+  elementDigitsOf,
 } from '../src/elements.js';
 
 const baseProps = {
@@ -288,6 +289,28 @@ describe('LottieElement', () => {
     };
     expect(LottieElementSchema.parse(l)).toEqual(l);
   });
+
+  it('media-phases-follow-composition — the third source + holdAt round-trip as the RELATIONSHIP', () => {
+    // The element stores the relationship, not numbers: `source: 'composition'` + `holdAt`
+    // survive save/reload untouched; the (ignored) introEnd/outroStart slots survive too —
+    // they are the Detach landing, not derived output.
+    const l = {
+      ...baseProps,
+      type: 'lottie' as const,
+      assetId: 'asset-backdrop',
+      speed: 1,
+      loopMode: 'none' as const,
+      phases: {
+        introEnd: 40,
+        outroStart: 60,
+        source: 'composition' as const,
+        holdAt: 150,
+        idle: [140, 160] as [number, number],
+      },
+      holdBehavior: 'idle-loop' as const,
+    };
+    expect(LottieElementSchema.parse(l)).toEqual(l);
+  });
 });
 
 describe('VideoPlaceholderElement', () => {
@@ -351,6 +374,40 @@ describe('VideoElement (D-128)', () => {
         introEnd: 1200,
         outroStart: 6500,
         idle: { start: 2000, end: 5000 },
+      },
+    };
+    expect(VideoElementSchema.parse(v)).toEqual(v);
+  });
+
+  it('media-phases-follow-composition — absent `source` stays ABSENT (manual-equivalent), no injection', () => {
+    // Video phases had NO source field before this change; additive means a stored scene
+    // round-trips byte-identically — the parser must not inject `source: 'manual'`.
+    const v = {
+      ...baseProps,
+      type: 'video' as const,
+      assetId: 'asset-clip',
+      durationMs: 4000,
+      holdBehavior: 'loop' as const,
+      phases: { introEnd: 1000, outroStart: 3000 },
+    };
+    const parsed = VideoElementSchema.parse(v);
+    expect(parsed).toEqual(v);
+    expect(parsed.phases !== undefined && 'source' in parsed.phases).toBe(false);
+  });
+
+  it('media-phases-follow-composition — the third source + holdAt (ms) round-trip', () => {
+    const v = {
+      ...baseProps,
+      type: 'video' as const,
+      assetId: 'asset-backdrop',
+      durationMs: 5000,
+      holdBehavior: 'loop' as const,
+      phases: {
+        introEnd: 400,
+        outroStart: 600,
+        source: 'composition' as const,
+        holdAt: 3000,
+        idle: { start: 2500, end: 3500 },
       },
     };
     expect(VideoElementSchema.parse(v)).toEqual(v);
@@ -981,5 +1038,95 @@ describe('RepeaterElement (D-030)', () => {
   });
   it('rejects a row item without a stable id', () => {
     expect(() => RepeaterElementSchema.parse({ ...repeater, items: [{ name: 'x' }] })).toThrow();
+  });
+});
+
+describe('an element says which digits its authored text is drawn in (TEXT-DIGITS-01)', () => {
+  const font = {
+    family: 'Vazirmatn',
+    weight: 500,
+    style: 'normal' as const,
+    size: 36,
+    lineHeight: 1.4,
+    letterSpacing: 0,
+  };
+  const text = {
+    ...baseProps,
+    type: 'text' as const,
+    text: 'اخبار ساعت 14',
+    font,
+    color: '#FFFFFF',
+    align: 'start' as const,
+    direction: 'rtl' as const,
+    fitMode: 'fixed' as const,
+    overflow: 'clip' as const,
+  };
+  const ticker = {
+    ...baseProps,
+    type: 'ticker' as const,
+    font,
+    color: '#FFFFFF',
+    direction: 'rtl' as const,
+    speed: 120,
+    repeat: 'infinite' as const,
+    cycleBoundary: 'seamless' as const,
+    gap: 48,
+    items: [{ id: 'i1', text: 'خبر 1' }],
+  };
+  const sequence = {
+    ...baseProps,
+    type: 'sequence' as const,
+    font,
+    color: '#FFFFFF',
+    direction: 'rtl' as const,
+    items: [{ id: 'a', text: 'ساعت 14' }],
+  };
+
+  it('a text, a ticker and a sequence take all four choices, and keep them', () => {
+    for (const digits of ['as-typed', 'persian', 'latin', 'arabic-indic'] as const) {
+      expect(TextElementSchema.parse({ ...text, digits }).digits).toBe(digits);
+      expect(TickerElementSchema.parse({ ...ticker, digits }).digits).toBe(digits);
+      expect(SequenceElementSchema.parse({ ...sequence, digits }).digits).toBe(digits);
+      expect(ElementSchema.parse({ ...text, digits })).toMatchObject({ digits });
+    }
+  });
+
+  it('no element takes a set that does not exist', () => {
+    expect(() => TextElementSchema.parse({ ...text, digits: 'hindi' })).toThrow();
+    expect(() => TickerElementSchema.parse({ ...ticker, digits: 'hindi' })).toThrow();
+    expect(() => SequenceElementSchema.parse({ ...sequence, digits: 'hindi' })).toThrow();
+  });
+
+  it('an old element carries no key and none is written on the way in', () => {
+    expect(TextElementSchema.parse(text)).not.toHaveProperty('digits');
+    expect(TickerElementSchema.parse(ticker)).not.toHaveProperty('digits');
+    expect(SequenceElementSchema.parse(sequence)).not.toHaveProperty('digits');
+  });
+
+  it('the effective choice: absent is Keyboard (as-typed), a choice is itself', () => {
+    expect(elementDigitsOf(TextElementSchema.parse(text))).toBe('as-typed');
+    expect(elementDigitsOf(TickerElementSchema.parse(ticker))).toBe('as-typed');
+    expect(elementDigitsOf(SequenceElementSchema.parse(sequence))).toBe('as-typed');
+    expect(elementDigitsOf(TextElementSchema.parse({ ...text, digits: 'persian' }))).toBe(
+      'persian',
+    );
+    expect(elementDigitsOf(TickerElementSchema.parse({ ...ticker, digits: 'latin' }))).toBe(
+      'latin',
+    );
+    expect(
+      elementDigitsOf(SequenceElementSchema.parse({ ...sequence, digits: 'arabic-indic' })),
+    ).toBe('arabic-indic');
+  });
+
+  it('a kind with no authored text rewrites nothing — a clock’s digits are its own number setting', () => {
+    const clock = ClockElementSchema.parse({
+      ...baseProps,
+      type: 'clock',
+      font,
+      color: '#FFFFFF',
+      mode: 'wall',
+    });
+    expect(clock.digits).toBe('persian'); // the clock's own, drawn by its formatter
+    expect(elementDigitsOf(clock)).toBe('as-typed');
   });
 });

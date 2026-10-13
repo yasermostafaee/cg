@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { StrictMode, createElement } from 'react';
+import { fillBridgeStub } from './support/authStub.js';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -49,9 +50,9 @@ afterEach(async () => {
 
 const BANK: FixedLayerBank = {
   channel: 1,
+  low: { start: 50, count: 9 },
   start: 70,
   count: 3,
-  visible: [70, 71, 72],
   aliases: {},
 };
 
@@ -81,7 +82,12 @@ const STACK: StackItemState[] = [
 
 function stubBridge(reach: Reachability): void {
   const stub = {
-    link: { status: () => linkFor(reach), onStatusChanged: () => () => undefined },
+    link: {
+      status: () => linkFor(reach),
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
     connections: connectionsStub(reach),
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
     fixedLayers: {
@@ -96,6 +102,12 @@ function stubBridge(reach: Reachability): void {
       clear: () => Promise.resolve({ ok: true }),
       onStateChanged: () => () => undefined,
     },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+      // `B-247` — the release reason. Never fired here; the subscription must exist.
+      onPlateReleased: () => () => undefined,
+    },
     stack: {
       snapshot: () => Promise.resolve(STACK),
       onStateChanged: () => () => undefined,
@@ -105,9 +117,13 @@ function stubBridge(reach: Reachability): void {
       update: () => Promise.resolve({ accepted: true }),
       out: () => Promise.resolve({ accepted: true }),
       remove: () => Promise.resolve({ accepted: true }),
+      // B-108 — the restore-skip report. A healthy session reports NOTHING,
+      // which is what this panel renders for every spec not about that surface.
+      onRestoreSkips: () => () => undefined,
+      onRestoreMigrations: () => () => undefined,
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 async function renderPanel(reach: Reachability): Promise<HTMLDivElement> {
@@ -128,10 +144,14 @@ async function renderPanel(reach: Reachability): Promise<HTMLDivElement> {
             inspectorPx: 320,
             focus: 'none' as const,
             narrow: false,
+            monitorPx: 220,
             setInspectorPx: () => undefined,
+            setMonitorPx: () => undefined,
             setFocus: () => undefined,
             reset: () => undefined,
             customized: false,
+            monitorsShown: true,
+            setMonitorsShown: () => undefined,
           },
           inspectorOpen: false,
           onToggleInspector: () => undefined,
@@ -151,7 +171,7 @@ async function renderPanel(reach: Reachability): Promise<HTMLDivElement> {
  * The colour assertions below read the TOKEN, never a hex literal — that is the
  * repo's rule (`data-row-state` exists because a hex assertion fails the next time
  * the palette is tuned while saying nothing about the property that matters). But
- * the DOM normalises `#9CA3AF` to `rgb(156, 163, 175)`, so the token has to go
+ * the DOM normalises `#8e9eaf` to `rgb(142, 158, 175)`, so the token has to go
  * through the same normalisation before it can be compared.
  */
 function asRendered(token: string): string {
@@ -187,10 +207,41 @@ describe('§4 — the four treatments, together, with CasparCG unreachable', () 
     expect(air?.hasAttribute('data-unverifiable')).toBe(true);
     expect(air?.getAttribute('data-row-state'), 'never the air tone').not.toBe('onair');
 
-    // 3. The header count — still a count, greyed, not renamed and not hidden.
-    expect(airCount(el)?.textContent).toContain('(1)');
+    /*
+      3. The count — still a count, greyed, not renamed and not hidden.
+
+      🔴 IT IS IN THE SUB-BAR NOW (`CONSOLE-LOOK-06` DELTA D5), not the STATE head: the
+      reference keeps its header to columns and puts the counts below, and ours was stating
+      the same number in both places. The helper finds it either way — it matches on the
+      accessible name, which is unchanged — and the §4 CONTRACT is unchanged with it.
+
+      ⭐ `B-224` had cut the words for want of 28 px in a 132 px cell; the sub-bar is a
+      full-width line, so they are back on the visible chip.
+    */
+    expect(airCount(el)?.textContent?.trim()).toBe('1 on air');
+    expect(airCount(el)?.getAttribute('aria-label')).toBe('1 items on air');
     expect(airCount(el)?.hasAttribute('data-unverifiable')).toBe(true);
-    expect(airCount(el)?.style.color).toBe(asRendered(colors.textMuted));
+    /*
+      ⚠ RE-POINTED BY `AUDIT-CLOSE-01` C2, and the PROPERTY is unchanged: the count is the
+      header's own quiet ink, which is what "greyed — the claim withdrawn" means here. It
+      used to be the app-wide `--r-text-muted`; C2 gave the layer table's header the
+      reference's rendered PAIR (ground `rgb(45,55,69)` + ink `rgb(156,163,175)`), and a
+      count left on the shared muted would have read 4.39:1 on that ground — the accepted
+      fail owner answer A6 closed — while every label beside it read 4.74:1.
+
+      It is still a TOKEN read and not a hex, which is the rule this helper exists for.
+
+      🔴 BUT THE READ IS NO LONGER AN INLINE STYLE, and that is D5's other consequence: the
+      count is painted by `.cg-layers-subbar__onair[data-unverifiable]` — a SELECTOR, so
+      `element.style.color` is empty here and asserting it would be asserting nothing.
+      jsdom's cascade could answer a `getComputedStyle` for a declared value, but this
+      sheet is not loaded in this harness, so the honest split is: the ATTRIBUTE contract
+      here (it is what the selector keys on), and the PAINT in a real engine —
+      `shell-chrome.spec.ts` §D5b reads the two colours apart in Chromium. Golden rule 12(c),
+      applied rather than worked around.
+    */
+    expect(airCount(el)?.hasAttribute('data-unverifiable')).toBe(true);
+    expect(airCount(el)?.style.color, 'the colour is a selector now, not an inline').toBe('');
 
     // 4. EMPTY — a fact about OUR list. Normal styling, no confidence hook at all.
     const empty = stateCell(el, 70);
@@ -207,8 +258,8 @@ describe('§4 — the four treatments, together, with CasparCG unreachable', () 
     expect(stateCell(el, 72)?.getAttribute('data-row-state')).toBe('onair');
     expect(stateCell(el, 71)?.hasAttribute('data-unverifiable')).toBe(false);
     expect(stateCell(el, 71)?.style.color).toBe(asRendered(colors.ready));
+    // …and with both hops up the withdrawal hook is absent, which is what the selector reads.
     expect(airCount(el)?.hasAttribute('data-unverifiable')).toBe(false);
-    expect(airCount(el)?.style.color).toBe(asRendered(colors.onAir));
   });
 
   /**

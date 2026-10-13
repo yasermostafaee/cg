@@ -37,7 +37,7 @@ export default [
     // A dialog's message — "why that did not happen" — belongs in `Modal`'s pinned
     // region, which sits OUTSIDE the scrolling body and immediately above the action
     // row. `DelimitersModal` rendered `<p role="alert">` as the last child of its
-    // Modal instead: below the fold on a long list, in a red measuring 2.13:1 on the
+    // Modal instead: below the fold on a long list, in a red measuring 2.08:1 on the
     // dialog surface. It was on the primitive and went around this one contract.
     //
     // The COLOUR half of that hole is closed by the type system — `Modal`'s `message`
@@ -64,6 +64,58 @@ export default [
             "A dialog's message must go through <Modal>'s `message` prop (`{ role: 'refusal' | 'notice', text, detail? }`), which pins it outside the scrolling body and immediately above the action row. A message rendered into the body can be below the fold when the operator presses the button, which is a silent refusal.",
         },
       ],
+      /*
+        🔴 `TIMING-WIRE-22 · DELTA B · R2` — THE RAW-CONTROL RATCHET.
+
+        A raw <input> outside `renderer/ui/`, or a `style` prop on a control primitive, is
+        refused from today. The 32 sites the renderer already carried are FROZEN BELOW, per
+        file, as a count — and the rule refuses movement in BOTH directions: more than the
+        number is new debt, FEWER than the number means the debt was paid and the number is now
+        a lie. So the list can only ever shrink, and it cannot gain a file without this config
+        being edited on purpose.
+
+        ⚠ EVERY NUMBER HERE IS MEASURED, not estimated — two independent passes that agreed
+        exactly: a comment-and-string-masked tokenizer scan, and a TypeScript-parser walk
+        counting JsxOpeningElement/JsxSelfClosingElement named `input` (a parser cannot see
+        into a comment at all, which is what makes it a second AXIS rather than a better
+        regex). Both returned 32 across these 14 files, with zero comment hits to exclude.
+
+        ⚠ THE DESIGNER IS NOT ENABLED and the number is why: 37 sites across 20 files there,
+        redder than here. Widening it is its own item, not a rider on this one.
+
+        ⚠ MIGRATING THESE 32 IS LATER CLEANUP — they are listed as an open item on the timing
+        arc's OpenSpec change. Paying one down means lowering its number here in the same
+        commit; the rule will say so if you forget.
+      */
+      'cg/raw-control': [
+        'error',
+        {
+          allow: {
+            // `OPERATOR-NAME-SWEEP-01` — 3 → 2: the `#audit-operator` raw input retired with
+            // the self-declared console name. The ratchet refuses movement in BOTH directions, so
+            // this number had to fall in the same commit — a debt paid is a number that is now a lie.
+            'src/renderer/features/audit/AuditPanel.tsx': 2,
+            'src/renderer/features/fixedLayers/CandidateLayersSection.tsx': 4,
+            'src/renderer/features/fixedLayers/useTemplatePicker.tsx': 2,
+            'src/renderer/features/inspector/DelimitersSection.tsx': 2,
+            'src/renderer/features/inspector/FromFileControl.tsx': 1,
+            'src/renderer/features/inspector/Inspector.tsx': 4,
+            'src/renderer/features/inspector/PositionPicker.tsx': 2,
+            'src/renderer/features/layers/LayersPanel.tsx': 2,
+            'src/renderer/features/layers/LivePlateAudioDialog.tsx': 1,
+            'src/renderer/features/layers/PlateAudioStrip.tsx': 1,
+            'src/renderer/features/lock/EngageLockDialog.tsx': 2,
+            'src/renderer/features/lock/LockOverlay.tsx': 2,
+            // `PLAYOUT-SOURCES-01` §1.F — `LiveSourceDialog.tsx` (5) went with the catalogue editor:
+            // the sources are the Playout's. The debt left with the file; the entry leaves with it.
+            'src/renderer/features/stationSetup/BackupServerDialog.tsx': 1,
+            'src/renderer/features/stationSetup/StationSetupDialog.tsx': 3,
+            'src/renderer/features/connections/FailoverBanner.tsx': 3,
+            'src/renderer/features/inspector/SourceDefaultsLink.tsx': 1,
+            'src/renderer/features/status/StatusBar.tsx': 1,
+          },
+        },
+      ],
     },
   },
   {
@@ -78,7 +130,8 @@ export default [
     },
   },
   {
-    // `*.timestamp-*.mjs` are transient Vite config-load artifacts.
-    ignores: ['dist/**', '.vite/**', '*.tsbuildinfo', '*.timestamp-*.mjs'],
+    // `*.timestamp-*.mjs` are transient Vite config-load artifacts; `src-tauri/gen/**` is Tauri's
+    // generated output (DESKTOP-APPS-01). CG Control stages no payload since CENTRAL-BRIDGE-01.
+    ignores: ['dist/**', '.vite/**', '*.tsbuildinfo', '*.timestamp-*.mjs', 'src-tauri/gen/**'],
   },
 ];

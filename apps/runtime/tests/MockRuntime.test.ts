@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { TAKE_ON_AIR_CODE } from '@cg/shared-ipc';
 import { MockRuntime } from '../src/platform/MockRuntime.js';
 
 describe('MockRuntime stack', () => {
@@ -56,7 +57,7 @@ describe('MockRuntime owned-slot occupancy (B-056 parity)', () => {
     expect(calls).toBe(0);
   });
 
-  it('boots with the seeded warning under CG_E2E_OWNED_OCCUPANCY and resolves it on remove', () => {
+  it('boots with the seeded warning under CG_E2E_OWNED_OCCUPANCY and resolves it on remove', async () => {
     (globalThis as { CG_E2E_OWNED_OCCUPANCY?: boolean }).CG_E2E_OWNED_OCCUPANCY = true;
     try {
       const rt = new MockRuntime();
@@ -65,14 +66,35 @@ describe('MockRuntime owned-slot occupancy (B-056 parity)', () => {
       // The seeded warning names a row `seedStack()` actually creates — the
       // E2E's remedy is removing that row (D-119 rebuilt the starter seed).
       expect(rt.ownedOccupancy()).toMatchObject([
-        { channel: 1, layer: 10, itemId: 'item-irib-news' },
+        { channel: 1, layer: 60, itemId: 'item-irib-news' },
       ]);
       expect(rt.stackSnapshot().map((i) => i.itemId)).toContain('item-irib-news');
       // A take does NOT resolve (bridge parity).
       rt.take('item-irib-news');
       expect(rt.ownedOccupancy()).toHaveLength(1);
-      // The remedy resolves it and publishes the change.
-      rt.remove('item-irib-news');
+      /*
+        🔴 `R-017` — THE REMEDY IS NOW TWO PRESSES, and this asserts both halves rather than
+        being relaxed to skip the take above.
+
+        The row was taken on air on the line before, so REMOVE is refused — by the mock, in
+        parity with the bridge, which is the whole reason the mock carries the refusal. The
+        refusal must change NOTHING: the warning is still there and the row is still on the
+        stack. Then the remedy the refusal names — take it off air first — and the remove
+        lands.
+      */
+      expect(rt.remove('item-irib-news')).toMatchObject({ accepted: false });
+      expect(rt.ownedOccupancy(), 'a refused remove resolves nothing').toHaveLength(1);
+      expect(rt.stackSnapshot().map((i) => i.itemId)).toContain('item-irib-news');
+      // ⚠ Let the TAKE settle before the out: the mock's `#settle` bails when the item is
+      // no longer `pending`, so an out issued inside the take's own settle window has its
+      // timer eaten by it. Not a product behaviour — a mock timing detail, and waiting is
+      // what the other suites do (`clearAll.test.ts`'s `settle()`).
+      await new Promise((r) => setTimeout(r, 220));
+      rt.out('item-irib-news');
+      // …and the out has to settle too: `exiting` is inside the refusal's set, because the
+      // on-air result is still unknown while it runs. That is the gate working, not a race.
+      await new Promise((r) => setTimeout(r, 220));
+      expect(rt.remove('item-irib-news')).toMatchObject({ accepted: true });
       expect(rt.ownedOccupancy()).toEqual([]);
       expect(emissions[emissions.length - 1]).toEqual([]);
     } finally {
@@ -188,5 +210,104 @@ describe('MockRuntime position read-back (B-072 parity)', () => {
     expect(rt.stackSnapshot().find((i) => i.itemId === id)).toBeUndefined();
     rt.load(id, 'tpl-1', {});
     expect(rt.stackSnapshot().find((i) => i.itemId === id)?.position).toBeUndefined();
+  });
+});
+
+describe('🔴 B-145 (2.8) — the mock releases live plates on the SAME verbs the bridge does', () => {
+  /*
+    ── THE PARITY THAT WAS WRONG, AND WHY A MOCK BUG IS WORTH A TEST ─────────────
+
+    A first cut filtered the seeded ledger by STACK MEMBERSHIP. That looks like
+    release, but it models only `remove`. On air `teardownLiveLayers` is awaited by
+    THREE call sites: `#stopItemImpl` ("the plates come down WITH the graphic"),
+    `#outImpl` ("THE LIVE LAYERS COME DOWN FIRST, THEN THE GRAPHIC") and `#removeImpl`.
+
+    So after a STOP or an OUT the real console shows nothing on those layers, while the
+    mock went on reporting a guest "On screen". `playoutClear`'s own parity note is the
+    rule: a mock that teaches a different — and more dangerous — mental model than air
+    is worse than no mock.
+  */
+
+  const armed = (): MockRuntime => {
+    (globalThis as { CG_E2E_FIXED_BANK?: boolean }).CG_E2E_FIXED_BANK = true;
+    return new MockRuntime();
+  };
+
+  afterEach(() => {
+    delete (globalThis as { CG_E2E_FIXED_BANK?: boolean }).CG_E2E_FIXED_BANK;
+  });
+
+  it('the armed seed starts seated — a console attaching to a bridge that already has plates', () => {
+    const rt = armed();
+    expect(rt.liveLayersState().map((r) => r.layer)).toEqual([60, 61]);
+  });
+
+  it('UNARMED it is empty, because the offline mock has seated nothing', () => {
+    // Honest rather than a gap: no CasparCG, an empty source catalog by design, and no
+    // declared band. `seedPlayoutLayers` makes the same choice for the same reason.
+    expect(new MockRuntime().liveLayersState()).toEqual([]);
+  });
+
+  it('🔴 STOP releases the plates, though the template producer survives', () => {
+    const rt = armed();
+    rt.stop('item-irib-news');
+    expect(rt.liveLayersState()).toEqual([]);
+  });
+
+  it('🔴 OUT releases the plates', () => {
+    const rt = armed();
+    rt.out('item-irib-news');
+    expect(rt.liveLayersState()).toEqual([]);
+  });
+
+  it('🔴 a TAKE of the SEATED row is refused, as the bridge refuses it — nothing is seated twice', () => {
+    // `FIELD-FIXES-01-A` Decision 2 parity: the seeded row reads loaded, but its plates are seated
+    // (the `B-145` adoption case), so it owns live seats and the take is refused with nothing done.
+    const rt = armed();
+    expect(rt.take('item-irib-news')).toEqual({ accepted: false, errorCode: TAKE_ON_AIR_CODE });
+    expect(rt.liveLayersState().map((r) => r.layer)).toEqual([60, 61]);
+  });
+
+  it('REMOVE releases the plates', () => {
+    const rt = armed();
+    rt.remove('item-irib-news');
+    expect(rt.liveLayersState()).toEqual([]);
+  });
+
+  it('a TAKE seats them again — the verb that seats on air seats here', async () => {
+    const rt = armed();
+    rt.out('item-irib-news');
+    expect(rt.liveLayersState()).toEqual([]);
+
+    // `FIELD-FIXES-01-A` Decision 2 — OUT reads `exiting` until it settles, and a take of an
+    // unsettled row is refused exactly as the bridge refuses it; so the take waits for the settle.
+    await new Promise((r) => setTimeout(r, 220));
+    expect(rt.take('item-irib-news')).toEqual({ accepted: true });
+
+    expect(rt.liveLayersState().map((r) => r.layer)).toEqual([60, 61]);
+  });
+
+  it('every one of those transitions PUBLISHES, so a console never has to poll', async () => {
+    const rt = armed();
+    const seen: number[][] = [];
+    rt.liveLayersChanged.subscribe((s) => seen.push(s.map((r) => r.layer)));
+
+    rt.out('item-irib-news');
+    // `FIELD-FIXES-01-A` Decision 2 — OUT reads `exiting` until it settles, and a take of an
+    // unsettled row is refused exactly as the bridge refuses it; so the take waits for the settle.
+    await new Promise((r) => setTimeout(r, 220));
+    rt.take('item-irib-news');
+
+    expect(seen).toEqual([[], [60, 61]]);
+  });
+
+  it('the seed is never `unverified` — the mock has no file to adopt from', () => {
+    // A demotion test mode can never really be in would teach an alarm that is not true
+    // of it, which is the same rule that keeps the mock from faking a STRANDED row.
+    expect(
+      armed()
+        .liveLayersState()
+        .every((r) => !r.unverified),
+    ).toBe(true);
   });
 });

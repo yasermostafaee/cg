@@ -1,5 +1,12 @@
-import { MonitorOff } from 'lucide-react';
+import { backupChannelLineText } from '@cg/shared-ipc';
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
+import { useBackupChannels } from '../../hooks/useBackupChannels.js';
+import { useConnections } from '../../hooks/useConnections.js';
+import { useChannelAir, useChannelBankState } from '../channels/useSelectedChannel.js';
+import { useProgramReturn } from '../../hooks/useProgramReturn.js';
+import { usePgmAudio } from '../../hooks/usePgmAudio.js';
+import { useStackSnapshot } from '../../hooks/useStack.js';
+import { airTally, onChannel } from '../stack/onAir.js';
 import { MonitorPanel } from './MonitorPanel.js';
 import { PreviewPanel } from './PreviewPanel.js';
 
@@ -24,8 +31,50 @@ import { PreviewPanel } from './PreviewPanel.js';
  */
 export function MonitorStrip(): JSX.Element {
   const { focus } = useShellLayoutContext();
+  /*
+    🔴 `CONSOLE-MATCH-03` §1 — the two facts PGM's strip states, read HERE and passed down.
+
+    `airTally` is the ONE air count on this console (`B-213`), and the channel comes from the
+    declared bank the layer table reads. Both are lifted to the strip rather than looked up
+    inside `MonitorPanel` so that the panel stays a presentation component and so there is
+    exactly one place the two panes' channel can come from.
+  */
+  // `MULTI-CHANNEL-01` — the SELECTED channel: PROGRAM is the channel on screen.
+  const { viewChannel } = useChannelBankState();
+  // `UI-POLISH-01` G — the Playout's air facts for the channel PROGRAM shows (its head's colour).
+  const air = useChannelAir(viewChannel);
+  const { items } = useStackSnapshot();
+  // `DESKTOP-APPS-01-D` j — PROGRAM's `N rows on air` counts this channel only.
+  const onAirRows = airTally(onChannel(items, viewChannel)).onAir;
   const showPvw = focus !== 'pgm';
   const showPgm = focus !== 'pvw';
+  /*
+    🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — THIS channel's backup line, and whether the backup engine is on
+    air now (server B the primary): then the return, its sound and its meter — read from the PRIMARY engine —
+    are not available, and nothing is requested for them.
+  */
+  const backupState = useBackupChannels();
+  const health = useConnections();
+  const onBackupEngine = health?.currentPrimary === 'B';
+  const backupLine = ((): { text: string; title?: string; mapped: boolean } | null => {
+    const backup = backupState?.backup ?? null;
+    if (backup === null) return null;
+    const line = backup.channels.find((c) => c.channel === viewChannel);
+    if (line === undefined) return null;
+    return {
+      text: backupChannelLineText(line, backup.backupHost),
+      ...(line.reason !== undefined ? { title: line.reason } : {}),
+      mapped: line.state === 'mapped',
+    };
+  })();
+  /*
+    `C-016` — the programme return, lifted here beside the air count for the same reason. A
+    PROGRAM pane that is not rendered asks for NOTHING: the channel is `null` while it is folded
+    away, so no picture is requested and the bridge pulls nothing from the Playout for it.
+  */
+  const programReturn = useProgramReturn(showPgm && !onBackupEngine ? viewChannel : null);
+  // `PLAYOUT-FEATURES-01` E — and its SOUND, on the same rule: a folded PROGRAM plays nothing.
+  const programSound = usePgmAudio(showPgm && !onBackupEngine ? viewChannel : null);
 
   return (
     /*
@@ -43,22 +92,22 @@ export function MonitorStrip(): JSX.Element {
     */
     <div style={{ display: 'flex', gap: '0.75rem', flex: 1, minHeight: 0, minWidth: 0 }}>
       {/*
-        The copy says what each output IS and why it is blank, in the operator's
-        terms, naming no internal item number — the visible surface is not where
-        the roadmap gets tracked. The pointers live in `MonitorPanel`'s comment.
+        The copy says what each output IS, in the operator's terms, naming no
+        internal item number — the visible surface is not where the roadmap gets
+        tracked. The pointers live in `MonitorPanel`'s comment.
 
-        The two empty states are DIFFERENT ON PURPOSE. PREVIEW is a local browser
-        render with no server involvement, so it has nothing to connect to and a
-        "not connected" label would send an operator hunting for a link that is
-        not part of the design. Only PROGRAM is genuinely waiting for a feed.
+        The two panes are DIFFERENT ON PURPOSE. PREVIEW is a local browser render
+        with no server involvement, so it has nothing to connect to and a "no
+        signal" label would send an operator hunting for a link that is not part of
+        the design. Only PROGRAM has a feed — the Playout's own return (C-016).
       */}
       {/*
         R-022 — PREVIEW is no longer a reserved empty box: it renders the
         rehearsal for EVERY row the operator has put into REHEARSE, composited. It
-        gets its own component rather than props on `MonitorPanel`, because it now
-        has behaviour (the rehearsing set, the retained pages, the channel raster,
-        the operator's staged values) while PROGRAM is still genuinely awaiting a
-        feed (C-016).
+        gets its own component rather than props on `MonitorPanel`, because its
+        behaviour (the rehearsing set, the retained pages, the channel raster, the
+        operator's staged values) has nothing in common with PROGRAM's, which shows
+        the Playout's return (C-016).
 
         It takes NO `selectedId`. It used to, to pick which single rehearsal to
         show; now it shows all of them, and the selection's remaining job — which
@@ -69,9 +118,14 @@ export function MonitorStrip(): JSX.Element {
         <MonitorPanel
           id="pgm"
           title="PROGRAM (PGM)"
-          icon={MonitorOff}
-          emptyLabel="No program return"
-          detail="This will show what is on air, returned from the playout server. No return feed is arriving yet."
+          word="PROGRAM"
+          channel={viewChannel}
+          onAirRows={onAirRows}
+          programReturn={programReturn}
+          programSound={programSound}
+          air={air}
+          backupLine={backupLine}
+          onBackupEngine={onBackupEngine}
         />
       )}
     </div>

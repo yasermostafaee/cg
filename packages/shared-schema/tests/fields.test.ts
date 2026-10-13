@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DynamicFieldSchema, FieldValuesSchema } from '../src/fields.js';
+import { DynamicFieldSchema, FieldValuesSchema, fieldDigitsOf } from '../src/fields.js';
 
 const baseField = { id: 'headline', label: 'Headline', required: true };
 
@@ -98,6 +98,52 @@ describe('DynamicField variants', () => {
   });
 });
 
+describe('a field says which digits its value is written in (FIELD-DIGITS-01)', () => {
+  const text = { ...baseField, type: 'text' as const, default: '' };
+  const multiline = { ...baseField, type: 'multiline' as const, default: '' };
+  const number = { ...baseField, type: 'number' as const, default: 0 };
+
+  it('text and multiline take all four choices; a number takes the three sets', () => {
+    for (const digits of ['as-typed', 'persian', 'latin', 'arabic-indic'] as const) {
+      expect(DynamicFieldSchema.parse({ ...text, digits })).toEqual({ ...text, digits });
+      expect(DynamicFieldSchema.parse({ ...multiline, digits })).toEqual({ ...multiline, digits });
+    }
+    for (const digits of ['persian', 'latin', 'arabic-indic'] as const) {
+      expect(DynamicFieldSchema.parse({ ...number, digits })).toEqual({ ...number, digits });
+    }
+  });
+
+  it('a number field refuses as-typed, and no field takes a set that does not exist', () => {
+    expect(() => DynamicFieldSchema.parse({ ...number, digits: 'as-typed' })).toThrow();
+    expect(() => DynamicFieldSchema.parse({ ...text, digits: 'hindi' })).toThrow();
+  });
+
+  it('an old field carries no key and none is written on the way in', () => {
+    expect(DynamicFieldSchema.parse(text)).not.toHaveProperty('digits');
+    expect(DynamicFieldSchema.parse(number)).not.toHaveProperty('digits');
+  });
+
+  it('the effective choice: absent is as-typed for text, latin for a number', () => {
+    expect(fieldDigitsOf(DynamicFieldSchema.parse(text))).toBe('as-typed');
+    expect(fieldDigitsOf(DynamicFieldSchema.parse(multiline))).toBe('as-typed');
+    expect(fieldDigitsOf(DynamicFieldSchema.parse(number))).toBe('latin');
+    expect(fieldDigitsOf(DynamicFieldSchema.parse({ ...number, digits: 'persian' }))).toBe(
+      'persian',
+    );
+    expect(fieldDigitsOf(DynamicFieldSchema.parse({ ...text, digits: 'arabic-indic' }))).toBe(
+      'arabic-indic',
+    );
+  });
+
+  it('no field, or a kind with no setting, rewrites nothing', () => {
+    expect(fieldDigitsOf(null)).toBe('as-typed');
+    expect(fieldDigitsOf(undefined)).toBe('as-typed');
+    expect(fieldDigitsOf({ ...baseField, type: 'select', default: 'a', options: [] })).toBe(
+      'as-typed',
+    );
+  });
+});
+
 describe('FieldValues', () => {
   it('accepts mixed value types', () => {
     const v = {
@@ -154,5 +200,25 @@ describe('ListField (D-028)', () => {
   });
   it('rejects a list value whose items lack ids', () => {
     expect(() => FieldValuesSchema.parse({ headlines: [{ text: 'x' }] })).toThrow();
+  });
+});
+
+describe('a list field says which digits its items are written in (TEXT-DIGITS-01)', () => {
+  const list = { ...baseField, type: 'list' as const, default: [{ id: 'i1', text: 'خبر 1' }] };
+
+  it('takes all four choices and keeps them', () => {
+    for (const digits of ['as-typed', 'persian', 'latin', 'arabic-indic'] as const) {
+      expect(DynamicFieldSchema.parse({ ...list, digits })).toEqual({ ...list, digits });
+    }
+    expect(() => DynamicFieldSchema.parse({ ...list, digits: 'hindi' })).toThrow();
+  });
+
+  it('an old list carries no key and none is written on the way in', () => {
+    expect(DynamicFieldSchema.parse(list)).not.toHaveProperty('digits');
+  });
+
+  it('the effective choice: absent is Keyboard (as-typed), a choice is itself', () => {
+    expect(fieldDigitsOf(DynamicFieldSchema.parse(list))).toBe('as-typed');
+    expect(fieldDigitsOf(DynamicFieldSchema.parse({ ...list, digits: 'persian' }))).toBe('persian');
   });
 });

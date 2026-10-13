@@ -1,0 +1,296 @@
+# CG Control ↔ Apasai Playout — the integration record
+
+The documents the two teams exchanged, adopted verbatim; [ADR 0010](../../adrs/0010-playout-link.md)
+is the decision resting on them. 🔴 **Change this folder only by a versioned addendum, never by
+editing v1 in place** — each file was consumed verbatim by the other team's assistant.
+
+| File                                            | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PLAYOUT-INTEGRATION-CONTRACT-v1.md`            | The contract, v1 (2026-09-15). Topology, the JWT claims, D1–D8, roles, the acceptance checklist.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `cg-control-playout-api.openapi.yaml`           | OpenAPI 3.1 of D1–D5 / D8 — the machine-readable half of the same contract.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `PLAYOUT-CG-RESPONSE-v1.md`                     | Their first response (build 2.8.44): C1–C7, O1–O3, the Q1–Q7 answers, their 17/17 run.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `CG-CONTROL-REPLY-A-2026-09-16.md`              | Our Reply A = **Addendum A**: C1–C7 adopted, O1 viewer sign-in ON, O2 → D9 proposed, O3 the `iss` rule, our deployment facts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `PLAYOUT-CG-RESPONSE-B-v1.md`                   | Their Response B (build 2.8.45): O1 ON plus **C8**, **D9 implemented verbatim**, the firewall script prepared, 22/22.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `CG-CONTROL-REPLY-B-2026-09-16.md`              | Our Reply B: C8 folded into Addendum A, D9 accepted as **v1.1 live**, the open-items table.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `PLAYOUT-CG-RESPONSE-C-v1.md`                   | Their Response C (2026-09-16, 2.8.45 pinned): the firewall table, the refreshed handoff, and the CG routes re-run over the network address. ⚠ Its firewall table was NOT in force — see Response D.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `CG-CONTROL-REPLY-C-2026-09-16.md`              | Our Reply C (2026-09-16): item 1 awaited in writing with both rules listed, our three inbound rules, and what the bridge sends on connect. First raised that a **Block outranks an Allow**.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `CG-CONTROL-REPLY-D-2026-09-21.md`              | Our Reply D (2026-09-21): 8080 / 8443 / 9250 measured reachable from `192.168.21.93`, the `pktmon` capture, and the observation that a **`RST` on 9999** contradicts their table.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `PLAYOUT-CG-RESPONSE-D-v1.md`                   | Their Response D (2026-09-21, engine 2.8.47): both our points conceded and verified against Microsoft's docs — the allow rule was **inert**, and the **Public profile's firewall is off**, so 5250 was open to the whole LAN. The corrected twin-rule model.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `CG-CONTROL-REPLY-E-2026-09-21.md`              | Our Reply E (2026-09-21): the twelve any-port program rules blunt their Decision 1; a time-boxed window on the pinned 2.8.45 offered as a third path; and **does 2.8.47 still carry apasai-core `2.5.0 6b29237 Dev`?**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `PLAYOUT-CG-RESPONSE-E-v1.md`                   | Their Response E (2026-09-21, engine **2.8.48**): **item 1 complete — the written authorisation.** It answers our Reply D §3 and **crossed with our Reply E**, so Reply E's questions are untouched by it. ⚠ SUPERSEDED by the revised E below — read that one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `CG-CONTROL-REPLY-F-2026-09-21.md`              | Our Reply F (2026-09-21): the authorisation accepted; asks whether the twelve program rules were removed or merely not shown; flags `singbox_tun` on THEIR host as a measurement risk for the OSC half.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `PLAYOUT-CG-RESPONSE-E-v1-revised.md`           | 🔴 **Their revised Response E (2026-09-21) — THE authorisation the 2026-09-22 run used.** Supersedes the first E: §5 the core is byte-identical (mtime/size/md5 + a live `VERSION` on 2.8.48); §6 **their plant NIC is DOWN** and everything routes via the Kerio tunnel; §7 the time-boxed window is moot and would now lock us out; §9 the real inbound grant is an **NDI-created rule**, not the twelve.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `PLAYOUT-CG-RESPONSE-F-v1.md`                   | Their Response F (2026-09-21): the twelve were not shown, not removed; the scope bounds were their deliberate choice (Windows REFUSES a rule containing loopback/multicast/broadcast, writing neither rule); and 🔴 **they predict they present source `172.27.36.46`, not `192.168.21.111`** — the warning that made us widen all three inbound rules before the run.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `CG-CONTROL-REPLY-G-2026-09-22.md`              | Our Reply G (2026-09-22): their warning went one layer deeper — **all three** of our rules were scoped to `.111`, so the template fetch on 7911 would have failed as a take-404 too; all three widened additively; the HTTP GET sent so they can read our source address from their own log.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `PLAYOUT-2.8.54-CG-FACTS-2026-09-23.md`         | 🔴 **Playout 2.8.54 (2026-09-23, REVISED the same day): the built-in `cg-admin` (random password per install, read from the Playout's settings), the fixed `iss` `urn:apasai:playout` — NOT an install identity, the root of trust is the JWKS at the entered address — the loopback `casparHost`, and the AMCP ALLOW LIST** (only a server-side `station-admin` D9 read introduces; the first machine once automatically, every later one after an in-app approval; no expiry; same IPv4; no NAT or proxy). What CG Control does about each.                                                                                                                                                                                                                                                                                                                                |
+| `CG-CONTROL-REQUEST-PGM-FEED-2026-09-23.md`     | Our request (2026-09-23): the `pgm` consumer's framing, index, default, firewall, cost and safety, and its WAV port — so CG Control can show the programme picture.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `PLAYOUT-CG-RESPONSE-PGM-FEED-v1.md`            | 🔴 **Their answer (2026-09-23, 2.8.54, from source + loopback measurement):** HTTP/1.0 MJPEG on `9250 + n − 1`, framed by `Content-Length`, the client sends first; on for every programme channel; open to the whole LAN; the server is **not hardened** and an error on its thread stops the whole core; audio is `GET /audio.wav` on the SAME port. **Corrects their first answer: `935x` is the PREVIEW, not air.**                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `PGM-FEED-AS-USED.md`                           | How CG Control uses that feed (`C-016`, `pgm-return`): the port rule and the preview trap, the well-behaved-client rule and how each part is kept, the whole-LAN note, what is never done, the cost measured.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `handoff/2026-09-16/`                           | Dated evidence snapshots from the test Playout — `jwks.json` and `channels.json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `CG-CONTROL-REQUEST-INPUTS-MEDIA-2026-09-26.md` | Our request (2026-09-26): **v1.2 = D10** (`GET /api/cg/inputs`, the station's inputs) **+ D11** (`GET /api/cg/media`, the media library, searched and paged on their side).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `PLAYOUT-CG-RESPONSE-INPUTS-MEDIA-v1.md`        | 🔴 **Their answer, in Persian (build `2.8.57`) — where it differs from the request, THIS is the contract:** D10 lists only inputs safe to share (NDI, pulled RTSP/RTMP, multicast UDP/RTP); the NDI producer is `[NDI] "HOST (Cam 1)"`, not `NDI NAME`; D11's `clip` is an ABSOLUTE path that can move between cache and original; `limit` clamped at 200.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `PLAYOUT-CG-RESPONSE-HOLDER-v1.md`              | Their holder-channel answer (Persian): every exclusive input comes through a holder channel as a `route`; **contract v1.3 draft** — §3.1 shapes (`epoch`, `route` with `layer` + `videoMode`, `compatibleChannels`, `available`/`reason`; D4 `videoMode`/`pendingRestart`), §3.2 six rules, §3.3 OSC carries input URLs with credentials.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `PLAYOUT-DESIGN-INPUT-HOLDER-v1.md`             | Their full holder design (v1.1), the background to the answer above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `CG-CONTROL-REPLY-HOLDER-2026-09-26.md`         | Our acceptance of v1.3 with clarifications C1–C5, and: keep `CgControl.RouteInputs` OFF until we say so in writing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `PLAYOUT-CG-RESPONSE-V13-STATE-v1.md`           | Their V13-STATE answer (Persian, 2026-09-27): D4 `output`/`playlist`, and C1–C5 answered — **C2 corrected** (`BEGIN…COMMIT` is not same-frame; a plate is shown by `OPACITY` in one `MIXER <ch> COMMIT`; the `DEFER` list is one per channel), **C3** the epoch is a 64-bit integer that never repeats, **C5** more commands we never send.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `CG-CONTROL-REPLY-V13-STATE-2026-09-27.md`      | Our acceptance of their V13-STATE answers: D4 `output`/`playlist`, the C2 hide → `PLAY` → reveal pattern, a raised plate ramps over 25 frames.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `PLAYOUT-CG-RESPONSE-V13-INSTALL-v1.md`         | Their answer (Persian, 2026-09-27): clearing our layers on an unlicensed channel is intended; `ADD`/`REMOVE` means consumer commands only; **`2.9.0` on `.111` from 10:10 Tehran, holder and `RouteInputs` OFF** — D10 byte-identical to v1.2 (no `epoch`), D4 `videoMode` may be `null` with `pendingRestart: true`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `CG-CONTROL-ASK-BRIDGE-HOST-2026-09-29.md`      | Our ask (2026-09-29): may "CG Bridge" — one bridge per Playout, every CG Control its console — run as a Windows service on the Playout machine? §2.1–§2.8: account and start order, the AMCP allow list, reads from loopback, the ports, the backup, a status page, their installer chaining ours, a test on `.111`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `PLAYOUT-CG-RESPONSE-BRIDGE-HOST-v1.md`         | 🔴 **Their answer (Persian, 2026-09-30) — the rules `CENTRAL-BRIDGE-01` is built to:** allowed, as a service on the Playout machine or a server beside it; **no dependency on `ApasaiEngine`**; loopback AMCP on IPv4 admitted with no approval, `127.0.0.1` never in the allow list; **UDP `127.0.0.1:6250` is their engine's — the bridge binds another port and sends `OSC SUBSCRIBE`**; D1 from the consoles themselves; no service token; `/health` for their page; their installer will chain ours.                                                                                                                                                                                                                                                                                                                                                                    |
+| `PLAYOUT-CG-RESPONSE-ROUTE-ON-DONE-v1.md`       | Their answer (Persian, 2026-09-29, **`2.9.1` on `.111`**): the holder and `RouteInputs` switched on; **D11 `source` and `fingerprint`** with the `?fingerprint=` filter; **D10 `ownOutputOf`** on an NDI input that is one of this server's own channel outputs (reliable when present, "unknown" when absent). Adopted by `PLAYOUT-FEATURES-01` A and B.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md`      | Their answer (Persian, 2026-09-30, `2.9.2`): **the playlist output as a D10 row** (`pl-<code>`, `route://N-L` with L read from D10, `playlistOf`) — the box ALWAYS at `VOLUME 0`, never a command to L; **their client's audio method** and **`GET /api/cg/meters`** (SSE, D4/D10 authentication); the `VuMeterTall` look. Adopted by `PLAYOUT-FEATURES-01` C and E.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `PLAYOUT-CG-RESPONSE-LICENSE-v1.md`             | Their answer (Persian, 2026-09-30, `2.9.2`): **the CG license from the Playout's dongle** — `cg_not_licensed` at D1/D2, `GET /api/cg/license`, D4 `cgLicensed`; nothing on air is cleared by either side for the CG license, but the Playout's own license rule still clears a channel; **§5: AMCP on loopback cannot be locked**. Adopted by `PLAYOUT-FEATURES-01` D (and `CENTRAL-BRIDGE-01-A`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `PLAYOUT-CG-RESPONSE-0110-111-v1.md`            | Their answer (Persian, 2026-10-04): **`2.9.2` on `.111`**; §1 their client reads `/audio` from `2.9.3` (IDM); §2 **the backup refuses the primary's token** (`401 invalid_token`; one session per server is the way); §3.1 **`GET /api/v1/system/version`, no token, from `2.1.0`**; §3.2–§3.3 the built-in **`cg-bridge`** account (`viewer`, `2.9.3`; the meters carry nothing for it); §4 the wrapper is fine for their `Exec`, and their installer gains «CG Bridge هم نصب شود» (ticked by default); §5 `.111`'s **Public** firewall profile is ON. Adopted by `RELEASE-0111-01-A`.                                                                                                                                                                                                                                                                                      |
+| `PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md`      | Their answer (Persian, 2026-10-04): §1 the `0.11.1` CG Bridge installer's SHA-256 matches; §2 **their `2.9.4` engine installer** has «CG Bridge هم نصب شود» under «CG Control (اگر CG Bridge روی سرورِ جداست، تیک را بردارید):», ticked by default, runs ours with `/S` after their engine starts, and **reads CG Bridge's Installed-apps row** (`DisplayName` `CG Bridge`, its `DisplayVersion`, both registry views) to leave a same-or-newer one alone; `/MERGETASKS="!cgbridge"` skips it in a silent install; §3 the `cg-bridge` account's meters are full from `2.9.4`; §4 **D2's outcomes** — every answer but `200` and `401` comes before the refresh token is spent, a disabled user is `401`, D2 never returns `423`, and one re-send is safe only within 10 s; §6 the `.111` window, Monday 2026-10-05 10:00 Tehran, on `2.9.2`. Adopted by `RELEASE-0112-01-C`. |
+| `PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md`           | Their answer (Persian, 2026-10-05): §2 **line-by-line mirroring to the backup core is NOT safe** — redundancy belongs to a CHANNEL; a mirror is a new channel on the backup engine with its OWN number (largest + 1), so A's channel number on B hits another channel; unknown mapping = send B nothing; §3 **D4 `mirrorOf` / `mirrors` from `2.9.5`** (commit `584cb19`) and their mapping rule — the host compared, an empty `playout` only for exactly one row, `mirrors[].casparChannel` a stale hint; §4 the engine installer does not know it is half of a pair; §5 each engine's password: connect the client to that engine first; §7 AMCP's automatic admission, its six conditions, `cg-bridge` never automatic, a loopback D9 seals it; §8 `0.11.2`'s hash is in their `2.9.5`. Adopted by `RELEASE-0113-01`.                                                     |
+
+**Contract status.** v1 accepted by both sides · **Addendum A** carries C1–**C8** · **v1.1 / D9
+(`GET /api/cg/revoked`) implemented and LIVE**, not a proposal. Nothing in the Response C → E
+exchange touched the contract; all of it was firewall, enforcement and build.
+
+**v1.2 (D10/D11) and v1.3, as `PLAYOUT-SOURCES-01` adopted them (2026-09-27).** D10/D11 came in
+build `2.8.57`; `2.9.0` has been on `.111` since 2026-09-27 (10:10 Tehran), with the holder and
+`CgControl.RouteInputs` off, so its D10 has no `epoch`. Where their answer differs from our request:
+
+| #   | their answer                                                                                                                             | what CG Control does                                                                                                                  |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| a   | D10 lists only inputs safe to share: NDI, pulled RTSP/RTMP, UDP/RTP multicast. No `decklink`, no `route` in v1.2.                        | The four-arm shape stays; under v1.3 every exclusive input arrives as `route`, seated by contract v1.3's rules (`ROUTE-PLATES-01`).   |
+| b   | NDI: `NDI NAME "…"` is the CONSUMER syntax; the producer is `[NDI] "HOST (Cam 1)"` (`newtek_ndi_producer.cpp:289-292`).                  | The `ndi` arm sends `[NDI] "<source>"` — the one sanctioned wire change.                                                              |
+| c   | A `stream` URL is exactly what the Playout opens, and it can carry `user:pass@`.                                                         | Never shown in the console; written `scheme://***@` in the log and the audit.                                                         |
+| d   | `format` is operator-declared; `aspect` always sent; `available` never sent; compare format names case-insensitively; no `FORMAT AUTO`.  | Format matched case-insensitively; an unknown one reads as `AUTO` plus `aspect`.                                                      |
+| e   | `casparHost` is `127.0.0.1` on `.111` (their override is empty).                                                                         | The same loopback rule as D4.                                                                                                         |
+| f   | `clip` is an ABSOLUTE path (spaces, Persian); it can move between the cache and the original; an item with no playable file is left out. | Bound items are re-read by `ids=` every 30 s; a gone item is `unavailable`, never pruned; a 404 on `PLAY` gets one re-read and retry. |
+| g   | `type` is `video` or `audio`; no stills today.                                                                                           | We request `type=video,still`; audio never appears; no type chips.                                                                    |
+| h   | The cursor is bound to its own `q`/`type`/`sort` (else `400`); `limit` above 200 clamped; `total` exact; new items within ~30 s.         | A cursor is only sent with the query that produced it.                                                                                |
+| i   | Both endpoints answer `404` when CG Control is switched off in their settings.                                                           | A failed read: the last good list stays in force.                                                                                     |
+| j   | A backup Playout is a separate install with its own D4/D10/D11; its paths can differ.                                                    | Established and filed, not fixed here.                                                                                                |
+| k   | Thumbnails exist (by fingerprint); a `thumbnail` field offered for later.                                                                | Out of scope.                                                                                                                         |
+
+**v1.3 is ACCEPTED with C1–C5, and CG Control keeps it (`ROUTE-PLATES-01`, 2026-09-28).** A plate
+bound to a D10 `route` is seated by their pattern: hidden and silent first, `LOADBG` → `PLAY`
+40–200 ms apart, shown by `OPACITY` in one `MIXER <ch> COMMIT`; only on a channel its
+`compatibleChannels` names; never from a stale or unconfirmed `epoch`; never to a backup server; and
+no command this contract forbids ever leaves the bridge (one guard at the send seam). Where each rule
+is enforced is [ADR 0010](../../adrs/0010-playout-link.md)'s v1.3 paragraph. 🔴
+**`CgControl.RouteInputs` stays OFF on their side until we confirm in writing** — this record says
+the build is ready; the letter is the owner's to send.
+
+The seven letters adopted on 2026-09-27 were scanned for credentials before copying, against a
+positive control: none carries one. The single hit is their own placeholder `rtsp://user:pass@…`
+in prose (the example of the risk). `PLAYOUT-CG-RESPONSE-V13-STATE-v1.md` was adopted earlier
+(`UI-POLISH-01`); its words match the source. All seven were run through `prettier --write` like
+every file here, and their words match the originals once whitespace, table rules and emphasis
+spelling are normalised.
+
+## Item 1 is DONE — and how it was actually done (2026-09-21)
+
+🔴 **Superseded, kept because the trail is the lesson.** Until 2026-09-21 this section read that
+the AMCP allow rule was not applied and the joint test was blocked on exactly that. Both halves
+turned out to be true for a **different reason than either side thought**, and the correction is
+worth more than the fix.
+
+**What Response C claimed, and what was actually in force.** Response C §1 listed the rules on
+`192.168.21.111` as verified: the block rule enabled, the engine API and PGM ranges allowed,
+`Apasai - Allow AMCP from trusted hosts` absent. The table was accurate **and described a machine
+on which none of it was being enforced** — all three connected interfaces are categorised
+**Public** and the Public profile's firewall was **off** (Response D §2–§3). TCP 5250 was open to
+the whole LAN with apasai-core listening on `0.0.0.0:5250`. ⭐ **A rule listing is not
+enforcement; ask for the profile/enabled state beside it — theirs or ours.**
+
+**And the rule would not have worked even once applied.** Windows Defender Firewall evaluates an
+explicit **Block** ahead of any **Allow** (Response D §1, verified by them against Microsoft's
+documentation after our Reply C and Reply D §3 raised it). Only an authenticated-bypass rule
+(`-OverrideBlockRules`, requiring IPsec and `RemoteUser`) lets an allow beat a block, and theirs
+was an ordinary allow rule. The block rule's remote scope was `Any`, so it covered
+`192.168.21.93`. ⭐ **"The rule is applied" is not "the rule is in force", and the difference is
+invisible in a rule listing.**
+
+**What Response E establishes — the written authorisation.** An inbound allow on TCP 5250 scoped
+to exactly `192.168.21.93`; the old `Apasai - Block external playout-core AMCP` with remote `Any`
+**replaced** by `Apasai - Block untrusted playout-core AMCP`, whose scope stops at
+`…-192.168.21.92` and resumes at `192.168.21.94-…`; and — the part that was false in Response C —
+**all three firewall profiles enabled**, with the profile table printed beside the listing. They
+did not out-rank the block: **they removed our address from it**, so no block matches us and the
+allow decides. Their `Error` → `Warning` log pair (§3) shows only enforcement changing between the
+two states, with no rule touched.
+
+**Build.** The engine moved to **2.8.48**. The 2.8.45 pin was self-blocking — that build recreates
+its blanket block on every start and cannot hold an allow rule (Response D §4) — so **2.8.48 is
+the build to name in the recon record**. apasai-core, which is what `C-040` actually validates, is
+`2.5.0 6b29237 Dev` and is unchanged as far as they have stated.
+
+## Open items, true as of 2026-09-22
+
+1. ✅ **Item 1 — the TCP 5250 allow rule — DONE and EXERCISED.** Authorised in writing by
+   `PLAYOUT-CG-RESPONSE-E-v1-revised.md`, and on 2026-09-22 a bridge from `192.168.21.93`
+   connected and `VERSION` answered `2.5.0 6b29237 Dev` on the first attempt.
+2. ✅ **Item 2 — our side — in place, and WIDENED.** Three inbound rules on `192.168.21.93`, all
+   Allow and enabled, each now admitting **both** `192.168.21.111` and `172.27.36.46`:
+   `CG bridge OSC in` (UDP 6250), `CG bridge templates in` (TCP 7911), `CG probe fixtures in`
+   (TCP 7900–7901). 🔴 Their Response F §4 is why: a rule scoped to `.111` alone would have
+   dropped OSC **and** the template fetch, manufacturing a `degraded` reading and a take-404
+   shape that both look like faults in apasai-core.
+3. ✅ **The measurement has RUN** —
+   [`docs/recon/2026-09-22-apasai-core-validation.md`](../../recon/2026-09-22-apasai-core-validation.md).
+   The AMCP surface is identical to stock 2.5.0, OSC reaches a non-loopback AMCP client
+   (`healthy`), and a template round trip completed with the fetch hop proven. They were told
+   before we connected, as agreed. **`C-040` remains `[~]`: the SIGN-IN half has not run.**
+4. **Their revised Response E answered the second of Reply E's questions; the first is still
+   open.** (a) The twelve `apasai-engine` / `apasai-core` program rules were **not shown, not
+   removed** (Response F §1) — and the more important finding is theirs: the running core is not
+   covered by those rules at all. An **NDI-created rule** (`Protocol Any`, `LocalPort Any`,
+   `RemoteAddress Any`) is the real grant, so scoping the twelve would have changed nothing. Their
+   staged plan is in revised Response E §9; only the NDI narrowing closes it, and it waits for a
+   service window. (b) ✅ **ANSWERED** — the core is byte-identical across the engine move
+   (revised §5), and our own `VERSION` confirms `2.5.0 6b29237 Dev` running on 2.8.48.
+5. 🔴 **The SOURCE-ADDRESS question is open, and it is now a question for them.** They report the
+   plant NIC down and predict they present `172.27.36.46`; every TCP connection they made to our
+   template server on 2026-09-22 arrived from **`192.168.21.111`**. Our rules admit both, so the
+   run stands either way — but which address they present decides whether the widening can be
+   narrowed again, and whether the dead NIC is still dead.
+6. **Owed to them:** an independent reading of what a host that is **not** `192.168.21.93`
+   observes on 5250 (Response E §6). They expect a silent drop rather than a reset. ⭐ Partial
+   evidence already exists: from `.93`, port **9999** moved from a 3.7 ms `RST` (2026-09-21, their
+   firewall off) to a **26 s timeout** (2026-09-22) — enforcement is visible from outside.
+7. **`revoked.json` still has not reached this folder.** D9 is live and the endpoint is specified;
+   the dated snapshot is not here.
+8. **The test fixtures are still ours to release** — `cg-op1`, `cg-op2`, `cg-admin`, `cg-view`,
+   `cg-noch` and channel `cg-test2` — after the plant deployment, and we say when.
+9. 🔴 **2026-09-22 — OUR SIGN-IN HALF IS BUILT, AND IT HAS NOT MET YOUR BOX.**
+   `C-037` and the sign-in half of `R-066` are implemented (`openspec/changes/playout-auth-signin`):
+   the `auth` frame, offline ES256 verification against a cached JWKS, the gate at the one
+   chokepoint, D9 revocation polling, the `playout.*` configuration group, and a console sign-in.
+   ⚠ **Every one of those is exercised against a FAKE Playout on loopback** — a test server that
+   generates its own ES256 key in memory at test start and writes nothing to disk — and **not one
+   byte has been sent to `192.168.21.111`**. That is why `C-040` stays `[~]`: the AMCP half is
+   measured, the SIGN-IN half has not run. The real run is a separate, announced event, and we
+   still tell you before we connect.
+   ⚠ Two things the build measured that the contract does not state, recorded so the first joint
+   run is not spent discovering them: the claim is **`roles` (plural, `string[]`)** and there is no
+   singular `role`; and **D9 has no home in `PLAYOUT-INTEGRATION-CONTRACT-v1.md`** — it is
+   specified across Reply A and Response B and accepted as v1.1, so a reader of the contract file
+   alone will not find it.
+   ⚠ ~~And one thing that is NOT done…~~ **`C-038` LANDED 2026-09-22** — see item 11.
+10. 🔴 **2026-09-22 — `C-038` IS BUILT, AND ONE READING OF `cg_channels` IS OURS AND NOT YOURS.**
+    Per-channel authorisation landed (`openspec/changes/playout-authz-channels`): a permission
+    class on every route, and the request's channels checked against the principal's grants.
+    ⚠ **Our host rule is WIDER than the contract's wording, and we are telling you rather than
+    letting you find it.** §3.2 says `host` is _"the CasparCG server address exactly as the bridge
+    connects to it"_, and a station with a redundant pair has TWO such addresses — servers A and B
+    are MIRRORS of one channel set, not a partition of it. So we accept a grant whose `host`
+    matches **either** configured server, not only the primary. In practice nothing changes: you
+    issue A's address today, and a grant naming a host that is not ours still authorises nothing.
+    Two consequences worth stating: a redundant station does not need its grants reissued after a
+    failover, and a grant naming ANOTHER station's host does not authorise this station's
+    channel 1 — the channel number matching is not enough. **This belongs in the next addendum;
+    if you would rather we matched only `servers.A.host`, say so and it is a one-line change.**
+    ⚠ We also carry `cg-admin` and a new `cg-op-elsewhere` as local fixtures. The latter is not a
+    request for a user on your side — it exists only to prove the host half of the rule above
+    actually does something, and its address is `192.0.2.10` (RFC 5737 documentation range),
+    never dialled.
+
+11. ✅ **CLOSED 2026-09-23 — the false caveat is gone.** It read, directly above rows carrying a
+    VERIFIED name, that the actor was merely a label somebody had typed rather than a proven
+    sign-in — true for every build before `C-037` and untrue the moment a bridge runs
+    `auth: 'playout'`. `OPERATOR-NAME-SWEEP-01` retired the sentence, the field behind it, its
+    persisted key and the bridge-contract members it hung from, and left a permanent two-axis
+    guard (`operatorNameRetired.test.ts`) that fails if either the symbol or the sentence
+    returns to source.
+    ⚠ **One thing changed for stations running `auth: 'off'`, and it is not a regression:** the
+    console now sends no `actor` at all, so a console's row records `console` and a row nothing
+    at a console caused records `unattributed` (`BRIDGE-TRUTH-01` §4, 2026-09-23 — until then both
+    read `unattributed`). The label it replaced was a claim nobody checked; the remedy for a
+    station that wants attribution in the log is federating identity, which is what this
+    integration is for.
+12. ⚠ **THE CORS ORIGIN IS THE PORT THE CONSOLE ACTUALLY SERVES ON, and the dev server's
+    fallback is not it.** Their CORS list names `http://192.168.21.93:5174` and
+    `http://127.0.0.1:5174`. Measured 2026-09-22: with something already holding 5174 the
+    Runtime dev server bound **5175** instead, silently, and the console then ran on an origin
+    the Playout would not answer a preflight for. Nothing broke in the local test only because
+    the fake Playout serves permissive CORS. Before the joint sign-in run, confirm the port the
+    console is actually served on and make sure that exact origin is on their list — the
+    symptom otherwise is a sign-in that fails with no HTTP answer at all, which this console
+    reported as "پلی‌اوت پاسخ نمی‌دهد" and read as the Playout being down. Since
+    `DELTA-MULTI-CHANNEL-01-B` (2026-09-26) the sign-in is offered only once the connection check
+    shows the Playout's keys AND this console's CORS entry pass, so a missing origin now reads as
+    the check's own CORS line, in English, before anybody types a password.
+13. 🔴 **2026-09-23 — `BRIDGE-TRUTH-01` §2 and §3: what changed on OUR side for the joint run.**
+    All of it inside our own band; nothing of yours is addressed.
+    - **Our clear now resets the layer's mixer.** After a `CLEAR` of a declared bank row that
+      landed on the primary, the bridge sends `MIXER <ch>-<layer> CLEAR` (your Q4 word order;
+      the reversed spelling is your measured `400`). Never on a layer outside our declared bank,
+      never after a `CLEAR` that did not land, and never on a playout layer. So a layer we
+      empty no longer keeps the `VOLUME 0` our load leaves behind.
+    - ⚠ **The severity we told you in Reply P §3 was overstated.** Our own take re-asserts
+      `MIXER … VOLUME 1` on every take, so our next take on such a layer was always audible;
+      the residue silenced only a producer that did NOT come through our take. The correction
+      belongs in our next letter.
+    - **The band reader** (`@cg/caspar-client` `readBandVolumes`) is how we will take the
+      before/after readings: one burst of `MIXER <ch>-<layer> VOLUME` queries and one read,
+      matched by order. Measured 2.7 ms for fifty layers against our loopback fake — not against
+      a real server; your 182 ms is the real-server figure. Reading a layer inserts an identity
+      transform entry (`tweens_[index]`); we treat a read as not side-effect free.
+    - **Wording, as agreed:** an `INFO`-based reading establishes **no producer**, never
+      **clean**. Our docs and our one probe that said otherwise have been corrected; we never
+      address `INFO` by layer and never read a layer volume from `INFO`'s `<volume>` nodes.
+14. 🔴 **2026-09-23 — `CHANNEL-AUTHORITY-01`: our bridge now READS D4, and it now REFUSES your
+    channels.** Two halves, landed in that order on purpose
+    (`openspec/changes/archive/2026-09-23-channel-authority`).
+    - **The fence first.** A bridge writes only to the channels ITS OWN bank declares. Any request
+      naming another channel is refused before anything is sent — with auth ON or OFF, whatever the
+      principal's `cg_channels` says. Measured before the fix, on a station declaring channel 2
+      with a user granted channels 1 AND 2 (your `cg-op2`'s shape): our `layers.clear` and our
+      playout-layer clear each put a `CLEAR 1-<layer>` on channel 1, and our console OFFERED both
+      (`B-261`). A grant says who may operate a channel; it never made channel 1 ours, and nothing
+      but our bank does now.
+    - **What we read from D4.** `GET /api/cg/channels`, **at most once per 5 s** (it was 30 s; you
+      agreed to 5 s and asked for no less, `PLAYOUT-CG-RESPONSE-V13-STATE-v1.md` §1.4), with
+      `If-None-Match` (a `304` keeps what we hold), immediately when a console signs in so its
+      names arrive with it, and when first-run or Change channel… opens — each of those through the
+      same 5 s floor. From `2.8.58` each row's `output` and `playlist` (V13 §1) are read with the
+      name: `output` colours a dot before the channel's name and the PROGRAM head; `playlist` is a
+      neutral tag, except `unlicensed`, which also marks the channel amber. A value we do not know
+      is dropped, never a reason to discard the row. The bearer is the signed-in operator's own token — the same credential
+      D9 uses, because the bridge has none of its own — **checked at the moment of use**: never a
+      token past `exp`, never one on your revocation list, and none at all once that operator has
+      signed out or closed the tab. No bearer means no read. Any failure — no answer, a `401`, a
+      body we cannot parse — means we hold **no catalogue at all** (not the last one): no alarm, no
+      verdict, and never a gate on a command. With auth OFF we do not read it.
+    - **What we use it for: NAMES.** A row joins one of our channels only when its `casparHost` is
+      a server we are configured to drive (the same host rule as item 10) and its `casparChannel`
+      is a channel our bank declares. The console's channel tab then carries your name for it —
+      `کانال دوم (تست CG)` rather than `CHANNEL 2`. Your programme channel is listed by our
+      discovery call as a channel that EXISTS, and it is **never** on our operating strip and never
+      written to.
+    - 🔴 **The catalogue cannot widen what we write to**, and the fence is why: it reads our bank,
+      never your catalogue. A row you add for a channel we do not declare names nothing we
+      operate. We also never derive a channel index — your preview channels `N+1..2N` are in no list
+      we read, so they are neither addressed nor probed.
+
+**The test Playout.** Base URL `http://192.168.21.111:8080` — which is also `iss`, byte-for-byte,
+and never derived. ⚠ **From 2.8.54 `iss` is `urn:apasai:playout` on every install**
+([`PLAYOUT-2.8.54-CG-FACTS-2026-09-23.md`](PLAYOUT-2.8.54-CG-FACTS-2026-09-23.md)); until the team
+confirms 2.8.54 is deployed on `192.168.21.111`, the line above is the value in force there. `aud` contains `cg-control`. Signing is ES256 and **the JWKS is read LIVE**;
+the snapshot here is dated evidence and nothing else. Engine build **2.8.48** (was 2.8.45; see
+above). Five temporary test users exist, named here and nowhere near their password — `cg-op1`,
+`cg-op2`, `cg-admin`, `cg-view`, `cg-noch` — as is channel `cg-test2`.
+
+🔴 **No credential lives in this folder.** The sample tokens are NOT adopted, and the R5 password
+line in `PLAYOUT-CG-RESPONSE-v1.md` is redacted in place and marked as such — the ONE content edit
+made on adoption. The five files adopted on 2026-09-21 and the four adopted on 2026-09-22 were
+each scanned before copying — against a positive control on a file that does carry credential
+prose — and carry none: no password, secret, API key, bearer token, JWT or private-key material.
+⚠ The revised Response E §5 quotes an `md5` prefix of the core BINARY; that is a build identity,
+not a secret.
+`handoff/2026-09-16/jwks.json` is PUBLIC key material (three P-256 points, no `d`) and is
+**stale**: the Playout team reset its signing keys after testing on 2026-09-16, which is why the
+bridge reads the JWKS live.
+
+⚠ **Presentation moved, content did not.** `format:check` globs the whole tree, so every file here
+was run through `prettier --write`: markdown emphasis respelled `*x*` → `_x_`, table cells padded,
+the contract's embedded JSON block reflowed, and the YAML re-quoted with bracket spacing. Verified
+after the fact — the two JSON snapshots are deep-equal to the originals, and the four other
+markdown files are identical once emphasis and table padding are normalised. No value changed
+anywhere. The same applies to the five files adopted on 2026-09-21. If byte-fidelity is wanted
+instead, the route is a `.prettierignore` entry, the same one `tools/*/evidence/**` and
+`docs/recon/ciab-client-tools.json` already use for the same reason.

@@ -5,10 +5,17 @@ import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
-import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import {
+  CONSOLE_ACTOR,
+  type ConnectionConfig,
+  type TemplateAct,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
+import { runAsActor } from '../src/actor-context.js';
+import type { AuthSession } from '../src/auth-session.js';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { createBridge, type BridgeHandle } from '../src/bridge.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-028 (o1 / 3.2 / 3.3) — the bridge OWNS the template catalogue:
@@ -36,7 +43,7 @@ let foreignTransport: AmcpTransport | null = null;
 const SWEEP_MS = 150;
 const STALE_MS = 800;
 const HTML = '<!doctype html><html><body>پایین‌ثلث</body></html>';
-const BANK = { channel: 1, start: 70, count: 4 };
+const BANK = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 4 };
 const FIXED_SLOTS = [70, 71, 72, 73].map((layer) => ({ channel: 1, layer }));
 
 afterEach(async () => {
@@ -116,6 +123,7 @@ async function bootRuntime(
     cfg,
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: SWEEP_MS,
       occupancyStaleMs: STALE_MS,
       ...(extra.noBank === true ? {} : { fixedSlots: FIXED_SLOTS, fixedBank: BANK }),
@@ -162,6 +170,43 @@ it('R-028 (o1) — import and removal each publish the FULL catalogue (all brows
   expect(r.templateRemove('tpl-a').ok).toBe(true);
   expect(published).toHaveLength(3);
   expect(published[2]?.map((t) => t.templateId)).toEqual(['tpl-b']);
+});
+
+it('`B-300` — every ACCEPTED import, re-import and removal says who did what, on which channel; a refused one says nothing', async () => {
+  const r = await bootRuntime(templatesDir());
+  const acted: TemplateAct[] = [];
+  r.templatesActed.subscribe((a) => acted.push(a));
+  // A console's request with a verified principal is that person's act.
+  const sara = { token: { principal: { name: 'سارا', sub: 'u-1' } } } as unknown as AuthSession;
+
+  runAsActor(sara, () => r.templateImport(info('tpl-a', 'زیرنویس'), HTML, 1));
+  runAsActor(sara, () =>
+    r.templateImport({ ...info('tpl-a', 'زیرنویس'), sourceFileName: 'news.vcg' }, HTML + ' ', 1),
+  );
+  // A console with no sign-in is a console, not a person.
+  runAsActor(null, () => expect(r.templateRemove('tpl-a', 1).ok).toBe(true));
+  // Refused (nothing to remove): no act.
+  runAsActor(sara, () => expect(r.templateRemove('tpl-a', 1).ok).toBe(false));
+
+  expect(acted).toEqual([
+    { act: 'import', templateId: 'tpl-a', name: 'زیرنویس', channel: 1, actor: 'سارا' },
+    {
+      act: 'reimport',
+      templateId: 'tpl-a',
+      name: 'زیرنویس',
+      sourceFileName: 'news.vcg',
+      channel: 1,
+      actor: 'سارا',
+    },
+    {
+      act: 'remove',
+      templateId: 'tpl-a',
+      name: 'زیرنویس',
+      sourceFileName: 'news.vcg',
+      channel: 1,
+      actor: CONSOLE_ACTOR,
+    },
+  ]);
 });
 
 it('R-028 (3.3) — after a restart, row identity is UNKNOWN honestly: never guessed from the persisted registry', async () => {
@@ -232,14 +277,31 @@ it('R-028 / C-015 — a retained item whose slot is now RESERVED is skipped at r
       itemId: 'item-old',
       templateId: 'tpl-clock',
       fields: {},
-      played: true,
+      state: 'on-air',
       slot: { channel: 1, layer: 61, server: 'primary' },
     },
   ]);
   // SKIPPED — not restored elsewhere. Re-homing would read a DIFFERENT
   // layer's occupancy and could re-ADD a duplicate while the survivor stays
   // live on the playout layer.
-  expect(result).toEqual({ restored: 0, skipped: 1 });
+  expect(result).toEqual({
+    restored: 0,
+    // B-108 — named, so the SPA can tell the operator this row is GONE (a reserved
+    // playout coordinate yields no layer of ours) rather than letting it vanish.
+    // `B-233` — the skip CARRIES its naming now, and the assertion says so rather than
+    // being loosened to `toMatchObject`: the whole point of widening the wire is that the
+    // operator's strip can name this row, and a test that stopped looking at the extra
+    // fields would let them silently stop arriving.
+    skipped: [
+      {
+        itemId: 'item-old',
+        reason: 'no-layer',
+        templateId: 'tpl-clock',
+        slot: { channel: 1, layer: 61, server: 'primary' },
+      },
+    ],
+    migrated: [],
+  });
   expect(r.stackSnapshot().some((i) => i.itemId === 'item-old')).toBe(false);
   expect(mock.lastCgAdd({ channel: 1, layer: 61 })).toBeUndefined();
 });
@@ -249,6 +311,7 @@ it('R-028 (2.3) — installing a bank LIVE with pre-hidden layers fails closed o
   // BEFORE the session is healthy the tap has never heard: unknown → refuse.
   const blind = r.setFixedLayers({
     channel: 1,
+    low: { start: 50, count: 9 },
     start: 70,
     count: 4,
     visibility: { '71': false },
@@ -262,6 +325,7 @@ it('R-028 (2.3) — installing a bank LIVE with pre-hidden layers fails closed o
   await waitFor(() => {
     const probe = r.setFixedLayers({
       channel: 1,
+      low: { start: 50, count: 9 },
       start: 70,
       count: 4,
       visibility: { '71': false },
@@ -271,6 +335,43 @@ it('R-028 (2.3) — installing a bank LIVE with pre-hidden layers fails closed o
   expect(r.fixedLayersConfig()?.visibility).toEqual({ '71': false });
 });
 
+/*
+  🔴 `B-205` — the LIVE-INSTALL path meets the bed half too.
+
+  Installing a bank live walks every row of the NEW bank and refuses any pre-hidden row
+  whose occupancy is not provably empty. That walk was `next.start … next.start+count`,
+  so a bank arriving with a bed row already hidden was installed with nothing adjudicating
+  that row — the "we do not know" state the rule exists to stop anyone hiding. Beds at 2–6
+  so a hand-widened `1 … 9` cannot pass; the refusal names the bed layer.
+*/
+it('🔴 B-205 — installing a bank LIVE with a pre-hidden BED row fails closed on unknown occupancy', async () => {
+  const r = await bootRuntime(templatesDir(), { noBank: true });
+  const low = { start: 2, count: 5 };
+  const blind = r.setFixedLayers({
+    channel: 1,
+    low: { ...low, visibility: { '3': false } },
+    start: 70,
+    count: 4,
+  });
+  expect(blind.ok).toBe(false);
+  expect(blind.reason).toBe('untick-unknown');
+  expect(blind.message).toContain('layer 3');
+  expect(r.fixedLayersConfig()).toBeNull(); // nothing applied
+
+  // With a hearing tap and a provably-empty bed, the same install applies.
+  await r.whenServerHealthy(HEALTH_MS);
+  await waitFor(() => {
+    const probe = r.setFixedLayers({
+      channel: 1,
+      low: { ...low, visibility: { '3': false } },
+      start: 70,
+      count: 4,
+    });
+    return probe.ok;
+  });
+  expect(r.fixedLayersConfig()?.low.visibility).toEqual({ '3': false });
+});
+
 it('R-028 (2.5) — a candidate ceiling intersecting the reserved playout range refuses to BOOT, naming both ranges', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
@@ -278,51 +379,35 @@ it('R-028 (2.5) — a candidate ceiling intersecting the reserved playout range 
     createBridge({
       port: 0,
       connection: singleServer(mock.amcpPort, oscPort),
-      fixedLayers: { channel: 1, start: 70, count: 10 },
+      fixedLayers: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 10 },
       reservedLayers: { ranges: [{ from: 75, to: 84 }] },
     }),
   ).rejects.toThrow(/70–79.*75–84|75–84.*70–79/s);
 });
 
-it('R-028 part B — a RE-DELIVERY never resurrects a REMOVED template (but may still repair)', async () => {
+it('🔴 CENTRAL-BRIDGE-01 (B-294) — a REMOVAL outlives a bridge restart with no tombstone: the bridge’s registry is the only copy', async () => {
+  /*
+    R-028 part B kept a process-lifetime tombstone so a console's reconnect RE-DELIVERY could not
+    resurrect a removed template — and after a bridge restart the tombstone was gone and any
+    console's old copy brought it back (`B-294`). A console re-delivers nothing now, so the
+    persisted registry is the whole truth: removed there, it is removed for good.
+  */
   const dir = templatesDir();
-  const r = await bootRuntime(dir);
-  r.templateImport(info('tpl-a', 'first name'), HTML);
+  const first = await bootRuntime(dir);
+  first.templateImport(info('tpl-a', 'first name'), HTML);
+  first.templateImport(info('tpl-b', 'kept'), HTML);
+  expect(first.templateRemove('tpl-a').ok).toBe(true);
 
-  // The operator removes it. Any browser still holding a local copy will
-  // re-deliver on its next reconnect — a page reload is enough.
-  expect(r.templateRemove('tpl-a').ok).toBe(true);
-  expect(r.templateList()).toHaveLength(0);
+  await first.stop();
+  runtime = null;
+  const second = await bootRuntime(dir);
+  // Still gone after the restart — CONTROL: the template that was not removed came back.
+  expect(second.templateList().map((t) => t.templateId)).toEqual(['tpl-b']);
 
-  const resurrect = r.templateImport(info('tpl-a', 'first name'), HTML, true);
-  expect(resurrect).toEqual({ registered: false, templateId: 'tpl-a', skipped: true });
-  expect(r.templateList()).toHaveLength(0); // still gone — the removal stands
-
-  // A re-delivery of an id the bridge ALREADY holds is NOT skipped — B-085's
-  // local-wins stands. An adversarial review caught the first draft keeping the
-  // bridge's copy: nothing here can tell which copy is newer (`TemplateInfo`
-  // carries no version), so preferring the bridge's would silently discard a
-  // template a browser had CORRECTED while offline, and the stale HTML would
-  // keep going to air with no signal that the fix never landed. The tombstone
-  // above is the narrower fix part A actually asked for — stop RESURRECTION,
-  // not stop repair.
-  r.templateImport(info('tpl-b', 'bridge copy'), HTML);
-  const corrected = r.templateImport(info('tpl-b', 'corrected browser copy'), HTML, true);
-  expect(corrected.skipped).toBeUndefined();
-  expect(r.templateGet('tpl-b')?.name).toBe('corrected browser copy');
-
-  // An OPERATOR import (no flag) always wins and revives a removed template.
-  const reimport = r.templateImport(info('tpl-a', 'deliberately re-imported'), HTML);
-  expect(reimport.skipped).toBeUndefined();
-  expect(r.templateGet('tpl-a')?.name).toBe('deliberately re-imported');
-});
-
-it('R-028 part B — re-delivery still REPAIRS a registry that genuinely lost a template', async () => {
-  const dir = templatesDir();
-  const r = await bootRuntime(dir);
-  // Nothing removed, nothing held: this is the case re-delivery exists for (an
-  // offline import, or a registry predating persistence). It must still land.
-  const delivered = r.templateImport(info('tpl-new'), HTML, true);
-  expect(delivered).toEqual({ registered: true, templateId: 'tpl-new' });
-  expect(r.templateGet('tpl-new')).not.toBeNull();
+  // An operator's import is the one way back, and it is recorded like any import.
+  expect(second.templateImport(info('tpl-a', 'deliberately re-imported'), HTML)).toEqual({
+    registered: true,
+    templateId: 'tpl-a',
+  });
+  expect(second.templateGet('tpl-a')?.name).toBe('deliberately re-imported');
 });

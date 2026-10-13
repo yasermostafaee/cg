@@ -8,11 +8,14 @@ import type {
 import {
   aggregateCompositionFields,
   hasNextStep,
-  resolveDefaultPosition,
+  TEMPLATE_TIMING_VERSION,
+  templateTimingOf,
+  runtimeShortfall,
+  runtimeShortfallMessage,
   type Manifest,
   type Position,
 } from '@cg/shared-schema';
-import { collectLiveSources, unpack, verify } from '@cg/vcg-format';
+import { buildTemplateLiveSources, unpack, verify } from '@cg/vcg-format';
 import {
   ExporterSingleFile,
   cgCss,
@@ -82,6 +85,11 @@ export interface ProduceOptions {
    * bundled starter or a byte-only import (those keep their manifest name).
    */
   sourceFileName?: string;
+  /**
+   * `CHANNEL-TEMPLATES-01` — the channel whose list the template joins; no other channel's list
+   * changes. Omitted, the station-wide import (every declared channel).
+   */
+  channel?: number;
 }
 
 /** The minimal `window.cg` surface this module needs (the extended import channel). */
@@ -157,6 +165,30 @@ export async function produceTemplateDelivery(
     throw new Error(`could not be unpacked: ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  /*
+    🔴 `B-196` — THE ONE PLACE A PACKAGE FROM A NEWER BUILD IS REFUSED, WITH A SENTENCE.
+
+    ⚠ It is not the only thing that refuses one, and that is the point. `SceneSchema`'s
+    `schemaVersion: z.literal(1)` already rejects a bumped document, and `ElementSchema` is a
+    `z.union`, so an element kind this build does not know already fails to parse — but what
+    the operator gets from those is a zod error with a path into an element array, at import,
+    with nothing saying that the STATION is the thing that is behind. This runs BEFORE the
+    render for exactly that reason: the message is the feature, not the refusal.
+
+    Placed after `unpack` because the manifest is what declares the requirement, and before
+    the render because there is no value in rendering a package that must be refused. Fails
+    OPEN on an unreadable version — see `runtimeShortfall`, which states why.
+  */
+  const shortfall = runtimeShortfall(manifest.compatibility.minRuntimeVersion);
+  if (shortfall !== null) {
+    throw new Error(
+      runtimeShortfallMessage(
+        pickTemplateName(manifest.name, scene.name) ?? 'This template',
+        shortfall,
+      ),
+    );
+  }
+
   // B-067 — the operator's field form must be the template's FULL field closure, not the
   // entry composition's flat fields. A D-119 starter is a graphic composition nested in a
   // full-frame positioning composition, and the authored fields live on the NESTED comp:
@@ -187,26 +219,49 @@ export async function produceTemplateDelivery(
     // It rides `TemplateInfo` (not a browser-local store like R-011/R-018) so
     // the bridge persists it and every browser gets the same answer.
     hasNext: hasNextStep(scene, scene.compositions),
+    /*
+      🔴 `TIMING-WIRE-22` §4 — the template's PLAYOUT, derived at this same one moment and for
+      the reason stated two comments down: no `.vcg` reaches the bridge, so a fact not captured
+      here is not recoverable later.
+
+      🔴 Through `templateTimingOf`, NOT `playoutOf(scene)`. The scene root of a real template
+      is a wrapper — every starter has `layers: []` and a set `entryCompositionId` — so
+      `playoutOf(scene)` answers `static` for all of them, and the console would state `Static`
+      for every template in existence while offering no pass control at all. The resolver reads
+      the ENTRY composition for what the row DOES, and the first looping scope for the count and
+      gap an override inherits from. This was found by screenshotting the section, not by any
+      test: the first spelling was green and wrong.
+
+      ⚠ `repeat` and `delayMs` are carried as AUTHORED — absent when the template authored
+      none — rather than resolved through `repeatOf`/`delayMsOf`. The console needs to tell
+      "the author asked for infinite" from "the author said nothing and the default is
+      infinite": they display identically today, but only one of them changes if the default
+      ever does, and an override UI that cannot see which it inherits cannot honestly say
+      `Default (…)`.
+    */
+    playout: (() => {
+      const t = templateTimingOf(scene);
+      return {
+        v: TEMPLATE_TIMING_VERSION,
+        mode: t.mode,
+        ...(t.holdSource !== undefined ? { holdSource: t.holdSource } : {}),
+        ...(t.holdMs !== undefined ? { holdMs: t.holdMs } : {}),
+        ...(t.loop !== undefined ? { loops: true } : {}),
+        ...(t.loop?.repeat !== undefined ? { repeat: t.loop.repeat } : {}),
+        ...(t.loop?.delayMs !== undefined ? { delayMs: t.loop.delayMs } : {}),
+      };
+    })(),
     // D-137 / C-015 — the Live Source carrier, derived at the SAME moment and for
     // the same reason as `hasNext`: this is the only point in the product where
     // the unpacked scene is in hand. `LibraryEntry` is `{ template, html }`, the
     // bridge parses no HTML, and no `.vcg` ever reaches the bridge — so a fact not
     // captured here is not recoverable later.
     //
-    // ALWAYS EMITTED, including with an EMPTY `sources`. That is what makes the
-    // absent block mean "imported before this existed" rather than "has none":
-    // collapsing the two would let a template with real holes go to air with
-    // nothing composited behind them (see `liveSourceCarrierState`).
-    //
-    // `defaultPosition` is the RESOLVED authored default via the canonical
-    // `resolveDefaultPosition`, never a local `{ anchor: 'center' }`: the page
-    // falls through to that same function, and two spellings of "centred" is how
-    // the composited box comes to sit somewhere the transparent hole is not.
-    liveSources: {
-      resolution: scene.resolution,
-      defaultPosition: resolveDefaultPosition(scene),
-      sources: collectLiveSources(scene),
-    },
+    // ⭐ The block is ASSEMBLED IN ONE PLACE (`buildTemplateLiveSources`) rather than
+    // field-by-field here. It gained a fourth field with the arrangement carrier
+    // (`multibox-layout-switch` 5.2), and a block built by hand at a call site is one
+    // whose NEXT field gets added here and forgotten at the next call site.
+    liveSources: buildTemplateLiveSources(scene),
   };
 
   try {
@@ -254,15 +309,19 @@ export async function importTemplateFromBytes(
   defaultPosition?: Position;
   listFieldTargets: ListFieldTargets;
   /**
-   * A9 / D-137 — the plate ids THIS version declares, so the caller can
-   * reconcile the template's existing assignments against them. Empty for a
-   * template with no live plates, which is a real answer and not an absence.
+   * A9 / D-137 — the plate ids THIS version declares, so the caller can say whether the
+   * template's existing defaults were carried over. Empty for a template with no live plates,
+   * which is a real answer and not an absence.
    */
   declaredPlateIds: readonly string[];
 }> {
   const { template, html, warnings, defaultPosition, listFieldTargets } =
     await produceTemplateDelivery(bytes, opts);
-  await bridge.templates.import({ template, html });
+  await bridge.templates.import({
+    template,
+    html,
+    ...(opts.channel !== undefined && { channel: opts.channel }),
+  });
   return {
     templateId: template.templateId,
     displayName: templateDisplayName(template),

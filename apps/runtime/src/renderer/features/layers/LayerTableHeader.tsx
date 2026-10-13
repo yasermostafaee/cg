@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { colors } from '../../theme.js';
+import { cssVars } from '../../theme.js';
 import {
   ROW_GEOMETRY,
   VERBS_GRID,
@@ -33,7 +33,23 @@ import {
  * label drift away from the column it names.
  */
 
-/** The word above each verb glyph, in the order `layerRowActions` emits buttons. */
+/**
+ * The word above each verb glyph, in the order `layerRowActions` emits buttons.
+ *
+ * 🔴 **THE ADMISSION RULE — this list is one of the two places a violation is actually
+ * made, so it is stated here as well as at `VERB_COUNT`.** A control joins the block ONLY
+ * IF it is declared for EVERY row, and its head is added HERE in the same change that adds
+ * the button. Availability may vary by STATE (a disabled button keeps its column, which is
+ * the established pattern); PRESENCE may not vary by ROW — a conditional button shifts every
+ * head to its right onto the wrong glyph, and this product's STOP/CLEAR inversion is exactly
+ * where a misread costs a graphic.
+ *
+ * A control that is needed on some rows and not others goes to the row's CONTEXT MENU (or
+ * the Inspector). Two controls have already arrived at that answer independently — R-048's
+ * SOURCE swap and C-015 6.5f's plate AUDIO — and the count stayed at six both times. The
+ * menu's own, deliberately DIFFERENT rule is recorded beside the C6 boundary in
+ * `PlayoutPanel.tsx`; the two are not the same rule and must not be harmonised.
+ */
 const VERB_HEADS: readonly { label: string; title: string }[] = [
   {
     /*
@@ -89,47 +105,41 @@ const styles = {
     display: 'grid',
     alignItems: 'end',
     columnGap: ROW_GEOMETRY.columnGap,
-    padding: `0.35rem ${String(12)}px 0.3rem`,
+    // The SAME horizontal padding the rows take, so the first column's edge is one
+    // edge. It was a bare `12` here beside the model's own number — a second spelling.
+    padding: `0.35rem ${ROW_GEOMETRY.headerPaddingX} 0.3rem`,
     // STICKY, so column names and verb words survive a scrolled list.
     position: 'sticky' as const,
     top: 0,
     zIndex: 2,
     // Opaque: rows scroll UNDER this, so any transparency shows them through it.
-    // Exact value specified by the owner, and a literal rather than a token
-    // because it is this header's own colour — it is deliberately lighter than
-    // both row backgrounds so the sticky band reads as a lid on the list rather
-    // than as one more row of it.
-    background: 'rgb(45 55 69)',
-    borderBottom: `1px solid ${colors.border}`,
+    //
+    // `AUDIT-CLOSE-01` C2 — the reference's own rendered PAIR, ground and ink together.
+    // Phase 3 took `--soft` alone (owner answer A6) because taking the ground without the
+    // ink would have put the shared muted at 4.39:1; the pair clears AA at 4.74:1 without
+    // moving `--r-text-muted` anywhere else in the app. On this ground the band is a
+    // visible LID over the rows again — see `--r-layer-head-bg`.
+    background: cssVars['--r-layer-head-bg'],
+    borderBottom: `1px solid ${cssVars['--r-row-rule']}`,
     fontSize: '0.62rem',
     fontWeight: 700,
     letterSpacing: '0.06em',
     textTransform: 'uppercase' as const,
-    color: colors.textMuted,
+    color: cssVars['--r-layer-head-ink'],
     whiteSpace: 'nowrap' as const,
   },
   cell: { overflow: 'hidden', textOverflow: 'ellipsis' },
-  /**
-   * The on-air tally beside `State`. The sacred air colour, and one of only two
-   * places allowed to use it (the row's state mark is the other) — it is a genuine
-   * air claim about the channel, not decoration.
+  /*
+   * 🔴 THE FIVE TALLY STYLES THAT WERE HERE ARE GONE WITH THE TALLY (DELTA D5) — `count`,
+   * `onAirCount`, `onAirCountStale`, `errorCount` and `errorTallyMark`. Deleted rather than left
+   * for "when it comes back": an unreachable style object is the shape this repo has filed
+   * four times, and it reads as a live decision to whoever finds it next.
+   *
+   * What was WORTH keeping travelled with them into `controls.css` — the contrast split in
+   * particular. The number is TEXT and takes the error TEXT role; the mark beside it is a
+   * GRAPHIC and takes the mark role, judged against 3.0 rather than 4.5. Two reds side by
+   * side is the intended result: the loud one marks, the legible one reads.
    */
-  onAirCount: {
-    color: colors.onAir,
-    fontWeight: 700,
-    // 14px, per the owner — larger than the ~10px header type around it without
-    // dominating the row. This is the one number a control room wants from the whole
-    // list ("how much of my output is live?"), so it is sized to be read at a glance
-    // rather than hunted for.
-    fontSize: '14px',
-    lineHeight: 1,
-  },
-  /**
-   * …and the same number with its confidence withdrawn (§4). Muted, keeping its
-   * size and its parentheses — the count is unchanged, only the claim that a
-   * server is confirming it. B-081's tone, reused rather than a new grey.
-   */
-  onAirCountStale: { color: colors.textMuted },
   verbHead: {
     textAlign: 'center' as const,
     overflow: 'hidden',
@@ -139,26 +149,7 @@ const styles = {
   },
 } as const satisfies Record<string, CSSProperties>;
 
-export function LayerTableHeader({
-  density,
-  onAirCount,
-  unverifiable = false,
-}: {
-  density: Density;
-  /** How many rows are ON AIR right now — shown beside `State`, in the air colour. */
-  onAirCount: number;
-  /**
-   * §4 — neither hop can back that count right now, so it stops wearing the air
-   * colour.
-   *
-   * IT IS NOT RENAMED and it is not hidden. It remains a count of what our list
-   * says is on air, which is still the most useful number on the screen and still
-   * true of our model; what it can no longer do is assert that a server confirmed
-   * it. This is the sacred air colour's own rule — B-081's "the look of health we
-   * cannot currently verify" — applied to the one other place entitled to wear it.
-   */
-  unverifiable?: boolean;
-}): JSX.Element {
+export function LayerTableHeader({ density }: { density: Density }): JSX.Element {
   const spec = densitySpec(density);
   return (
     <div style={{ ...styles.header, gridTemplateColumns: gridTemplateColumns(density) }} role="row">
@@ -169,42 +160,30 @@ export function LayerTableHeader({
         #
       </span>
       {/*
-        STATE, with a running count of how many rows are ON AIR — in the air colour,
-        because it IS an air claim and this is one of the two places entitled to wear
-        that green (the row's own state mark being the other).
+        🔴 `CONSOLE-LOOK-06` DELTA D5 — THE TALLY IS NOT IN THIS HEAD ANY MORE.
 
-        It answers the question a control room asks of the whole list rather than of
-        one row: "how much of my graphics output is live right now?" Previously that
-        needed counting green marks down a thirty-row list.
+        It was: `State 1 2`, the on-air count in the air colour and the in-error count in the
+        error colour, both inside the STATE column head. The reference's header is
+        `# / State / Name / Template / …` and nothing else, and its counts live in the SUB-BAR
+        — measured, and it is the better place for a reason this console proved the hard way.
 
-        Rendered ONLY when the count is non-zero. A permanent `(0)` would be noise on
-        the resting state, and — worse — it would put the air colour on screen at all
-        times, which is exactly how a colour reserved for one meaning stops being
-        noticed.
+        ⚠ THE MOVE IS WHAT MAKES IT HONEST, not a deletion. `CONSOLE-LOOK-06` had already put
+        an `N on air` chip in the sub-bar, so the same number was being stated twice, three
+        inches apart, in two different type sizes — and the day they disagree the operator has
+        no way to tell which one is lying. One fact, one place.
+
+        ⭐ AND IT PAYS `B-224` BACK. That bug was width: `(1 on air) (2 in error)` needed 160 px
+        of a 132 px cell, so the error count was CUT OFF and the owner's ruling was to drop the
+        words and keep the numbers. The sub-bar is a full-width line with room for both, so the
+        words come back with them — `2 on air` · `1 in error` — and the tooltip is no longer
+        the only place the meaning is written. `B-213`'s rule is untouched and travels with
+        them: two numbers that mean two things, never folded into one.
       */}
       <span
         style={styles.cell}
         title="What is on this layer right now: on air, ready, empty, occupied by another system, or unknown."
       >
         State
-        {onAirCount > 0 && (
-          <span
-            style={
-              unverifiable ? { ...styles.onAirCount, ...styles.onAirCountStale } : styles.onAirCount
-            }
-            aria-label={`${String(onAirCount)} items on air`}
-            {...(unverifiable ? { 'data-unverifiable': '' } : {})}
-            {...(unverifiable
-              ? {
-                  title:
-                    'What this console believes is on air. CasparCG cannot be reached, so nothing is confirming it right now.',
-                }
-              : {})}
-          >
-            {' '}
-            ({onAirCount})
-          </span>
-        )}
       </span>
       <span
         style={styles.cell}

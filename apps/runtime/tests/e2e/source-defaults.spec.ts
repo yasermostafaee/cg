@@ -1,0 +1,343 @@
+import type { Page } from '@playwright/test';
+import { E2E_PLAYOUT, chooseSource, expect, test } from './fixtures/runtime.js';
+
+/**
+ * 🔴 `SOURCE-DEFAULTS-20` §4 — **WHAT MUST STILL BE TRUE AFTER THE MOVE.**
+ *
+ * The editor for a template's source defaults left the Inspector for a dialog. The values, the
+ * store and the channel are unchanged, so the two safety properties the old surface had must
+ * survive the move — and "must survive" is not a thing to assert by reading the diff:
+ *
+ *   1. **ROW OVERRIDES REMAIN SEPARATE.** Changing a default must not touch a row that
+ *      overrode that plate, and must move the ones that inherit.
+ *   2. **AN ON-AIR ROW THAT INHERITS DOES NOT RE-POINT A PLATE ALREADY SEATED.** The change
+ *      takes effect at the next seat — the next take, or the next look that seats that frame.
+ *
+ * ⚠ **WHAT THIS FILE IS AND IS NOT EVIDENCE FOR.** It drives the OPERATOR'S PATH through the
+ * new dialog against the offline MockRuntime, which shares the bridge's own validators. The
+ * AMCP-level proof that an assignment edit reaches no wire lives where the wire is —
+ * `tools/caspar-bridge/tests/assignment-freeze.integration.test.ts` (a look switch after an
+ * edit carries no producer change; the re-take adopts it) and
+ * `live-look-reconcile.integration.test.ts` ("the assignment reaches no wire of its own").
+ * Those are not duplicated here; what is new is the DIALOG as the writer, so that is what is
+ * exercised.
+ */
+
+/**
+ * `PLAYOUT-SOURCES-01` — the two sources are the seeded Playout's cameras, Studio 1 and Studio 2
+ * (`in-studio-1` / `in-studio-2`): a station's sources are the Playout's inputs, and nothing in
+ * the console defines one any more.
+ */
+test.use({ playoutSources: E2E_PLAYOUT });
+
+/**
+ * A template with two plates and one look, registered as an import would leave it.
+ *
+ * `CHANNEL-TEMPLATES-01` — on `channel`'s list when one is named (an import on that channel, as its
+ * picker makes it); with none, on every channel declared at the time.
+ */
+async function registerTwoBox(page: Page, templateId: string, channel?: number): Promise<void> {
+  await page.evaluate(
+    async ([id, ch]) => {
+      const w = window as unknown as {
+        cg: {
+          templates: {
+            import: (r: { template: unknown; html: string; channel?: number }) => Promise<unknown>;
+          };
+        };
+      };
+      const rect = { x: 0, y: 0, width: 640, height: 360 };
+      const sources = [
+        { elementId: 'el-1', sourceId: 'guest-1', rect, dynamic: false },
+        { elementId: 'el-2', sourceId: 'guest-2', rect, dynamic: false },
+      ];
+      await w.cg.templates.import({
+        template: {
+          templateId: id,
+          name: id,
+          sourceFileName: `${id}.vcg`,
+          templateType: 'lower-third',
+          fields: [],
+          liveSources: {
+            resolution: { width: 1920, height: 1080 },
+            defaultPosition: { anchor: 'center', dx: 0, dy: 0 },
+            sources,
+            defaultLookId: 'both',
+            looks: [
+              {
+                id: 'both',
+                name: 'Both',
+                rects: { 'guest-1': rect, 'guest-2': rect },
+              },
+            ],
+          },
+        },
+        html: '<!doctype html><html><body>two-box</body></html>',
+        ...(ch !== null ? { channel: ch } : {}),
+      });
+    },
+    [templateId, channel ?? null] as const,
+  );
+}
+
+/** Open the defaults dialog, set one plate, and save. */
+async function setDefault(
+  app: { page: Page; inspector: ReturnType<Page['locator']> },
+  plateId: string,
+  label: string,
+): Promise<void> {
+  await app.inspector.locator('[data-open-template-defaults]').click();
+  const dialog = app.page.getByRole('dialog', { name: 'Source defaults' });
+  await expect(dialog).toBeVisible();
+  await chooseSource(app.page, dialog.locator(`[data-defaults-select="${plateId}"]`), {
+    input: label,
+  });
+  await dialog.locator('[data-defaults-save]').click();
+  await expect(dialog).toHaveCount(0);
+}
+
+test('🔴 §4.1 — a ROW OVERRIDE survives a default change, and the inheriting plate moves', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const templateId = 'tpl-defaults-override';
+  await registerTwoBox(page, templateId);
+  const row = await app.loadTemplate(templateId);
+  await app.selectLayerRow(row);
+
+  // Both plates start on the SAME default.
+  await setDefault(app, 'guest-1', 'Studio 1');
+  await setDefault(app, 'guest-2', 'Studio 1');
+
+  /*
+    THE OVERRIDE: this ROW, in this look, pins `guest-1` to Studio 2. Level 3 of the chain —
+    above the template default and below an emergency patch.
+  */
+  const looks = app.inspector.locator('[aria-label="Look inputs"]');
+  await chooseSource(page, looks.locator('[data-look-binding="both:guest-1"]'), {
+    input: 'Studio 2',
+  });
+  await app.applyEdits();
+  await expect
+    .poll(() =>
+      looks.locator('[data-look-binding="both:guest-1"]').getAttribute('data-picker-value'),
+    )
+    .toBe('in-studio-2');
+
+  // …now move the TEMPLATE default for BOTH plates to Studio 2 → 2 is the new default.
+  await setDefault(app, 'guest-1', 'Studio 2');
+  await setDefault(app, 'guest-2', 'Studio 2');
+
+  /*
+    🔴 THE CLAIM. `guest-1` is overridden on this row, so its value is untouched by anything
+    the dialog did — it still reads the operator's own choice, not the new default.
+  */
+  await expect(
+    looks.locator('[data-look-binding="both:guest-1"]'),
+    'the row override is untouched by a default change',
+  ).toHaveAttribute('data-picker-value', 'in-studio-2');
+
+  /*
+    …AND THE POSITIVE CONTROL, without which the assertion above is worthless: the plate that
+    is NOT overridden must have MOVED to the new default. A dialog that wrote nothing at all
+    would pass the first assertion and fail this one.
+
+    The inheriting plate shows its default inside the control that inherits it — the picker's
+    `Default (…)` choice NAMES it, and is what the field shows while it is chosen — so the change
+    is read there rather than from the store.
+  */
+  const inheriting = looks.locator('[data-look-binding="both:guest-2"]');
+  await expect(inheriting).toHaveAttribute('data-picker-value', '');
+  await expect(inheriting, 'the inheriting plate follows the new default').toContainText(
+    'Default (Studio 2)',
+  );
+});
+
+test('🔴 §4.2 — changing a default while a row is ON AIR sends nothing and re-points nothing', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const templateId = 'tpl-defaults-onair';
+  await registerTwoBox(page, templateId);
+  const row = await app.loadTemplate(templateId);
+  await app.selectLayerRow(row);
+  await setDefault(app, 'guest-1', 'Studio 1');
+  await setDefault(app, 'guest-2', 'Studio 1');
+
+  // ON AIR. The take is what SEATS the plates, and what FREEZES the assignment it resolved.
+  await app.layerRow(row).getByRole('button', { name: 'PLAY' }).click();
+  await expect(app.layerRow(row).getByText('ON AIR')).toBeVisible({ timeout: 3000 });
+
+  /*
+    Count everything the page could send that reaches a graphic. Installed AFTER the take, so
+    the take's own traffic is not what is being measured — the question is only what the
+    DIALOG causes.
+  */
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __stackCalls: string[];
+      cg: { stack: Record<string, unknown> };
+    };
+    w.__stackCalls = [];
+    for (const name of Object.keys(w.cg.stack)) {
+      const orig = w.cg.stack[name];
+      if (typeof orig !== 'function') continue;
+      w.cg.stack[name] = (...args: unknown[]) => {
+        w.__stackCalls.push(name);
+        return (orig as (...a: unknown[]) => unknown).apply(w.cg.stack, args);
+      };
+    }
+  });
+
+  // THE EDIT, on a live row, through the dialog.
+  await setDefault(app, 'guest-1', 'Studio 2');
+
+  /*
+    🔴 THE CLAIM: not one stack intent. An assignment is read when a row is TAKEN; it never
+    re-composites the graphic already on the channel, and `setSourceAssignments` on the bridge
+    validates, assigns and emits — it reconciles nothing.
+  */
+  expect(
+    await page.evaluate(() => (window as unknown as { __stackCalls: string[] }).__stackCalls),
+    'a default change must reach no stack intent at all while a row is on air',
+  ).toEqual([]);
+
+  /*
+    …and the row is still resolving what its take froze. The Inspector says so ON the plate's
+    own row in `LOOK INPUTS`, which is the surface that had to survive the move:
+    `this row: <source> (frozen at take)`.
+
+    ⚠ It used to be read from a `LIVE PLATES` section that no longer renders for a looks
+    template. Re-pointed to the new host rather than dropped — a locator aimed at a deleted
+    section passes `toHaveCount(0)` and fails nothing, so relaxing it would have quietly
+    deleted the half of §4.2 that is about what the OPERATOR can tell.
+  */
+  const plates = app.inspector.locator('[aria-label="Look inputs"]');
+  await expect(
+    plates.locator('[data-plate-frozen="guest-1"]'),
+    'the row states that it is still on what it froze',
+  ).toBeVisible();
+  await expect(plates.locator('[data-plate-frozen="guest-1"]')).toContainText('Studio 1');
+
+  /*
+    ⚠ THE POSITIVE CONTROL FOR THE SPY. Every assertion above is "nothing happened", which is
+    TRUE and WORTHLESS of a spy that was never wired. A verb that DOES send must be seen.
+  */
+  await app.layerRow(row).getByRole('button', { name: 'STOP' }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __stackCalls: string[] }).__stackCalls))
+    .not.toEqual([]);
+});
+
+const strip = (page: Page) => page.getByRole('tablist', { name: 'Channels' });
+
+/** Declare channel 2 the way Station setup does: channel 1's bank kept, a second bank added. */
+async function declareSecondChannel(page: Page): Promise<void> {
+  const ok = await page.evaluate(async () => {
+    const cg = (window as unknown as { cg: typeof window.cg }).cg;
+    const [first] = await cg.fixedLayers.banks();
+    if (first === undefined) return false;
+    const res = await cg.fixedLayers.setBanks({ banks: [first, { ...first, channel: 2 }] });
+    return res.ok;
+  });
+  expect(ok, 'the second channel was declared').toBe(true);
+}
+
+/** Open the selected row's defaults dialog and read one plate's value, then close it. */
+async function defaultOn(
+  app: { page: Page; inspector: ReturnType<Page['locator']> },
+  channel: number,
+  plateId: string,
+): Promise<string | null> {
+  await app.inspector.locator('[data-open-template-defaults]').click();
+  // The title names the channel the dialog edits.
+  const dialog = app.page.getByRole('dialog', { name: `Source defaults · CH ${String(channel)}` });
+  await expect(dialog).toBeVisible();
+  const value = await dialog
+    .locator(`[data-defaults-select="${plateId}"]`)
+    .getAttribute('data-picker-value');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+  return value;
+}
+
+/**
+ * 🔴 `CHANNEL-SOURCES-01` decision 2 — **SOURCE DEFAULTS BELONG TO A CHANNEL.** The owner changed
+ * the defaults on channel 2 and channel 1's changed with them. The same template on the same layer
+ * of two channels: a default set on CH 2 is CH 2's, and CH 1 keeps its own. The AMCP-level proof
+ * (each channel's take plays its own channel's inputs) is the bridge's,
+ * `channel-source-defaults.integration.test.ts`; this is the operator's path through the dialog.
+ */
+test('🔴 a default set on CH 2 stays on CH 2 — CH 1 keeps its own', async ({ app }) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const templateId = 'tpl-defaults-channels';
+  await declareSecondChannel(page);
+  // `CHANNEL-TEMPLATES-01` — imported once both channels exist, naming none: on both lists.
+  await registerTwoBox(page, templateId);
+
+  // CH 1 — guest-1 defaults to Studio 1.
+  const row = await app.loadTemplate(templateId);
+  await app.selectLayerRow(row);
+  await setDefault(app, 'guest-1', 'Studio 1');
+  expect(await defaultOn(app, 1, 'guest-1')).toBe('in-studio-1');
+
+  // CH 2 — the same template on the same row number. CH 1's default does not show through…
+  await strip(page)
+    .getByRole('tab', { name: /^CHANNEL 2/ })
+    .click();
+  await app.loadTemplate(templateId, row);
+  await app.selectLayerRow(row);
+  expect(await defaultOn(app, 2, 'guest-1'), 'CH 2 starts with no default of its own').toBe('');
+  // …and CH 2's own is set to Studio 2.
+  await app.inspector.locator('[data-open-template-defaults]').click();
+  const dialog = page.getByRole('dialog', { name: 'Source defaults · CH 2' });
+  await chooseSource(page, dialog.locator('[data-defaults-select="guest-1"]'), {
+    input: 'Studio 2',
+  });
+  await dialog.locator('[data-defaults-save]').click();
+  await expect(dialog).toHaveCount(0);
+  // Control: the write landed — CH 2 reads it back.
+  expect(await defaultOn(app, 2, 'guest-1')).toBe('in-studio-2');
+
+  // 🔴 THE CLAIM — CH 1 still reads Studio 1.
+  await strip(page)
+    .getByRole('tab', { name: /^CHANNEL 1/ })
+    .click();
+  await app.selectLayerRow(row);
+  expect(await defaultOn(app, 1, 'guest-1'), 'CH 1 keeps its own default').toBe('in-studio-1');
+});
+
+/**
+ * 🔴 `CHANNEL-SOURCES-01` decision 2 — **A CHANNEL ADDED LATER STARTS FROM A COPY** of the
+ * template's current defaults, and from then on the copy is its own.
+ */
+test('🔴 a channel declared after the defaults were set starts from a copy of them', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const templateId = 'tpl-defaults-copied';
+  await registerTwoBox(page, templateId);
+  const row = await app.loadTemplate(templateId);
+  await app.selectLayerRow(row);
+  await setDefault(app, 'guest-1', 'Studio 1');
+
+  await declareSecondChannel(page);
+  /*
+    `CHANNEL-TEMPLATES-01` — a channel declared later starts with an EMPTY template list (the owner,
+    2026-09-28), so CH 2's operator imports the template on CH 2. Its Source defaults were copied
+    when the channel was declared (`CHANNEL-SOURCES-01`), and the import keeps them.
+  */
+  await registerTwoBox(page, templateId, 2);
+  await strip(page)
+    .getByRole('tab', { name: /^CHANNEL 2/ })
+    .click();
+  await app.loadTemplate(templateId, row);
+  await app.selectLayerRow(row);
+  expect(await defaultOn(app, 2, 'guest-1'), 'CH 2 starts from CH 1’s default').toBe('in-studio-1');
+  // Control: the plate CH 1 never set is not invented on CH 2.
+  expect(await defaultOn(app, 2, 'guest-2')).toBe('');
+});

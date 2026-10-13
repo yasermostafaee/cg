@@ -11,7 +11,6 @@ import {
 } from '../src/elements.js';
 import { FieldBindingSchema } from '../src/bindings.js';
 import { SceneSchema } from '../src/scene.js';
-import { CURRENT_SCHEMA_VERSION, migrations } from '../src/migrations/index.js';
 
 /**
  * D-141 — the schema half of the azan countdown: the `timeofday` target kind, a
@@ -277,6 +276,13 @@ describe('the widening is additive — no schema-version bump, no migration', ()
     const parsed = SceneSchema.parse(raw);
     // Round-tripping through JSON drops `undefined`-valued keys, so this compares the
     // SERIALISED forms: the parse neither added a field nor dropped one.
+    //
+    // P-031 — the comparison is now EXACT again. It used to run the fixture through a
+    // `renameBackgroundKeys` helper, because B-129's parse-time shim rewrote a legacy
+    // `background` key onto `editorBackdrop`. That shim is gone (nothing has shipped, so
+    // no document needs it) and the fixtures carry `editorBackdrop` directly — so the
+    // proof compares raw against parsed with no allowance at all. Do NOT weaken this to
+    // `toMatchObject`: that would stop catching injected keys, which is the whole point.
     expect(JSON.parse(JSON.stringify(parsed))).toEqual(raw);
   });
 
@@ -288,8 +294,14 @@ describe('the widening is additive — no schema-version bump, no migration', ()
     expect(serialised).not.toContain('"zones"');
   });
 
-  it('CURRENT_SCHEMA_VERSION is still 1 and the migration registry is still empty', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(1);
-    expect(migrations).toHaveLength(0);
+  it('schemaVersion is still the literal 1 — a stale document FAILS to parse', () => {
+    // P-031 — the migration registry is gone; `z.literal(1)` is what remains, and it
+    // is the whole mechanism: a document from a future (or past) schema must fail
+    // LOUDLY here rather than silently mis-parse into today's shape.
+    const raw = JSON.parse(
+      readFileSync(resolve(process.cwd(), `../../fixtures/b034/${fixtures[0]}.scene.json`), 'utf8'),
+    ) as Record<string, unknown>;
+    expect(() => SceneSchema.parse({ ...raw, schemaVersion: 2 })).toThrow();
+    expect(() => SceneSchema.parse({ ...raw, schemaVersion: 0 })).toThrow();
   });
 });

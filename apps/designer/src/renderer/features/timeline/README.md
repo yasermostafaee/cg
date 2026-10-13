@@ -103,6 +103,78 @@ row's live value are **self-subscribing leaves** (`RulerPlayhead`,
 `BodyPlayhead`, `FrameReadout`, `TrackRowLabel`), so a playback tick re-renders
 only the moving parts, not the whole tree.
 
+### What the playhead drives on the canvas (D-135)
+
+The transport does exactly one thing: it advances the store's `currentFrame` at
+`scene.frameRate`. **The canvas is never told to "play"** — `CanvasArea` posts one
+`{ action: 'scrub', frame }` per change and the iframe turns that into
+`runtime.tick(frame)`. So on this surface **scrub and play are the same call**, which is
+what makes them unable to disagree, and it is why the transport's BACKWARD (`J`) and
+BOUNCE modes work on everything the tick reaches without any special case.
+
+What that tick reaches: keyframed properties, stamped repeater rows, per-element lifespan
+gates, and — since D-135 — **every Lottie AND every `<video>`**, positioned at the clip
+frame/time the playhead maps to (regardless of `drivesHold`). A **ticker, a sequence and a
+clock deliberately do NOT follow it**: they are functions of real time, so there is no
+frame N of a crawl to show, and an invented mapping would disagree with air.
+
+The video half (§9.5 answered (a), 2026-08-13 — position everywhere, the forward-1×
+hybrid REJECTED) positions a PAUSED element by `currentTime` through the driver's own
+`expectedClipMs` mapping; a tick that finds a seek in flight SKIPS, so under PLAY the
+canvas shows the **nearest decodable frame** (~10 distinct fps on a 1080p VP8+alpha
+element — the measured, specified contract; the Preview stays the frame-true rendition).
+**The poster consequence:** the canvas `<video>` no longer RESTS on its mid-clip
+`data-cg-poster-ms` — the poster routine is kept as the load path + seek-fragile recovery
+and paints only a PRE-TICK transient (the iframe chains a re-tick on its settle), so at
+rest the video sits where the playhead says, exactly like the Lottie.
+
+⚠ **There is no exception at the in-point, and adding one is a known mistake.** Every frame maps,
+including `activeRange.in`, where the clip shows its first frame — legitimately blank for a clip
+that animates ON from nothing, exactly as a keyframed element animating in from opacity 0 is
+invisible at frame 0. An interim revision rested the in-point on the Lottie's D-125 "poster" frame
+so the design surface would not open blank; what the operator actually saw was the one frame that
+did not show the clip, with every other frame correct. The settled answer is that the operator
+reaches the settled look by moving the playhead — the gesture this feature exists to make
+meaningful.
+
+### The HOLD LOOP range, and the three loops (D-133)
+
+The lane body draws a **hold loop range** — `[content start → out point]` — for every
+composition that has an out-point, i.e. every composition that holds. It is **present by
+default**, not hand-added: that is what makes it the item's acceptance rather than
+decoration, because the loop range is only OFFERED where an out-point exists, so the range
+being drawn unprompted is what keeps the Inspector's pin affordance "at most a shortcut,
+never the only path".
+
+Three pieces, and the split matters:
+
+| piece                                     | where it lives        | why                                                             |
+| ----------------------------------------- | --------------------- | --------------------------------------------------------------- |
+| the draggable GRIPS (`phaseMarkerIn/Out`) | inside the scene lane | a grip needs a row to be grabbed on                             |
+| the INDICATOR LINES (`loopRangeLine`)     | the lane-body overlay | full timeline height — line keyframes up against the boundaries |
+| the range BAND (`loopRangeBand`)          | the lane-body overlay | the range readable at a glance                                  |
+
+The lines and the band are siblings of `BodyPlayhead`, the shipped full-height overlay, so
+"full height" is a structural property rather than a styling one. The start position is the
+**effective** content start: the marker when pinned, else the same
+[`contentStartDefaultFrom`](../inspector/content-start-default.ts) the Inspector's "Pin
+content start" writes — one definition, three callers, so what is drawn and what pinning
+produces cannot disagree. An **unpinned** start draws dashed: it is derived, and a
+derivation must not be presented as an authored decision. A **degenerate** range (no
+entrance to settle ⇒ the effective content start IS the out-point) draws nothing.
+
+⚠ **Three different loops can be true of one composition at once, so none of them is called
+plain "loop".** They are named for where they live: **Preview loop** (this app's transport
+toggle — the editor playhead wrapping over the ruler; session state, never exported), **Loop
+cycle** (`playout.mode` — the whole in → hold → out repeating on air) and **Hold loop**
+(this range — the furniture replaying during a content-driven hold while the content runs
+straight through every seam). Do not reintroduce a bare "Loop" label on any of them.
+
+The RENDERING half lives in `@cg/template-runtime`
+(`PlayoutController.startHoldLoop`); the timeline only draws the range, and the range is
+inert whenever the hold is not content-driven — which the Playout panel states in words,
+naming the missing condition.
+
 ### Time ↔ pixel — the crux of every gesture
 
 Two pixel spaces meet on the lane, and the conversions are all pure in

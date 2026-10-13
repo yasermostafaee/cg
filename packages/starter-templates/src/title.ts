@@ -279,7 +279,7 @@ export const titleScene: Scene = {
   frameRate: FPS,
   safeAreas: { title: 10, action: 5 },
   frameRange: { in: 0, out: 128 },
-  background: 'transparent',
+  editorBackdrop: 'transparent',
   layers: [],
   compositions: [
     {
@@ -289,7 +289,7 @@ export const titleScene: Scene = {
       frameRange: { in: 0, out: 128 },
       lifecycle: { outPoint: 65 },
       playout: { mode: 'auto-out', holdSource: 'timed', holdMs: 6000 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [
         layer('L-full', 'Frame', [
           {
@@ -316,7 +316,7 @@ export const titleScene: Scene = {
       frameRange: { in: 0, out: 115 },
       lifecycle: { outPoint: 65 },
       playout: { mode: 'auto-out', holdSource: 'timed', holdMs: 6000 },
-      background: 'transparent',
+      editorBackdrop: 'transparent',
       layers: [layer('L-card', 'Card', cardChildren)],
     },
   ],

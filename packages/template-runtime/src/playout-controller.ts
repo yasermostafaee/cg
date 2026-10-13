@@ -1,4 +1,10 @@
-import type { FrameRange, Lifecycle, Playout } from '@cg/shared-schema';
+import {
+  delayMsOf,
+  repeatOf,
+  type FrameRange,
+  type Lifecycle,
+  type Playout,
+} from '@cg/shared-schema';
 import { FrameDriver } from './frame-driver.js';
 import type { RuntimeClock } from './types.js';
 
@@ -38,6 +44,37 @@ export interface PlayoutControllerOptions {
   onExitStart: () => void;
   /** Fully settled hidden (outro finished). */
   onSettle: () => void;
+  /**
+   * 🔴 `SELF-STOP-24` / `C-013` — THE RUN ENDED BY ITSELF, and nothing outside asked it to.
+   *
+   * Fired immediately BEFORE {@link onSettle}, from exactly the two places a lifecycle reaches
+   * its terminal without an external command:
+   *
+   *  - `onOutroEnd()` with no cycles left — the authored run is over;
+   *  - `setRemainingPasses(0)` during the between-passes gap — the count ran out and the pass
+   *    the operator declined never started.
+   *
+   * 🔴 **`stop()` DOES NOT FIRE IT, and that is the whole distinction this callback exists to
+   * draw.** {@link onSettle} cannot serve: every exit converges there, so a listener on it
+   * cannot tell a template that FINISHED from one that was TAKEN OFF. The bridge asked for the
+   * operator stop and does not need telling — and once a stale report is a thing that can stop
+   * a row, an unnecessary report is not merely noise.
+   *
+   * ⚠ The discriminator is read HERE rather than as an "an exit was requested" flag on the
+   * runtime. Such a flag would have to be set by `stop()`, `out()` and the deferred-outro
+   * resume, and cleared by `play()` — four sites that must agree, which is the shape this tree
+   * has paid for repeatedly. A controller already knows which of its own methods it is standing
+   * in.
+   *
+   * ⚠ `static`, `manual` and every infinite lifecycle never reach either site, so they never
+   * fire. That is a property of the control flow below rather than a guard anybody wrote — see
+   * `self-end-signal.test.ts`, which pins it as an ABSENCE precisely because nothing fails if a
+   * later edit gives them a way there.
+   *
+   * Absent ⇒ a silent no-op. Only the GLOBAL ROOT wires it: a nested instance settling is not
+   * the template finishing.
+   */
+  onSelfEnd?: (() => void) | undefined;
   /**
    * D-028 / D-104 follow-up — fired once per cycle the moment the ENTRANCE animation
    * completes (the intro's settle frame — see `holdEntryFrame`), which is the start of
@@ -102,7 +139,14 @@ export interface PlayoutControllerOptions {
   clock?: RuntimeClock | undefined;
 }
 
-type Phase = 'idle' | 'intro' | 'hold' | 'outro';
+/**
+ * `TIMING-BUILD-21` §7 — `gap` is the BETWEEN-PASSES delay: the outro has finished, the graphic
+ * is OFF SCREEN, and the next intro has not started. It is deliberately NOT `hold` (the graphic
+ * is on screen there) and NOT `idle` (the composition has not settled and `stop()` still has a
+ * cycle to end). Giving it its own name is what lets `resume()` re-arm it and `stop()` cut it
+ * short without either having to guess which kind of wait a pending timer represents.
+ */
+type Phase = 'idle' | 'intro' | 'hold' | 'outro' | 'gap';
 
 interface NormalizedClock {
   raf: (cb: (timestamp: number) => void) => number;
@@ -150,6 +194,15 @@ export class PlayoutController {
 
   // Cycles left for `loop-cycle` (`'infinite'` repeats until stop()).
   private cyclesLeft: number | 'infinite' = 1;
+  /**
+   * 🔴 `DELTA B0` — the OPERATOR's pass count, or `null` when they have set none.
+   *
+   * Distinct from `cyclesLeft`, which counts DOWN: this is the value as stated, kept so that
+   * `play()` can seat it instead of the template's authored `repeat`. `null` — never `0` — is
+   * the unset sentinel, because `0` is a legal instruction and a truthiness test here would
+   * erase it.
+   */
+  private pendingPasses: number | 'infinite' | null = null;
   // D-028 — identifies the CURRENT content hold; bumped by stop()/reset()/
   // startOutro() so a stale `waitForContent` resolution (after stop, or from a
   // previous cycle) can never trigger a second outro.
@@ -162,6 +215,22 @@ export class PlayoutController {
   // Reset by `play()` (via `reset()`); an infinite loop / manual hold / paused
   // scope is NOT settled, so it still exits on stop.
   private settled = false;
+  /*
+    🔴 `SELF-STOP-24` — DID SOMETHING OUTSIDE ASK FOR THIS EXIT?
+
+    Set by the two methods an external command reaches — `stop()` and `markFinalCycle()`,
+    which the runtime cascades from its own `stop()`/`out()` — and cleared by `reset()`, which
+    `play()` and `destroy()` already call. Read at ONE place: the guard on `onSelfEnd`.
+
+    🔴 **IT IS NOT REDUNDANT WITH THE TERMINAL BRANCH, and the test that proves it was written
+    before the code.** The reflex is that `onOutroEnd()`'s no-cycles-left branch IS the natural
+    end, so firing there is enough. It is not: `stop()` sets `cyclesLeft = 1` and plays the
+    outro, so the operator's exit arrives at that same branch with the same state and is
+    indistinguishable from a finite loop running out. Without this flag an operator STOP
+    announced itself as the template finishing — measured, not feared
+    (`self-end-signal.test.ts`).
+  */
+  private exitRequested = false;
   // D-125 §D6.2b — supersede token for the ASYNC element-outro gate: bumped by
   // `reset()` (play() / destroy()), so a gate resolution belonging to a superseded
   // exit can never start a stale background leg (B-031/B-033 territory).
@@ -187,7 +256,17 @@ export class PlayoutController {
   /** Begin playback: play-once-and-hold, or repeat per the cyclic modes. */
   play(): void {
     this.reset();
-    this.cyclesLeft = this.cyclic() ? (this.o.playout.repeat ?? 1) : 1;
+    /*
+      🔴 `TIMING-WIRE-22 · DELTA B0` — AN OPERATOR COUNT SET BEFORE THE TAKE IS THE COUNT THAT
+      AIRS. It used to be discarded here, which made the console's `Passes next take` label a
+      promise the system did not keep: the value reached the page on the `CG ADD` payload,
+      through `update()`, and this line then overwrote it with the authored `repeat`.
+
+      `TIMING-BUILD-21` §3 — with NO operator value the default still lives in the schema
+      (`repeatOf`), not here. That read was once `repeat ?? 1`, which quietly made a stored
+      `loop-cycle` with no count play ONCE.
+    */
+    this.cyclesLeft = this.cyclic() ? (this.pendingPasses ?? repeatOf(this.o.playout)) : 1;
     this.startIntro();
   }
 
@@ -202,11 +281,26 @@ export class PlayoutController {
    */
   stop(): void {
     if (this.settled) return; // already finished — don't replay the exit
+    // `SELF-STOP-24` — whatever this exit settles as, it was ASKED FOR. Set before every
+    // return below, including the gap short-circuit, which settles inline.
+    this.exitRequested = true;
     this.clearHold();
     // Force the current cycle to be the last, then play the outro once. An empty
     // outro (`outPoint === active.out`, e.g. no marker) settles instantly.
     this.cyclesLeft = 1;
     if (this.phase === 'outro') return; // already exiting
+    // 🔴 `TIMING-BUILD-21` §7 — stopping DURING the between-passes gap settles immediately.
+    // The outro for that pass has already run and the graphic is off screen; `startOutro()`
+    // here would replay an exit from a hidden state — an outro animation over nothing, and a
+    // second `onExitStart` for one departure. The gap is the one wait that is already outside
+    // the graphic's life, so ending it IS the end.
+    if (this.phase === 'gap') {
+      this.phase = 'idle';
+      this.settled = true;
+      this.announceExit();
+      this.o.onSettle();
+      return;
+    }
     this.startOutro();
   }
 
@@ -227,7 +321,123 @@ export class PlayoutController {
    */
   markFinalCycle(): void {
     if (this.settled) return;
+    // `SELF-STOP-24` — the runtime cascades this ONLY from its own `stop()`/`out()`, so it is
+    // an external exit request arriving one step ahead of the cascaded `stop()`. Marked here as
+    // well as there because the in-flight boundary it finalizes can settle on its own, reaching
+    // `onOutroEnd()`'s terminal branch before any `stop()` does.
+    this.exitRequested = true;
     this.cyclesLeft = 1;
+  }
+
+  /**
+   * 🔴 `TIMING-BUILD-21` §6 — SET PASSES REMAINING FROM NOW, WITHOUT DISTURBING THE PASS ON
+   * SCREEN. The one affordance that changes a live count, and the reason it exists at all.
+   *
+   * Before this, the only way to change a playout knob on a running graphic was to tear the
+   * runtime down and rebuild it — which is a black frame in the middle of a live template. An
+   * operator asking for "two more passes then out" must not pay for it with a restart, a cut,
+   * or an instant stop because passes already ran.
+   *
+   * 🔴 **THE NUMBER IS REMAINING, AND THE PASS ON SCREEN IS NOT ONE OF THEM.** `cyclesLeft`
+   * counts the current pass plus the rest, so `passes` maps to `passes + 1`. Typing 2 means
+   * this one finishes and two more play. Counting the current pass would make 2 mean
+   * one-and-a-bit, which is not a number anybody asked for.
+   *
+   * 🔴 **`0` IS AN INSTRUCTION, NOT A STOP.** It means "after this pass, go out" — `mode`'s out
+   * behaviour still runs, so the outro plays and the graphic leaves the way it was designed to.
+   * It is emphatically not a cut.
+   *
+   * ⚠ A SETTLED controller REMEMBERS it and does nothing else. Re-arming a finished graphic
+   * from a CONFIGURATION verb would put a picture back on screen that the operator had taken
+   * off — a playout effect from a non-playout action, which is golden rule 10 inverted — so
+   * neither `cyclesLeft` nor `phase` is touched. But the value is kept for the next `play()`:
+   * `LOGO-LOOP-01` (`B-323`) measured what dropping it costs. A row stopped after an on-air
+   * count was told `Until stop` by its resident take, ignored it here, and re-ran the stale
+   * count — while every surface said `Until stop`.
+   *
+   * ⚠ A NON-CYCLIC mode ignores it too. `auto-out` / `manual` / `static` have no pass loop to
+   * extend, and extending one would mean changing `mode` — which is DESIGNER-OWNED (ADR 0009)
+   * and not this verb's to touch. The console does not offer the control on such a row; this is
+   * the backstop, not the refusal, and the refusal belongs at the surface where a reason can be
+   * given.
+   */
+  /**
+   * 🔴 `TIMING-BUILD-21` §7 — set the gap BETWEEN passes, live.
+   *
+   * There is nothing to schedule here and that is the design: `beginNextPass` re-reads the
+   * delay from this object at every boundary, so writing the new value IS the whole change.
+   * The gap currently in flight keeps the length it started with — which is exactly the
+   * contract ("takes effect from the NEXT pass, never disturbs the running one"), obtained by
+   * not snapshotting rather than by special-casing.
+   *
+   * ⚠ Deliberately does NOT re-arm a running gap. Re-arming would let a change stretch or
+   * truncate a wait already under way, and a truncated gap is a graphic reappearing earlier
+   * than the operator was told it would.
+   *
+   * ⚠ A SETTLED controller takes the write too (`LOGO-LOOP-01`, `B-323`). Nothing is scheduled
+   * on one, so writing the value re-arms nothing; it is simply in place for the next `play()`'s
+   * gaps, which is what the resident take's tell is for.
+   */
+  setDelayMs(ms: number): void {
+    // `!cyclic()` for the same reason `setRemainingPasses` has it, and so that the runtime's
+    // tree-wide apply can truthfully say it reaches exactly the loops: a gap BETWEEN passes is
+    // meaningless where there are no passes, and writing one would leave a value on a scope that
+    // could start honouring it if its mode ever changed under a later edit.
+    if (!this.cyclic()) return;
+    this.o.playout.delayMs = Math.max(0, ms);
+  }
+
+  setRemainingPasses(passes: number | 'infinite'): void {
+    if (!this.cyclic()) return;
+    /*
+      🔴 `DELTA B0` — THE OPERATOR'S VALUE IS REMEMBERED FOR THE NEXT `play()`, whichever state
+      it arrives in. One stored number, read two ways — exactly the two the console's own labels
+      promise:
+
+        - BEFORE a run ("Passes next take") it is a TOTAL: `play()` seats it whole.
+        - DURING a run ("Passes remaining") it is a REMAINDER: the pass on screen is not one of
+          them, so it seats `n + 1`.
+
+      Storing it on the live path too means a re-take of a still-resident producer (`C-012`'s
+      graceful stop) runs the count the operator last asked for, which is what the row shows.
+    */
+    this.pendingPasses = passes === 'infinite' ? 'infinite' : Math.max(0, Math.floor(passes));
+    /*
+      NOT RUNNING — before the first `play()`, or SETTLED (`LOGO-LOOP-01`: a stopped graphic whose
+      producer stays resident, told its next count by the resident take). Either way this is the
+      pre-take case: remember it and let `play()` seat it as a total. Seating `cyclesLeft` here
+      instead would be read as a remainder by the first pass boundary and run one pass too many,
+      and on a settled controller touching `cyclesLeft` or `phase` would be the re-arm the doc
+      above forbids.
+    */
+    if (this.settled || this.phase === 'idle') return;
+    if (passes === 'infinite') {
+      this.cyclesLeft = 'infinite';
+      return;
+    }
+    const remaining = Math.max(0, Math.floor(passes));
+    // Asked for NOTHING MORE while the gap before the next pass is already running: that pass
+    // has not started, so there is nothing to let finish. Cancel the wait and settle, rather
+    // than starting a pass the operator has just said they do not want.
+    if (remaining === 0 && this.phase === 'gap') {
+      this.clearHold();
+      this.cyclesLeft = 1;
+      this.phase = 'idle';
+      this.settled = true;
+      this.announceExit();
+      // 🔴 `SELF-STOP-24` — A SELF-END TOO, and the one that looks least like one.
+      //
+      // An operator typed the zero, so the reflex is to call this an operator exit. It is not:
+      // what they set is a COUNT, which is a configuration verb (golden rule 10), and the run
+      // then ended because the count ran out — exactly as it would have on its own had the
+      // author written the same number. The pass they declined never started, so nothing was
+      // interrupted. `stop()` is the operator ending a run that had passes left; this is a run
+      // with none.
+      this.o.onSelfEnd?.();
+      this.o.onSettle();
+      return;
+    }
+    this.cyclesLeft = remaining + 1;
   }
 
   pause(): void {
@@ -248,7 +458,13 @@ export class PlayoutController {
     if (!this.paused) return;
     this.paused = false;
     this.driver?.resume();
-    if (this.phase === 'hold' && this.holdCb !== null && this.holdRemainingMs !== null) {
+    // `TIMING-BUILD-21` §7 — `gap` re-arms exactly as `hold` does. Both are a pending timer the
+    // pause froze; leaving `gap` out would strand a paused looping template off screen forever.
+    if (
+      (this.phase === 'hold' || this.phase === 'gap') &&
+      this.holdCb !== null &&
+      this.holdRemainingMs !== null
+    ) {
       const cb = this.holdCb;
       this.scheduleHold(this.holdRemainingMs, cb);
       this.holdRemainingMs = null;
@@ -304,25 +520,50 @@ export class PlayoutController {
     // this collapses to today's single intro.
     const holdEntry = this.holdEntry();
     const outPoint = this.outPoint();
-    this.playRange(this.o.active.in, holdEntry, () => {
-      this.o.onContentStart?.();
-      // Only play the static settle leg when it is non-empty; when the entrance ends AT
-      // the out-point (or there is no animation) `holdEntry === outPoint` and we go
-      // straight to the hold — no redundant second paint of the out-point frame.
-      if (holdEntry < outPoint) {
-        this.playRange(holdEntry, outPoint, () => this.onIntroEnd());
-      } else {
-        this.onIntroEnd();
-      }
-    });
+    this.playRange(
+      this.o.active.in,
+      holdEntry,
+      () => {
+        this.o.onContentStart?.();
+        // Only play the static settle leg when it is non-empty; when the entrance ends AT
+        // the out-point (or there is no animation) `holdEntry === outPoint` and we go
+        // straight to the hold — no redundant second paint of the out-point frame.
+        if (holdEntry < outPoint) {
+          this.playRange(holdEntry, outPoint, () => this.onIntroEnd());
+        } else {
+          this.onIntroEnd();
+        }
+        // The ENTRANCE leg ends at the content-start moment, so when that moment is
+        // ANCHORED it must consume its real duration whatever the leg paints — see
+        // `mustConsumeDuration` on `playRange`. Only this leg: the static settle and the
+        // outro end at a PAINT (the out-point / the exit), so they still collapse.
+        //
+        // "Anchored" is exactly `lifecycle.contentStart` being AUTHORED, and the distinction
+        // is load-bearing rather than a tidy-up. `holdEntryFrame` has two provenances and the
+        // frame number alone cannot tell them apart:
+        //
+        //   - an authored marker — a PROMISE ABOUT TIME ("content starts at frame 30"), which
+        //     the leg must honour even with nothing on screen moving;
+        //   - `entranceSettleFrame`'s fallback, which returns `outPoint` verbatim for a scene
+        //     with no keyframes and no Lottie settle. That is the "there is NO entrance"
+        //     sentinel, not a promise: those scenes have always started their content at play,
+        //     and forcing the leg to consume `[active.in → outPoint]` would delay content by
+        //     the WHOLE composition.
+        //
+        // The derived-but-real settles need no flag: keyframes force the sweep via
+        // `hasAnimation`, and a Lottie settle via `needsFrameSweep` (D-125 Phase 3a).
+      },
+      this.o.lifecycle?.contentStart !== undefined,
+    );
   }
 
   private onIntroEnd(): void {
     this.phase = 'hold';
     // The intro played `[active.in → outPoint]` (entrance + static settle) and the driver
-    // left the graphic painted at `outPoint`; the HOLD simply keeps that frame. Content
-    // already started at the entrance-settle frame (onContentStart) — here we only start
-    // the hold TIMING. (A looping idle while holding is D-021's opt-in, not this change.)
+    // left the graphic painted at `outPoint`; a TIMED hold simply keeps that frame, and a
+    // CONTENT-DRIVEN one replays the loop range over it (D-133 — `startHoldLoop` below).
+    // Content already started at the entrance-settle frame (onContentStart) — here we only
+    // start the hold TIMING. (A looping idle while holding is D-021's opt-in, not this.)
     this.stopDriver();
     // D-114 — `manual` and `static` both hold the out-point frozen until `stop()`; `static`
     // additionally has no outro (a no-out-point composition — it cuts on stop, see `startOutro`).
@@ -341,6 +582,9 @@ export class PlayoutController {
         this.scheduleHold(0, () => this.startOutro());
         return;
       }
+      // D-133 — RENDER the hold as the repeating loop range instead of a parked frame.
+      // Started AFTER `waitForContent()` so a zero-length hold above never opens one.
+      this.startHoldLoop();
       void wait.then(() => {
         if (token === this.holdToken && this.phase === 'hold') this.startOutro();
       });
@@ -349,8 +593,59 @@ export class PlayoutController {
     this.scheduleHold(this.o.playout.holdMs ?? 0, () => this.startOutro());
   }
 
+  /**
+   * D-133 — THE HOLD LOOP: render a content-driven hold as a repeating
+   * `[contentStart → outPoint]` instead of a parked `outPoint` frame.
+   *
+   * 🔴 **This is a re-render of the COMPOSITION FRAME and nothing else.** The only thing
+   * the loop can reach is `applyFrame` — the FrameDriver's sole output — so a wrap cannot
+   * `reset()` / `start()` / transition any content driver: there is no path from here to
+   * one. That is the design's point (`design.md` §3.3): the restart the item forbids is
+   * UNREACHABLE, not merely guarded. If a future edit gives this method a driver handle,
+   * it has stopped being the loop D-133 asked for. The seam invariant is pinned by a test
+   * (`hold-loop-range.test.ts`), never by this comment.
+   *
+   * Why the content drivers are untouched by construction: a content-driven hold holds
+   * BECAUSE its drivers run on their own clocks, independent of the composition frame. The
+   * crawl's position is not a function of the frame, so wrapping the frame cannot move it.
+   *
+   * Scope, deliberately narrow:
+   *  - CONTENT-DRIVEN holds only — §9.1's answer is that the range is INERT under any other
+   *    hold, and the caller's branch is what enforces it. Note that `playout` here is the
+   *    EFFECTIVE playout, so B-032 has already resolved a driver-less `content-driven` back
+   *    to `timed`: reaching this method means real drivers exist.
+   *  - A degenerate range (`contentStart` at or past `outPoint` — including
+   *    `entranceSettleFrame`'s "there is NO entrance" fallback, which returns `outPoint`
+   *    verbatim) has nothing to replay, so the hold parks exactly as it does today.
+   *  - A range with nothing frame-dependent in it would paint the same pixels every wrap,
+   *    so it keeps the parked frame and its rAF stays off. That reuses `playRange`'s OWN
+   *    collapse predicate through the shared `frameDependent` — one rule, one call site's
+   *    worth of logic, not a second copy that can drift.
+   */
+  private startHoldLoop(): void {
+    const from = this.holdEntry();
+    const to = this.outPoint();
+    if (to <= from || !this.frameDependent(from, to)) return;
+    this.stopDriver();
+    this.driver = new FrameDriver({
+      frameRate: this.o.frameRate,
+      range: { in: from, out: to },
+      mode: 'loop',
+      onFrame: this.o.applyFrame,
+      raf: this.clock.raf,
+      cancel: this.clock.cancel,
+      now: this.clock.now,
+    });
+    this.driver.start();
+  }
+
   private startOutro(): void {
     this.clearHold();
+    // D-133 — the exit owns the frame from here: stop any hold loop BEFORE the element-outro
+    // gate, not only when the background leg finally plays. `playRange` also stops the driver,
+    // but it can be deferred behind an async `beforeOutro` (and by pause), and a hold loop
+    // still wrapping the furniture while the graphic is exiting would be visible.
+    this.stopDriver();
     this.phase = 'outro';
     const finalExit = this.isFinalOutro();
     if (finalExit) this.announceExit();
@@ -395,21 +690,53 @@ export class PlayoutController {
       // (Lottie intro + completion + outro ledger) BEFORE the next intro leg, so
       // cycle N+1 replays the furniture's intro and its exit plays the outro again.
       if (this.cyclesLeft === 'infinite') {
-        this.o.onCycleRestart?.();
-        this.startIntro();
+        this.beginNextPass();
         return;
       }
       this.cyclesLeft -= 1;
       if (this.cyclesLeft >= 1) {
-        this.o.onCycleRestart?.();
-        this.startIntro();
+        this.beginNextPass();
         return;
       }
     }
     this.phase = 'idle';
     this.settled = true;
     this.announceExit();
+    // 🔴 `SELF-STOP-24` — THE AUTHORED RUN IS OVER: an `auto-out` that reached its out-point,
+    // or the last pass of a finite loop. An infinite loop returned above at the `'infinite'`
+    // branch and never arrives here, which is why this needs no mode check of its own — but it
+    // DOES need the `exitRequested` guard, because a `stop()` reaches this same branch with
+    // this same state. See the field.
+    if (!this.exitRequested) this.o.onSelfEnd?.();
     this.o.onSettle();
+  }
+
+  /**
+   * 🔴 `TIMING-BUILD-21` §7 — start the next pass, after the authored gap.
+   *
+   * The delay is **re-read from `this.o.playout` at EVERY boundary, never snapshotted**, which
+   * is the whole of the "changing it on air takes effect from the NEXT pass and never disturbs
+   * the running one" contract: the pass in flight already committed to whatever gap followed
+   * it, and the next one asks again. (Contrast `cyclesLeft`, which IS snapshotted at `play()`
+   * because it counts DOWN — see `setRemainingPasses` for how a live count change edits the
+   * counter in place rather than restarting the loop.)
+   *
+   * ⚠ Zero means no gap and must stay SYNCHRONOUS — deferring a 0 ms gap through the timer
+   * would insert a frame of black between passes on every looping template that never asked
+   * for one, which is the defect this feature exists to let an author OPT INTO.
+   */
+  private beginNextPass(): void {
+    const start = (): void => {
+      this.o.onCycleRestart?.();
+      this.startIntro();
+    };
+    const gapMs = delayMsOf(this.o.playout);
+    if (gapMs <= 0) {
+      start();
+      return;
+    }
+    this.phase = 'gap';
+    this.scheduleHold(gapMs, start);
   }
 
   /** Emit `onExitStart` once per exit (the graphic is going off air). */
@@ -427,6 +754,19 @@ export class PlayoutController {
   }
 
   /**
+   * Does anything in `[inF, outF]` paint differently from `outF`? Keyframes are one reason;
+   * a `lifespan` gate boundary (or a Lottie settle) crossing the leg is another.
+   *
+   * ONE definition, two readers: `playRange`'s collapse decision below and D-133's
+   * `startHoldLoop` (a range with nothing frame-dependent in it has nothing to replay).
+   * Extracted rather than copied — a second local copy is exactly how the two would drift
+   * apart, and they must answer the same question about the same range.
+   */
+  private frameDependent(inF: number, outF: number): boolean {
+    return this.o.hasAnimation || (this.o.needsFrameSweep?.(inF, outF) ?? false);
+  }
+
+  /**
    * Play `[inF, outF]` once then call `onEnd`; instant when NOTHING in the leg is
    * frame-dependent.
    *
@@ -439,11 +779,35 @@ export class PlayoutController {
    *
    * Every leg routes through here — both intro legs (entrance + static settle) and the
    * outro — so the predicate covers all three without each caller repeating it.
+   *
+   * 🔴 `mustConsumeDuration` — the collapse decides a PAINT question ("does every frame in
+   * this leg look like `outF`?"), and it answers it correctly. What it may NOT decide is a
+   * CLOCK question, because collapsing calls `onEnd` SYNCHRONOUSLY: a leg whose completion
+   * is an EVENT AT A SCHEDULED MOMENT must consume its real duration even when nothing in
+   * it moves. The entrance leg is exactly that — its `onEnd` fires `onContentStart` — and
+   * a caller that needs the moment honoured passes this flag rather than relying on a
+   * paint predicate to be incidentally true.
+   *
+   * That reliance is what broke: with no keyframes (a VIDEO or LOTTIE backdrop contributes
+   * no `animated` entry), `needsFrameSweep`'s only remaining term was a `lifespan` gate
+   * TRANSITION inside `(inF, outF]` — so whether the content started on time came down to
+   * whether some element's span happened to begin after the leg's first frame. A ticker
+   * spanning from frame 0 is already ON at `inF`, does not transition, and the entrance
+   * collapsed: the crawl began at frame 0. The same ticker spanning from frame 1 swept and
+   * was correct — one frame of authoring flipping a timing guarantee.
+   *
+   * `outF <= inF` still short-circuits to instant ahead of the flag: a zero-length entrance
+   * (no marker and no animation ⇒ `holdEntry === active.in`) has no duration TO consume.
    */
-  private playRange(inF: number, outF: number, onEnd: () => void): void {
+  private playRange(
+    inF: number,
+    outF: number,
+    onEnd: () => void,
+    mustConsumeDuration = false,
+  ): void {
     this.stopDriver();
-    const frameDependent = this.o.hasAnimation || (this.o.needsFrameSweep?.(inF, outF) ?? false);
-    if (!frameDependent || outF <= inF) {
+    const frameDependent = this.frameDependent(inF, outF);
+    if (outF <= inF || (!frameDependent && !mustConsumeDuration)) {
       this.o.applyFrame(outF);
       onEnd();
       return;
@@ -498,6 +862,9 @@ export class PlayoutController {
     this.paused = false;
     this.exitAnnounced = false;
     this.settled = false;
+    // `SELF-STOP-24` — a fresh run is not carrying the last one's exit. `reset()` is reached by
+    // `play()` and `destroy()`, which are the only two ways a controller starts over.
+    this.exitRequested = false;
     // D-125 §D6.2b — invalidate any in-flight element-outro gate and drop a deferred
     // background leg: after a reset (play()/destroy()) the old exit no longer owns
     // the scene, and its stale resolution must be inert.

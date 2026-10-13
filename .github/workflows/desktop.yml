@@ -1,0 +1,1534 @@
+name: Desktop
+
+# DESKTOP-APPS-01 — the Windows installers (ADR 0011). CENTRAL-BRIDGE-01 made them three: CG Bridge
+# (the service on the Playout machine, per machine), CG Control (a console that connects to it, per
+# user, no bridge of its own) and CG Designer (on its own). Built here, on windows-latest, so nobody
+# needs Rust locally; then installed and driven on fresh runners that have built nothing.
+#
+# A separate workflow from `pr.yml`: that file's jobs, its `required` aggregation and the
+# P-030 reuse guard are keyed to their job names and are untouched. This one is the record of
+# the installers — its artifacts are what the owner downloads.
+#
+# CLIENT-TEST-RELEASE-01 B4 — a tag `v<version>` runs the same jobs from the tagged commit, and
+# then `release` opens a DRAFT pre-release holding exactly the three installers, SHA256SUMS.txt and
+# the Persian install guide. CI never publishes it: the owner does, or hands the files over.
+#
+# CI-INSTALLERS-ON-DEMAND-01 — WHAT RUNS WHEN. The installers are built when they are asked for, never
+# on every push: the `installers` job runs on a tag `v*`, on a manual run (`gh workflow run Desktop
+# --ref dev`), or on a push whose head commit message contains `[installers]` — the expression style
+# of `guide-shots`' own `[guide-shots]`, for the same reason ("a push never pays for it"). Every
+# other job but `guide-shots` `needs: installers`, so an ordinary push to `dev` or `main` starts this
+# workflow and skips all of it; the Linux gate and `e2e` (`pr.yml`) still run on every push. A tag
+# is unchanged: it builds and checks everything from the tagged commit, and `release` still runs on
+# a tag only. A dev build never ships anyway — the tag rebuilds from its own commit.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, dev]
+    # A release tag. GitHub does not evaluate path filters for a tag push, so every tag runs.
+    tags: ['v*']
+    # A docs-only push cannot change what the installers contain.
+    paths-ignore:
+      - 'docs/**'
+      - 'openspec/**'
+      - '**/*.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Push runs are never cancelled (P-027's reasoning): a cancelled run is not a result.
+  cancel-in-progress: false
+
+jobs:
+  installers:
+    name: Installers (Windows)
+    # On request only (see the header): not a push (a manual run), a tag, or `[installers]` in the
+    # head commit message. Written as "not a push" rather than "a dispatch", so a trigger added later
+    # builds rather than being skipped by a guess.
+    if: ${{ github.event_name != 'push' || github.ref_type == 'tag' || contains(github.event.head_commit.message, '[installers]') }}
+    runs-on: windows-latest
+    timeout-minutes: 75
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      # CLIENT-TEST-RELEASE-01 B1 — ONE version for CG Control, CG Designer and the bridge, read
+      # from every file that carries it; a build whose files disagree stops here, before anything
+      # is built. On a tag (B4), a tag that does not name that version stops it too. Zero-dependency,
+      # so the runner's own Node runs it.
+      - name: The release version
+        id: version
+        shell: pwsh
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $tag = @()
+          if ($env:REF_TYPE -eq 'tag') { $tag = @('--tag', $env:REF_NAME) }
+          $version = node tools/release/src/release-version.mjs @tag
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "Release version: $version"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      # The Node installed here is also the one the CG Bridge installer ships: its staging step
+      # copies this official node.exe as the service's `cg-bridge.exe`.
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (workspace)
+        run: pnpm build
+
+      # CENTRAL-BRIDGE-01 1C — CG Control's shell: its native Playout sign-in (no Origin, http only)
+      # and its one read-only keyboard command, tested before the app is built from it.
+      - name: Test CG Control's shell (Rust)
+        run: cargo test --release -p cg-control
+
+      # CENTRAL-BRIDGE-01 1A (D1) — Shawl 1.9.0 (MIT), the service host CG Bridge runs under, built
+      # here from crates.io; the installer carries it, so nothing is fetched at install time.
+      - name: Build Shawl (the service host)
+        run: cargo install shawl --version 1.9.0 --locked
+
+      - name: Stage CG Bridge's payload (bridge bundle, node.exe, shawl.exe)
+        shell: pwsh
+        run: node tools/caspar-bridge/scripts/stage-bridge.mjs --shawl "$env:USERPROFILE\.cargo\bin\shawl.exe"
+
+      # CLIENT-TEST-RELEASE-01 — the installers carry no real address and no test secret: every text
+      # file the installers are built from, scanned before any is built. CG Control bundles its
+      # console (apps/runtime/dist) the way CG Designer bundles its page.
+      - name: Scan what the installers ship
+        run: node tools/release/src/scan-payload.mjs apps/runtime/dist apps/designer/dist tools/bridge-installer/payload
+
+      # CENTRAL-BRIDGE-01 1A — CG Bridge's own NSIS installer (per machine; the service CGBridge). The
+      # runner's NSIS when it has one; else NSIS from Chocolatey (build time only).
+      - name: Build CG Bridge
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $makensis = (Get-Command makensis -ErrorAction SilentlyContinue).Source
+          if (-not $makensis) {
+            choco install nsis -y --no-progress
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+            $makensis = Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe'
+          }
+          & $makensis /V2 "/DVERSION=$env:VERSION" tools/bridge-installer/cg-bridge.nsi
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-Item "tools/bridge-installer/CG-Bridge_${env:VERSION}_x64-setup.exe" | Format-List Name, Length
+
+      - name: Build CG Control
+        run: pnpm --filter @cg/runtime tauri build
+
+      - name: Build CG Designer
+        run: pnpm --filter @cg/designer tauri build
+
+      # INSTALLER-DESIGN-01 (P-063) — CG Setup, the setup window every installer opens. The three
+      # installers built above become its ENGINES, unchanged: CG Setup goes in front of each, and with
+      # /S it hands the command line to the engine and returns the engine's exit code. 32-bit, as the
+      # NSIS installers are, so an installer still starts on 32-bit Windows and refuses there with
+      # exit 2 as before. Its unit tests (the NSIS-exact command line, the progress steps keyed to
+      # cg-bridge.nsi's log labels, the palette read from theme.ts) run first.
+      - name: Test CG Setup
+        run: cargo test -p cg-setup
+
+      - name: Build CG Setup (32-bit)
+        run: |
+          rustup target add i686-pc-windows-msvc
+          cargo build --release -p cg-setup --target i686-pc-windows-msvc
+
+      # P-067 (RELEASE-0114-01 Part B2) — every page of all three setup windows, rendered by the
+      # program just built, before anything is packed: the bare cg-setup.exe (nothing appended) offers
+      # only its developer preview (`--cg-preview`, src/dev.rs), which paints each page through the
+      # window's own painter onto a bitmap — at 100 %, and Welcome at 150 % and 200 %. The record of
+      # each installer's step rail and the art at its foot. A GUI-subsystem program, so it is waited for.
+      - name: Render CG Setup's pages (each rail's art)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath target/i686-pc-windows-msvc/release/cg-setup.exe -Wait -PassThru -NoNewWindow -ArgumentList @(
+            '--cg-preview', 'setup-rail-art', 'apps/runtime/src-tauri/icons/icon.png', 'apps/designer/src-tauri/icons/icon.png')
+          if ($p.ExitCode -ne 0) { "The preview exited $($p.ExitCode)."; exit 1 }
+          foreach ($role in 'control', 'designer', 'bridge') {
+            if (-not (Test-Path "setup-rail-art/$role-welcome.png")) { "No $role-welcome.png."; exit 1 }
+          }
+          Get-ChildItem setup-rail-art | Format-Table Name, Length -AutoSize
+
+      - name: Upload CG Setup's pages
+        uses: actions/upload-artifact@v7
+        with:
+          name: setup-rail-art
+          path: setup-rail-art/
+          if-no-files-found: error
+          retention-days: 30
+
+      # The install guide the window's Help opens, when this release has one (the release job prints
+      # the same file again for the release itself).
+      - name: Build the install guide for the installers' Help
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $md = "docs/release/$env:VERSION/install-guide.fa.md"
+          if (Test-Path $md) {
+            node tools/release/src/build-guide.mjs $md --out guide/install-guide.pdf
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          } else {
+            "No install guide for $env:VERSION: the installers carry none, and their Help is not shown."
+          }
+
+      # Each installer: CG Setup + the product's icon and version + its engine appended. The sizes of
+      # each engine and each installer go to the log (the report compares them).
+      - name: Pack the installers (CG Setup in front of each engine)
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $guide = @()
+          if (Test-Path guide/install-guide.pdf) { $guide = @('--guide', 'guide/install-guide.pdf') }
+          node tools/release/src/pack-installers.mjs $env:VERSION --setup target/i686-pc-windows-msvc/release --out installers @guide
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # P-060 — the hashes go to the LOG only. This job used to write installers/SHA256SUMS.txt over
+      # Tauri's built names (with a space) and ship it inside both artifacts; the owner took that for
+      # the release's. The release's own SHA256SUMS.txt (release-files.mjs) is the only file of that name.
+      # INSTALLER-DESIGN-01 — the engines are kept too: the smokes run every silent path against the
+      # engine alone AND the installer, and require the same exit codes.
+      - name: Collect the installers, and their engines
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force engines | Out-Null
+          Copy-Item target/release/bundle/nsis/*-setup.exe engines/
+          Copy-Item tools/bridge-installer/CG-Bridge_*_x64-setup.exe engines/
+          Get-ChildItem installers, engines | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Directory.Name)/$($_.Name)  $($_.Length) bytes"
+          }
+
+      # RELEASE-0110-01 §3 — and what the BUILT installers carry, not only what they are built from:
+      # each engine opened with 7-Zip and every text file in it scanned — no private address, no test
+      # secret, no token, no dev-only code (the dev station's flags, the suite's fakes) — and every
+      # program WE build read for its strings: CG Setup's front end, and each app's own exe. A Tauri app
+      # embeds its page compressed inside its exe; that page is `apps/*/dist`, scanned above before it
+      # was built in, so the exe's strings are its shell's. Third-party programs (Node as
+      # `cg-bridge.exe`, shawl, NSIS plug-ins, the WebView2 installer) are listed, never read: their own
+      # documentation carries example private addresses (Node's `BlockList` docs: `192.168.1.0/24`).
+      - name: Scan the built installers
+        shell: pwsh
+        run: |
+          $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
+          $dirs = @()
+          foreach ($engine in Get-ChildItem engines -Filter '*-setup.exe') {
+            $to = Join-Path 'installer-contents' ($engine.BaseName -replace '\s', '-')
+            & $sevenZip x $engine.FullName "-o$to" -y | Out-Null
+            if ($LASTEXITCODE -ne 0) { "7-Zip could not open $($engine.Name)"; exit 1 }
+            $root = (Resolve-Path $to).Path
+            "$($engine.Name): $((Get-ChildItem $to -Recurse -File).Count) files"
+            Get-ChildItem $to -Recurse -File | ForEach-Object { "  $($_.Length)  $($_.FullName.Substring($root.Length + 1))" }
+            $dirs += $to
+          }
+          # Each app's own exe, found in its engine — one, and not empty: a scan of nothing proves nothing.
+          $ours = @('target/i686-pc-windows-msvc/release/cg-setup.exe')
+          foreach ($app in 'cg-control.exe', 'cg-designer.exe') {
+            $found = @(Get-ChildItem installer-contents -Recurse -File -Filter $app)
+            if ($found.Count -ne 1 -or $found[0].Length -eq 0) { "Expected one non-empty $app in the engines; found $($found.Count)."; exit 1 }
+            $ours += $found[0].FullName
+          }
+          node tools/release/src/scan-payload.mjs @dirs --binaries ($ours -join ',')
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # CI-INSTALLERS-ON-DEMAND-01 Part B — an installer lives 30 days from a tag's run (the release's
+      # own build) and 7 from any other run (a manual run, or `[installers]`): long enough to hand over
+      # or test, short enough not to pile up. The release job reads them from this same run.
+      - name: Upload CG Control
+        uses: actions/upload-artifact@v7
+        with:
+          name: CG-Control-installer
+          path: installers/CG Control_*-setup.exe
+          if-no-files-found: error
+          retention-days: ${{ github.ref_type == 'tag' && 30 || 7 }}
+
+      - name: Upload CG Designer
+        uses: actions/upload-artifact@v7
+        with:
+          name: CG-Designer-installer
+          path: installers/CG Designer_*-setup.exe
+          if-no-files-found: error
+          retention-days: ${{ github.ref_type == 'tag' && 30 || 7 }}
+
+      - name: Upload CG Bridge
+        uses: actions/upload-artifact@v7
+        with:
+          name: CG-Bridge-installer
+          path: installers/CG-Bridge_*-setup.exe
+          if-no-files-found: error
+          retention-days: ${{ github.ref_type == 'tag' && 30 || 7 }}
+
+      # Not a deliverable: the three engines, for the smokes' engine-vs-installer exit codes. Read only
+      # by this run's own jobs (job to job), so 2 days (CI-INSTALLERS-ON-DEMAND-01 Part B): ~471 MB a run.
+      - name: Upload the engines (for the smokes)
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-engines
+          path: engines/
+          if-no-files-found: error
+          retention-days: 2
+
+  # CENTRAL-BRIDGE-01 1E — CG Bridge on a clean Windows, as the Playout's installer will chain it:
+  # silent install, the service (automatic, recovery, no dependency), /health under a second, our
+  # rules, nothing on UDP 6250, no state for a console without a token, a stop that stays stopped
+  # and a crash that Windows restarts, a silent upgrade and a silent uninstall, each exit code
+  # read. Its own runner: its stop, crash, upgrade and uninstall take away the very service the
+  # app smoke's CG Control is connected to.
+  bridge-smoke:
+    name: CG Bridge smoke (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      # RELEASE-0111-01 Part A — the `v0.11.0` DRAFT's CG Bridge installer (an upgrade from a separate
+      # server); a draft release is listed only to a token that can push to the repository.
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          # The smoke, and the firewall judge both smokes share (CLIENT-TEST-RELEASE-01 B2).
+          # INSTALLER-DESIGN-01 — and the setup window's smoke, with the window's hands it shares.
+          # RELEASE-0112-01-C C1 — and the Installed-apps row's one reader.
+          sparse-checkout: |
+            tools/bridge-installer/smoke.mjs
+            tools/bridge-installer/installed-apps.mjs
+            tools/bridge-installer/setup-smoke.mjs
+            apps/runtime/tests/desktop/firewall-rule.mjs
+            apps/runtime/tests/desktop/setup-window.mjs
+            apps/runtime/tests/desktop/setup-uia.ps1
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Node (test harness only)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Download the CG Bridge installer
+        uses: actions/download-artifact@v8
+        with:
+          name: CG-Bridge-installer
+          path: installers
+
+      - name: Install, check, upgrade and uninstall CG Bridge (elevated)
+        shell: pwsh
+        run: |
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          node tools/bridge-installer/smoke.mjs --installer "$bridge" --version "${{ needs.installers.outputs.version }}" --out bridge-smoke
+          exit $LASTEXITCODE
+
+      - name: Download the engines
+        if: ${{ !cancelled() }}
+        uses: actions/download-artifact@v8
+        with:
+          name: installer-engines
+          path: engines
+
+      - name: The 0.11.0 CG Bridge installer, from the v0.11.0 draft
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.11.0 --pattern 'CG-Bridge_0.11.0_x64-setup.exe' --dir previous
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem previous | Format-Table Name, Length
+
+      # INSTALLER-DESIGN-01 — the silent paths against the engine alone (same arguments, same exit
+      # codes), then CG Bridge's setup window driven through UI Automation: fresh, update, failed.
+      # RELEASE-0111-01 Part A — and its Playout page: unticked is today's install; refused on the page in
+      # words; ticked, the configuration the command line writes, field by field; an upgrade from 0.11.0
+      # installed as a separate server opens filled and keeps its values.
+      - name: CG Bridge's setup window, and its silent paths against its engine (elevated)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $engine = (Get-ChildItem engines -Filter 'CG-Bridge_*-setup.exe').FullName
+          $previous = (Resolve-Path previous/CG-Bridge_0.11.0_x64-setup.exe).Path
+          node tools/bridge-installer/setup-smoke.mjs --installer "$bridge" --engine "$engine" --version "${{ needs.installers.outputs.version }}" --out bridge-smoke/setup --previous "$previous" --previous-version 0.11.0
+          exit $LASTEXITCODE
+
+      - name: Upload the CG Bridge smoke evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: bridge-smoke
+          path: bridge-smoke/
+          retention-days: 14
+
+  smoke:
+    name: Installer smoke (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      # Only the smoke script is needed; nothing is installed or built from the checkout. The two
+      # tauri.conf.json files are read for each app's identifier alone (RELEASE-091-01 §3: the
+      # AppUserModelID each shortcut must carry), never a second copy in the script.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            apps/runtime/tests/desktop
+            apps/runtime/src-tauri/tauri.conf.json
+            apps/runtime/src-tauri/capabilities/console.json
+            apps/designer/src-tauri/tauri.conf.json
+          sparse-checkout-cone-mode: false
+
+      # Node runs the smoke SCRIPT only. CG Bridge runs its own cg-bridge.exe as a service, and the
+      # script proves that is the only one: CG Control starts no bridge.
+      - name: Set up Node (test harness only)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      # CENTRAL-BRIDGE-01 — CG Bridge first, per machine, as the Playout's installer chains it: the
+      # service CG Control connects to. Its own lifecycle is the bridge-smoke job's.
+      - name: Install CG Bridge (elevated)
+        shell: pwsh
+        run: |
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          node apps/runtime/tests/desktop/installer-smoke.mjs --phase install --bridge "$bridge" --control-installer "$control" --designer-installer "$designer" --version "${{ needs.installers.outputs.version }}" --out smoke
+
+      # WebView2 ignores WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS in an elevated process (wry#1782),
+      # and the runner is elevated — so the apps are installed (each per user, without admin) and
+      # driven at medium integrity, as an operator runs them. gsudo is Tauri's own recipe for this
+      # (tauri-apps/tauri test-api-e2e.yml); the workspace is opened up so the de-elevated process
+      # can write its evidence.
+      - name: Install CG Designer and CG Control, launch and drive both apps (unelevated)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          # gsudo re-splits an argument at its spaces (run 35862184574: "…\installers\CG" ENOENT),
+          # so each installer is handed over under a name without one.
+          Copy-Item (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName installers\cg-designer-setup.exe
+          Copy-Item (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName installers\cg-control-setup.exe
+          $designer = (Resolve-Path installers\cg-designer-setup.exe).Path
+          $control = (Resolve-Path installers\cg-control-setup.exe).Path
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          & $gsudo --integrity Medium node apps/runtime/tests/desktop/installer-smoke.mjs --phase drive --designer $designer --control $control --version ${{ needs.installers.outputs.version }} --out smoke
+          exit $LASTEXITCODE
+
+      - name: Download the engines
+        if: ${{ !cancelled() }}
+        uses: actions/download-artifact@v8
+        with:
+          name: installer-engines
+          path: engines
+
+      # INSTALLER-DESIGN-01 — the two apps' setup windows, driven unelevated through UI Automation:
+      # the silent paths against each engine alone, then a fresh install, an update and a damaged
+      # download, every page captured. Names without a space again, for gsudo.
+      - name: CG Designer's and CG Control's setup windows, driven (unelevated)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          Copy-Item (Get-ChildItem engines -Filter 'CG Designer_*-setup.exe').FullName engines\cg-designer-engine.exe
+          Copy-Item (Get-ChildItem engines -Filter 'CG Control_*-setup.exe').FullName engines\cg-control-engine.exe
+          $designer = (Resolve-Path installers\cg-designer-setup.exe).Path
+          $control = (Resolve-Path installers\cg-control-setup.exe).Path
+          $designerEngine = (Resolve-Path engines\cg-designer-engine.exe).Path
+          $controlEngine = (Resolve-Path engines\cg-control-engine.exe).Path
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          & $gsudo --integrity Medium node apps/runtime/tests/desktop/setup-smoke.mjs --designer $designer --control $control --designer-engine $designerEngine --control-engine $controlEngine --version ${{ needs.installers.outputs.version }} --out smoke/setup
+          exit $LASTEXITCODE
+
+      - name: Uninstall CG Control (elevated), and sum every phase
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: node apps/runtime/tests/desktop/installer-smoke.mjs --phase uninstall --out smoke
+
+      - name: Upload the smoke evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-smoke
+          path: smoke/
+          retention-days: 14
+
+  # INSTALLER-DESIGN-01 (P-063) — the setup window itself, before anything is installed, on the two
+  # Windows code bases: Server 2022 (Windows 10's — a square window edge) and Server 2025 (Windows
+  # 11's — rounded corners). Each installer's first screen with WebView2 made unavailable to every
+  # program (and no WebView2 module loaded), the keyboard (Tab, Shift+Tab, Enter, Esc → exit 1), and
+  # Welcome at 150 % and 200 % display scaling. Nothing is installed, so it needs its own runner only
+  # for the display and policy changes it makes.
+  setup-window:
+    name: Setup window (${{ matrix.os }})
+    needs: installers
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            apps/runtime/tests/desktop/setup-window.mjs
+            apps/runtime/tests/desktop/setup-window-smoke.mjs
+            apps/runtime/tests/desktop/setup-uia.ps1
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Node (test harness only)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: Each installer's first screen, the keyboard, and 150 % / 200 %
+        shell: pwsh
+        run: |
+          node apps/runtime/tests/desktop/setup-window-smoke.mjs --installers installers --version "${{ needs.installers.outputs.version }}" --label "${{ matrix.os }}" --out setup-window
+          exit $LASTEXITCODE
+
+      - name: Upload the setup window's evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: setup-window-${{ matrix.os }}
+          path: setup-window/
+          retention-days: 14
+
+  # RELEASE-0110-01 §3 — THE RELEASE, ACCEPTED (`apps/runtime/tests/desktop/release-acceptance.mjs`).
+  # A fresh runner: the three installers in the guide's order, each through its setup window, with the
+  # network CUT (a positive control proves it); then the INSTALLED CG Control driven end to end against
+  # the INSTALLED CG Bridge and a fake Playout with CasparCG's stand-in (`acceptance-station.mjs`) —
+  # sign in, sign CG Bridge in, channel 2, a take ON AIR, a clear, read off the stand-in's wire too;
+  # then the owner's stuck console (B-320: a record naming CG Bridge at this runner's LAN address, the
+  # Playout silent → Set up again → a good address); then all three uninstalled. The fakes are the test
+  # suite's own TypeScript, so this job installs the workspace and runs Node 24 (type stripping).
+  acceptance-fresh:
+    name: Release acceptance — fresh install, offline (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node 24 (the fakes run by type stripping)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CasparCG's stand-in
+        run: pnpm --filter @cg/amcp-mock build
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      # ONE step on purpose: the fake station must live from the first phase to the last, and the runner
+      # ends what a step started when the step ends (run 37186619456: the station was gone by the next
+      # step). The elevated phases run here; the drive runs at medium integrity through gsudo, because
+      # WebView2 opens DevTools only in an unelevated process (see the smoke job). Every phase runs;
+      # the summary decides.
+      - name: Install offline in the guide's order, drive CG Control end to end, uninstall
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          $node = (Get-Command node -ErrorAction Stop).Source
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          $v = '${{ needs.installers.outputs.version }}'
+          $acceptance = 'apps/runtime/tests/desktop/release-acceptance.mjs'
+          New-Item -ItemType Directory -Force acceptance | Out-Null
+          $station = Start-Process $node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -PassThru -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
+          Get-Content acceptance/station.json
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          "::group::install (elevated, the network cut)"
+          & $node $acceptance --phase install --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive --mode fresh --version $v --out acceptance
+          "::endgroup::"
+          "::group::stuck-station (medium integrity) - B-320, the owner's stuck console"
+          & $gsudo --integrity Medium $node $acceptance --phase stuck-station --version $v --out acceptance
+          "::endgroup::"
+          "::group::uninstall (elevated)"
+          & $node $acceptance --phase uninstall --version $v --out acceptance
+          "::endgroup::"
+          "station alive at the end: $(-not $station.HasExited)"
+          & $node $acceptance --phase summary --expect install,drive,stuck-station,uninstall --out acceptance
+          $code = $LASTEXITCODE
+          Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
+          exit $code
+
+      - name: Upload the acceptance evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-fresh
+          path: acceptance/
+          retention-days: 30
+
+  # RELEASE-0110-01 §3 — THE REAL UPGRADE: the classic NSIS `0.10.0` the owner holds, from the `v0.10.0`
+  # draft's own installers, a take left ON AIR through it, then each `0.11.0` installer over it — its
+  # Welcome ("Update from 0.10.0 to …"), then `/S` — and CG Bridge's service, configuration and session,
+  # CG Control's station and the row ON AIR all kept, with no `CLEAR` reaching CasparCG's stand-in.
+  acceptance-upgrade:
+    name: Release acceptance — upgrade from 0.10.0 (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      # A DRAFT release (`v0.10.0`'s) is listed only to a token that can push to the repository.
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node 24 (the fakes run by type stripping)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CasparCG's stand-in
+        run: pnpm --filter @cg/amcp-mock build
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: The classic 0.10.0 installers, from the v0.10.0 draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.10.0 --pattern 'CG-*_0.10.0_x64-setup.exe' --dir classic
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem classic | Format-Table Name, Length
+
+      # ONE step, for the reason the fresh job gives: the fake station — its Playout's signing keys, the
+      # bridge's trust and the stand-in's layer ON AIR — must live from the classic take to the upgraded
+      # drive. Elevated phases here; the two drives at medium integrity through gsudo.
+      - name: The classic 0.10.0 set up with a row ON AIR, each installer upgraded, the upgraded console
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          $node = (Get-Command node -ErrorAction Stop).Source
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          $v = '${{ needs.installers.outputs.version }}'
+          $acceptance = 'apps/runtime/tests/desktop/release-acceptance.mjs'
+          New-Item -ItemType Directory -Force acceptance | Out-Null
+          $station = Start-Process $node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -PassThru -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
+          Get-Content acceptance/station.json
+          $old = @{ bridge = (Resolve-Path classic/CG-Bridge_0.10.0_x64-setup.exe).Path; control = (Resolve-Path classic/CG-Control_0.10.0_x64-setup.exe).Path; designer = (Resolve-Path classic/CG-Designer_0.10.0_x64-setup.exe).Path }
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          "::group::install-classic (elevated)"
+          & $node $acceptance --phase install-classic --bridge $old.bridge --control $old.control --designer $old.designer --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the classic console, a row ON AIR (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive --mode classic --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade (elevated)"
+          & $node $acceptance --phase upgrade --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the upgraded console (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive-upgraded --version $v --out acceptance
+          "::endgroup::"
+          "station alive at the end: $(-not $station.HasExited)"
+          & $node $acceptance --phase summary --expect install-classic,drive,upgrade,drive-upgraded --out acceptance
+          $code = $LASTEXITCODE
+          Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
+          exit $code
+
+      - name: Upload the acceptance evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-upgrade
+          path: acceptance/
+          retention-days: 30
+
+  # RELEASE-0111-01 §3 — THE SAME REAL UPGRADE, FROM `0.11.0`: the `v0.11.0` draft's own installers (CG Setup
+  # in front of each engine — superseded, never delivered, and what a station may hold), a take left ON AIR
+  # through it, then each new installer over it; everything kept, no `CLEAR`.
+  acceptance-upgrade-0110:
+    name: Release acceptance — upgrade from 0.11.0 (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      # A DRAFT release (`v0.11.0`'s) is listed only to a token that can push to the repository.
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node 24 (the fakes run by type stripping)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CasparCG's stand-in
+        run: pnpm --filter @cg/amcp-mock build
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: The 0.11.0 installers, from the v0.11.0 draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.11.0 --pattern 'CG-*_0.11.0_x64-setup.exe' --dir previous
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem previous | Format-Table Name, Length
+
+      # ONE step, for the reason the fresh job gives.
+      - name: The 0.11.0 set up with a row ON AIR, each installer upgraded, the upgraded console
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          $node = (Get-Command node -ErrorAction Stop).Source
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          $v = '${{ needs.installers.outputs.version }}'
+          $acceptance = 'apps/runtime/tests/desktop/release-acceptance.mjs'
+          New-Item -ItemType Directory -Force acceptance | Out-Null
+          $station = Start-Process $node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -PassThru -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
+          Get-Content acceptance/station.json
+          $old = @{ bridge = (Resolve-Path previous/CG-Bridge_0.11.0_x64-setup.exe).Path; control = (Resolve-Path previous/CG-Control_0.11.0_x64-setup.exe).Path; designer = (Resolve-Path previous/CG-Designer_0.11.0_x64-setup.exe).Path }
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          "::group::install-classic 0.11.0 (elevated)"
+          & $node $acceptance --phase install-classic --from 0.11.0 --bridge $old.bridge --control $old.control --designer $old.designer --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the 0.11.0 console, a row ON AIR (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive --mode classic --from 0.11.0 --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade (elevated)"
+          & $node $acceptance --phase upgrade --from 0.11.0 --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the upgraded console (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive-upgraded --from 0.11.0 --version $v --out acceptance
+          "::endgroup::"
+          "station alive at the end: $(-not $station.HasExited)"
+          & $node $acceptance --phase summary --expect install-classic,drive,upgrade,drive-upgraded --out acceptance
+          $code = $LASTEXITCODE
+          Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
+          exit $code
+
+      - name: Upload the acceptance evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-upgrade-0110
+          path: acceptance/
+          retention-days: 30
+
+  # RELEASE-0112-01 Part D — THE SAME REAL UPGRADE, FROM `0.11.1`: the `v0.11.1` draft's own installers (never
+  # delivered, superseded by `0.11.2`, and what a station may hold), a take left ON AIR through it, then each
+  # new installer over it; everything kept, no `CLEAR`. Its `install-classic` phase records `0.11.1`'s own
+  # Installed-apps row exactly as written (`RELEASE-0112-01-C` C1).
+  acceptance-upgrade-0111:
+    name: Release acceptance — upgrade from 0.11.1 (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      # A DRAFT release (`v0.11.1`'s) is listed only to a token that can push to the repository.
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node 24 (the fakes run by type stripping)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CasparCG's stand-in
+        run: pnpm --filter @cg/amcp-mock build
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: The 0.11.1 installers, from the v0.11.1 draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.11.1 --pattern 'CG-*_0.11.1_x64-setup.exe' --dir previous
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem previous | Format-Table Name, Length
+
+      # ONE step, for the reason the fresh job gives.
+      - name: The 0.11.1 set up with a row ON AIR, each installer upgraded, the upgraded console
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          $node = (Get-Command node -ErrorAction Stop).Source
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          $v = '${{ needs.installers.outputs.version }}'
+          $acceptance = 'apps/runtime/tests/desktop/release-acceptance.mjs'
+          New-Item -ItemType Directory -Force acceptance | Out-Null
+          $station = Start-Process $node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -PassThru -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
+          Get-Content acceptance/station.json
+          $old = @{ bridge = (Resolve-Path previous/CG-Bridge_0.11.1_x64-setup.exe).Path; control = (Resolve-Path previous/CG-Control_0.11.1_x64-setup.exe).Path; designer = (Resolve-Path previous/CG-Designer_0.11.1_x64-setup.exe).Path }
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          "::group::install-classic 0.11.1 (elevated)"
+          & $node $acceptance --phase install-classic --from 0.11.1 --bridge $old.bridge --control $old.control --designer $old.designer --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the 0.11.1 console, a row ON AIR (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive --mode classic --from 0.11.1 --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade (elevated)"
+          & $node $acceptance --phase upgrade --from 0.11.1 --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the upgraded console (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive-upgraded --from 0.11.1 --version $v --out acceptance
+          "::endgroup::"
+          "station alive at the end: $(-not $station.HasExited)"
+          & $node $acceptance --phase summary --expect install-classic,drive,upgrade,drive-upgraded --out acceptance
+          $code = $LASTEXITCODE
+          Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
+          exit $code
+
+      - name: Upload the acceptance evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-upgrade-0111
+          path: acceptance/
+          retention-days: 30
+
+  # RELEASE-0113-01 Part E — THE SAME REAL UPGRADE, FROM `0.11.2`: the `v0.11.2` draft's own installers (never
+  # installed at a station, superseded by `0.11.3` because it writes the backup core on the primary's channel
+  # numbers — `B-316`), a take left ON AIR through it, then each new installer over it; everything kept, no
+  # `CLEAR`. Its `install-classic` phase records `0.11.2`'s own Installed-apps row exactly as written (`P-066`).
+  acceptance-upgrade-0112:
+    name: Release acceptance — upgrade from 0.11.2 (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      # A DRAFT release (`v0.11.2`'s) is listed only to a token that can push to the repository.
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node 24 (the fakes run by type stripping)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CasparCG's stand-in
+        run: pnpm --filter @cg/amcp-mock build
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: The 0.11.2 installers, from the v0.11.2 draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.11.2 --pattern 'CG-*_0.11.2_x64-setup.exe' --dir previous
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem previous | Format-Table Name, Length
+
+      # ONE step, for the reason the fresh job gives.
+      - name: The 0.11.2 set up with a row ON AIR, each installer upgraded, the upgraded console
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          $node = (Get-Command node -ErrorAction Stop).Source
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          $v = '${{ needs.installers.outputs.version }}'
+          $acceptance = 'apps/runtime/tests/desktop/release-acceptance.mjs'
+          New-Item -ItemType Directory -Force acceptance | Out-Null
+          $station = Start-Process $node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -PassThru -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
+          Get-Content acceptance/station.json
+          $old = @{ bridge = (Resolve-Path previous/CG-Bridge_0.11.2_x64-setup.exe).Path; control = (Resolve-Path previous/CG-Control_0.11.2_x64-setup.exe).Path; designer = (Resolve-Path previous/CG-Designer_0.11.2_x64-setup.exe).Path }
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          "::group::install-classic 0.11.2 (elevated)"
+          & $node $acceptance --phase install-classic --from 0.11.2 --bridge $old.bridge --control $old.control --designer $old.designer --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the 0.11.2 console, a row ON AIR (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive --mode classic --from 0.11.2 --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade (elevated)"
+          & $node $acceptance --phase upgrade --from 0.11.2 --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the upgraded console (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive-upgraded --from 0.11.2 --version $v --out acceptance
+          "::endgroup::"
+          "station alive at the end: $(-not $station.HasExited)"
+          & $node $acceptance --phase summary --expect install-classic,drive,upgrade,drive-upgraded --out acceptance
+          $code = $LASTEXITCODE
+          Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
+          exit $code
+
+      - name: Upload the acceptance evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-upgrade-0112
+          path: acceptance/
+          retention-days: 30
+
+  # RELEASE-0114-01 Part D — THE SAME REAL UPGRADE, FROM `0.11.3`: the `v0.11.3` draft's own installers, a take
+  # left ON AIR through it, then each new installer over it; everything kept, no `CLEAR`.
+  # RELEASE-0114-01-C — and CG Control's and CG Designer's own upgrades run over the two apps OPEN, CG Designer
+  # with unsaved changes: first the 0.11.3 apps, then the upgraded ones with the close guard proved live
+  # (`upgrade-apps-open`). Tauri's NSIS ends a running app with `TerminateProcess`, never a `WM_CLOSE`, so
+  # no guard is asked; each installer is bounded, and must exit 0 having waited on no dialog.
+  acceptance-upgrade-0113:
+    name: Release acceptance — upgrade from 0.11.3, apps open (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 50
+    permissions:
+      # A DRAFT release (`v0.11.3`'s) is listed only to a token that can push to the repository.
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node 24 (the fakes run by type stripping)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CasparCG's stand-in
+        run: pnpm --filter @cg/amcp-mock build
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: The 0.11.3 installers, from the v0.11.3 draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.11.3 --pattern 'CG-*_0.11.3_x64-setup.exe' --dir previous
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem previous | Format-Table Name, Length
+
+      # ONE step, for the reason the fresh job gives.
+      - name: The 0.11.3 set up with a row ON AIR, each installer upgraded (the apps open), the upgraded console
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          $node = (Get-Command node -ErrorAction Stop).Source
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          $v = '${{ needs.installers.outputs.version }}'
+          $acceptance = 'apps/runtime/tests/desktop/release-acceptance.mjs'
+          New-Item -ItemType Directory -Force acceptance | Out-Null
+          $station = Start-Process $node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -PassThru -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
+          Get-Content acceptance/station.json
+          $old = @{ bridge = (Resolve-Path previous/CG-Bridge_0.11.3_x64-setup.exe).Path; control = (Resolve-Path previous/CG-Control_0.11.3_x64-setup.exe).Path; designer = (Resolve-Path previous/CG-Designer_0.11.3_x64-setup.exe).Path }
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          "::group::install-classic 0.11.3 (elevated)"
+          & $node $acceptance --phase install-classic --from 0.11.3 --bridge $old.bridge --control $old.control --designer $old.designer --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the 0.11.3 console, a row ON AIR (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive --mode classic --from 0.11.3 --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade CG Bridge; read every Welcome (elevated)"
+          & $node $acceptance --phase upgrade --apps-open yes --from 0.11.3 --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade CG Control and CG Designer over the two apps OPEN (medium integrity)"
+          # Names without a space, for gsudo (it splits a quoted path at its space — measured on this job).
+          Copy-Item $control installers\cg-control-setup.exe
+          Copy-Item $designer installers\cg-designer-setup.exe
+          $controlNs = (Resolve-Path installers\cg-control-setup.exe).Path
+          $designerNs = (Resolve-Path installers\cg-designer-setup.exe).Path
+          & $gsudo --integrity Medium $node $acceptance --phase upgrade-apps-open --from 0.11.3 --control $controlNs --designer $designerNs --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the upgraded console (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive-upgraded --from 0.11.3 --version $v --out acceptance
+          "::endgroup::"
+          "station alive at the end: $(-not $station.HasExited)"
+          & $node $acceptance --phase summary --expect install-classic,drive,upgrade,upgrade-apps-open,drive-upgraded --out acceptance
+          $code = $LASTEXITCODE
+          Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
+          exit $code
+
+      - name: Upload the acceptance evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-upgrade-0113
+          path: acceptance/
+          retention-days: 30
+
+  # RELEASE-0115-01 Part C — THE SAME REAL UPGRADE, FROM `0.11.4`: the `v0.11.4` draft's own installers, the
+  # release installed on a real station and on the owner's PC; a take left ON AIR through it, then each new
+  # installer over it, CG Control and CG Designer OPEN through their upgrades (the 0.11.4 apps carry the close
+  # guard; the upgraded ones prove it live first). Everything kept, no `CLEAR`.
+  acceptance-upgrade-0114:
+    name: Release acceptance — upgrade from 0.11.4, apps open (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 50
+    permissions:
+      # A DRAFT release (`v0.11.4`'s) is listed only to a token that can push to the repository.
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node 24 (the fakes run by type stripping)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CasparCG's stand-in
+        run: pnpm --filter @cg/amcp-mock build
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: The 0.11.4 installers, from the v0.11.4 draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.11.4 --pattern 'CG-*_0.11.4_x64-setup.exe' --dir previous
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem previous | Format-Table Name, Length
+
+      # ONE step, for the reason the fresh job gives.
+      - name: The 0.11.4 set up with a row ON AIR, each installer upgraded (the apps open), the upgraded console
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          $node = (Get-Command node -ErrorAction Stop).Source
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          $v = '${{ needs.installers.outputs.version }}'
+          $acceptance = 'apps/runtime/tests/desktop/release-acceptance.mjs'
+          New-Item -ItemType Directory -Force acceptance | Out-Null
+          $station = Start-Process $node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -PassThru -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
+          Get-Content acceptance/station.json
+          $old = @{ bridge = (Resolve-Path previous/CG-Bridge_0.11.4_x64-setup.exe).Path; control = (Resolve-Path previous/CG-Control_0.11.4_x64-setup.exe).Path; designer = (Resolve-Path previous/CG-Designer_0.11.4_x64-setup.exe).Path }
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          "::group::install-classic 0.11.4 (elevated)"
+          & $node $acceptance --phase install-classic --from 0.11.4 --bridge $old.bridge --control $old.control --designer $old.designer --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the 0.11.4 console, a row ON AIR (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive --mode classic --from 0.11.4 --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade CG Bridge; read every Welcome (elevated)"
+          & $node $acceptance --phase upgrade --apps-open yes --from 0.11.4 --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade CG Control and CG Designer over the two apps OPEN (medium integrity)"
+          # Names without a space, for gsudo (it splits a quoted path at its space — measured on the 0.11.3 job).
+          Copy-Item $control installers\cg-control-setup.exe
+          Copy-Item $designer installers\cg-designer-setup.exe
+          $controlNs = (Resolve-Path installers\cg-control-setup.exe).Path
+          $designerNs = (Resolve-Path installers\cg-designer-setup.exe).Path
+          & $gsudo --integrity Medium $node $acceptance --phase upgrade-apps-open --from 0.11.4 --control $controlNs --designer $designerNs --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the upgraded console (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive-upgraded --from 0.11.4 --version $v --out acceptance
+          "::endgroup::"
+          "station alive at the end: $(-not $station.HasExited)"
+          & $node $acceptance --phase summary --expect install-classic,drive,upgrade,upgrade-apps-open,drive-upgraded --out acceptance
+          $code = $LASTEXITCODE
+          Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
+          exit $code
+
+      - name: Upload the acceptance evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-upgrade-0114
+          path: acceptance/
+          retention-days: 30
+
+  acceptance-upgrade-0115:
+    name: Release acceptance — upgrade from 0.11.5, apps open (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 50
+    permissions:
+      # `v0.11.5` is PUBLISHED, so `gh release download` would read it with `contents: read`. The write
+      # scope is kept because the earlier upgrade jobs start from DRAFTS, and one shape for all of them.
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node 24 (the fakes run by type stripping)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CasparCG's stand-in
+        run: pnpm --filter @cg/amcp-mock build
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: The 0.11.5 installers, from the v0.11.5 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.11.5 --pattern 'CG-*_0.11.5_x64-setup.exe' --dir previous
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem previous | Format-Table Name, Length
+
+      # ONE step, for the reason the fresh job gives.
+      - name: The 0.11.5 set up with a row ON AIR, each installer upgraded (the apps open), the upgraded console
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          $node = (Get-Command node -ErrorAction Stop).Source
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          $v = '${{ needs.installers.outputs.version }}'
+          $acceptance = 'apps/runtime/tests/desktop/release-acceptance.mjs'
+          New-Item -ItemType Directory -Force acceptance | Out-Null
+          $station = Start-Process $node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -PassThru -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
+          Get-Content acceptance/station.json
+          $old = @{ bridge = (Resolve-Path previous/CG-Bridge_0.11.5_x64-setup.exe).Path; control = (Resolve-Path previous/CG-Control_0.11.5_x64-setup.exe).Path; designer = (Resolve-Path previous/CG-Designer_0.11.5_x64-setup.exe).Path }
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          "::group::install-classic 0.11.5 (elevated)"
+          & $node $acceptance --phase install-classic --from 0.11.5 --bridge $old.bridge --control $old.control --designer $old.designer --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the 0.11.5 console, a row ON AIR (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive --mode classic --from 0.11.5 --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade CG Bridge; read every Welcome (elevated)"
+          & $node $acceptance --phase upgrade --apps-open yes --from 0.11.5 --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade CG Control and CG Designer over the two apps OPEN (medium integrity)"
+          # Names without a space, for gsudo (it splits a quoted path at its space — measured on the 0.11.3 job).
+          Copy-Item $control installers\cg-control-setup.exe
+          Copy-Item $designer installers\cg-designer-setup.exe
+          $controlNs = (Resolve-Path installers\cg-control-setup.exe).Path
+          $designerNs = (Resolve-Path installers\cg-designer-setup.exe).Path
+          & $gsudo --integrity Medium $node $acceptance --phase upgrade-apps-open --from 0.11.5 --control $controlNs --designer $designerNs --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the upgraded console (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive-upgraded --from 0.11.5 --version $v --out acceptance
+          "::endgroup::"
+          "station alive at the end: $(-not $station.HasExited)"
+          & $node $acceptance --phase summary --expect install-classic,drive,upgrade,upgrade-apps-open,drive-upgraded --out acceptance
+          $code = $LASTEXITCODE
+          Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
+          exit $code
+
+      - name: Upload the acceptance evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-upgrade-0115
+          path: acceptance/
+          retention-days: 30
+
+  # RELEASE-0110-01 §2 — THE INSTALL GUIDE'S PICTURES OF CG CONTROL AND CG DESIGNER, from the built
+  # consoles on Windows (the client's fonts and rendering), by the two `guide-shots.spec.ts` harnesses
+  # (`CG_GUIDE_SHOTS`). By hand only (`gh workflow run Desktop --ref dev`): a push never pays for it.
+  # The PNGs are an artifact; the release's author commits them into `docs/release/<version>/img/`.
+  # A runner rather than a developer's machine because the second harness binds a CasparCG stand-in on
+  # TCP 5250, which the owner's machine — also a station — may have its own CG Bridge dialling. The
+  # installers' own pages are pictured by `setup-window`. No real address, token or password in any
+  # picture: a documentation address is typed (RFC 5737) and the password is masked by its field.
+  # Also on a push whose head commit asks for it (`[guide-shots]` in its message): a dispatch queued
+  # behind a push run is replaced by the next push (one pending run per concurrency group).
+  guide-shots:
+    name: Guide screenshots (on request)
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[guide-shots]') }}
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The pictures are of the BUILT consoles (Playwright's staleness guard refuses anything else).
+      - name: Build (workspace)
+        run: pnpm build
+
+      - name: CG Control's and CG Designer's pictures (the runner's Chrome)
+        shell: pwsh
+        env:
+          CG_GUIDE_SHOTS: ${{ github.workspace }}\guide-shots
+          PW_CHANNEL: chrome
+        run: |
+          pnpm --filter @cg/runtime exec playwright test tests/e2e/guide-shots.spec.ts --reporter=list
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          pnpm --filter @cg/designer exec playwright test tests/e2e/guide-shots.spec.ts --reporter=list
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem guide-shots | Format-Table Name, Length
+
+      - name: Upload the pictures
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: guide-shots
+          path: guide-shots/
+          retention-days: 30
+
+  # CLIENT-TEST-RELEASE-01 B4 — ON A TAG ONLY, and only once the installers are built from the
+  # tagged commit and BOTH clean-Windows smokes have passed (the apps', and CG Bridge's own): a DRAFT
+  # pre-release with exactly five files (CENTRAL-BRIDGE-01: CG Bridge's installer joined the two).
+  # INSTALLER-DESIGN-01 — and the setup window's own job, on both Windows images.
+  # Never published here.
+  # RELEASE-0110-01 §3 — and both release acceptances: a fresh install offline, driven end to end, and
+  # the real upgrade from 0.10.0.
+  # RELEASE-0112-01 Part D — and the real upgrades from 0.11.0 and from 0.11.1.
+  # RELEASE-0113-01 Part E — and the real upgrade from 0.11.2.
+  # RELEASE-0114-01 Part D — and the real upgrade from 0.11.3, the two apps open through it (delta C).
+  # RELEASE-0115-01 Part C — and the real upgrade from 0.11.4, the two apps open through it.
+  # RELEASE-0116-01 Part C — and the real upgrade from 0.11.5, the two apps open through it.
+  release:
+    name: Draft release (tag only)
+    if: ${{ github.ref_type == 'tag' }}
+    needs:
+      [
+        installers,
+        smoke,
+        bridge-smoke,
+        setup-window,
+        acceptance-fresh,
+        acceptance-upgrade,
+        acceptance-upgrade-0110,
+        acceptance-upgrade-0111,
+        acceptance-upgrade-0112,
+        acceptance-upgrade-0113,
+        acceptance-upgrade-0114,
+        acceptance-upgrade-0115,
+      ]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # For Playwright, which prints the guide with the runner's installed Chrome (nothing fetched).
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: Build the Persian install guide (PDF)
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.installers.outputs.version }}
+        run: |
+          node tools/release/src/build-guide.mjs "docs/release/$env:VERSION/install-guide.fa.md" --out guide/install-guide.pdf
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # Exactly five files (tools/release/src/release-files.mjs): the three installers under names with
+      # no space (GitHub would rewrite one, and SHA256SUMS.txt would name a file nobody downloads), the
+      # guide, and SHA256SUMS.txt over the other four in sha256sum's own format.
+      - name: Assemble the release's five files
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.installers.outputs.version }}
+        run: |
+          node tools/release/src/release-files.mjs assemble $env:VERSION installers guide/install-guide.pdf release
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Open the DRAFT pre-release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.installers.outputs.version }}
+        run: |
+          # RELEASE-0110-01 — `0.11.0` is the build the client receives: titled as the release itself.
+          $notes = @(
+            "APASAI CG $env:VERSION. DRAFT: published by hand, never by CI.",
+            '',
+            '- CG Bridge installer - install it FIRST: per machine, the Windows service every CG Control connects to, on the Playout machine or on a server beside it. It opens TCP 5280 and 7911 and UDP 6251-6252 for itself only.',
+            '- CG Control installer (per user; no administrator; no bridge of its own - it connects to CG Bridge).',
+            '- CG Designer installer (per user; no administrator).',
+            '- SHA256SUMS.txt - the SHA-256 of the other four files.',
+            '- The Persian install guide (PDF).',
+            '',
+            'Unsigned: Windows SmartScreen warns before installing - the guide says what to press.'
+          ) -join "`n"
+          $files = (Get-ChildItem release -File).FullName
+          gh release create $env:TAG --draft --prerelease --verify-tag --title "APASAI CG $env:VERSION" --notes $notes @files
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # Read back, never trust the exit code (CLAUDE.md "Verify before claiming"): a draft, a
+      # pre-release, and exactly these five assets.
+      - name: Read the draft back
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.installers.outputs.version }}
+        run: |
+          $release = gh release view $env:TAG --json isDraft,isPrerelease,assets,url | ConvertFrom-Json
+          $names = @($release.assets | ForEach-Object { $_.name } | Sort-Object)
+          $expected = @(node tools/release/src/release-files.mjs expect $env:VERSION | Sort-Object)
+          "draft=$($release.isDraft) prerelease=$($release.isPrerelease) url=$($release.url)"
+          $release.assets | ForEach-Object { "{0,12}  {1}" -f $_.size, $_.name }
+          if (-not $release.isDraft -or -not $release.isPrerelease) { throw 'the release is not a draft pre-release' }
+          if (($names -join '|') -ne ($expected -join '|')) { throw "assets are [$($names -join ', ')], not [$($expected -join ', ')]" }
+
+      # P-060 — SHA256SUMS.txt against what was UPLOADED, never the local copy: every line names an asset
+      # of the release exactly, every asset but the sums has a line, and each hash is the file's as
+      # GitHub serves it (and GitHub's own digest of it, when it reports one). A wrong name stops here.
+      - name: Check SHA256SUMS.txt against the uploaded assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release download $env:TAG --dir uploaded
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          gh release view $env:TAG --json assets | Out-File -Encoding utf8 uploaded-assets.json
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          node tools/release/src/release-files.mjs verify uploaded --assets uploaded-assets.json
+          if ($LASTEXITCODE -ne 0) { exit 1 }

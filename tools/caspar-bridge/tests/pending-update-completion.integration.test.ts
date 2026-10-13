@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-044 — pending-intent completion. The regression this pins: `updating` /
@@ -80,7 +80,10 @@ async function bootOnAir(opts: { disableOsc: boolean; intentTimeoutMs?: number }
   runtime = new CasparRuntime(
     connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
     {},
-    opts.intentTimeoutMs !== undefined ? { intentTimeoutMs: opts.intentTimeoutMs } : {},
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      ...(opts.intentTimeoutMs !== undefined ? { intentTimeoutMs: opts.intentTimeoutMs } : {}),
+    },
   );
   runtime.start();
   await runtime.startServing();

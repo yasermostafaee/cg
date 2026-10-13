@@ -14,7 +14,14 @@ interface Props {
    * toggle. For sections that should never be hidden (Transform, Path Style).
    */
   pinned?: boolean;
-  children: ReactNode;
+  /**
+   * `DESIGNER-FIX-0905` — the WHOLE section is withheld for this element kind: the
+   * header stays, dimmed and inert, with the reason as its tooltip and a `withheld`
+   * tag beside the title; the body is never rendered. A section that vanishes teaches
+   * nothing about why it is unavailable (the Live Source's Filter section used to).
+   */
+  withheld?: string | undefined;
+  children?: ReactNode;
 }
 
 /**
@@ -27,10 +34,22 @@ export function CollapseSection({
   defaultExpanded = false,
   trailing,
   pinned = false,
+  withheld,
   children,
 }: Props): JSX.Element {
   const [open, setOpen] = useState(defaultExpanded);
   const expanded = pinned || open;
+  if (withheld !== undefined) {
+    return (
+      <div className={s.section} data-testid="section-withheld" data-section={title}>
+        <div className={s.headerWithheld} title={withheld} aria-disabled="true">
+          <span className={s.chevron} aria-hidden />
+          <span>{title}</span>
+          <span className={s.withheldTag}>withheld</span>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={s.section}>
       {pinned ? (

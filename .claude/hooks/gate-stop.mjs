@@ -26,6 +26,14 @@
  * Full command output lands in `.gate-logs/<session_id>.log` (gitignored); stderr
  * carries only the tail (hook output is capped ~10k chars).
  *
+ * P-045: the gate's output is STREAMED into that log by the child itself — its stdout and
+ * stderr are the log file's descriptor (`tools/gate-hook/src/gate-run.mjs`), so there is no
+ * pipe and no `maxBuffer`. The previous `spawnSync(…, { encoding: 'utf8' })` buffered the
+ * output under Node's default 1 MiB cap and KILLED the gate past it (`ENOBUFS`, `SIGTERM`,
+ * `status: null`), which this hook then reported as a red gate. Every green gate measured on
+ * 2026-09-06 printed 954,627 to 1,013,268 bytes — within 4 % of the cap. The tail printed
+ * below is sliced from the file after the gate exits.
+ *
  * P-013: this hook does NOT lock anything itself. The `pnpm gate` / `pnpm gate:e2e` it
  * runs each acquire this host's exclusive gate slot inside their own scripts (a host-wide
  * advisory lock), so if a turn end fires this hook at the same moment a push fires
@@ -47,6 +55,7 @@ import {
   localE2eOptIn,
   nextAttempt,
 } from '../../tools/gate-hook/src/gate-decision.mjs';
+import { runGateCommand } from '../../tools/gate-hook/src/gate-run.mjs';
 
 const REPAIR_RULES = `REPAIR RULES (non-negotiable):
 - Fix the CODE, not the test. Never delete, skip, .only, loosen an assertion, or widen a tolerance to go green.
@@ -126,11 +135,10 @@ function main() {
   for (const command of commands) {
     ranE2e = ranE2e || command === 'pnpm gate:e2e';
     log(`\n──── ${new Date().toISOString()} $ ${command}\n`);
-    // `shell: true` so `pnpm` resolves on Windows (pnpm.cmd) and POSIX alike; the
-    // command strings are our own constants, never user input.
-    const run = spawnSync(command, { cwd: root, shell: true, encoding: 'utf8', windowsHide: true });
-    const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
-    log(output);
+    // P-045 — the child writes STRAIGHT INTO the log file: no pipe, no `maxBuffer`, no
+    // capture that can kill a green gate. `run.tail` is sliced from the file afterwards.
+    const run = runGateCommand({ command, cwd: root, logFile });
+    if (!run.streamed) log(run.tail);
     if (run.status !== 0) {
       // 6. Red — bounded, non-cheating self-repair.
       let prev = null;
@@ -156,9 +164,15 @@ function main() {
         );
         return 0;
       }
-      const tail = output.split('\n').slice(-120).join('\n');
+      const tail = run.tail.split('\n').slice(-120).join('\n');
+      // A signal here can only be the GATE's own death (P-045 removed the capture's): say
+      // which, so a killed gate is never read as a failing task.
+      const verdict =
+        run.status === null
+          ? `died (${run.signal ?? 'no exit code'}) — not a failing task; check the host`
+          : `failed (exit ${run.status})`;
       process.stderr.write(
-        `The turn's local gate is RED — \`${command}\` failed (attempt ${attempts}/2 before escalation).\n` +
+        `The turn's local gate is RED — \`${command}\` ${verdict} (attempt ${attempts}/2 before escalation).\n` +
           `Failing output tail (full log: .gate-logs/${sessionId}.log):\n\n${tail}\n\n${REPAIR_RULES}\n`,
       );
       return 2;

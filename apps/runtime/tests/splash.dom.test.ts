@@ -40,14 +40,14 @@ const inlineScript = (() => {
   const match = /<script>([\s\S]*?)<\/script>/.exec(html);
   if (match === null)
     throw new Error('no inline <script> in index.html — the splash clock is gone');
-  return match[1];
+  return match[1] as string;
 })();
 
 /** The document body with both `<script>` blocks stripped — the splash's markup. */
 const bodyMarkup = (() => {
   const match = /<body>([\s\S]*)<\/body>/.exec(html);
   if (match === null) throw new Error('no <body> in index.html');
-  return match[1].replace(/<script[\s\S]*?<\/script>/g, '');
+  return (match[1] as string).replace(/<script[\s\S]*?<\/script>/g, '');
 })();
 
 /** A numeric `var NAME = 123;` from the inline script. */
@@ -162,7 +162,7 @@ describe('the phase readout', () => {
     runSplashScript();
     // A step is finished when the NEXT one begins, so entering step 2 puts one behind us.
     // The clock is at 0 here, so the `min` pins both readings to the clock's 0.
-    splash().phase('PROBING BRIDGE');
+    splash().phase('CONNECTING');
     expect(shownPct()).toBe(expected(0, 1));
     expect(railPct()).toBe(shownPct());
 
@@ -204,7 +204,7 @@ describe('the phase readout', () => {
     // The boot never finishes. Pretending the number got there would invent the one thing
     // this readout refuses to invent.
     runSplashScript();
-    splash().phase('PROBING BRIDGE');
+    splash().phase('CONNECTING');
     vi.advanceTimersByTime(SPLASH_CEILING_MS);
     expect(splashEl()?.getAttribute('data-dismissing')).toBe('true');
     expect(shownPct()).toBe('33%');
@@ -393,6 +393,30 @@ describe('the test-suite door', () => {
   it('is not reachable from the URL — the script never reads location', () => {
     // A query parameter is a door an operator can reach by bookmark or typo.
     expect(inlineScript).not.toMatch(/location|URLSearchParams|search/);
+  });
+});
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` — **IN CG CONTROL'S WINDOW THIS SPLASH IS THE FIRST ONE ON SCREEN.** The app
+ * bundles this page; there is no starting page before it any more, so nothing marks it continued
+ * and its entrance plays there as in a browser. `FIELD-FIXES-01` J's `data-continued` belonged to a
+ * window that showed a starting page while its bridge started — pinned here as an ABSENCE, the
+ * direction it would come back in. (The entrance itself is measured by `e2e/splash.spec.ts`.)
+ */
+describe('CENTRAL-BRIDGE-01 — in CG Control’s window the splash makes its entrance', () => {
+  afterEach(() => {
+    delete (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  });
+
+  it('🔴 in the shell’s window nothing marks it continued — and it keeps its clock', () => {
+    (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {};
+    runSplashScript();
+    expect(splashEl()?.hasAttribute('data-continued')).toBe(false);
+    expect(() => splash()).not.toThrow();
+  });
+
+  it('…and the page carries no rule that would skip an entrance', () => {
+    expect(html).not.toContain('data-continued');
   });
 });
 

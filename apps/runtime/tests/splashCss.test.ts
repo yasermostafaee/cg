@@ -60,7 +60,7 @@ const tokenValues = new Map(
  */
 const localConstants = new Map(
   [...code.matchAll(/(--cg-[a-z0-9-]+)\s*:\s*([^;]+);/g)].map(
-    (m) => [normalise(m[2]), m[1]] as const,
+    (m) => [normalise(m[2] as string), m[1]] as const,
   ),
 );
 
@@ -111,7 +111,7 @@ function channels(literal: string): { r: number; g: number; b: number } {
       b: parseInt(full.slice(4, 6), 16),
     };
   }
-  const parts = /rgba?\(([^)]*)\)/.exec(literal)?.[1].split(',') ?? [];
+  const parts = /rgba?\(([^)]*)\)/.exec(literal)?.[1]?.split(',') ?? [];
   return { r: Number(parts[0]), g: Number(parts[1]), b: Number(parts[2]) };
 }
 
@@ -147,8 +147,18 @@ describe('the splash mirrors the palette rather than inventing one', () => {
     // That is a SPLASH-LOCAL decision: the app's `--r-accent` must not have moved with it.
     expect(localConstants.get('#00aeef')).toBe('--cg-brand');
     expect(localConstants.get('#0090c9')).toBe('--cg-brand-deep');
-    expect(cssVars['--r-accent'], 'the app accent was dragged along with the splash').toBe(
-      '#38BDF8',
+    /*
+     * ⚠ THIS USED TO PIN `--r-accent`'s VALUE (`#38BDF8`), and that was the wrong
+     * assertion in the way `PROMPT.md` §11 names: it asserted the ARTEFACT that
+     * expressed the property rather than the property. `RUNTIME-REDESIGN-01` Phase 2
+     * moved the app's sky to the approved reference's blue and this line went red
+     * having caught nothing — the splash was untouched, which is the very thing it
+     * claims to be guarding. The property is that the two are INDEPENDENT: the brand
+     * screen wears the company blue, the console wears its own, and neither is the
+     * other.
+     */
+    expect(normalise(cssVars['--r-accent']), 'the app accent became the brand blue').not.toBe(
+      '#00aeef',
     );
     // …and the sky no longer appears on the first frame at all.
     expect(literals.map(normalise)).not.toContain(normalise(cssVars['--r-accent']));
@@ -165,9 +175,11 @@ describe('the splash mirrors the palette rather than inventing one', () => {
     // Violet and amber depict broadcast graphics; nothing in the console may wear them.
     expect(localConstants.get('#a78bfa')).toBe('--cg-violet');
     expect(localConstants.get('#fbbf24')).toBe('--cg-amber');
-    // The amber has no token at all. (The violet's value coincides with `--r-rehearsing`,
-    // which is a coincidence and not a reference — the scene means "graphic on air", not
-    // "rehearsing", and the two must be free to move apart.)
+    // Neither has a token. The violet's value USED to coincide with `--r-rehearsing`,
+    // and the note here said the two must be free to move apart because the scene means
+    // "graphic on air" and not "rehearsing". Phase 2 moved `--r-rehearsing` to the
+    // reference's violet and this one stayed: they have now actually moved apart, which
+    // is the prediction coming true rather than a new fact.
     expect(Object.values(cssVars)).not.toContain('#FBBF24');
     for (const name of Object.keys(cssVars)) {
       expect(name.startsWith('--r-splash-brand')).toBe(false);
@@ -245,14 +257,14 @@ function keyframeBodies(css: string): Map<string, string> {
       else if (css[i] === '}') depth -= 1;
       i += 1;
     }
-    out.set(match[1], css.slice(opener.lastIndex, i - 1));
+    out.set(match[1] as string, css.slice(opener.lastIndex, i - 1));
   }
   return out;
 }
 
 /** The CSS properties a keyframe body animates. */
 function animatedProperties(body: string): string[] {
-  return [...new Set([...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]))].sort();
+  return [...new Set([...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1] as string))].sort();
 }
 
 describe('THE KEYFRAME AUDIT — a loop may cost a compositor frame and nothing more', () => {
@@ -261,8 +273,8 @@ describe('THE KEYFRAME AUDIT — a loop may cost a compositor frame and nothing 
   /** Keyframe names referenced by an `animation:` that repeats forever. */
   const looping = new Set(
     [...code.matchAll(/animation:\s*([^;]+);/g)]
-      .filter((m) => m[1].includes('infinite'))
-      .flatMap((m) => [...bodies.keys()].filter((name) => m[1].includes(name))),
+      .filter((m) => (m[1] as string).includes('infinite'))
+      .flatMap((m) => [...bodies.keys()].filter((name) => (m[1] as string).includes(name))),
   );
 
   it('finds the loops at all', () => {
@@ -279,7 +291,7 @@ describe('THE KEYFRAME AUDIT — a loop may cost a compositor frame and nothing 
     const referenced = [
       ...new Set(
         [...code.matchAll(/animation:\s*([^;]+);/g)].flatMap((m) =>
-          m[1].split(/[\s,]+/).filter((token) => /^cg-[\w-]+$/.test(token)),
+          (m[1] as string).split(/[\s,]+/).filter((token) => /^cg-[\w-]+$/.test(token)),
         ),
       ),
     ];
@@ -402,7 +414,9 @@ describe('the APASAI mark', () => {
 
   /** Every `d="…"` in a document, whitespace-normalised. */
   function paths(svg: string): string[] {
-    return [...svg.matchAll(/\sd="([^"]+)"/g)].map((m) => m[1].replace(/\s+/g, ' ').trim());
+    return [...svg.matchAll(/\sd="([^"]+)"/g)].map((m) =>
+      (m[1] as string).replace(/\s+/g, ' ').trim(),
+    );
   }
 
   it('is inlined, not fetched — a mark that arrives late is one the first frame lacks', () => {
@@ -474,9 +488,13 @@ describe('the splash does not wait on a webfont', () => {
     expect(code).toContain('ui-monospace');
   });
 
-  it('loads the CDN face non-render-blocking, so the first frame never waits on a network', () => {
-    // A plain `<link rel=stylesheet>` to a CDN blocks the first paint until it answers
-    // or times out — and on a LAN-only broadcast machine it never answers.
-    expect(code).toMatch(/media="print"/);
+  it('links nothing off the machine, so the first frame never waits on a network (P-001)', () => {
+    // A `<link rel=stylesheet>` to a CDN blocks the first paint until it answers or times
+    // out — and on a LAN-only broadcast machine it never answers. R-035 made the CDN face
+    // non-blocking; P-001 removed it, because the faces ship in `fonts.css`.
+    // Control: the text below is the page head, so an absence in it is a real absence.
+    expect(code).toContain('<title>');
+    expect(code).not.toMatch(/<link[^>]+href=["']https?:\/\//);
+    expect(code).not.toContain('cdn.jsdelivr.net');
   });
 });

@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * C-001 Phase 2 — the real `@cg/caspar-client` stack inside the bridge, driven
@@ -62,7 +62,11 @@ it('drives load/take/update/out as AMCP (acked) and confirms state from real OSC
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
 
-  runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  runtime = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   // B-038 Phase 3 — start the template HTTP server and register the template, so
   // `CG ADD` references a served URL the (now-resolving) mock can fetch (→ 202).
@@ -115,7 +119,11 @@ it('drives load/take/update/out as AMCP (acked) and confirms state from real OSC
 it('reports health from the real session state', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 20 });
-  runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  runtime = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.whenServerHealthy(HEALTH_MS);
 

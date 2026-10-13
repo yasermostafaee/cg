@@ -39,27 +39,242 @@ Persian / RTL is a core requirement.
    the wait (`probeAmcpLiveness`), never by a quiet OSC port. Reading silence on one
    channel as death on another is what destroyed a working socket every ~13 s on
    every OSC-less install (see `B-101`, and `B-100` one layer up).
+9. **When the deliverable is a STRING, the compiler cannot help you.** Changing user-facing
+   wording obliges a tree-wide `git grep` for the OLD text — tests, docs, task lists and spec
+   files — BEFORE the commit, because the only thing that fails on a stale copy is a suite that
+   does not run locally. Session BM-2 changed one sentence in the Inspector, fixed the one unit
+   test that reddened, and pushed a red `e2e`: `pnpm gate` does not run Playwright (`P-028`), so
+   nothing local could catch it — **one grep would have**, and the same sweep also found a
+   `tasks.md` still quoting the old sentence as shipped fact. The rule is the sweep, not "run the
+   E2E": the E2E is slow and non-authoritative here, while the grep is cheap and total.
+   ⚠ That clause about the gate is stated here only to explain why a GREP is the remedy for a
+   STRING. As a fact about the gate it belongs to **golden rule 12**, which is where it is
+   argued and where its three faces are named — do not grow a second copy of it here.
+
+   ⚠ **`git grep`, NOT `grep -r` and NOT ripgrep — a sweep whose tool can go blind is not a
+   sweep.** A file containing a **NUL byte** reads as BINARY to those two and is skipped **in
+   silence**: no warning, no non-zero exit, just a match count that is quietly short. The sweep
+   then looks clean, which is worse than not running it. Two such files sat in the tree until
+   session BP found them — one in `@cg/shared-ipc`'s `channels/sources.ts` (the module that owns
+   `SourceAssignments`, invisible during a session whose whole subject was that type) and four
+   occurrences in the OSC probe — each a separator written as a literal byte instead of its
+   escape. **`git grep` was not blind only because it samples the first 8000 bytes for binary
+   detection and both NULs happened to sit past that**, which is precisely what kept the hole
+   looking closed. Write separators as escapes, never as literal bytes; and if you have just
+   written a file that talks about NUL bytes, scan it — `node -e "…readFileSync(p).indexOf(0)"` is
+   the whole check, and BP wrote one into its own handoff that way.
+
+   ⚠ **THE SWEEP IS A PROCEDURE, NOT A GREP — and it is written down because the instrument has
+   now under-reported THREE times in one session** (`CONSOLE-LOOK-06` DELTA R §B5). Each miss
+   looked like a clean result:
+   1. an `apps/*/tests` pathspec matched **nothing, silently** — a git wildcard pathspec is a
+      full-path match, so it addressed no file and printed an empty, reassuring answer;
+   2. filtering the hits by Playwright's own vocabulary (`getByRole`, `name:`, …) **hid a jsdom
+      test** that pinned the same copy with a bare `RegExp.test`;
+   3. a **one-line** scan of `message:` sites found 4 of 10, missing the very message the owner
+      had photographed, because that one is built across several lines.
+
+   Three failures of one instrument is an instrument defect, so every sweep from here:
+   - **(a) TWO independent passes on DIFFERENT axes** — by STRING, and by COMPONENT or CLASS —
+     and the report says which pass found what. **A single pass is not a sweep.**
+   - **(b) PROVE EVERY PATHSPEC MATCHES SOMETHING before trusting its result, and report the
+     match count per pathspec** (e.g. `127 / 178 / 22 / 18`). **A zero is an error, not an
+     answer.**
+   - **(c) NEVER NARROW BY ONE RUNNER'S VOCABULARY.** jsdom specs pin copy too, and so do docs,
+     task lists and spec files.
+
+   ⭐ And scan MULTI-LINE where the deliverable can be built across lines: a template literal
+   concatenated over three lines is invisible to a per-line regex, which is how (3) happened.
+
+   ⭐ **AND A VALUE HAS NOTATIONS — sweep every one it can be written in.** A COLOUR is the
+   common case: `#f5c879`, `rgb(245 200 121)` and `rgb(245, 200, 121)` are one value in three
+   spellings, and a sweep by token NAME plus hex finds neither of the last two. That is exactly
+   how a fourth miss happened on 2026-09-13 — two passes agreed the ink unification was
+   complete, and `station-setup-match.spec.ts` was still pinning the retired amber as
+   `rgb(245, 200, 121)`. The same applies to a number with units (`4px` / `0.25rem`) and to a
+   name with casing (`LIVE PLATES` / `Live plates`). **Two passes on different AXES is the
+   rule; within an axis, cover every SPELLING of the thing.**
+
+10. 🔴 **A CONFIGURATION VERB IS NEVER A PLAYOUT VERB.** `UPDATE` puts values **IN
+    FORCE**; only a **take** puts content **ON AIR**. A row that does not already own live
+    layers must produce **no `PLAY`, no un-mute and no fill** — the change lands in STATE, and
+    the next take seats it. `B-161`: the owner stopped several plates, swapped their inputs and
+    pressed UPDATE alone, and the videos went to air with **no template above them** — measured
+    at the wire as four `PLAY`s, four `MIXER VOLUME` and eight `MIXER FILL`/`CLIP` on a row that
+    had never been taken. The complement of BM's _STAGED ≠ IN FORCE_.
+    ⚠ **Gate at the ROW, never at the look or the visible hole.** A live row's UNION pre-seat
+    — every look's inputs, including the looks not punched — is what makes a switch pure
+    `MIXER FILL`; narrowing it puts a `PLAY` back inside a switch (`B-155` case 3). If a gate
+    changes the pre-seat SET, it is the wrong gate.
+    ⚠ **And "owns live layers" is NOT `isOnAirStatus` alone — the other half is the LEDGER,
+    and it is NEVER the rehearse flag (`B-216`).** A row whose seats survived a bridge restart
+    while its status did not (`B-145` boot adoption) holds producers that are on the channel,
+    and a configuration change on it re-points them whatever the status says. A REHEARSING row
+    owns nothing on the channel: PVW is a browser render (`R-022`, nothing is ever sent to
+    CasparCG) and `enterRehearse` seats nothing — `B-161`'s first spelling put `rehearsing`
+    inside the predicate and an UPDATE on a rehearsing, never-taken row went on seating four
+    producers, `B-161`'s own defect reached through the flag added to fix it. Use the ONE
+    predicate that asks what the decision turns on (`#ownsLiveSeats` = on air OR the ledger
+    holds seats) at EVERY door — `update`, `swapLiveSource`, `setActiveLook`, a volume raise —
+    and gate the one path the verbs share rather than making two paths agree.
+
+11. 🔴 **AN OPERATOR-FACING SURFACE NAMES THINGS IN THE OPERATOR'S WORDS.** Internal ids —
+    item ids, template UUIDs, slot indexes, persistent consumer ids — live behind a `title`
+    or on a TECHNICAL surface. They never appear in the sentence he reads under pressure.
+    The one canonical composition is `renderer/ui/operatorNaming.ts` (`operatorRowName`);
+    call it, never compose a label locally.
+    ⚠ **The id is not DELETED, it is RELOCATED.** `B-211` settled that half and it still
+    holds: a name can be renamed or repeated and an id cannot, so the audit record keeps
+    both — shortened for the eye, complete in the `title` and on a copy button. The rule is
+    about which of the two is in the SENTENCE.
+    ⭐ **Keep the real LAYER NUMBER visible** where a row is named IN A SENTENCE — a notice,
+    a log entry, a banner. `R-028`'s reason — _"an operator may need it to clear that layer by
+    hand"_ — is about the moment the console is NOT helping, so a hover does not discharge it
+    there. ⚠ **The layer TABLE is the deliberate exception, and the citation here used to say
+    the opposite:** `operator-surface` §2 was answered **(A) — the supersession STANDS**, so the
+    table keeps the number in its `title`/`aria-label` and the LAYER column does not come back
+    (`R-028`'s acceptance bullet was amended to match, 2026-09-07). Two surface classes, two
+    answers: the table pays a density ladder for every column and the notice pays nothing.
+    ⚠ **And isolate every name you render.** Row names are Persian, template names are
+    often Latin, and separators and coordinates are NEUTRALS: joined into one text node
+    their placement is decided by the bidi algorithm rather than by you. Each piece of
+    operator data goes in its own `<bdi>` (`ui/OperatorNames.tsx`) and the line itself stays
+    LTR chrome — `dir="auto"` on the line would flip the English clauses beside the name.
+    **Four surfaces learned this separately before it was written down** — `B-210`/`B-211`
+    (the audit log), `B-223` (the output alarm), `useTemplateIndex`'s own header (the stack
+    row and Inspector), and `B-232` (the emptied-air notice, measured on the plant as
+    `1-9 · e506e319-…`). A rule nobody can point at is re-learned per surface.
+
+12. 🔴 **A GREEN GATE IS NO EVIDENCE ABOUT ANYTHING THAT RENDERS.** `pnpm gate` does not run
+    Playwright (`P-028`), so **render work is UNVERIFIED until an e2e has actually run.** The
+    gate proves the code compiles, lints and passes its unit tests; it says nothing whatsoever
+    about what appears on screen. Never let a green gate stand in for that — and never report
+    render work as verified on the strength of one.
+    ⭐ **The practical rule: run `pnpm --filter @cg/<app> test:e2e` locally before pushing
+    render work**, and re-run it after any later edit that changes what a surface CONTAINS —
+    not only after the edit that changed how it looks.
+    ⚠ **It has three faces, and each has been met separately.** They are named together
+    because each looks like a different problem while being this one.
+    (a) **A WINDOWS pass does not discharge a LINUX e2e.** The host that gives a green local
+    `gate:e2e` is the host carrying the `B-098` load-flake class; a Windows run is a useful
+    signal and never a discharge (see "E2E coverage").
+    (b) **A GREEN CI JOB CAN BE A SKIPPED ONE.** CI skips `e2e` when the diff is classified as
+    unable to affect rendering (`P-029`). Check the job **RAN** — a run whose `e2e` was skipped
+    proves nothing about the suite, and `conclusion: success` on the run does not distinguish
+    the two. ⚠ **And it reads the same way backwards: a RED job whose `e2e` step never reached
+    the suite is not evidence about the code either** — `P-046` is the measured instance, where
+    a third-party apt index sank the browser-deps step and the `E2E` step was SKIPPED, so the
+    job was red in 55 s having run no test at all; check that the job **RAN**, in both
+    directions.
+    (c) **THE GATE DOES NOT RUN THE RENDERER AT ALL.** No amount of unit green covers layout:
+    jsdom has no layout, so `getBoundingClientRect()` is all zeros there and a dom spec
+    asserting a box, an edge or an overflow passes against a surface of ANY shape, including a
+    broken one. A geometry claim is measured in a real engine or it is not measured.
+    ⚠ **And jsdom's CASCADE is not Chrome's, either** — a narrower trap than the missing
+    layout and the one that actually hid the rail's white box. A `getComputedStyle` COLOUR,
+    keyword or declared length IS real there (`cssstyle` resolves the cascade), which is what
+    makes the contrast specs and `live-source-frame.test.ts` legitimate; but an edge case the
+    two engines resolve differently — a border whose colour declarations were deleted, leaving
+    a width and a style — reads one way in jsdom and another on screen. So a computed-style
+    assertion is REAL for the value a stylesheet declares and UNSAFE as a proxy for what the
+    browser paints.
+    **Written down because it has been learned three times in three sessions — by three
+    different mechanisms, which is the point of naming them separately:** `STATION-SETUP-02`
+    pushed a red `e2e` on a WORDING change, where layout never came into it and the miss was
+    simply that the gate does not run the suite (golden rule 9 owns the remedy); the
+    `STATION-CHROME-01` white box was the CASCADE divergence just above, not the missing
+    layout; and only `SOURCE-DELETE-GATE-03`'s footer edge — 18 px on three of five tabs — is
+    face (c) proper. In all three the gate was green at the moment of the push.
+    ⭐ And the corollary that makes such an assertion worth writing: **measure the property the
+    operator actually notices, not the one that is easy to reach.** That footer edge was found
+    only because `STATION-CHROME-02` had been made to measure it in a browser — the dialog's
+    outer box stayed identical on all five tabs the whole time the footer moved underneath it.
+    ⚠ **The hazard in (c) is REAL and currently UNEXERCISED, and both halves are measured.**
+    Every one of the 131 jsdom test files was swept for layout reads and **none was found** —
+    no `getBoundingClientRect`, no `offset*`/`client*`/`scroll*` dimension, and the three
+    `getComputedStyle` reads in the tree are cascade facts. So there is no vacuous geometry
+    test to delete today. That the hazard bites was proved by planting one: a spec asserting
+    `rect.width === 0`, `offsetWidth === 0` and `scrollHeight === 0` on a **1000 × 680** dialog
+    **passed**. Do not add the first one — and do not "fix" a vacuous assertion by weakening
+    it to something jsdom can answer, which is the same defect with a fresh coat.
+
+13. 🔴 **A SETTING THAT CAN BREAK THE TEMPLATE'S OWN CONTRACT BELONGS TO WHOEVER AUTHORED THE
+    CONTRACT.** `hold = content-driven` means "stay until the content finishes". An operator who
+    changes it pulls the background out from under a headline sequence that is still running —
+    the template keeps its promise and the operator breaks it without knowing they did. So playout
+    `mode` and `holdSource` are **designer-owned**: authored in the Designer's composition
+    inspector, READ-ONLY on every other surface — the Designer's preview and CG Control alike.
+    Per-element CONTENT timing is the complement and stays **operator-owned, per session**: crawl
+    passes, crawl cycle seam, rotator passes, rotator item dwell. The full decision, both lists and
+    the surfaces are `docs/adrs/0009-timing-setting-ownership.md`.
+    ⚠ **Remove the CHANNEL, not the control.** A read-only decision enforced by hiding or disabling
+    a control is one edit away from coming back. `mode` and `holdSource` are ABSENT from the
+    preview's session-override TYPE, so there is no control to disable and no route a value could
+    travel — the compiler enforces it in code nobody thought to lint.
+    ⚠ **And a fact is written as a FACT, never as a disabled control** (this is golden rule 11's
+    door and 12(c)'s together). A greyed-out select tells the operator they lack a permission when
+    the truth is the value was never theirs to set. Render it through the app's `Tag` — whose type
+    makes `onClick`, `tabIndex` and `role="button"` inexpressible — with none of a control's
+    border, background or chrome. The strongest form of "it refuses" is that it does not exist.
+
+## Cadence — classify every item before you start
+
+🔴 **SAY IN ONE LINE WHICH LANE EACH ITEM IS IN, before touching it.** The lane decides how often
+you gate and push, and nothing else.
+
+- **FAST LANE — visual only.** CSS, tokens, spacing, icons, copy inside a component, layout,
+  hover and focus treatment. Anything whose whole effect is what the screen looks like.
+- **FULL LANE.** The path to air · the wire/AMCP · an IPC channel schema · a persisted key · a
+  refusal CONDITION · shared config (`@cg/ui`, `CLAUDE.md`, `turbo.json`) · or a predicate
+  that decides what an operator can see or do.
+- 🔴 **If the lane is unclear it is FULL LANE.** Say so and carry on.
+
+**FAST LANE cadence — BATCH.** Do every fast-lane item in hand, committing per item as you go,
+running only the fast checks for what you touched (typecheck, lint, the touched package's dom
+specs). **ONE full gate at the end of the batch, then ONE push.** If the batch gate is red,
+bisect your own small commits rather than re-running the gate.
+
+**FULL LANE cadence — unchanged.** Per item: its own commit, its own full green gate, its own
+step-level e2e discharge READ before the next item starts.
+
+🔴 **NEVER BLOCK ON CI, in either lane.** CI is the record, not the gate. Push, keep working,
+read the step-level result when it lands and report it with the next batch.
+
+🔴 **If a fast-lane batch turns out to contain a full-lane change once you are in the code, stop
+batching, split it out, and say so.** That is the common case, not the rare one: a "just the
+colour" item that reaches a predicate is exactly how the lane is misread.
+
+⚠ **WHAT NEVER RELAXES.** The lane changes the CADENCE, never the floor:
+
+- no merge to `main`, and nothing handed over as a deliverable, without a **step-level e2e
+  discharge on that commit**;
+- `dev` is never left red — revert the batch and say why;
+- 🔴🔴 `silenceAllLivePlates` **STAYS UNSCOPED**;
+- refusal CONDITIONS do not change;
+- no wire, schema or persisted-key change rides a fast-lane batch;
+- a guard is never deleted or loosened to make a batch pass.
 
 ## Where features go
 
-| Feature kind                                    | Location                                                                                                                   |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| UI control / panel / tool (existing data)       | `apps/<app>/src/renderer/features/<feature>/` (+ `state/`, `hooks/`)                                                       |
-| New backend capability (no schema change)       | method in `src/shared/*-bridge.ts` → impl in `src/platform/` → call from renderer (+ optional channel in `@cg/shared-ipc`) |
-| Data-model change (element/field/shape kind)    | `@cg/shared-schema` → renderer UI → `@cg/template-runtime` render                                                          |
-| How a scene renders (animation, element visual) | `@cg/template-runtime`                                                                                                     |
-| `.vcg` package format / manifest / signing      | `@cg/shared-schema` (manifest) + `@cg/vcg-format`                                                                          |
-| Runtime/playout (intents, connections)          | `@cg/shared-ipc` channel + `apps/runtime/src/platform/MockRuntime.ts` + renderer (real logic → `@cg/caspar-client`)        |
-| Shared tokens / theme                           | `@cg/ui` (tokens ONLY — components live app-local, see Design system)                                                      |
-| Storage backend                                 | `@cg/storage`                                                                                                              |
+| Feature kind                                    | Location                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UI control / panel / tool (existing data)       | `apps/<app>/src/renderer/features/<feature>/` (+ `state/`, `hooks/`)                                                                                                                                                                                                                                                               |
+| New backend capability (no schema change)       | method in `src/shared/*-bridge.ts` → impl in `src/platform/` → call from renderer (+ optional channel in `@cg/shared-ipc`)                                                                                                                                                                                                         |
+| Data-model change (element/field/shape kind)    | `@cg/shared-schema` → renderer UI → `@cg/template-runtime` render                                                                                                                                                                                                                                                                  |
+| How a scene renders (animation, element visual) | `@cg/template-runtime`                                                                                                                                                                                                                                                                                                             |
+| `.vcg` package format / manifest / signing      | `@cg/shared-schema` (manifest) + `@cg/vcg-format`                                                                                                                                                                                                                                                                                  |
+| Runtime/playout (intents, connections)          | `@cg/shared-ipc` channel + `apps/runtime/src/platform/MockRuntime.ts` + renderer (real logic → `@cg/caspar-client`)                                                                                                                                                                                                                |
+| Shared tokens / theme                           | `@cg/ui` (tokens ONLY — components live app-local, see Design system)                                                                                                                                                                                                                                                              |
+| Shared INTERACTION behaviour (no styles/markup) | `@cg/gesture` — headless hooks only (B-140's drag gesture). NOT a home for components: it exists so `@cg/ui` can stay tokens-only and components can stay app-local, and behaviour with neither styling nor markup is a third category rather than an exception to either rule. Anything that renders app chrome belongs app-local |
+| Storage backend                                 | `@cg/storage`                                                                                                                                                                                                                                                                                                                      |
 
 ## Commands
 
 ```bash
 pnpm install
 pnpm build                              # turbo: build all @cg/* packages
-pnpm --filter @cg/designer dev          # Designer SPA → http://127.0.0.1:4000
-pnpm --filter @cg/runtime  dev          # Runtime  SPA → http://127.0.0.1:5174
+pnpm --filter @cg/designer dev          # Designer SPA → port 4000, LAN-visible by default (P-041); HOST=127.0.0.1 restricts
+pnpm --filter @cg/runtime  dev          # Runtime  SPA → port 5174, same; the page derives its bridge host from its own origin
 pnpm gate                               # full green gate — turbo --force + format:check + openspec validate. NEVER append flags (see below)
 pnpm test:e2e                           # Playwright E2E via turbo (builds first — never run against a stale dist)
 pnpm --filter @cg/<pkg> typecheck|lint|test|build   # one workspace
@@ -114,27 +329,52 @@ before.
 
 **Run it as plain `pnpm gate`; NEVER `pnpm gate --force`.** The `--force` is already
 inside the script (`turbo … --force`), so `pnpm gate` IS the uncached run — it reports
-`0 cached, 82 total`. `gate` is an `&&` chain and pnpm appends extra args to the LAST
+`0 cached, 93 total`. `gate` is an `&&` chain and pnpm appends extra args to the LAST
 command, so the flag lands on `openspec validate --all --strict --force` →
 `error: unknown option '--force'`: a bogus red on an otherwise green gate. Same trap
 for any `pnpm <script> <flag>` where the script chains commands.
 
-**The gate's test fan-out is BOUNDED to the host — leave it bounded (B-098).** `gate`,
-`test` and `test:integration` no longer call `turbo` directly; they route through
-`tools/gate-hook/src/bounded-turbo-cli.mjs`, which caps BOTH multipliers that used to
-compound — turbo's task concurrency AND each `vitest run`'s fork count — so the worst case
-`taskConcurrency × forksPerTask` stays ≤ cores (8 cores → 3 × 2 = 6 workers; the run prints
-its own bound). Unbounded, those two defaults wanted ~64 workers on 8 cores and starved
-whichever timing-sensitive suite was co-scheduled — the same `did not reach HEALTHY`
-contention red B-073 first met. **Always run these tasks through their `pnpm` script (`pnpm
-gate` / `pnpm test`); NEVER call `turbo run test` — or `turbo run` for any gate task —
-directly.** A direct `turbo` invocation skips `tools/gate-hook/src/bounded-turbo-cli.mjs` and so
+**The gate's test fan-out is BOUNDED to the host — leave it bounded (B-098, P-034).** `gate`,
+`test`, `test:integration`, **`test:e2e` and `gate:e2e`** no longer call `turbo` directly; they
+route through `tools/gate-hook/src/bounded-turbo-cli.mjs`, which caps BOTH multipliers that used to
+compound — turbo's task concurrency AND each task's own worker count (`vitest run`'s forks, and
+Playwright's browser workers) — so the worst case `taskConcurrency × workersPerTask` stays ≤ cores
+(12 cores → 4 × 2 = 8 workers; the run prints its own bound, one line per half). Unbounded, the
+vitest defaults wanted ~64 workers on 8 cores and starved whichever timing-sensitive suite was
+co-scheduled — the same `did not reach HEALTHY` contention red B-073 first met.
+
+⭐ **`test:e2e` was the sibling the bound never reached, and it is why this list now names five
+scripts rather than three (P-034).** It stayed a bare `turbo run` and therefore started both apps'
+Playwright suites at full width at once — 6 + 6 = 12 browsers on 12 cores — and the tests it broke
+were, every time, "did this ANIMATE within N milliseconds" assertions whose VICTIMS MOVED between
+runs. **One rule, two spellings** is the shape to watch for: when you bound something, bound its
+siblings in the same commit, and never let the list of covered scripts be a decision someone has to
+remember. **Always run these tasks through their `pnpm` script (`pnpm gate` / `pnpm test` / `pnpm
+test:e2e`); NEVER call `turbo run test` — or `turbo run` for any gate task — directly.** A direct `turbo` invocation skips `tools/gate-hook/src/bounded-turbo-cli.mjs` and so
 drops the worker cap, reviving the B-098 `did not reach HEALTHY` load-flake class the bound
 exists to prevent. Do NOT "simplify" a script back to a bare `turbo run test`
 (it removes the cap), do NOT drop the `VITEST_*` `passThroughEnv` keys in `turbo.json` (strict
 env mode then filters the caps out and the bound is a silent no-op), and do NOT answer a
 contention red by raising a timeout — B-073 already did that and B-098 is that bound blown in
 turn. The fix is the bound; a longer rope is not.
+
+**When you widen what a task READS, widen that task's turbo `inputs` in the SAME COMMIT.** A
+tsconfig `include`, a lint target, a newly-linted directory — the moment a task checks a file the
+cache key does not hash, its green stops meaning anything, and it fails **silently and ONLY under
+a cache HIT**, so neither `pnpm gate` (forced uncached) nor a cold CI runner can ever catch it.
+Session BS is the measured instance: it flipped `tools/caspar-bridge`'s typecheck to include
+`tests/**` while `typecheck` inputs still hashed `src/**` only, so a test-only edit could not
+invalidate a cached typecheck (closed in `85e3c27e`). The notch BS named one further out was real
+too: all four `bin/`-bearing workspaces run `eslint .`, which lints their `bin/**/*.mjs` (9 files),
+and a planted `no-unused-vars` error in `tools/soak-runner/bin/cg-soak.mjs` came back `cache hit,
+replaying logs` with `pnpm lint` exit 0 — until `bin/**` joined `lint` inputs (`db32fd14`,
+2026-08-22). ⚠ **The sibling notch BS left open is CLOSED — `test` inputs hash the same glob as of
+`7dd8140d`, 2026-08-23 — and WHY it had to be closed is the whole rule in one file:**
+`tools/caspar-bridge/tests/live-layers-default.test.ts` **SPAWNS `bin/caspar-bridge.mjs` as a child
+process**, so while the cache key ignored that file the test written to catch a defect in it could
+not be invalidated by an edit to it. Measured before the fix: the real defect planted in the CLI
+(deleting its `liveLayersPath` option) failed a direct vitest run and came back `cache hit,
+replaying logs`, exit 0, through `pnpm test`. A green suite over a bridge that had lost its ledger.
 
 **Never background a push.** The pre-push gate must run in the FOREGROUND, or a
 second gate can start alongside it — two gates in one workspace collide over
@@ -151,9 +391,24 @@ layer over B-098's `bounded-turbo-cli` (host serialization vs. intra-gate fan-ou
 both). It lives at the SINGLE `gate`/`gate:e2e` script chokepoint every entry point
 (direct, pre-push, Stop hook) funnels through — do NOT re-implement it per caller (a
 second copy is how the rule drifts, B-100/P-012), and do NOT "simplify" `gate` back to the
-inline chain: `gate` = lock → `gate:run` (the real chain, still `0 cached, 82 total`),
+inline chain: `gate` = lock → `gate:run` (the real chain, still `0 cached, 93 total`),
 `gate:e2e` = lock → `gate:e2e:run`. A broken lock DEGRADES to an unserialized run rather
 than blocking the gate (it is the sole landing gate); only a 15-min-stuck slot errors out.
+
+**The gate's FULL output is persisted, not its tail (P-040).** The same chokepoint tees
+every byte the gate prints into `.gate-logs/gate-<stamp>-<pid>.log` (gitignored, newest
+twenty kept) and names the file before the gate starts and again on failure. When a
+pre-push gate fails naming no task — the first push of `96090c49` did — read that file, not
+the terminal's tail. Logging is fail-open: a checkout that cannot write it still gates.
+⚠ **Read the FOOTER first (P-045).** A gate log that ends without its `---- gate ended`
+line is a gate whose PROCESS died, not a task that failed: read it as "the capture died
+here", never as "the gate failed here". Until 2026-09-06 the Stop hook itself was the
+killer — it buffered the gate's output under Node's default 1 MiB `spawnSync` cap and every
+green gate printed within 4 % of it — so a green gate could read red with a footer-less log
+behind it. The hook now streams the child's output into its log through a file descriptor
+(`tools/gate-hook/src/gate-run.mjs`), so there is no capture buffer left to cross; a
+footer-less log today means the host killed the gate, and the hook's own message says
+"died", never "failed", in that case.
 
 **Docs-only carve-out (archive).** An OpenSpec **archive** operation — folding a
 merged change into `openspec/specs/` + the PRD status flip to `[x]` — touches only
@@ -164,6 +419,26 @@ ONLY `pnpm openspec validate --all --strict` + `pnpm format:check` (after the
 meaningless for a markdown-only fold. This applies ONLY to a pure archive/docs commit
 where NO source/test/build file changed; any commit that touches code keeps the full
 green gate above.
+
+**TWO GUARDS THAT ARE NOT TESTS (`GUARDS-18`).** Both exist because a written rule was not
+enough — each names an accident that happened more than once.
+
+- **`control-bytes` is a step in `gate:run`**, between `format:check` and `openspec validate`.
+  It reads the BYTES of every tracked text file and refuses a control byte (C0 except
+  `\t`/`\n`/`\r`, plus DEL) or a UTF-8 BOM. ~0.6 s for ~2,900 files.
+  🔴 **It must never be reimplemented on grep or ripgrep**: a NUL makes those treat the file as
+  BINARY and skip it IN SILENCE, which is the hole it closes (golden rule 9's own reason for
+  saying `git grep`). Binaries are exempted by EXTENSION, never by sniffing content — sniffing
+  is the same judgement grep makes and fails the same way. A file that trips it is FIXED;
+  `EXEMPT_PATHS` is empty and a test pins that it stays empty.
+- **`untracked-sweep` is a PRE-COMMIT hook**, beside `never-stage` and before `lint-staged`
+  (same ordering reason: lint-staged REWRITES staged files). It refuses a commit that stages a
+  path which was already untracked at the previous commit — the `git add -A` accident, which
+  has now happened three times (`P-044`). ~0.2 s. Its baseline lives in
+  `.git/cg-untracked-baseline`, so it can never be staged and never needs ignoring.
+  ⚠ **Do NOT silence it with `.gitignore`** — that hides the file instead of stopping the add,
+  and `AGENTS.md` is owed as a TRACKED pointer. To adopt a path on purpose, name it:
+  `CG_ADOPT_UNTRACKED="AGENTS.md" git commit …`.
 
 **The gate is enforced at turn end (P-009).** A committed Stop hook
 (`.claude/hooks/gate-stop.mjs`) runs when your turn ends: docs-only diffs get the
@@ -284,6 +559,34 @@ count does not reset on its own.
   and carries the B-098 load-flake class, so a green local gate is a reason to push, never
   a claim that the change is verified. CI is what verifies it; the owner's read at merge
   is the judgment layer on top.
+- 🔴 **A PUSH TO `dev` RUNS THE LINUX `pr.yml` ONLY — THE WINDOWS INSTALLERS ARE BUILT ON
+  REQUEST (`CI-INSTALLERS-ON-DEMAND-01`).** `desktop.yml`'s `installers` job, and with it every
+  smoke and acceptance job, runs on a **tag `v*`**, a **manual run**
+  (`gh workflow run Desktop --ref dev`), or a push whose **head commit message contains
+  `[installers]`** — nothing else. An ordinary push starts the Desktop workflow and skips all of
+  it. The owner asks for installers in words ("build the installers").
+  - 🔴 **An EMPTY commit carrying the marker builds NOTHING — measured, not assumed.** The
+    workflow's `paths-ignore` judges the PUSH's whole diff, and a push that changes no file (or
+    only docs) never starts the Desktop workflow at all, so the marker is never read: the empty
+    probe `e9094b4d` got its `pr.yml` run (the positive control) and no Desktop run. So when CC
+    has code commits to push, the marker goes on the push's HEAD commit (the diff then carries a
+    non-docs path); when it has nothing to push, CC **dispatches**
+    (`gh workflow run Desktop --ref dev`) — after checking no Desktop run is queued for `dev`.
+  - **A report no longer says "Desktop run green".** It says **"Desktop skipped by design"**
+    unless the prompt asked for installers. A skipped Desktop run is the expected state, not a
+    missing result.
+  - ⚠ **The marker is a plain substring match.** A commit message that QUOTES `[installers]` or
+    `[guide-shots]` — a message about this very rule — triggers the build. Spell a marker without
+    its brackets unless the build is meant.
+  - **A change only the Windows pipeline can exercise** — under `apps/*/src-tauri/**`, `Cargo.*`,
+    `tools/bridge-installer/**`, `tools/release/**`,
+    `tools/caspar-bridge/scripts/stage-bridge.mjs` or `.github/workflows/desktop.yml` — carries
+    `[installers]` on its **final** commit even unasked (`OWNER CHOICE`; the owner may delete this
+    line), pushed together with the code it exercises. Everything else never carries it unless
+    he asks.
+  - A manual run also runs `guide-shots` (2.5 runner-minutes on run 38160390947); the marker
+    does not. A dispatch
+    queued behind a running Desktop run is replaced by the next push (one pending run per group).
 - **CC PAUSES AND FLAGS — out loud, in its final report — when a commit falls in one of
   these three classes.** They are about RISK, not about PRs, so retiring the PR model does
   not retire them. CC still commits and pushes; what it must not do is let one of these
@@ -380,6 +683,29 @@ origin dev` matches local — and only claim CI green after seeing the check's
   prior run's URL, so a green merge run that did nothing can never be mistaken for one
   that passed.
 
+  ⭐ **WHY reusing a green SHA is safe at all — classification gates WHETHER; the jobs
+  themselves are WHOLE-TREE.** The natural alarm on reading that guard is: the prior run
+  classified only **its own push's diff**, but the merge run's job is the whole
+  `main..head` **span** — so an earlier commit in the span could be uncovered, and the
+  guard would skip the very run that covers it. **That alarm is wrong, and the reason is
+  written here because it will occur to the next reader too — who might otherwise "fix" a
+  guard that is already correct.** Neither heavy job is diff-scoped: `ci` runs
+  `pnpm format:check` / `typecheck` / `lint` / `test` / `build`, each a bare
+  workspace-wide `turbo run <task>` with no `--filter` and no changed-file input, and
+  `e2e` runs `pnpm test:e2e` — the entire Playwright suite. **The changed-path
+  classification decides only WHETHER those jobs run, never WHAT they cover.** A green run
+  that EXECUTED both therefore verifies the whole **tree** at that SHA, including the code
+  of every earlier commit in the span. Reusing it does not narrow coverage; it declines to
+  compute the same whole-tree answer twice.
+
+  🔴 **The corollary — "both jobs actually RAN" is LOAD-BEARING, not belt-and-braces.**
+  Whole-tree coverage is a property of jobs that **RAN**. A prior run that was green having
+  **SKIPPED** `e2e` proves nothing whatsoever about the tree's render behaviour, which is
+  exactly why that case must not be reused. **Do not let a later reader relax the condition
+  to "a green run exists for this SHA"** — it reads as a harmless simplification and
+  silently deletes the backstop. The same fact is what re-scored `B-132`: a dropped event
+  costs a commit its own run, not the tree's eventual verification.
+
 ## Engine doc-sync
 
 When a change alters an engine's **structure, contracts, or extension points**,
@@ -392,6 +718,45 @@ specs; engine docs cover "how it's built".
 
 ## Design system — interactive controls
 
+- 🔴 **AN OPERATOR SURFACE CARRIES NO EXPLANATORY PROSE.** Labels, values, state
+  facts and refusal sentences — nothing else. A sentence explaining how a feature
+  works is read once, never again, and then occupies the space a real message
+  needs; explanation lives in the docs and in training, and the long form of a
+  word lives in its `title` at most. Golden rules 11 (the operator's words) and
+  13 (who owns a setting) still apply on top of this — it narrows what may be
+  said, not who owns what. Measured instance: the Timing section shipped with five
+  such lines, and `TIMING-WIRE-22 · DELTA B2` removed them. ⭐ Pin the rule as an
+  ABSENCE where you apply it — that is the direction it regresses in: the next
+  person adds one helpful line and nothing fails.
+- 🔴 **A NEW CONTROL REUSES THE SHARED PRIMITIVES WITH NO LOCAL STYLING.** No
+  `style` prop on a control, no raw `<input>`/`<button>`/`<select>` in a feature,
+  and no second copy of a treatment that already has a declaration — name your
+  surface in the existing selector instead. A feature must not need its controls
+  restyled to look like the rest of the console. ⚠ And a class the stylesheet
+  never declares is the silent form of the same defect: `TimingSection` invented
+  `cg-fact`, no rule existed, and the two facts rendered as bare text beside a
+  panel of chips — green in every gate, wrong on screen (golden rule 12).
+  ⚠ **WHAT A LINT RULE ACTUALLY CATCHES, stated so nobody trusts a guard that is
+  not there — or misses one that is.**
+  - `<button>` and `<select>` outside `renderer/ui/` are refused by
+    `no-restricted-syntax` — **in the DESIGNER only**
+    (`apps/designer/eslint.config.mjs`); the Runtime has the same config shape and
+    not that rule.
+  - 🔴 **A raw `<input>`, and a `style` prop on `Button`/`AsyncButton`/`NumericInput`/`Tag`,
+    are refused in the RUNTIME renderer by `cg/raw-control` — ENFORCED FOR NEW CODE**
+    (`TIMING-WIRE-22 · DELTA B · R2`). It is a **RATCHET, not a ban**: the 40 sites the
+    renderer already carried (32 raw inputs across 14 files, plus 8 styled primitives across 5) are FROZEN per file as a count in `apps/runtime/eslint.config.mjs`, and the rule
+    refuses movement in BOTH directions — more than the number is new debt, **fewer** means
+    the debt was paid and the number is now a lie, so it can only ever shrink. Paying one
+    down means lowering its number in the same commit; the rule says so if you forget.
+    ⚠ The DESIGNER is not enabled: 37 sites across 20 files there, redder than the Runtime.
+    That is its own item, not a rider.
+  - The ratchet's downward check is why there is NO separate pinning test: a test reading the
+    frozen list would be a second reader under a different turbo `inputs` glob, which is the
+    silent-under-cache-hit hole this file records three times. One reader, one glob.
+  - What it still cannot see: a control behind a local wrapper component, a `className` that
+    restyles a primitive (the legitimate route), `style` on a raw HTML element, and `.ts`
+    files. For those this bullet stays a REVIEW rule.
 - Components are styled with `renderer/theme.ts` + vanilla-extract (the app's
   real design system). `@cg/ui` is **tokens-only** — do NOT add components
   there or change the palette.

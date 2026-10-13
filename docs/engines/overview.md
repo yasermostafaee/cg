@@ -66,6 +66,15 @@ the editor UI and the runtime renderer (the "Where features go" map in
   values are numbers, hex colours, or D-110 whole-shape path snapshots — the
   path morph interpolates anchors by stable id via the schema's shared
   `lerpPathSnapshot` and feeds the same `pathD` builder the static render uses),
+- **renders a content-driven HOLD as a repeating `[contentStart → outPoint]`** — D-133's
+  hold loop: the furniture replays the range while the content runs, instead of the
+  timeline parking on one frame. It is a RENDERING of the existing hold, not a new phase
+  and not a new `PlayoutMode`: the range is the two shipped lifecycle markers, and the
+  hold's start/end conditions and the OUT after it are unchanged. 🔴 The wrap re-renders the
+  COMPOSITION FRAME ONLY — it cannot reset or restart a content driver, because the loop
+  driver's sole output is `applyFrame` and a content driver runs on its own clock. Under any
+  hold that is not content-driven the range is INERT (the Designer's Playout panel says so,
+  and names the missing condition),
 - **drives** the broadcast lifecycle and playout timing — entrance → hold → exit,
   auto-out / loop cycles with timed or content-driven holds (PlayoutController +
   FrameDriver; the ticker's TickerDriver, the countdown clock's ClockDriver, and
@@ -74,13 +83,50 @@ the editor UI and the runtime renderer (the "Where features go" map in
   drivers — the D-031 steps seam; the repeater's RepeaterDriver stamps one
   child-composition scope per data row through the `wireScopeSubtree`
   factory — count at play, values live),
+- **positions frame-mapped media at the Designer playhead** — D-135: `tick(frame)`
+  reaches every `LottieDriver` AND every `VideoDriver` (`positionAt`), so scrubbing AND
+  timeline play animate a Lottie and a `<video>` on the canvas instead of leaving them on
+  a static poster frame. The canvas has no `play()` path of its own — its transport
+  advances the frame and posts one `scrub` per change — so scrub and play are literally
+  the same call, and the driver's own phase mapping (`clipPositionAt` / `expectedClipMs`)
+  is what resolves the clip frame/time (never a second copy). A driver that is running
+  its own lifecycle owns the frame and is not fought. The video is positioned PAUSED by
+  `currentTime` (§9.5 (a) — the forward-1× hybrid rejected): a tick that finds a seek in
+  flight skips, so play shows the nearest decodable frame while the Preview stays the
+  frame-true rendition; the node is resolved through the handle's `live()` on every
+  access (B-137), and the at-rest canvas poster is now a pre-tick transient for video
+  exactly as for the Lottie. The ticker, the clock and the sequence are DELIBERATELY
+  carved out: they are functions of real time, with no frame N of a crawl to show,
+- **derives FOLLOW-source media windows from the composition's lifecycle** —
+  `media-phases-follow-composition`: a Lottie/video whose `phases.source` is
+  `'composition'` stores the RELATIONSHIP (intro settles at the content start, outro fits
+  the OUT segment, hold at `holdAt`), and `createRuntime` derives the concrete window at
+  driver construction through `followWindowMs` (`@cg/shared-schema`) + the
+  `lottieFollowWindow` unit adapter (`@cg/lottie-bridge`) — one derivation, re-run on
+  every scene replace, never baked. A follower contributes nothing to the entrance
+  settle (it derives FROM it),
 - lets an **element own its own exit** — the D-125 element-outro seam: `out()` /
-  `stop()` await every outro-owning driver's `playOutro()` (today the
-  `LottieDriver`'s authored `[outroStart → op]`) BEFORE the background outro, so
-  the background never closes over an element that has not played out. A Lottie
-  drives the content-driven hold only by explicit opt-in (`drivesHold === true` —
-  the inverse of the ticker/clock/sequence default), and a hidden Lottie (or one
-  under a hidden ancestor) is fully inert,
+  `stop()` route every owning driver through a ONE-SHOT ledger and await it before the
+  background closes. That await is **bounded at the ledger entry** (session Z): a driver
+  whose `playOutro()` never settles would otherwise strand the exit — and, because
+  `stop()`/`out()` are guarded on the lifecycle state, take every later operator command
+  with it — so the bound fires an `error` event and lets the exit proceed,
+- **parks the content of a LOOK that is not on screen** — `B-150`: a look switch shows one
+  composition instance and hides the rest with `display: none`, and hiding a node stops
+  nothing inside it. `LookMediaPark` (`look-media.ts`) SILENCES hidden content
+  unconditionally and PAUSES it as the policy half, reviving it IN PLACE — `VideoDriver`
+  re-anchors to the media position rather than seeking, so a switch back is seamless.
+  `B-217`: a revive is owed ONLY to a driver that was running when parked (`isRunning()` is
+  asked before the pause) — `VideoDriver.resume()` / `LottieDriver.resume()` START a
+  never-started driver, and a blind revive set clips playing in the Designer canvas, which
+  never plays. Membership is asked of the DOM (`Element.contains`) because `display: none` is
+  a DOM fact and a parallel table could disagree with what is on screen; the video registers
+  its node as a getter (`live()`), so a node the preview's pool transplanted is still the one
+  asked. 🔴 Two things are deliberately
+  never parked: content that GATES A HOLD (a paused driver never completes, so the graphic
+  would never come off air) and CLOCKS (a parked countdown returns claiming time it does not
+  have). ⚠ The pause is the half a future operator toggle governs; the silence is not a
+  policy and must not become one,
 - cascades all of the above through **nested composition instances**.
 
 The renderer talks to its "backend" only through the typed `window.cg` bridge; the
@@ -151,15 +197,15 @@ reference that resolves in neither store is reported by `Exporter.preflight`
 
 ## Where the engines live
 
-| Engine / package                                          | Responsibility                                                                                         |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| [`@cg/shared-schema`](../../packages/shared-schema)       | The data model (Zod): scenes, elements, fields, bindings, animation, lifecycle, playout, compositions. |
-| [`@cg/template-runtime`](../../packages/template-runtime) | Build DOM from a scene, bind data, animate, drive lifecycle/playout. **The heart.**                    |
-| [`@cg/vcg-format`](../../packages/vcg-format)             | Isomorphic pack / unpack / verify of `.vcg` template packages.                                         |
-| [`@cg/text-shaping`](../../packages/text-shaping)         | Persian/RTL-aware transforms (digits, dates, truncation) used by bindings.                             |
-| [`@cg/lottie-bridge`](../../packages/lottie-bridge)       | Lottie import allowlist, marker→phase mapping, and the `lottie_light` player mount (D-125).            |
-| `apps/designer`                                           | Canvas editor, inspector, preview, exporters.                                                          |
-| `apps/runtime`                                            | Playout controller (CasparCG via the local bridge / mock).                                             |
+| Engine / package                                          | Responsibility                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`@cg/shared-schema`](../../packages/shared-schema)       | The data model (Zod): scenes, elements, fields, bindings, animation, lifecycle, playout, compositions.                                                                                                                                                                                           |
+| [`@cg/template-runtime`](../../packages/template-runtime) | Build DOM from a scene, bind data, animate, drive lifecycle/playout. **The heart.**                                                                                                                                                                                                              |
+| [`@cg/vcg-format`](../../packages/vcg-format)             | Isomorphic pack / unpack / verify of `.vcg` template packages.                                                                                                                                                                                                                                   |
+| [`@cg/text-shaping`](../../packages/text-shaping)         | Persian/RTL-aware transforms (digits, dates, truncation) used by bindings; the one reader of a number, time or duration typed in any digit set (`numerals.ts`); the one digit writer (`writeFieldDigits`) and what an editor writes as text is entered (`keyboard-digits.ts`, `TEXT-DIGITS-01`). |
+| [`@cg/lottie-bridge`](../../packages/lottie-bridge)       | Lottie import allowlist, marker→phase mapping, and the `lottie_light` player mount (D-125).                                                                                                                                                                                                      |
+| `apps/designer`                                           | Canvas editor, inspector, preview, exporters.                                                                                                                                                                                                                                                    |
+| `apps/runtime`                                            | Playout controller (CasparCG via the local bridge / mock).                                                                                                                                                                                                                                       |
 
 ## Deeper reading
 

@@ -3,10 +3,11 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FixedLayerBank, FixedSlotState, Rehearsal } from '@cg/shared-ipc';
+import type { FixedLayerBank, FixedSlotState, Rehearsal, TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { PreviewPanel } from '../src/renderer/features/monitors/PreviewPanel.js';
 import { ShellLayoutProvider } from '../src/renderer/hooks/shellLayoutContext.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * R-022 — PVW COMPOSITES EVERY REHEARSING ROW.
@@ -19,7 +20,7 @@ import { ShellLayoutProvider } from '../src/renderer/hooks/shellLayoutContext.js
  * The frame COUNT is therefore asserted directly: it is the bug.
  */
 
-const BANK: FixedLayerBank = { channel: 1, start: 70, count: 30 };
+const BANK: FixedLayerBank = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 30 };
 const PAGE = '<!doctype html><html><head></head><body></body></html>';
 
 let root: Root | null = null;
@@ -73,8 +74,15 @@ interface Fixture {
   rehearsals: Rehearsal[];
   items?: StackItemState[];
   slots?: FixedSlotState[];
-  /** Item ids whose page this browser does NOT hold. */
+  /** Item ids whose page the bridge answers it holds no file for (`B-288`: `no-file`). */
   missingPages?: string[];
+  /**
+   * R-049 — the registry entries PVW joins each row against for its live-plate
+   * placeholders. Absent means the ordinary case for this suite: templates with
+   * no Live Source carrier, so no placeholder is drawn and every assertion below
+   * is about the frames alone.
+   */
+  templates?: TemplateInfo[];
 }
 
 function stubBridge(f: Fixture): void {
@@ -99,11 +107,35 @@ function stubBridge(f: Fixture): void {
       onChanged: noop,
     },
     templates: {
-      html: (templateId: string) => Promise.resolve(missing.has(templateId) ? null : PAGE),
+      // `B-288` — PVW asks the BRIDGE for the page it serves CasparCG (`templates.page`); this stub
+      // answers as the bridge does, a page or the reason there is none. (It stubbed the retired
+      // `html` read until `RELEASE-091-01` §1, and went red with it.)
+      page: (templateId: string) =>
+        Promise.resolve(
+          missing.has(templateId)
+            ? ({ kind: 'missing', reason: 'no-file' } as const)
+            : ({ kind: 'page', html: PAGE, source: 'bridge' } as const),
+        ),
+      // R-049 — PVW now also reads the REGISTRY, for each template's Live Source
+      // carrier (the plate rects its placeholders are drawn over). Both members
+      // are required: `useTemplateIndex` pulls once and re-pulls on every
+      // catalogue push, so a stub with only `page` leaves the panel calling
+      // through an undefined.
+      list: () => Promise.resolve(f.templates ?? []),
+      onChanged: noop,
     },
-    link: { status: () => 'live', onStatusChanged: noop },
+    link: {
+      status: () => 'live',
+      onStatusChanged: noop,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
+    // `add-multibox-audio` — the panel reads the seated-layer ledger for the HELD half of
+    // each box's audio glyph. Empty here: this file is about frame composition, and a
+    // rehearsing row with nothing seated is not held.
+    liveLayers: { state: () => Promise.resolve([]), onStateChanged: noop, onPlateReleased: noop },
   };
-  (window as unknown as { cg: unknown }).cg = stub;
+  (window as unknown as { cg: unknown }).cg = fillBridgeStub(stub);
 }
 
 async function render(f: Fixture): Promise<HTMLDivElement> {
@@ -178,7 +210,7 @@ describe('PreviewPanel — one frame per rehearsing row', () => {
     for (const f of frames(el)) expect(Number(f.style.zIndex)).toBeGreaterThan(checkerZ);
   });
 
-  it('names each frame by the ROW’s name, never the raw layer dressed as an alias', async () => {
+  it('names each frame by the ROW’s name — its alias, else the default `Layer <layer>`', async () => {
     const el = await render({
       rehearsals: [
         { itemId: 'a', channel: 1, layer: 99 },
@@ -190,10 +222,11 @@ describe('PreviewPanel — one frame per rehearsing row', () => {
     // `title` on an iframe doubles as a native tooltip, and the frames cover
     // most of the panel, so it popped up over the graphic being judged.
     const names = frames(el).map((f) => f.getAttribute('aria-label') ?? '');
-    // Layer 99 is the bank's HIGHEST, so its default alias is `Layer 1`.
-    expect(names).toContain('Layer 1 rehearsal preview');
+    // `DESKTOP-APPS-01-D` h — an unaliased row's default name carries its REAL layer.
+    expect(names).toContain('Layer 99 rehearsal preview');
+    // Control: a custom name is kept, and never replaced by the layer.
     expect(names).toContain('CLOCK rehearsal preview');
-    expect(names.join(' ')).not.toContain('Layer 99');
+    expect(names.join(' ')).not.toContain('Layer 97');
     // Named, but with NOTHING on hover — asserted so a later "just add a title
     // for the tooltip" puts the popup back knowingly rather than by accident.
     for (const f of frames(el)) expect(f.getAttribute('title')).toBeNull();
@@ -216,7 +249,7 @@ describe('PreviewPanel — one frame per rehearsing row', () => {
    * rehearsing rows, it must say so ON THE SURFACE — not inside a collapsed
    * disclosure. A quiet drop is the bug this whole change fixes.
    */
-  it('states a shortfall as "showing N of M" when a page is missing in this browser', async () => {
+  it('states a shortfall as "showing N of M" when the bridge holds no page for one', async () => {
     const el = await render({
       rehearsals: [
         { itemId: 'a', channel: 1, layer: 99 },
@@ -233,7 +266,9 @@ describe('PreviewPanel — one frame per rehearsing row', () => {
   it('shows the empty state only when NOTHING is rehearsing', async () => {
     const el = await render({ rehearsals: [] });
     expect(frames(el)).toHaveLength(0);
-    expect(el.textContent).toContain('Nothing to preview');
+    // `CONSOLE-MATCH-03` §1 — the reference's heading, which names the MECHANISM. The
+    // sentence beneath it still carries `R-022`'s "Nothing is sent to CasparCG".
+    expect(el.textContent).toContain('No layers on preview');
   });
 
   /**

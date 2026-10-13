@@ -45,6 +45,19 @@ export const OscEventSchema = z.discriminatedUnion('kind', [
     layer: z.number().int().nonnegative(),
     paused: z.boolean(),
   }),
+  /**
+   * `MEDIA-PLATES-01` — `/channel/N/stage/layer/L/foreground/file/time`: a media clip's elapsed
+   * time and the file's length, in SECONDS (2.5.0's `av_producer.cpp`:
+   * `state_["file/time"] = {time() / fps, file_duration() / fps}`, fps being the field rate). At
+   * the end of a clip that is not looping, `elapsed` stands at `total` — the clip froze there.
+   */
+  z.object({
+    kind: z.literal('osc.layer.foreground.time'),
+    channel: z.number().int().positive(),
+    layer: z.number().int().nonnegative(),
+    elapsed: z.number().nonnegative(),
+    total: z.number().nonnegative(),
+  }),
   /** `/channel/N/stage/layer/L/background/producer` — next-up tracking. */
   z.object({
     kind: z.literal('osc.layer.background.producer'),

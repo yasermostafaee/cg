@@ -1,6 +1,7 @@
 import * as http from 'node:http';
 import type * as net from 'node:net';
 import * as os from 'node:os';
+import { TEMPLATE_COMPLETE_PATH } from '@cg/shared-schema';
 
 /** Where/how the template HTTP server binds + the host CasparCG uses to reach it. */
 export interface TemplateServeOptions {
@@ -27,6 +28,17 @@ export interface TemplateServeOverride {
  */
 const STOP_GRACE_MS = 500;
 
+/**
+ * `SELF-STOP-24` — the completion body's hard ceiling.
+ *
+ * A report is `{"take":"<32 hex>"}` — about 45 bytes. Anything appreciably larger is not one,
+ * and READING IT TO FIND THAT OUT is the whole of the exposure: this route answers on an
+ * interface that is routable whenever a remote CasparCG is configured, so an unbounded read is
+ * an unbounded allocation reachable by anyone on the LAN. The bound is generous enough that a
+ * longer token or an extra member could never trip it, and small enough that nothing is stored.
+ */
+const MAX_COMPLETE_BODY = 1024;
+
 /** True for loopback CasparCG hosts → serve loopback, no LAN exposure. */
 export function isLoopbackHost(host: string): boolean {
   const h = host.trim().toLowerCase();
@@ -49,24 +61,198 @@ export function guessLanHost(): string {
 /**
  * Derive serve options from where CasparCG runs (design §6), honoring overrides:
  *
- * - CasparCG **local** (loopback host) → bind + serve on `127.0.0.1` (no LAN
- *   exposure — the common operator case).
- * - CasparCG **remote** → bind a routable interface (`0.0.0.0`, opt-in) and serve
- *   on an explicit `serveHost`, else a guessed LAN IPv4.
+ * - **every** configured CasparCG is **local** (loopback host) → bind + serve on
+ *   `127.0.0.1` (no LAN exposure — the common operator case).
+ * - **any** configured CasparCG is **remote** → bind a routable interface
+ *   (`0.0.0.0`, opt-in) and serve on an explicit `serveHost`, else a guessed
+ *   LAN IPv4.
  *
  * Port defaults to `0` (ephemeral); the `CG ADD` URL carries the actual bound port.
+ *
+ * 🔴 **IT TAKES EVERY CONFIGURED HOST, AND THE URL MUST SATISFY THE STRICTEST
+ * READER — the REMOTE one.** `urlFor()` builds ONE string and mirror-sync hands
+ * that same string to EVERY server, so this is not a decision about the primary;
+ * it is a decision about the whole configured set. Deriving it from the primary
+ * alone is `B-162`: a loopback primary with a remote backup bound `127.0.0.1`
+ * and advertised `127.0.0.1`, so the backup fetched ITSELF and its template
+ * never rendered — while its live plates, which never touch this server, came up
+ * fine. `CG ADD` still returned 200, because the page's fetch failing afterwards
+ * is not an AMCP outcome.
+ *
+ * ⚠ The argument is a LIST for exactly that reason. If you find yourself passing
+ * one host here, you are re-deriving the bug: ask the configuration for all of
+ * its servers, backup included.
+ *
+ * An EMPTY list is all-loopback by `every`'s vacuous truth, and correctly so —
+ * no configured server can fail to reach anything.
  */
 export function deriveServeOptions(
-  casparHost: string,
+  casparHosts: readonly string[],
   override: TemplateServeOverride = {},
 ): TemplateServeOptions {
-  const local = isLoopbackHost(casparHost);
+  const allLocal = casparHosts.every(isLoopbackHost);
   return {
-    bindHost: override.bindHost ?? (local ? '127.0.0.1' : '0.0.0.0'),
+    bindHost: override.bindHost ?? (allLocal ? '127.0.0.1' : '0.0.0.0'),
     port: override.port ?? 0,
-    serveHost: override.serveHost ?? (local ? '127.0.0.1' : guessLanHost()),
+    serveHost: override.serveHost ?? (allLocal ? '127.0.0.1' : guessLanHost()),
   };
 }
+
+/**
+ * `B-162` — the configured CasparCG hosts that **cannot fetch the served URL**,
+ * given the serve options actually in force. Empty means every configured server
+ * can reach it.
+ *
+ * 🔴 **THIS IS THE CORRECTNESS DIRECTION, and it is the half with no other
+ * surface.** The existing warning is the SECURITY direction — "the template
+ * server is LAN-EXPOSED, make sure that is what you meant". Its complement is
+ * silent: a loopback bind or a loopback advertised host while a REMOTE server is
+ * configured costs that server its graphics, and nothing anywhere errors.
+ * `CG ADD` returns 200 (CasparCG accepted the command; the page's later fetch is
+ * not an AMCP outcome), the journal records success, health stays green, and the
+ * operator sees boxes with no template over them.
+ *
+ * Two ways to land here, both reachable in production:
+ * 1. `guessLanHost()` found no non-internal IPv4 and fell back to `127.0.0.1`;
+ * 2. `setConfig`'s bind-conflict retry deliberately falls back to safe
+ *    loopback-ephemeral options.
+ *
+ * The predicate is deliberately ONE function used by every surface (boot line,
+ * apply response, operator dialog) rather than three re-derivations — a second
+ * local copy of "who can reach us" is how the name comes to lie (`B-100`/`P-012`).
+ *
+ * 🔴 `B-326` (`SERVERS-SIMPLIFY-01` T3) — **AND A THIRD WAY: A HOST THAT IS NOT THIS MACHINE.** The
+ * owner's `.32` advertised `http://192.168.21.93:7911/…`, his own PC, and every `CG ADD` came back
+ * `CG OK` while CasparCG fetched the page from a machine that does not serve it. Neither half above
+ * sees it — the bind was `0.0.0.0` and the host was routable. So `ownAddresses` (this machine's,
+ * `detectServeHostCandidates()`: the list Station setup's chips show) is an input of the ONE
+ * predicate, and a host {@link servesFromAnotherMachine} names leaves EVERY configured server unable,
+ * a local one included. Required, not defaulted: every caller states what it judged against.
+ */
+export function hostsUnableToFetchTemplates(
+  casparHosts: readonly string[],
+  options: TemplateServeOptions,
+  ownAddresses: readonly string[],
+): readonly string[] {
+  if (servesFromAnotherMachine(options.serveHost, ownAddresses)) return [...casparHosts];
+  const remote = casparHosts.filter((h) => !isLoopbackHost(h));
+  if (remote.length === 0) return [];
+  // Either half alone is fatal for a remote reader: a loopback BIND means the
+  // socket is unreachable from the LAN at all, and a loopback SERVE HOST means
+  // the remote fetches ITSELF. `0.0.0.0` and a specific LAN address are both
+  // routable, so `isLoopbackHost` is the right test for the bind too.
+  const loopbackOnly = isLoopbackHost(options.bindHost) || isLoopbackHost(options.serveHost);
+  return loopbackOnly ? remote : [];
+}
+
+/**
+ * 🔴 `B-326` (`SERVERS-SIMPLIFY-01` T3) — **DOES THE ADVERTISED HOST NAME ANOTHER MACHINE THAN THIS ONE?**
+ *
+ * `true` when the host is an IPv4 address that is neither loopback (`127.0.0.0/8`) nor one of
+ * `ownAddresses` — this machine's, as {@link hostsUnableToFetchTemplates} is given them. Read inside that
+ * one predicate and by the serve state's `elsewhere`, so the boot line, the apply answer and Station
+ * setup's check say the same thing about the same host.
+ *
+ * ⚠ **A NAME IS NOT JUDGED.** `cg-bridge.local` may well be this machine, and only a lookup could say;
+ * a false alarm on a correct name would teach the operator to read past the true one. An IPv4 literal
+ * is a fact about which machine it is, so only that is judged — the owner's case was one.
+ */
+export function servesFromAnotherMachine(
+  serveHost: string,
+  ownAddresses: readonly string[],
+): boolean {
+  const host = serveHost.trim();
+  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return false;
+  if (host.startsWith('127.')) return false;
+  return !ownAddresses.includes(host);
+}
+
+/**
+ * `B-162` — the operator-facing sentence for {@link hostsUnableToFetchTemplates},
+ * written ONCE and emitted by both surfaces that report it (boot and apply).
+ *
+ * It names the servers, the two halves of the address they cannot reach, and —
+ * the part that matters at 03:00 — what the failure LOOKS like, because the
+ * failure looks like nothing: live plates render, `CG ADD` succeeds, and only
+ * the graphic is missing. It also names BOTH ways to fix it — the flag and the
+ * Runtime's Server settings panel (`C-024`, `serve-host-from-app`) — since the
+ * derivation is a guess and the operator is the one who knows the answer.
+ */
+export function templateServeUnreachableWarning(
+  unreachable: readonly string[],
+  options: TemplateServeOptions,
+  ownAddresses: readonly string[],
+): string {
+  // `B-326` — the third way, in its own words: the host is not this machine, so no bind can help.
+  if (servesFromAnotherMachine(options.serveHost, ownAddresses)) {
+    return (
+      `[caspar-bridge] ⚠ the CG ADD URL host ${options.serveHost} is NOT this machine ` +
+      `(${ownAddresses.length > 0 ? ownAddresses.join(', ') : 'no LAN address'}), so these CasparCG ` +
+      `servers would fetch graphics from another machine: ${unreachable.join(', ')}. ` +
+      `Those servers will show live sources but NO TEMPLATE — no background, no text — ` +
+      `and CG ADD will still report success. ` +
+      `Clear the graphics host in Station setup → Connection → Advanced to detect it again, ` +
+      `or drop --template-serve-host if it is set there.\n`
+    );
+  }
+  return (
+    `[caspar-bridge] ⚠ template HTTP server is LOOPBACK-ONLY ` +
+    `(bind ${options.bindHost}, CG ADD URL host ${options.serveHost}:${String(options.port)}) ` +
+    `but these CasparCG servers are REMOTE and cannot fetch it: ${unreachable.join(', ')}. ` +
+    `Those servers will show live sources but NO TEMPLATE — no background, no text — ` +
+    `and CG ADD will still report success. ` +
+    `Set --template-serve-host <this machine's address as those servers see it>, ` +
+    `or set the template serve host in the Runtime's Server settings panel (persists across restarts).\n`
+  );
+}
+
+/**
+ * 🔴 `SELF-STOP-24 · REPLY 1` §R3 — **EVERY ROUTE THIS ORIGIN SERVES, IN ONE LIST.**
+ *
+ * ── WHY A LIST RATHER THAN TWO `if`s ──────────────────────────────────────────────────────
+ *
+ * The owner accepted `connect-src 'self'` on the served page (2026-09-16), and `'self'` is an
+ * ORIGIN, not a path. So a template can reach **anything this server hosts** — which makes the
+ * server's route set a security boundary rather than an implementation detail, and a boundary
+ * that is spelled inline in a handler is a boundary nobody can see being widened.
+ *
+ * The router consults this table and nothing else, so a route that is not here cannot be
+ * served, and `template-server-route-set.test.ts` fails the moment the table changes.
+ *
+ * 🔴 **DO NOT ADD A CONTROL, IDENTITY OR DATA ROUTE HERE.** `SECURITY.md` states the rule; the
+ * short form is that a template is untrusted code and this is the one origin it can talk to.
+ * The control WebSocket is deliberately a DIFFERENT server on a different port
+ * (`DEFAULT_BRIDGE_PORT`, bound in `bridge.ts`), which is what keeps `'self'` away from it.
+ * `PLAYOUT-LINK-01` will bring identity routes; they belong on that side, not this one.
+ */
+export interface TemplateServerRoute {
+  /** How the route reads in a census, e.g. `GET /template/<id>`. */
+  readonly name: string;
+  /** The single method this route answers. Anything else is refused. */
+  readonly method: 'GET' | 'POST';
+  /** Which handler serves it — the router's discriminant. */
+  readonly kind: 'template' | 'complete';
+  /** Does this path select the route? Query already stripped. */
+  readonly match: (path: string) => boolean;
+}
+
+export const TEMPLATE_SERVER_ROUTES: readonly TemplateServerRoute[] = [
+  {
+    name: 'GET /template/<id>',
+    method: 'GET',
+    kind: 'template',
+    match: (path) => TEMPLATE_PATH_RE.test(path),
+  },
+  {
+    name: `POST ${TEMPLATE_COMPLETE_PATH}`,
+    method: 'POST',
+    kind: 'complete',
+    match: (path) => path === TEMPLATE_COMPLETE_PATH,
+  },
+];
+
+/** The served-template path, in one place so the route table and the handler cannot disagree. */
+const TEMPLATE_PATH_RE = /^\/template\/([^/]+)$/;
 
 /**
  * B-038 Phase 3 — serves each retained template's self-contained HTML over HTTP
@@ -105,8 +291,30 @@ export class TemplateHttpServer {
    */
   readonly #busy = new Set<net.Socket>();
 
-  constructor(getHtml: (templateId: string) => string | null) {
+  /**
+   * 🔴 `SELF-STOP-24` / `C-013` — **WHO DECIDES WHETHER A COMPLETION REPORT IS LIVE.**
+   *
+   * Injected, like `getHtml`, and for the same reason: this server holds no template state and
+   * it holds no take state either. It knows how to parse a report and nothing about what a
+   * token means — the bridge answers that, because the bridge is where the ledger, the row's
+   * air status and the stop path all already live.
+   *
+   * Returns `true` when the token named a LIVE take and the stop was started. The stop itself is
+   * asynchronous and is NOT awaited here: the page never reads this answer (see
+   * `completion-ping.ts`), so holding the socket open for an AMCP round trip would buy nothing
+   * and would put a template's fetch inside the `#busy` set that `stop()` waits on.
+   *
+   * Absent ⇒ the route does not exist. Every pre-existing construction site passes one argument
+   * and must keep behaving exactly as it did.
+   */
+  readonly #onComplete: ((take: string) => boolean) | undefined;
+
+  constructor(
+    getHtml: (templateId: string) => string | null,
+    onComplete?: (take: string) => boolean,
+  ) {
     this.#getHtml = getHtml;
+    this.#onComplete = onComplete;
   }
 
   /** Start listening. Idempotent — a second call resolves without rebinding. */
@@ -152,21 +360,142 @@ export class TemplateHttpServer {
 
   #handle(req: http.IncomingMessage, res: http.ServerResponse): void {
     const path = (req.url ?? '/').split('?')[0] ?? '/';
-    const match = /^\/template\/([^/]+)$/.exec(path);
+    /*
+      🔴 `REPLY 1` §R3 — **THE ROUTER CONSULTS {@link TEMPLATE_SERVER_ROUTES} AND NOTHING ELSE.**
+
+      Not a tidy-up: `connect-src 'self'` makes this server's route SET a security boundary, and
+      a boundary spelled as inline `if`s is one that can be widened without anybody seeing it.
+      A path that matches no entry is a `404` before any handler is reached.
+    */
+    const route = TEMPLATE_SERVER_ROUTES.find((r) => r.match(path));
+    if (route === undefined) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('not found');
+      return;
+    }
+    if (route.kind === 'complete') {
+      this.#handleComplete(req, res);
+      return;
+    }
+    const match = TEMPLATE_PATH_RE.exec(path);
     if (match !== null) {
       const id = decodeURIComponent(match[1] ?? '');
       const html = this.#getHtml(id);
+      /*
+        🔴 `CENTRAL-BRIDGE-01` (`B-293`) — `no-store` on BOTH answers. CasparCG's CEF keeps pages on
+        disk (the Playout team's rule 12); a URL names one version for life now (the registry's
+        serve key), and this makes sure neither a page nor a 404 outlives the answer that gave it.
+      */
       if (html !== null) {
-        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.writeHead(200, {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+        });
         res.end(html);
         return;
       }
-      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.writeHead(404, {
+        'content-type': 'text/plain; charset=utf-8',
+        'cache-control': 'no-store',
+      });
       res.end('template not found');
       return;
     }
+    // Unreachable: the route matched `TEMPLATE_PATH_RE` to get here. Kept as the honest
+    // fall-through rather than a throw — a 404 is the right answer to any path this server
+    // does not own, and an exception on an HTTP handler is not.
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('not found');
+  }
+
+  /**
+   * 🔴 `SELF-STOP-24` §2.2 — read one completion report, or refuse it.
+   *
+   * **EVERY refusal is the same `404` with no side effect**, which is the answer an unknown
+   * template id already gets. A `400` would distinguish "you asked badly" from "that does not
+   * exist", and the only party that difference helps is one probing the route.
+   *
+   * ⚠ **The rejection is LOGGED and never acted on.** A stale report is the expected case on a
+   * mirrored plant — the backup's copy of the page reports the same run the primary already
+   * did — so this is not an alarm. It is the line that answers "why did that row not come off
+   * air" at 03:00, which is the one question the record could not answer before `C-013`.
+   */
+  #handleComplete(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const refuse = (why: string): void => {
+      process.stderr.write(`[caspar-bridge] template completion refused (${why})\n`);
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('not found');
+    };
+    if (this.#onComplete === undefined) {
+      // No handler wired: the route does not exist for this server. Silent — a bridge built
+      // without one is not misconfigured, it is a unit-test fixture.
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('not found');
+      return;
+    }
+    // The table declares this route `POST`; the refusal lives HERE rather than in the router
+    // so a wrong method is LOGGED as a refusal instead of silently reading as an unknown path.
+    if (req.method !== 'POST') {
+      refuse(`method ${req.method ?? 'none'}`);
+      return;
+    }
+    let body = '';
+    let overflowed = false;
+    req.setEncoding('utf-8');
+    req.on('data', (chunk: string) => {
+      if (overflowed) return;
+      body += chunk;
+      if (body.length > MAX_COMPLETE_BODY) {
+        /*
+          ⚠ **STOP ACCUMULATING, ANSWER, AND DRAIN — do NOT `destroy()` the request.**
+
+          The bound being defended is MEMORY, and dropping the buffer is the whole of it: what
+          follows is read and discarded in constant space. Destroying instead resets the
+          connection, and the reset RACES the 404 down the same socket — the client sees
+          `ECONNRESET` instead of the answer roughly half the time, which is an intermittent
+          failure invented to defend against nothing. (Measured here, not reasoned about: the
+          first spelling of this branch destroyed, and the test for it failed on the reset.)
+        */
+        overflowed = true;
+        body = '';
+        refuse('body too large');
+        req.resume();
+      }
+    });
+    req.on('end', () => {
+      if (overflowed) return;
+      let take: unknown;
+      try {
+        const parsed: unknown = JSON.parse(body);
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          refuse('body is not an object');
+          return;
+        }
+        take = (parsed as Record<string, unknown>)['take'];
+      } catch {
+        refuse('body is not JSON');
+        return;
+      }
+      if (typeof take !== 'string' || take === '') {
+        refuse('no take token');
+        return;
+      }
+      let accepted = false;
+      try {
+        accepted = this.#onComplete?.(take) ?? false;
+      } catch (err) {
+        // A throw from the bridge is not the page's problem, but an unanswered request is a
+        // socket `stop()` waits on — so it is answered, and the reason is kept.
+        refuse(`handler threw: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+      if (!accepted) {
+        refuse('token names no live take');
+        return;
+      }
+      res.writeHead(204);
+      res.end();
+    });
   }
 
   /** Whether the server is bound and serving. */

@@ -23,17 +23,39 @@ export {
   WsRequestFrameSchema,
   WsResponseFrameSchema,
   WsPublishFrameSchema,
+  WsAuthFrameSchema,
   parseWsFrame,
   serializeWsFrame,
   DEFAULT_BRIDGE_HOST,
   DEFAULT_BRIDGE_PORT,
   DEFAULT_BRIDGE_WS_URL,
+  TEMPLATE_ACTOR,
+  CONSOLE_ACTOR,
+  UNATTRIBUTED_ACTOR,
+  MAX_ACTOR_LENGTH,
+  normalizeActor,
 } from './ws-frame.js';
-export type { WsFrame, WsRequestFrame, WsResponseFrame, WsPublishFrame } from './ws-frame.js';
+export type {
+  WsFrame,
+  WsRequestFrame,
+  WsResponseFrame,
+  WsPublishFrame,
+  WsAuthFrame,
+} from './ws-frame.js';
 
+// `C-037` — the socket's principal and the ONE refusal. Exported BEFORE capabilities,
+// which reads `AuthMode` off it to advertise the bridge's auth MODE at connect.
+export * from './channels/auth.js';
+// `CHANNEL-AUTHORITY-01` — which channels this station writes to, and the refusal for the rest.
+export * from './channels/stationChannels.js';
+export * from './channels/stationStrays.js';
+// `DESKTOP-APPS-01` — first-run: the phase, the connection check, the unjoined catalogue.
+export * from './channels/setup.js';
+export * from './channels/capabilities.js';
 export * from './channels/common.js';
 export * from './channels/stack.js';
 export * from './channels/connections.js';
+export * from './channels/outputs.js';
 export * from './channels/layers.js';
 export * from './channels/lock.js';
 export * from './channels/projects.js';
@@ -44,9 +66,23 @@ export * from './channels/preview.js';
 export * from './channels/templates.js';
 export * from './channels/audit.js';
 export * from './channels/updates.js';
-export * from './channels/settings.js';
+// THE layer map — the three role bands and the guard over them. Exported BEFORE the
+// channels that derive their defaults from it, so a reader meets the map first.
+export * from './layer-bands.js';
 export * from './channels/fixedLayers.js';
 export * from './channels/playoutLayers.js';
+// B-145 acceptance 1 (display half) — the bridge's OWN Live Source ledger, the
+// third declared layer class. Deliberately its own channel and not a wider
+// playoutLayers: see the header of channels/liveLayers.ts.
+export * from './channels/liveLayers.js';
+// B-225 — the standing notice that the playout server stopped carrying what this
+// console had put on air, and the ONE PRESS that puts those rows back. Its own
+// channel rather than a `connections` field: this is not link health, it is a
+// statement about AIR that outlives the reconnect that produced it.
+export * from './channels/emptiedAir.js';
+// C-016 — the programme return's STATE per watched channel; the picture itself is relayed on the
+// console's own origin, never over the control socket.
+export * from './channels/pgmReturn.js';
 export * from './channels/delimiters.js';
 // R-030 — the per-channel output raster (bridge-owned) + the configured-vs-real
 // video-mode verdict.
@@ -56,3 +92,21 @@ export * from './channels/rehearse.js';
 // D-137 / C-015 — the installation's symbolic-id → producer mapping, and the
 // layer band those producers are placed on. ABSENT means NO MAPPINGS.
 export * from './channels/sources.js';
+// `PLAYOUT-SOURCES-01` — the Playout's input list (D10) and media library (D11): the contract's
+// shapes, the one builder of the catalogue in force, the credential redaction and the route gate.
+export * from './playout-sources.js';
+// `CENTRAL-BRIDGE-01` (D7) — the Playout's D1 sign-in and D2 refresh, for the console and for CG
+// Bridge's own session alike.
+export * from './playout-session.js';
+// `CENTRAL-BRIDGE-01` (D7, rule 8) — CG Bridge's own Playout session: its state, and the admin's
+// one-time sign-in.
+export * from './channels/bridgeSession.js';
+// `RELEASE-0113-01` (`B-316`, `R-089`) — each channel's mirror on the backup engine, and the admin's entries.
+export * from './channels/backupChannels.js';
+export * from './channels/license.js';
+export * from './channels/meters.js';
+export * from './channels/bridgeHttp.js';
+// `CONSOLE-POLISH-01` (`R-083`) — the words a row shows, and the one audit filter predicate: the
+// console and CG Bridge word and search a row alike.
+export * from './operator-naming.js';
+export * from './audit-match.js';

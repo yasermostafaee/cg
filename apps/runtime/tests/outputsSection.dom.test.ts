@@ -1,0 +1,356 @@
+// @vitest-environment jsdom
+import { createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { act } from 'react-dom/test-utils';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { ChannelOutputCheck, ConnectionHealth, ServerHealth } from '@cg/shared-ipc';
+import { OutputsSection } from '../src/renderer/features/connections/OutputsSection.js';
+
+/**
+ * `B-223` — the TECHNICAL surface of the output check: the Server connection dialog's
+ * Outputs section. Everything that used to be on the operator banner and is engineering —
+ * `C-030`'s addressing reading and log recipe, `C-029`'s failed-at-start paragraph and the
+ * creation outcome — is pinned HERE now, with the same assertions the banner tests carried
+ * (`outputMissingBanner.addressing.dom.test.ts` was folded in; not one assertion was dropped).
+ *
+ * Red-first: written against the tree before the section existed; every case failed on
+ * "module not found", then the section was written.
+ */
+
+let container: HTMLDivElement | null = null;
+let root: Root | null = null;
+
+afterEach(async () => {
+  if (root !== null) {
+    const r = root;
+    await act(async () => {
+      r.unmount();
+    });
+  }
+  root = null;
+  container?.remove();
+  container = null;
+});
+
+async function render(health: ConnectionHealth | null): Promise<HTMLElement> {
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+  const r = root;
+  await act(async () => {
+    r.render(createElement(OutputsSection, { health }));
+  });
+  const section = container.querySelector<HTMLElement>('section[aria-label="Program outputs"]');
+  if (section === null) throw new Error('the outputs section did not render');
+  return section;
+}
+
+function missingDevice(device: string): ChannelOutputCheck {
+  return {
+    channel: 1,
+    declared: [
+      { kind: 'decklink', device, embeddedAudio: true, keyer: 'default' },
+      { kind: 'screen' },
+      { kind: 'system-audio' },
+    ],
+    running: [
+      { port: 500, kind: 'system-audio' },
+      { port: 600, kind: 'screen' },
+    ],
+    missing: [{ kind: 'decklink', declared: 1, running: 0, devices: [device] }],
+    observedAt: '2026-09-04T20:00:00.000Z',
+  };
+}
+
+/** The plant on 2026-09-05: the screen consumer stopped, the DeckLink running. */
+const SCREEN_ONLY: ChannelOutputCheck = {
+  channel: 1,
+  declared: [
+    { kind: 'decklink', device: '23487013' },
+    { kind: 'screen' },
+    { kind: 'system-audio' },
+  ],
+  running: [
+    { port: 23487313, kind: 'decklink' },
+    { port: 500, kind: 'system-audio' },
+  ],
+  missing: [{ kind: 'screen', declared: 1, running: 0, devices: [] }],
+  observedAt: '2026-09-05T14:08:44.000Z',
+};
+
+const serverA = (state: ServerHealth['state'], outputs?: ChannelOutputCheck[]): ServerHealth => ({
+  label: 'A',
+  state,
+  amcpAxisOk: state === 'healthy',
+  ...(outputs !== undefined ? { outputs } : {}),
+});
+
+const health = (primary: ServerHealth, backup?: ServerHealth): ConnectionHealth =>
+  ({
+    primary,
+    ...(backup !== undefined ? { backup } : {}),
+    currentPrimary: 'A',
+    strategy: 'mirror-sync',
+  }) as ConnectionHealth;
+
+describe('B-223 — an AIR loss carries the full remedy here', () => {
+  it('🔴 a missing DeckLink is an AIR row with the declared device, what runs, and the restart paragraph', async () => {
+    const el = await render(health(serverA('healthy', [missingDevice('23487013')])));
+    const air = el.querySelector('[data-severity="air"]');
+    expect(air?.textContent).toContain('decklink (device 23487013)');
+    const text = el.textContent ?? '';
+    expect(text).toContain('Declared: decklink, screen, system-audio');
+    expect(text).toContain('Running: system-audio, screen');
+    expect(text).toContain('Nothing on this channel reaches air');
+    expect(text).toMatch(/restart CasparCG/);
+    expect(text).toMatch(/CasparCG log/);
+    // The server is UP — nobody power-cycles a working playout box over this.
+    expect(text).toMatch(/do not power-cycle/);
+  });
+
+  it('C-030 — the plant’s declaration is called a hardware persistent ID, in plain words', async () => {
+    const text =
+      (await render(health(serverA('healthy', [missingDevice('23487013')])))).textContent ?? '';
+    expect(text).toContain('hardware persistent ID 23487013');
+    expect(text).not.toContain('slot index 23487013');
+  });
+
+  it('C-030 — a small number is called a slot index', async () => {
+    const text = (await render(health(serverA('healthy', [missingDevice('1')])))).textContent ?? '';
+    expect(text).toContain('slot index 1');
+  });
+
+  it('C-030 — says how CasparCG reads the number — slot position first, persistent ID second', async () => {
+    const text =
+      (await render(health(serverA('healthy', [missingDevice('23487013')])))).textContent ?? '';
+    expect(text).toMatch(/slot position first/);
+    expect(text).toMatch(/persistent ID second/);
+  });
+
+  it('C-030 — points at the startup log and names the search string and the two brackets', async () => {
+    const text =
+      (await render(health(serverA('healthy', [missingDevice('23487013')])))).textContent ?? '';
+    expect(text).toMatch(/startup log/);
+    expect(text).toMatch(/Decklink devices found/);
+    expect(text).toMatch(/\[slot\] \(persistent ID\)/);
+  });
+
+  it('🔴 C-030 — does not widen what it claims to know: nothing about a consumer’s health', async () => {
+    const text =
+      (await render(health(serverA('healthy', [missingDevice('23487013')])))).textContent ?? '';
+    expect(text).not.toMatch(/reference signal|dropping frames|unhappy/i);
+  });
+
+  it('🔴 FOLLOWUPS-01 A — a missing output is reported, and nothing says the bridge re-creates it', async () => {
+    const text =
+      (await render(health(serverA('healthy', [missingDevice('23487013')])))).textContent ?? '';
+    // Positive control: this IS the section showing the missing DeckLink.
+    expect(text).toMatch(/declared and not running/);
+    expect(text).not.toMatch(/re-creat|Creation is on|ADD \d/i);
+  });
+});
+
+describe('B-223 — a local monitor is noted here, and only here', () => {
+  it('🔴 a missing screen is a preview row: named, explained, and explicitly not an air matter', async () => {
+    const el = await render(health(serverA('healthy', [SCREEN_ONLY])));
+    expect(el.querySelector('[data-severity="air"]')).toBeNull();
+    const local = el.querySelector('[data-severity="local"]');
+    expect(local?.textContent).toContain('Preview');
+    expect(local?.textContent).toContain('screen');
+    expect(local?.textContent).toMatch(/preview window/);
+    expect(local?.textContent).toMatch(/no effect on air/);
+    expect(local?.textContent).toMatch(/Nothing for the operator to do/);
+    // No remedy paragraph for a preview window.
+    expect(el.textContent ?? '').not.toMatch(/restart CasparCG/);
+  });
+
+  it('a missing system-audio is the sound-device row', async () => {
+    const check: ChannelOutputCheck = {
+      ...SCREEN_ONLY,
+      running: [
+        { port: 23487313, kind: 'decklink' },
+        { port: 600, kind: 'screen' },
+      ],
+      missing: [{ kind: 'system-audio', declared: 1, running: 0, devices: [] }],
+    };
+    const local = (await render(health(serverA('healthy', [check])))).querySelector(
+      '[data-severity="local"]',
+    );
+    expect(local?.textContent).toContain('system-audio');
+    expect(local?.textContent).toMatch(/sound device/);
+  });
+
+  it('a DeckLink and a screen both missing: one AIR row and one preview row', async () => {
+    const check: ChannelOutputCheck = {
+      ...missingDevice('23487013'),
+      running: [{ port: 500, kind: 'system-audio' }],
+      missing: [
+        ...missingDevice('23487013').missing,
+        { kind: 'screen', declared: 1, running: 0, devices: [] },
+      ],
+    };
+    const el = await render(health(serverA('healthy', [check])));
+    expect(el.querySelectorAll('[data-severity="air"]').length).toBe(1);
+    expect(el.querySelectorAll('[data-severity="local"]').length).toBe(1);
+  });
+});
+
+describe('B-223 — the states with nothing to alarm about are said plainly', () => {
+  it('every declared consumer running', async () => {
+    const check: ChannelOutputCheck = {
+      ...SCREEN_ONLY,
+      running: [...SCREEN_ONLY.running, { port: 600, kind: 'screen' }],
+      missing: [],
+    };
+    const text = (await render(health(serverA('healthy', [check])))).textContent ?? '';
+    expect(text).toContain('Every declared consumer is running');
+  });
+
+  it('no check completed yet', async () => {
+    const text = (await render(health(serverA('healthy')))).textContent ?? '';
+    expect(text).toContain('no output check has completed yet');
+  });
+
+  it('no health reading at all', async () => {
+    const text = (await render(null)).textContent ?? '';
+    expect(text).toContain('No health reading from the bridge yet');
+  });
+
+  it('an unreadable declaration is named as a gap', async () => {
+    const check: ChannelOutputCheck = { ...SCREEN_ONLY, declared: null, missing: [] };
+    const text = (await render(health(serverA('healthy', [check])))).textContent ?? '';
+    expect(text).toMatch(/could not be read/);
+  });
+
+  it('a kept verdict on an unreachable server is dated and says it cannot be re-checked', async () => {
+    const text =
+      (await render(health(serverA('disconnected', [missingDevice('23487013')])))).textContent ??
+      '';
+    expect(text).toMatch(/last checked/);
+    expect(text).toMatch(/cannot be re-checked/);
+  });
+
+  it('a declared backup server gets its own block', async () => {
+    const text =
+      (
+        await render(
+          health(serverA('healthy', [SCREEN_ONLY]), { ...serverA('healthy'), label: 'B' }),
+        )
+      ).textContent ?? '';
+    expect(text).toContain('Channel 1 on server A');
+    expect(text).toContain('Server B: no output check has completed yet');
+  });
+});
+
+/**
+ * `RUNTIME-REDESIGN-01` Phase 7 (`PROMPT.md` §7) — **the reference's Outputs TABLE**
+ * (`09-channel-settings.html` as rendered: `Slot · Configured output · Runtime status`, one row
+ * per consumer `casparcg.config` declares, a `N of M running` count beside the heading).
+ *
+ * RED FIRST against the shipped section, which rendered one prose line — `Declared: … Running:
+ * …` — and no table. Every B-223 assertion above stays: the AIR row, its remedy paragraphs and
+ * the local-monitor sentence live BENEATH the table, unchanged, because they are the engineering
+ * detail the banner points at and the deletion guard keeps.
+ *
+ * ⚠ A row's running/missing verdict is counted PER KIND, exactly as `MissingConsumer` is: the
+ * wire reports a running DeckLink only by port, so the first `running` declarations of a kind
+ * are the ones running and the rest are not. Nothing here matches a device to a port.
+ */
+describe('Phase 7 — the outputs table, one row per declared consumer', () => {
+  const rows = (el: HTMLElement): HTMLTableRowElement[] => [
+    ...el.querySelectorAll<HTMLTableRowElement>('[data-output-table] tbody tr'),
+  ];
+  const cells = (tr: HTMLTableRowElement): string[] =>
+    [...tr.querySelectorAll('td')].map((td) => (td.textContent ?? '').trim());
+
+  it('🔴 the head reads Slot · Configured output · Runtime status, and the rows are the declaration in order', async () => {
+    const el = await render(health(serverA('healthy', [missingDevice('23487013')])));
+    expect(
+      [...el.querySelectorAll('[data-output-table] th')].map((th) => th.textContent?.trim()),
+    ).toEqual(['Slot', 'Configured output', 'Runtime status']);
+    const r = rows(el);
+    expect(r).toHaveLength(3);
+    expect(cells(r[0] as HTMLTableRowElement)[0]).toBe('01');
+    expect(cells(r[1] as HTMLTableRowElement)[0]).toBe('02');
+    expect(cells(r[2] as HTMLTableRowElement)[0]).toBe('03');
+    // The configured output names the KIND and the device it declares, in the words the
+    // banner and the AIR row already use (`missingWords`).
+    expect(cells(r[0] as HTMLTableRowElement)[1]).toContain('decklink');
+    expect(cells(r[0] as HTMLTableRowElement)[1]).toContain('23487013');
+    expect(cells(r[1] as HTMLTableRowElement)[1]).toContain('screen');
+    expect(cells(r[2] as HTMLTableRowElement)[1]).toContain('system-audio');
+  });
+
+  it('🔴 a missing AIR consumer reads Not running in the alarm ink; a running one reads Running', async () => {
+    const el = await render(health(serverA('healthy', [missingDevice('23487013')])));
+    const r = rows(el);
+    expect(r[0]?.getAttribute('data-output-row')).toBe('missing');
+    expect(r[0]?.getAttribute('data-output-row-severity')).toBe('air');
+    expect(cells(r[0] as HTMLTableRowElement)[2]).toContain('Not running');
+    expect(r[1]?.getAttribute('data-output-row')).toBe('running');
+    expect(cells(r[1] as HTMLTableRowElement)[2]).toContain('Running');
+    expect(r[2]?.getAttribute('data-output-row')).toBe('running');
+    // …and the B-223 AIR row beneath the table is still exactly one element.
+    expect(el.querySelectorAll('[data-severity="air"]')).toHaveLength(1);
+  });
+
+  it('a missing LOCAL monitor is a missing row at local severity, not an alarm', async () => {
+    const el = await render(health(serverA('healthy', [SCREEN_ONLY])));
+    const r = rows(el);
+    expect(r.map((tr) => tr.getAttribute('data-output-row'))).toEqual([
+      'running',
+      'missing',
+      'running',
+    ]);
+    expect(r[1]?.getAttribute('data-output-row-severity')).toBe('local');
+    expect(el.querySelector('[data-severity="air"]')).toBeNull();
+  });
+
+  it('🔴 the count beside the heading says how many declared consumers run', async () => {
+    const two = await render(health(serverA('healthy', [SCREEN_ONLY])));
+    expect(two.querySelector('[data-output-count]')?.textContent).toBe('2 of 3 running');
+    await act(async () => {
+      root?.unmount();
+    });
+    root = null;
+    container?.remove();
+    const all = await render(
+      health(
+        serverA('healthy', [
+          {
+            ...SCREEN_ONLY,
+            running: [...SCREEN_ONLY.running, { port: 600, kind: 'screen' }],
+            missing: [],
+          },
+        ]),
+      ),
+    );
+    expect(all.querySelector('[data-output-count]')?.textContent).toBe('3 of 3 running');
+  });
+
+  it('two DeckLinks declared, one running: the FIRST declaration is the running one, per kind', async () => {
+    const check: ChannelOutputCheck = {
+      channel: 1,
+      declared: [
+        { kind: 'decklink', device: '1' },
+        { kind: 'decklink', device: '2' },
+      ],
+      running: [{ port: 301, kind: 'decklink' }],
+      missing: [{ kind: 'decklink', declared: 2, running: 1, devices: ['2'] }],
+      observedAt: '2026-09-05T14:08:44.000Z',
+    };
+    const el = await render(health(serverA('healthy', [check])));
+    expect(rows(el).map((tr) => tr.getAttribute('data-output-row'))).toEqual([
+      'running',
+      'missing',
+    ]);
+  });
+
+  it('an unreadable declaration renders no table and keeps its gap sentence', async () => {
+    const el = await render(
+      health(serverA('healthy', [{ ...SCREEN_ONLY, declared: null, missing: [] }])),
+    );
+    expect(el.querySelector('[data-output-table]')).toBeNull();
+    expect(el.textContent).toMatch(/could not be read/);
+  });
+});

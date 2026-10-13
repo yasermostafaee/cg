@@ -6,7 +6,9 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { SAME_NUMBERS_ON_B } from './support/backup-map.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * Reconnect-reconciliation (Face 2 + the load guard) — a killed bridge leaves
@@ -70,7 +72,12 @@ const SLOT = { channel: 1, layer: 10 };
 
 /** Session 1: import → load → take → the bridge DIES with output on air. */
 async function orphanedSession(m: MockHandle, oscPort: number): Promise<void> {
-  const r = new CasparRuntime(connectionFor(m.amcpPort, oscPort, await freeUdpPort()));
+  const r = new CasparRuntime(
+    connectionFor(m.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    // `B-316` — the mocks share numbers by construction; said, never defaulted.
+    { layerPolicy: TEST_LAYER_POLICY, backupChannels: SAME_NUMBERS_ON_B },
+  );
   runtime = r;
   r.start();
   await r.startServing();
@@ -98,13 +105,7 @@ async function recvLines(m: MockHandle, file: string): Promise<string[]> {
   // sleep under CI contention read TRUNCATED traces, which both misses lines
   // and misaligns the session1Count slicing below.
   await m.traceFlush();
-  return fs
-    .readFileSync(file, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(file);
 }
 
 it('the fresh session ADOPTS the orphaned layer: CLEAR precedes its first CG ADD, and no CLEAR is issued at startup', async () => {
@@ -131,7 +132,12 @@ it('the fresh session ADOPTS the orphaned layer: CLEAR precedes its first CG ADD
   const session1Count = session1Lines.length;
 
   // Fresh session (re-delivery-shaped: the template is registered again).
-  const r2 = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  const r2 = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    // `B-316` — the mocks share numbers by construction; said, never defaulted.
+    { layerPolicy: TEST_LAYER_POLICY, backupChannels: SAME_NUMBERS_ON_B },
+  );
   runtime2 = r2;
   r2.start();
   await r2.startServing();
@@ -154,10 +160,10 @@ it('the fresh session ADOPTS the orphaned layer: CLEAR precedes its first CG ADD
 
   // The fresh ADD references the NEW session's served URL (the old origin is dead).
   const freshAdd = mock.lastCgAdd(SLOT);
-  // R-030 — the served URL carries the channel raster on every ADD; what this
-  // case is about is the ORIGIN changing, asserted on the next line.
+  // R-030 — the served URL carries the channel raster on every ADD (and `B-293` its version in
+  // the path); what this case is about is the ORIGIN changing, asserted on the next line.
   expect(freshAdd?.template).toMatch(
-    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third\?cw=1920&ch=1080$/,
+    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third~[0-9a-f]{16}\?cw=1920&ch=1080$/,
   );
   expect(freshAdd?.template).not.toBe(staleAdd?.template);
   await expect(mock.waitForCgAddResolution(SLOT)).resolves.toBe('resolved');
@@ -200,7 +206,12 @@ it('a remove landing during the adopt-CLEAR window neither leaks the layer nor A
       }),
   );
 
-  const r = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  const r = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    // `B-316` — the mocks share numbers by construction; said, never defaulted.
+    { layerPolicy: TEST_LAYER_POLICY, backupChannels: SAME_NUMBERS_ON_B },
+  );
   runtime = r;
   r.start();
   await r.startServing();
@@ -230,7 +241,7 @@ it('a remove landing during the adopt-CLEAR window neither leaks the layer nor A
   expect((await r.load('item2', 'lower-third', { headline: 'تازه' })).accepted).toBe(true);
   for (const release of releases.splice(0)) release(); // any residual adopt-CLEARs
   expect(mock.lastCgAdd(SLOT)?.template).toMatch(
-    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third\?cw=1920&ch=1080$/,
+    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third~[0-9a-f]{16}\?cw=1920&ch=1080$/,
   );
   // Settle the page before the take so PLAY deterministically flips onAir
   // (a pending fetch spuriously timing out under contention would flip the
@@ -246,7 +257,12 @@ it('EXP-A regression: a post-restart load with an EMPTY registry fails fast (unk
   await orphanedSession(mock, oscPort);
 
   // Fresh session, NO re-import (the pre-fix reconnect state).
-  const r2 = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  const r2 = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    // `B-316` — the mocks share numbers by construction; said, never defaulted.
+    { layerPolicy: TEST_LAYER_POLICY, backupChannels: SAME_NUMBERS_ON_B },
+  );
   runtime2 = r2;
   r2.start();
   await r2.startServing();
@@ -254,14 +270,14 @@ it('EXP-A regression: a post-restart load with an EMPTY registry fails fast (unk
 
   expect(r2.templateHtml('lower-third')).toBeNull();
   const loaded = await r2.load('item2', 'lower-third', { headline: 'جدید' });
-  expect(loaded.accepted).toBe(false);
+  expect(loaded).toEqual({ accepted: false, errorCode: 'unknown-template' });
 
   // Give the 40 Hz OSC ticks time — before the fix, the orphan's producer
   // report routed to item2 and displayed a false ON AIR over the failed ack.
+  // `B-301` — and since the Loads check first, a refused Load creates no item at all: there is
+  // nothing for the orphan's reports to route to, ON AIR or otherwise.
   await new Promise((r) => setTimeout(r, 200));
-  const item = r2.stackSnapshot().find((i) => i.itemId === 'item2');
-  expect(item?.status).toBe('error');
-  expect(item?.errorCode).toBe('unknown-template');
+  expect(r2.stackSnapshot().find((i) => i.itemId === 'item2')).toBeUndefined();
 
   // The guard sent nothing: the orphan is untouched (still on air).
   expect(mock.layerState(SLOT)?.producer).toBe('html');

@@ -1,6 +1,9 @@
-import { useState, type ReactNode } from 'react';
-import { Tabs, type TabSpec } from '../../ui/Tabs.js';
-import { useFixedBank } from '../../hooks/useFixedLayers.js';
+import { useEffect, type ReactNode } from 'react';
+import { useLockCoverage } from '../../hooks/useLock.js';
+import { setMessageScope } from './messageScope.js';
+import { TabPanel } from '../../ui/Tabs.js';
+import { ChannelLockPanel } from '../lock/ChannelLockPanel.js';
+import { useSelectedChannel } from './useSelectedChannel.js';
 
 /**
  * THE CHANNEL axis — the OUTER level of the operator surface.
@@ -14,37 +17,59 @@ import { useFixedBank } from '../../hooks/useFixedLayers.js';
  * correctly now than to unpick later.
  *
  * CHANNEL and LAYERS-vs-PLAYOUT are two different axes and must never share one
- * strip: a single "Channel 1 | Channel 2 | Playout" row cannot say WHOSE playout it
+ * strip: a single "Channel 1 | Channel 2 | STATION LAYERS" row cannot say WHOSE playout it
  * means. They are nested instead — channel outside, surfaces inside.
  *
- * ONE CHANNEL FOR NOW. The bank declares exactly one, and no channel discovery is
- * invented here. The strip still renders for it: it says which channel the operator
- * is looking at, and it means adding a second is a longer array rather than a new
- * layout.
+ * ── `RUNTIME-REDESIGN-01` PHASE 7 — A LIST WHOSE LENGTH IS DATA ─────────────────────
+ *
+ * This used to read `bank?.channel ?? 1` into a ONE-element array and keep its selection in
+ * component state: _"ONE CHANNEL FOR NOW. The bank declares exactly one, and no channel
+ * discovery is invented here."_ Nothing was invented (owner answer A3), and the strip was
+ * shaped for a discovery call instead: its tabs are `channelIds(…)`, and the selection is a
+ * channel ID in `channelStore`, readable by Station setup's per-channel tab. With one declared
+ * channel it renders exactly what it did before. ⭐ The call now exists (`R-062` gap 2,
+ * `CHANNEL-AUTHORITY-01`): `channelIds` reads its `declared` channels first, with the bank and
+ * channel settings as the fallback.
+ */
+/**
+ * 🔴 `AUDIT-CLOSE-01` B1 — THE STRIP MOVED TO THE APP HEADER; THE SCOPE DID NOT.
+ *
+ * This component used to render both halves of the channel tab set: the tablist and the panel
+ * it controls. The reference puts the channel chooser in its top bar, and the app had no top
+ * bar to put it in — an absence §1.1 recorded and no phase ever decided (see `AppHeader`). Now
+ * that the header exists, the tablist lives there and this keeps the PANEL.
+ *
+ * ⚠ Everything the header note above argues about SCOPE is unchanged and still the reason this
+ * component exists: the channel owns the layer list, PROGRAM, PREVIEW and the Inspector, so the
+ * tabpanel still wraps all four. What moved is which end of the room the tabs are on.
+ *
+ * The two halves are joined by `idPrefix="channel"` and by the SAME `useSelectedChannel()`
+ * reading — a module store, not a prop — so they cannot disagree about which channel is
+ * selected however far apart they are rendered.
  */
 export function ChannelScope({ children }: { children: ReactNode }): JSX.Element {
-  const bank = useFixedBank();
-  // The bank is the only channel authority the SPA has. Before its snapshot
-  // arrives — and when no bank is declared at all — the surface still belongs to
-  // SOME channel, and channel 1 is the documented default (`FixedLayerBankSchema`).
-  const channel = bank?.channel ?? 1;
-  const [activeChannel, setActiveChannel] = useState<string>(String(channel));
-
-  const tabs: TabSpec[] = [{ id: String(channel), label: `CHANNEL ${String(channel)}` }];
+  const { selected, verbScope } = useSelectedChannel();
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 L — a refusal raised by a press is stamped with the channel on screen
+    (`messageScope`), so it stays in that channel's view. Kept current here, where the selection
+    is read for the whole workspace, and cleared when the workspace goes.
+  */
+  useEffect(() => {
+    setMessageScope(verbScope);
+    return () => setMessageScope(null);
+  }, [verbScope]);
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 F — a channel a covered-set lock covers presents as LOCKED: its view
+    is the lock card, and the workspace — every verb in it — is not rendered at all (golden rule
+    13). `partial` is the only coverage that reaches here: `all` is the console's lock screen, as
+    it always was, and `none` leaves every channel live.
+  */
+  const coverage = useLockCoverage();
+  const lockedHere = coverage.kind === 'partial' && coverage.channels.includes(selected);
 
   return (
-    <Tabs
-      tabs={tabs}
-      // Follow the bank if it names a different channel than the one selected —
-      // with one channel this cannot diverge, but reading through keeps the strip
-      // honest rather than stranded on a stale id.
-      activeId={tabs.some((t) => t.id === activeChannel) ? activeChannel : String(channel)}
-      onSelect={setActiveChannel}
-      ariaLabel="Channels"
-      idPrefix="channel"
-      level="outer"
-    >
-      {children}
-    </Tabs>
+    <TabPanel activeId={String(selected)} idPrefix="channel">
+      {lockedHere ? <ChannelLockPanel channel={selected} /> : children}
+    </TabPanel>
   );
 }

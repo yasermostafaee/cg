@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-070 — `update` gets the PRODUCER-STATE rule it never had.
@@ -68,7 +68,11 @@ function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
 async function boot(): Promise<void> {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  runtime = new CasparRuntime(singleServer(mock.amcpPort, oscPort));
+  runtime = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);

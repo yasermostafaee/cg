@@ -1,6 +1,35 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { CircleArrowOutDownRight, Trash2, XSquare, type LucideIcon } from 'lucide-react';
 import type { VerbTone } from './rowAction.js';
+import { Icon } from './Icon.js';
 import { Modal, ModalAction } from './Modal.js';
+
+/**
+ * 🔴 **THE MARK PICTURES THE ACT — A TRASH CAN IS FOR AN ACT THAT DELETES** (the owner,
+ * 2026-09-14, photographing `Clear all …?` and `Clear Layer 3?` under a red bin).
+ *
+ * This is `EmptiedAirNotice`'s rule one step further in, and that call site already states
+ * the half this completes: a glyph that lies about the button beneath it is not a safety
+ * signal, it is noise. CLEAR and STOP delete NOTHING — the dialogs' own sentences say so in
+ * words two lines below the bin: _"The template stays on the row and can be played again"_,
+ * _"They stay loaded and can be taken again."_ REMOVE is the act that cannot be undone, and
+ * it keeps the bin and the red, alone, so that when the bin does appear it means something.
+ *
+ * ⚠ **NOT a weakening of the signal, and the distinction is the whole point.** §8d's rule —
+ * "the confirm dialog is the ONE place a destructive control reads destructive AT REST" —
+ * stands untouched: the emblem is still drawn, the confirm button is still FILLED and still
+ * the loudest thing in the frame. What changes is WHICH consequence it names. Severity by
+ * verb rather than one red for three different acts; the treatment comes from the same
+ * `--r-verb-*` token the row button and the bulk button already wear, so the operator's eye
+ * follows ONE colour from the verb he pressed to the button that commits it.
+ *
+ * ⚠ `remove` and an unset tone fall through to the bin. A new destructive verb that forgets
+ * to declare itself therefore gets the LOUDEST treatment, not the quietest.
+ */
+const CONFIRM_EMBLEM: Partial<Record<VerbTone, LucideIcon>> = {
+  clear: XSquare,
+  stop: CircleArrowOutDownRight,
+};
 
 /**
  * Promise-shaped replacements for `window.confirm` and `window.prompt`, so a caller keeps
@@ -36,6 +65,60 @@ interface ConfirmRequest {
    * that actually commits.
    */
   tone?: VerbTone;
+  /**
+   * 🔴 `SETTINGS-MATCH-02` §8d — **THE DESTRUCTIVE EMBLEM.**
+   *
+   * A red-tinted tile above the sentence, which the reference draws on every remove. It is not
+   * decoration: this hook's whole job is to gate an act that removes something or takes it off
+   * air, and the mark is what says so in the quarter-second before the sentence is read.
+   *
+   * ⚠ OPTIONAL, and the omission is a decision the drawing makes too — its `#confirm-dialog`
+   * has none. The rule `Modal`'s `emblem` already states applies here one layer in: a dialog
+   * that is a PLACE gets a mark, and a dialog that asks a question in words does not. What
+   * earns one HERE is the act being destructive, so the flag is named for that rather than
+   * for the picture.
+   *
+   * 🔴🔴 **`MODAL-CHROME-10` ADDENDUM D §D3(a) — THE DEFAULT IS NOW `true`, AND THAT IS THE
+   * "FIX IT ONCE" THE OWNER ASKED FOR.**
+   *
+   * It was an opt-in, and exactly THREE call sites opted in — all three inside Station setup.
+   * Every destructive confirm the CONSOLE raises went without: `Clear all`, `Stop all`,
+   * `Remove all`, `Clear layer` ×3, `Release stranded`, `Remove that item` and the
+   * template deletion the owner photographed. Nine dialogs, one missing mark each, and nothing
+   * in the tree said they should have had it — which is how an opt-in flag on a hook whose
+   * whole job is destructive acts always ends.
+   *
+   * So the ROLE decides it, like `ModalActionRole` decides the button. This hook exists to gate
+   * acts that remove something or take it off air; a confirm raised through it is destructive
+   * by default and the EXCEPTION is written down at the one call site that is not.
+   *
+   * ⚠ The exception is real and must stay possible: `EmptiedAirNotice`'s _"Put N rows back on
+   * air?"_ is a CONSTRUCTIVE act asked through the same hook, and a trash glyph over it would
+   * be a lie about what the button does. It passes `destructive: false`, with its reason.
+   */
+  destructive?: boolean;
+  /**
+   * 🔴 `SETTINGS-MATCH-02` §8 — **WHICH DIALOG FAMILY THIS CONFIRM BELONGS TO**, and an e2e
+   * caught the first spelling getting it wrong.
+   *
+   * `useConfirm` serves TWO surfaces, and the reference draws two frames for them:
+   *
+   *   · `base` (the default) — a confirm raised from the CONSOLE, over nothing. `Clear all`,
+   *     a row's CLEAR. The reference's outer `#confirm-dialog`, `.modal.small`, **500** wide.
+   *   · `sub` — a confirm raised from inside STATION SETUP, over that dialog. The reference's
+   *     `.sub-dialog`, **480** wide, with the lighter scrim that keeps the surface underneath
+   *     visible so the operator can see he is one step deeper.
+   *
+   * The first spelling made every confirm `record`, and `modal-geometry.spec.ts` — which
+   * measures the console's `Clear all` against the drawing's 500 — went red at 480. That spec
+   * was right: widening a decision from one family to both is how a measured value quietly
+   * becomes an average of two.
+   *
+   * ⚠ It also fixes the SCRIM, which was wrong before this session and nothing had noticed:
+   * a confirm over Station setup laid the full `base` scrim, so the dialog it was launched
+   * from went as dark as the console behind it.
+   */
+  layer?: 'base' | 'sub';
 }
 
 export function useConfirm(): {
@@ -65,6 +148,13 @@ export function useConfirm(): {
     request === null ? null : (
       <Modal
         title={request.title}
+        /*
+          `SETTINGS-MATCH-02` §8d — a confirm raised INSIDE Station setup is part of that
+          dialog's sub-family (480, its own bands, the lighter scrim); one raised from the
+          console keeps the outer family's 500. See `ConfirmRequest.layer`.
+        */
+        size={request.layer === 'sub' ? 'record' : 'prose'}
+        layer={request.layer ?? 'base'}
         onClose={() => settle(false)}
         footer={
           <>
@@ -98,6 +188,24 @@ export function useConfirm(): {
           </>
         }
       >
+        {/* §8d — the mark, then the sentence. See `ConfirmRequest.destructive` for why the
+            DEFAULT is the mark: this hook gates destructive acts, so the exception is the one
+            that gets written at its call site. */}
+        {request.destructive !== false && (
+          <span
+            className="cg-confirm-emblem"
+            data-confirm-emblem=""
+            /* The HUE travels with the glyph — see `CONFIRM_EMBLEM`. Published as an
+               attribute rather than an inline style so `controls.css` keeps owning the
+               palette and the two halves cannot come to disagree. */
+            {...(request.tone !== undefined ? { 'data-confirm-tone': request.tone } : {})}
+          >
+            <Icon
+              icon={request.tone === undefined ? Trash2 : (CONFIRM_EMBLEM[request.tone] ?? Trash2)}
+              size={20}
+            />
+          </span>
+        )}
         {request.body}
       </Modal>
     );
@@ -164,16 +272,63 @@ export function usePrompt(): {
         {request.body}
         <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
           {request.label}
+          {/*
+            🔴 `B-230` — `data-modal-autofocus`, NOT `autoFocus`, and the swap is the fix.
+
+            The attribute was here and it never worked. React applies `autoFocus` during
+            the commit; the primitive's focus-on-open runs in an effect AFTER it, so the
+            effect always won and focus landed on the ✕. Worse, that effect re-ran on every
+            keystroke (see `Modal`), so it was not a one-time race at mount — it took focus
+            back every time the operator typed a character.
+
+            Two things moving focus is the defect; a second `autoFocus` tuned to win would
+            have been a third. So the primitive is told WHERE to put focus and remains the
+            only thing that puts it there. Measured in a real browser, where the ordering
+            is decidable — jsdom cannot tell commit-time from effect-time here.
+          */}
           <input
             className="cg-field"
             type={request.type ?? 'text'}
             value={value}
-            autoFocus
+            data-modal-autofocus=""
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
               // Enter submits, but never past the length rule — the native prompt let a
               // too-short PIN through and the caller silently dropped it.
-              if (e.key === 'Enter' && !tooShort) settle(value);
+              if (e.key !== 'Enter' || tooShort) return;
+              /*
+                🔴 **`preventDefault` FIRST, AND IT IS NOT DEFENSIVE — IT IS THE FIX FOR A
+                REGRESSION THIS DIALOG ACQUIRED THE DAY ENTER STARTED WORKING (owner, 2026-09-06).**
+
+                Reported from the plant: pressing the Lock BUTTON locks and closes the dialog,
+                but pressing ENTER locks and leaves the dialog open on top of the lock screen.
+                Reproduced against a real bridge; the offline mock does NOT show it, and that
+                difference is the whole mechanism:
+
+                  1. Enter closes this dialog (`settle`), so the `Modal` unmounts;
+                  2. the focus trap's cleanup restores focus to whatever had it when the trap
+                     armed — the status bar's own `Lock` BUTTON, which is what the operator
+                     pressed to get here;
+                  3. the browser then runs the Enter keydown's DEFAULT ACTION, and the default
+                     action of Enter on a focused button is to CLICK it — so the prompt
+                     re-opens, while the engage that is already in flight raises the lock
+                     screen behind it.
+
+                Against the mock, `engage` resolves fast enough that `lock.engaged` flips and
+                the status bar has already REPLACED that button with the `LOCKED` chip, so
+                there is nothing left for the default action to click. With a real bridge the
+                round-trip is slower, the button is still mounted, and it fires. A race whose
+                outcome depends on socket latency is exactly the kind that reaches the plant
+                and never the suite.
+
+                ⚠ It could not happen before `B-230`: focus used to be stolen to the ✕ on every
+                keystroke, so Enter never reached this handler at all. Fixing one focus defect
+                is what exposed this one — which is why the fix is to stop the default action
+                rather than to make the trap restore focus somewhere else. The restore is
+                correct; a synthetic click the operator never made is not.
+              */
+              e.preventDefault();
+              settle(value);
             }}
           />
         </label>

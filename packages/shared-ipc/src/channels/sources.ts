@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { IdSchema, LiveSourceIdSchema } from '@cg/shared-schema';
-import type { FixedLayerBank } from './fixedLayers.js';
+import { IdSchema, LiveFitModeSchema, LiveSourceIdSchema } from '@cg/shared-schema';
+import { fixedBankEnd, lowBankEnd, type FixedLayerBank } from './fixedLayers.js';
+import { LAYER_BANDS } from '../layer-bands.js';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 
@@ -22,9 +23,10 @@ import { definePublishChannel } from '../publish.js';
  *    lives, built with NO reference to any template and NO dependence on any
  *    declared id. Each entry carries an installation-generated id, a human NAME
  *    ("Studio A", "Baku", "Skype 1") and its producer definition.
- * 2. **The ASSIGNMENTS** ({@link SourceAssignmentsSchema}) — per template, per
- *    PLATE, which catalog entry that plate uses. The operator assigns once, per
- *    template.
+ * 2. **The ASSIGNMENTS** ({@link SourceAssignmentsSchema}) — per CHANNEL, per template, per
+ *    PLATE, which catalog entry that plate uses: the template's Source defaults. The operator
+ *    assigns once per template on each channel (`CHANNEL-SOURCES-01`; before it, once per
+ *    template for the whole station — {@link assignmentsOnChannel}).
  *
  * The author names plates for the LAYOUT; the installation names sources for
  * what they ARE; one deliberate operator action joins them. **The template stays
@@ -159,6 +161,43 @@ export function aspectForFormat(format: LiveSourceFormat): number | null {
 }
 
 /**
+ * C-025 — the URL schemes a `stream` producer's URL may use.
+ *
+ * 🔴 **THIS LIST STATES WHAT THE CLIENT REQUIRES THE PRODUCT TO ACCEPT — nothing
+ * more.** It is NOT a statement about what CasparCG or its linked ffmpeg can
+ * play: no source of truth for that is available to this project, and a
+ * hand-written list posing as one would be a guard whose name lies (the class
+ * session BS spent a session auditing out). WIDENING the list is therefore a
+ * product decision to take with the client, never a "discovery" that some other
+ * scheme happens to work on one install.
+ *
+ * The rule this list feeds is enforced in {@link validateSourceCatalog} — once.
+ */
+export const STREAM_URL_SCHEMES = [
+  'http',
+  'https',
+  'rtmp',
+  'rtmps',
+  'rtsp',
+  'srt',
+  'udp',
+  'rtp',
+  'mms',
+] as const;
+
+/**
+ * The scheme of a stream URL, lowercased — or `null` when the text carries no
+ * `scheme://` head at all. Case-insensitive per RFC 3986 §3.1 (`RTMP://` is
+ * `rtmp://`); the `://` is required because every form the allowlist covers is
+ * written that way, and a scheme-less `host:port` has no scheme to judge.
+ */
+function streamUrlScheme(url: string): string | null {
+  const match = /^([A-Za-z][A-Za-z0-9+.-]*):\/\//.exec(url.trim());
+  const scheme = match?.[1];
+  return scheme === undefined ? null : scheme.toLowerCase();
+}
+
+/**
  * The concrete producer a source resolves to — a DISCRIMINATED UNION on `kind`,
  * never a free string, so an unreachable producer form is a parse error at the
  * boundary rather than an AMCP `400` at take time.
@@ -172,8 +211,17 @@ export const SourceProducerSchema = z.discriminatedUnion('kind', [
      * Optional because the measured grammar makes it optional
      * (`route://<channel>` with an optional `-<layer>` tail): a channel-only
      * route means that channel's whole output.
+     *
+     * ⚠ `PLAYOUT-SOURCES-01` — contract v1.3 rule 3 makes it REQUIRED for a `route` the Playout lists:
+     * a route with no layer stacks every held input. That is enforced where D10 is read
+     * (`buildPlayoutSourceCatalog`), not here, because this arm also parses today's hand-made files.
      */
     layer: z.number().int().nonnegative().optional(),
+    /**
+     * `PLAYOUT-SOURCES-01` — the holder channel's video mode, as D10 v1.3 gives it; `null` when the
+     * running core does not have that mode yet. Carried for the operator's list; not acted on.
+     */
+    videoMode: z.string().nullable().optional(),
   }),
   z.object({
     kind: z.literal('decklink'),
@@ -201,6 +249,22 @@ export const SourceProducerSchema = z.discriminatedUnion('kind', [
     /** A clip in CasparCG's media folder — the one producer that needs no signal. */
     file: z.string().min(1),
   }),
+  z.object({
+    kind: z.literal('stream'),
+    /**
+     * C-025 — an internet stream, played by URL: `PLAY <ch>-<layer> "<url>"`,
+     * the command the owner proved by hand on the plant. Deliberately its OWN
+     * arm and not an extension of `media`: that is "the one producer that needs
+     * no signal", and a stream is its opposite — it needs a signal and can drop.
+     *
+     * The scheme must be one of {@link STREAM_URL_SCHEMES}, and that rule is
+     * spelled ONCE, in {@link validateSourceCatalog} — deliberately NOT here as
+     * a zod refine. A hand-written config file is a legal way to configure a
+     * station, and at LOAD a zod failure is an unusable-file boot error, while
+     * the validator refuses with a NAMED code an operator can act on.
+     */
+    url: z.string().min(1),
+  }),
 ]);
 export type SourceProducer = z.infer<typeof SourceProducerSchema>;
 
@@ -223,6 +287,21 @@ export const SourceDefinitionIdSchema = z
   .min(1)
   .max(64)
   .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'a source id is alphanumeric with "_" and "-"');
+
+/**
+ * 🔴 `MEDIA-PLATES-01` — **WHAT A MEDIA CLIP DOES WHEN A LOOK HIDES ITS PLATE**, per clip and
+ * station-wide (the market's common shape: vMix's Auto Pause / Auto Restart, Cinegy's Free Run):
+ *
+ *   - `pause` — the default. Paused and muted, still seated; shown again, it resumes from the SAME
+ *     frame with its audio back.
+ *   - `restart` — torn down when hidden, as every clip was before this setting; shown again, it
+ *     plays from the beginning.
+ *   - `continue` — keeps playing, hidden and muted; shown again, it is wherever it has reached by
+ *     then (its last frame, if it has ended).
+ */
+export const MEDIA_WHEN_HIDDEN = ['pause', 'restart', 'continue'] as const;
+export const MediaWhenHiddenSchema = z.enum(MEDIA_WHEN_HIDDEN);
+export type MediaWhenHidden = z.infer<typeof MediaWhenHiddenSchema>;
 
 /** ONE live this installation has, defined without reference to any template. */
 export const SourceDefinitionSchema = z.object({
@@ -249,8 +328,98 @@ export const SourceDefinitionSchema = z.object({
    */
   aspect: z.number().positive().optional(),
   producer: SourceProducerSchema,
+  /**
+   * 🔴 `PLAYOUT-SOURCES-01` — **WHERE THIS ENTRY CAME FROM.** `input` = the Playout's D10 list,
+   * `media` = its D11 library; absent on a hand-made entry. It decides two things and nothing
+   * else: which tab of the picker lists it, and whether a plate showing it is a D10 plate that
+   * starts silent and only ramps (contract v1.3 rule 2).
+   */
+  origin: z.enum(['input', 'media']).optional(),
+  /**
+   * `PLAYOUT-SOURCES-01` — absent = usable. `unusable`: listed with its {@link reason} and never
+   * bound (it failed the catalogue's rules, or the route gate holds it). `unavailable`: the Playout
+   * stopped offering it — the binding is KEPT and shown tagged, and a take of it is refused before
+   * any AMCP. Never a reason to delete anything.
+   */
+  status: z.enum(['unusable', 'unavailable']).optional(),
+  /**
+   * `PLAYOUT-SOURCES-01` — the Playout no longer OFFERS it: an input a successful D10 read stopped
+   * listing, or a bound media item a successful `ids=` read left out. Always with `status:
+   * 'unavailable'`. Kept so a binding to it keeps its name; it can no longer be newly bound. (An
+   * input the Playout still lists with `available: false` is unavailable WITHOUT this flag.)
+   */
+  departed: z.literal(true).optional(),
+  /** Why it is unusable or unavailable, in the operator's words (a `title`, never an id). */
+  reason: z.string().min(1).optional(),
+  /**
+   * `PLAYOUT-SOURCES-01` / v1.3 rule 1 — the channels OF THIS STATION this input may be bound on,
+   * joined from D10's `compatibleChannels` by the same rule as D4. Absent = any channel.
+   */
+  channels: z.array(z.number().int().positive()).optional(),
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` B (`B-298`) — THIS STATION'S CHANNEL whose OWN OUTPUT this input is (D10's
+   * `ownOutputOf`, `2.9.1`, joined by D4's rule). Shown there it would loop, so it is refused on THAT
+   * channel and offered on every other. Absent = unknown, never "safe": nothing is guessed from a name.
+   */
+  ownOutputOf: z.number().int().positive().optional(),
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` C (`R-075`) — the Playout CHANNEL whose running playlist this input outputs
+   * (D10's `playlistOf`, `2.9.2`), in the Playout's own numbering — `route://N-L` to its playout layer.
+   * Present: the box is ALWAYS at `VOLUME 0` (`isPlaylistOutput`), whatever the operator asks.
+   */
+  playlistOf: z.number().int().positive().optional(),
+  /** `PLAYOUT-SOURCES-01` — a media item's facts, for the picker's second line. Media only. */
+  media: z
+    .object({
+      durationMs: z.number().nonnegative().optional(),
+      width: z.number().int().positive().optional(),
+      height: z.number().int().positive().optional(),
+      folder: z.string().optional(),
+      /** When this station last bound it — the picker's `Recent` group. */
+      lastBoundAt: z.string().optional(),
+      /**
+       * `PLAYOUT-FEATURES-01` A (`B-286`) — the clip's content fingerprint (D11, `2.9.1`): the key the BACKUP's
+       * own copy is found by. Absent: none given, and the backup is sent nothing for it.
+       */
+      fingerprint: z.string().optional(),
+      /** `MEDIA-PLATES-01` — the clip's two playback settings ({@link mediaPlaybackOf}). */
+      loop: z.boolean().optional(),
+      whenHidden: MediaWhenHiddenSchema.optional(),
+    })
+    .optional(),
 });
 export type SourceDefinition = z.infer<typeof SourceDefinitionSchema>;
+
+/** A clip's two playback settings. */
+export interface MediaPlayback {
+  /** Plays with `LOOP`. Off: the clip freezes on its last frame at its end — never empty. */
+  readonly loop: boolean;
+  readonly whenHidden: MediaWhenHidden;
+}
+
+/**
+ * The settings a NEW bound-media reference gets — and what an absent value reads as, which is every
+ * reference bound before these settings existed (additive; no migration).
+ */
+export const MEDIA_PLAYBACK_DEFAULTS: MediaPlayback = { loop: false, whenHidden: 'pause' };
+
+/**
+ * A clip's playback settings from its catalogue entry. 🔴 **THE ONE READER** — the bridge's hold, its
+ * `PLAY`, the console's control: none of them spells a default of its own.
+ */
+export function mediaPlaybackOf(entry: {
+  readonly media?:
+    | {
+        readonly loop?: boolean | undefined;
+        readonly whenHidden?: MediaWhenHidden | undefined;
+      }
+    | undefined;
+}): MediaPlayback {
+  return {
+    loop: entry.media?.loop ?? MEDIA_PLAYBACK_DEFAULTS.loop,
+    whenHidden: entry.media?.whenHidden ?? MEDIA_PLAYBACK_DEFAULTS.whenHidden,
+  };
+}
 
 /**
  * The aspect THIS SOURCE states: derived from the format, falling back to the
@@ -271,11 +440,19 @@ export const MAX_LIVE_SOURCE_LAYER = 9999;
 /**
  * The layer band the bridge places Live Source producers on, INCLUSIVE.
  *
- * DECLARED, never defaulted. design.md §4 names 10–59 as the band R-028's own
- * 6.4 frees, and {@link SUGGESTED_LIVE_SOURCE_LAYER_RANGE} carries it as a
- * SUGGESTION for the editor — applying it automatically would be this project
- * choosing layer numbers for a plant it cannot see, and a station whose
- * reservation already sits inside 10–59 would then fail to boot on upgrade.
+ * DECLARED by a station-admin — or, since 🔴 `PLATE-BAND-01` (the owner, 2026-09-28), DEFAULTED on
+ * a station LINKED TO THE PLAYOUT that declares none: {@link plateBandInForce} is the one reader.
+ *
+ * ⚠ **IT WAS "DECLARED, NEVER DEFAULTED" UNTIL THEN, FOR TWO REASONS, AND THE OWNER ANSWERED BOTH.**
+ * (1) A default would be this project choosing layer numbers for a plant it cannot see — but a
+ * Playout-linked station's plant is SEEN: the contract fixes its layers (the Playout owns 1–49,
+ * CG Control owns 50–99 — beds 50–59, plates 60–79, template rows 80–99:
+ * `docs/integration/playout/PLAYOUT-INTEGRATION-CONTRACT-v1.md` §7, and C5 as the Playout answered
+ * it, `PLAYOUT-CG-RESPONSE-V13-STATE-v1.md` §3.5). (2) A station whose reservation already sits
+ * inside the band would fail to boot on upgrade — which is now the CONDITION rather than the
+ * objection: a station whose own config claims a layer in 60–79 gets no default, and its take is
+ * refused as before. The default is COMPUTED, never written into the config, so no station's boot
+ * can depend on it. A station not linked to the Playout keeps the old rule: declared, or none.
  *
  * NO CHANNEL. A Live Source is placed on whatever channel its template is on,
  * so the band is a statement about layer NUMBERS. Disjointness is therefore
@@ -291,8 +468,20 @@ export const LiveSourceLayerRangeSchema = z
   .refine((r) => r.end >= r.start, { message: '`end` must be >= `start`' });
 export type LiveSourceLayerRange = z.infer<typeof LiveSourceLayerRangeSchema>;
 
-/** design.md §4's band, offered in the editor and never applied on its own. */
-export const SUGGESTED_LIVE_SOURCE_LAYER_RANGE: LiveSourceLayerRange = { start: 10, end: 59 };
+/**
+ * THE PLATE band: what the editor offers, and — `PLATE-BAND-01` — the band a Playout-linked station
+ * with none declared is given by {@link plateBandInForce}, unless its own config claims a layer in it.
+ * It is never written into a station's config on its own.
+ *
+ * ⚠ **IT MOVED FROM 10-59 TO `LAYER_BANDS.plate` (60-79) on 2026-09-14**, and it is
+ * DERIVED now rather than restated: the whole point of `layer-bands.ts` is that the band a
+ * plate goes on and the band the editor suggests are ONE number, so a re-cut moves both or
+ * the suggestion quietly points at someone else's layers.
+ */
+export const SUGGESTED_LIVE_SOURCE_LAYER_RANGE: LiveSourceLayerRange = {
+  start: LAYER_BANDS.plate.start,
+  end: LAYER_BANDS.plate.end,
+};
 
 /**
  * The installation's LIST of lives, replaced at once.
@@ -305,8 +494,72 @@ export const SourceCatalogSchema = z.object({
   sources: z.array(SourceDefinitionSchema),
   /** Absent ⇒ no band is declared, and phase 5 has nowhere to place a producer. */
   layerRange: LiveSourceLayerRangeSchema.optional(),
+  /**
+   * `PLAYOUT-SOURCES-01` — when the Playout's input list (D10) was last read successfully (ISO), for
+   * Station setup's read-only list. Absent = never read.
+   */
+  inputsReadAt: z.string().optional(),
+  /**
+   * `ROUTE-PLATES-01` — the `epoch` of the D10 answer this catalogue was built from, canonical
+   * ({@link canonicalPlayoutEpoch}): every `route` producer in it names a holder layer of THAT epoch
+   * (contract v1.3 rule 5). Absent = the Playout sent none (v1.2, or the holder off).
+   */
+  inputsEpoch: z.string().optional(),
 });
 export type SourceCatalog = z.infer<typeof SourceCatalogSchema>;
+
+/**
+ * 🔴 `PLATE-BAND-01` — **WHERE THE PLATE BAND IN FORCE CAME FROM**: a station-admin DECLARED it, or
+ * it is the DEFAULT a station linked to the Playout gets ({@link plateBandInForce}).
+ */
+export const PLATE_BAND_ORIGINS = ['declared', 'default'] as const;
+export type PlateBandOrigin = (typeof PLATE_BAND_ORIGINS)[number];
+
+/** The plate band a take seats plates in right now, and where it came from. */
+export const PlateBandInForceSchema = z.object({
+  range: LiveSourceLayerRangeSchema,
+  origin: z.enum(PLATE_BAND_ORIGINS),
+});
+export type PlateBandInForce = z.infer<typeof PlateBandInForceSchema>;
+
+/**
+ * 🔴 `PLATE-BAND-01` — **THE CATALOGUE AS A CONSOLE IS TOLD IT: the catalogue in force, and the
+ * plate band in force beside it.**
+ *
+ * ⚠ **A SEPARATE SCHEMA, AND THE SEPARATION IS THE POINT.** {@link SourceCatalogSchema} is also the
+ * shape the station's file holds, and it has no field for the band in force — so the computed
+ * default can be PUBLISHED and can never be WRITTEN: no writer holds a value of the file's type that
+ * carries it, and a hand-written file that tried is stripped of it on load.
+ */
+export const ConsoleSourceCatalogSchema = SourceCatalogSchema.extend({
+  /** Absent ⇒ no band is in force, and a take of a template with plates is refused. */
+  plateBand: PlateBandInForceSchema.optional(),
+});
+export type ConsoleSourceCatalog = z.infer<typeof ConsoleSourceCatalogSchema>;
+
+/**
+ * The plate band in force as a CONSOLE reads it — the one reader on that side (Station setup).
+ *
+ * A bridge from before `PLATE-BAND-01` publishes no `plateBand`, and its band in force WAS its
+ * declared one, so that is what this answers for it: a console never shows a band a station does not
+ * seat in, and never hides one it does.
+ */
+export function publishedPlateBand(catalog: ConsoleSourceCatalog): PlateBandInForce | null {
+  if (catalog.plateBand !== undefined) return catalog.plateBand;
+  return catalog.layerRange === undefined
+    ? null
+    : { range: catalog.layerRange, origin: 'declared' };
+}
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.F — **WHAT `sources.set-config` STILL CARRIES: THE PLATE BAND, AND ONLY
+ * IT.** The Playout defines the sources now; CG Control keeps the one fact that is its own — which of
+ * its layers a plate is placed on. An older console that still sends `sources` has them ignored.
+ */
+export const SourceBandConfigSchema = z.object({
+  layerRange: LiveSourceLayerRangeSchema.optional(),
+});
+export type SourceBandConfig = z.infer<typeof SourceBandConfigSchema>;
 
 /** The empty catalog — what an ABSENT file means, and what a fresh station has. */
 export const EMPTY_SOURCE_CATALOG: SourceCatalog = { sources: [] };
@@ -319,9 +572,49 @@ export const EMPTY_SOURCE_CATALOG: SourceCatalog = { sources: [] };
  * names a hole in that template and nothing outside it.
  */
 export const TemplateSourceAssignmentSchema = z.object({
+  /**
+   * 🔴 `CHANNEL-SOURCES-01` decision 2 (the owner, 2026-09-28) — **SOURCE DEFAULTS BELONG TO A
+   * CHANNEL.** Each channel keeps its own defaults for a template; changing them on one channel
+   * never changes another ({@link assignmentsOnChannel} is the one reader).
+   *
+   * ABSENT is the station-wide entry every assignment was before this field existed. It is read as
+   * the default on a channel that has none of its own for that plate, so nothing on air changed
+   * the day it arrived — and the bridge turns every such entry into one copy per declared channel
+   * the first time it loads them ({@link migrateAssignmentsToChannels}), so a station's stored
+   * defaults are per channel from then on.
+   */
+  channel: z.number().int().positive().optional(),
   templateId: IdSchema,
   plateId: LiveSourceIdSchema,
   sourceId: SourceDefinitionIdSchema,
+  /**
+   * ⭐ `C-028` — **the OPERATOR's fit-mode override for this plate, and the reason the
+   * mode chain runs the opposite way round from the aspect chain.**
+   *
+   * Absent means "the operator is not overriding" — the AUTHOR's mode stands, and absent
+   * there means `contain`. It is a third state, not a missing value, exactly as an absent
+   * `expectedAspect` is.
+   *
+   * ⚠ `B-178` — "the author's mode" is resolved by {@link lookPlateFits}, not read off one
+   * field: a look-group template carries it PER LOOK (the plate element serving that
+   * `routeKey` in the active look), and a template without looks carries it on the
+   * declaration. This override sits above whichever of the two answered.
+   *
+   * 🔴 **Why the operator outranks the author here, where `D-147` has the source
+   * outranking the author for the ASPECT.** The two chains resolve different kinds of
+   * fact and must not be collapsed. The aspect is a MEASURABLE PROPERTY of the feed —
+   * the author cannot see it, so their guess is about what they designed for and the
+   * installation's statement wins. The mode is a PRESENTATION CHOICE about that
+   * feed — the author states what the design wants, and the operator, who is looking
+   * at the picture on the day, is the only party who can say the design's choice is
+   * wrong for this shot. Neither chain is a template for the other.
+   *
+   * It lives on the ASSIGNMENT rather than in a parallel map for the reason
+   * `resolvePlateAssignments` gives for the source override: this is the same question
+   * ("how does this plate show its input") answered by a higher authority, and a second
+   * path answering it would eventually disagree with this one about a plate on air.
+   */
+  fitMode: LiveFitModeSchema.optional(),
 });
 export type TemplateSourceAssignment = z.infer<typeof TemplateSourceAssignmentSchema>;
 
@@ -397,12 +690,29 @@ export function nextSourceId(existing: readonly string[]): string {
  *   disjoint from the operator's candidate bank AND from the playout system's
  *   reserved layers. Checked at LOAD and at every CHANGE; the message names
  *   BOTH ranges so the operator can see which side to move.
+ * - `stream-scheme-not-allowed` — a `stream` URL whose scheme is outside
+ *   {@link STREAM_URL_SCHEMES}, or absent. "Not allowed", not "unsupported":
+ *   the list states what the product ACCEPTS (the client's requirement), and
+ *   refusing here is what keeps a mistyped URL from becoming an AMCP failure
+ *   at take, on air (C-025).
  */
 export const SOURCES_SET_CONFIG_REASONS = [
   'duplicate-id',
   'duplicate-name',
   'overlaps-fixed-bank',
   'overlaps-reserved',
+  'stream-scheme-not-allowed',
+  /**
+   * 🔴 `single-clock-look-switch` — **the bed rows are not BELOW this band.**
+   *
+   * DISJOINTNESS IS NOT ENOUGH HERE, and that is the entire reason this code is separate
+   * from `overlaps-fixed-bank`. A bed's whole purpose is to be composited UNDER the plates
+   * it declares; a bed bank that merely fails to collide with the band — sitting above it,
+   * say — is a bank that cannot do its job, and it fails INVISIBLY, as a background drawn
+   * over the pictures it was meant to back. The operator bank has the opposite requirement
+   * and keeps the opposite check.
+   */
+  'low-bank-not-below-band',
 ] as const;
 export type SourcesSetConfigReason = (typeof SOURCES_SET_CONFIG_REASONS)[number];
 
@@ -411,13 +721,20 @@ export type SourcesSetConfigReason = (typeof SOURCES_SET_CONFIG_REASONS)[number]
  *
  * - `duplicate-plate` — one template's plate assigned twice, so which source it
  *   used would depend on array order.
- * - `unknown-source` — an assignment naming a catalog entry that does not exist.
- *   Refused AT CHANGE, because the product's own UI cannot produce one and a
- *   caller that does is stale or hand-written. At LOAD the same shape is PRUNED
- *   instead — see {@link pruneAssignmentsForCatalog}, which records why the two
- *   doors answer differently.
+ * - `unknown-source` — a NEW or CHANGED assignment naming a catalog entry that does not
+ *   exist. Refused AT CHANGE, because the product's own UI cannot produce one and a
+ *   caller that does is stale or hand-written. ⚠ `PLAYOUT-SOURCES-01` — at LOAD nothing is
+ *   pruned any more: a binding whose entry is gone is kept (ADR 0010 rule 14), and only an
+ *   operator removes one.
+ * - `source-unusable` — `PLAYOUT-SOURCES-01`: a NEW or CHANGED assignment naming an entry
+ *   that exists but cannot be bound — one the Playout marks unusable (a route today), or
+ *   one it no longer offers. Refused at change for the same reason as `unknown-source`.
  */
-export const SOURCES_SET_ASSIGNMENTS_REASONS = ['duplicate-plate', 'unknown-source'] as const;
+export const SOURCES_SET_ASSIGNMENTS_REASONS = [
+  'duplicate-plate',
+  'unknown-source',
+  'source-unusable',
+] as const;
 export type SourcesSetAssignmentsReason = (typeof SOURCES_SET_ASSIGNMENTS_REASONS)[number];
 
 /** A refused catalog (or catalog change). `code` is stable; the message names specifics. */
@@ -431,12 +748,20 @@ export class SourceCatalogConfigError extends Error {
   }
 }
 
-/** A refused assignment set. `code` is stable; the message names specifics. */
+/**
+ * A refused assignment set. `code` is stable; the message says what is wrong in words.
+ *
+ * 🔴 `B-309` — the sentence names no plate, template or source by its id (golden rule 11): the ids
+ * are RELOCATED to `detail`, which a log line carries (`plate "guest-1" of template "tpl-1" on
+ * channel 2`) and an operator's sentence never does.
+ */
 export class SourceAssignmentsConfigError extends Error {
   override readonly name = 'SourceAssignmentsConfigError';
   constructor(
     readonly code: SourcesSetAssignmentsReason,
     message: string,
+    /** The ids the sentence does not carry — for a log line. */
+    readonly detail?: string,
   ) {
     super(message);
   }
@@ -528,6 +853,27 @@ export function validateSourceCatalog(
       );
     }
     seenNames.add(key);
+
+    // C-025 — the ONE spelling of the stream scheme rule. Reached at LOAD and at
+    // every CHANGE, by the bridge and by the offline mock, because they all call
+    // this function; a second copy anywhere is the drift this file warns about.
+    if (source.producer.kind === 'stream') {
+      const scheme = streamUrlScheme(source.producer.url);
+      if (scheme === null) {
+        throw new SourceCatalogConfigError(
+          'stream-scheme-not-allowed',
+          `the stream URL for "${source.name}" has no scheme — write it as scheme://…, where ` +
+            `the scheme is one of: ${STREAM_URL_SCHEMES.join(', ')}`,
+        );
+      }
+      if (!(STREAM_URL_SCHEMES as readonly string[]).includes(scheme)) {
+        throw new SourceCatalogConfigError(
+          'stream-scheme-not-allowed',
+          `the stream URL for "${source.name}" uses the scheme "${scheme}", which is not one ` +
+            `this product accepts — accepted: ${STREAM_URL_SCHEMES.join(', ')}`,
+        );
+      }
+    }
   }
 
   const range = value.layerRange;
@@ -536,7 +882,7 @@ export function validateSourceCatalog(
 
   const bank = options.fixedBank;
   if (bank !== null) {
-    const bankEnd = bank.start + bank.count - 1;
+    const bankEnd = fixedBankEnd(bank);
     if (range.start <= bankEnd && range.end >= bank.start) {
       // Name BOTH ranges, the `overlaps-reserved` stance: the operator has to
       // be able to see which side to move.
@@ -545,6 +891,25 @@ export function validateSourceCatalog(
         `the Live Source layer band ${rangeText} overlaps the operator's candidate layer ` +
           `bank ${String(bank.start)}-${String(bankEnd)} (channel ${String(bank.channel)}) — ` +
           `the two must be disjoint; move the band or the bank`,
+      );
+    }
+    /*
+      `single-clock-look-switch` — THE BED HALF, and it is a STRICTLY-BELOW test rather
+      than a disjointness test. See `low-bank-not-below-band` for why the two are different
+      questions. Checked HERE and not in the bank validator because this is the side that
+      can MOVE: the bed range is fixed at install (`renumber-refused` / `resize-refused`),
+      the band is edited from the Sources surface, so the band's own validator is the door
+      every change to this relationship passes through.
+    */
+    const lowEnd = lowBankEnd(bank);
+    if (range.start <= lowEnd) {
+      throw new SourceCatalogConfigError(
+        'low-bank-not-below-band',
+        `the graphics-bed rows ${String(bank.low.start)}-${String(lowEnd)} must lie BELOW the ` +
+          `Live Source layer band ${rangeText}, and they do not — a bed is composited UNDER ` +
+          `the plates it declares, so a bed row at or above layer ${String(range.start)} would ` +
+          `draw its background OVER the live pictures instead of behind them; move the band up ` +
+          `or the bed rows down`,
       );
     }
   }
@@ -581,6 +946,91 @@ export function checkSourceCatalog(
 }
 
 /**
+ * 🔴 `MULTI-CHANNEL-01` — **THE CATALOG AGAINST EVERY DECLARED BANK.** The band carries no
+ * channel (a Live Source lands on whatever channel its template is on), so it must stay clear of
+ * EVERY bank's rows and above EVERY bank's beds — each bank checked by the one validator above,
+ * in channel order, the first refusal winning. With no bank it is checked against none, exactly
+ * as a bank-less station always was. The bridge, its boot and the offline mock all call THIS, so
+ * none of them can check the band against fewer banks than the others.
+ */
+export function validateSourceCatalogAgainstBanks(
+  value: SourceCatalog,
+  banks: readonly FixedLayerBank[],
+  reservedLayers: readonly number[],
+): void {
+  const each: readonly (FixedLayerBank | null)[] = banks.length > 0 ? banks : [null];
+  for (const fixedBank of each) validateSourceCatalog(value, { fixedBank, reservedLayers });
+}
+
+/** {@link validateSourceCatalogAgainstBanks} as a verdict, the {@link checkSourceCatalog} shape. */
+export function checkSourceCatalogAgainstBanks(
+  value: SourceCatalog,
+  banks: readonly FixedLayerBank[],
+  reservedLayers: readonly number[],
+): { ok: true } | { ok: false; reason: SourcesSetConfigReason; message: string } {
+  try {
+    validateSourceCatalogAgainstBanks(value, banks, reservedLayers);
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof SourceCatalogConfigError) {
+      return { ok: false, reason: err.code, message: err.message };
+    }
+    throw err;
+  }
+}
+
+/** What {@link plateBandInForce} reads: the station's own config, and nothing observed. */
+export interface PlateBandStation {
+  /** The band a station-admin declared (`sources.set-config`), or `undefined`. */
+  readonly declared: LiveSourceLayerRange | undefined;
+  /** Whether this station is linked to the Playout — its auth config names one. */
+  readonly playoutLinked: boolean;
+  /** Every declared bank (none on a station still in first-run). */
+  readonly banks: readonly FixedLayerBank[];
+  /** The reserved playout layers, expanded (`reservedLayerNumbers`). */
+  readonly reservedLayers: readonly number[];
+  /** A deployment's own dynamic ranges, inclusive (`BridgeOptions.layerPolicy`); none by default. */
+  readonly policyRanges?: readonly (readonly [number, number])[];
+}
+
+/**
+ * 🔴 `PLATE-BAND-01` (the owner, 2026-09-28) — **THE PLATE BAND IN FORCE. The ONE reader:** the
+ * bridge's seating plan, its binding-change check, its own-layer test, the band it publishes and its
+ * boot line, and the offline mock, all ask THIS — so none of them can seat a plate in a band another
+ * does not believe in (golden rule 6).
+ *
+ *   1. A band a station-admin DECLARED is in force exactly as declared.
+ *   2. Otherwise, on a station LINKED TO THE PLAYOUT, the plate band 60–79
+ *      ({@link SUGGESTED_LIVE_SOURCE_LAYER_RANGE}, `LAYER_BANDS.plate`): the contract gives the Playout
+ *      1–49 and CG Control 50–99, so the plant's plate layers are known — UNLESS the station's own
+ *      config claims a layer in it. "Claims" is everything that config can put there: a reserved
+ *      playout layer (the owner's condition), a bank row or bed, which the validator a DECLARED band
+ *      must pass already refuses ({@link checkSourceCatalogAgainstBanks}), and a dynamic policy range,
+ *      which that validator does not read and a plate must still never share.
+ *   3. Otherwise NONE, and a take of a template with plates is refused as it always was — one line
+ *      on its row.
+ *
+ * COMPUTED, NEVER STORED. Nothing writes the default into the station's config, so a station boots
+ * whatever its config holds: a reservation that reaches into 60–79 turns the default OFF, it cannot
+ * fail a boot. A fresh object every call, for `defaultFixedLayerBank`'s reason: a shared literal
+ * handed to several readers is one mutation away from disagreeing.
+ */
+export function plateBandInForce(station: PlateBandStation): PlateBandInForce | null {
+  if (station.declared !== undefined) return { range: station.declared, origin: 'declared' };
+  if (!station.playoutLinked) return null;
+  const range: LiveSourceLayerRange = { ...SUGGESTED_LIVE_SOURCE_LAYER_RANGE };
+  const passesTheValidator = checkSourceCatalogAgainstBanks(
+    { sources: [], layerRange: range },
+    station.banks,
+    station.reservedLayers,
+  ).ok;
+  const clearOfPolicy = (station.policyRanges ?? []).every(
+    ([low, high]) => range.end < low || range.start > high,
+  );
+  return passesTheValidator && clearOfPolicy ? { range, origin: 'default' } : null;
+}
+
+/**
  * Validate an assignment set against itself and against the catalog IN FORCE.
  *
  * Same split as the catalog's validator and for the same reason: the bridge and
@@ -588,26 +1038,47 @@ export function checkSourceCatalog(
  */
 export function validateSourceAssignments(
   value: SourceAssignments,
-  options: { catalog: SourceCatalog },
+  /**
+   * `PLAYOUT-SOURCES-01` — `catalog: null` checks the SHAPE only (no plate twice) and not
+   * membership: the boot path, where the catalogue is the Playout's and may not have been read yet.
+   * A binding whose entry is gone is never a reason to refuse or drop it (ADR 0010 rule 14).
+   */
+  options: { catalog: SourceCatalog | null },
 ): void {
-  const known = new Set(options.catalog.sources.map((s) => s.id));
+  const known = options.catalog === null ? null : new Set(options.catalog.sources.map((s) => s.id));
   const seen = new Set<string>();
   for (const assignment of value.assignments) {
-    const key = `${assignment.templateId} ${assignment.plateId}`;
+    /*
+      ⚠ **THE SEPARATOR IS AN ESCAPE, NEVER A RAW BYTE (session BP).** This line carried a
+      literal NUL byte until BP, and the resulting string is identical either way — what
+      differed is that a file containing one reads as BINARY to `grep -r` and to ripgrep, so
+      every tree-wide sweep skipped this module in silence. Golden rule 9 makes `git grep` the
+      instrument that catches a string change the compiler cannot, so a file the sweep cannot
+      read is a hole in it — and this module, which owns `SourceAssignments`, is one of the
+      likelier things to be swept for. (`git grep` itself was not blind here: it samples only
+      the first 8000 bytes for binary detection and the NUL sat past that, which is exactly the
+      sort of accident that makes a hole look closed.)
+    */
+    // `CHANNEL-SOURCES-01` — one entry per plate PER CHANNEL; the station-wide entry is its own key.
+    const key = `${String(assignment.channel ?? '*')}\u0000${assignment.templateId}\u0000${assignment.plateId}`;
+    const onChannel =
+      assignment.channel === undefined ? '' : ` on channel ${String(assignment.channel)}`;
+    const which = `plate "${assignment.plateId}" of template "${assignment.templateId}"${onChannel}`;
     if (seen.has(key)) {
       throw new SourceAssignmentsConfigError(
         'duplicate-plate',
-        `plate "${assignment.plateId}" of template "${assignment.templateId}" is assigned ` +
-          `twice — which source it used would depend on the order of the list`,
+        `A plate of one template is assigned twice${onChannel} — which source it used would ` +
+          `depend on the order of the list`,
+        which,
       );
     }
     seen.add(key);
-    if (!known.has(assignment.sourceId)) {
+    if (known !== null && !known.has(assignment.sourceId)) {
       throw new SourceAssignmentsConfigError(
         'unknown-source',
-        `plate "${assignment.plateId}" of template "${assignment.templateId}" is assigned to ` +
-          `source "${assignment.sourceId}", which this installation does not define — assign ` +
-          `it to one of the defined sources, or leave it unassigned`,
+        `A plate is assigned to a source this installation does not define — assign it to one ` +
+          `of the defined sources, or leave it unassigned`,
+        `${which}, source "${assignment.sourceId}"`,
       );
     }
   }
@@ -616,14 +1087,21 @@ export function validateSourceAssignments(
 /** The assignment validation as a RESULT — the bridge's and the mock's answer shape. */
 export function checkSourceAssignments(
   value: SourceAssignments,
-  options: { catalog: SourceCatalog },
-): { ok: true } | { ok: false; reason: SourcesSetAssignmentsReason; message: string } {
+  options: { catalog: SourceCatalog | null },
+):
+  | { ok: true }
+  | { ok: false; reason: SourcesSetAssignmentsReason; message: string; detail?: string } {
   try {
     validateSourceAssignments(value, options);
     return { ok: true };
   } catch (err) {
     if (err instanceof SourceAssignmentsConfigError) {
-      return { ok: false, reason: err.code, message: err.message };
+      return {
+        ok: false,
+        reason: err.code,
+        message: err.message,
+        ...(err.detail !== undefined ? { detail: err.detail } : {}),
+      };
     }
     throw err;
   }
@@ -667,54 +1145,287 @@ export function pruneAssignmentsForCatalog(
   return dropped.length === 0 ? { value, dropped: [] } : { value: { assignments: kept }, dropped };
 }
 
-/** The source a plate is assigned to, or `null` when nothing is assigned. */
+/** `templateId` + `plateId` — one plate of one template, whatever channel. */
+function plateKeyOf(a: { readonly templateId: string; readonly plateId: string }): string {
+  return `${a.templateId}\u0000${a.plateId}`;
+}
+
+/**
+ * 🔴 `CHANNEL-SOURCES-01` decision 2 — **THE DEFAULTS IN FORCE ON ONE CHANNEL**, and the one reader
+ * of them: the take, a look switch, a swap, a restore, the Inspector's `Default (…)` and the Source
+ * defaults dialog all ask this, so no two of them can disagree about which default a plate uses.
+ *
+ * A plate's entry for `channel` wins. A station-wide entry (no `channel`) answers only where the
+ * channel has none of its own for that plate. An entry for ANOTHER channel never answers — which is
+ * the whole of "changing them on one channel never changes another".
+ */
+export function assignmentsOnChannel(value: SourceAssignments, channel: number): SourceAssignments {
+  const own = new Set<string>();
+  for (const a of value.assignments) if (a.channel === channel) own.add(plateKeyOf(a));
+  return {
+    assignments: value.assignments.filter(
+      (a) => a.channel === channel || (a.channel === undefined && !own.has(plateKeyOf(a))),
+    ),
+  };
+}
+
+/**
+ * 🔴 `PLATE-BAND-01` (the owner, 2026-09-28) — **THE CHANNELS WHOSE SOURCE DEFAULTS A WRITE CHANGES**, in
+ * channel order: the channels a `sources.set-assignments` is judged on by the channel grant (and by a
+ * channel-scoped lock), as `fixedLayers.set-banks` is judged by the banks it changes.
+ *
+ * A channel is touched when what {@link assignmentsOnChannel} — the ONE reader — answers for it differs
+ * between the two sets. So an entry sent back as it was costs its channel nothing (a console sends the
+ * whole set on every save); an entry added, removed or pointed elsewhere is an act on its channel; and a
+ * STATION-WIDE entry (no `channel`) changed is an act on every channel it answers on. The candidates are
+ * the declared channels and every channel either set names.
+ */
+export function channelsWhoseDefaultsDiffer(
+  before: SourceAssignments,
+  after: SourceAssignments,
+  declared: readonly number[],
+): number[] {
+  const named = (value: SourceAssignments): number[] =>
+    value.assignments.flatMap((a) => (a.channel === undefined ? [] : [a.channel]));
+  // The defaults a channel reads, as a comparable key: every field but the channel, which is the key.
+  const readOn = (value: SourceAssignments, channel: number): string =>
+    assignmentsOnChannel(value, channel)
+      .assignments.map((a) =>
+        JSON.stringify([a.templateId, a.plateId, a.sourceId, a.fitMode ?? null]),
+      )
+      .sort()
+      .join('\n');
+  return [...new Set([...declared, ...named(before), ...named(after)])]
+    .filter((channel) => readOn(before, channel) !== readOn(after, channel))
+    .sort((a, b) => a - b);
+}
+
+/**
+ * 🔴 `CHANNEL-SOURCES-01` decision 2 — **THE ONE-TIME COPY.** Every station-wide entry becomes one
+ * entry per declared channel that has none of its own for that plate, and the station-wide entry
+ * goes. Nothing on air changes: on every channel the same source answers as before.
+ *
+ * Idempotent: a set with no station-wide entry comes back as it was (`copied: 0`), which is why a
+ * second load copies nothing. With no channel declared there is nowhere to copy to, and the set is
+ * returned as it is — its entries keep answering on every channel until one is declared.
+ */
+export function migrateAssignmentsToChannels(
+  value: SourceAssignments,
+  channels: readonly number[],
+): { value: SourceAssignments; copied: number } {
+  const stationWide = value.assignments.filter((a) => a.channel === undefined);
+  if (stationWide.length === 0 || channels.length === 0) return { value, copied: 0 };
+  const kept = value.assignments.filter((a) => a.channel !== undefined);
+  const held = new Set(kept.map((a) => `${String(a.channel)}\u0000${plateKeyOf(a)}`));
+  const added: TemplateSourceAssignment[] = [];
+  for (const channel of [...new Set(channels)].sort((a, b) => a - b)) {
+    for (const a of stationWide) {
+      if (held.has(`${String(channel)}\u0000${plateKeyOf(a)}`)) continue;
+      added.push({ ...a, channel });
+    }
+  }
+  return { value: { assignments: [...kept, ...added] }, copied: added.length };
+}
+
+/**
+ * 🔴 `CHANNEL-SOURCES-01` decision 2 — **A CHANNEL ADDED LATER starts from a copy of each template's
+ * current defaults.** "Current" is read from the channels declared before it: for each template, the
+ * LOWEST of `from` that holds defaults of its own for it, copied whole, so the new channel starts
+ * from one channel's coherent set rather than a plate-by-plate mixture. A plate the new channel
+ * already holds is kept (a channel declared, left and declared again keeps what it had).
+ */
+export function copyAssignmentsToChannel(
+  value: SourceAssignments,
+  from: readonly number[],
+  to: number,
+): { value: SourceAssignments; copied: number } {
+  const donors = [...new Set(from)].filter((c) => c !== to).sort((a, b) => a - b);
+  const held = new Set(value.assignments.filter((a) => a.channel === to).map(plateKeyOf));
+  const templates = new Set(value.assignments.map((a) => a.templateId));
+  const added: TemplateSourceAssignment[] = [];
+  for (const templateId of templates) {
+    const donor = donors.find((c) =>
+      value.assignments.some((a) => a.channel === c && a.templateId === templateId),
+    );
+    if (donor === undefined) continue;
+    for (const a of value.assignments) {
+      if (a.channel !== donor || a.templateId !== templateId || held.has(plateKeyOf(a))) continue;
+      added.push({ ...a, channel: to });
+    }
+  }
+  return added.length === 0
+    ? { value, copied: 0 }
+    : { value: { assignments: [...value.assignments, ...added] }, copied: added.length };
+}
+
+/**
+ * The Source defaults dialog's write: `templateId`'s defaults ON `channel` become `entries`
+ * (`plateId → catalog id`; an absent plate keeps what it had, an empty id removes the entry), and
+ * nothing of any other channel or template is touched. The entry already there is carried forward
+ * so a field this writer has never heard of (`fitMode`) survives it.
+ */
+export function withChannelDefaults(
+  value: SourceAssignments,
+  channel: number,
+  templateId: string,
+  entries: ReadonlyMap<string, string>,
+): SourceAssignments {
+  const inForce = new Map(
+    assignmentsOnChannel(value, channel)
+      .assignments.filter((a) => a.templateId === templateId)
+      .map((a) => [a.plateId, a]),
+  );
+  const untouched = value.assignments.filter(
+    (a) => !(a.channel === channel && a.templateId === templateId && entries.has(a.plateId)),
+  );
+  const written: TemplateSourceAssignment[] = [];
+  for (const [plateId, sourceId] of entries) {
+    if (sourceId === '') continue;
+    written.push({ ...inForce.get(plateId), channel, templateId, plateId, sourceId });
+  }
+  return { assignments: [...untouched, ...written] };
+}
+
+/** The source a plate is assigned to ON `channel`, or `null` when nothing is assigned there. */
 export function assignedSourceId(
   assignments: SourceAssignments,
+  channel: number,
   templateId: string,
   plateId: string,
 ): string | null {
-  const hit = assignments.assignments.find(
+  const hit = assignmentsOnChannel(assignments, channel).assignments.find(
     (a) => a.templateId === templateId && a.plateId === plateId,
   );
   return hit === undefined ? null : hit.sourceId;
 }
 
 /**
- * The plates of `templateId` that no assignment covers, in the order given.
+ * The plates of `templateId` that no assignment covers ON `channel`, in the order given.
  *
  * A freshly imported template has ALL of them, which is the ordinary state and
  * not an error — the row names them so the operator knows what is left to do.
  */
 export function unassignedPlateIds(
   assignments: SourceAssignments,
+  channel: number,
   templateId: string,
   plateIds: readonly string[],
 ): string[] {
-  return plateIds.filter((plateId) => assignedSourceId(assignments, templateId, plateId) === null);
+  return plateIds.filter(
+    (plateId) => assignedSourceId(assignments, channel, templateId, plateId) === null,
+  );
 }
 
-/** Read the catalog in force. An empty `sources` list = nothing is defined (see the header). */
-export const SourcesConfigChannel = defineChannel('sources.config', z.void(), SourceCatalogSchema);
+/**
+ * Read the catalog in force. An empty `sources` list = nothing is defined (see the header).
+ * `PLATE-BAND-01` — with the plate band in force beside it ({@link ConsoleSourceCatalogSchema}).
+ */
+export const SourcesConfigChannel = defineChannel(
+  'sources.config',
+  z.void(),
+  ConsoleSourceCatalogSchema,
+);
 
 /**
- * Replace the catalog in force: validate → apply → CASCADE → persist → publish.
+ * Replace the PLATE BAND in force: validate → apply → persist → publish.
  *
- * The BRIDGE is authoritative for the refusal and supplies the wording, so a
- * second browser, a stale client or a hand-written call cannot create a state
- * the UI is careful to prevent.
+ * `PLAYOUT-SOURCES-01` §1.F — the band ONLY ({@link SourceBandConfigSchema}). It cascades nothing:
+ * the sources are the Playout's, and no set-config can delete a binding.
  *
- * `droppedAssignments` is how a DELETION reports itself: the plates this change
- * orphaned, so the surface can name them at the moment of deletion instead of
- * leaving the operator to meet them at a take.
+ * The BRIDGE is authoritative for the refusal and supplies the wording, so a second browser, a stale
+ * client or a hand-written call cannot create a state the UI is careful to prevent.
  */
 export const SourcesSetConfigChannel = defineChannel(
   'sources.set-config',
-  SourceCatalogSchema,
+  SourceBandConfigSchema,
   z.object({
     ok: z.boolean(),
     reason: z.enum(SOURCES_SET_CONFIG_REASONS).optional(),
     message: z.string().optional(),
-    droppedAssignments: z.array(TemplateSourceAssignmentSchema).optional(),
+  }),
+);
+
+/**
+ * `PLAYOUT-SOURCES-01` — ONE media item as the console sees it: the catalogue id it binds by
+ * (`md-<playout id>`), its name and the facts the picker's second line shows. Never the `clip`: what
+ * is played is the bridge's own read, never anything a console sends back.
+ */
+export const ConsoleMediaItemSchema = z.object({
+  id: SourceDefinitionIdSchema,
+  name: z.string().min(1),
+  durationMs: z.number().nonnegative().optional(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+  folder: z.string().optional(),
+});
+export type ConsoleMediaItem = z.infer<typeof ConsoleMediaItemSchema>;
+
+/** The two named failures of a media search (the prompt's §1.A). */
+export const MEDIA_SEARCH_FAILURES = ['playout-unreachable', 'playout-refused'] as const;
+export type MediaSearchFailure = (typeof MEDIA_SEARCH_FAILURES)[number];
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.A — **SEARCH THE PLAYOUT'S MEDIA ON THE PLAYOUT'S SIDE.** One page per
+ * call; the bridge asks D11 with `type=video,still`, `limit` 50 by default and a 5 s bound, and
+ * answers what it received. A `cursor` is only ever valid with the query that produced it — the
+ * console never sends one with a different `q` or `sort`. A read-class route: a `viewer` may search.
+ */
+export const SourcesMediaSearchChannel = defineChannel(
+  'sources.media-search',
+  z.object({
+    q: z.string().max(200),
+    sort: z.enum(['name', 'recent']).optional(),
+    cursor: z.string().min(1).max(4096).optional(),
+    limit: z.number().int().positive().max(200).optional(),
+  }),
+  z.union([
+    z.object({
+      ok: z.literal(true),
+      items: z.array(ConsoleMediaItemSchema),
+      total: z.number().int().nonnegative(),
+      nextCursor: z.string().nullable(),
+    }),
+    z.object({
+      ok: z.literal(false),
+      reason: z.enum(MEDIA_SEARCH_FAILURES),
+      message: z.string(),
+    }),
+  ]),
+);
+
+/**
+ * `PLAYOUT-SOURCES-01` §1.A — **A PICKER OPENED.** Asks the bridge to read D10 and the bound media
+ * now if its last read is older than 5 s. Answers at once and never waits on the Playout: whatever
+ * changes arrives on `sources.config-changed`. A read-class route.
+ */
+export const SourcesRefreshChannel = defineChannel(
+  'sources.refresh',
+  z.void(),
+  z.object({ ok: z.literal(true) }),
+);
+
+/** `MEDIA-PLATES-01` — why a clip's playback settings were not changed. */
+export const MEDIA_PLAYBACK_REFUSALS = ['unknown-media'] as const;
+
+/**
+ * 🔴 `MEDIA-PLATES-01` §1.A — **A BOUND CLIP'S TWO PLAYBACK SETTINGS, STATION-WIDE.** `mediaId` is
+ * the clip's CATALOGUE id (`md-<Playout id>`), the one every console door names a source by. Stored
+ * on the clip's bound-media reference and published with the catalogue. Operator class, audited with
+ * the clip's name. A `loop` change reaches every plate of that clip already playing at once
+ * (`CALL <ch>-<L> LOOP 0|1` — 2.5.0 switches looping on a playing clip); `whenHidden` applies at the
+ * next time a look hides the plate.
+ */
+export const SourcesSetMediaPlaybackChannel = defineChannel(
+  'sources.set-media-playback',
+  z.object({
+    mediaId: z.string().min(1).max(64),
+    loop: z.boolean(),
+    whenHidden: MediaWhenHiddenSchema,
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.enum(MEDIA_PLAYBACK_REFUSALS).optional(),
+    message: z.string().optional(),
   }),
 );
 
@@ -736,10 +1447,14 @@ export const SourcesSetAssignmentsChannel = defineChannel(
   }),
 );
 
-/** Pushed with the FULL catalog whenever it changes, so every browser converges. */
+/**
+ * Pushed with the FULL catalog whenever it changes, so every browser converges — and
+ * (`PLATE-BAND-01`) whenever the plate band in force changes without it, a bank change turning the
+ * default on or off.
+ */
 export const SourcesConfigChangedChannel = definePublishChannel(
   'sources.config-changed',
-  SourceCatalogSchema,
+  ConsoleSourceCatalogSchema,
 );
 
 /**
@@ -751,3 +1466,132 @@ export const SourcesAssignmentsChangedChannel = definePublishChannel(
   'sources.assignments-changed',
   SourceAssignmentsSchema,
 );
+
+/**
+ * 🔴 **SESSION BQ — THE ONE RESOLUTION OF "WHICH SOURCE DOES THIS PLATE SHOW, IN THIS
+ * LOOK", CALLABLE FROM BOTH PROCESSES.**
+ *
+ * ── WHY IT MOVED HERE ───────────────────────────────────────────────────────
+ *
+ * The four-level precedence lived bridge-side only (`live-look-bindings.ts`). The bridge
+ * could resolve a name for a look; the RENDERER could not, so PVW's overlay was handed a
+ * `(plateId) => name` callback with **no look dimension in it at all** — a per-look binding
+ * was literally unrepresentable, and the preview named the template default while air
+ * showed the bound source. `B-151` was the same shape one field over: PVW's overlay never
+ * learned that looks exist, that time about RECTS.
+ *
+ * BL fixed the first one by moving the resolver rather than patching the call site, and
+ * `lookPlateRects` carries the reason in its own doc: _"PVW could not have called a private
+ * method on a process it does not run in — which is precisely how it came to have its own
+ * idea of the layout."_ **This is that fix, applied to the second field.** One function, two
+ * processes, no second spelling — the bridge delegates to these rather than keeping a copy.
+ *
+ * ── THE FOUR LEVELS, PLUS THE FREEZE ────────────────────────────────────────
+ *
+ *   1. the installation's **CATALOG** — resolved by the caller, which owns the id→name join
+ *   2. the template's **ASSIGNMENT** — ⚠ or, for a row that has taken, the snapshot that
+ *      take FROZE ({@link assignmentInForce})
+ *   3. the row's **PER-LOOK composition**
+ *   4. the row's **PER-PLATE emergency patch** (`R-048`), outermost, in force in EVERY look
+ */
+
+/**
+ * Levels 3 and 4, flattened for ONE look — the row's per-look composition with its
+ * per-plate emergency patch on top.
+ *
+ * ⚠ **The emergency wins, in every look, and that is deliberate.** `R-048` exists because
+ * an INPUT IS DEAD, and a dead input is dead in every look; if a per-look binding outranked
+ * it, switching look would bring the dead feed straight back and the operator would have to
+ * re-patch, live, once per look, having already been told the substitution was applied.
+ *
+ * 🔴 **THIS IS THE ONE PLACE THAT ORDER IS DECIDED.** It was briefly two expressions that
+ * happened to agree — the duplicate session BM's own review caught (§3b.1) — and the pair
+ * survived review precisely BECAUSE they agreed. Do not add a third.
+ */
+export function effectiveOverridesForLook(
+  lookId: string | undefined,
+  bindings: Readonly<Record<string, Readonly<Record<string, string>>>> | undefined,
+  overrides: Readonly<Record<string, string>> | undefined,
+): Record<string, string> | undefined {
+  const perLook = lookId === undefined ? undefined : bindings?.[lookId];
+  if (perLook === undefined) return overrides === undefined ? undefined : { ...overrides };
+  return { ...perLook, ...(overrides ?? {}) };
+}
+
+/**
+ * 🔴 **LEVEL 2 IN FORCE FOR ONE ROW: the snapshot its take FROZE, or the template's live
+ * assignment when it has not taken.**
+ *
+ * Session BP made a row on air resolve its template assignment from what it captured at
+ * TAKE, so an edit made during a show cannot change a picture that is already up. A surface
+ * that resolved the LIVE assignment while air resolved the FROZEN one would be a second
+ * answer to the same question — which is the class this feature keeps producing — so the
+ * choice is made HERE and every caller inherits it.
+ *
+ * ⚠ **`undefined` means NOT FROZEN; an EMPTY record is a real freeze to nothing.** The test
+ * is presence, never emptiness. And the frozen map is the row's COMPLETE level-2 answer: a
+ * plate absent from it is unassigned for this run and does NOT fall through to the store.
+ *
+ * ⚠ A REHEARSING row is off air by `R-022`'s interlock, so nothing is frozen for it and this
+ * returns the live assignment. The rule is written to stay true if that ever changes rather
+ * than to be correct by accident today.
+ */
+export function assignmentInForce(
+  templateId: string,
+  assignments: SourceAssignments,
+  frozenAssignment: Readonly<Record<string, string>> | undefined,
+  /** `CHANNEL-SOURCES-01` — the row's channel: the defaults answer per channel. */
+  channel: number,
+): Record<string, string> {
+  if (frozenAssignment !== undefined) return { ...frozenAssignment };
+  const map: Record<string, string> = {};
+  for (const a of assignmentsOnChannel(assignments, channel).assignments) {
+    if (a.templateId === templateId) map[a.plateId] = a.sourceId;
+  }
+  return map;
+}
+
+/** What {@link resolvePlateSourcesForLook} needs to answer for one row, in one look. */
+export interface PlateSourceResolution {
+  readonly templateId: string;
+  /** The plates to answer for — normally the look's members, in declaration order. */
+  readonly plateIds: readonly string[];
+  /** The installation's level 2 store. */
+  readonly assignments: SourceAssignments;
+  /** `CHANNEL-SOURCES-01` — the row's channel: level 2 is read ON it ({@link assignmentsOnChannel}). */
+  readonly channel: number;
+  /** Session BP — the row's frozen level 2, when it has taken. Absent ⇒ not frozen. */
+  readonly frozenAssignment?: Readonly<Record<string, string>> | undefined;
+  /** The look being resolved; `undefined` for a carrier that authors none. */
+  readonly lookId: string | undefined;
+  /** Level 3 — `lookId → plateId → catalog id`. */
+  readonly lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>> | undefined;
+  /** Level 4 — `plateId → catalog id`, `R-048`'s emergency patch. */
+  readonly overrides?: Readonly<Record<string, string>> | undefined;
+}
+
+/**
+ * 🔴 **THE ANSWER A TAKE OF THIS ROW, IN THIS LOOK, WOULD PUT ON AIR — as
+ * `plateId → catalog id`, or `null` where nothing resolves.**
+ *
+ * That sentence is the whole contract, and it settles every case without a table of
+ * exceptions: the preview names what air would show, because both ask this.
+ *
+ * ⚠ It answers in CATALOG IDS, not names. The id→name join belongs to the caller, because
+ * only a surface knows whether a missing catalog entry should read as "unassigned" (a
+ * preview) or refuse a take (the bridge).
+ */
+export function resolvePlateSourcesForLook(
+  input: PlateSourceResolution,
+): Map<string, string | null> {
+  const levelTwo = assignmentInForce(
+    input.templateId,
+    input.assignments,
+    input.frozenAssignment,
+    input.channel,
+  );
+  const effective = effectiveOverridesForLook(input.lookId, input.lookBindings, input.overrides);
+  return new Map(
+    input.plateIds.map((plateId) => [plateId, effective?.[plateId] ?? levelTwo[plateId] ?? null]),
+  );
+}

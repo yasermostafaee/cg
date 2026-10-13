@@ -1,10 +1,22 @@
 import {
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
+  publishedPlateBand,
+  unassignedPlateIds,
+  type ChannelRequest,
+  type ChannelResponse,
+  type ConsoleMediaItem,
+  type ConsoleSourceCatalog,
+  type LiveSourceLayerRange,
+  type PlateBandInForce,
   type SourceAssignments,
-  type SourceCatalog,
-  type TemplateSourceAssignment,
+  type SourcesMediaSearchChannel,
 } from '@cg/shared-ipc';
+
+/** One media search, as the picker asks it. */
+export type MediaSearchRequest = ChannelRequest<typeof SourcesMediaSearchChannel>;
+/** Its answer: a page, or one of the two named failures. */
+export type MediaSearchResponse = ChannelResponse<typeof SourcesMediaSearchChannel>;
 import { sourcesReasonMessage, sourcesTransportMessage } from '../../ui/sourcesReasonMessage.js';
 
 /**
@@ -26,22 +38,26 @@ import { sourcesReasonMessage, sourcesTransportMessage } from '../../ui/sourcesR
  * station that has never been configured.
  */
 
-let catalog: SourceCatalog = EMPTY_SOURCE_CATALOG;
+let catalog: ConsoleSourceCatalog = EMPTY_SOURCE_CATALOG;
 let assignments: SourceAssignments = EMPTY_SOURCE_ASSIGNMENTS;
 let version = 0;
 const listeners = new Set<() => void>();
 
 /**
- * A refusal, split the way the pinned message region shows it: the RULE, and the
- * bridge's own SPECIFICS beneath it.
+ * A refusal, as the operator reads it: ONE line.
  *
- * Deliberately not a bare string. The rule comes from `sourcesReasonMessage`,
- * which is keyed off the wire's reason union, so a validator code that gains no
- * sentence fails typecheck rather than reaching an operator as a code.
+ * The rule comes from `sourcesReasonMessage`, which is keyed off the wire's reason
+ * union, so a validator code that gains no sentence fails typecheck rather than
+ * reaching an operator as a code.
+ *
+ * 🔴 `DELTA-MULTI-CHANNEL-01-A` A5 — it used to carry the bridge's `message` as a
+ * `detail` beneath the rule, and three surfaces showed it: under the rule in the
+ * Live sources pane, and glued onto it in one line on the refusal banner and in
+ * Template defaults. The bridge's words are written for the record, so the field
+ * is gone from the TYPE — no consumer can put them back under a headline.
  */
 export interface CommitRefusal {
   text: string;
-  detail?: string;
 }
 
 /**
@@ -58,8 +74,17 @@ function bump(): void {
 }
 
 /** The catalog in force, as the bridge last stated it. */
-export function currentSourceCatalog(): SourceCatalog {
+export function currentSourceCatalog(): ConsoleSourceCatalog {
   return catalog;
+}
+
+/**
+ * 🔴 `PLATE-BAND-01` — the plate band IN FORCE, as the bridge last stated it: the declared band, or a
+ * Playout-linked station's default, or `null` when a take with plates would be refused. Read through
+ * `@cg/shared-ipc`'s one console reader, never off `layerRange` (which is the declared band alone).
+ */
+export function currentPlateBand(): PlateBandInForce | null {
+  return publishedPlateBand(catalog);
 }
 
 /** The assignments in force, as the bridge last stated them. */
@@ -91,8 +116,8 @@ export function sourcesVersion(): number {
  */
 export function initSources(bridge: {
   sources: {
-    config: () => Promise<SourceCatalog>;
-    onConfigChanged: (handler: (catalog: SourceCatalog) => void) => () => void;
+    config: () => Promise<ConsoleSourceCatalog>;
+    onConfigChanged: (handler: (catalog: ConsoleSourceCatalog) => void) => () => void;
     assignments: () => Promise<SourceAssignments>;
     onAssignmentsChanged: (handler: (assignments: SourceAssignments) => void) => () => void;
   };
@@ -124,56 +149,87 @@ function noteBridgeDown(): void {
   // with no file has. The first push after reconnect corrects it.
 }
 
-/** The rule sentence plus the bridge's specifics, for a refusal that carried a code. */
+/** The rule sentence, for a refusal that carried a code — one line (A5). */
 function refusalOf(res: {
   reason?: string | undefined;
   message?: string | undefined;
 }): CommitRefusal {
   const rule = sourcesReasonMessage(res.reason);
-  if (rule !== null) {
-    return res.message === undefined ? { text: rule } : { text: rule, detail: res.message };
-  }
-  // No code at all: the bridge's own sentence is the best there is, and a
-  // generic fallback is better than an empty region.
+  if (rule !== null) return { text: rule };
+  // No code at all: the bridge's own sentence is the best there is — as the ONE line, never
+  // under another — and a generic fallback is better than an empty region.
   return { text: res.message ?? 'The change could not be saved.' };
 }
 
 /**
- * Send a new catalog to the bridge and adopt it only once ACCEPTED.
- *
- * The local cache is NOT updated optimistically. The bridge is the owner and can
- * refuse — a duplicate id, a duplicate name, a band overlapping the candidate
- * bank or the reserved playout range — and showing the operator a catalog the
- * station does not have is worse here than anywhere else this rule applies: they
- * would walk away believing a guest box is bound, and find out at the take.
- *
- * On success it returns the assignments the change ORPHANED, so the caller can
- * name them at the moment of deletion. An empty array is the ordinary case.
+ * 🔴 `PLAYOUT-SOURCES-01` §1.F — **send the PLATE BAND to the bridge, and adopt it only once
+ * ACCEPTED.** The station's sources are the Playout's; the band is the one catalogue fact this
+ * console edits. The bridge can refuse (a band overlapping the candidate bank or the reserved
+ * playout range) and supplies the rule; it cascades nothing, so a refusal is the only answer
+ * there is to report.
  */
-export async function commitSourceCatalog(next: SourceCatalog): Promise<{
-  refusal: CommitRefusal | null;
-  droppedAssignments: readonly TemplateSourceAssignment[];
-}> {
+export async function commitSourceBand(
+  layerRange: LiveSourceLayerRange | undefined,
+): Promise<CommitRefusal | null> {
   try {
-    const res = await window.cg.sources.setConfig(next);
-    if (!res.ok) return { refusal: refusalOf(res), droppedAssignments: [] };
-    catalog = next;
-    const dropped = res.droppedAssignments ?? [];
-    if (dropped.length > 0) {
-      // The bridge already cascaded; mirror it locally so this browser cannot
-      // paint a plate as bound between the ack and the push that follows.
-      const orphaned = new Set(dropped.map((a) => `${a.templateId} ${a.plateId}`));
-      assignments = {
-        assignments: assignments.assignments.filter(
-          (a) => !orphaned.has(`${a.templateId} ${a.plateId}`),
-        ),
-      };
+    const res = await window.cg.sources.setConfig(layerRange === undefined ? {} : { layerRange });
+    if (!res.ok) return refusalOf(res);
+    const next: ConsoleSourceCatalog = { ...catalog };
+    if (layerRange === undefined) {
+      delete next.layerRange;
+      /*
+        `PLATE-BAND-01` — a band withdrawn leaves a DECLARED band in force nowhere. What takes its
+        place (a linked station's default, or none) is the bridge's to say, and its push says it.
+      */
+      if (next.plateBand?.origin === 'declared') delete next.plateBand;
+    } else {
+      next.layerRange = layerRange;
+      // A declared band is in force exactly as declared (`plateBandInForce` rule 1).
+      next.plateBand = { range: layerRange, origin: 'declared' };
     }
+    catalog = next;
     bump();
-    return { refusal: null, droppedAssignments: dropped };
+    return null;
   } catch (err) {
-    return { refusal: { text: sourcesTransportMessage(err) }, droppedAssignments: [] };
+    return { text: sourcesTransportMessage(err) };
   }
+}
+
+/**
+ * `PLAYOUT-SOURCES-01` §1.A — a picker opened: ask the bridge to read the Playout again if its last
+ * read is older than 5 s. Never waited on; whatever changes arrives as a push.
+ */
+export function refreshPlayoutSources(): void {
+  try {
+    void window.cg.sources.refresh().catch(() => undefined);
+  } catch {
+    // No bridge yet (a page still booting): the picker opens on what is already held.
+  }
+}
+
+/** `PLAYOUT-SOURCES-01` §1.A — one page of the Playout's media, searched on the Playout's side. */
+export async function searchPlayoutMedia(req: MediaSearchRequest): Promise<MediaSearchResponse> {
+  try {
+    const res = await window.cg.sources.mediaSearch(req);
+    if (res.ok) {
+      for (const item of res.items) seenMedia.set(item.id, item);
+    }
+    return res;
+  } catch {
+    return { ok: false, reason: 'playout-unreachable', message: 'The Playout did not answer.' };
+  }
+}
+
+/**
+ * The media items this console has SEEN in a search this session, by catalogue id — so a field can
+ * name an item the operator just picked, before a commit binds it and the catalogue carries it.
+ * Names only; what is played is the bridge's own read, never this.
+ */
+const seenMedia = new Map<string, ConsoleMediaItem>();
+
+/** A media item seen in a search this session, or `undefined`. */
+export function seenMediaItem(id: string): ConsoleMediaItem | undefined {
+  return seenMedia.get(id);
 }
 
 /** Send new assignments to the bridge and adopt them only once ACCEPTED. */
@@ -199,24 +255,7 @@ export function __resetSourcesForTest(): void {
 }
 
 /**
- * A9 — ASSIGNMENTS ARE OWNED BY THE LIBRARY ENTRY.
- *
- * Deleting a template from this station deletes its plate bindings with it. That
- * is what makes "delete from this station" mean something: without it there is
- * state on this machine with nothing left that refers to it, and a later import
- * of the same id would silently inherit bindings nobody chose to keep.
- *
- * Called ONLY after the removal is CONFIRMED by its owner. A refused removal must
- * leave the bindings exactly where they were — the template is still there.
- */
-export async function forgetTemplateAssignments(templateId: string): Promise<CommitRefusal | null> {
-  const kept = assignments.assignments.filter((a) => a.templateId !== templateId);
-  if (kept.length === assignments.assignments.length) return null;
-  return commitSourceAssignments({ assignments: kept });
-}
-
-/**
- * A9 — the templates whose bindings SURVIVED a re-import in this session.
+ * A9 — the templates whose bindings SURVIVED a re-import in this session, per channel.
  *
  * A re-import KEEPS its assignments: the useful case is an author fixing
  * something and re-exporting, with the operator not re-binding every plate. But
@@ -225,50 +264,50 @@ export async function forgetTemplateAssignments(templateId: string): Promise<Com
  *
  * Session-local on purpose: it is a statement about what just happened in front
  * of this operator, not a durable property of the template.
+ *
+ * `CHANNEL-TEMPLATES-01` — keyed by the CHANNEL too: a re-import acts on one channel's list, and
+ * the defaults it carries over are that channel's.
  */
 const carriedOver = new Set<string>();
 
-/** True iff this template's bindings were carried over by an import this session. */
-export function assignmentsWereCarriedOver(templateId: string): boolean {
-  return carriedOver.has(templateId);
+const carriedKey = (templateId: string, channel: number | undefined): string =>
+  `${String(channel ?? '*')}\u0000${templateId}`;
+
+/** True iff this template's bindings on `channel` were carried over by an import this session. */
+export function assignmentsWereCarriedOver(templateId: string, channel?: number): boolean {
+  return carriedOver.has(carriedKey(templateId, channel));
 }
 
 /**
- * A9 — reconcile a template's assignments against the plate set it NOW declares,
- * at import.
+ * A9 — note, at import, whether a template's Source defaults on `channel` were carried over.
  *
- * 🔴 **A PLATE ID THE NEW VERSION NO LONGER DECLARES IS DROPPED.** A dangling
- * record can later match a plate it was never meant for — the author re-uses
- * `guest-1` for a different box, and a binding nobody made comes back to life on
- * air. Plates the new version declares and the old did not simply read as
- * unassigned, which is the ordinary state of a plate nobody has bound.
+ * 🔴 `CHANNEL-TEMPLATES-01` decision 2 (the owner, 2026-09-28) — **NOTHING IS WRITTEN.** A re-import
+ * keeps the channel's defaults for every plate that still exists, and a default for a plate the new
+ * version no longer declares is IGNORED, never deleted: every reader asks for the plates the
+ * template declares (`assignedSourceId` / `unassignedPlateIds`), so a default for a plate that is
+ * gone answers nothing. This used to drop such defaults — on every channel at once, in a
+ * station-wide write — which is what refused a channel's own operator the re-import of a template
+ * another channel also used (`PLATE-BAND-01`'s found item).
  *
- * Returns the plate ids it dropped, so the caller can say so.
+ * What is left is the notice: anything that answers for a declared plate on this channel was
+ * carried over from a previous import, and the operator did nothing to produce it.
  */
-export async function reconcileAssignmentsForImport(
+export function noteAssignmentsCarriedOver(
   templateId: string,
   declaredPlateIds: readonly string[],
-): Promise<readonly string[]> {
-  const declared = new Set(declaredPlateIds);
-  const mine = assignments.assignments.filter((a) => a.templateId === templateId);
-  if (mine.length === 0) {
-    carriedOver.delete(templateId);
-    return [];
-  }
-  const dropped = mine.filter((a) => !declared.has(a.plateId));
-  if (dropped.length > 0) {
-    await commitSourceAssignments({
-      assignments: assignments.assignments.filter(
-        (a) => a.templateId !== templateId || declared.has(a.plateId),
-      ),
-    });
-  }
-  // Anything that survived was carried over from the previous import, and the
-  // operator has to be told: they did nothing to produce it.
-  if (mine.length > dropped.length) carriedOver.add(templateId);
-  else carriedOver.delete(templateId);
+  channel?: number,
+): void {
+  const key = carriedKey(templateId, channel);
+  const carried =
+    channel === undefined
+      ? assignments.assignments.some(
+          (a) => a.templateId === templateId && declaredPlateIds.includes(a.plateId),
+        )
+      : unassignedPlateIds(assignments, channel, templateId, declaredPlateIds).length <
+        declaredPlateIds.length;
+  if (carried) carriedOver.add(key);
+  else carriedOver.delete(key);
   bump();
-  return dropped.map((a) => a.plateId);
 }
 
 /** Test seam — forget the carried-over marks. */

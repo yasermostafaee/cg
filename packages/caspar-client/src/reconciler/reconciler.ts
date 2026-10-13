@@ -1,9 +1,11 @@
 import { EventEmitter } from 'node:events';
+import { isRetainedOnAir } from '@cg/shared-schema';
 import type {
   FieldValues,
   Intent,
   LayerSlot,
   OscEvent,
+  RetainedAirState,
   StackItemState,
   StackItemStatus,
 } from '@cg/shared-schema';
@@ -110,6 +112,18 @@ interface ItemRecord {
    * the more dangerous error.
    */
   playedBeforeIntent?: boolean;
+  /**
+   * 🔴 `FIELD-FIXES-01-A` Decision 2 — **a TAKE whose reply is overdue is UNRESOLVED, not failed.**
+   *
+   * Set by {@link Reconciler.expireIntent} when a take's bounded wait (`INTENT_TIMEOUT_MS`, 5 s)
+   * ends with no answer. It used to retract the play evidence there (`B-079`), so a take whose
+   * `CG PLAY` HAD landed read `loaded` off the page's own producer, and PLAY came back on a row
+   * whose graphic was on air; a late OK then never restored the evidence either. While this is
+   * set the row reads `unconfirmed` whatever OSC says, and the bridge refuses another take
+   * (`isOnAirStatus` counts `unconfirmed`). The take's own late reply settles it either way
+   * ({@link Reconciler.applyAck}); any newer intent supersedes it.
+   */
+  takeOverdue?: boolean;
   slot?: LayerSlot;
   lastIntentSeq?: number;
   lastAckAt?: number;
@@ -144,6 +158,13 @@ interface ItemRecord {
    * globally would misreport every other item.
    */
   unverifiable?: boolean;
+  /**
+   * 🔴 `B-331` — **THIS ITEM'S OWN CLEAR LANDED ON THE PRIMARY**, so its producer is destroyed and a
+   * report of one is a frame the core composed BEFORE the erase. Set by
+   * {@link Reconciler.noteProducerCleared}; lifted by the item's next `take` (the one thing that
+   * puts a producer back) and by a failover (the new primary's reports are about its own stage).
+   */
+  producerCleared?: true;
 }
 
 /**
@@ -202,38 +223,60 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
    * a live bridge's own state with a retained copy (a page reload against a
    * healthy bridge must change nothing).
    *
-   * `played` is reconstructed play evidence, and it decides how the record is
-   * seeded:
+   * ⭐ **B-107 / B-109 — the retained STATE decides how the record is seeded, and
+   * a restore may NEVER seed a state better than the one that was retained.**
    *
-   *   played  → `playing` AND `ackedStatus: 'playing'`, i.e. exactly what a
-   *             settled, confirmed take left behind before the process died.
-   *             The ack matters: without it `pending` is true and the row spins
-   *             forever on a link that may never come back. The item is NOT
-   *             claimed `on-air` here — only OSC may promote it there, and it
-   *             will, as soon as the wire confirms a live producer.
-   *   !played → the terminal `loaded`, resting and unconfirmed by anything.
+   * This took a `played: boolean`, which is the shared root of both bugs: it
+   * collapsed a FAILED row, a deliberately CLEARed row and a genuinely pre-rolled
+   * one into the single seed `loaded`, so a bridge restart silently promoted the
+   * first two to something playable.
+   *
+   *   `on-air`  → `playing` AND `ackedStatus: 'playing'`, i.e. exactly what a
+   *               settled, confirmed take left behind before the process died.
+   *               The ack matters: without it `pending` is true and the row spins
+   *               forever on a link that may never come back. The item is NOT
+   *               claimed `on-air` here — only OSC may promote it there, and it
+   *               will, as soon as the wire confirms a live producer.
+   *   `loaded`  → the terminal `loaded`, resting and unconfirmed by anything.
+   *   `cleared` → the terminal `idle`. The operator emptied this layer (or a
+   *               reconcile proved it empty); the row comes back saying so.
+   *   `error`   → `error`, carrying its code, AND acked. The ack is load-bearing
+   *               for the same reason as the on-air case — `error` is not in
+   *               `isTerminalStatus`, so without a matching ack the row would
+   *               publish `pending: true` and spin forever on a failure that is
+   *               finished.
    *
    * No OSC observation and no slot are seeded — the caller assigns the slot
    * (`assignSlot`) and real OSC supplies the truth. Until then the merge ladder
    * falls through to these values, and while the CasparCG link is down B-086's
-   * `unverified` demotion applies to the played case exactly as it would to a
+   * `unverified` demotion applies to the on-air case exactly as it would to a
    * record that never died.
    */
   restoreItem(input: {
     itemId: string;
     templateId: string;
     fields: FieldValues;
-    played: boolean;
+    state: RetainedAirState;
+    errorCode?: string;
   }): StackItemState | null {
     if (this.items.has(input.itemId)) return null;
+    // The ONE canonical predicate for play evidence — never a local re-derivation
+    // of which states count as air (golden rule 6).
+    const played = isRetainedOnAir(input.state);
     const rec: ItemRecord = {
       itemId: input.itemId,
       templateId: input.templateId,
       fields: input.fields,
       fieldsHash: hashFields(input.fields),
-      intentStatus: input.played ? 'playing' : 'loaded',
-      ...(input.played && { ackedStatus: 'playing' as StackItemStatus }),
-      played: input.played,
+      intentStatus: seedStatusFor(input.state),
+      ...(played && { ackedStatus: 'playing' as StackItemStatus }),
+      // An errored restore is SETTLED, not in flight: acking it with its own status
+      // is what stops the row spinning (see the docstring).
+      ...(input.state === 'error' && { ackedStatus: 'error' as StackItemStatus }),
+      ...(input.state === 'error' && input.errorCode !== undefined
+        ? { errorCode: input.errorCode }
+        : {}),
+      played,
     };
     this.items.set(rec.itemId, rec);
     return this.emitChange(rec);
@@ -289,7 +332,13 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
     if (rec.lastIntentSeq !== seq) return null; // stale ack — superseded intent
 
     rec.lastAckAt = this.now();
+    // `FIELD-FIXES-01-A` — an overdue take is resolved by its OWN late reply, whichever way it went.
+    const overdueTake = rec.takeOverdue === true;
+    delete rec.takeOverdue;
     if (ok) {
+      // The overdue take LANDED: it is a settled take again, so its ack reads `playing` and OSC
+      // promotes it to `on-air` — the claim it kept through the wait was the true one.
+      if (overdueTake) rec.intentStatus = 'playing';
       // B-079 — the command landed, so the take's claim is now proven: there is nothing
       // left to retract.
       delete rec.playedBeforeIntent;
@@ -320,8 +369,9 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       // `CG PLAY` never reached the wire. Restoring the PRIOR value (not forcing `false`)
       // is what makes it safe both ways: a failed RE-take of a genuinely on-air item leaves
       // it on air — a false `loaded` would hide a live graphic, the worse error direction.
-      // Only a take is retracted; a failed update/out never touched play evidence.
-      if (rec.intentStatus === 'playing') {
+      // Only a take is retracted; a failed update/out never touched play evidence. An OVERDUE
+      // take kept its claim through the wait (`takeOverdue`), and gives it back here the same way.
+      if (rec.intentStatus === 'playing' || overdueTake) {
         rec.played = rec.playedBeforeIntent ?? false;
       }
       // C-012 — and symmetrically for a failed graceful STOP, which retracted play
@@ -339,6 +389,21 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       delete rec.settle;
       if (errorCode !== undefined) rec.errorCode = errorCode;
     }
+    return this.emitChange(rec);
+  }
+
+  /**
+   * 🔴 `B-301` (`CONSOLE-POLISH-01` §2) — **AN OPERATOR DISMISSES A ROW'S ERROR.** A failed ack lands
+   * `ackedStatus: 'error'` above the resting status it settled to (`B-070`'s settle: the target it
+   * came from, or `unconfirmed`); dismissing drops that error ack and its code and NOTHING else — no
+   * play evidence, no OSC truth, no intent — so the row reads what is actually known: its settled
+   * status, or OSC's fresh truth. `null` when the item is unknown or not in `error`.
+   */
+  dismissError(itemId: string): StackItemState | null {
+    const rec = this.items.get(itemId);
+    if (rec === undefined || rec.ackedStatus !== 'error') return null;
+    delete rec.ackedStatus;
+    delete rec.errorCode;
     return this.emitChange(rec);
   }
 
@@ -371,10 +436,27 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       return null;
     }
 
-    // B-079 — an expired take never proved its claim either: retract it, exactly as a
-    // failed ack does (restore the prior evidence, so a real on-air item is never demoted).
-    if (rec.intentStatus === 'playing') {
-      rec.played = rec.playedBeforeIntent ?? false;
+    if (takeInFlight) {
+      /*
+        🔴 `FIELD-FIXES-01-A` DECISION 2 — **A SLOW REPLY LEAVES A TAKE UNRESOLVED, NOT FAILED.**
+
+        This used to retract the take's play evidence here (`B-079`: "an expired take never proved
+        its claim"). But the take had not FAILED — its `CG PLAY` may well have landed — and with
+        the evidence gone, the page's own producer on OSC read `loaded`: the row said it was not on
+        air while its graphic was, PLAY came back, and a second take re-`PLAY`ed plates that were
+        working. The late OK that followed restored nothing, so it stayed that way.
+
+        So the take stays unresolved: its evidence and `playedBeforeIntent` are KEPT, the row reads
+        `unconfirmed` (`takeOverdue`, above the OSC truth in {@link baseStatus}), and the bridge
+        refuses another take meanwhile. The take's own reply resolves it in `applyAck` — `on-air`
+        if it landed, the prior evidence restored if it failed — and the AMCP queue's own bound
+        guarantees that reply comes (a timeout or a closed socket is an answer too).
+      */
+      rec.takeOverdue = true;
+      rec.intentStatus = 'unconfirmed';
+      delete rec.ackedStatus;
+      rec.errorCode = 'unconfirmed';
+      return this.emitChange(rec);
     }
     // C-012 — an expired STOP never proved it landed either: give back the play
     // evidence it retracted, so an item that is still on air keeps saying so.
@@ -400,6 +482,8 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       const itemId = this.slotIndex.get(key);
       if (itemId !== undefined) {
         const rec = this.items.get(itemId);
+        // `B-331` — a page reported after this item's own acknowledged CLEAR is the late frame.
+        if (rec?.producerCleared === true && event.producer !== 'empty') return [];
         if (rec !== undefined) {
           rec.lastOscAt = at;
           // B-053 — store the raw observation; the status is derived at read
@@ -529,15 +613,70 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       const key = rec.slot !== undefined ? slotKey(rec.slot) : undefined;
       if (key !== undefined && occupiedSlotKeys.has(key)) continue; // still on air — OSC restores it
       // Silent layer — the producer is gone. Reset to the honest idle.
-      rec.played = false;
-      rec.intentStatus = 'idle';
-      delete rec.ackedStatus;
-      delete rec.settle;
-      rec.lastProducer = 'empty';
-      rec.lastOscAt = this.now();
-      changed.push(this.emitChange(rec));
+      changed.push(this.resetEmptied(rec));
     }
     return changed;
+  }
+
+  /**
+   * 🔴 `RELEASE-091-01` (DELTA B, B1) — **THE LAYERS CASPARCG HAS JUST SAID ARE EMPTY**: a played
+   * item on one of `emptiedSlotKeys` is reset to `idle`, exactly as {@link reconcileOnReconnect}
+   * resets one whose layer went silent across a reconnect — the same reset, one spelling.
+   *
+   * The bridge calls it when a layer it held on air went silent and an `INFO` read proved it gone:
+   * cleared by another AMCP client, the Playout, or CasparCG itself. A fresh `empty` observation
+   * alone would not do — the truth decays after `truthTtlMs` and the row would fall back to its
+   * `playing` ack, ON AIR again over an empty layer. That was `B-292`.
+   */
+  markLayersEmptied(emptiedSlotKeys: ReadonlySet<string>): readonly StackItemState[] {
+    const changed: StackItemState[] = [];
+    for (const rec of this.items.values()) {
+      if (!rec.played || rec.slot === undefined) continue;
+      if (!emptiedSlotKeys.has(slotKey(rec.slot))) continue;
+      changed.push(this.resetEmptied(rec));
+    }
+    return changed;
+  }
+
+  /**
+   * 🔴 `B-331` — **THE ITEM'S OWN `CLEAR` WAS ACKNOWLEDGED BY THE PRIMARY: its producer is gone, and
+   * stays gone until its next take.**
+   *
+   * A 2.5.0 core answers `202 CLEAR OK` BEFORE the erase runs (`clear_command` only queues
+   * `stage->clear(index)`), so a frame composed before the erase reports the page over OSC AFTER
+   * the reply. The bridge's own note of the `202` had just recorded `empty`, so that late report
+   * passed the change tracker as a change and — `played` still set — derived ON AIR; the layer then
+   * fell silent and nothing re-published the row until some other command did. The owner saw PLAY
+   * stay green after a Clear, "one step behind".
+   *
+   * So the late page is not evidence for THIS item: record `empty` and ignore a non-empty report
+   * until a take lifts it. Play evidence is untouched (the doctrine on `played` stands), and the
+   * caller vouches for the PRIMARY only — a CLEAR acknowledged by the backup alone proves nothing
+   * about the primary's producer, and reading that one away would hide a live graphic.
+   */
+  noteProducerCleared(itemId: string): StackItemState | null {
+    const rec = this.items.get(itemId);
+    if (rec === undefined) return null;
+    rec.producerCleared = true;
+    rec.lastProducer = 'empty';
+    rec.lastOscAt = this.now();
+    return this.emitChange(rec);
+  }
+
+  /** `B-331` — a failover: no clear on the old primary vouches for the new one's stage. */
+  liftProducerCleared(): void {
+    for (const rec of this.items.values()) delete rec.producerCleared;
+  }
+
+  /** The one reset of a played item whose producer is gone: the honest `idle`. */
+  private resetEmptied(rec: ItemRecord): StackItemState {
+    rec.played = false;
+    rec.intentStatus = 'idle';
+    delete rec.ackedStatus;
+    delete rec.settle;
+    rec.lastProducer = 'empty';
+    rec.lastOscAt = this.now();
+    return this.emitChange(rec);
   }
 
   /** True iff `beginResync()` has been called and `endResync()` has not. */
@@ -550,6 +689,10 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
   // ──────────────────────────────────────────────────────────────────────
 
   private applyIntentInternal(intent: Intent, seq: number): StackItemState | null {
+    // `FIELD-FIXES-01-A` — a newer intent supersedes an overdue take; the take's late reply is then
+    // a stale ack and settles nothing (`applyAck`'s `lastIntentSeq` guard).
+    const superseded = this.items.get((intent as { itemId?: string }).itemId ?? '');
+    if (superseded !== undefined) delete superseded.takeOverdue;
     switch (intent.kind) {
       case 'load': {
         const rec: ItemRecord = {
@@ -576,6 +719,8 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
         // back exactly the claim it made (and not one made by an earlier, successful take).
         rec.playedBeforeIntent = rec.played;
         rec.played = true;
+        // `B-331` — a take is what puts a producer back, so its page is evidence again.
+        delete rec.producerCleared;
         rec.lastIntentSeq = seq;
         rec.pendingSince = this.now();
         // A new intent invalidates the PREVIOUS command's ack — without this
@@ -749,6 +894,9 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
 
   /** The pre-link-state merge ladder: OSC truth → ack → intent. */
   private baseStatus(rec: ItemRecord): StackItemStatus {
+    // `FIELD-FIXES-01-A` — an overdue take is UNRESOLVED, and says so above everything OSC says:
+    // the page's own producer on the layer proves neither that the take landed nor that it did not.
+    if (rec.takeOverdue === true) return 'unconfirmed';
     const fresh = this.freshTruth(rec);
     if (fresh !== null) return fresh;
     if (rec.ackedStatus !== undefined) return rec.ackedStatus;
@@ -781,6 +929,28 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       return rec.ackedStatus === rec.intentStatus;
     }
     return false;
+  }
+}
+
+/**
+ * B-107 / B-109 — the seed status for a restored record, per retained state.
+ *
+ * Exhaustive with no `default`, like `retainedStateFor` on the other side of the
+ * same journey: a new retained state must not be able to fall through to a
+ * comfortable guess.
+ */
+function seedStatusFor(state: RetainedAirState): StackItemStatus {
+  switch (state) {
+    // NOT `on-air`: only OSC may promote a record there. `playing` + the ack is
+    // exactly what a settled take left behind.
+    case 'on-air':
+      return 'playing';
+    case 'loaded':
+      return 'loaded';
+    case 'cleared':
+      return 'idle';
+    case 'error':
+      return 'error';
   }
 }
 
