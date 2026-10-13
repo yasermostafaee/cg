@@ -1,7 +1,7 @@
 # CG Bridge — for the Playout team
 
-Release `0.11.5` (`RELEASE-0115-01`, 2026-10-11; first written for `0.10.0` by `CENTRAL-BRIDGE-01`, then
-`0.11.0`, `0.11.1`, `0.11.2`, `0.11.3` and `0.11.4`). **One CG Bridge per Playout client.** A station's Playout client may run a
+Release `0.11.6` (`RELEASE-0116-01`, 2026-10-13; first written for `0.10.0` by `CENTRAL-BRIDGE-01`, then
+`0.11.0`, `0.11.1`, `0.11.2`, `0.11.3`, `0.11.4` and `0.11.5`). **One CG Bridge per Playout client.** A station's Playout client may run a
 primary engine and a backup engine; one CG Bridge serves both (§3). CG Bridge is a Windows service on the
 primary engine's machine, or on a server beside the engines. Every CG Control is a console that connects to it;
 a console never talks to CasparCG. This document is what your engine and your installer need from us, and what
@@ -27,7 +27,7 @@ without a version we tell you about. Our schema test refuses any field not liste
 `casparcg.channels`, `playout.backup` and three problem codes; `0.11.3` adds `casparcg.servers[].channels` and
 the problem code `backup-channels`. `0.11.4` adds no field and no code: a `port-refused` problem can now also
 be about CG Bridge's OSC port, naming the program that holds it — for example
-`cannot open UDP 6251 (OSC from CasparCG): held by example.exe (PID 4120).` `0.11.5` adds no field and no
+`cannot open UDP 6251 (OSC from CasparCG): held by example.exe (PID 4120).` `0.11.6` adds no field and no
 code.
 
 | Field                                           | Meaning                                                                                                                                                                    |
@@ -65,7 +65,7 @@ Example (a fresh install, no CasparCG yet, no station-admin sign-in yet, no back
 ```json
 {
   "app": "cg-bridge",
-  "version": "0.11.5",
+  "version": "0.11.6",
   "startedAt": "2026-09-30T10:48:34.772Z",
   "uptimeS": 11,
   "casparcg": {
@@ -105,7 +105,7 @@ exits `2`). It asks for administrator rights. **What it is:** our setup program,
 Bridge's NSIS installer inside it. Double-clicked, it shows CG Setup's window. **Run with `/S`, it shows
 nothing: it runs the NSIS installer with exactly your command line and returns that installer's exit
 code — every switch, the uninstall line and every exit code in this section are the NSIS installer's
-own, unchanged in `0.11.5`.** Our clean-Windows test runs each silent path against the NSIS installer alone
+own, unchanged in `0.11.6`.** Our clean-Windows test runs each silent path against the NSIS installer alone
 and against the file you receive, and requires the same codes. It needs Windows 10 or later, as CG Bridge's
 own Node runtime does. **Size:** about 23.5 MB — `0.11.1`'s was 24,677,440 bytes, as your letter measured
 (the release lists the exact size and SHA-256 of each release's). It carries everything: the official
@@ -138,10 +138,10 @@ CG-Bridge_<version>_x64-setup.exe /S [/PLAYOUT=http://host:8080] [/AMCPHOST=127.
   server; it never runs under `/S`. **Nothing in this section changed for a silent install:** the same
   switches, the same defaults, the same exit codes.
 - `/OSCPORT=6250` is refused: that port is yours.
-- From Inno Setup: `Exec(ExpandConstant('{tmp}\CG-Bridge_0.11.5_x64-setup.exe'), '/S', '', SW_HIDE,
+- From Inno Setup: `Exec(ExpandConstant('{tmp}\CG-Bridge_0.11.6_x64-setup.exe'), '/S', '', SW_HIDE,
 ewWaitUntilTerminated, ResultCode)`. Your `2.9.4` chains it exactly this way, after your engine's service
   has started, behind «CG Bridge هم نصب شود» under «CG Control (اگر CG Bridge روی سرورِ جداست، تیک را
-  بردارید):» (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §2); `0.11.5` keeps every part of that line as
+  بردارید):» (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §2); `0.11.6` keeps every part of that line as
   it was. **On a pair, untick it on both engine machines** (`/MERGETASKS="!cgbridge"` silently), as your
   `PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md` §4 says, and install CG Bridge once, beside them (§3).
 
@@ -173,7 +173,7 @@ Your `2.9.4` reads it to decide whether to run our file at all, so it is a contr
   `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\CGBridge`. Nothing of ours is written to the
   32-bit view, so your read of both views finds one row.
 - `DisplayName` = **`CG Bridge`**, exactly.
-- `DisplayVersion` = the release, **`major.minor.patch`** (`0.11.5`), never a fourth part or a suffix.
+- `DisplayVersion` = the release, **`major.minor.patch`** (`0.11.6`), never a fourth part or a suffix.
 - Publisher `APASAI`.
 
 Read on a clean Windows runner after the install and after every upgrade path we test — over the
@@ -211,7 +211,7 @@ plays is adopted; a row whose layer is empty is reported off air (§6).
 | `bridgeAddress`  | The host CasparCG fetches templates from (a separate server) | this machine       |
 
 The file is strict: an unknown key is refused, and the service then does not start; the log names the
-file. `0.11.5` adds no key. To change a value, re-run the installer with it, or edit the file and restart
+file. `0.11.6` adds no key. To change a value, re-run the installer with it, or edit the file and restart
 the service. The same values can be given on the command line (`cg-bridge.exe caspar-bridge.mjs
 --service-config <file> --port …`); the command line wins.
 
@@ -389,7 +389,7 @@ station admin signs in again once the user is enabled. That is safe, and it is w
 
 ## 5. Versions
 
-- CG Bridge, CG Control and CG Designer carry ONE version per release (`0.11.5`).
+- CG Bridge, CG Control and CG Designer carry ONE version per release (`0.11.6`).
 - CG Bridge reads each engine's version from `GET /api/v1/system/version` (your §3.1; no token, so no
   `Authorization` header): at start, then at most once a minute. CG Control shows the primary's under
   `Versions` in its connection check. An answer that is missing or not a version is said as "not served" and
@@ -409,12 +409,47 @@ station admin signs in again once the user is enabled. That is safe, and it is w
 - `0.11.4` is the compatibility floor — the first release a station installs (`0.11.3` and earlier were never
   installed at a station, and are superseded; `0.11.2` and earlier also write the backup core on the primary's
   channel numbers): every later release opens what `0.11.4` wrote — the configuration, the state, the template
-  packages. `0.11.5` reads what `0.11.4` wrote unchanged, and adds no file and no configuration key. Your engine
-  installer should carry `0.11.5` in place of the CG Bridge it carries now.
-- **One fact on the wire in `0.11.5`, no new command.** When an operator has recorded a pass count or a gap for a
+  packages. `0.11.6` reads what `0.11.4` wrote unchanged, and adds no file and no configuration key. Your engine
+  installer should carry `0.11.6` in place of the CG Bridge it carries now. (`0.11.5` was tagged but is
+  superseded by `0.11.6`; nothing in it reached your build.)
+- **One fact on the wire, already in `0.11.5`, no new command.** When an operator has recorded a pass count or a gap for a
   row whose graphic was stopped, that row's next take carries a `timing` member inside the `__cg` control of the
   one `CG UPDATE` it already sent before `CG PLAY`, and only when the template admits that timing. A row with no
   such recording sends the same bytes as `0.11.4`. You may see it in `amcp.log`.
+- **`0.11.6`: `GET /api/cg/license` is read every 5 s while it reads "not licensed", instead of every 60 s**
+  (`DONGLE-RECOVER-01`, `B-330`). A read, never a write: at most **12 requests a minute**, and only while the
+  answer says unlicensed. The moment it reads licensed the cadence returns to about 60 s. Nothing else about the
+  licence changed — the same route, the same session beside D9, the last value KEPT while the Playout cannot be
+  reached.
+- **`0.11.6`: a `403` on a stopped row's resume tell is read as "no page on that layer", and the SAME operator
+  take then loads the template first** (`DONGLE-RECOVER-01`, `B-328`). Background: when your own licence rule
+  clears a whole channel (`CLEAR <channel>`, LICENSE §4) it also erases the pages of rows that are merely
+  STOPPED, which nothing on our side was watching. The resume route's first line is the take's tell, and your
+  core answers it `403 CG UPDATE FAILED` exactly when the layer's foreground holds no CG producer
+  (`get_expected_cg_proxy`, `v2.5.0-stable`). We now treat that answer as the check. **What appears in your
+  `amcp.log` for one such take, in this order** (pinned by
+  `tools/caspar-bridge/tests/dongle-recover.integration.test.ts`):
+
+  ```
+  CG <ch>-<layer> UPDATE 0 {"__cg":{…}}        << 403 CG UPDATE FAILED
+  CG <ch>-<layer> ADD 0 "<template>" 1 {…}     << 202
+  PLAY <ch>-<plate> "<file>" LOOP              << 202   (only a row that has media plates)
+  CG <ch>-<layer> PLAY 0                       << 202
+  ```
+
+  The `ADD` always precedes the row's `CG PLAY`, and it carries the row's recorded look. When the page IS
+  resident the route is unchanged — one `CG UPDATE`, one `CG PLAY`, no `ADD`. **No command is sent that the
+  operator did not ask for**, and the take is not refused.
+
+- **`0.11.6`: a late status frame after a `CLEAR` is ignored until that row's next Play** (`B-331`). Your core
+  answers `202 CLEAR OK` before the erase runs, so a frame composed earlier can report the page after the
+  reply. We now discard that one report instead of reading it as "still on air". **No wire change** — we send
+  nothing new and nothing less.
+- **`0.11.6`, your logs only:** one line per change of the licence fields a take reads
+  (`Playout license: licensed=… reason=… playoutState=… graceUntil=… maxChannels=… (read <time>)`), one line
+  when a channel's `playlist` or `cgLicensed` changes, and a run of repeated "the Playout refused the session
+  refresh" lines collapsed to the first plus one closing line with the count and the last time. No token and no
+  Playout sentence is written to the log.
 - `/health.version` always names the running version.
 
 ## 6. Where we differ from your letter
