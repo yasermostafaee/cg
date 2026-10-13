@@ -1943,13 +1943,22 @@ floor:** `0.11.4`'s installers upgrade each in place, settings kept, tested on a
 draft's own installers — from `0.11.3` with CG Designer and CG Control OPEN through it (`RELEASE-0114-01-C`).
 That is a test of this release, not a promise to any one's formats.
 
-### 🔴 THE FLOOR STAYS — `0.11.4` (2026-10-11, `RELEASE-0115-01` Part B)
+### 🔴 THE FLOOR STAYS — `0.11.4` (2026-10-13, `RELEASE-0116-01` Part B)
 
 **Why it does not move:** `0.11.4` is the first release installed where it is used — CG Bridge on a real
-station (`.32`) and CG Control on the owner's PC. It is delivered, so `0.11.5` keeps every path that reads
+station (`.32`) and CG Control on the owner's PC. It is delivered, so `0.11.6` keeps every path that reads
 what `0.11.4` wrote. A release that moved the floor past a delivered build would delete those paths.
 
-**Measured at `0.11.5`:** the five files that define the `.vcg` manifest and scene, the `.cgproj`, CG
+**Measured at `0.11.6`:** the same five files read an **empty** `git diff --stat v0.11.5..dev` — each
+pathspec proved to match a tracked file first (`*/manifest.ts` 1, `*/scene.ts` 2, `*/project-package.ts` 2,
+`*/service-config.ts` 1, `*/stationAddress.ts` 1), with the control in the same command,
+`tools/caspar-bridge/src/caspar-runtime.ts`, printing `110 insertions(+), 51 deletions(-)`. Neither
+persisted-key census changed; `@cg/shared-schema` is unchanged; `@cg/shared-ipc` changed by ONE doc comment
+(`channels/license.ts` — the 5 s cadence while unlicensed), no schema move. So `0.11.6` adds no persisted
+shape and no wire line to what `0.11.5` already carried, and the console ↔ CG Bridge protocol stays one
+release line in both directions.
+
+**Measured at `0.11.5` (kept — the skew below is still open):** the five files that define the `.vcg` manifest and scene, the `.cgproj`, CG
 Bridge's `cg-bridge.json` and CG Control's station record read an empty `git diff v0.11.4` (2026-10-11,
 against a control file in the same command — `packages/shared-ipc/src/channels/setup.ts`, 26 insertions
 and 3 deletions — that did change). Neither persisted-key census changed (`persistedKeyCensus.test.ts`,
@@ -1966,9 +1975,10 @@ refusal and nothing on the path to air. A take's tell gains an optional `timing`
 (`B-322`), which a page baked by `0.11.4` already reads (`applyPassTiming`) and keeps only until its loop
 settles (`B-323`, fixed in pages imported from `0.11.5`).
 
-**The `0.11.4`, `0.11.3`, `0.11.2`, `0.11.1`, `0.11.0` and `0.10.0` installs are upgraded in place:**
-`0.11.5`'s installers are tested on a clean runner from each draft's own installers — from `0.11.4` with CG
-Designer and CG Control OPEN through it (`acceptance-upgrade-0114`).
+**The `0.11.5`, `0.11.4`, `0.11.3`, `0.11.2`, `0.11.1`, `0.11.0` and `0.10.0` installs are upgraded in
+place:** `0.11.6`'s installers are tested on a clean runner from each release's own installers — from
+`0.11.5` and from `0.11.4` with CG Designer and CG Control OPEN through it (`acceptance-upgrade-0115`,
+`acceptance-upgrade-0114`).
 
 ## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
 
