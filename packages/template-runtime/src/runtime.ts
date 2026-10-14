@@ -1785,7 +1785,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         id: string;
         lifespan?: FrameRange | undefined;
       }): void => {
-        const node = built.elementMap.get(element.id);
+        // 🔴 `B-099` — THIS SCOPE's map, never the root's. A nested composition registers its
+        // elements in its own `scope.elementMap`; read through `built.elementMap` (the ROOT's
+        // alias) every nested host missed, the gate list stayed empty, and a nested clock or
+        // sequence showed its frozen content from frame 0 — PROBED: `flex` at frame ~30 under a
+        // marker at 60. The same root-map lookup `B-089` removed from the lifespan gates, ten
+        // lines below; for the root scope the two maps are one, so nothing changes there.
+        const node = scope.elementMap.get(element.id);
         if (node !== undefined) {
           contentGates.push({ node, lifespan: element.lifespan, natural: node.style.display });
         }

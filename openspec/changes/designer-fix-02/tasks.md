@@ -18,7 +18,8 @@
 
 - [x] 2.1 `B-147` interim: Auto Squeeze shown as unavailable, one short reason; saved values kept. A `Tag`
       fact (golden rule 13); the toggles requirement in `designer-inspector` no longer lists it.
-- [ ] 2.2 `B-099` probe reported; fixed if frozen.
+- [x] 2.2 `B-099` probe reported; fixed if frozen. PROBED FROZEN (nested clock host `flex` at frame ~30,
+      marker 60); the gate now reads the scope's own element map. The probe is the regression test.
 - [ ] 2.3 `B-030` a timed auto-out child no longer strands a content-driven parent.
 
 ## 3. Sequences (FULL)

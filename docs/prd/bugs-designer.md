@@ -1221,7 +1221,17 @@ the assertion is that a row is ABSENT. Note there is no consolidated Linux-E2E b
 repo; P-009's spec (`docs/prd/platform.md`) establishes the owed-run rule, and each entry carries its
 own debt, which is why it is written out here.
 
-## [ ] B-099 — UNVERIFIED: `wireScope`'s content-start gate resolves a nested scope's hosts through the ROOT `elementMap`, so the D-104 visibility gate is likely inert for nested compositions ⟨priority: medium⟩
+## [~] B-099 — UNVERIFIED: `wireScope`'s content-start gate resolves a nested scope's hosts through the ROOT `elementMap`, so the D-104 visibility gate is likely inert for nested compositions ⟨priority: medium⟩ — `openspec/changes/designer-fix-02/`
+
+— **PROBED, CONFIRMED and closed in code (DESIGNER-FIX-02, 2026-10-14).** The probe this item asks
+for: a nested composition holding a wall clock and a sequence under a content-start marker at frame
+60; at frame ~30 the nested clock's host read **`flex`** (visible, frozen) where it must read
+`none`. The gate's lookup (`runtime.ts`, `collectContentHost`) now reads THIS scope's
+`scope.elementMap` — for the root the two maps are one, so the root is unchanged. Test (the probe,
+kept): `content-start-hold-entry.test.ts` › "🔴 B-099 (NESTED, visibility) …" — red before, green
+after; the whole template-runtime suite (1,167 tests) passes. Templates with a clock / sequence /
+ticker inside a nested composition must be re-exported and re-imported (`C-034`) until
+`PAGE-REBUILD-01`.
 
 **Status: UNVERIFIED — filed from a static reading, no runtime probe run.** The code path below is
 confirmed present on merged `main`; the _behaviour_ it implies is not. Do not treat the impact

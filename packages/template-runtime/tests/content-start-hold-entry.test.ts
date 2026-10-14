@@ -484,6 +484,40 @@ describe('D-104 follow-up — content starts at the entrance completion (hold en
     r.remove();
   });
 
+  /**
+   * 🔴 `B-099` — THE PROBE, kept as the regression test. The gate collected each content host
+   * through the ROOT `elementMap`, and a nested composition's elements are registered in their
+   * OWN scope's map, so for a nested scope the lookup missed, the gate list stayed empty, and the
+   * nested clock / sequence showed its frozen content from frame 0. Measured before the fix: both
+   * hosts read their natural display (`flex` / `grid`) at frame ~30, before the marker at 60.
+   */
+  it('🔴 B-099 (NESTED, visibility) a nested clock + sequence HOST is hidden before its scope’s marker, revealed after', async () => {
+    const clock = makeClock();
+    const child = {
+      ...comp('nested', 150, [introShape('cbg', 10), wallClock('nclk'), twoItemSequence('nseq')], {
+        mode: 'manual',
+      }),
+      lifecycle: { outPoint: 150, contentStart: 60 },
+    } as unknown as Composition;
+    const r = createRuntime(
+      scene({
+        children: [introShape('bg', 10), instance('i-nested', 'nested', 'nested')],
+        outPoint: 150,
+        playout: { mode: 'manual' },
+        compositions: [child],
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await r.play({});
+    await run(clock, 600); // ~frame 30: before the NESTED scope's marker (frame 60)
+    expect(hostDisplay('nclk')).toBe('none');
+    expect(hostDisplay('nseq')).toBe('none');
+    await run(clock, 800); // ~frame 70: past it
+    expect(hostDisplay('nclk')).toBe('flex');
+    expect(hostDisplay('nseq')).toBe('grid');
+    r.remove();
+  });
+
   it('(heuristic, visibility) with NO marker the hosts are hidden until the entrance-settle heuristic', async () => {
     // No marker → holdEntry is the entranceSettleFrame heuristic (here frame 40 = 800ms, where
     // the entrance opacity reaches its held value). The clock + sequence hosts stay hidden until

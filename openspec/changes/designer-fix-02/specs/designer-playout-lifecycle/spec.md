@@ -42,3 +42,25 @@ SHALL be identical in the canvas preview and the export (one driver).
 - **WHEN** a sequence is infinite (`repeat: 'infinite'`)
 - **THEN** its first item enters with `transitionIn`, it plays no last-item exit, never completes, and
   holds until `stop()`
+
+## ADDED Requirements
+
+### Requirement: A content host is hidden until its own scope's content start, nested ones included
+
+A clock, sequence or ticker HOST SHALL be hidden (`display: none`) until the content-start frame of
+the scope that holds it — its composition's marker, or the entrance-settle heuristic without one —
+and revealed from that frame, so it never shows its frozen static content during an intro. This
+SHALL hold for a host inside a NESTED composition exactly as for one at the root: each scope SHALL
+collect its content hosts through its OWN element map (`B-099`), never the root's, through which a
+nested host is never found and the gate silently applies to nothing.
+
+#### Scenario: A nested clock and sequence wait for their scope's marker
+
+- **WHEN** a composition nested in a template holds a wall clock and a sequence, under a
+  content-start marker at frame 60 of that composition, and the template plays
+- **THEN** both hosts are hidden at frame ~30, and revealed (their natural display) after frame 60
+
+#### Scenario: The root is unchanged
+
+- **WHEN** the clock and sequence sit directly in the template, under a marker at frame 60
+- **THEN** they are hidden before it and revealed after it, as before
