@@ -82,6 +82,16 @@ describe('R-100 — the page store', () => {
     expect(await store.read('e'.repeat(64))).toBeNull();
   });
 
+  it('🔴 a picture’s address changes when its bytes change, and only then — no stale page', async () => {
+    const store = new PageStore(null);
+    const a = await store.put(pngBytes(640, 360, 1), 'page.png');
+    const again = await store.put(pngBytes(640, 360, 1), 'page-copy.png');
+    const edited = await store.put(pngBytes(640, 360, 2), 'page.png'); // same name, new bytes
+    if (!a.ok || !again.ok || !edited.ok) throw new Error('put');
+    expect(store.pathOf(again.page.sha256)).toBe(store.pathOf(a.page.sha256));
+    expect(store.pathOf(edited.page.sha256)).not.toBe(store.pathOf(a.page.sha256));
+  });
+
   it('🔴 a restart re-reads the store from its file names, and keeps every page', async () => {
     const d = tempDir();
     const first = new PageStore(d);

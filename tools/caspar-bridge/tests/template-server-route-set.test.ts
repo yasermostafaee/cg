@@ -181,6 +181,17 @@ describe('REPLY 1 §R3 — the template server hosts exactly three routes', () =
       `/page/${'a'.repeat(64)}.png/extra`,
       `/page/${'b'.repeat(64)}.png`,
       `/page/../template/t1`,
+      // Traversal in every spelling — the route takes a 64-hex name and nothing else, and the
+      // store is looked up by that hash, never by a path the request supplied.
+      '/page/%2e%2e/template/t1',
+      '/page/%2E%2E%2Ftemplate%2Ft1',
+      '/page/..%5ctemplate%5ct1',
+      '/page/..\\template\\t1',
+      '/page/C:/Windows/win.ini',
+      '/page//etc/passwd',
+      `/page/${'a'.repeat(64)}.png%00.html`,
+      `/page/${'A'.repeat(64)}.png`,
+      `/page/${'a'.repeat(63)}.png`,
     ];
     for (const path of forbidden) {
       expect(await probe(port, 'GET', path), `GET ${path} is served by the template origin`).toBe(
@@ -222,6 +233,28 @@ describe('REPLY 1 §R3 — the template server hosts exactly three routes', () =
     expect(got.headers['content-type']).toBe('image/png');
     expect(got.headers['cache-control']).toBe('no-store');
     expect(got.headers['x-content-type-options']).toBe('nosniff');
+  });
+
+  it('🔴 the page route only READS: every other method is refused', async () => {
+    const port = await serve();
+    for (const method of ['HEAD', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']) {
+      expect(await probe(port, method, `/page/${STORED}.png`), method).toBe(404);
+    }
+  });
+
+  it('🔴 the type served is the STORED picture’s own, whatever extension the request names', async () => {
+    // The extension is matched (png | jpg | webp, the allow-list) but never trusted: the store
+    // answers by hash, with the type its own header proved when it was stored.
+    const port = await serve();
+    const type = await new Promise<string | undefined>((resolve, reject) => {
+      http
+        .get({ host: '127.0.0.1', port, path: `/page/${STORED}.jpg` }, (res) => {
+          res.resume();
+          resolve(res.headers['content-type']);
+        })
+        .on('error', reject);
+    });
+    expect(type).toBe('image/png');
   });
 
   it('a template cannot reach the control socket — it is a different origin', () => {
