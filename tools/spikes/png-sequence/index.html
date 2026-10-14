@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>png-sequence spike</title>
+  </head>
+  <body>
+    <h1>PNG sequence → VP8+alpha WebM (ffmpeg.wasm, WORKERFS blobs)</h1>
+    <input id="frames" type="file" multiple />
+    <label>fps <input id="fps" type="number" value="50" /></label>
+    <label><input id="copy" type="checkbox" /> copy frames into MEMFS (the comparison)</label>
+    <button id="run" type="button">Convert</button>
+    <pre id="log"></pre>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
