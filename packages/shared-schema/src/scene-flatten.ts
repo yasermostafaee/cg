@@ -614,3 +614,40 @@ export function liveSourcesInStampedScopes(scene: Scene): StampedLiveSource[] {
   for (const layer of scene.layers) walk(layer.children, 0, new Set<string>());
   return found;
 }
+
+// ───────────────── ONE SOURCE, SEVERAL PLATES: `B-148` ─────────────────
+
+/** One source id that more than one rendered plate names. */
+export interface SharedPlateSource {
+  readonly sourceId: string;
+  /** Every rendered copy that names it, in document order — always two or more. */
+  readonly plates: readonly FlatElement[];
+}
+
+/**
+ * 🔴 **`B-148` — every source id that more than one RENDERED plate names.**
+ *
+ * Counted over rendered COPIES ({@link FlatElement}), never over authored elements, and that is
+ * the whole defect: one box composition instanced twice is ONE authored plate and TWO copies, and
+ * the copies are what `collectLiveSources` declares — two declarations with the same `elementId`
+ * AND the same `sourceId`, which the bridge keys to one live layer and cannot tell apart. Two
+ * separate plates set to one source are the same collision through the other door.
+ *
+ * ⚠ **Not scoped to looks — the caller decides which copies are on air together.** Without a
+ * look group every plate is, so every group returned here is a refusal. With one,
+ * `look-source-duplicate` judges per look, because the same source in DIFFERENT looks is
+ * legitimate there.
+ */
+export function platesSharingASource(scene: Scene): SharedPlateSource[] {
+  const bySource = new Map<string, FlatElement[]>();
+  for (const f of flattenElements(scene, 'document')) {
+    const el = f.element;
+    if (el.type !== 'video-placeholder' || el.routeKey === undefined) continue;
+    const list = bySource.get(el.routeKey);
+    if (list === undefined) bySource.set(el.routeKey, [f]);
+    else list.push(f);
+  }
+  return [...bySource]
+    .filter(([, plates]) => plates.length > 1)
+    .map(([sourceId, plates]) => ({ sourceId, plates }));
+}

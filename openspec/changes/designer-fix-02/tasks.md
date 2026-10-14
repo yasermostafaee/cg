@@ -2,8 +2,9 @@
 
 ## 1. Refuse what cannot work (FULL)
 
-- [ ] 1.1 `B-148` groupless duplicate box composition refused at export, both copies named; `look-carrier.test.ts`
-      pin changed.
+- [x] 1.1 `B-148` groupless duplicate box composition refused at export, both copies named; `look-carrier.test.ts`
+      pin changed. `live-source-repeated`, read from `platesSharingASource`; separate plates on one source
+      refused alike; each copy marked.
 - [ ] 1.2 `B-128` separator picker images only; a saved font / video separator repaired on open, told once.
 - [ ] 1.3 `B-106` repeater `maxItems` in the row editor and at play.
 - [ ] 1.4 `B-249` per-composition export writes no dangling `entryCompositionId`.

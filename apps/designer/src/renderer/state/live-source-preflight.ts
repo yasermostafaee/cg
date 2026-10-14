@@ -13,6 +13,7 @@ import {
   lessThanBeyondNoise,
   liveSourcesInStampedScopes,
   lookContaining,
+  platesSharingASource,
   resolveVisibilityOf,
 } from '@cg/shared-schema';
 import { arrangementViewOf, boxInstanceIds } from './slices/arrangements.js';
@@ -231,6 +232,10 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
       elementId: stamped.element.id,
     });
   }
+  // 🔴 `B-148` — ONE SOURCE ON SEVERAL PLATES, in a template WITHOUT looks: every plate there is
+  // on air at once, so two of them on one source are two frames fighting over one live layer.
+  // With a look group `look-source-duplicate` (below) judges the same thing per look instead.
+  if ((scene.lookGroups ?? []).length === 0) issues.push(...repeatedSourceIssues(scene));
   const docs: { layers: readonly Layer[]; width: number; height: number; where: string }[] = [
     {
       layers: scene.layers,
@@ -626,6 +631,94 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
   }
   issues.push(...nearMissIssues(scene));
   return issues;
+}
+
+/**
+ * 🔴 **`B-148` — the same source on more than one plate, refused, naming every COPY.**
+ *
+ * The obvious way to author a multi-box template is one box composition instanced N times, and
+ * it exports N declarations that are identical in both identity fields: the boxes fight over one
+ * live layer, one gets the picture and the rest stay empty, and the export used to say nothing.
+ * Two separate plates set to one source are the same collision, so they are refused alike.
+ *
+ * ⚠ **The code is `live-source-repeated`, NOT `live-source-duplicate`.** That one is the BRIDGE's
+ * (`caspar-runtime.ts`, a binding change that would put one input in two frames of a look) —
+ * another actor, another moment, another remedy, and the `live-source-unset` note above says why
+ * two subsystems must not share a code.
+ *
+ * Each copy is named where the author made it a copy: the first level of its instance path that
+ * no other copy shares. Two instances of one box composition are therefore named by their
+ * INSTANCES (the plate inside is one authored element, so its own name tells them apart not at
+ * all), and two separate plates by the plates. Each issue points at that element, so the canvas
+ * marks every copy rather than one of them twice.
+ */
+function repeatedSourceIssues(scene: Scene): ExportIssue[] {
+  const shared = platesSharingASource(scene);
+  if (shared.length === 0) return [];
+  const byKey = new Map(flattenElements(scene, 'document').map((f) => [f.key, f]));
+  const compositionName = (id: string): string | undefined =>
+    (scene.compositions ?? []).find((c) => c.id === id)?.name;
+
+  const out: ExportIssue[] = [];
+  for (const { sourceId, plates } of shared) {
+    const handleOf = (plate: FlatElement): FlatElement => {
+      const segments = plate.key.split('/');
+      for (let i = 0; i < segments.length; i++) {
+        const prefix = segments.slice(0, i + 1).join('/');
+        const unshared = plates.every(
+          (other) =>
+            other === plate || !(other.key === prefix || other.key.startsWith(`${prefix}/`)),
+        );
+        if (unshared) return byKey.get(prefix) ?? plate;
+      }
+      return plate;
+    };
+    const handles = plates.map(handleOf);
+    const refOf = (h: FlatElement): string => {
+      if (h.element.type === 'video-placeholder') {
+        return plateRef(h.element, {
+          minX: h.rect.x,
+          minY: h.rect.y,
+          maxX: h.rect.x + h.rect.width,
+          maxY: h.rect.y + h.rect.height,
+        });
+      }
+      const name = h.element.name.trim();
+      return name !== ''
+        ? `"${name}"`
+        : `the copy at (${String(Math.round(h.rect.x))}, ${String(Math.round(h.rect.y))})`;
+    };
+    const refs = handles.map(refOf);
+    const list =
+      refs.length === 2
+        ? `${refs[0] ?? ''} and ${refs[1] ?? ''}`
+        : `${refs.slice(0, -1).join(', ')} and ${refs[refs.length - 1] ?? ''}`;
+    const compIds = new Set(
+      handles.map((h) => (h.element.type === 'composition' ? h.element.compositionId : null)),
+    );
+    const [onlyComp] = [...compIds];
+    const copiesOf =
+      compIds.size === 1 && typeof onlyComp === 'string'
+        ? `, copies of composition "${compositionName(onlyComp) ?? onlyComp}"`
+        : '';
+    const remedy =
+      copiesOf === ''
+        ? 'Give each plate its own source id.'
+        : 'Make one composition per box, each plate with its own source id.';
+    const message =
+      `Source "${sourceId}" is shown in ${String(plates.length)} places — ${list}${copiesOf}. ` +
+      `One source is ONE seat, so only one of them can get the picture and the others stay ` +
+      `empty on air. ${remedy}`;
+    for (const h of handles) {
+      out.push({
+        severity: 'error',
+        code: 'live-source-repeated',
+        message,
+        elementId: h.element.id,
+      });
+    }
+  }
+  return out;
 }
 
 /**

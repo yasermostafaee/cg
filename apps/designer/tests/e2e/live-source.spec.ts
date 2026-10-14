@@ -548,8 +548,9 @@ test.describe('Live Source (D-137 phase 1)', () => {
 
       This asserted `['live-1', 'live-2']` on the grounds that "two holes sharing an id
       would map to ONE producer with nothing saying so". That reasoning still holds and is
-      now enforced where it belongs — on ids the author actually chose (`look-source-duplicate`)
-      — rather than by a generator inventing undeclared names nobody had accepted.
+      now enforced where it belongs — on ids the author actually chose (`look-source-duplicate`
+      in a template with looks, `live-source-repeated` without, `B-148`) — rather than by a
+      generator inventing undeclared names nobody had accepted.
 
       Both plates therefore start unassigned, SAY so on their bars, and are refused until the
       author names them. Independence is then asserted on the chosen ids.
@@ -572,6 +573,54 @@ test.describe('Live Source (D-137 phase 1)', () => {
         (await holes(app).locator('[data-cg-live-source-label]').allTextContents()).sort(),
       )
       .toEqual(['guest-1', 'guest-2']);
+    await expect(errorPill(app)).toHaveCount(0);
+  });
+
+  /**
+   * 🔴 `B-148` — ONE source on TWO plates, in a template without looks, blocks the export and
+   * names both. The comment above used to credit `look-source-duplicate` with this, which only
+   * judges a template WITH a look group; here nothing refused it. The composition-copies door
+   * (one box composition instanced twice) is pinned by value in
+   * `repeated-source-preflight.dom.test.ts`; this is the same rule through the real browser.
+   */
+  test('B-148 — one source on TWO plates is refused, both are marked, and a second id clears it', async ({
+    app,
+  }) => {
+    await app.newProject('RepeatedSource');
+    await app.addLiveSource({ x: 120, y: 100 });
+    await app.addLiveSource({ x: 300, y: 240 });
+    await expect(holes(app)).toHaveCount(2);
+    const ids = await holes(app).evaluateAll((nodes) =>
+      nodes.map((n) => n.closest('[data-cg-element-id]')?.getAttribute('data-cg-element-id') ?? ''),
+    );
+    expect(ids.filter((id) => id !== '')).toHaveLength(2);
+    // Separated in SCENE units, as the test above explains, so overlap never enters into it.
+    await app.selectElementById(ids[0]!);
+    await app.setInspectorNumber('X position', 0);
+    await app.setInspectorNumber('Y position', 0);
+    await app.setLiveSourceId('guest-1');
+    await app.selectElementById(ids[1]!);
+    await app.setInspectorNumber('X position', 1000);
+    await app.setInspectorNumber('Y position', 0);
+    await app.setLiveSourceId('guest-1');
+
+    const marks = app.page.locator('[data-testid^="canvas-error-mark-"]');
+    await expect(marks).toHaveCount(2);
+    await expect(marks.first().getByRole('img')).toHaveAttribute(
+      'aria-label',
+      /Source "guest-1" is shown in 2 places/,
+    );
+    const exportBtn = app.page.getByRole('button', { name: 'Export .vcg' });
+    await expect(exportBtn).toHaveAttribute('data-export-blocked', 'errors');
+    await openIssues(app);
+    await expect(issueRows(app, /is shown in 2 places/)).toHaveCount(2);
+    await app.page.keyboard.press('Escape');
+    await expect(issuesModal(app)).toHaveCount(0);
+
+    // The author's next move, as the sentence names it: give the second plate its own id.
+    await app.selectElementById(ids[1]!);
+    await app.setLiveSourceId('guest-2');
+    await expect(marks).toHaveCount(0);
     await expect(errorPill(app)).toHaveCount(0);
   });
 });

@@ -2358,7 +2358,17 @@ beside a working one is how the next author picks the dead one.
   [[R-057]] (the operator half), [[B-146]] (the same class — a control that silently does nothing),
   [[D-060]] (`fitMode: 'autosize'`, the one that IS implemented).
 
-## [ ] B-148 — instancing ONE box composition twice exports TWO declarations with the SAME `elementId` and `sourceId`: the boxes fight over one live layer, and nothing refuses it ⟨priority: high — a template that exports clean and cannot work⟩
+## [~] B-148 — instancing ONE box composition twice exports TWO declarations with the SAME `elementId` and `sourceId`: the boxes fight over one live layer, and nothing refuses it ⟨priority: high — a template that exports clean and cannot work⟩ — `openspec/changes/designer-fix-02/`
+
+— **Closed in code (DESIGNER-FIX-02), shape 1 (REFUSE):** in a template without a look group, more
+than one rendered plate on one source id is refused at export as `live-source-repeated` (not the
+bridge's `live-source-duplicate`), naming every copy — instances by their names, the composition
+they copy, and the remedy — and marking each copy on the canvas. Two separate plates on one source
+are refused alike. The predicate is `platesSharingASource` (`@cg/shared-schema`, beside the
+stamped-scope one); the `look-carrier.test.ts` pin that recorded the hazard as shipped now asserts
+the predicate finds the pair. Tests: `repeated-source-preflight.dom.test.ts`,
+`plates-sharing-a-source.test.ts`, e2e `live-source.spec.ts` › "B-148 — one source on TWO plates is
+refused…". Shape 2 (carry the instance path) stays `multibox-layout-switch` work.
 
 **What:** a multi-box template authored the obvious way — one `box` composition, instanced N times —
 produces N Live Source declarations that are **identical in both identity fields**. The bridge keys

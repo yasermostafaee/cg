@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Element, Scene } from '@cg/shared-schema';
+import { platesSharingASource, type Element, type Scene } from '@cg/shared-schema';
 import { buildTemplateLiveSources, collectLookCarrier } from '../src/live-sources.js';
 
 /**
@@ -527,16 +527,32 @@ describe('buildTemplateLiveSources — the assembly, and the coexistence control
     const s = scene({
       rootChildren: [
         plate('p-1', 'guest-1', 0, 0, 640, 360),
-        plate('p-2', 'guest-1', 960, 0, 640, 360),
+        plate('p-2', 'guest-2', 960, 0, 640, 360),
       ],
       compositions: [],
     });
     const block = buildTemplateLiveSources(s);
-    // Two elements, same routeKey ⇒ TWO declarations: exactly the shipped behaviour (the
-    // B-148 hazard), untouched for templates that have no multi-frame group.
-    expect(block.sources).toHaveLength(2);
+    // One declaration per plate, no looks: the legacy path, untouched.
+    expect(block.sources.map((d) => d.sourceId)).toEqual(['guest-1', 'guest-2']);
     expect(block.looks).toBeUndefined();
     expect(block.defaultLookId).toBeUndefined();
+  });
+
+  it('🔴 `B-148` — WITHOUT a group, two plates on ONE source never reach this carrier: export refuses them', () => {
+    // This pin used to record the hazard as shipped: two elements on `guest-1` ⇒ two
+    // declarations the bridge keys to ONE live layer. The carrier still emits per plate; what
+    // changed is that such a scene is refused at export (`live-source-repeated`, the Designer
+    // preflight), which reads THIS predicate — so the pair is asserted to be found by it.
+    const s = scene({
+      rootChildren: [
+        plate('p-1', 'guest-1', 0, 0, 640, 360),
+        plate('p-2', 'guest-1', 960, 0, 640, 360),
+      ],
+      compositions: [],
+    });
+    expect(platesSharingASource(s).map((g) => [g.sourceId, g.plates.map((p) => p.key)])).toEqual([
+      ['guest-1', ['p-1', 'p-2']],
+    ]);
   });
 });
 
