@@ -56,14 +56,25 @@ function migrateTextElement(el: TextElement): TextElement {
   const shrinkOverflow = legacy.overflow === 'shrink';
   if (squeeze === undefined && !shrinkOverflow) return el;
   const askedForFit = squeeze === true || shrinkOverflow;
-  const rest = Object.fromEntries(
-    Object.entries(legacy).filter(([key]) => key !== 'autoSqueeze'),
-  ) as TextElement;
+  const rest = withoutKeys(legacy, ['autoSqueeze']) as TextElement;
   return {
     ...rest,
     fitMode: askedForFit && el.fitMode === 'fixed' ? 'shrink-to-fit' : el.fitMode,
     overflow: shrinkOverflow ? 'clip' : el.overflow,
   } as TextElement;
+}
+
+/**
+ * A shallow copy of `obj` without `keys`. ⚠ Not `Object.fromEntries`: these migrations run INSIDE
+ * the on-air page (`createRuntime` → `migrateScene`), and `Object.fromEntries` is Chromium 73 —
+ * past the CasparCG CEF floor of 71 (`single-file-export`'s `cef-compat.test.ts` refuses it).
+ */
+function withoutKeys(obj: object, keys: readonly string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(obj)) {
+    if (!keys.includes(key)) out[key] = (obj as Record<string, unknown>)[key];
+  }
+  return out;
 }
 
 /** Map every element of the scene (root, compositions, containers), preserving identity. */
