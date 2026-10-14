@@ -75,6 +75,8 @@
       API: CG Control 343 passed / 2 skipped, Designer 310 passed / 13 skipped (the guide-shots and
       arrangements skips that were there before), and every new spec among the PASSED —
       `book-pages.spec.ts` ×2, `sequence-pages.spec.ts` ×7.
-- [ ] 5.5 The commits made after that push — `ee5961df` (the transition-time field), `a2b191f9`
+- [x] 5.5 The commits made after that push — `ee5961df` (the transition-time field), `a2b191f9`
       (the page route's boundary tests), `54626658` (comments) — ride the next push; its run is
-      cited here.
+      cited here. Pushed `016e1408..4b06c4fa`: **https://github.com/yasermostafaee/cg/actions/runs/38599224954**
+      — `ci` and `e2e` both RAN on `4b06c4fa`, `success` (job log: Designer 312 passed / 1 flaky /
+      13 skipped, CG Control 343 passed / 2 skipped; `sequence-pages.spec.ts` among the passed).

@@ -45,4 +45,10 @@
 
 ## 6. Verification
 
-- [ ] 6.1 Full gate; push; a Linux `e2e` that RAN, cited here.
+- [x] 6.1 Full gate; push; a Linux `e2e` that RAN, cited here. Pre-push gate 99/99; pushed
+      `016e1408..4b06c4fa`. **https://github.com/yasermostafaee/cg/actions/runs/38599224954** — `ci` and
+      `e2e` both RAN on `4b06c4fa`, `success`, proved from the job log: Designer 312 passed, 1 flaky
+      (`video-dimensions.spec.ts:188`, not touched here — `barAlpha` 0 on attempt 1, green on retry),
+      13 skipped; CG Control 343 passed, 2 skipped. Every new or changed spec passed first time:
+      `live-source.spec.ts` (B-148, B-187), `sequence-composition-item-fields.spec.ts` (R-037),
+      `video-missing-still.spec.ts` (B-138).
