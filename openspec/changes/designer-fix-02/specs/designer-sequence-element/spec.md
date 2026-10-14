@@ -86,3 +86,57 @@ The Designer SHALL provide a Sequence tool and an inspector section editing the 
 
 - **WHEN** a sequence is inspected
 - **THEN** it shows text controls (font, colour incl. gradient, Text Shadow) but NO background, box padding, border-radius, or stroke/path-style controls (D-056)
+
+### Requirement: A non-list-bound sequence exposes per-item operator fields (text AND composition)
+
+When a sequence's ITEM-LIST is NOT data-bound, its items SHALL contribute operator-editable
+field(s) to the data form, NAMESPACED per item, reusing the D-025 instance-namespacing (no new data
+model). A COMPOSITION item SHALL contribute its referenced composition's fields as a group. A TEXT
+item SHALL contribute a field only when the designer bound it explicitly (its per-item data key);
+an unbound text item is static design-time content and contributes nothing (the D-083 follow-up,
+which this text now states — it used to say every item contributes). A composition item's group
+SHALL be DISPLAYED as `<composition> — item N` — the item's COMPOSITION's authored name and its
+1-based position (`R-037`, the owner's decision 2026-10-14, Q22 (a); it used to be the sequence
+element's name, an internal label such as `ROTATOR`) — and, ONLY when two headings at one level
+would otherwise read the same, followed by ` · <stub>`: the sequence's name when the colliding
+sequences' names differ, else a short stub of its id (`R-040`). The heading SHALL also be carried as
+its parts, so CG Control's Inspector and the Designer's preview form render each name in its own
+`<bdi>` with `— item N` as chrome (golden rule 11); the GDD carries the joined text. Each group
+SHALL be KEYED by a stable, parent-unique id-based value (so two same-named sequences never collide
+and a rename never orphans values), and lives under the item's own scope path (a sequence nested in
+a composition instance reads its correctly-scoped sub-object). Setting a field SHALL update that
+item in the preview — a bound text item's text directly, a composition item's content via the
+existing composition-field mechanism — applied when the item renders and re-applied live on
+`update()`. To avoid double-exposure, a LIST-BOUND sequence SHALL expose NO per-item fields (the
+bound list owns the items; the list editor with the dwell column is unchanged).
+
+#### Scenario: A non-bound mixed sequence exposes its composition item, named for the composition
+
+- **WHEN** a sequence named `Now/Next` is NOT list-bound and has an unbound text item and, at
+  position 2, an item of composition `card`
+- **THEN** the data form shows NO field for the text item, and the composition item's fields under
+  the heading `card — item 2` (keyed stably so same-named sequences don't collide)
+
+#### Scenario: Two headings that would collide are told apart
+
+- **WHEN** two sequences each show composition `card` at position 1
+- **THEN** their headings read `card — item 1 · <sequence name>` when the sequences' names differ,
+  and `card — item 1 · <id stub>` when they do not; with no collision no stub is shown
+
+#### Scenario: Each name is isolated
+
+- **WHEN** the composition's name is Persian and a stub is shown
+- **THEN** CG Control's Inspector and the Designer's preview form render the name and the stub each
+  in its own `<bdi>`, and `— item N` outside them
+
+#### Scenario: Setting a per-item field updates the right item
+
+- **WHEN** the operator sets a bound text item's field or a composition item's field
+- **THEN** that item updates in the preview — the text item's text directly, the composition item's
+  content via the composition-field mechanism — at render and live on `update()`
+
+#### Scenario: A list-bound sequence exposes no per-item fields
+
+- **WHEN** a sequence's item-list IS data-bound
+- **THEN** no per-item fields are exposed (the bound list drives the items via the existing list
+  editor); per-item exposure resumes if the binding is removed

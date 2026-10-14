@@ -4,6 +4,8 @@ import type { FieldBinding } from './bindings.js';
 import type { Element } from './elements.js';
 import type { Composition, Layer, Scene } from './scene.js';
 
+type SequenceElement = Extract<Element, { type: 'sequence' }>;
+
 /**
  * D-025 — instance-scoped field namespacing for nested compositions (Option C).
  *
@@ -41,10 +43,31 @@ export interface CompositionFieldGroup {
    * `TemplateInfo`), whose `.optional()` models an absent key as `string | undefined`.
    */
   label?: string | undefined;
+  /**
+   * `R-037` / `R-040` — a sequence composition item's heading as its PARTS, so a surface can put
+   * each NAME in its own `<bdi>` (golden rule 11): a Persian composition name and the LTR
+   * `— item N` joined into one text node are ordered by the bidi algorithm, not by us. Absent for
+   * a `composition` instance (its {@link label} is one name) and on a template imported before
+   * this existed, which then falls back to {@link label}.
+   */
+  labelParts?: GroupLabelParts | undefined;
   /** The referenced child composition id. */
   compositionId: string;
   /** The child's own aggregate (recursive — arbitrary depth). */
   aggregate: AggregatedFields;
+}
+
+/** `R-037` / `R-040` — the parts of a sequence item's heading; {@link sequenceItemHeading} joins them. */
+export interface GroupLabelParts {
+  /** The item's COMPOSITION's authored name — operator data. */
+  readonly name: string;
+  /** The item's 1-based position in its sequence. */
+  readonly item: number;
+  /**
+   * `R-040` — present ONLY when two headings at one level would otherwise read the same: the
+   * sequence's name when that tells them apart, else a short stub of its id. Operator data too.
+   */
+  readonly stub?: string | undefined;
 }
 
 /** A composition's own flat fields plus its nested-instance namespaces. */
@@ -85,6 +108,13 @@ export const CompositionFieldGroupSchema: z.ZodType<CompositionFieldGroup, z.Zod
       instanceId: z.string().min(1),
       name: z.string().min(1),
       label: z.string().optional(),
+      labelParts: z
+        .object({
+          name: z.string(),
+          item: z.number().int().positive(),
+          stub: z.string().optional(),
+        })
+        .optional(),
       compositionId: z.string().min(1),
       aggregate: AggregatedFieldsSchema,
     }),
@@ -189,11 +219,23 @@ export function sequenceItemTextFieldIds(
 }
 
 /**
- * D-083 — the friendly DISPLAY label for a composition sequence item's field group: the
- * sequence element's name plus the item's position, e.g. `Now/Next — item 2`. This is
- * shown in the operator Inspector, the designer form + GDD; the stable value KEY is
- * {@link sequenceItemInstanceId} (so two same-named sequences can't collide and a rename
- * never orphans values).
+ * `R-037` / `R-040` (owner, 2026-10-14, Q22 (a)) — the ONE composition of a sequence item's
+ * heading: `<composition> — item N`, and ` · <stub>` only when two would otherwise collide.
+ * The text form, for the GDD and any surface that shows one string; a surface that can isolate
+ * the names renders {@link GroupLabelParts} instead.
+ */
+export function sequenceItemHeading(parts: GroupLabelParts): string {
+  const base = sequenceItemNamespace(parts.name, parts.item - 1);
+  return parts.stub === undefined ? base : `${base} · ${parts.stub}`;
+}
+
+/**
+ * D-083 — the friendly DISPLAY label for a composition sequence item's field group: a name
+ * plus the item's position, e.g. `Card — item 2`. `R-037` — the name is now the item's
+ * COMPOSITION's (what the operator is filling in), no longer the sequence element's (an
+ * internal name like `ROTATOR`, which read as a constant). This is shown in the operator
+ * Inspector, the designer form + GDD; the stable value KEY is {@link sequenceItemInstanceId}
+ * (so two same-named sequences can't collide and a rename never orphans values).
  *
  * WHY IT IS NOT `Now/Next[1]` ANY MORE. Array-index syntax is programmer notation and
  * 0-based, and the operator reading it in the Inspector is neither. `ROTATOR[0]`,
@@ -210,8 +252,8 @@ export function sequenceItemTextFieldIds(
  * 1-BASED, matching the display numbering the rest of the console uses for a
  * human-facing position.
  */
-export function sequenceItemNamespace(sequenceName: string, index: number): string {
-  return `${sequenceName} — item ${String(index + 1)}`;
+export function sequenceItemNamespace(name: string, index: number): string {
+  return `${name} — item ${String(index + 1)}`;
 }
 
 /**
@@ -340,23 +382,65 @@ export function aggregateCompositionFields(
     // owns its items). TEXT items are NOT auto-exposed — operator-editability requires an
     // explicit per-item binding (above), consistent with the rest of the app.
     const bound = listBoundSequenceIds(doc);
+    const itemGroups: { group: CompositionFieldGroup; seq: SequenceElement }[] = [];
     for (const seq of sequencesOf(doc)) {
       if (bound.has(seq.id)) continue;
       seq.items.forEach((item, index) => {
         if (item.kind !== 'composition') return;
         const child = scene.compositions?.find((c) => c.id === item.compositionId);
         if (child === undefined) return;
-        groups.push({
+        // `R-037` — the heading names the COMPOSITION being filled in, never the sequence
+        // element's internal name.
+        const parts: GroupLabelParts = {
+          name: child.name.trim() === '' ? child.id : child.name.trim(),
+          item: index + 1,
+        };
+        const group: CompositionFieldGroup = {
           instanceId: sequenceItemInstanceId(seq.id, item.id),
           name: sequenceItemInstanceId(seq.id, item.id),
-          label: sequenceItemNamespace(seq.name, index),
+          label: sequenceItemHeading(parts),
+          labelParts: parts,
           compositionId: child.id,
           aggregate: aggregateCompositionFields(scene, child, depth + 1),
-        });
+        };
+        groups.push(group);
+        itemGroups.push({ group, seq });
       });
     }
+    disambiguateItemHeadings(itemGroups);
   }
   return { fields, groups };
+}
+
+/**
+ * 🔴 `R-040` — two headings at ONE level that would read the same (two sequences each showing
+ * the same composition at the same position) each get a short stub, and only then — a suffix
+ * on every heading is noise in the common case (the `live-source-multibox` 4d precedent for
+ * same-named templates). The stub is the sequence's name when the colliding sequences' names
+ * differ, else the last four characters of its id. Mutates the groups it is given, in place,
+ * before the aggregate is returned.
+ */
+function disambiguateItemHeadings(
+  entries: readonly { group: CompositionFieldGroup; seq: SequenceElement }[],
+): void {
+  const byLabel = new Map<string, { group: CompositionFieldGroup; seq: SequenceElement }[]>();
+  for (const e of entries) {
+    const key = e.group.label ?? e.group.name;
+    byLabel.set(key, [...(byLabel.get(key) ?? []), e]);
+  }
+  for (const colliding of byLabel.values()) {
+    if (colliding.length < 2) continue;
+    const seqNames = colliding.map((e) => e.seq.name.trim());
+    const namesTell = seqNames.every((n) => n !== '') && new Set(seqNames).size === seqNames.length;
+    for (const [i, e] of colliding.entries()) {
+      const parts = e.group.labelParts;
+      if (parts === undefined) continue;
+      const stub = namesTell ? (seqNames[i] ?? '') : e.seq.id.slice(-4);
+      const next: GroupLabelParts = { ...parts, stub };
+      e.group.labelParts = next;
+      e.group.label = sequenceItemHeading(next);
+    }
+  }
 }
 
 /** The seed value for a single field (mirrors the preview's `seedDefaults`). */

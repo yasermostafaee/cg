@@ -34,7 +34,9 @@ test.describe('Sequence composition-item fields (D-083 correction)', () => {
 
     // The operator's field form surfaces the comp item's field, namespaced per item.
     await app.openPreviewModal();
-    await expect(app.previewDialog.getByText('Sequence — item 1')).toBeVisible();
+    // `R-037` — the heading names the COMPOSITION being filled in, not the sequence element.
+    await expect(app.previewDialog.getByText('LabelCard — item 1')).toBeVisible();
+    await expect(app.previewDialog.getByText('Sequence — item 1')).toHaveCount(0);
     const cityField = app.previewDialog.getByLabel('city');
     await expect(cityField).toBeVisible();
     await cityField.fill('Tehran');
@@ -101,10 +103,11 @@ test.describe('Sequence composition-item fields (D-083 correction)', () => {
 
     await app.openPreviewModal();
     // The composition item's field DOES surface (its group + inner 'city' field)…
-    await expect(app.previewDialog.getByText('Sequence — item 2')).toBeVisible();
+    await expect(app.previewDialog.getByText('ClockCard — item 2')).toBeVisible();
     await expect(app.previewDialog.getByLabel('city')).toBeVisible();
-    // …but the UNBOUND text item (item 1) contributes NOTHING — no auto-exposed field.
-    await expect(app.previewDialog.getByLabel('Sequence — item 1')).toHaveCount(0);
+    // …but the UNBOUND text item (item 1) contributes NOTHING — no auto-exposed field and no
+    // heading for it.
+    await expect(app.previewDialog.getByText(/— item 1\b/)).toHaveCount(0);
     await app.stop();
   });
 

@@ -160,7 +160,10 @@ describe('aggregateCompositionFields (D-025)', () => {
     // The COMPOSITION item is still a group (id-based key, friendly label, its comp's fields).
     expect(agg.groups).toHaveLength(1);
     expect(agg.groups[0]?.name).toBe('seq:c1');
-    expect(agg.groups[0]?.label).toBe('Now/Next — item 2');
+    // `R-037` — the heading names the COMPOSITION being filled in (`card`), not the sequence
+    // element (`Now/Next`), and carries its parts for a surface that isolates the name.
+    expect(agg.groups[0]?.label).toBe('card — item 2');
+    expect(agg.groups[0]?.labelParts).toEqual({ name: 'card', item: 2 });
     expect(agg.groups[0]?.aggregate.fields.map((f) => f.id)).toEqual(['label']);
     // The value object carries ONLY the comp item (no scalar for the unbound text item).
     expect(defaultNestedValues(agg)).toEqual({ 'seq:c1': { label: 'City' } });
@@ -258,14 +261,42 @@ describe('aggregateCompositionFields (D-025)', () => {
     const agg = aggregateCompositionFields(scene, parent);
     // Distinct id-based KEYS even though both sequences share the default name 'Sequence'…
     expect(agg.groups.map((g) => g.name)).toEqual(['s1:a', 's2:b']);
-    // …but the friendly DISPLAY labels still COLLIDE, because the label is built from the
-    // sequence's NAME and both sequences are called 'Sequence'. Asserted so the limit is
-    // recorded rather than assumed away: the operator can only disambiguate these two by
-    // renaming one element. Making sibling labels unique needs a de-dup pass over the
-    // aggregate and is not attempted here (see DEBT.md).
-    expect(agg.groups.map((g) => g.label)).toEqual(['Sequence — item 1', 'Sequence — item 1']);
+    // 🔴 `R-040` — the headings used to COLLIDE ('Sequence — item 1' twice) and the operator
+    // could not tell them apart. Both items show `card` at position 1, so the de-dup pass gives
+    // each a short stub; both sequences are called 'Sequence', so the stub is the id's tail.
+    expect(agg.groups.map((g) => g.label)).toEqual(['card — item 1 · s1', 'card — item 1 · s2']);
+    expect(agg.groups.map((g) => g.labelParts?.stub)).toEqual(['s1', 's2']);
     // No collapse: both namespaces survive in the value object.
     expect(Object.keys(defaultNestedValues(agg))).toEqual(['s1:a', 's2:b']);
+  });
+
+  it('🔴 R-040 — colliding headings are told apart by the SEQUENCE NAME when the names differ', () => {
+    const card = comp({ id: 'card', fields: [textField('label')] });
+    const s1 = sequenceEl('s1', 'Morning', [
+      { id: 'a', kind: 'composition', compositionId: 'card' },
+    ]);
+    const s2 = sequenceEl('s2', 'Evening', [
+      { id: 'b', kind: 'composition', compositionId: 'card' },
+    ]);
+    const parent = comp({ id: 'parent', layers: [layer([s1, s2])] });
+    const scene = { compositions: [card, parent] } as Pick<Scene, 'compositions'>;
+    expect(aggregateCompositionFields(scene, parent).groups.map((g) => g.label)).toEqual([
+      'card — item 1 · Morning',
+      'card — item 1 · Evening',
+    ]);
+  });
+
+  it('R-040 — no stub when nothing collides: the common case carries no suffix', () => {
+    const card = comp({ id: 'card', fields: [textField('label')] });
+    const s1 = sequenceEl('s1', 'Rotator', [
+      { id: 'a', kind: 'composition', compositionId: 'card' },
+      { id: 'b', kind: 'composition', compositionId: 'card' },
+    ]);
+    const parent = comp({ id: 'parent', layers: [layer([s1])] });
+    const scene = { compositions: [card, parent] } as Pick<Scene, 'compositions'>;
+    const groups = aggregateCompositionFields(scene, parent).groups;
+    expect(groups.map((g) => g.label)).toEqual(['card — item 1', 'card — item 2']);
+    expect(groups.every((g) => g.labelParts?.stub === undefined)).toBe(true);
   });
 
   it('(D-083) a sequence comp item inside a composition instance nests under the instance namespace', () => {

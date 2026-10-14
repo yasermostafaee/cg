@@ -6,6 +6,7 @@ import {
   type DynamicField,
   type FieldDigits,
   type FieldValue,
+  type GroupLabelParts,
   type ListItem,
   type NestedFieldValues,
 } from '@cg/shared-schema';
@@ -117,6 +118,7 @@ function AggregateSection({
   onUpdateAll,
   anyPending,
   title,
+  titleParts,
   depth,
   dwellFieldIds,
   columnsByFieldId,
@@ -132,6 +134,8 @@ function AggregateSection({
   onUpdateAll?: (() => void) | undefined;
   anyPending?: boolean | undefined;
   title: string;
+  /** `R-037` / `R-040` — a sequence item's heading as parts, each name in its own `<bdi>`. */
+  titleParts?: GroupLabelParts | undefined;
   depth: number;
   dwellFieldIds?: ReadonlySet<string> | undefined;
   columnsByFieldId?: ReadonlyMap<string, readonly ListItemColumn[]> | undefined;
@@ -145,7 +149,25 @@ function AggregateSection({
   return (
     <div className={depth > 0 ? s.group : undefined}>
       <div className={s.header}>
-        <span className={depth > 0 ? s.groupTitle : s.title}>{title}</span>
+        <span className={depth > 0 ? s.groupTitle : s.title}>
+          {titleParts === undefined ? (
+            title
+          ) : (
+            // `R-037` / `R-040` — the composition name (often Persian) and the stub each in their
+            // own isolate; `— item N` is chrome. Joined into one text node the bidi algorithm
+            // would order the pieces, not this line (golden rule 11).
+            <>
+              <bdi>{titleParts.name}</bdi>
+              {` — item ${String(titleParts.item)}`}
+              {titleParts.stub !== undefined && (
+                <>
+                  {' · '}
+                  <bdi>{titleParts.stub}</bdi>
+                </>
+              )}
+            </>
+          )}
+        </span>
         {aggregate.fields.length > 0 && (
           <span className={s.count}>
             {String(aggregate.fields.length)} field{aggregate.fields.length === 1 ? '' : 's'}
@@ -220,6 +242,7 @@ function AggregateSection({
           onUpdateField={onUpdateField}
           onUpdateItem={onUpdateItem}
           title={g.label ?? g.name}
+          titleParts={g.labelParts}
           depth={depth + 1}
           dwellFieldIds={dwellFieldIds}
           columnsByFieldId={columnsByFieldId}

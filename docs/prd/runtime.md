@@ -1818,9 +1818,18 @@ recorded; the design is authored when the work starts.
 **Notes:** do NOT ship a bare `schemaVersion` and call this done — that is the 10% that would not
 have caught the reported incident. Source: `DEBT.md:195`.
 
-## [ ] R-037 — the sequence item heading is technical, and the fix is a schema decision rather than a restyle ⟨priority: medium⟩
+## [~] R-037 — the sequence item heading is technical, and the fix is a schema decision rather than a restyle ⟨priority: medium⟩ — `openspec/changes/designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q22): **(a)** — sequence-item field headings read "`<composition> — item N`", with a short stub only when two still collide; done together with R-040.
+— **Closed in code (DESIGNER-FIX-02, FULL lane — a `@cg/shared-schema` + GDD + `TemplateInfo` change, so
+NOT the FAST lane the prompt guessed).** `aggregateCompositionFields` labels a composition item
+`<composition> — item N` (`sequenceItemHeading`) and carries `labelParts` (an optional field on
+`CompositionFieldGroupSchema`); CG Control's Inspector and the Designer's preview form render each
+name in its own `<bdi>`; the GDD carries the joined text. The heading's `text-transform: uppercase`
+in CG Control is gone, as this item's note asked. Piece 2 (the `Split on delimiter` row's
+alignment) was not touched. A template must be re-imported (`C-034`) for CG Control to show the new
+heading. Tests: `composition-fields.test.ts`, `inspector.groupHeading.dom.test.ts`, e2e
+`sequence-composition-item-fields.spec.ts`.
 
 **What:** the remainder of `dev-b6-inspector-finish`, which landed seven of nine. Two pieces are
 open and only the first is substantial:
@@ -1902,9 +1911,14 @@ shell or overlay change disturbs silently.
 **Notes:** identified as worth adding at the time and not written. Source: `DEBT.md:1383`, inside
 the owner UI review batch at `DEBT.md:1360`.
 
-## [ ] R-040 — two same-named sequences produce IDENTICAL Inspector headings ⟨priority: low⟩
+## [~] R-040 — two same-named sequences produce IDENTICAL Inspector headings ⟨priority: low⟩ — `openspec/changes/designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q22): **(a)** — sequence-item field headings read "`<composition> — item N`", with a short stub only when two still collide; done together with R-037.
+— **Closed in code (DESIGNER-FIX-02):** a de-dup pass over each level's item headings adds
+` · <stub>` ONLY to headings that would otherwise read the same — the sequence's name when the
+colliding sequences' names differ, else the last four characters of its id. The test that asserted
+the collision (`composition-fields.test.ts`, "TWO same-named sequences") now asserts the
+distinction, as the acceptance asked, plus a sequence-name-stub case and a no-collision case.
 
 **What:** a sequence composition item's display label is built from the sequence ELEMENT's name
 via `sequenceItemNamespace`, so two sequences both called `Sequence`, each with an item at

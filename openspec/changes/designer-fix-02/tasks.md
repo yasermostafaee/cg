@@ -40,7 +40,8 @@
       in Chromium by pixel; ablation reddens the e2e).
 - [x] 5.2 `D-156` Alt bypasses snapping in move, nudge, resize, rotate. Shift removed as a bypass (not
       aliased); `designer-canvas-view` restated; the pending `aspect-lock-live-source` delta corrected.
-- [ ] 5.3 `R-040` + `R-037` `<composition> — item N` headings, stub on collision, `<bdi>`.
+- [x] 5.3 `R-040` + `R-037` `<composition> — item N` headings, stub on collision, `<bdi>`. FULL lane in the
+      event (`@cg/shared-schema` + `TemplateInfo` + GDD), split from the FAST batch and said so.
 
 ## 6. Verification
 

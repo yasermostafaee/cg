@@ -107,10 +107,12 @@ const DEFAULT_COLOR_FIELD_VALUE = '#FFFFFF';
  * `templateId` that separates them is on the heading's `title` attribute, which
  * is to say nowhere an operator looks.
  *
- * ⚠ SAME CLASS, DIFFERENT ROOT CAUSE, and the distinction is the point. R-040 is
+ * ⚠ SAME CLASS, DIFFERENT ROOT CAUSE, and the distinction is the point. R-040 was
  * `sequenceItemNamespace` colliding two same-named sequence ELEMENTS inside ONE
  * template's field tree; this is two same-named TEMPLATES. Neither fix reaches
- * the other, so this one is recorded ON R-040 rather than folded into it.
+ * the other, so this one is recorded ON R-040 rather than folded into it. (R-040 is
+ * fixed in `@cg/shared-schema` by the same shape — a stub only on a collision —
+ * and rendered by {@link GroupHeadingText}.)
  *
  * The stub appears ONLY when it is earning its place — when another template in
  * this browser's registry shares the display name. A suffix on every heading
@@ -294,7 +296,8 @@ const styles = {
     fontWeight: 700,
     color: colors.textMuted,
     letterSpacing: '0.05em',
-    textTransform: 'uppercase' as const,
+    // `R-037` — no `text-transform: uppercase`: it made an authored name (`Rotator`) read as a
+    // system constant (`ROTATOR`), which is the very thing the heading's naming fix removes.
     margin: '0 0 var(--r-space-1)',
   },
   /** `FIELD-FIXES-01` B — a refused take's line, in the error WORD's ink, as the file error is. */
@@ -538,7 +541,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
    *    `@cg/template-runtime` applies each item's own namespace). Removing the grouping
    *    would print the same field label two or three times with no way to tell which
    *    instance is which. Those got a readable label instead — see
-   *    `sequenceItemNamespace`.
+   *    `sequenceItemHeading` (`R-037`: `<composition> — item N`; `R-040`: a stub on a collision).
    */
   const groups = (info?.groups ?? []).filter((g) => aggregateHasFields(g.aggregate));
   // The schema-less fallback (registry doesn't know the template) stays FLAT: with no
@@ -983,6 +986,30 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
 }
 
 /**
+ * 🔴 `R-037` / `R-040` — a group's heading with EACH NAME IN ITS OWN ISOLATE (golden rule 11). A
+ * sequence item reads `<composition> — item N`, plus ` · <stub>` only when two would collide; the
+ * composition name is often Persian and `— item N` is LTR chrome, and joined into one isolate the
+ * bidi algorithm would order them, not this line. A group without parts (a composition instance,
+ * or a template imported before the parts existed) is one name, in one isolate, as before.
+ */
+export function GroupHeadingText({ group }: { group: CompositionFieldGroup }): JSX.Element {
+  const parts = group.labelParts;
+  if (parts === undefined) return <IsolatedName>{group.label ?? group.name}</IsolatedName>;
+  return (
+    <>
+      <IsolatedName>{parts.name}</IsolatedName>
+      {` — item ${String(parts.item)}`}
+      {parts.stub !== undefined && (
+        <>
+          {' · '}
+          <IsolatedName>{parts.stub}</IsolatedName>
+        </>
+      )}
+    </>
+  );
+}
+
+/**
  * B-067 — one nested composition instance's fields, under its namespace.
  *
  * The group's `name` is the STABLE namespace key the value object is addressed by (and the
@@ -1006,7 +1033,7 @@ function FieldGroup({
     <section style={styles.group} aria-label={`${group.label ?? group.name} fields`}>
       {/* Authored too — a composition's label comes from the template package. */}
       <h3 style={styles.groupHeading}>
-        <IsolatedName>{group.label ?? group.name}</IsolatedName>
+        <GroupHeadingText group={group} />
       </h3>
       {group.aggregate.fields.map((f) => (
         <FieldEditor
