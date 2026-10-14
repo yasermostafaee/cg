@@ -776,6 +776,30 @@ again: a frozen picture with a healthy driver behind it. A rejected `play()` is
 now also reported ONCE per element (latched — the path can be re-entered every
 tick), because swallowing it is what made that failure invisible.
 
+### AudioDriver + the page's sound graph (D-165)
+
+A sound effect authored in the template (`type: 'audio'`). The scene builder emits a never-painted
+`<audio data-cg-element-id data-cg-asset-id>` INTO the scope's tree — so the look park's membership
+test and the hosts' asset-URL walks reach it — and `createRuntime` attaches an `AudioDriver`
+(`audio-driver.ts`) for each VISIBLE one. Two halves, kept apart:
+
+- **WHEN — `AudioDriver`.** The content-driver calls (`reset`/`start`/`pause`/`resume`/`stop`/
+  `destroy`/`playOutro`) and NO hold array: a sound never gates a hold. `start` = `entrance` plays at
+  `play()`; `time` arms `ms` on the injected clock (a pause holds the countdown); `exit` joins the
+  scope's element-outro list, and its `playOutro()` starts the sound and RESOLVES AT ONCE, because
+  element outros are awaited before the template's exit animation. The settle's `stop()` silences an
+  entrance or timed sound but lets an exit sound finish; `reset()` (a new play) and `destroy()` (the
+  page removed — a hard Clear) silence everything. A scrub (`tick`) touches no sound.
+- **HOW — `audio-graph.ts`.** One `AudioContext` per document, lazily: `<audio>` → the element's
+  GAIN (`volumeDb`, −60…+6, and its fades, `envelopeAt`) → its PARK gain (silenced while its look is
+  hidden) → the page's MASTER gain → output. Web Audio because a media element's `volume` stops at
+  1.0. The master gain is the HOST's switch, exported as `setSoundMuted` on the page's `CG` global:
+  CG Control's PVW calls it on load (silent), the Designer's Preview toggles it. A host without Web
+  Audio (jsdom) gets the element's own `volume` and `muted`, no fades.
+
+On air the page plays the sound itself; nothing is sent to CasparCG for it. Measured on CasparCG
+2.5.0: 0 dB → −6.02 dBFS for a −6.02 dBFS asset, −12 dB → −18.02 (`openspec/changes/add-audio-element`).
+
 ### LottieDriver + the element-outro seam (D-125)
 
 A `lottie` element mounts a `lottie_light` player (`@cg/lottie-bridge`,

@@ -5725,3 +5725,21 @@ continues or cancels; WHEN a folder holds `a_*` and `b_*` THEN the modal lists b
 the same folder is imported twice with the same rate and crop THEN the second skips the encode; WHEN the author cancels
 THEN the project is unchanged; WHEN the imported element is on the timeline THEN it behaves as any video (phases, hold,
 scrub); WHEN its alpha ramp is shown over black and over white THEN no fringe.
+
+## [~] D-165 — sound effects that play with a template's entrance and exit ⟨priority: high — the owner, 2026-10-14⟩ — FILED 2026-10-14 by `AUDIO-ELEMENT-01` · `openspec/changes/add-audio-element/`
+
+**What:** the author imports SOUNDS (WAV, MP3, OGG, M4A …) into the project — each becomes one 48 kHz stereo 16-bit WAV,
+its length and peak (dBFS) measured and shown, never normalised — and places one as an `audio` element: no box on the
+canvas, its own Inspector section, starting at the graphic's ENTRANCE, a TIME after it, or its EXIT, with a volume
+(−60…+6 dB) and optional fades. The template page plays it on air; CG Bridge sends nothing new. It plays once per
+occurrence, never loops, never drives a hold; an exit sound is not cut by its exit; a hard Clear plays nothing. The
+Designer's Preview plays it (a Sound switch, on by default); CG Control's PVW is silent; a CG Control row whose template
+makes sound shows a speaker mark. **Why (the owner, 2026-10-14):** _"We also need sound import, mostly for effects between
+templates."_ **Measured first (§0, the change's design.md):** CasparCG 2.5.0 plays a template page's own sound — its own
+channel meter read −6.02 dBFS for a −6.02 dBFS tone, with no flag and no gesture; the page layer is muted before every
+`CG ADD` and raised at the take before `CG PLAY`, so a sound is heard from the take and never while cued. **Acceptance:**
+WHEN a WAV, MP3, OGG and M4A are imported THEN four 48 kHz stereo WAVs, each with its length and peak (a mono sound at its
+own level); WHEN a sound is dropped on the canvas THEN one `audio` element with no box and a Sound section; WHEN the
+template is taken THEN an entrance sound plays, a timed one at its moment, an exit sound only at the stop; WHEN it is
+cleared without a stop THEN no sound; WHEN played at −12 dB on CasparCG THEN the channel reads 12 dB below 0 dB; WHEN
+rehearsed in CG Control THEN silence; WHEN exported THEN the `.vcg` and the single file carry the WAV.

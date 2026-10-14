@@ -3406,3 +3406,12 @@ and remote-tracking refs after `git fetch` returned nothing; control: the same s
 refs); no stash.
 
 ⇒ **Next free after this entry is `B-344`**, **`D-165`**, **`P-068`**, **`R-101`** and **`C-049`**.
+
+### 2026-10-14 — `AUDIO-ELEMENT-01` takes `D-165`
+
+- `D-165` — sound effects that play with a template's entrance and exit — [designer.md](designer.md).
+
+Measured free before use: `git grep -h -e "## \[.\] D-165" <ref> -- docs/prd` on all 9 local and remote-tracking refs
+returned nothing; control: the same sweep found `D-164` (on 2 refs); no stash.
+
+⇒ **Next free after this entry is `B-344`**, **`D-166`**, **`P-068`**, **`R-101`** and **`C-049`**.
