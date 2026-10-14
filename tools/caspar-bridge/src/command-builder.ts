@@ -25,7 +25,7 @@ export interface TakeControl {
   readonly take: string;
   readonly look?: string;
   readonly timing?: CgPassTiming;
-  /** `R-100` — the page a row's page list is on, with that page's picture when it needs one. */
+  /** `R-100` — the page a row's page list is on, naming that page's picture by address when it needs one. */
   readonly page?: CgPage;
 }
 

@@ -5991,8 +5991,8 @@ export class CasparRuntime {
 
     // Send the merged field set the Reconciler now holds.
     const merged = this.#reconciler.get(itemId)?.fields ?? fields;
-    // `R-100` — a page on its layer whose book changed is told the page now shown, with its
-    // picture, IN THE SAME COMMAND as the new book: two commands could land apart.
+    // `R-100` — a page on its layer whose book changed is told the page now shown, naming its
+    // picture's address, IN THE SAME COMMAND as the new book: two commands could land apart.
     const pageTurn =
       touchedPages === undefined ? undefined : await this.#pageTurnFor(itemId, touchedPages);
     this.#armExpiry(seq);
@@ -6130,8 +6130,8 @@ export class CasparRuntime {
   /**
    * `R-100` — **STORE ONE PICTURE of a book an operator is loading.** The bytes are checked from
    * themselves (a PNG, JPEG or WebP within the limits) and stored once by their SHA-256, which the
-   * console then names in the row's page list. Nothing reaches CasparCG: a picture travels to a
-   * page only inside the take or the page turn that shows it.
+   * console then names in the row's page list. Nothing is sent to CasparCG: a take or a page turn
+   * names the picture's address, and CasparCG fetches it from the template server's page route.
    */
   async putPage(
     name: string,
@@ -6159,8 +6159,8 @@ export class CasparRuntime {
    * `R-100` — **TURN A ROW'S BOOK: Next, Previous, or Go to page N.**
    *
    * The bridge owns the page number ({@link pageTarget}: a book stops at its ends, a wrapping list
-   * wraps) and tells a page that is ON ITS LAYER the absolute page in ONE `CG UPDATE`, carrying that
-   * page's picture when it is an operator page. A row with no page on its layer changes state only
+   * wraps) and tells a page that is ON ITS LAYER the absolute page in ONE `CG UPDATE`, naming that
+   * page's picture by its address when it is an operator page (never its bytes). A row with no page on its layer changes state only
    * and sends nothing; the next take carries the page (`#pageControl`). No `PLAY`, ever.
    */
   async pageItem(
@@ -6321,8 +6321,8 @@ export class CasparRuntime {
   }
 
   /**
-   * `R-100` — what a TAKE tells its page about its book: the first page list's current page, with
-   * that page's picture. Empty for a template with no page list, so every other template's take
+   * `R-100` — what a TAKE tells its page about its book: the first page list's current page, naming
+   * that page's picture by its address. Empty for a template with no page list, so every other template's take
    * puts exactly the bytes on the wire it always did.
    */
   async #pageControl(itemId: string, templateId: string | undefined): Promise<{ page?: CgPage }> {
@@ -6401,7 +6401,7 @@ export class CasparRuntime {
     return touched;
   }
 
-  /** The page turn that tells an on-air page its book changed: the page now shown, with its picture. */
+  /** The page turn that tells an on-air page its book changed: the page now shown, and its picture's address. */
   async #pageTurnFor(itemId: string, fieldId: string): Promise<CgPage | undefined> {
     const list = this.#pageList(itemId, this.#reconciler.get(itemId)?.templateId, fieldId);
     if (list === undefined || list.items.length === 0) return undefined;
@@ -16521,7 +16521,7 @@ export class CasparRuntime {
       page's token could report a run that is already over.
     */
     // `LOGO-LOOP-01` — built by the one helper the resident route's tell uses too.
-    // `R-100` — and the row's page, with its picture: a rebuilt page opens on the page it was on.
+    // `R-100` — and the row's page, naming its picture: a rebuilt page opens on the page it was on.
     const control: CgControl = {
       ...this.#takeControl(itemId, templateId),
       ...(await this.#pageControl(itemId, templateId)),

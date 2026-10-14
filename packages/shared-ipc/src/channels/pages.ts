@@ -38,8 +38,9 @@ export const PagesPutChannel = defineChannel(
  * bridge's after it receives (a console of another build is not trusted to have checked).
  *
  * Measured on the owner's CasparCG 2.5.0 (`add-image-pages/design.md` §0.4): a 1 MB page is shown
- * ~0.1 s after the press. Every page also crosses AMCP inline, and CasparCG logs each command in
- * full, so the byte cap is the cost of ONE page turn in that log.
+ * ~0.1 s after the press. A page turn now NAMES its picture (`/page/<sha256>.<ext>`, fetched from the
+ * template server) — it no longer crosses AMCP inline, because CasparCG 2.5.0 keeps ~2.6× every
+ * `CG UPDATE`'s bytes in memory — so the byte cap bounds the store and each fetch, not the log.
  */
 export const PAGE_MAX_BYTES = 4 * 1024 * 1024;
 /** 3840 × 2160 — a UHD frame, more than any channel this product drives shows. */
