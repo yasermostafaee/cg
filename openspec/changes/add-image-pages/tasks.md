@@ -69,4 +69,12 @@
       twice — main process 826.0 → 827.6 MB then 775.8, renderer flat; **0 blank frames** in 3,159
       recorded on-air frames at Cut, and at Crossfade 0 blank and no darker frame in 2,484
       (design.md §0.4).
-- [ ] 5.4 Full gate; push; a Linux `e2e` that RAN, cited here by run URL.
+- [x] 5.4 Full gate; push; a Linux `e2e` that RAN, cited here by run URL. Pre-push gate 99/99;
+      pushed `c03e9458..016e1408`. **https://github.com/yasermostafaee/cg/actions/runs/38581006283**
+      — `ci` and `e2e` both RAN on `016e1408`, `success`; proved from the job log, not the jobs
+      API: CG Control 343 passed / 2 skipped, Designer 310 passed / 13 skipped (the guide-shots and
+      arrangements skips that were there before), and every new spec among the PASSED —
+      `book-pages.spec.ts` ×2, `sequence-pages.spec.ts` ×7.
+- [ ] 5.5 The commits made after that push — `ee5961df` (the transition-time field), `a2b191f9`
+      (the page route's boundary tests), `54626658` (comments) — ride the next push; its run is
+      cited here.
