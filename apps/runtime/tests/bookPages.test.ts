@@ -80,7 +80,7 @@ describe('R-100 — bookOf, the one reading of a row’s book', () => {
 describe('R-100 — test mode turns a book with the bridge’s rules', () => {
   async function mockWithBook(count: number): Promise<{ mock: MockRuntime; shas: string[] }> {
     const mock = new MockRuntime();
-    mock.templateImport(BOOK, '<html></html>');
+    mock.templateImport(BOOK);
     const shas: string[] = [];
     for (let i = 0; i < count; i += 1) {
       const put = await mock.putPage(`page${String(i + 1)}.png`, png(1920, 1080, i));
