@@ -38,6 +38,31 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
     await expect(app.inspector.getByLabel('out', { exact: true })).toHaveValue('none');
   });
 
+  test('🔴 the pages RENDER — on the canvas and in Preview, with the Assets panel closed', async ({
+    app,
+  }) => {
+    // The owner's report: `missing image` on both, because only the Assets panel primed new assets.
+    await app.newProject('BookRender');
+    await app.addSequence({ x: 200, y: 200 });
+    const chooser = app.page.waitForEvent('filechooser');
+    await app.inspector.getByRole('button', { name: 'Add pictures…', exact: true }).click();
+    await (
+      await chooser
+    ).setFiles(
+      ['p1.png', 'p2.png'].map((name) => ({ name, mimeType: 'image/png', buffer: png(name) })),
+    );
+    await expect(app.inspector.getByTestId('sequence-page-count')).toHaveText('2 pages');
+    // A real picture's blob URL — not the placeholder's `data:image/svg+xml`.
+    await expect(app.canvasFrame.locator('img[data-cg-asset-id]').first()).toHaveAttribute(
+      'src',
+      /^blob:/,
+    );
+    await app.openPreviewModal();
+    await expect(
+      app.previewDialog.frameLocator('iframe').locator('img[data-cg-asset-id]').first(),
+    ).toHaveAttribute('src', /^blob:/);
+  });
+
   test('🔴 the preview’s six playout commands all sit inside the panel — Next is not pushed off', async ({
     app,
   }) => {

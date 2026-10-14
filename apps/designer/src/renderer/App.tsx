@@ -16,7 +16,10 @@ import { TopToolbar } from './features/shell/TopToolbar.js';
 import { TransportBar } from './features/shell/TransportBar.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { TimelineDock } from './features/timeline/TimelineDock.js';
-import { primeAll as primeAllAssets } from './features/assets/assetUrlCache.js';
+import {
+  prime as primeAsset,
+  primeAll as primeAllAssets,
+} from './features/assets/assetUrlCache.js';
 import { primeAll as primeAllSharedImages } from './features/sharedLibrary/sharedImageUrlCache.js';
 import { useIssues } from './hooks/useIssues.js';
 import { designerStore, editSceneOf, shallowEqual, useDesignerSelector } from './state/store.js';
@@ -255,6 +258,10 @@ export function App(): JSX.Element {
     if (activeSceneId === null) return;
     void primeAllAssets();
   }, [activeSceneId]);
+  // `D-163` — and every NEW asset primes itself, whichever left panel is open. Only the Assets
+  // panel's own hook subscribed before, so pictures added from the Inspector (a book's pages)
+  // rendered `missing image` on the canvas and in Preview while that panel was closed.
+  useEffect(() => window.cg.assets.onImported((asset) => void primeAsset(asset)), []);
 
   // D-040 — the shared image library is project-independent, so prime its blob
   // URLs once on mount; logos then render on the canvas regardless of which
