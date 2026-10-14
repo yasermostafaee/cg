@@ -115,3 +115,21 @@ legitimate. The code SHALL NOT be the bridge's `live-source-duplicate`.
 
 - **WHEN** two different compositions each hold a plate with its own source id
 - **THEN** nothing is refused, because that is the correct authoring shape
+
+### Requirement: The author picks a plate's poster
+
+The Live Source panel SHALL offer a `poster` picker (`D-137`) over the project's pictures and the
+shared library's, plus "bars" for none, writing the plate's `posterAssetId`, which the canvas and
+Preview draw in place of the bars (authoring only — the output page paints nothing for a plate). A
+font, video or animation SHALL NOT be offered. A stored poster that resolves to neither list SHALL
+be shown as itself, marked missing, never as a different value.
+
+#### Scenario: Picking and clearing a poster
+
+- **WHEN** the author picks a project picture as the poster, then picks "bars"
+- **THEN** the plate's `posterAssetId` is that picture's id, then absent
+
+#### Scenario: Only pictures are offered
+
+- **WHEN** the project holds a picture and a font, and the shared library a logo
+- **THEN** the picker offers "bars", the picture and the logo

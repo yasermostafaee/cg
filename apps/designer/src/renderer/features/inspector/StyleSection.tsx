@@ -77,6 +77,7 @@ import { deriveLookSources, videoFollowClipFacts } from '@cg/shared-schema';
 import { contentStartDefaultFrom } from './content-start-default.js';
 import * as lottieAssetCache from '../assets/lottieAssetCache.js';
 import { useAssetUrl, useAssets } from '../assets/useAssets.js';
+import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { VideoPoster } from '../assets/VideoPoster.js';
 import { posterTimeMs } from '../assets/video-convert-args.js';
 import * as lt from './LottieTiming.css.js';
@@ -801,6 +802,7 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
         />
         <AspectRow element={element} />
         <FitModeRow element={element} />
+        <LivePosterRow element={element} />
         {/*
           ⭐ `DESIGNER-FIX-0905` — the paragraph that stood here is gone, and its sentences
           went three ways. Its CONSTRAINTS ("rotating would slide the picture out", "opacity
@@ -1030,6 +1032,43 @@ function FitModeRow({ element }: { element: VideoPlaceholderElement }): JSX.Elem
  * field forces an author who has never seen the feed into a guess that can refuse a
  * take on air. Absent means no comparison and no refusal.
  */
+/**
+ * ⭐ `D-137` — THE POSTER, at last settable. The runtime has always drawn `posterAssetId` in place
+ * of the bars on the canvas and in Preview (`scene-builder.ts`, authoring only — the output page
+ * paints nothing for a plate), but nothing in the Designer could write it. A picture from the
+ * project or the shared library; "bars" is no poster. A stored id that resolves to neither list
+ * is shown as itself, "(missing)", so the control never shows a value the scene does not hold.
+ */
+function LivePosterRow({ element }: { element: VideoPlaceholderElement }): JSX.Element {
+  const project = useAssets().filter((a) => a.kind === 'image');
+  const shared = useSharedImages();
+  const ids = [...project.map((a) => a.assetId), ...shared.map((a) => a.assetId)];
+  const names = [
+    ...project.map((a) => `${stripExtension(a.filename)} (project)`),
+    ...shared.map((a) => `${stripExtension(a.filename)} (shared)`),
+  ];
+  const current = element.posterAssetId ?? '';
+  const missing = current !== '' && !ids.includes(current);
+  return (
+    <SelectField
+      label="poster"
+      value={current}
+      options={['', ...(missing ? [current] : []), ...ids]}
+      labels={['bars', ...(missing ? [`${current} (missing)`] : []), ...names]}
+      onCommit={(v) =>
+        designerStore.updateElement(element.id, {
+          posterAssetId: v === '' ? undefined : v,
+        } as Partial<Element>)
+      }
+    />
+  );
+}
+
+function stripExtension(filename: string): string {
+  const dot = filename.lastIndexOf('.');
+  return dot === -1 ? filename : filename.slice(0, dot);
+}
+
 function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Element {
   const id = element.id;
   const stored = element.expectedAspect;
