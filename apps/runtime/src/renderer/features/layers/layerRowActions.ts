@@ -1,4 +1,5 @@
 import {
+  ArrowLeftFromLine,
   ArrowRightFromLine,
   CircleArrowOutDownRight,
   Download,
@@ -183,6 +184,12 @@ export interface LayerRowActionDeps {
   observed: FixedSlotState['observed'];
   /** Does the loaded template have a next step? (`TemplateInfo.hasNext`.) */
   hasNext: boolean;
+  /**
+   * `R-100` — the row's BOOK, when its template has a page list: NEXT then turns the page (with the
+   * bridge's number, `stack.page`) instead of `CG NEXT`, and PREV appears beside it. Absent or
+   * `null` on every other row, whose verbs are exactly what they were.
+   */
+  book?: { fieldId: string; page: number; count: number; wrap: boolean } | null;
   /** True when the SPA→bridge link is down: every verb is refused (R-006). */
   linkDown: boolean;
   /**
@@ -266,6 +273,8 @@ export interface LayerRowActionDeps {
   templateAvailable: boolean;
   play: (itemId: string) => Promise<AsyncResult>;
   next: (itemId: string) => Promise<AsyncResult>;
+  /** `R-100` — turn a book row's page; present wherever `book` is. */
+  page?: (itemId: string, field: string, to: 'next' | 'previous') => Promise<AsyncResult>;
   update: (itemId: string) => Promise<AsyncResult>;
   stop: (itemId: string) => Promise<AsyncResult>;
   clear: (itemId: string) => Promise<AsyncResult>;
@@ -548,6 +557,11 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         return `${who} stopped. It stays loaded, so it can be taken again.`;
       case 'next':
         return `${who} advanced to its next step.`;
+      // `R-100` — a book's page turns; the counter on the row says which page.
+      case 'page-next':
+        return `${who} turned to the next page.`;
+      case 'page-previous':
+        return `${who} turned back a page.`;
       case 'rehearse':
         return deps.rehearsing
           ? `${who} left PVW.`
@@ -897,16 +911,62 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
           ),
         ]
       : []),
+    /*
+      `R-100` — PREV, only on a BOOK row (a template with a page list): the bridge owns the page
+      number and turns it ABSOLUTELY, so on air the page is told the page, and off air the number
+      moves and nothing is sent (golden rule 10) — which is why it is not gated on `onAir`. A book
+      stops at page 1; a wrapping list goes round.
+    */
+    ...(deps.book !== undefined && deps.book !== null && deps.page !== undefined
+      ? (() => {
+          const book = deps.book;
+          const page = deps.page;
+          return [
+            {
+              ...act(
+                'page-previous',
+                'PREV',
+                empty ||
+                  blocked ||
+                  needsCaspar ||
+                  book.count === 0 ||
+                  (!book.wrap && book.page <= 1),
+                () => (item === null ? noop() : page(item.itemId, book.fieldId, 'previous')),
+                ArrowLeftFromLine,
+              ),
+              ...(blocked ? { title: RESTORE_BLOCKED_REASON } : {}),
+              tone: 'next' as const,
+            },
+          ];
+        })()
+      : []),
     // NEXT — ALWAYS present (the shape never changes), enabled only when the
     // template actually has a step to advance to and the item is on air.
+    // `R-100` — on a BOOK row it turns the page instead (see PREV above), on air or not.
     {
-      ...act(
-        'next',
-        'NEXT',
-        empty || !onAir || !deps.hasNext || blocked || needsCaspar,
-        () => (item === null ? noop() : deps.next(item.itemId)),
-        ArrowRightFromLine,
-      ),
+      ...(deps.book !== undefined && deps.book !== null && deps.page !== undefined
+        ? (() => {
+            const book = deps.book;
+            const page = deps.page;
+            return act(
+              'page-next',
+              'NEXT',
+              empty ||
+                blocked ||
+                needsCaspar ||
+                book.count === 0 ||
+                (!book.wrap && book.page >= book.count),
+              () => (item === null ? noop() : page(item.itemId, book.fieldId, 'next')),
+              ArrowRightFromLine,
+            );
+          })()
+        : act(
+            'next',
+            'NEXT',
+            empty || !onAir || !deps.hasNext || blocked || needsCaspar,
+            () => (item === null ? noop() : deps.next(item.itemId)),
+            ArrowRightFromLine,
+          )),
       ...(blocked
         ? { title: RESTORE_BLOCKED_REASON }
         : needsCaspar || awaiting

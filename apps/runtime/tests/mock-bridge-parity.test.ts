@@ -146,6 +146,8 @@ const BRIDGE_SURFACE: {
     backupChannels: ['state', 'onChanged', 'setEntries'],
     // `PLAYOUT-FEATURES-01` E — the Playout's meters (the mock: none).
     meters: ['onReading'],
+    // `R-100` — a book's pictures (the mock: kept in the page's memory, checked as the bridge checks).
+    pages: ['put'],
     /*
       🔴 **SESSION BR — `delimiters` AND `sources` were BOTH missing from this expected tree,
       so the one guard that exists to prove the mock shim matches the real bridge has never
@@ -179,6 +181,9 @@ const BRIDGE_SURFACE: {
       'stop',
       // R-028 (5.4) — advance the template's sequence.
       'next',
+      // `R-100` — turn a row's book (Next / Previous / Go to). The mock turns the page NUMBER with
+      // the bridge's own arithmetic; the wire half is integration-tested bridge-side.
+      'page',
       'out',
       'remove',
       'setPosition',

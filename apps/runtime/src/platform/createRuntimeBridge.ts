@@ -218,6 +218,8 @@ export function createMockBridge(): RuntimeBridge {
       stop: (req) => Promise.resolve(mock.stop(req.itemId)),
       // R-028 (5.4) — advance the template's sequence.
       next: (req) => Promise.resolve(mock.next(req.itemId)),
+      // `R-100` — a page turn on a row's book, with the bridge's arithmetic.
+      page: (req) => Promise.resolve(mock.page(req.itemId, req.field, req.to)),
       out: (req) => Promise.resolve(mock.out(req.itemId)),
       remove: (req) => Promise.resolve(mock.remove(req.itemId)),
       dismissError: (req) => Promise.resolve(mock.dismissError(req.itemId)),
@@ -451,6 +453,11 @@ export function createMockBridge(): RuntimeBridge {
       release: (req) => mock.release(req.pin),
       state: () => Promise.resolve(mock.lockState()),
       onStateChanged: (handler) => mock.lockChanged.subscribe(handler),
+    },
+
+    // `R-100` — a book's pictures: test mode keeps them in this page's memory, checked as the bridge does.
+    pages: {
+      put: (req) => mock.putPage(req.name, req.base64),
     },
 
     // `CHANNEL-TEMPLATES-01` — each channel's own list, the channel passed through as named.

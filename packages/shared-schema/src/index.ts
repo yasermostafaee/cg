@@ -18,6 +18,7 @@ export * from './float-noise.js';
 export * from './live-fit.js';
 export * from './live-geometry.js';
 export * from './scene.js';
+export * from './page-lists.js';
 export * from './scene-flatten.js';
 export * from './look-sources.js';
 export * from './composition-fields.js';

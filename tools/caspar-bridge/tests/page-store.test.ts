@@ -2,10 +2,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { PAGE_MAX_BYTES } from '@cg/shared-ipc';
-import { probeImage } from '../src/image-probe.js';
+import { PAGE_MAX_BYTES, pageRefsOf, pageTarget, probeImage } from '@cg/shared-ipc';
 import { PageStore } from '../src/page-store.js';
-import { pageRefsOf, pageTarget } from '../src/page-turn.js';
 import { jpegBytes, pngBytes, webpBytes } from './support/pictures.js';
 
 /** `R-100` — what a picture is, how CG Bridge keeps a book's pages, and where a page turn lands. */

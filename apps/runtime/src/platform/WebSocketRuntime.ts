@@ -44,6 +44,8 @@ import {
   type MediaPlateState,
   StackLoadChannel,
   StackNextChannel,
+  StackPageChannel,
+  PagesPutChannel,
   StackOutChannel,
   StackClearAllChannel,
   StackRemoveAllChannel,
@@ -191,6 +193,8 @@ const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'bro
 
 const WS_OPEN = 1;
 const REQUEST_TIMEOUT_MS = 8000;
+/** `R-100` — one picture of a book may be 4 MB; see `pages.put`. */
+const PAGE_PUT_TIMEOUT_MS = 30_000;
 /**
  * ⚠ A FLOOR under the refresh delay. `refreshDelayMs` can legitimately return 0 — a Playout
  * issuing a lifetime shorter than the ten-minute lead, or a session restored from storage that
@@ -1797,6 +1801,8 @@ export class WebSocketRuntime implements RuntimeBridge {
     stop: (req: ChannelRequest<typeof StackStopChannel>) => this.#invoke(StackStopChannel, req),
     // R-028 (5.4) — advance the template's sequence.
     next: (req: ChannelRequest<typeof StackNextChannel>) => this.#invoke(StackNextChannel, req),
+    // `R-100` — a page turn: the urgent verb's default timeout, like NEXT.
+    page: (req: ChannelRequest<typeof StackPageChannel>) => this.#invoke(StackPageChannel, req),
     out: (req: ChannelRequest<typeof StackOutChannel>) => this.#invoke(StackOutChannel, req),
     remove: (req: ChannelRequest<typeof StackRemoveChannel>) =>
       this.#invoke(StackRemoveChannel, req),
@@ -2246,6 +2252,16 @@ export class WebSocketRuntime implements RuntimeBridge {
   // browsers imported); the browser-local `#library` (B-085) is the OFFLINE
   // display copy — a read that cannot reach the bridge answers from it rather
   // than rejecting, the same display-only degradation the stack snapshot uses.
+  /**
+   * `R-100` — one picture of a book. A picture is up to 4 MB (5.4 MB as base64 in the frame), so its
+   * request gets a longer wait than an ordinary verb: a console on a slow link to a remote bridge must
+   * not see a picture refused by its own clock while the bridge is still receiving it.
+   */
+  readonly pages = {
+    put: (req: ChannelRequest<typeof PagesPutChannel>) =>
+      this.#invoke(PagesPutChannel, req, PAGE_PUT_TIMEOUT_MS),
+  };
+
   readonly templates = {
     get: async (req: ChannelRequest<typeof TemplatesGetChannel>) => {
       if (this.#status === 'live') {

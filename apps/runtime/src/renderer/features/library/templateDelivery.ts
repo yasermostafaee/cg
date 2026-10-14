@@ -8,6 +8,7 @@ import type {
 import {
   aggregateCompositionFields,
   hasNextStep,
+  pageListsOf,
   TEMPLATE_TIMING_VERSION,
   templateTimingOf,
   runtimeShortfall,
@@ -219,6 +220,12 @@ export async function produceTemplateDelivery(
     // It rides `TemplateInfo` (not a browser-local store like R-011/R-018) so
     // the bridge persists it and every browser gets the same answer.
     hasNext: hasNextStep(scene, scene.compositions),
+    // `R-100` — the template's PAGE LISTS, at this same one moment and for `hasNext`'s reason:
+    // which rows load pictures, and whether Next / Previous wrap. Absent when there are none.
+    ...(() => {
+      const pageLists = pageListsOf(scene);
+      return pageLists.length > 0 ? { pageLists } : {};
+    })(),
     /*
       🔴 `TIMING-WIRE-22` §4 — the template's PLAYOUT, derived at this same one moment and for
       the reason stated two comments down: no `.vcg` reaches the bridge, so a fact not captured

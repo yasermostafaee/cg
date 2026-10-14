@@ -93,6 +93,8 @@ import type {
   PlayoutLayersStateChannel,
   LiveLayersStateChannel,
   StackNextChannel,
+  StackPageChannel,
+  PagesPutChannel,
   TemplateAct,
   TemplateInfo,
   TemplatesGetChannel,
@@ -401,6 +403,13 @@ export interface RuntimeBridge {
     next(
       req: ChannelRequest<typeof StackNextChannel>,
     ): Promise<ChannelResponse<typeof StackNextChannel>>;
+    /**
+     * `R-100` — turn a row's book: Next, Previous or Go to page N on one page list. The bridge owns
+     * the page number and answers the page the row is now on.
+     */
+    page(
+      req: ChannelRequest<typeof StackPageChannel>,
+    ): Promise<ChannelResponse<typeof StackPageChannel>>;
     out(
       req: ChannelRequest<typeof StackOutChannel>,
     ): Promise<ChannelResponse<typeof StackOutChannel>>;
@@ -824,6 +833,16 @@ export interface RuntimeBridge {
    * Every call below names the channel whose list it reads or changes; with none, the station-wide
    * reading (every listed template once), which is what a surface that shows no channel wants.
    */
+  /**
+   * `R-100` — a book's pictures, sent to CG Bridge one at a time; it answers each one's SHA-256,
+   * which the row's page list then names.
+   */
+  pages: {
+    put(
+      req: ChannelRequest<typeof PagesPutChannel>,
+    ): Promise<ChannelResponse<typeof PagesPutChannel>>;
+  };
+
   templates: {
     get(
       req: ChannelRequest<typeof TemplatesGetChannel>,

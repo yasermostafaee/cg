@@ -52,6 +52,15 @@ import type {
 // bridge about what `1080i5000` means would show a mismatch that does not exist
 // on air.
 import {
+  // `R-100` — a book's pages: the bridge's own probe, arithmetic, limits and wording.
+  PAGE_MAX_BYTES,
+  PAGE_MAX_PIXELS,
+  PAGE_MAX_SIDE,
+  PAGES_MAX_PER_ROW,
+  pageRefusalMessage,
+  pageRefsOf,
+  pageTarget,
+  probeImage,
   bankForChannel,
   ChannelRasterSchema,
   checkSourceAssignments,
@@ -450,6 +459,8 @@ export class MockRuntime {
   // B-070 — producer-existence bookkeeping (bridge parity: the bridge's
   // `#loaded`). A producer lives from load/take until out/remove destroys it.
   // A seeded item that is not idle already has one.
+  /** `R-100` — the pictures test mode holds, by SHA-256 (the bytes themselves are not kept). */
+  readonly #pages = new Set<string>();
   readonly #loaded = new Set<string>(
     seedStack()
       .filter((i) => i.status !== 'idle')
@@ -721,13 +732,21 @@ export class MockRuntime {
           lookBindings as Record<string, Record<string, string>>,
         );
     }
+    // `R-100` parity — a page list naming a picture this runtime does not hold refuses the WHOLE update.
+    const pageRefusal = this.#refusePageLists(item.templateId, itemId, fields);
+    if (pageRefusal !== null) return { accepted: false, ...pageRefusal };
+    const pages = this.#pagesAfterUpdate(item, fields);
     const merged = mergeMode === 'merge' ? { ...item.fields, ...fields } : fields;
 
     // No producer on the slot ⇒ commit only, nothing "sent", intent settled
     // (B-044: never rest non-terminal — an unsettled `updating` is the zombie
     // `pending` that used to block setPosition for the item's whole life).
     if (!this.#loaded.has(itemId)) {
-      this.#patch(itemId, { fields: merged, pending: false });
+      this.#patch(itemId, {
+        fields: merged,
+        pending: false,
+        ...(pages !== undefined && { pages }),
+      });
       this.#record(auditEntry('update', this.#auditItem(itemId, item.templateId)));
       this.#emitStack();
       return { accepted: true };
@@ -738,6 +757,7 @@ export class MockRuntime {
       fields: merged,
       status: wasOnAir ? 'updating' : item.status,
       pending: wasOnAir,
+      ...(pages !== undefined && { pages }),
     });
     this.#record(auditEntry('update', this.#auditItem(itemId, item.templateId)));
     // B-044 contract: `updating` is transient — it settles to the item's
@@ -780,6 +800,141 @@ export class MockRuntime {
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
     this.#record(auditEntry('next', this.#auditItem(itemId, item.templateId)));
     return { accepted: true };
+  }
+
+  /**
+   * `R-100` parity — store one picture of a book. Test mode has no CG Bridge, so the picture stays
+   * in this page's memory, checked from its own bytes and against the limits exactly as the bridge
+   * checks it (`probeImage`, the shared limits and their one wording), and named by its SHA-256.
+   */
+  async putPage(
+    name: string,
+    base64: string,
+  ): Promise<{
+    accepted: boolean;
+    sha256?: string;
+    width?: number;
+    height?: number;
+    errorCode?: string;
+    message?: string;
+  }> {
+    const bytes = base64ToBytes(base64);
+    if (bytes.byteLength > PAGE_MAX_BYTES) {
+      return {
+        accepted: false,
+        errorCode: 'page-too-large',
+        message: pageRefusalMessage('page-too-large', { name, bytes: bytes.byteLength }),
+      };
+    }
+    const probe = probeImage(bytes);
+    if (probe === null) {
+      return {
+        accepted: false,
+        errorCode: 'page-not-a-picture',
+        message: pageRefusalMessage('page-not-a-picture', { name }),
+      };
+    }
+    if (
+      probe.width > PAGE_MAX_SIDE ||
+      probe.height > PAGE_MAX_SIDE ||
+      probe.width * probe.height > PAGE_MAX_PIXELS
+    ) {
+      return {
+        accepted: false,
+        errorCode: 'page-too-many-pixels',
+        message: pageRefusalMessage('page-too-many-pixels', {
+          name,
+          width: probe.width,
+          height: probe.height,
+        }),
+      };
+    }
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    const sha256 = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    this.#pages.add(sha256);
+    return { accepted: true, sha256, width: probe.width, height: probe.height };
+  }
+
+  /**
+   * `R-100` parity — turn a row's book, with the bridge's arithmetic (`pageTarget`) and its
+   * refusals. Offline there is no page to tell, so the page NUMBER is the whole action — which is
+   * also exactly what the bridge does for a row with nothing on its layer.
+   */
+  page(
+    itemId: string,
+    field: string,
+    to: 'next' | 'previous' | number,
+  ): { accepted: boolean; page?: number; count?: number; errorCode?: string; message?: string } {
+    const item = this.#find(itemId);
+    if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+    const info = this.#templateOfItem(itemId, item.templateId);
+    const entry = info?.pageLists?.find((l) => l.fieldId === field);
+    if (info === null || info === undefined || entry === undefined) {
+      return {
+        accepted: false,
+        errorCode: 'not-a-page-list',
+        message: 'This row has no page list by that name.',
+      };
+    }
+    const value: unknown = item.fields[field];
+    const declared = info.fields.find((f) => f.id === field);
+    const count = pageRefsOf(
+      Array.isArray(value) ? value : declared?.type === 'list' ? declared.default : [],
+    ).length;
+    if (count === 0) {
+      return {
+        accepted: false,
+        errorCode: 'no-pages',
+        message: 'This row has no pages yet.',
+        count,
+      };
+    }
+    const target = pageTarget(Math.min(item.pages?.[field] ?? 0, count - 1), count, entry.wrap, to);
+    this.#patch(itemId, { pages: { ...item.pages, [field]: target } });
+    this.#record(auditEntry('page-turn', this.#auditItem(itemId, item.templateId)));
+    this.#emitStack();
+    return { accepted: true, page: target + 1, count };
+  }
+
+  /**
+   * `R-100` parity — the bridge's two rules for a page list an update carries: it may name only
+   * pictures this runtime holds, at most {@link PAGES_MAX_PER_ROW} of them; and afterwards the row
+   * keeps its page number when the new book still has that page, else goes to page 1.
+   */
+  #refusePageLists(
+    templateId: string,
+    itemId: string,
+    fields: FieldValues,
+  ): { errorCode: string; message: string } | null {
+    for (const { fieldId } of this.#templateOfItem(itemId, templateId)?.pageLists ?? []) {
+      const value: unknown = fields[fieldId];
+      if (!Array.isArray(value)) continue;
+      if (value.length > PAGES_MAX_PER_ROW) {
+        return {
+          errorCode: 'page-too-many',
+          message: pageRefusalMessage('page-too-many', { count: value.length }),
+        };
+      }
+      for (const ref of pageRefsOf(value)) {
+        if (ref.media !== undefined && !this.#pages.has(ref.media)) {
+          return {
+            errorCode: 'page-missing',
+            message: pageRefusalMessage('page-missing', { name: ref.name ?? 'A page' }),
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  #pagesAfterUpdate(item: StackItemState, fields: FieldValues): Record<string, number> | undefined {
+    let pages = item.pages;
+    for (const { fieldId } of this.#templateOfItem(item.itemId, item.templateId)?.pageLists ?? []) {
+      const value: unknown = fields[fieldId];
+      if (!Array.isArray(value)) continue;
+      if ((pages?.[fieldId] ?? 0) >= value.length) pages = { ...pages, [fieldId]: 0 };
+    }
+    return pages;
   }
 
   /** C-012 parity — STOP every on-air item; producers stay resident. */
@@ -3573,4 +3728,12 @@ function seedFixedBindings(): MockFixedBinding[] {
 /** Is this seeded coordinate the e2e `restore-blocked` row? */
 function isSeededBlockedSlot(channel: number, layer: number): boolean {
   return fixedBankSeedArmed() && channel === MOCK_CHANNEL && layer === BLOCKED_SEED.layer;
+}
+
+/** `R-100` — a picture's base64 as bytes (the page's own decoder, no Node `Buffer` here). */
+function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }

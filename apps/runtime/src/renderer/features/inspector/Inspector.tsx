@@ -49,6 +49,9 @@ import { grantedFileSourcePaths } from './fileSourceGrants.js';
 import { detachUngrantedSources } from './fromFileStore.js';
 import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
+import { PageListEditor } from './PageListEditor.js';
+import { BookBar } from './BookBar.js';
+import { bookOf, type RowBook } from '../layers/bookOf.js';
 import { LivePlatesSection } from './LivePlatesSection.js';
 import { LooksBindingsSection } from './LooksBindingsSection.js';
 import { TimingSection } from './TimingSection.js';
@@ -573,6 +576,8 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
     item.timingOverride,
   );
   const isEmpty = rootFields.length === 0 && groups.length === 0;
+  // `R-100` — the row's book (its first page list), turned beside that field.
+  const rowBook = bookOf(info, item);
 
   // R-004 — the header names the template. The `TemplateInfo` was already in hand here and
   // its label was dropped on the floor in favour of the raw `templateId`. The id is a
@@ -792,6 +797,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
                   path={[row.key]}
                   item={item}
                   applied={valueAt(item.fields, [row.key])}
+                  book={rowBook?.fieldId === row.key ? rowBook : null}
                 />
               ))}
               {groups.map((group) => (
@@ -1032,11 +1038,14 @@ function FieldEditor({
   path,
   item,
   applied,
+  book = null,
 }: {
   field: DynamicField | null;
   path: FieldPath;
   item: StackItemState;
   applied: FieldValue | undefined;
+  /** `R-100` — the row's book, when THIS field is its page list: the book bar renders below it. */
+  book?: RowBook | null;
 }): JSX.Element {
   const itemId = item.itemId;
   // The control's accessible name stays the FIELD id (not the full path): the operator
@@ -1120,6 +1129,7 @@ function FieldEditor({
             The difference is not cosmetic bookkeeping: a list is the only kind
             with a second footer control to share a row with. */}
         {fromFileKind !== undefined && kind !== 'list' && fromFile}
+        {book !== null && <BookBar itemId={itemId} book={book} />}
       </div>
     </div>
   );
@@ -1238,6 +1248,17 @@ function FieldControl({
         value={writeFieldDigits(v, digits)}
         onChange={(e) => onStage(writeFieldText(e.currentTarget, field, e.nativeEvent))}
         aria-label={fieldId}
+      />
+    );
+  }
+  if (kind === 'list' && field?.type === 'list' && field.pages === true) {
+    // `R-100` — a PAGE LIST: the operator loads pictures (a book), never types items.
+    return (
+      <PageListEditor
+        fieldId={fieldId}
+        value={value}
+        defaultCount={field.default.length}
+        onStage={onStage}
       />
     );
   }

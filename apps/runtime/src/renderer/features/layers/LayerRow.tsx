@@ -9,6 +9,7 @@ import { Volume2 } from 'lucide-react';
 import { Icon } from '../../ui/Icon.js';
 import { directionOf } from '../../ui/OperatorNames.js';
 import { Tag } from '../../ui/Tag.js';
+import { bookOf } from './bookOf.js';
 import { ContextMenu } from '../../ui/ContextMenu.js';
 import { isContextMenuKey, useContextMenu } from '../../ui/useContextMenu.js';
 import { operatorRowName, type OperatorRowName } from '../../ui/operatorNaming.js';
@@ -484,6 +485,8 @@ export function LayerRow({
   // `C-038` — the ONE console-side permission answer; the verbs read it, nothing else does.
   const canOperate = useCanOperate();
   const hasPlates = (template?.liveSources?.sources.length ?? 0) > 0;
+  // `R-100` — the row's book (null unless its template has a page list): the counter and NEXT / PREV.
+  const rowBook = bookOf(template, item);
 
   const openPlateAudio = (): Promise<{ accepted: true }> => {
     setAudioOpen(true);
@@ -498,6 +501,8 @@ export function LayerRow({
     binding,
     observed: slot.observed,
     hasNext: template?.hasNext === true,
+    // `R-100` — a book row turns its page with NEXT / PREV (the bridge's number).
+    book: rowBook,
     linkDown,
     casparReach,
     dirty,
@@ -593,6 +598,7 @@ export function LayerRow({
     templateAvailable: item === null || template !== null,
     play: (itemId) => window.cg.stack.take({ itemId }),
     next: (itemId) => window.cg.stack.next({ itemId }),
+    page: (itemId, field, to) => window.cg.stack.page({ itemId, field, to }),
     update: (itemId) => onUpdate(itemId),
     stop: (itemId) => window.cg.stack.stop({ itemId }),
     clear: (itemId) => window.cg.stack.out({ itemId }),
@@ -1046,6 +1052,16 @@ export function LayerRow({
           >
             <Icon icon={Volume2} size={16} />
           </Button>
+        )}
+        {/* `R-100` — where the row's book is: the page and how many. A fact, not a control. */}
+        {rowBook !== null && rowBook.count > 0 && (
+          <Tag
+            data-page-counter=""
+            title={`Page ${String(rowBook.page)} of ${String(rowBook.count)}`}
+            aria-label={`Page ${String(rowBook.page)} of ${String(rowBook.count)}`}
+          >
+            {`${String(rowBook.page)} / ${String(rowBook.count)}`}
+          </Tag>
         )}
         {item !== null &&
           (() => {

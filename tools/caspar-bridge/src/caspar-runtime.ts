@@ -42,7 +42,6 @@ import type {
 import { isOnAirStatus, isRetainedOnAir, ownsLiveSeats, withCgControl } from '@cg/shared-schema';
 import type { CgPage } from '@cg/shared-schema';
 import { PageStore } from './page-store.js';
-import { pageRefsOf, pageTarget, type PageRef, type PageTurn } from './page-turn.js';
 import {
   bankForChannel,
   firstBank,
@@ -172,6 +171,10 @@ import {
   unlicensedTakeRefusal,
   PAGES_MAX_PER_ROW,
   pageRefusalMessage,
+  pageRefsOf,
+  pageTarget,
+  type PageRef,
+  type PageTurn,
   CG_UNLICENSED_CODE,
   BACKUP_UNMAPPED_CODE,
   backupUnmappedRefusal,

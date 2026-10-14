@@ -56,6 +56,7 @@ export * from './channels/common.js';
 export * from './channels/stack.js';
 // `R-100` — a book's pages, sent to CG Bridge one picture at a time, and their limits.
 export * from './channels/pages.js';
+export * from './page-book.js';
 export * from './channels/connections.js';
 export * from './channels/outputs.js';
 export * from './channels/layers.js';

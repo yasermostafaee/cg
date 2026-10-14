@@ -7,9 +7,10 @@ import {
   PAGE_MAX_PIXELS,
   PAGE_MAX_SIDE,
   pageRefusalMessage,
+  probeImage,
+  type ImageProbe,
   type PageRefusalCode,
 } from '@cg/shared-ipc';
-import { probeImage, type ImageProbe } from './image-probe.js';
 
 /**
  * `R-100` — **A BOOK'S PAGES, as CG Bridge keeps them.**
