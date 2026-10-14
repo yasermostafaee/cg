@@ -248,6 +248,33 @@ describe('D-083 — a sequence COMPOSITION item pulls its comp into the export c
   });
 });
 
+describe('🔴 B-249 — a per-composition export carries no dangling `entryCompositionId`', () => {
+  it('exporting the MAIN composition: the root IS the entry, so the pointer is absent', async () => {
+    const scoped = scopeSceneToComposition({ ...fourCompScene(), entryCompositionId: 'R' }, 'R')!;
+    // `R` was flattened into the root and is not in `compositions` — the id would name nothing.
+    expect((scoped.compositions ?? []).map((c) => c.id)).not.toContain('R');
+    expect('entryCompositionId' in scoped).toBe(false);
+    // …and the PACKAGE says the same: the template.json a reader gets has no pointer either.
+    const { scene } = await unpack((await makeVcgExporter(ALL).produce(scoped)).vcg);
+    expect('entryCompositionId' in scene).toBe(false);
+  });
+
+  it('exporting a composition that NESTS the project main: still absent, never the nested one', () => {
+    // The project's main is C, which R instances. Copied through, the export would name a
+    // composition it does contain — and a reader would take a NESTED panel for the entry.
+    const project = { ...fourCompScene(), entryCompositionId: 'C' };
+    const scoped = scopeSceneToComposition(project, 'R')!;
+    expect((scoped.compositions ?? []).map((c) => c.id)).toContain('C');
+    expect('entryCompositionId' in scoped).toBe(false);
+  });
+
+  it('the PROJECT is untouched — only the export drops it', () => {
+    const project = { ...fourCompScene(), entryCompositionId: 'R' };
+    scopeSceneToComposition(project, 'R');
+    expect(project.entryCompositionId).toBe('R');
+  });
+});
+
 describe('D-086 — preflight auto-scopes to the closure', () => {
   it('a missing asset in a SIBLING comp does not block the root export', async () => {
     const scene = fourCompScene();

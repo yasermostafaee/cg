@@ -9,7 +9,8 @@
       On-air behaviour measured first (Chrome 155: a broken-image icon with a grey border in every gap);
       the repair is outside undo and leaves the project unsaved.
 - [ ] 1.3 `B-106` repeater `maxItems` in the row editor and at play.
-- [ ] 1.4 `B-249` per-composition export writes no dangling `entryCompositionId`.
+- [x] 1.4 `B-249` per-composition export writes no dangling `entryCompositionId` (omitted, not rewritten;
+      `pageListsOf` pinned to "a miss is not found").
 
 ## 2. Text fit and nested playout (FULL)
 

@@ -97,3 +97,46 @@ describe('D-163 — a page list says when the operator does not step it', () => 
     ]);
   });
 });
+
+describe('🔴 B-249 — pageListsOf resolves the ENTRY by id, and a miss is NOT FOUND', () => {
+  // A composition holding a book, as a template's ENTRY composition would.
+  const withEntry = (entryCompositionId: string): Scene =>
+    scene([], {
+      entryCompositionId,
+      compositions: [
+        {
+          id: 'C',
+          name: 'C',
+          layers: [
+            {
+              id: 'LC',
+              name: 'LC',
+              visible: true,
+              locked: false,
+              blendMode: 'normal',
+              children: [sequence('book', { repeat: 1 })],
+            },
+          ],
+          fields: [
+            {
+              id: 'pages',
+              label: 'Pages',
+              required: false,
+              type: 'list',
+              default: [],
+              pages: true,
+            },
+          ],
+          bindings: [{ fieldId: 'pages', target: { kind: 'sequence-items', elementId: 'book' } }],
+        },
+      ],
+    } as unknown as Partial<Scene>);
+
+  it('an id that names the composition reads its page list', () => {
+    expect(pageListsOf(withEntry('C'))).toEqual([{ fieldId: 'pages', wrap: false }]);
+  });
+
+  it('a DANGLING id reads nothing — never "whichever composition is first"', () => {
+    expect(pageListsOf(withEntry('comp-flattened-away'))).toEqual([]);
+  });
+});

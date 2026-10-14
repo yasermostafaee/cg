@@ -176,8 +176,17 @@ export function scopeSceneToComposition(scene: Scene | null, id: string | null):
   const projected = editSceneOf(scene, id);
   if (projected === null || scene === null || id === null) return null;
   const closure = compositionClosure(scene, id);
+  /*
+    🔴 `B-249` — `entryCompositionId` is DROPPED, never copied through. It names the project's MAIN
+    composition, and in a per-composition export the chosen composition has just been flattened
+    into the ROOT — the root IS the entry, so the pointer has nothing to say. Copied, it named a
+    composition the package does not contain (or, worse, one nested inside the export, which a
+    reader would then take for the entry): a dangling id that reads as data. Omitted, not
+    rewritten; and no consumer is taught to tolerate it.
+  */
+  const { entryCompositionId: _projectEntry, ...rootIsTheEntry } = projected;
   const scoped: Scene = {
-    ...projected,
+    ...rootIsTheEntry,
     compositions: (scene.compositions ?? []).filter((c) => closure.has(c.id)),
   };
   // D-071 Phase A — EXPORT-ONLY: drop fully-off-frame STATIC elements so they don't

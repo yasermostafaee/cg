@@ -4072,7 +4072,15 @@ runtime's, and the runtime is untouched by this fix (the authorisation boundary)
 - **Number:** taken immediately after `B-219` in the same sweep; `git grep -n "B-220"` returned
   nothing anywhere before this heading was written.
 
-## [ ] B-249 — a per-composition export writes an `entryCompositionId` the package does not contain ⟨priority: low — nothing reads it today, which is exactly why it will be trusted by whatever reads it next⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B1.5`
+## [~] B-249 — a per-composition export writes an `entryCompositionId` the package does not contain ⟨priority: low — nothing reads it today, which is exactly why it will be trusted by whatever reads it next⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B1.5` — `openspec/changes/designer-fix-02/`
+
+— **Closed in code (DESIGNER-FIX-02):** `scopeSceneToComposition` OMITS the field (not rewritten);
+the project keeps its own. ⚠ The "nothing reads it" premise no longer held: `D-163`'s
+`pageListsOf` (`shared-schema/src/page-lists.ts`) reads the entry composition's page lists by this
+id — with a `filter`, so a miss was already "not found", but an export of a composition that NESTS
+the project main would have handed it a nested panel as the entry. Tests:
+`per-composition-export.test.ts` › "B-249 — …" (the scoped scene AND the unpacked `template.json`),
+`operator-steps.test.ts` › "B-249 — pageListsOf resolves the ENTRY by id, and a miss is NOT FOUND".
 
 **What:** A Designer per-composition export flattens the chosen composition into the scene ROOT
 and carries the compositions it NESTS in `compositions` — but it copies the project's
