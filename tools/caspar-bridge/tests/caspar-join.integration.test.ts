@@ -40,6 +40,9 @@ const quietProbes = (): CheckProbes => ({
   systemProxy: async () => null,
   portHolder: async () => ({ kind: 'free' }),
   adapters: () => [],
+  // AMCP pinned to `refused` — what a CI runner reads. The check dials the station's CasparCG host
+  // on 5250, and on the dev host that is the owner's real core (`connection-check.test.ts`).
+  amcp: async () => ({ kind: 'refused' }),
 });
 
 interface Station {

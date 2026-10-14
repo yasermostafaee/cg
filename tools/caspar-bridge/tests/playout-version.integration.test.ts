@@ -32,6 +32,9 @@ async function station(): Promise<{ handle: BridgeHandle; playout: FakePlayout }
       systemProxy: async () => null,
       portHolder: async () => ({ kind: 'free' }),
       adapters: () => [],
+      // Pinned to what a CI runner reads: the dev host's real CasparCG answers on 5250 (the
+      // `R-084` CONTROL flake, `connection-check.test.ts`). The CONTROL here compares the same lines.
+      amcp: async () => ({ kind: 'refused' }),
     },
   });
   return { handle, playout };

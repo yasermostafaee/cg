@@ -100,9 +100,10 @@ describe('§3(a) — the strip is told when the config moves under it', () => {
       'the operator never held channel 1 — every assertion below would be vacuous',
     ).toEqual([1]);
 
-    // The admin repoints the station at a host the operator's grant does not name.
+    // The admin repoints the station at a host the operator's grant does not name. OSC on an
+    // ephemeral port: a remote host binds `0.0.0.0:<oscPort>`, and `6251` is a running bridge's.
     const repointed = await admin.ask('set', 'connections.set-config', {
-      servers: { A: { host: '10.9.9.9', amcpPort: 5250, oscPort: 6251 } },
+      servers: { A: { host: '10.9.9.9', amcpPort: 5250, oscPort: 0 } },
       strategy: 'mirror-sync',
       autoFailoverEnabled: false,
     });
@@ -147,9 +148,10 @@ describe('§3(a) — the strip is told when the config moves under it', () => {
     );
     expect((accepted.payload as AuthState).permittedChannels).toEqual([1]);
 
-    // Same host, different port — the grant still matches.
+    // Same host, different port — the grant still matches. A port that refuses, and OSC on an
+    // ephemeral one: `5251`/`6251` on loopback are the dev host's CasparCG and bridge.
     await admin.ask('set', 'connections.set-config', {
-      servers: { A: { host: '127.0.0.1', amcpPort: 5251, oscPort: 6251 } },
+      servers: { A: { host: '127.0.0.1', amcpPort: 2, oscPort: 0 } },
       strategy: 'mirror-sync',
       autoFailoverEnabled: false,
     });
@@ -300,8 +302,9 @@ describe('§3(a) — the strip is told when the config moves under it', () => {
     handle = await createBridge({ port: 0, connection: deadConnection() });
     const client = await openClient(handle);
 
+    // Ports that refuse and bind nothing fixed — never the dev host's real ones.
     await client.ask('set', 'connections.set-config', {
-      servers: { A: { host: '127.0.0.1', amcpPort: 5252, oscPort: 6252 } },
+      servers: { A: { host: '127.0.0.1', amcpPort: 2, oscPort: 0 } },
       strategy: 'mirror-sync',
       autoFailoverEnabled: false,
     });

@@ -53,7 +53,9 @@ describe('parseBandVolumeReplies', () => {
 
 describe('readBandVolumes — against the fake CasparCG', () => {
   it('reads a fifty-layer band in one burst, each layer’s own transform volume', async () => {
-    mock = await createMock({ amcpPort: 0 });
+    // OSC off and on no fixed port: left at the mock's defaults it sent 10 datagrams a second to
+    // 127.0.0.1:6250 — a real Playout engine's OSC port on the dev host. This reads over AMCP only.
+    mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
     const layers = Array.from({ length: 50 }, (_, i) => 50 + i);
     // Positive control: two layers that differ from a fresh layer, so a reader that returned
     // the same number for every layer — or read the bus meter — could not pass.

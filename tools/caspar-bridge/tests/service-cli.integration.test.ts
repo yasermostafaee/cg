@@ -300,14 +300,16 @@ async function startService(
  * the backup was gone after a reboot. Red before the fix: `/health` listed server A alone.
  */
 describe('🔴 B-312 — the service keeps Station setup’s backup across a restart', () => {
+  // OSC 0 on both: the saved B goes back in with its own `oscPort`, and `6252` is a dev station's
+  // server-B ingest — `QUIET`'s `--osc-port 0` reaches server A only.
   const saved = (dir: string, b: { host: string; amcpPort: number }): void => {
     fs.mkdirSync(path.join(dir, '.cg-runtime'), { recursive: true });
     fs.writeFileSync(
       path.join(dir, '.cg-runtime', 'bridge-connection.json'),
       JSON.stringify({
         servers: {
-          A: { host: '127.0.0.1', amcpPort: 1, oscPort: 6251 },
-          B: { host: b.host, amcpPort: b.amcpPort, oscPort: 6252 },
+          A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 },
+          B: { host: b.host, amcpPort: b.amcpPort, oscPort: 0 },
         },
         strategy: 'mirror-sync',
         autoFailoverEnabled: false,
@@ -353,6 +355,9 @@ describe('🔴 B-312 — the service keeps Station setup’s backup across a res
       '127.0.0.1',
       '--backup-amcp-port',
       '4',
+      // Unnamed, server B's OSC defaults to `6252` — a dev station's.
+      '--backup-osc-port',
+      '0',
     ]);
     try {
       expect(servers(await typed.health()).find((r) => r.label === 'B')?.amcpPort).toBe(4);

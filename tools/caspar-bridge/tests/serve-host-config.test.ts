@@ -37,6 +37,17 @@ const LOCAL: ConnectionConfig = {
   autoFailoverEnabled: true,
 };
 
+/**
+ * `LOCAL` for a runtime that is actually RUN: `setConfig` starts session A, and `LOCAL`'s A is
+ * `127.0.0.1:5250` with OSC on `6251` — on the dev host, the owner's real CasparCG and a running
+ * bridge's OSC port. Port 1 refuses at once and OSC takes an ephemeral port; the serve host these
+ * tests judge does not read the server at all.
+ */
+const LOCAL_RUN: ConnectionConfig = {
+  ...LOCAL,
+  servers: { A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 } },
+};
+
 /** A config with a REMOTE backup — the `B-162` shape, where the address actually matters. */
 const REMOTE_BACKUP: ConnectionConfig = {
   ...LOCAL,
@@ -203,8 +214,8 @@ it('C-024: an applied config puts a NEW serve host in force on the RUNNING bridg
     rebuilds template serving, so the address lands on the running process — which is why nothing
     in this change starts, stops or restarts a bridge, and why the panel must not offer to.
   */
-  runtime = new CasparRuntime(LOCAL, {}, { layerPolicy: TEST_LAYER_POLICY });
-  const applied = await runtime.setConfig({ ...LOCAL, templateServeHost: '10.1.2.3' });
+  runtime = new CasparRuntime(LOCAL_RUN, {}, { layerPolicy: TEST_LAYER_POLICY });
+  const applied = await runtime.setConfig({ ...LOCAL_RUN, templateServeHost: '10.1.2.3' });
   expect(applied.ok).toBe(true);
   expect(runtime.templateServeInfo().serveHost).toBe('10.1.2.3');
 });
@@ -216,8 +227,12 @@ it('C-024: a flag STILL wins after an apply — the stored value cannot take the
     the address to whatever the panel last saved. The flag is process-lifetime; an apply must not
     outlive it.
   */
-  runtime = new CasparRuntime(LOCAL, { serveHost: '10.9.9.9' }, { layerPolicy: TEST_LAYER_POLICY });
-  await runtime.setConfig({ ...LOCAL, templateServeHost: '10.1.2.3' });
+  runtime = new CasparRuntime(
+    LOCAL_RUN,
+    { serveHost: '10.9.9.9' },
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
+  await runtime.setConfig({ ...LOCAL_RUN, templateServeHost: '10.1.2.3' });
   expect(runtime.templateServeInfo().serveHost).toBe('10.9.9.9');
   expect(runtime.templateServeInfo().flagOverrides.serveHost).toBe('10.9.9.9');
 });

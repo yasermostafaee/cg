@@ -71,8 +71,20 @@ function singleServer(amcpPort: number, oscPort: number, host = '127.0.0.1'): Co
 }
 
 /**
- * B-162 — a DECLARED PAIR. The hosts are what these tests are about; the ports
- * never carry traffic (nothing here waits for health), so they are fixed.
+ * A loopback server that REFUSES — for a bridge whose boot connection is not what
+ * its test judges. Left out, `createBridge` boots the built-in default
+ * (`127.0.0.1:5250`, OSC `6251`): on the dev host the owner's real CasparCG and a
+ * running bridge's OSC port.
+ */
+function refusedServer(): ConnectionConfig {
+  return singleServer(1, 0);
+}
+
+/**
+ * B-162 — a DECLARED PAIR. The hosts are what these tests are about; nothing
+ * here waits for health, so the ports are ones that refuse. The sessions DO
+ * dial them: `5250`/`5251` on a loopback host reached the dev host's real
+ * CasparCG.
  *
  * `192.0.2.1` is TEST-NET-1 (RFC 5737) — unroutable by design, exactly as the
  * loopback-invariant test above already uses it. A remote host that is remote
@@ -81,8 +93,8 @@ function singleServer(amcpPort: number, oscPort: number, host = '127.0.0.1'): Co
 function serverPair(hostA: string, hostB: string): ConnectionConfig {
   return {
     servers: {
-      A: { host: hostA, amcpPort: 5250, oscPort: 0 },
-      B: { host: hostB, amcpPort: 5251, oscPort: 0 },
+      A: { host: hostA, amcpPort: 1, oscPort: 0 },
+      B: { host: hostB, amcpPort: 2, oscPort: 0 },
     },
     strategy: 'mirror-sync',
     autoFailoverEnabled: true,
@@ -195,7 +207,7 @@ it('re-points the running bridge: refused on air, Remove-All clears + unblocks, 
 }, 20000);
 
 it('loopback invariant: a remote-host config never moves the control WS off 127.0.0.1; unreachable is honest, not fatal', async () => {
-  bridge = await createBridge({ port: 0 });
+  bridge = await createBridge({ port: 0, connection: refusedServer() });
   expect(bridge.host).toBe('127.0.0.1');
 
   // Apply a REMOTE, unreachable (TEST-NET) primary through the real WS route.
@@ -237,7 +249,7 @@ it('loopback invariant: a remote-host config never moves the control WS off 127.
   explicit override instead of a guess.
 */
 it('B-162: a REMOTE BACKUP alone takes the template server routable — the apply path re-derives over the whole declared set', async () => {
-  bridge = await createBridge({ port: 0 });
+  bridge = await createBridge({ port: 0, connection: refusedServer() });
 
   const applied = await wsInvoke(
     bridge.url,
@@ -257,7 +269,7 @@ it('B-162: a REMOTE BACKUP alone takes the template server routable — the appl
   it must stay bit-for-bit what it was.
 */
 it('B-162: a remote PRIMARY with a loopback backup is unchanged — still routable, still no unreachable server', async () => {
-  bridge = await createBridge({ port: 0 });
+  bridge = await createBridge({ port: 0, connection: refusedServer() });
 
   const applied = await wsInvoke(
     bridge.url,
@@ -269,7 +281,7 @@ it('B-162: a remote PRIMARY with a loopback backup is unchanged — still routab
 }, 20000);
 
 it('B-162: an all-loopback PAIR stays on 127.0.0.1 — a backup is not a reason to open the LAN', async () => {
-  bridge = await createBridge({ port: 0 });
+  bridge = await createBridge({ port: 0, connection: refusedServer() });
 
   const applied = await wsInvoke(
     bridge.url,
@@ -335,8 +347,10 @@ it('persists the applied config across a bridge restart; explicit connection fla
   mockB = await createMock({ amcpPort: 0, oscPort: oscB, oscHost: '127.0.0.1', oscHz: 30 });
   const persisted = singleServer(mockB.amcpPort, oscB);
 
-  // Bridge #1: default connection; apply + persist over the real route.
-  bridge = await createBridge({ port: 0, persistPath });
+  // Bridge #1: a refused boot connection (never the default — see `refusedServer`);
+  // apply + persist over the real route. An explicit connection skips only the
+  // boot LOAD, and there is no file yet; every apply saves.
+  bridge = await createBridge({ port: 0, connection: refusedServer(), persistPath });
   const applied = await wsInvoke(bridge.url, ConnectionsSetConfigChannel, persisted);
   expect(applied.ok).toBe(true);
   expect(fs.existsSync(persistPath)).toBe(true);
@@ -363,7 +377,10 @@ it('an invalid persisted file is warned about and ignored (defaults win)', async
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-r010-bad-'));
   const persistPath = path.join(tempDir, 'bridge-connection.json');
   fs.writeFileSync(persistPath, '{ "servers": { "A": { "host": "" } } }', 'utf8');
-  bridge = await createBridge({ port: 0, persistPath });
+  // The default IS this test's subject, so its AMCP `127.0.0.1:5250` is still
+  // dialled; only its OSC bind is moved off `6251` (the bridge-wide override
+  // leaves the AMCP port, which is what is asserted, untouched).
+  bridge = await createBridge({ port: 0, persistPath, oscPort: 0 });
   // Fell back to the built-in single-server default.
   expect(bridge.runtime.config().servers.A.amcpPort).toBe(5250);
   expect(bridge.runtime.config().servers.B).toBeUndefined();

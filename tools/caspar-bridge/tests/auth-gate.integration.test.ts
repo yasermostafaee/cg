@@ -227,13 +227,18 @@ describe('C-037 §1 — an unauthenticated socket gets two answers, not every an
   learns whether a sign-in CAN work, so it answers before one — for this station's Playout only.
 */
 describe('DELTA-MULTI-CHANNEL-01-B B1 — the check answers before any sign-in, for this station', () => {
-  /** The network probes are real; the Windows-only readers are pinned (`connection-check.test.ts`). */
+  /**
+   * The network probes are real; the Windows-only readers are pinned (`connection-check.test.ts`),
+   * and so is AMCP — to `refused`, what a CI runner reads — because the dev host's own CasparCG
+   * answers on 5250 and the check would dial it (the `R-084` CONTROL flake).
+   */
   const quietProbes = (): CheckProbes => ({
     ...realProbes(),
     processes: async () => [],
     systemProxy: async () => null,
     portHolder: async () => ({ kind: 'free' }),
     adapters: () => [],
+    amcp: async () => ({ kind: 'refused' }),
   });
   const CONSOLE = 'http://127.0.0.1:5174';
 
