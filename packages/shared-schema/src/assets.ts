@@ -83,9 +83,9 @@ export const VideoProvenanceSchema = z.object({
    * `D-164` — present when the source was a numbered IMAGE SEQUENCE rather than one clip: the
    * first and last frame's file names (in the natural order they were converted in), how many
    * frames, and the rate the author gave it — a sequence has no rate of its own. `sourceFilename`
-   * is then the first frame's name and `sourceFps` this same rate; `sourceSha256` hashes the
-   * ordered frames' bytes, `sourceBytes` is their sum. Additive + optional: every asset stored
-   * before it parses unchanged.
+   * is then the sequence's label (`f_1.png … f_300.png (300 frames)`) and `sourceFps` this same
+   * rate; `sourceSha256` hashes the ordered frames (each length-prefixed), `sourceBytes` is their
+   * sum. Additive + optional: every asset stored before it parses unchanged.
    */
   sequence: z
     .object({
