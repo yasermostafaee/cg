@@ -13707,3 +13707,80 @@ take re-ADDs, the page goes on air, the row reads on air, and no "cleared outsid
 the fix: no `ADD`). Control: with no hold the same test was green before the fix. `dongle-recover` under the same load:
 0/24 after, against 7/36 before. Not shown: whether the owner's "READY with PLAY disabled" sighting
 (`DONGLE-RECOVER-01-v2`) was this race.
+
+<!--
+  `B-333`…`B-341` — LARGE `CG ADD` / `CG UPDATE` PAYLOADS. Filed 2026-10-14 by `IMAGE-PAGES-01` (run
+  `RUN-NEXT-VERSION-01`), measure-only: NOT fixed in that run.
+
+  The measured fact behind all nine (owner's CasparCG 2.5.0, `127.0.0.1`): the core keeps ~2.6 MB of
+  main-process memory per 1 MB of `CG UPDATE` payload, for the life of the process — 600 × 20 KB updates
+  +33 MB, 60 × 1 MB +154 MB, 600 tiny updates +0; a `CLEAR` gives none of it back. The Playout's core is a
+  2.5.x fork. Whether `CG ADD` payloads are held the same way is NOT measured. Sizes below are ESTIMATES from
+  the code (UTF-8 Persian ~2 B a letter; AMCP escaping per `caspar-client/src/amcp/escape.ts:56-81`).
+-->
+
+## [ ] B-333 — Every Update re-sends a row's WHOLE field set, so one caption fix re-sends a 300-item ticker ⟨priority: medium — CasparCG keeps ~2.6× every update's bytes for the day⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · measure-only
+
+**Actual:** `#updateImpl` sends the reconciler's merged fields on every `CG UPDATE`
+(`caspar-runtime.ts:5993-6002`); the console also sends the complete set (`applyDraft.ts:79`, `draftStore.ts:736-740`),
+and Update with nothing staged re-sends it (`applyDraft.ts:39`). A ticker / sequence list of 300 items × a 150-char
+Persian headline is ~100–105 KB on the wire (estimated), sent on EVERY Update press while a producer is resident.
+**Guard:** none — `FieldValuesSchema` has no limit (`shared-schema/src/fields.ts:283-285`); only the 64 MiB WebSocket
+frame cap (`bridge.ts:1812`). **Acceptance (when fixed):** an update sends only the fields that changed, or a stated
+limit refuses it in the operator's words; measured on a 2.5.x core.
+
+## [ ] B-334 — A "From file" list with split OFF puts the whole file in ONE item, with no size cap ⟨priority: medium⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · measure-only
+
+**Actual:** the default from-file list makes one item holding the file verbatim (`fromFileContent.ts:82-84`); the file
+is read whole with no size check (`textFileSource.ts:114-117`), staged at `fromFileOps.ts:49-58`, and every Update sends
+it (B-333). A ~55k-character Persian file is over 100 KB; CRLF line ends cost 10 B each on the wire. **Guard:** none;
+the authored `maxLength` is not enforced by the console or the bridge. **Acceptance (when fixed):** a file over a stated
+size is refused with a sentence naming it.
+
+## [ ] B-335 — A "From file" list with split ON sends one item per line, with no cap ⟨priority: medium⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · measure-only
+
+**Actual:** one `{ id: "file-N", text }` per entry (`fromFileContent.ts:86-89`); 300 lines × 150 Persian characters is
+~92 KB (estimated), on every Update. **Guard:** none. **Acceptance (when fixed):** a line or byte limit, stated and
+enforced.
+
+## [ ] B-336 — A "From file" text or multiline field takes the whole file verbatim ⟨priority: medium⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · measure-only
+
+**Actual:** `fromFileContent.ts:81` puts the file in the field as-is; same size and frequency as B-334. **Guard:** none
+(`maxLength` unenforced). **Acceptance (when fixed):** the field's authored `maxLength` is enforced, or a stated cap.
+
+## [ ] B-337 — A book of 500 pages with long names is ~80–100+ KB in every Update ⟨priority: low — only Update presses carry the list; page turns do not⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · measure-only
+
+**Actual:** each page-list item is `{ id, kind: "image", media: <64 hex>, name }` (`PageListEditor.tsx:117-137`), ~155–175
+B; 500 pages is ~78–92 KB, past 100 KB with long or Persian file names (estimated). Sent on every Update of a book row
+(B-333); page turns carry ~200 B. **Guard:** count only, `PAGES_MAX_PER_ROW = 500`
+(`shared-ipc/src/channels/pages.ts:50`, checked at `caspar-runtime.ts:6361` and `PageListEditor.tsx:112`); no cap on
+bytes or name length. **Acceptance (when fixed):** the list's names are sent once, or a byte cap.
+
+## [ ] B-338 — A take's `CG ADD` carries the row's full stored field set ⟨priority: medium⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · measure-only
+
+**Actual:** the single chokepoint `#sendAdd` (`caspar-runtime.ts:16314` → `#sendAddServed` :16363, line at :16531) sends
+everything B-333 to B-337 can hold, once per non-resident take: after Out / CLEAR, after a reconnect, after a resident
+tell's 403, a fixed row's first take, PUT BACK ON AIR (`restoreEmptiedAir` :12818), and `setPosition` on a loaded row
+(:4733). **Unmeasured:** whether the core holds `CG ADD` bytes like `CG UPDATE`'s. **Acceptance (when fixed):** measured
+on a 2.5.x core, then bounded with B-333.
+
+## [ ] B-339 — A dynamic load's `CG ADD` seeds every authored default ⟨priority: low⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · measure-only
+
+**Actual:** `load` → `#loadOnto` (`caspar-runtime.ts:3197`, `:3258`, line at `:3539`) seeds all authored defaults
+(`newItemFields.ts:22-24`, `composition-fields.ts:363-375`); an authored list default copies the element's items
+(`apps/designer/src/renderer/state/slices/fields.ts:461-465`). Small unless an author put hundreds of ticker items in
+the template. Fixed-row loads send no ADD. **Acceptance (when fixed):** bounded with B-333.
+
+## [ ] B-340 — An image field takes any string as its asset id ⟨priority: low — nothing in the product writes a data: URL there⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · measure-only
+
+**Actual:** an image value is `{ assetId }` (`shared-schema/src/fields.ts:259`), edited in CG Control's Inspector as
+free text (`Inspector.tsx:1219-1232`), and `IdSchema` is `z.string().min(1)` with no maximum (`primitives.ts:7`): a
+pasted `data:` URL would ride every update. **Acceptance (when fixed):** an id is bounded, and a `data:` value refused.
+
+## [ ] B-341 — The backup core pays every large line too, and a corrective resend can pay it again ⟨priority: medium⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · measure-only
+
+**Actual:** under `mirror-sync` (`bridge.ts:1827`) every ADD / UPDATE line also goes to server B, which keeps the same
+memory. Corrective resend (on by default, `redundancy-adapter.ts:142`) replays every successful journaled line to B when
+divergences pile up within 30 s (`:535-559`); the journal keeps up to 500 lines from the last 5 minutes
+(`journal.ts:84-85`). No AMCP line-length guard exists (`amcp-guard.ts`, `caspar-client`). **Acceptance (when fixed):**
+a replay sends no line over a stated size, or the sizes of B-333 to B-339 are bounded first.

@@ -3369,3 +3369,17 @@ and the same with `--untracked`; control: the same sweep's shape found the 2 hea
 stash. `B-332` the same way after `B-331` was committed (12 refs, nothing; control: `B-331` in the worktree).
 
 ⇒ **Next free after this entry is `B-333`**, **`D-163`**, **`P-068`**, **`R-100`** and **`C-049`**.
+
+### 2026-10-14 — `IMAGE-PAGES-01` takes `D-163`, `R-100` and `B-333` to `B-341`
+
+- `D-163` — pages of pictures turned with Next / Previous / Go to — [designer.md](designer.md).
+- `R-100` — the operator loads a book of pictures on a row and turns its pages — [runtime.md](runtime.md).
+- `B-333` to `B-341` — large `CG ADD` / `CG UPDATE` payloads, filed measure-only (CasparCG 2.5.0 keeps ~2.6× every
+  update's bytes) — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: `D-163` and `R-100` were the registry's next free (no heading on any ref before
+`57d57aa5`). `git grep -n -E "^## \[.\] (B-33[3-9]|B-34[01]) " <ref> -- docs` on all 9 local and remote-tracking
+refs returned nothing, and the same with `--untracked`; control: the same sweep's shape found the heading `B-332` on
+`dev`; no stash.
+
+⇒ **Next free after this entry is `B-342`**, **`D-164`**, **`P-068`**, **`R-101`** and **`C-049`**.
