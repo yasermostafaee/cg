@@ -14,7 +14,8 @@
 
 ## 2. Text fit and nested playout (FULL)
 
-- [ ] 2.1 `B-147` interim: Auto Squeeze shown as unavailable, one short reason; saved values kept.
+- [x] 2.1 `B-147` interim: Auto Squeeze shown as unavailable, one short reason; saved values kept. A `Tag`
+      fact (golden rule 13); the toggles requirement in `designer-inspector` no longer lists it.
 - [ ] 2.2 `B-099` probe reported; fixed if frozen.
 - [ ] 2.3 `B-030` a timed auto-out child no longer strands a content-driven parent.
 

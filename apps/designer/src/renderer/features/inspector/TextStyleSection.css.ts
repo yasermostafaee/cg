@@ -39,6 +39,17 @@ export const toggleOption = style({
   textAlign: 'center',
 });
 
+/*
+  🔴 `B-147` interim — a FACT, not a control (golden rule 13): no border, no background, no
+  pointer — the row's value written as text, in the toggle's own size so the row keeps its height.
+*/
+export const unavailable = style({
+  color: colors.textMuted,
+  fontSize: '0.72rem',
+  fontStyle: 'italic',
+  padding: '0.2rem 0',
+});
+
 // D-048 — neutral properties-panel active fill (no blue accent), matching
 // D-045-align-0/1.png.
 export const toggleOptionActive = style({

@@ -191,8 +191,8 @@ function applyOne(
       if (!el) return;
       let stringValue = boundText(raw, rule?.field, binding.transform);
       // Cap to the field's maxLength by code point (so a surrogate pair or a
-      // ZWNJ counts as one and isn't split); the element's own auto-size /
-      // auto-squeeze then handles fit.
+      // ZWNJ counts as one and isn't split); the element's own auto-size then
+      // handles fit. (Auto-squeeze is NOT built — `B-147`; nothing reads `autoSqueeze`.)
       if (maxLength !== undefined && [...stringValue].length > maxLength) {
         stringValue = [...stringValue].slice(0, maxLength).join('');
       }

@@ -2309,9 +2309,15 @@ mutations). An E2E asserting the marker appears on a video whose assetId resolve
 **Related:** [[B-136]] (the identical symptom from a different cause, and the item that surfaced
 this), [[B-137]] (the once-per-element logging precedent).
 
-## [ ] B-147 — three schema spellings of "make the text fit" and the runtime implements NONE; the Designer ships an `autoSqueeze` control that writes a field nothing reads ⟨priority: high — it is a control that silently does nothing, and the failure lands on air with the next long name⟩
+## [~] B-147 — three schema spellings of "make the text fit" and the runtime implements NONE; the Designer ships an `autoSqueeze` control that writes a field nothing reads ⟨priority: high — it is a control that silently does nothing, and the failure lands on air with the next long name⟩
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q8): **(a) now** — the toggle shows as unavailable with one short reason (the D-159 pattern); **then real shrink-to-fit** (bundle 4) as soon as possible.
+— **Interim closed in code (DESIGNER-FIX-02, `openspec/changes/designer-fix-02/`):** the Auto Squeeze
+row is a `Tag` reading "not available", titled "Not built yet: on air the text keeps its size and
+may overflow its box." — no toggle, no disabled control; a saved `autoSqueeze` is kept. The two
+comments that claimed auto-squeeze handles fit (`bindings.ts`, `slices/fields.ts`) now say it is not
+built. Test: `auto-squeeze-unavailable.dom.test.ts` (the absence pinned). **Still open:** real
+shrink-to-fit — `TEXT-FIT-01`.
 
 **What:** the schema offers **three** ways to say "shrink the text so it fits its box". The runtime
 honours **none** of them.

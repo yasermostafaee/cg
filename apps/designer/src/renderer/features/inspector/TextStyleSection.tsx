@@ -22,7 +22,12 @@ import { RealtimeNumberInput } from './controls.js';
 import { TextSettingsButton } from './TextSettingsPopover.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
+import { Tag } from '../../ui/Tag.js';
 import * as s from './TextStyleSection.css.js';
+
+/** `B-147` interim — the ONE short reason Auto Squeeze is not offered, as the fact's title. */
+export const AUTO_SQUEEZE_UNAVAILABLE =
+  'Not built yet: on air the text keeps its size and may overflow its box.';
 
 /**
  * D-010-pic-5 — the Text section in the right Inspector. Custom layout
@@ -30,7 +35,7 @@ import * as s from './TextStyleSection.css.js';
  * because the reference uses dedicated widgets:
  *
  *   Sizing                [ Auto | Fixed ]
- *   Auto Squeeze          [ Yes  | No    ]
+ *   Auto Squeeze          not available     (B-147 — a fact, not a control)
  *   Text Wrap             [ Yes  | No    ]
  *   Text Color    █ 000000 ◇
  *   Background    ⣿ FFFFFF ◇
@@ -75,7 +80,6 @@ export function TextStyleSection({
     else switchTextToAutoSize([id]);
   };
   const wrapValue = element.wrap === false ? 'no' : 'yes';
-  const squeezeValue = element.autoSqueeze === true ? 'yes' : 'no';
   const verticalAlign = element.verticalAlign ?? 'top';
   // Evaluated-at-playhead values so animated text fields reflect the canvas and a
   // colour edit's result shows immediately (B-005/B-006).
@@ -117,21 +121,20 @@ export function TextStyleSection({
             />
           </div>
 
-          {/* Auto Squeeze */}
+          {/* 🔴 `B-147` interim (owner, Q8 (a)) — Auto Squeeze is NOT BUILT: the renderer never
+              read `autoSqueeze`, so the toggle promised a shrink that never happened and a long
+              Persian name overflowed on air. It is now a FACT, not a disabled control (golden rule
+              13): there is no control to press, and the reason is its title. A saved value is KEPT
+              untouched in the element — real shrink-to-fit is `TEXT-FIT-01`. */}
           <div className={s.labeledRow}>
             <span className={s.label}>Auto Squeeze</span>
-            <TogglePair
-              value={squeezeValue}
-              options={[
-                { value: 'yes', label: 'Yes' },
-                { value: 'no', label: 'No' },
-              ]}
-              onChange={(v) =>
-                designerStore.updateElement(id, {
-                  autoSqueeze: v === 'yes',
-                } as unknown as Partial<Element>)
-              }
-            />
+            <Tag
+              className={s.unavailable}
+              title={AUTO_SQUEEZE_UNAVAILABLE}
+              data-testid="auto-squeeze-unavailable"
+            >
+              not available
+            </Tag>
           </div>
 
           {/* Text Wrap */}
