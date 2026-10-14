@@ -31,6 +31,8 @@ export interface PreviewDispatch {
   stop(): void;
   out(): void;
   next(): void;
+  /** D-163 — back one page (the runtime's previous()). */
+  previous(): void;
   reset(): void;
   pause(): void;
   resume(): void;

@@ -1,4 +1,5 @@
 import type { LottieLayerInfo } from '@cg/lottie-bridge';
+import { sequenceItemsBinding } from '@cg/shared-schema';
 import type { DynamicField, Element, FieldBinding, Scene } from '@cg/shared-schema';
 
 /**
@@ -112,9 +113,9 @@ export function resolveBinding(
       return { fieldId: field.id, target: { kind: 'ticker-items', elementId: element.id } };
     }
     if (element.type === 'sequence') {
-      // D-083 — binding is TEXT-ONLY in Phase 1: a sequence holding any composition
-      // item can't be data-bound (a bound `list` value carries only text items).
-      if (element.items.some((it) => it.kind === 'composition')) return null;
+      // D-083 / D-163 — a list of TEXT items or of PICTURES (a page list) is bindable; a
+      // composition item, or a mix, is not. The one predicate decides (golden rule 6).
+      if (sequenceItemsBinding(element.items) === null) return null;
       return { fieldId: field.id, target: { kind: 'sequence-items', elementId: element.id } };
     }
     if (element.type === 'repeater') {

@@ -155,6 +155,16 @@ export function defaultClock(id: string, x: number, y: number): ClockElement {
  * out through the top, simultaneous), auto-advance every 5s, infinite passes.
  * Time-driven like the ticker/clock — scrubbing never moves it.
  */
+/**
+ * The three sample items a new sequence starts with. `D-163` — exported so the first pictures can
+ * REPLACE them when the author never touched them (a book should not open on "Now: first item").
+ */
+export const DEFAULT_SEQUENCE_ITEMS: readonly { id: string; text: string }[] = [
+  { id: 'item-1', text: 'Now: first item' },
+  { id: 'item-2', text: 'Then: second item' },
+  { id: 'item-3', text: 'Next: third item' },
+];
+
 export function defaultSequence(id: string, x: number, y: number): SequenceElement {
   return {
     id,
@@ -179,11 +189,7 @@ export function defaultSequence(id: string, x: number, y: number): SequenceEleme
     // D-045 — vertical placement of the item text within the box (default centred).
     verticalAlign: 'middle',
     direction: 'ltr',
-    items: [
-      { id: 'item-1', text: 'Now: first item' },
-      { id: 'item-2', text: 'Then: second item' },
-      { id: 'item-3', text: 'Next: third item' },
-    ],
+    items: DEFAULT_SEQUENCE_ITEMS.map((i) => ({ ...i })),
     defaultDwellMs: 5000,
     advance: 'auto',
     transitionIn: 'bottom',

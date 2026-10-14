@@ -116,9 +116,16 @@ function typedInto(
   return digits === undefined ? el.value : writeDigitsInto(el, event, digits, keyboardLanguage);
 }
 
-/** D-083 — the item's kind ('text' default for back-compat). */
-function kindOf(item: ListItem): 'text' | 'composition' {
-  return (item as Record<string, unknown>)['kind'] === 'composition' ? 'composition' : 'text';
+/** D-083 — the item's kind ('text' default for back-compat); `D-163` a PICTURE. */
+function kindOf(item: ListItem): 'text' | 'composition' | 'image' {
+  const kind = (item as Record<string, unknown>)['kind'];
+  return kind === 'composition' ? 'composition' : kind === 'image' ? 'image' : 'text';
+}
+
+/** `D-163` — a picture item's file name (or its id when it carries none). */
+function pageNameOf(item: ListItem): string {
+  const name = (item as Record<string, unknown>)['name'];
+  return typeof name === 'string' && name !== '' ? name : item.id;
 }
 
 /** The composition id a composition item references ('' when unset). */
@@ -357,7 +364,10 @@ export function ListItemsEditor({
                 <Select
                   value={kindOf(item)}
                   aria-label={`${label} item ${String(i + 1)} type`}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    // D-163 — `Picture` is only ever the kind an item already has: a picture
+                    // comes from `Add pictures…`, never from turning text into one.
+                    if (e.target.value === 'image') return;
                     onChange(
                       items.map((it, j) =>
                         j === i
@@ -368,18 +378,27 @@ export function ListItemsEditor({
                             )
                           : it,
                       ),
-                    )
-                  }
+                    );
+                  }}
                 >
                   <option value="text">Text</option>
                   <option value="composition">Composition</option>
+                  {kindOf(item) === 'image' && <option value="image">Picture</option>}
                 </Select>
                 <div className={s.itemActions}>
                   {dwellInput}
                   {controls}
                 </div>
               </div>
-              {kindOf(item) === 'composition' ? (
+              {kindOf(item) === 'image' ? (
+                <span
+                  className={s.pageName}
+                  title={pageNameOf(item)}
+                  aria-label={`${label} item ${String(i + 1)} picture`}
+                >
+                  {pageNameOf(item)}
+                </span>
+              ) : kindOf(item) === 'composition' ? (
                 <Select
                   value={compIdOf(item)}
                   aria-label={`${label} item ${String(i + 1)} composition`}

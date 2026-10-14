@@ -20,10 +20,13 @@ import { acceptAttr, type PickKind } from '../shared/asset-types.js';
  * `cancel` handling dismissal there is nothing left to detect by timing, so the
  * race source is removed entirely: nothing pre-empts `change`.
  */
-export function pickFiles(kind?: PickKind): Promise<File[]> {
+export function pickFiles(kind?: PickKind, opts: { folder?: boolean } = {}): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
+    // D-163 — a whole FOLDER of pictures (a book's pages) in one pick. The browser hands back
+    // every file under it; the caller filters to the kind and orders them naturally.
+    if (opts.folder === true) input.webkitdirectory = true;
     // D-128 — the video import modal is inherently ONE clip at a time (crop, fps
     // warning, progress, duplicate step), so the video picker is single-select so
     // the UI can't promise a batch it won't import. Every other kind stays

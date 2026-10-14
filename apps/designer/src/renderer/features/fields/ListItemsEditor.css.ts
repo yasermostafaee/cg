@@ -118,6 +118,24 @@ export const addRow = style({
   marginTop: '0.3rem',
 });
 
+/** `D-163` — `Add pictures…` / `Add folder…`, side by side. */
+export const pageButtons = style({
+  display: 'flex',
+  gap: '0.3rem',
+  marginTop: '0.3rem',
+});
+
+/** `D-163` — a picture item's file name: one line, cut with an ellipsis, the full name in its title. */
+export const pageName = style({
+  color: colors.text,
+  fontSize: '0.72rem',
+  lineHeight: 1.4,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  minWidth: 0,
+});
+
 export const empty = style({
   color: colors.textMuted,
   fontSize: '0.68rem',

@@ -1068,6 +1068,10 @@ export class Preview {
                 const nextFn = controlFn('next');
                 if (nextFn === null) reportDroppedControl('next');
                 else nextFn();
+              } else if (msg.action === 'previous') {
+                // D-163 — CasparCG has no PREVIOUS verb, so there is no global to call: the
+                // preview turns back through the runtime it holds (a bridge does it with __cg.page).
+                if (runtime && typeof runtime.previous === 'function') void runtime.previous();
               } else if (msg.action === 'pause') {
                 // D-020 — freeze the lifecycle (intro / hold countdown / outro).
                 if (runtime && typeof runtime.pause === 'function') runtime.pause();

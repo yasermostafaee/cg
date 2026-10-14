@@ -194,7 +194,7 @@ export interface DesignerBridge {
      * picking: it shows a loading tile per file only after a real selection (a cancel
      * returns `[]`), then `store()`s each file independently.
      */
-    pick(kind?: AssetMeta['kind']): Promise<File[]>;
+    pick(kind?: AssetMeta['kind'], opts?: { folder?: boolean }): Promise<File[]>;
     /** D-067 — import one already-picked file (decode / store / dedupe by sha256). */
     store(
       file: File,

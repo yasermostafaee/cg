@@ -49,6 +49,17 @@ export function collectImageElements(scene: Scene): ImageRef[] {
             source: el.separator.source,
           });
         }
+      } else if (el.type === 'sequence') {
+        // D-163 — an AUTHORED page of a book (a picture item naming a project asset) is packaged
+        // and inlined exactly like an image element. Keyed per item: one sequence, many pages. An
+        // operator page (`media`) is never in the template — its bytes travel with its page turn.
+        for (const item of el.items) {
+          if (item.kind !== 'image' || item.assetId === undefined) continue;
+          const key = `${el.id}:page:${item.id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({ elementId: el.id, assetId: item.assetId, source: 'project' });
+        }
       } else if (el.type === 'container') {
         walk(el.children);
       }

@@ -659,6 +659,25 @@ export type SequenceTextItem = z.infer<typeof SequenceTextItemSchema>;
 export type SequenceCompositionItem = z.infer<typeof SequenceCompositionItemSchema>;
 export type SequenceImageItem = z.infer<typeof SequenceImageItemSchema>;
 
+/**
+ * 🔴 `D-163` — THE ONE ANSWER to "how may this sequence's item LIST be data-bound?" (golden rule 6):
+ *
+ * - `'text'` — every item is text (or there are none): a bound `list` of text items, as D-029/D-083;
+ * - `'pages'` — every item is a picture: a PAGE LIST the operator loads in CG Control;
+ * - `null` — anything mixed, or any composition item: not bindable (a bound list value cannot carry
+ *   a composition, and a list that is half text and half pictures is neither surface).
+ *
+ * The Designer's bind resolver, its Data-key lock and its store all read this; none re-derives it.
+ */
+export function sequenceItemsBinding(
+  items: readonly { kind?: string | undefined }[],
+): 'text' | 'pages' | null {
+  if (items.some((i) => i.kind === 'composition')) return null;
+  const pictures = items.filter((i) => i.kind === 'image').length;
+  if (pictures === 0) return 'text';
+  return pictures === items.length ? 'pages' : null;
+}
+
 /** A transition edge: where an item enters from / exits to. `none` = instant cut. */
 const SequenceEdgeSchema = z.enum(['top', 'bottom', 'left', 'right', 'none']);
 

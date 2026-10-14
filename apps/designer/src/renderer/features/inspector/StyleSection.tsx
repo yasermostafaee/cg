@@ -10,6 +10,7 @@ import {
   fieldDigitsOf,
   followWindowMs,
   followsComposition,
+  ImageFitSchema,
   NumberFieldDigitsSchema,
 } from '@cg/shared-schema';
 import type {
@@ -58,6 +59,7 @@ import {
   sequencePresetKeyFor,
 } from './sequence-presets.js';
 import { ListItemsEditor } from '../fields/ListItemsEditor.js';
+import { SequencePagesControl } from './SequencePagesControl.js';
 import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
 import { TickerSeparatorControl } from './TickerSeparatorControl.js';
 import * as dds from './DynamicDataSection.css.js';
@@ -103,6 +105,14 @@ import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import * as radiusCss from './BorderRadiusSection.css.js';
 import * as fieldCss from './controls.css.js';
+
+/**
+ * D-149 — the image fit choices and their words (`none` is LABELLED "original"; its stored value is
+ * unchanged). `D-163` — the same pair drives a sequence's ONE fit for its pictures, so the two
+ * controls cannot drift.
+ */
+const IMAGE_FIT_OPTIONS = ImageFitSchema.options;
+const IMAGE_FIT_LABELS = ['contain', 'cover', 'fill', 'original', 'fit width', 'fit height'];
 
 interface Props {
   element: Element;
@@ -609,8 +619,8 @@ function ImageSections({
         <SelectField
           label="fit"
           value={element.fit}
-          options={['contain', 'cover', 'fill', 'none', 'fit-width', 'fit-height'] as const}
-          labels={['contain', 'cover', 'fill', 'original', 'fit width', 'fit height']}
+          options={IMAGE_FIT_OPTIONS}
+          labels={IMAGE_FIT_LABELS}
           onCommit={(fit) => designerStore.updateElement(id, { fit } as Partial<Element>)}
         />
         <SharedImagePicker element={element} />
@@ -2646,6 +2656,8 @@ function SequenceSections({
     return field === undefined ? undefined : fieldDigitsOf(field);
   };
   const dataBound = scene !== null && elementDataField(scene, id) !== undefined;
+  // D-163 — the book's pages: how many, and the ONE fit they are drawn at.
+  const pageCount = element.items.filter((it) => it.kind === 'image').length;
   return (
     <>
       <CollapseSection title="Sequence" pinned>
@@ -2756,6 +2768,17 @@ function SequenceSections({
             designerStore.updateElement(id, { direction } as Partial<Element>)
           }
         />
+        {pageCount > 0 && (
+          <SelectField
+            label="picture fit"
+            value={element.imageFit ?? 'contain'}
+            options={IMAGE_FIT_OPTIONS}
+            labels={IMAGE_FIT_LABELS}
+            onCommit={(imageFit) =>
+              designerStore.updateElement(id, { imageFit } as Partial<Element>)
+            }
+          />
+        )}
         <StateLine tip={<TimeDrivenTip kind="sequence" />}>
           Time-driven — scrubbing does not move it.
         </StateLine>
@@ -2782,6 +2805,7 @@ function SequenceSections({
           </InfoTip>
         }
       >
+        <SequencePagesControl elementId={id} pageCount={pageCount} />
         <ListItemsEditor
           items={element.items}
           label={element.name || 'Sequence'}

@@ -2,6 +2,7 @@ import {
   elementDigitsOf,
   fieldDigitsOf,
   fieldTakesFileSource,
+  sequenceItemsBinding,
   type DynamicField,
   type Element,
   type FieldBinding,
@@ -13,6 +14,7 @@ import { parseLocalizedNumber } from '@cg/text-shaping';
 import { current, set } from '../store-core.js';
 import { activeFieldData, locate, withActiveFieldData } from '../scene-doc.js';
 import { designerStore } from '../store.js';
+import { DEFAULT_SEQUENCE_ITEMS } from '../element-defaults.js';
 
 /**
  * Fields & bindings slice — the active composition's dynamic fields and
@@ -431,6 +433,10 @@ export const fieldsSlice = {
     // only a text-shaped one) — a kind mismatch would wire an uneditable
     // value.
     if (existing !== undefined && (existing.type === 'list') !== isListElement) return false;
+    // D-083 / D-163 — a sequence binds only an all-text list or an all-picture PAGE LIST.
+    const seqBinding =
+      el !== undefined && el.type === 'sequence' ? sequenceItemsBinding(el.items) : undefined;
+    if (seqBinding === null) return false;
 
     if (currentKey === null) {
       const binding: FieldBinding =
@@ -459,6 +465,8 @@ export const fieldsSlice = {
                 : [],
             // TEXT-DIGITS-01 — a list's items are typed text; a new one starts on Persian too.
             digits: NEW_FIELD_DIGITS,
+            // D-163 — an all-picture sequence seeds a PAGE LIST, loaded as pictures in CG Control.
+            ...(seqBinding === 'pages' ? { pages: true as const } : {}),
           }
         : {
             id: trimmed,
@@ -677,6 +685,19 @@ export const fieldsSlice = {
           ? { id: i.id, kind: 'composition', compositionId }
           : { id: i.id, kind: 'composition', compositionId, dwellMs };
       }
+      // D-163 — a PICTURE item keeps its one source and its file name.
+      if (o['kind'] === 'image') {
+        const assetId = typeof o['assetId'] === 'string' ? o['assetId'] : undefined;
+        const media = typeof o['media'] === 'string' ? o['media'] : undefined;
+        const name = typeof o['name'] === 'string' ? o['name'] : undefined;
+        return {
+          id: i.id,
+          kind: 'image',
+          ...(assetId !== undefined ? { assetId } : media !== undefined ? { media } : {}),
+          ...(name !== undefined ? { name } : {}),
+          ...(dwellMs !== undefined ? { dwellMs } : {}),
+        };
+      }
       const text = typeof o['text'] === 'string' ? o['text'] : '';
       return dwellMs === undefined ? { id: i.id, text } : { id: i.id, text, dwellMs };
     });
@@ -691,13 +712,16 @@ export const fieldsSlice = {
       (b) => b.target.kind === 'sequence-items' && b.target.elementId === elementId,
     );
     if (conv !== undefined) {
-      if (authored.some((i) => (i as Record<string, unknown>)['kind'] === 'composition')) {
+      const field = listDoc.fields.find((f) => f.id === conv.fieldId);
+      const binding = sequenceItemsBinding(authored as { kind?: string }[]);
+      // D-083 / D-163 — the binding is dropped (with its field) when the list stops being
+      // bindable, AND when it changes SURFACE — text ↔ pictures: a page list and a text list are
+      // two different operator controls, so the author binds the new one on purpose.
+      const wasPages = field !== undefined && field.type === 'list' && field.pages === true;
+      if (binding === null || (binding === 'pages') !== wasPages) {
         designerStore.removeField(conv.fieldId);
-      } else {
-        const field = listDoc.fields.find((f) => f.id === conv.fieldId);
-        if (field !== undefined && field.type === 'list') {
-          designerStore.updateField(field.id, { default: items.map((i) => ({ ...i })) });
-        }
+      } else if (field !== undefined && field.type === 'list') {
+        designerStore.updateField(field.id, { default: items.map((i) => ({ ...i })) });
       }
     }
 
@@ -709,7 +733,7 @@ export const fieldsSlice = {
       const tgt = b.target;
       if (tgt.kind !== 'sequence-item-text' || tgt.elementId !== elementId) continue;
       const item = authored.find((i) => i.id === tgt.itemId) as Record<string, unknown> | undefined;
-      if (item === undefined || item['kind'] === 'composition') {
+      if (item === undefined || item['kind'] === 'composition' || item['kind'] === 'image') {
         designerStore.removeField(b.fieldId);
       } else {
         designerStore.updateField(b.fieldId, {
@@ -717,6 +741,54 @@ export const fieldsSlice = {
         });
       }
     }
+  },
+
+  /**
+   * `D-163` — add PICTURES (already-imported image assets, in the order given) to a sequence as
+   * ONE intent — one undo step. The FIRST pictures make the sequence a book: transition Cut
+   * (`none`/`none`), manual advance, one pass — every one of which the author can change after.
+   * The three sample items a new sequence starts with are REPLACED when they are untouched; any
+   * item the author wrote is kept. Returns how many pages were added.
+   */
+  addSequencePictures(
+    elementId: string,
+    pictures: readonly { assetId: string; name: string }[],
+  ): number {
+    if (current.scene === null || pictures.length === 0) return 0;
+    const found = locate(current.scene, elementId);
+    const el = found === null ? undefined : found.layer.children[found.elIdx];
+    if (el === undefined || el.type !== 'sequence') return 0;
+    const firstPictures = !el.items.some((i) => i.kind === 'image');
+    const untouchedSamples =
+      el.items.length === DEFAULT_SEQUENCE_ITEMS.length &&
+      el.items.every((item, i) => {
+        const sample = DEFAULT_SEQUENCE_ITEMS[i];
+        return (
+          sample !== undefined &&
+          (item.kind === undefined || item.kind === 'text') &&
+          item.id === sample.id &&
+          item.text === sample.text &&
+          item.dwellMs === undefined
+        );
+      });
+    const kept = untouchedSamples ? [] : el.items.map((i) => ({ ...i }));
+    const stamp = Date.now().toString(36);
+    const added = pictures.map((p, n) => ({
+      id: `page-${stamp}-${String(n + 1)}`,
+      kind: 'image' as const,
+      assetId: p.assetId,
+      name: p.name,
+    }));
+    if (firstPictures) {
+      designerStore.updateElement(elementId, {
+        transitionIn: 'none',
+        transitionOut: 'none',
+        advance: 'manual',
+        repeat: 1,
+      } as Partial<Element>);
+    }
+    designerStore.setSequenceItems(elementId, [...kept, ...added] as ListItem[]);
+    return added.length;
   },
 
   /**

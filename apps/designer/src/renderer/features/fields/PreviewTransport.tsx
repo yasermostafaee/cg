@@ -1,4 +1,4 @@
-import { LogOut, Pause, Play, RotateCcw, SkipForward, Square } from 'lucide-react';
+import { LogOut, Pause, Play, RotateCcw, SkipBack, SkipForward, Square } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import * as s from './PreviewTransport.css.js';
@@ -28,6 +28,7 @@ export function PreviewTransport({
   onPause,
   onOut,
   onStop,
+  onPrevious,
   onNext,
   onReset,
 }: {
@@ -37,6 +38,7 @@ export function PreviewTransport({
   onPause: () => void;
   onOut: () => void;
   onStop: () => void;
+  onPrevious: () => void;
   onNext: () => void;
   onReset: () => void;
 }): JSX.Element {
@@ -67,6 +69,15 @@ export function PreviewTransport({
         >
           <Icon icon={Square} size={16} />
           Stop
+        </Button>
+        <Button
+          className={s.command}
+          onClick={onPrevious}
+          disabled={!canStep}
+          title={canStep ? undefined : 'Single-step template — nothing to go back to'}
+        >
+          <Icon icon={SkipBack} size={16} />
+          Previous
         </Button>
         <Button
           className={s.command}

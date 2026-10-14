@@ -252,6 +252,7 @@ export function PreviewModal({
       stop: () => post({ action: 'stop' }),
       out: () => post({ action: 'out' }),
       next: () => post({ action: 'next' }),
+      previous: () => post({ action: 'previous' }),
       reset: () => post({ action: 'reset' }),
       pause: () => post({ action: 'pause' }),
       resume: () => post({ action: 'resume' }),
@@ -291,6 +292,7 @@ export function PreviewModal({
     setPaused(false);
   }, [dispatch]);
   const onNext = useCallback(() => dispatch.next(), [dispatch]);
+  const onPrevious = useCallback(() => dispatch.previous(), [dispatch]);
   const onReset = useCallback(() => {
     const seeded = defaultNestedValues(aggregate);
     setValues(seeded);
@@ -439,6 +441,7 @@ export function PreviewModal({
               onPause={onPause}
               onOut={onOut}
               onStop={onStop}
+              onPrevious={onPrevious}
               onNext={onNext}
               onReset={onReset}
             />
