@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * Global dark tooltip (the Loopic pattern). Mounted once at the app root;
@@ -141,7 +142,14 @@ function Bubble({ tip }: { tip: Tip }): JSX.Element {
     setPos({ left, top });
   }, [tip]);
 
-  return (
+  /*
+    `D-163` — ABOVE EVERY LAYER, and on `document.body`. The bubble sat at 3000 inside the app root,
+    under the modal (5000, portaled to body) and the popovers (4000), so a dialog's tooltips drew
+    underneath it — the owner's report on the Pages manager. A tooltip is transient and click-
+    through (`pointer-events: none`), so the top of the stack is its place; the portal takes it out
+    of the app root's stacking context, where no number could lift it over a body-level dialog.
+  */
+  return createPortal(
     <div
       ref={ref}
       role="tooltip"
@@ -166,11 +174,12 @@ function Bubble({ tip }: { tip: Tip }): JSX.Element {
         wordBreak: 'break-word',
         pointerEvents: 'none',
         boxShadow: '0 4px 14px rgba(0, 0, 0, 0.45)',
-        zIndex: 3000,
+        zIndex: 10000,
       }}
     >
       {tip.text}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
