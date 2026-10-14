@@ -4205,3 +4205,29 @@ wraps, and stacks to a column when one row cannot hold it; fixed once in the sha
 label may be shortened with its long form in a `title`. **Acceptance:** measured in Chromium: every button's box
 lies inside the dialog's box, at the smallest supported window and at a large text scale, for every dialog of
 three or more buttons in both apps.
+
+## [~] B-342 — An imported clip is placed with its top-left corner at the scene centre ⟨priority: medium — a full-frame clip or image sequence lands three quarters off the frame⟩ — FILED 2026-10-14 by `PNG-SEQUENCE-IMPORT-01` §0.4 · `openspec/changes/add-image-sequence-import/`
+
+**Repro / Actual:** import any clip (or, since `D-164`, an image sequence) through the Assets panel and press
+`Place element`. `placeVideoElement` documents "place … at the scene centre" and hands the scene centre to the
+element's `position` — which is the element's TOP-LEFT. A 1920 × 1080 clip in a 1920 × 1080 project therefore draws
+from (960, 540): measured on the owner's local CasparCG 2.5.0 during `D-164` §0.4, the exported template's video
+reported `getBoundingClientRect()` = `960, 540, 1920, 1080`, and the channel showed only the clip's top-left quarter
+in the frame's bottom-right quarter. Nothing failed — the clip played, alpha intact — it was simply in the wrong
+place. **Expected:** the fitted BOX is centred: its centre is the scene centre (a full-frame clip at 0, 0).
+**Acceptance:** a full-frame clip is placed at 0, 0; a smaller one with its centre at the scene centre; a larger one
+fitted, then centred — `apps/designer/tests/place-video-centre.dom.test.ts`, red on the old placement (3 of 3).
+The drag-from-assets door places at the drop point and is unchanged.
+
+## [ ] B-343 — A looping video skips frames at every loop point on air ⟨priority: low — measured, not yet seen by eye; D-128's 2-hour owner run on 2.3.2 saw no stutter⟩ — FILED 2026-10-14 by `PNG-SEQUENCE-IMPORT-01` §0.4 · measure-only
+
+**Measured (owner's local CasparCG 2.5.0, channel 1080p50, single-file template by `CG ADD`):** a 150-frame 1080p50
+video (from a PNG sequence) holding with `holdBehavior: loop`, timed inside the page by `requestVideoFrameCallback`.
+`requestAnimationFrame` ran at exactly 50 per second, and BETWEEN loop points every frame was presented — 0 skipped
+of about 600. At each of 5 loop points the next frames presented were 1 to 6 frames past the clip's start (12 skipped
+in all; `presentedFrames` gaps 7), and a report caught the element `paused` at `currentTime` 3.00 just before one
+wrap. A clip import control (a 25 fps fixture conformed to 50) showed one compositor gap per wrap as well (14 over 14
+wraps), so this belongs to the hold loop's wrap (pause at the end, then seek to 0), not to image sequences.
+**Expected:** a loop that repeats seamlessly — the frame after the last is the first. **Acceptance:** the same
+measurement reads 0 skipped frames at the loop point over ≥ 10 wraps, on CasparCG 2.5.0. Nothing is changed by this
+filing.

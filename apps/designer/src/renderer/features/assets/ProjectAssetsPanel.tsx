@@ -518,6 +518,12 @@ function countUsages(
  * than the frame. The drag-from-assets drop is the other entry point to the
  * same element (CanvasOverlay) — BOTH go through {@link fitVideoElement} so the
  * two paths produce an identical element for the same asset.
+ *
+ * 🔴 `B-342` — CENTRED means the BOX's centre: `position` is the element's
+ * top-left, and handing it the scene centre put a full-frame clip's top-left
+ * there, three quarters of it off the frame (measured on air, `D-164` §0.4: a
+ * 1920×1080 sequence drew at left 960, top 540). The fitted size is known only
+ * after the fit, so the box is fitted first and then centred.
  */
 export function placeVideoElement(
   result: { asset: AssetMeta; durationMs: number; width: number; height: number },
@@ -525,22 +531,28 @@ export function placeVideoElement(
 ): void {
   const res = scene?.resolution ?? { width: 1920, height: 1080 };
   const id = `el-${String(Date.now())}`;
+  const fitted = fitVideoElement({
+    id,
+    x: 0,
+    y: 0,
+    assetId: result.asset.assetId,
+    durationMs: result.durationMs,
+    sourceWidth: result.width,
+    sourceHeight: result.height,
+    resolution: res,
+  });
+  const { w, h } = fitted.transform.size;
   // D-151 — through the add-time duration guard (door V1/V2): a clip longer than the host
   // raises the Extend / backdrop / Cancel dialog INSTEAD of inserting. The guard commits via
   // `addElement`, which also selects — the old trailing `setSelection` would have selected an
   // id that a deferred or cancelled add never inserts.
-  guardedAddVideo(
-    fitVideoElement({
-      id,
-      x: res.width / 2,
-      y: res.height / 2,
-      assetId: result.asset.assetId,
-      durationMs: result.durationMs,
-      sourceWidth: result.width,
-      sourceHeight: result.height,
-      resolution: res,
-    }),
-  );
+  guardedAddVideo({
+    ...fitted,
+    transform: {
+      ...fitted.transform,
+      position: { x: Math.round((res.width - w) / 2), y: Math.round((res.height - h) / 2) },
+    },
+  });
 }
 
 function DeleteConfirmDialog({

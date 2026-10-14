@@ -3393,3 +3393,16 @@ returned nothing, and the same with `--untracked`; control: the same sweep's sha
 no stash.
 
 ⇒ **Next free after this entry is `B-342`**, **`D-165`**, **`P-068`**, **`R-101`** and **`C-049`**.
+
+### 2026-10-14 — `PNG-SEQUENCE-IMPORT-01` takes `B-342` and `B-343`
+
+- `B-342` — an imported clip is placed with its top-left corner at the scene centre — [bugs-designer.md](bugs-designer.md).
+  Found on air during `D-164` §0.4.
+- `B-343` — a looping video skips frames at every loop point on air (measure-only) —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: `git grep -h -e "## \[.\] B-342" <ref> -- docs/prd` (and the same for `B-343`) on all 9 local
+and remote-tracking refs after `git fetch` returned nothing; control: the same sweep found the heading `B-341` (on 2
+refs); no stash.
+
+⇒ **Next free after this entry is `B-344`**, **`D-165`**, **`P-068`**, **`R-101`** and **`C-049`**.
