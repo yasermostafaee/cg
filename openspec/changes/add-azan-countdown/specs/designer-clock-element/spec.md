@@ -106,7 +106,7 @@ The Designer SHALL offer the 4-zone preset — base plus thresholds at 60, 30 an
 applying it SHALL also seed the clock's own per-zone text colour, as a single undo entry, so the
 preset yields a visibly working countdown rather than a configured-but-inert one.
 
-The active zone SHALL be selected FIRST-MATCH-WINS over the steps in authored order (the first
+The active zone SHALL be the TIGHTEST covering step over the steps in authored order (the LAST
 step whose `atOrBelowMs` is at or above the remaining time), falling back to `base`, or to NO
 active zone when `base` is absent. Selection SHALL compare against the SAME one-second quantum
 the display paints, so the zone changes on exactly the frame the digits reach the boundary — never

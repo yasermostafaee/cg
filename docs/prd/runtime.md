@@ -4680,3 +4680,16 @@ frame.
 Previous / `۱۲` THEN `2 / 300`, `1 / 300`, `12 / 300`; WHEN a picture is over a limit THEN a refusal naming it;
 WHEN the bridge restarts THEN the row keeps its pages and page; WHEN the row is removed THEN its pictures are
 deleted unless another row names them; WHEN a second console looks THEN it sees the same book.
+
+## [ ] R-101 — the Inspector checks a text field against its pattern before Update, so a mistyped Azan time is refused at the console instead of silently ignored by the page ⟨priority: medium — the Azan time is the first field whose bad value changes nothing on air without a word⟩ — FILED 2026-10-15 by `AZAN-DESIGNER-01` (item 4) · not built (CG Control work outside `add-azan-countdown`)
+
+**What:** a text field carrying a `pattern` (the Designer writes one, e.g. the `Time (HH:MM)` preset on a clock's
+data key, [[D-141]]) is checked in CG Control's Inspector before Apply/Update. The check tries the value as typed
+and with its digits read as Latin, as the Designer's preview form already does (`template-value-digits`), so `۲۰:۳۲`
+is a time. A value that fails shows one line under the field and is not sent. **Why:** today the Inspector sends any
+text. A time like `25:00` reaches the page, which refuses it (`parseTimeOfDay` answers nothing). The page then keeps
+the old target, as `D-141` §4.2 requires. Its `clock-target-unparseable` report reaches no console surface, so the
+operator types a new azan time, presses Update, and the countdown keeps counting to the old one with nothing said.
+**Acceptance:** WHEN an operator types `25:00` into a field whose pattern is the time preset THEN the Inspector says
+it is not a time and sends nothing; WHEN `۲۰:۳۲` or `20:32` THEN it is sent; WHEN a field has no pattern THEN nothing
+changes.

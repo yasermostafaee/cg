@@ -55,7 +55,12 @@
 - [x] 5.6 `apps/runtime/tests/e2e/page-rebuild.spec.ts` — a real in-process bridge: on connect
       the console rebuilds the kept page (one audit row, a new path), and the Library names
       the legacy template once. Local Windows: 1 passed
-- [ ] 5.7 Linux `e2e` RAN on the commit carrying the change — run URL here
+- [x] 5.7 Linux `e2e` RAN on the commit carrying the change —
+      [38637675128](https://github.com/yasermostafaee/cg/actions/runs/38637675128) (`9dc3d615`,
+      which carries `cec75cfa` and `2091dec6`): `ci` and the `E2E` step RAN and completed green —
+      Runtime 344 passed / 2 skipped, `page-rebuild.spec.ts` among them; Designer 318 passed / 13
+      skipped / 1 flaky (`clock.spec.ts:14`, a wall-clock tick, passed on retry; not touched by
+      this change). Read from the run log
 
 ## 6. Docs
 

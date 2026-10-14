@@ -189,6 +189,12 @@ swaps it into the channel lists only once no row has the old page on a layer.
 Extension point: anything new that goes into every page must enter the fingerprint;
 a change to the shell itself must bump the revision.
 
+**Countdown zones (`D-141`) are compiled by the runtime, from the scene.** A zoned countdown flips
+one attribute on its scope root; `zone-css.ts` turns the scene's zones and per-element overrides
+into one stylesheet of inherited custom properties at boot. The preview, the `.vcg` and the
+single-file page therefore run the same compiler over the same scene, and neither exporter has a
+zone code path (see `packages/template-runtime/README.md`, "Countdown ZONES").
+
 ## The editor ↔ schema ↔ runtime triangle
 
 ```

@@ -44,17 +44,22 @@ deliberate exceptions are the subpaths listed after the table:
 | `buildRepeaterRows`, `clampRowCount`, `repeaterItemValues`   | The row builder (flow cells + fresh row scopes) and its pure helpers. `B-106`: `clampRowCount` and the driver's restamp both read `@cg/shared-schema`'s `repeaterRowLimit` — a value that is not a number ≥ 1 is no limit. |
 | `LifecycleStateMachine`, `EventBus`, `applyTransform`        | Lifecycle state, events, value transforms.                                                                                                                                                                                 |
 
-### 🔴 The two SUBPATH exports, and why they are not on the table above
+### 🔴 The SUBPATH exports, and why they are not on the table above
 
 `src/index.ts` is **esbuild's bundle ENTRY**, so its export list IS the export table of the runtime
 bundle inlined into every exported `.vcg`. Adding a name there costs bytes in every artifact on air,
 for a symbol no page calls. Two symbols are therefore reachable **only** through subpaths declared
 in `package.json`, and are deliberately absent from the entry:
 
-| Subpath                              | Export                               | Consumer                                                                    |
-| ------------------------------------ | ------------------------------------ | --------------------------------------------------------------------------- |
-| `@cg/template-runtime/scene-builder` | `SMPTE_BARS`, `smpteBarsGradient()`  | The Runtime's PVW live-plate placeholders (R-049) — ONE bar table, reused.  |
-| `@cg/template-runtime/position`      | the pure `position.ts` geometry half | The same overlay's scene-px → raster-px chain — ONE arithmetic, not a copy. |
+| Subpath                              | Export                                | Consumer                                                                       |
+| ------------------------------------ | ------------------------------------- | ------------------------------------------------------------------------------ |
+| `@cg/template-runtime/scene-builder` | `SMPTE_BARS`, `smpteBarsGradient()`   | The Runtime's PVW live-plate placeholders (R-049) — ONE bar table, reused.     |
+| `@cg/template-runtime/position`      | the pure `position.ts` geometry half  | The same overlay's scene-px → raster-px chain — ONE arithmetic, not a copy.    |
+| `@cg/template-runtime/zone-css`      | `zoneColorTargets()` and the compiler | The Designer's zone-colour section (`D-141`) — the slots a kind owns, ONE map. |
+
+(`zone-css` is also re-exported from the entry for the page's own use; the subpath exists because the
+Designer renderer must not load the entry — it pulls `lottie_light`, which touches a 2D canvas at module
+init and breaks the Designer's jsdom suites. `zone-css.ts` imports types only.)
 
 Two rules govern adding to either, both learned by measurement rather than argued:
 
@@ -668,6 +673,31 @@ modes need a real epoch; the ticker's clock is performance-style).
   in semantics. The time-dependent cases are recomputed at reset time by
   design — a datetime deadline is absolute and keeps approaching while the
   template idles; only a duration countdown repaints a constant.
+- `D-141` — a `timeofday` target (`HH:mm[:ss]`) is ABSOLUTE too: `resolveTimeOfDay` builds the
+  next LOCAL occurrence from the rendering machine's calendar fields (today, or tomorrow once
+  today's has passed — an occurrence equal to now counts as arrived), and the deadline is PINNED
+  once per run (`start`/`reset`) so a countdown can reach zero instead of jumping to a full day.
+  `retarget()` re-pins it from a bound field (`clock-target`, applied by `reapplyClockTargets` on
+  play and update) without touching the run; an unparseable value applies nothing.
+
+### Countdown ZONES — one attribute, compiled custom properties (`D-141`)
+
+A countdown with `zones` publishes the active zone key as `data-cg-zone` on its SCOPE ROOT (the
+scope's container, stamped `data-cg-zone-root` by the scene-builder), written by the ClockDriver
+behind a latch — once per boundary, not per paint — and evaluated on the same one-second quantum the
+digits paint. The tightest covering step wins; at and after zero the lowest step stays.
+
+`zone-css.ts` compiles the scene into ONE stylesheet (`<style id="cg-zones">`, injected beside the
+baseline by `ensureZoneCss`): a RESET of every slot on every zoned root, a PUBLICATION rule per zone
+key, and a CONSUMPTION rule per opted-in element (`data-cg-zone-el="<index>"`) reading
+`var(--cgz-<index>-<slot>, <authored value>)`. Custom properties inherit, so the NEAREST zoned root
+governs a nested element — nearest-wins in the cascade, on Chromium 71. A key no root publishes is
+inert: the element keeps its authored colour.
+
+**Extension point.** A new colourable slot is a row in `zoneColorTargets` (the kind → CSS property
+map, shared with D-139's colour effect) — nothing else. The compiler is pure, and both exporters embed
+the scene and boot this runtime, so preview and air compile the same text and neither exporter knows
+zones exist (`single-file-export/tests/zone-export-parity.test.ts`).
 
 ### SequenceDriver — the now/next rotation + next() dispatch (D-029)
 

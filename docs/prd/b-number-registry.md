@@ -3426,3 +3426,14 @@ after `git fetch` returned nothing, and `git grep --untracked` over the tree lik
 `B-343` on 2 refs; no stash.
 
 ⇒ **Next free after this entry is `B-345`**, **`D-166`**, **`P-068`**, **`R-101`** and **`C-049`**.
+
+### 2026-10-15 — `AZAN-DESIGNER-01` takes `R-101`
+
+- `R-101` — CG Control's Inspector checks a text field against its pattern before Update (the Azan time) —
+  [runtime.md](runtime.md). Filed, not built.
+
+Measured free before use: `git grep -q -e "## \[.\] R-101" <ref> -- docs/prd` on all 8 local and remote-tracking refs
+returned nothing, and `git grep --untracked` over the tree likewise; control: the same sweep found `R-100` on 2 refs;
+no stash.
+
+⇒ **Next free after this entry is `B-345`**, **`D-166`**, **`P-068`**, **`R-102`** and **`C-049`**.

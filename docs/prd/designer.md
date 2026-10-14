@@ -3933,6 +3933,13 @@ answer. Rules are schema-level (additive) and evaluated in `@cg/template-runtime
 render paths agree. **RECON-FIRST, needs its own design.md** — schema + Inspector UI + runtime +
 both exporters (asset collection!).
 
+**Reuse, from [[D-141]] (`add-azan-countdown` design §1), so the boundary survives into D-139's own
+design:** a countdown's remaining time comes from `remainingMsOf(driver)`, a time of day from
+`resolveTimeOfDay`, a threshold choice from `pickByThreshold` (the TIGHTEST covering `≤` step on the
+displayed one-second quantum — "first match wins" over a decreasing `≤` list would pick the loosest),
+a colour effect's property and node from `zoneColorTargets`, and every write through a last-key latch.
+All are exported by `@cg/template-runtime`; a second local copy is golden rule 6's defect.
+
 ## [ ] D-140 — unified media insertion with a Source selector (Live Source / Video file / Image / Lottie) ⟨priority: medium⟩
 
 **What:** One **media insertion** tool whose Source selector — Live Source / Video file / Image /
@@ -3968,7 +3975,7 @@ is the NEED, not the UI. **Naming:** the live element is user-facing "Live Sourc
 schema type stays `video-placeholder`. **RECON-FIRST for the type-conversion semantics; needs its
 own design.md.**
 
-## [ ] D-141 — Azan countdown: time-of-day target + color zones (composition-deep) ⟨priority: high⟩ — change dir authored, NOT yet implemented: `openspec/changes/add-azan-countdown/` (42/63 tasks). Stays `[ ]` — per `docs/prd/README.md`, `[~]` means "change implemented, not yet archived", which this is not; the pointer is recorded so the change dir is reachable from the item
+## [~] D-141 — Azan countdown: time-of-day target + color zones (composition-deep) ⟨priority: high⟩ — implemented, not yet archived: `openspec/changes/add-azan-countdown/` (engine `edf8dcba`; the Designer half `AZAN-DESIGNER-01`, 2026-10-15 — `b57602ff`, `414c1377`, `94dee038`; `B-344` fixed on the way; the operator's pattern check filed as [[R-101]])
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q24): **needed for the next version.** Its Designer half (the 21 open tasks of `add-azan-countdown`) is in scope.
 

@@ -58,9 +58,12 @@ therefore lands these as SEPARATELY EXPORTED, dependency-free helpers in
    `Date.parse(target) - now`.
 2. **`resolveTimeOfDay(time, nowMs)`** — next-local-occurrence resolution (§3). Any future
    feature that names a time of day resolves it here.
-3. **`pickByThreshold(steps, remainingMs)`** — first-match-wins over strictly-decreasing
-   `atOrBelowMs` steps, with the boundary rule of §5.3. D-139's `≤ 60min` / `≤ 10min` threshold
-   rules are exactly this function with a different payload.
+3. **`pickByThreshold(steps, remainingMs)`** — the TIGHTEST covering step over strictly-decreasing
+   `atOrBelowMs` steps (corrected from "first-match-wins" by task 2.3 as built), with the boundary
+   rule of §5.3. D-139's `≤ 60min` / `≤ 10min` threshold rules are exactly this function with a
+   different payload. ⚠ D-139's own acceptance says FIRST match wins over an ordered list; over a
+   strictly-decreasing list of `≤` thresholds that picks the LOOSEST step, so D-139 must order or
+   choose by the same rule rather than re-derive one.
 4. **`zoneColorTargets(element)`** — element kind → the CSS property each colourable slot writes
    (§2.4). D-139's `colour/fill` effect must paint the SAME property on the SAME node, or a
    rectangle would recolour differently depending on which feature drove it.
@@ -231,14 +234,19 @@ none of the new members.
 resolveTimeOfDay(time, nowMs) -> epochMs
   d = new Date(nowMs)
   candidate = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm, ss ?? 0, 0)
-  if candidate.getTime() <= nowMs: candidate.setDate(candidate.getDate() + 1)
+  if candidate.getTime() < nowMs: candidate.setDate(candidate.getDate() + 1)
   return candidate.getTime()
 ```
 
 - **Local-field construction is the point.** `new Date(y, m, d, hh, mm, ss)` builds from LOCAL
   calendar fields, so DST transitions are resolved by the platform rather than by arithmetic on a
   fixed 86 400 000 ms day. `setDate(+1)` likewise rolls the local calendar day, not 24 hours.
-- **`<=` not `<`:** at exactly the target instant the countdown has arrived, not restarted.
+- **`<` not `<=`** (corrected by task 2.1 as built): an occurrence EXACTLY equal to now counts as
+  ARRIVED — remaining 0 — not as a fresh full day. The first draft read `<=`, which would have
+  turned a countdown reaching its target into `23:59:59`.
+- **Across midnight** (`AZAN-DESIGNER-01`): a target earlier in the day than now resolves to
+  tomorrow's local date, so at 23:50 a `00:10` azan is 20 minutes away and counts down through
+  midnight (and a year boundary) to zero — pinned by a test in `clock-timeofday-zones.test.ts`.
 - **The machine's clock is deliberate.** `wall` mode takes an optional IANA `timezone`
   (`elements.ts:303-310`) but "`countup`/`countdown` ignore it" (`:307`), and the driver honours
   that (`clock-driver.ts:44-47`). `timeofday` keeps the countdown family's rule: the operator
@@ -478,8 +486,10 @@ registration (Chrome 85) is needed — which matters, because that too is past t
 ### 5.3 Threshold and boundary semantics
 
 `pickByThreshold(steps, remainingMs)`: walk `steps` in authored order (strictly decreasing
-`atOrBelowMs`) and take the FIRST step whose `atOrBelowMs >= remainingMs`; if none matches, the
-zone is `base` (or none, when `base` is absent).
+`atOrBelowMs`) and take the TIGHTEST covering step — the LAST step whose `atOrBelowMs >=
+remainingMs`; if none matches, the zone is `base` (or none, when `base` is absent). (Corrected by
+task 2.3 as built: the first draft said FIRST, which would select the 60-minute zone for every
+remaining time under an hour and never reach the 30- or 10-minute zones.)
 
 **Evaluated on the DISPLAYED quantum, not the raw ms.** The countdown paints
 `ceil(max(0, remaining) / 1000)` seconds (`clock-driver.ts:245-247`), so zones compare
