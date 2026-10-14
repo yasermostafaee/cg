@@ -2282,9 +2282,14 @@ advancing `currentTime`. The existing coverage misses exactly this: `video-impor
 pins the transplant, but against the **canvas** iframe, which never plays, and it asserts node
 identity and `currentTime` — never `!paused` after a rebuild.
 
-## [ ] B-138 — an unresolved VIDEO asset in the preview is SILENTLY invisible: no placeholder, no marker, no console line ⟨priority: medium — it makes a whole class of asset failure undiagnosable⟩
+## [~] B-138 — an unresolved VIDEO asset in the preview is SILENTLY invisible: no placeholder, no marker, no console line ⟨priority: medium — it makes a whole class of asset failure undiagnosable⟩ — `openspec/changes/designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q3): **(a)** — a video whose file is missing shows the image "missing" picture as its still frame.
+— **Closed in code (DESIGNER-FIX-02, FAST lane):** the unresolved leg of `applyAssetUrls` is no
+longer image-only — a `<video>` gets `MISSING_IMG` as its `poster` and the `data-cg-missing` marker,
+and drops the poster when its URL arrives. Tests: `preview-video-missing.test.ts` (the generated
+source), e2e `video-missing-still.spec.ts` — measured in Chromium: the pixels in the video's box
+are the picture's fill `#2a2f45`; with the fix ablated the spec fails (no poster).
 
 **Repro (constructed — this is a latent trap, not a reported field failure):**
 

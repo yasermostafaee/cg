@@ -465,11 +465,19 @@ export class Preview {
               } else if (node.src !== url) {
                 node.src = url;
               }
+              // B-138 — a video that WAS missing drops the missing picture once its file resolves.
+              if (tag === 'VIDEO' && node.getAttribute('data-cg-missing') === '1') {
+                node.removeAttribute('poster');
+              }
               node.removeAttribute('data-cg-missing');
-            } else if (tag === 'IMG' && node.getAttribute('data-cg-missing') !== '1') {
+            } else if (node.getAttribute('data-cg-missing') !== '1') {
               // Unresolved (missing OR not-yet-primed). The host re-posts the map
-              // as URLs resolve, which overwrites this with the real image.
-              node.src = MISSING_IMG;
+              // as URLs resolve, which overwrites this with the real asset.
+              // B-138 (owner, Q3 (a)) — a VIDEO gets the SAME "missing image" picture, as its
+              // still frame (its poster): it used to fall out of this branch and paint nothing,
+              // indistinguishable from an element never placed.
+              if (tag === 'VIDEO') node.poster = MISSING_IMG;
+              else node.src = MISSING_IMG;
               node.setAttribute('data-cg-missing', '1');
             }
           });

@@ -36,7 +36,8 @@
 
 ## 5. FAST
 
-- [ ] 5.1 `B-138` a missing video shows the "missing" picture as its still frame.
+- [x] 5.1 `B-138` a missing video shows the "missing" picture as its still frame (its poster; measured
+      in Chromium by pixel; ablation reddens the e2e).
 - [ ] 5.2 `D-156` Alt bypasses snapping in move, nudge, resize, rotate.
 - [ ] 5.3 `R-040` + `R-037` `<composition> — item N` headings, stub on collision, `<bdi>`.
 
