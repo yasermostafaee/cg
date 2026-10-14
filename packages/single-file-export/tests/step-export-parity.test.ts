@@ -1,26 +1,36 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { Element as SceneElement, Layer, Scene } from '@cg/shared-schema';
-import type { compileZoneCss as CompileZoneCss } from '@cg/template-runtime';
+import {
+  migrateScene,
+  type CountdownSteps,
+  type Element as SceneElement,
+  type Layer,
+  type Scene,
+} from '@cg/shared-schema';
+import type { compileStepCss as CompileStepCss } from '@cg/template-runtime';
 import { buildGddSchema } from '@cg/vcg-format';
 import { ExporterSingleFile } from '../src/exporter-single-file.js';
 import { cgJsIife } from '../src/cg-runtime.js';
 import type { ImageAssetSource } from '../src/image-export.js';
 
 /**
- * 🔴 `add-azan-countdown` tasks 6.1 / 6.2 (`D-141`, `AZAN-DESIGNER-01`) — **THE ZONES ON AIR ARE THE
- * ZONES IN THE PREVIEW, AND NEITHER EXPORTER KNOWS ZONES EXIST.**
+ * 🔴 `add-azan-countdown` tasks 6.1 / 6.2 (`D-141`) and `DELTA-RUN-NEXT-VERSION-01-A` — **THE STEPS
+ * ON AIR ARE THE STEPS IN THE PREVIEW, AND NEITHER EXPORTER KNOWS STEPS EXIST.**
  *
- * The zone stylesheet is compiled by the RUNTIME, from the scene, at boot (`ensureZoneCss`). The
- * single-file page embeds the scene and boots the same runtime, so the page compiles the same text
- * the preview does. These tests prove each link rather than assume it:
+ * The step stylesheet is compiled by the RUNTIME, from the scene, at boot (`ensureStepCss`), after
+ * the scene migrations. The single-file page embeds the scene and boots the same runtime, so the
+ * page compiles the same text the preview does. These tests prove each link rather than assume it:
  *
  *   - the scene the page embeds compiles, in the page's `output` mode, to the stylesheet the preview
- *     compiles in `preview` mode — byte for byte;
+ *     compiles — byte for byte — for a scene authored in steps AND for one still carrying D-141 v1's
+ *     zones, which both sides migrate the same way;
  *   - the runtime the page carries is the one with the injector;
- *   - a zoned and an unzoned scene export to pages that differ ONLY in the embedded scene: the
- *     exporter has no zone code path at all;
+ *   - a scene with steps and one without export to pages that differ ONLY in the embedded scene:
+ *     the exporter has no step code path at all;
  *   - a clock target bound to a field reaches the GDD as a plain `single-line` string carrying its
  *     pattern — no new `gddType` — and an unbound clock leaves the GDD as it was.
+ *
+ * (The preview boots in `author` mode — its Live Sources show bars; no element here is one, so
+ * the two modes compile the same text.)
  */
 
 /*
@@ -28,7 +38,7 @@ import type { ImageAssetSource } from '../src/image-export.js';
   happy-dom has no Canvas 2D: the same no-op context `@cg/template-runtime`'s own suite installs
   (`tests/setup-canvas.ts`), then the runtime is imported. Test-environment only.
 */
-let compileZoneCss: typeof CompileZoneCss;
+let compileStepCss: typeof CompileStepCss;
 beforeAll(async () => {
   const proto = globalThis.HTMLCanvasElement?.prototype;
   if (proto !== undefined) {
@@ -45,7 +55,7 @@ beforeAll(async () => {
       });
     } as typeof proto.getContext;
   }
-  ({ compileZoneCss } = await import('@cg/template-runtime'));
+  ({ compileStepCss } = await import('@cg/template-runtime'));
 });
 
 const T = {
@@ -64,7 +74,37 @@ const FONT = {
   lineHeight: 1.2,
   letterSpacing: 0,
 } as const;
-const PRESET = {
+
+/** Three steps at 60 / 30 / 10 min — the preset — plus a hide, a blink and a picture. */
+const STEPS: CountdownSteps = {
+  steps: [
+    {
+      name: '60 min',
+      atMs: 3_600_000,
+      changes: [{ elementId: 'countdown', property: 'textColor', value: '#ffd600' }],
+    },
+    {
+      name: '30 min',
+      atMs: 1_800_000,
+      changes: [
+        { elementId: 'countdown', property: 'textColor', value: '#ff9100' },
+        { elementId: 'band', property: 'fill', value: '#ff6d00' },
+      ],
+    },
+    {
+      name: '10 min',
+      atMs: 600_000,
+      changes: [
+        { elementId: 'countdown', property: 'textColor', value: '#d50000' },
+        { elementId: 'countdown', property: 'blink', value: true },
+        { elementId: 'band', property: 'visible', value: false },
+      ],
+    },
+  ],
+};
+
+/** D-141 v1's zones for the same intent — what a scene saved before the steps carries. */
+const ZONES = {
   base: { key: 'normal', color: '#00c853' },
   steps: [
     { atOrBelowMs: 3_600_000, key: 'caution', color: '#ffd600' },
@@ -72,16 +112,14 @@ const PRESET = {
     { atOrBelowMs: 600_000, key: 'critical', color: '#d50000' },
   ],
 };
-const ALL_ZONE = ['normal', 'caution', 'warning', 'critical'].map((zone) => ({
-  zone,
-  textColor: 'zone' as const,
-}));
 
-function clock(zoned: boolean): SceneElement {
+type Kind = 'steps' | 'zones' | 'none';
+
+function countdown(kind: Kind): SceneElement {
   return {
     ...EL,
-    id: 'azan-clock',
-    name: 'azan',
+    id: 'countdown',
+    name: 'countdown',
     type: 'clock',
     font: FONT,
     color: '#ffffff',
@@ -91,11 +129,20 @@ function clock(zoned: boolean): SceneElement {
     format: 'mm:ss',
     digits: 'persian',
     target: { kind: 'timeofday', time: '20:32' },
-    ...(zoned ? { zones: PRESET, zoneOverrides: ALL_ZONE } : {}),
+    ...(kind === 'steps' ? { steps: STEPS } : {}),
+    ...(kind === 'zones'
+      ? {
+          zones: ZONES,
+          zoneOverrides: ['normal', 'caution', 'warning', 'critical'].map((zone) => ({
+            zone,
+            textColor: 'zone' as const,
+          })),
+        }
+      : {}),
   } as SceneElement;
 }
 
-function band(zoned: boolean): SceneElement {
+function band(kind: Kind): SceneElement {
   return {
     ...EL,
     id: 'band',
@@ -103,7 +150,7 @@ function band(zoned: boolean): SceneElement {
     type: 'shape',
     shape: 'rect',
     fill: { kind: 'solid', color: '#202020' },
-    ...(zoned
+    ...(kind === 'zones'
       ? {
           zoneOverrides: [
             { zone: 'critical', fill: 'zone' },
@@ -118,18 +165,18 @@ function layer(children: SceneElement[]): Layer {
   return { id: 'l1', name: 'l1', visible: true, locked: false, blendMode: 'normal', children };
 }
 
-function scene(zoned: boolean, extra: Partial<Scene> = {}): Scene {
+function scene(kind: Kind, extra: Partial<Scene> = {}): Scene {
   return {
     schemaVersion: 1,
-    id: 'azan-scene',
-    name: 'Azan',
+    id: 'countdown-scene',
+    name: 'Countdown',
     templateType: 'lower-third',
     resolution: { width: 1920, height: 1080 },
     frameRate: 50,
     safeAreas: { title: 10, action: 5 },
     frameRange: { in: 0, out: 50 },
     editorBackdrop: 'transparent',
-    layers: [layer([band(zoned), clock(zoned)])],
+    layers: [layer([band(kind), countdown(kind)])],
     fields: [],
     bindings: [],
     fonts: [],
@@ -156,55 +203,58 @@ function embeddedScene(html: string): Scene {
   return JSON.parse(m[1]) as Scene;
 }
 
-describe('add-azan-countdown 6.1 — the page compiles the preview’s zone stylesheet, byte for byte', () => {
-  it('🔴 the embedded scene compiles (output mode, as the page boots) to exactly the preview’s stylesheet', async () => {
-    const authored = scene(true);
-    const html = await exportHtml(authored);
+describe('D-141 6.1 — the page compiles the preview’s step stylesheet, byte for byte', () => {
+  it.each(['steps', 'zones'] as const)(
+    '🔴 a scene authored in %s: the embedded scene compiles, as the page boots it, to exactly the preview’s stylesheet',
+    async (kind) => {
+      const authored = scene(kind);
+      const html = await exportHtml(authored);
 
-    const preview = compileZoneCss(authored, 'preview');
-    const onAir = compileZoneCss(embeddedScene(html), 'output');
+      // Both sides boot through the SAME migrations, then the same compiler.
+      const preview = compileStepCss(migrateScene(authored), 'author');
+      const onAir = compileStepCss(migrateScene(embeddedScene(html)), 'output');
 
-    // Positive control: there IS a stylesheet to compare — publication for every key, both slots.
-    expect(preview.css).toContain("[data-cg-zone='critical']");
-    expect(preview.css).toContain("[data-cg-zone='normal']");
-    expect(preview.warnings).toEqual([]);
-    expect(onAir.css).toBe(preview.css);
-  });
+      // Positive control: there IS a stylesheet to compare — a publication for every step.
+      expect(preview.css).toContain("[data-cg-cd0='0']");
+      expect(preview.css).toContain("[data-cg-cd0='2']");
+      expect(preview.warnings).toEqual([]);
+      expect(onAir.css).toBe(preview.css);
+    },
+  );
 
   it('the page carries the runtime that injects it, and boots it on the embedded scene', async () => {
-    const html = await exportHtml(scene(true));
-    expect(cgJsIife).toContain('cg-zones');
+    const html = await exportHtml(scene('steps'));
+    expect(cgJsIife).toContain('cg-steps');
     expect(html).toContain(cgJsIife.slice(0, 200));
     expect(html).toContain("CG.createRuntime(scene, { mode: 'output'");
   });
 });
 
-describe('add-azan-countdown 6.2 — neither exporter has a zone code path', () => {
-  it('🔴 a zoned and an unzoned scene export to the same page except for the embedded scene', async () => {
-    const zoned = await exportHtml(scene(true));
-    const plain = await exportHtml(scene(false));
+describe('D-141 6.2 — neither exporter has a step code path', () => {
+  it('🔴 a scene with steps and one without export to the same page except for the embedded scene', async () => {
+    const stepped = await exportHtml(scene('steps'));
+    const plain = await exportHtml(scene('none'));
     const strip = (html: string): string => html.replace(/var scene = \{[\s\S]*?\};\n/, '');
     // Control: the scenes really differ, so the comparison below is not vacuous.
-    expect(zoned).not.toBe(plain);
-    expect(strip(zoned)).toBe(strip(plain));
+    expect(stepped).not.toBe(plain);
+    expect(strip(stepped)).toBe(strip(plain));
     // No compiled stylesheet is written into the page by the exporter: the runtime does it at boot.
-    // (`--cgz-` itself does appear — in the runtime bundle's own compiler source, in BOTH pages.)
-    expect(zoned).not.toContain('<style id="cg-zones">');
+    expect(stepped).not.toContain('<style id="cg-steps">');
   });
 
-  it('the GDD (the .vcg exporter’s only scene-derived surface besides the scene) is the same with zones and without', () => {
-    expect(buildGddSchema(scene(true))).toEqual(buildGddSchema(scene(false)));
+  it('the GDD (the .vcg exporter’s only scene-derived surface besides the scene) is the same with steps and without', () => {
+    expect(buildGddSchema(scene('steps'))).toEqual(buildGddSchema(scene('none')));
   });
 });
 
-describe('add-azan-countdown 6.1 — a bound target reaches the GDD as a plain patterned string', () => {
+describe('D-141 6.1 — a bound target reaches the GDD as a plain patterned string', () => {
   const TIME = '^([01][0-9]|2[0-3]):[0-5][0-9]$';
   const bound = (): Scene =>
-    scene(true, {
+    scene('steps', {
       fields: [
         {
-          id: 'azanTime',
-          label: 'Azan time',
+          id: 'targetTime',
+          label: 'Target time',
           required: true,
           type: 'text',
           default: '20:32',
@@ -212,19 +262,19 @@ describe('add-azan-countdown 6.1 — a bound target reaches the GDD as a plain p
         },
       ],
       bindings: [
-        { fieldId: 'azanTime', target: { kind: 'clock-target', elementId: 'azan-clock' } },
+        { fieldId: 'targetTime', target: { kind: 'clock-target', elementId: 'countdown' } },
       ],
     } as unknown as Partial<Scene>);
 
   it('🔴 single-line, string, its pattern carried — no new gddType', () => {
     const gdd = buildGddSchema(bound());
-    const property = gdd.properties['azanTime'];
+    const property = gdd.properties['targetTime'];
     expect(property).toMatchObject({ type: 'string', gddType: 'single-line', pattern: TIME });
     expect(['single-line', 'multi-line', 'color-rrggbb']).toContain(property?.gddType);
   });
 
   it('control: an UNBOUND clock leaves the GDD as it was — no property appears', () => {
-    expect(Object.keys(buildGddSchema(scene(true)).properties)).toEqual([]);
+    expect(Object.keys(buildGddSchema(scene('steps')).properties)).toEqual([]);
   });
 
   it('no preflight issue is raised for the bound target (nothing the client cannot honour)', async () => {

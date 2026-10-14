@@ -1,18 +1,28 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ClockElement, Element as SceneElement, Scene } from '@cg/shared-schema';
+import {
+  migrateScene,
+  type ClockElement,
+  type Element as SceneElement,
+  type Scene,
+} from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
-import { compileZoneCss } from '../src/zone-css.js';
+import { compileStepCss } from '../src/step-css.js';
 
 /**
  * D-141 Phase 4 — the runtime wiring: `clock-target` bindings routed through the
  * driver's re-target seam, and each scope's container handed to its clock drivers
- * as the zone scope root.
+ * as the step scope root.
  *
- * On the zone assertions: jsdom resolves neither `var()` nor the cascade, so these
- * assert the full CHAIN that produces a restyle — which scope root publishes which
- * key, which elements carry which slot index, and what the compiled stylesheet
- * declares for that key — rather than a computed colour. The pixel proof is owed to
- * the phase-7 E2E and is NOT claimed here.
+ * `DELTA-RUN-NEXT-VERSION-01-A` — the scenes below are still AUTHORED IN D-141 v1's zones and
+ * per-element overrides: `createRuntime` migrates them to steps on the way in, so this file now
+ * also proves that a zoned package reaches the same roots, the same reach and the same
+ * nearest-wins through the migration. A step is published as `data-cg-cd<c>="<token>"`; the
+ * migration names each step by its zone key, so `stepOf` reads the name back.
+ *
+ * On the colour assertions: jsdom resolves no `var()`, so these assert the full CHAIN that
+ * produces a restyle — which scope root publishes which step, which elements carry which index,
+ * and what the compiled stylesheet declares for that step — rather than a computed colour. The
+ * pixel proof is the E2E's.
  */
 
 function makeClock() {
@@ -130,6 +140,14 @@ function sceneOf(partial: Partial<Scene> & Pick<Scene, 'layers'>): Scene {
     metadata: { createdAt: '2026-07-28T00:00:00.000Z', updatedAt: '2026-07-28T00:00:00.000Z' },
     ...partial,
   } as Scene;
+}
+
+/** The NAME of the step countdown `c` publishes on `root` (the migration names steps by zone key). */
+function stepOf(root: HTMLElement, c: number): string | null {
+  const token = root.getAttribute(`data-cg-cd${String(c)}`);
+  if (token === null) return null;
+  if (token === 'b') return 'normal';
+  return ['caution', 'critical'][Number(token)] ?? token;
 }
 
 const timeText = (root: HTMLElement): string =>
@@ -315,7 +333,7 @@ describe('clock-target binding — re-target through the driver seam (D-141)', (
 
 // — 4.3 / 4.4 — the zone scope root ————————————————————————————————————
 
-describe('zone scope roots — reach, nearest-wins, inertness (D-141)', () => {
+describe('step scope roots — reach, nearest-wins, inertness, through the zone migration (D-141 v2)', () => {
   /** Host countdown + a nested composition holding an opted-in shape. */
   const nestedScene = (nestedZoned: boolean): Scene =>
     sceneOf({
@@ -370,24 +388,25 @@ describe('zone scope roots — reach, nearest-wins, inertness (D-141)', () => {
 
     const root = rootOf();
     const inner = innerOf();
-    expect(root.getAttribute('data-cg-zone')).toBe('normal');
-    // The nested instance owns NO zoned countdown, so it is NOT a zone root: nothing
-    // intercepts the host's published values on the way down. That is what makes zone
-    // state cross an instance boundary.
-    expect(inner.hasAttribute('data-cg-zone-root')).toBe(false);
+    expect(stepOf(root, 0)).toBe('normal');
+    // The nested instance owns NO countdown with steps, so it is NOT a step root: nothing
+    // intercepts the host's published values on the way down. That is what makes a step cross
+    // an instance boundary.
+    expect(inner.hasAttribute('data-cg-step-root')).toBe(false);
 
     clock.advance(300_000); // → 60 min remaining, crossing into `caution`
     await flush();
-    expect(root.getAttribute('data-cg-zone')).toBe('caution');
+    expect(stepOf(root, 0)).toBe('caution');
 
-    // The nested element carries a slot index, and the stylesheet publishes that slot
-    // under `caution` — the complete chain from the host's boundary to the nested
-    // element's colour. (The computed colour itself is the E2E's job.)
+    // The nested element carries an index, and the stylesheet publishes it under the
+    // `caution` step — the complete chain from the host's boundary to the nested element's
+    // colour. (The computed colour itself is the E2E's job.)
     const nested = document.body.querySelector<HTMLElement>('[data-cg-element-id="nested-shape"]');
-    const slot = nested?.dataset['cgZoneEl'];
+    const slot = nested?.dataset['cgStepEl'];
     expect(slot).toBeDefined();
-    expect(compileZoneCss(s).css).toContain(`[data-cg-zone='caution']{`);
-    expect(compileZoneCss(s).css).toContain(`--cgz-${String(slot)}-fill:#ffd600`);
+    const css = compileStepCss(migrateScene(s)).css;
+    expect(css).toContain(`[data-cg-cd0='0']{--cgs-dur:400ms;`);
+    expect(css).toContain(`--cgs-${String(slot)}-fill:#ffd600`);
   });
 
   it('NEAREST-WINS — host and nested countdowns in different zones each govern their own subtree', async () => {
@@ -400,26 +419,27 @@ describe('zone scope roots — reach, nearest-wins, inertness (D-141)', () => {
 
     const root = rootOf();
     const inner = innerOf();
-    // Two independent zone roots, in DIFFERENT zones at the same instant.
-    expect(root.getAttribute('data-cg-zone')).toBe('normal'); // 65 min out
-    expect(inner.hasAttribute('data-cg-zone-root')).toBe(true);
-    expect(inner.getAttribute('data-cg-zone')).toBe('critical'); // 5 min out
+    // Two independent step roots, in DIFFERENT steps at the same instant.
+    expect(stepOf(root, 0)).toBe('normal'); // 65 min out
+    expect(inner.hasAttribute('data-cg-step-root')).toBe(true);
+    expect(stepOf(inner, 1)).toBe('critical'); // 5 min out
 
-    // The nested root being a zone root is exactly what stops the host's values: the
-    // compiled reset rule keys off `data-cg-zone-root` and is emitted before the
+    // The nested root being a step root is exactly what stops the host's values: the
+    // compiled reset rule keys off `data-cg-step-root` and is emitted before the
     // equal-specificity publication rules, so the nested subtree resolves from the
-    // NESTED key alone.
-    const css = compileZoneCss(s).css;
-    expect(css.indexOf('[data-cg-zone-root]')).toBeLessThan(css.indexOf("[data-cg-zone='"));
+    // NESTED step alone. And the migration gave the host's step NO change on the nested
+    // shape — it belonged to the nested countdown — so nothing could reach it anyway.
+    const css = compileStepCss(migrateScene(s)).css;
+    expect(css.indexOf('[data-cg-step-root]')).toBeLessThan(css.indexOf("[data-cg-cd0='"));
 
     // They advance independently: the host crosses while the nested one holds.
     clock.advance(300_000);
     await flush();
-    expect(root.getAttribute('data-cg-zone')).toBe('caution');
-    expect(inner.getAttribute('data-cg-zone')).toBe('critical');
+    expect(stepOf(root, 0)).toBe('caution');
+    expect(stepOf(inner, 1)).toBe('critical');
   });
 
-  it('an override with NO enclosing zone renders authored — nothing publishes its slot', async () => {
+  it('an override with NO enclosing zone renders authored — the migration leaves it nothing to apply', async () => {
     const clock = makeClock();
     // The same opted-in shape, but no zoned countdown anywhere (a composition
     // previewed standalone is this case).
@@ -432,20 +452,23 @@ describe('zone scope roots — reach, nearest-wins, inertness (D-141)', () => {
     await flush();
 
     const root = rootOf();
-    expect(root.hasAttribute('data-cg-zone-root')).toBe(false);
-    expect(root.hasAttribute('data-cg-zone')).toBe(false);
-    // The consumption rule exists and falls back to the AUTHORED colour; no rule
-    // publishes the slot, so the element renders as authored — inert, not an error.
-    const css = compileZoneCss(s).css;
-    expect(css).toContain("[data-cg-zone-el='0']{background:var(--cgz-0-fill,#202020) !important}");
-    expect(css).not.toContain("[data-cg-zone='caution']");
+    expect(root.hasAttribute('data-cg-step-root')).toBe(false);
+    // The zone stylesheet compiled a consumption rule that fell back to the AUTHORED colour and
+    // nothing published it; the migration drops the override (no countdown defines its key), so
+    // there is nothing to compile — the element renders as authored either way: inert, not an error.
+    expect(compileStepCss(migrateScene(s)).css).toBe('');
+    expect(
+      document.body.querySelector<HTMLElement>('[data-cg-element-id="lonely"]')?.dataset[
+        'cgStepEl'
+      ],
+    ).toBeUndefined();
   });
 
-  it('a zoned countdown injects the stylesheet; a scene without one injects nothing', async () => {
+  it('a zoned countdown injects the step stylesheet; a scene without one injects nothing', async () => {
     const clock = makeClock();
     const rt = createRuntime(nestedScene(false), { clock });
     await rt.ready;
-    expect(document.getElementById('cg-zones')).not.toBeNull();
+    expect(document.getElementById('cg-steps')).not.toBeNull();
 
     document.head.innerHTML = '';
     document.body.innerHTML = '';
@@ -453,6 +476,6 @@ describe('zone scope roots — reach, nearest-wins, inertness (D-141)', () => {
       clock: makeClock(),
     });
     await plain.ready;
-    expect(document.getElementById('cg-zones')).toBeNull();
+    expect(document.getElementById('cg-steps')).toBeNull();
   });
 });

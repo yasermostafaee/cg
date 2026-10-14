@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { ClockZones } from '@cg/shared-schema';
+import type { ClockZones, CountdownSteps } from '@cg/shared-schema';
 import {
   ClockDriver,
   clockInitialText,
@@ -11,7 +11,9 @@ import {
 
 /**
  * D-141 — the driver half: a `timeofday` target (next local occurrence, pinned once
- * per run), the latched zone publication, and `retarget()`. Everything runs on a
+ * per run), the latched STEP publication (`DELTA-RUN-NEXT-VERSION-01-A` — what D-141 v1 published
+ * as a zone key; the steps below are NAMED by those keys, so every expectation reads as it did),
+ * and `retarget()`. Everything runs on a
  * fake {@link RuntimeClock}, so no test waits on real time.
  *
  * Every expected instant is built with the SAME local-field constructor the
@@ -59,7 +61,7 @@ function completionFlag(driver: ClockDriver): { done: boolean; count: number } {
   return out;
 }
 
-/** The 4-zone 60/30/10 preset — base + three steps, 3 boundaries, 4 zones. */
+/** The 4-zone 60/30/10 preset in D-141 v1's shape — `pickByThreshold` is generic over it. */
 const PRESET: ClockZones = {
   base: { key: 'normal', color: '#00c853' },
   steps: [
@@ -68,6 +70,26 @@ const PRESET: ClockZones = {
     { atOrBelowMs: 600_000, key: 'critical', color: '#d50000' },
   ],
 };
+
+/** The same preset as STEPS (what the zone migration produces): Before + three steps. */
+const STEPS: CountdownSteps = {
+  before: { name: 'normal', changes: [] },
+  steps: [
+    { name: 'caution', atMs: 3_600_000, changes: [] },
+    { name: 'warning', atMs: 1_800_000, changes: [] },
+    { name: 'critical', atMs: 600_000, changes: [] },
+  ],
+};
+
+/** The attribute the driver publishes its step on (countdown 0). */
+const STEP_ATTR = 'data-cg-cd0';
+
+/** A published token as the step's NAME — `b` is Before, a number indexes `steps`. */
+function nameOfToken(steps: CountdownSteps, token: string | null): string | null {
+  if (token === null) return null;
+  if (token === 'b') return steps.before?.name ?? null;
+  return steps.steps[Number(token)]?.name ?? null;
+}
 
 function make(
   opts: Partial<ClockDriverOptions> & Pick<ClockDriverOptions, 'mode'>,
@@ -88,14 +110,18 @@ function make(
     format: 'HH:mm:ss',
     digits: 'latin',
     clock,
-    zoneRoot: root,
+    stepRoot: root,
+    stepAttr: STEP_ATTR,
     ...opts,
   });
   return { clock, node, root, driver };
 }
 
-/** Record every `data-cg-zone` write on the scope root, in order. */
-function instrumentZoneWrites(root: HTMLElement): { writes: string[] } {
+/** Record every step write on the scope root, in order, as the step's name. */
+function instrumentZoneWrites(
+  root: HTMLElement,
+  steps: CountdownSteps = STEPS,
+): { writes: string[] } {
   const out: { writes: string[] } = { writes: [] };
   const target = root as unknown as {
     setAttribute: (name: string, value: string) => void;
@@ -104,17 +130,18 @@ function instrumentZoneWrites(root: HTMLElement): { writes: string[] } {
   const set = root.setAttribute.bind(root);
   const remove = root.removeAttribute.bind(root);
   target.setAttribute = (name, value): void => {
-    if (name === 'data-cg-zone') out.writes.push(value);
+    if (name === STEP_ATTR) out.writes.push(nameOfToken(steps, value) ?? value);
     set(name, value);
   };
   target.removeAttribute = (name): void => {
-    if (name === 'data-cg-zone') out.writes.push('(cleared)');
+    if (name === STEP_ATTR) out.writes.push('(cleared)');
     remove(name);
   };
   return out;
 }
 
-const zoneOf = (root: HTMLElement): string | null => root.getAttribute('data-cg-zone');
+const zoneOf = (root: HTMLElement, steps: CountdownSteps = STEPS): string | null =>
+  nameOfToken(steps, root.getAttribute(STEP_ATTR));
 
 /**
  * Count `textContent` writes. (Deliberately a local copy of the D-027 suite's
@@ -297,14 +324,14 @@ describe('a timeofday countdown is absolute and PINNED per run (D-141)', () => {
   });
 
   it('🔴 AZAN-DESIGNER-01 — a target PAST MIDNIGHT counts down across the day (and year) boundary, in Persian digits, and completes once', async () => {
-    // 23:50 on New Year's Eve, machine-local; the azan is at 00:10 — tomorrow, next year.
+    // 23:50 on New Year's Eve, machine-local; the event is at 00:10 — tomorrow, next year.
     const h = make(
       {
         mode: 'countdown',
         format: 'mm:ss',
         digits: 'persian',
         target: { kind: 'timeofday', time: '00:10' },
-        zones: PRESET,
+        steps: STEPS,
       },
       AT(2026, 11, 31, 23, 50, 0),
     );
@@ -393,13 +420,13 @@ describe('remainingMsOf — helper 1, the ONE source of remaining ms (D-141)', (
 
 // — 2.4 / 2.10 / 2.11 / 2.12 — zone publication ————————————————————————————
 
-describe('zone publication on the scope root (D-141)', () => {
+describe('step publication on the scope root (D-141 v2)', () => {
   it('flips EXACTLY at the displayed boundary — key and painted digits agree', () => {
     // One ms above the 60-minute threshold, so the crossing can be walked 1 ms at a time.
     const h = make({
       mode: 'countdown',
       target: { kind: 'duration', ms: 3_600_001 },
-      zones: PRESET,
+      steps: STEPS,
     });
     h.driver.start();
     expect(h.node.textContent).toBe('01:00:01');
@@ -418,7 +445,7 @@ describe('zone publication on the scope root (D-141)', () => {
     const h = make({
       mode: 'countdown',
       target: { kind: 'duration', ms: 3_900_000 }, // 65 min: starts in base
-      zones: PRESET,
+      steps: STEPS,
     });
     const zone = instrumentZoneWrites(h.root);
     h.driver.start();
@@ -444,7 +471,7 @@ describe('zone publication on the scope root (D-141)', () => {
     const h = make({
       mode: 'countdown',
       target: { kind: 'duration', ms: 3_900_000 },
-      zones: PRESET,
+      steps: STEPS,
     });
     h.driver.start();
     const zone = instrumentZoneWrites(h.root); // instrument AFTER the establishing write
@@ -453,23 +480,24 @@ describe('zone publication on the scope root (D-141)', () => {
     expect(zoneOf(h.root)).toBe('normal');
   });
 
-  it('with NO base zone, the region above the highest threshold publishes nothing', () => {
+  it('with NO Before step, the region above the highest threshold publishes nothing', () => {
+    const only: CountdownSteps = { steps: [{ name: 'critical', atMs: 600_000, changes: [] }] };
     const h = make({
       mode: 'countdown',
       target: { kind: 'duration', ms: 700_000 },
-      zones: { steps: [{ atOrBelowMs: 600_000, key: 'critical', color: '#d50000' }] },
+      steps: only,
     });
     h.driver.start();
-    expect(zoneOf(h.root)).toBeNull(); // inert — every override falls back to authored
+    expect(zoneOf(h.root, only)).toBeNull(); // inert — every change falls back to authored
     h.clock.advance(100_000);
-    expect(zoneOf(h.root)).toBe('critical');
+    expect(zoneOf(h.root, only)).toBe('critical');
   });
 
-  it('reset() clears the zone and the next cycle re-establishes it from the NEW run', () => {
+  it('reset() clears the step and the next cycle re-establishes it from the NEW run', () => {
     const h = make({
       mode: 'countdown',
       target: { kind: 'duration', ms: 3_900_000 },
-      zones: PRESET,
+      steps: STEPS,
     });
     h.driver.start();
     h.clock.advance(3_900_000); // run to zero — ends in 'critical'
@@ -485,11 +513,11 @@ describe('zone publication on the scope root (D-141)', () => {
     expect(zoneOf(h.root)).toBe('caution');
   });
 
-  it('destroy() leaves no stale zone behind', () => {
+  it('destroy() leaves no stale step behind', () => {
     const h = make({
       mode: 'countdown',
       target: { kind: 'duration', ms: 600_000 },
-      zones: PRESET,
+      steps: STEPS,
     });
     h.driver.start();
     expect(zoneOf(h.root)).toBe('critical');
@@ -497,16 +525,16 @@ describe('zone publication on the scope root (D-141)', () => {
     expect(zoneOf(h.root)).toBeNull();
   });
 
-  it.each(['wall', 'countup'] as const)('a %s clock publishes NO zone (runtime layer)', (mode) => {
+  it.each(['wall', 'countup'] as const)('a %s clock publishes NO step (runtime layer)', (mode) => {
     // The schema refuses to author this; the runtime ignores it independently, so a
     // hand-edited .vcg degrades to base styles rather than misbehaving.
-    const h = make({ mode, zones: PRESET });
+    const h = make({ mode, steps: STEPS });
     h.driver.start();
     h.clock.advance(5000);
     expect(zoneOf(h.root)).toBeNull();
   });
 
-  it('a countdown with no zones publishes nothing', () => {
+  it('a countdown with no steps publishes nothing', () => {
     const h = make({ mode: 'countdown', target: { kind: 'duration', ms: 5000 } });
     h.driver.start();
     h.clock.advance(1000);
@@ -554,9 +582,9 @@ describe('retarget() — re-aim without replaying (D-141)', () => {
     expect(text.count).toBe(1);
   });
 
-  it('re-evaluates the zone in ONE write when the new deadline crosses a boundary', () => {
+  it('re-evaluates the step in ONE write when the new deadline crosses a boundary', () => {
     const h = make(
-      { mode: 'countdown', target: { kind: 'timeofday', time: '20:32' }, zones: PRESET },
+      { mode: 'countdown', target: { kind: 'timeofday', time: '20:32' }, steps: STEPS },
       NOW(),
     );
     h.driver.start();

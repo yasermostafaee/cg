@@ -36,17 +36,24 @@ export { applyTransform, stringifyValue } from './transforms.js';
 export { LifecycleStateMachine, canTransition } from './lifecycle.js';
 export { ensureBaselineCss, BASELINE_CSS } from './css.js';
 export {
-  assignZoneIndices,
-  compileZoneCss,
-  ensureZoneCss,
-  hasZonedCountdown,
-  // D-141 helper 4 (design §1) — the kind → CSS property map D-139's colour effect
-  // must honour too, so one element recolours identically whichever drove it.
-  zoneColorTargets,
-  type ZoneColorTarget,
-  type ZoneCssResult,
-  type ZoneSlot,
-} from './zone-css.js';
+  // DELTA-RUN-NEXT-VERSION-01-A — a countdown's steps, compiled from the scene (D-141 v2). The
+  // kind → CSS property map is the one D-139's colour effect must honour too, so one element
+  // recolours identically whichever feature drove it.
+  colorChangeTargets,
+  compileStepCss,
+  displayedRemainingMs,
+  ensureStepCss,
+  hasStepCountdown,
+  pickStep,
+  stepAttribute,
+  stepPlanOf,
+  stepTokenValue,
+  type ColorChangeTarget,
+  type StepCssResult,
+  type StepPlan,
+  type StepToken,
+} from './step-css.js';
+export { createStepEffects, type StepEffects, type StepInstance } from './step-effects.js';
 export { EventBus } from './event-bus.js';
 export { FrameDriver, type FrameDriverOptions } from './frame-driver.js';
 export { PlayoutController, type PlayoutControllerOptions } from './playout-controller.js';

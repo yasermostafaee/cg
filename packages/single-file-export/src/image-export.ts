@@ -60,6 +60,27 @@ export function collectImageElements(scene: Scene): ImageRef[] {
           seen.add(key);
           out.push({ elementId: el.id, assetId: item.assetId, source: 'project' });
         }
+      } else if (el.type === 'clock' && el.mode === 'countdown' && el.steps !== undefined) {
+        // DELTA-RUN-NEXT-VERSION-01-A — a picture a countdown STEP swaps in is shown by no image
+        // element at build time, so nothing else would pack it: without this the page on air
+        // swaps to a picture it does not have. Keyed per step and target.
+        const sets = [
+          { key: 'b', changes: el.steps.before?.changes ?? [] },
+          ...el.steps.steps.map((s, i) => ({ key: String(i), changes: s.changes })),
+        ];
+        for (const set of sets) {
+          for (const change of set.changes) {
+            if (change.property !== 'image') continue;
+            const key = `${el.id}:step:${set.key}:${change.elementId}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            out.push({
+              elementId: change.elementId,
+              assetId: change.value.assetId,
+              source: change.value.source,
+            });
+          }
+        }
       } else if (el.type === 'container') {
         walk(el.children);
       }

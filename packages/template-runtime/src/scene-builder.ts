@@ -38,7 +38,13 @@ import { TEXT_NODE_DATASET } from './text-render-node.js';
 import { markTextFit } from './text-fit.js';
 import { populateTickerStaticRow } from './ticker-driver.js';
 import { itemsInDigits, stampTypedDigits } from './typed-digits.js';
-import { assignZoneIndices, hasZonedCountdown } from './zone-css.js';
+import {
+  hasStepCountdown,
+  STEP_EL_DATASET,
+  STEP_ROOT_DATASET,
+  STEP_WRAP_DATASET,
+  stepPlanOf,
+} from './step-css.js';
 
 /**
  * Build a DOM tree from a Scene. Returns the container element (caller
@@ -128,7 +134,7 @@ export function buildScene(
   // D-141 — this scope owns a zoned countdown, so it is a zone ROOT: the driver
   // publishes `data-cg-zone` here at run time, and the compiled reset rule keys off
   // this marker so a nested zoned root cannot inherit its host's zone values.
-  if (hasZonedCountdown(scene.layers)) container.dataset['cgZoneRoot'] = '';
+  if (hasStepCountdown(scene.layers)) container.dataset[STEP_ROOT_DATASET] = '';
 
   const rootScope = newScope(container, scene);
   const ctx: BuildCtx = {
@@ -160,20 +166,45 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
   node.dataset['cgLayerId'] = layer.id;
   if (!layer.visible) node.style.display = 'none';
 
-  // D-141 — the per-scene slot numbering the zone stylesheet was compiled with.
-  // Keyed by element id, so the same authored element inside a composition
-  // instanced twice stamps the SAME index on both DOM copies — each then reads the
-  // nearest publishing ancestor, which is what makes nearest-wins work per instance.
-  const zoneIndices = assignZoneIndices(ctx.scene);
+  // DELTA-RUN-NEXT-VERSION-01-A — the per-scene numbering the step stylesheet was compiled with.
+  // Keyed by element id, so the same authored element inside a composition instanced twice stamps
+  // the SAME index on both DOM copies — each then reads the nearest publishing ancestor, which is
+  // what makes nearest-wins work per instance.
+  const plan = stepPlanOf(ctx.scene);
 
   // Sort by zIndex so DOM order matches z-stack semantics.
   const sorted = [...layer.children].sort((a, b) => a.zIndex - b.zIndex);
   for (const element of sorted) {
-    const elementNode = buildElement(element, ctx);
+    // An element authored hidden that a step SHOWS is built as a visible element held transparent
+    // by its wrapper until its step (step-css.ts `shown`): its own content is already running when
+    // it appears, and the step's fade has something to fade.
+    const built = plan.shown.has(element.id)
+      ? ({ ...element, visible: true } as typeof element)
+      : element;
+    const elementNode = buildElement(built, ctx);
     if (elementNode === null) continue;
-    node.appendChild(elementNode);
-    const zoneIndex = zoneIndices.get(element.id);
-    if (zoneIndex !== undefined) elementNode.dataset['cgZoneEl'] = String(zoneIndex);
+    const stepIndex = plan.elements.get(element.id);
+    if (stepIndex !== undefined) elementNode.dataset[STEP_EL_DATASET] = String(stepIndex);
+    if (stepIndex !== undefined && plan.wrapped.has(element.id)) {
+      // The step's opacity and blink live on a WRAPPER nothing else writes, so they multiply the
+      // element's own (animated) opacity instead of fighting it. Layout-transparent: `.cg-layer` is
+      // static, so the wrapper's box is the stage's (or the instance's inner stage's), and the
+      // element positions against it exactly as it did against the stage. It never takes a pointer.
+      const wrap = ctx.doc.createElement('div');
+      wrap.className = 'cg-step-wrap';
+      wrap.dataset[STEP_WRAP_DATASET] = String(stepIndex);
+      wrap.style.position = 'absolute';
+      wrap.style.left = '0';
+      wrap.style.top = '0';
+      wrap.style.width = '100%';
+      wrap.style.height = '100%';
+      wrap.style.pointerEvents = 'none';
+      elementNode.style.pointerEvents = 'auto';
+      wrap.appendChild(elementNode);
+      node.appendChild(wrap);
+    } else {
+      node.appendChild(elementNode);
+    }
     // Every scope owns its elements, keyed by id, so field bindings apply within
     // the right instance (the same child instanced twice has two scopes).
     ctx.scope.elementMap.set(element.id, elementNode);
@@ -327,7 +358,7 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
   // D-141 — a nested instance whose own composition carries a zoned countdown is a
   // zone root in its own right; one without stays transparent to the host's zone,
   // which is how zone state crosses instance boundaries.
-  if (hasZonedCountdown(comp.layers)) inner.dataset['cgZoneRoot'] = '';
+  if (hasStepCountdown(comp.layers)) inner.dataset[STEP_ROOT_DATASET] = '';
 
   // A fresh field scope for THIS instance — so the same child instanced twice
   // gets two independent element maps, addressed by the instance's namespace.
@@ -343,6 +374,11 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
     // D-112 — carry the instance's per-instance hold overrides so the PARENT's aggregation can
     // re-filter this child's content (the override lives on the instance, not the shared child).
     holdOverrides: element.holdOverrides,
+    // DELTA-RUN-NEXT-VERSION-01-F — what a countdown step needs to cue this instance's own entrance
+    // and exit, and whether it waits hidden for one.
+    elementId: element.id,
+    node: el,
+    startsHidden: element.startsHidden,
   });
   const childCtx: BuildCtx = {
     ...ctx,
@@ -816,6 +852,7 @@ function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
       digits: element.digits,
       target: element.target,
       timezone: element.timezone,
+      afterZero: element.mode === 'countdown' ? element.afterZero : undefined,
     },
     Date.now(),
   );
@@ -1041,7 +1078,7 @@ export function buildSequenceCompositionItem(
     inner.style.background = comp.editorBackdrop;
   // D-141 — a stamped scope is a scope: it publishes its own zone when it owns a
   // zoned countdown (same rule as every other scope container).
-  if (hasZonedCountdown(comp.layers)) inner.dataset['cgZoneRoot'] = '';
+  if (hasStepCountdown(comp.layers)) inner.dataset[STEP_ROOT_DATASET] = '';
 
   // A fresh item scope — real per-scope semantics (drivers, holds) by construction,
   // but NEVER in `scope.children` (the sequence driver owns its lifecycle).
@@ -1197,7 +1234,7 @@ export function buildRepeaterRows(
     if (mode === 'author' && paintEditorBackdrop && comp.editorBackdrop !== 'transparent')
       inner.style.background = comp.editorBackdrop;
     // D-141 — same rule for a stamped repeater row.
-    if (hasZonedCountdown(comp.layers)) inner.dataset['cgZoneRoot'] = '';
+    if (hasStepCountdown(comp.layers)) inner.dataset[STEP_ROOT_DATASET] = '';
 
     // A fresh ROW scope — real per-scope semantics (lifecycle, drivers,
     // content holds) by construction, but NEVER in `scope.children`.

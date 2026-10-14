@@ -1,7 +1,29 @@
-import type { ClockTarget, ClockZones } from '@cg/shared-schema';
+import {
+  afterZeroOf,
+  completesAtZero,
+  type AfterZero,
+  type ClockTarget,
+  type CountdownSteps,
+} from '@cg/shared-schema';
 import { parseTimeOfDay } from '@cg/text-shaping';
 import { formatCountClock, formatWallClock, type ClockDigits } from './clock-format.js';
+import { displayedRemainingMs, pickStep, stepTokenValue, type StepToken } from './step-css.js';
 import type { RuntimeClock } from './types.js';
+
+/**
+ * `DELTA-RUN-NEXT-VERSION-01-D` — the sign a countdown counting PAST zero writes before the time
+ * since zero: U+2212 MINUS SIGN (`−00:12`), not a hyphen. The time span is LTR and bidi-isolated
+ * (scene-builder), so it stays on the left in an RTL layout.
+ */
+export const PAST_ZERO_SIGN = '−';
+
+/**
+ * Why the published step changed: the remaining time (or a rehearsal) moved it — `step` — or the
+ * run was RESET and the latch cleared — `reset`. A reset is not a cue: the runtime re-primes every
+ * composition instance for the next run itself, so an instance never plays its exit because a run
+ * restarted.
+ */
+export type StepChangeReason = 'step' | 'reset';
 
 /**
  * D-141 — validate an operator-supplied value as a time of day: the CANONICAL Latin
@@ -72,22 +94,29 @@ export interface ClockDriverOptions {
   /** D-103 — colon blink half-period in ms (phase = `floor(now / period) % 2`). Absent ⇒ 1000. */
   blinkPeriodMs?: number | undefined;
   /**
-   * D-141 — the countdown's colour zones. Honoured ONLY for `mode: 'countdown'`:
-   * `wall`/`countup` have no remaining time, so the driver IGNORES zones there.
-   * (The schema also refuses to author them — two layers, per design §2.2, so a
-   * hand-edited `.vcg` degrades to base styles rather than misbehaving.)
+   * `DELTA-RUN-NEXT-VERSION-01-A` — the countdown's STEPS. Honoured ONLY for `mode: 'countdown'`
+   * (the schema also refuses them elsewhere — two layers, so a hand-edited package degrades to the
+   * authored look rather than misbehaving).
    */
-  zones?: ClockZones | undefined;
+  steps?: CountdownSteps | undefined;
   /**
-   * D-141 — the SCOPE ROOT this driver publishes its active zone on: the owning
-   * composition's `FieldScope.container` (the root stage for the scene, the
-   * `.cg-comp-inner` div for a nested instance). One attribute on one node flips
-   * arbitrarily many elements, because the compiled custom properties INHERIT and
-   * the cascade does the distribution — nearest declaration wins, which is how
-   * nearest-enclosing-zone resolution is expressed without `@scope` or `:is()`
-   * (both past the CEF floor). Absent ⇒ the driver publishes nothing.
+   * The SCOPE ROOT this driver publishes its active step on: the owning composition's
+   * `FieldScope.container` (the root stage, or a nested instance's `.cg-comp-inner`). One attribute on
+   * one node restyles any number of elements — the compiled custom properties INHERIT, so the nearest
+   * declaration wins. Absent ⇒ the driver publishes nothing.
    */
-  zoneRoot?: HTMLElement | undefined;
+  stepRoot?: HTMLElement | undefined;
+  /** The attribute it publishes on (`data-cg-cd<c>`, `step-css.ts`). */
+  stepAttr?: string | undefined;
+  /**
+   * Called once per step CHANGE, after the attribute is written, with the step entered and the one
+   * left — what CSS cannot do (a picture, a composition instance's entrance / exit) hangs here.
+   */
+  onStep?:
+    | ((entered: StepToken | null, left: StepToken | null, reason: StepChangeReason) => void)
+    | undefined;
+  /** `DELTA-RUN-NEXT-VERSION-01-D` / `-E` — what the countdown does after zero. Absent ⇒ `hold`. */
+  afterZero?: AfterZero | undefined;
   clock?: RuntimeClock | undefined;
 }
 
@@ -174,12 +203,45 @@ export function pickByThreshold<S extends { atOrBelowMs: number }>(
   steps: readonly S[],
   remainingMs: number,
 ): S | undefined {
-  const displayed = Math.ceil(Math.max(0, remainingMs) / 1000) * 1000;
+  // The SIGNED displayed quantum (`step-css.ts`): above zero it is the old `ceil`; past zero it is
+  // the whole seconds since zero, which only a step "after zero" (a negative threshold) can reach —
+  // every non-negative threshold still covers it, so the lowest step stays selected after zero.
+  const displayed = displayedRemainingMs(remainingMs);
   let picked: S | undefined;
   for (const step of steps) {
     if (step.atOrBelowMs >= displayed) picked = step;
   }
   return picked;
+}
+
+/**
+ * 🔴 `DELTA-RUN-NEXT-VERSION-01-D` — **THE COUNTDOWN'S TEXT, AFTER ZERO TOO.** Above zero it is the
+ * remaining time, `ceil`ed to the second (it shows the full value at start and reaches `00:00`
+ * exactly when the remaining time does). At and after zero it follows the author's choice:
+ *
+ * - `hold` / `close` — `00:00` stays;
+ * - `count-past` — the whole seconds SINCE zero behind a minus sign (`−00:12`), in the clock's own
+ *   digits; the first second past zero still reads `00:00`, so the sign never flashes on a zero;
+ * - `hide-digits` — nothing: the element stays, so a step can still show something else there.
+ */
+export function countdownText(
+  remainingMs: number,
+  format: string,
+  digits: ClockDigits,
+  afterZero: AfterZero | undefined,
+): string {
+  if (remainingMs > 0) return formatCountClock(Math.ceil(remainingMs / 1000), format, digits);
+  switch (afterZeroOf(afterZero)) {
+    case 'hide-digits':
+      return '';
+    case 'count-past': {
+      const past = Math.floor(-remainingMs / 1000);
+      const text = formatCountClock(past, format, digits);
+      return past === 0 ? text : `${PAST_ZERO_SIGN}${text}`;
+    }
+    default:
+      return formatCountClock(0, format, digits);
+  }
 }
 
 /**
@@ -212,7 +274,10 @@ interface NormalizedDriverClock {
  * and keeps approaching); only a duration countdown is a constant.
  */
 export function clockInitialText(
-  opts: Pick<ClockDriverOptions, 'mode' | 'format' | 'digits' | 'target' | 'timezone'>,
+  opts: Pick<
+    ClockDriverOptions,
+    'mode' | 'format' | 'digits' | 'target' | 'timezone' | 'afterZero'
+  >,
   nowMs: number,
 ): string {
   if (opts.mode === 'wall')
@@ -228,7 +293,9 @@ export function clockInitialText(
       : t.kind === 'duration'
         ? t.ms
         : (absoluteDeadlineMs(t, nowMs) ?? 0) - nowMs;
-  return formatCountClock(Math.ceil(Math.max(0, remaining) / 1000), opts.format, opts.digits);
+  // DELTA-RUN-NEXT-VERSION-01-D — a target already past shows the author's after-zero choice from
+  // the first paint, not a `00:00` that changes on the run's first frame.
+  return countdownText(remaining, opts.format, opts.digits, opts.afterZero);
 }
 
 export class ClockDriver {
@@ -271,8 +338,14 @@ export class ClockDriver {
    */
   private pinnedDeadlineMs: number | null = null;
 
-  /** D-141 — the last zone key PUBLISHED on the scope root: the write latch. */
-  private lastZoneKey: string | null = null;
+  /** The last step PUBLISHED on the scope root: the write latch (one write per step CHANGE). */
+  private lastStep: StepToken | null = null;
+
+  /**
+   * A REHEARSAL override (the Designer preview's "show this step"): `undefined` follows the
+   * remaining time; a token or `null` is published instead, until cleared. Session-only.
+   */
+  private forcedStep: StepToken | null | undefined = undefined;
 
   constructor(options: ClockDriverOptions) {
     // Copied, not aliased: `retarget()` rewrites `target`, and that must not reach
@@ -390,9 +463,9 @@ export class ClockDriver {
     const text = clockInitialText(this.o, now);
     this.o.node.textContent = text;
     this.lastText = text;
-    // D-141 — clear the published zone: a fresh run must re-enter at the zone its
-    // OWN remaining time selects, never inherit the last run's colour.
-    this.clearZone();
+    // Clear the published step: a fresh run must re-enter at the step its OWN remaining time
+    // selects, never inherit the last run's.
+    this.clearStep();
     // D-103 — back to a steady single-`textContent` value; the run's first paint re-segments
     // for the blink if `blinkColon` is on.
     this.blinkBuilt = false;
@@ -499,8 +572,21 @@ export class ClockDriver {
       return formatCountClock(Math.floor(this.activeElapsedMs() / 1000), o.format, o.digits);
     }
     // Countdown displays ceil(remaining): it shows the full value at start and
-    // hits 00:00 exactly when the remaining time does.
-    return formatCountClock(Math.ceil(Math.max(0, this.remainingMs()) / 1000), o.format, o.digits);
+    // hits 00:00 exactly when the remaining time does — then the author's after-zero choice.
+    return countdownText(this.remainingMs(), o.format, o.digits, o.afterZero);
+  }
+
+  /**
+   * Whether the frame loop must keep running PAST zero: counting past zero repaints every second,
+   * and a step "after zero" that has not been reached yet needs the remaining time to keep being
+   * read (time still passes while the digits hold). Otherwise the countdown freezes at zero as it
+   * always did.
+   */
+  private runsPastZero(): boolean {
+    if (afterZeroOf(this.o.afterZero) === 'count-past') return true;
+    const steps = this.o.steps?.steps ?? [];
+    const lowest = steps.reduce((min, s) => Math.min(min, s.atMs), 0);
+    return lowest < 0 && displayedRemainingMs(this.remainingMs()) > lowest;
   }
 
   /** One step: write the DOM only when the formatted string changed (or the colon phase flips). */
@@ -512,54 +598,95 @@ export class ClockDriver {
       this.o.node.textContent = next;
       this.lastText = next;
     }
-    this.paintZone();
-    // Clean end: the run completes when 0 paints — then this driver signals
-    // its scope and freezes (the display stays clamped at 00:00).
+    this.paintStep();
+    // Clean end: the run completes when 0 paints — then this driver signals its scope, and freezes
+    // unless something past zero still needs the time (`runsPastZero`).
     //
     // Gated on `running` since D-141: `retarget()` repaints OUTSIDE a run (the
     // operator may re-aim a loaded-but-not-played template), and a repaint must
     // never be what completes a countdown that has not started.
-    if (this.running && this.o.mode === 'countdown' && !this.completed && this.remainingMs() <= 0) {
-      this.fireComplete();
-      this.running = false;
-      this.paused = false;
-      this.cancelFrame();
+    //
+    // DELTA-RUN-NEXT-VERSION-01-D — `count-past` NEVER completes: a content-driven hold it drives
+    // would otherwise take the graphic off air while it is still counting. Every other choice
+    // signals completion at zero exactly as before (`close` is that signal's whole purpose).
+    if (this.running && this.o.mode === 'countdown' && this.remainingMs() <= 0) {
+      if (!this.completed && completesAtZero(this.o.afterZero)) this.fireComplete();
+      if (!this.runsPastZero()) {
+        this.running = false;
+        this.paused = false;
+        this.cancelFrame();
+      }
     }
   }
 
   /**
-   * D-141 — publish the active zone on the scope root, LATCHED: one attribute
-   * write per zone CHANGE, never one per frame. For the 4-zone case that is the
-   * establishing write plus three boundary crossings over an entire hour.
+   * Publish the active step on the scope root, LATCHED: one attribute write per step CHANGE, never
+   * one per frame — for a three-step countdown that is the establishing write plus the crossings over
+   * its whole life. Selection is arithmetic over `remainingMs()`, which this frame already computed,
+   * so the ≈1-DOM-write-per-second text discipline is untouched. One attribute on one node restyles
+   * any number of elements — the cascade does the distribution — and `onStep` does what CSS cannot.
    *
-   * Zone selection is pure arithmetic over `remainingMs()`, which this frame has
-   * already computed, so the ≈1-DOM-write-per-second text discipline is untouched:
-   * a run that stays inside one zone adds ZERO writes. One attribute on one node
-   * restyles arbitrarily many elements — the cascade does the distribution.
-   *
-   * Countdown-only: `wall`/`countup` have no remaining time, so their zones (which
-   * the schema refuses to author in the first place) are ignored here too.
+   * Countdown-only: `wall`/`countup` have no remaining time.
    */
-  private paintZone(): void {
-    const zones = this.o.zones;
-    const root = this.o.zoneRoot;
-    if (zones === undefined || root === undefined || this.o.mode !== 'countdown') return;
-    const step = pickByThreshold(zones.steps, this.remainingMs());
-    // Above every threshold the zone is `base` — or NONE when `base` is absent, in
-    // which case every override is inert up there, the same code path as a scope
-    // with no zoned countdown at all.
-    const next = step?.key ?? zones.base?.key ?? null;
-    if (next === this.lastZoneKey) return;
-    if (next === null) root.removeAttribute('data-cg-zone');
-    else root.setAttribute('data-cg-zone', next);
-    this.lastZoneKey = next;
+  private paintStep(): void {
+    const steps = this.o.steps;
+    if (steps === undefined || this.o.mode !== 'countdown') return;
+    const next = this.currentStep;
+    if (next === this.lastStep) return;
+    const root = this.o.stepRoot;
+    const attr = this.o.stepAttr;
+    if (root !== undefined && attr !== undefined) {
+      if (next === null) root.removeAttribute(attr);
+      else root.setAttribute(attr, stepTokenValue(next));
+    }
+    const left = this.lastStep;
+    this.lastStep = next;
+    this.o.onStep?.(next, left, 'step');
   }
 
-  /** Drop the published zone and the latch (a fresh run, or teardown). */
-  private clearZone(): void {
-    if (this.lastZoneKey === null) return;
-    this.o.zoneRoot?.removeAttribute('data-cg-zone');
-    this.lastZoneKey = null;
+  /**
+   * The step this countdown is in RIGHT NOW (a rehearsal override included), whether or not it has
+   * published it — what the runtime reads at Take, before the graphic's entrance, so an instance the
+   * current step shows enters WITH the graphic rather than after it.
+   */
+  get currentStep(): StepToken | null {
+    const steps = this.o.steps;
+    if (steps === undefined || this.o.mode !== 'countdown') return null;
+    return this.forcedStep !== undefined ? this.forcedStep : pickStep(steps, this.remainingMs());
+  }
+
+  /** Publish the current step now, outside a run (at Take — the clock itself starts later). */
+  syncStep(): void {
+    if (this.destroyed) return;
+    this.paintStep();
+  }
+
+  /** Drop the published step and the latch (a fresh run, or teardown). */
+  private clearStep(): void {
+    if (this.lastStep === null) return;
+    const left = this.lastStep;
+    const root = this.o.stepRoot;
+    const attr = this.o.stepAttr;
+    if (root !== undefined && attr !== undefined) root.removeAttribute(attr);
+    this.lastStep = null;
+    this.o.onStep?.(null, left, 'reset');
+  }
+
+  /** The step this driver last published (`null` — none). */
+  get activeStep(): StepToken | null {
+    return this.lastStep;
+  }
+
+  /**
+   * REHEARSAL — show `step` (or no step, `null`) regardless of the remaining time, until called
+   * again with `undefined`, which returns to the live step. Applies at once, inside or outside a
+   * run, through the same latch and `onStep` the live steps use — a rehearsal exercises the code
+   * that runs on air. Session-only: nothing is persisted.
+   */
+  forceStep(step: StepToken | null | undefined): void {
+    if (this.destroyed) return;
+    this.forcedStep = step;
+    this.paintStep();
   }
 
   private fireComplete(): void {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Window } from 'happy-dom';
 import type { Element, Scene } from '@cg/shared-schema';
 import { buildScene, smpteBarsGradient, SMPTE_BARS } from '../src/scene-builder.js';
-import { compileZoneCss } from '../src/zone-css.js';
+import { compileStepCss } from '../src/step-css.js';
 
 /**
  * D-137 phase 1 §9 — the render-MODE seam, and the thing it exists for: a Live
@@ -10,11 +10,12 @@ import { compileZoneCss } from '../src/zone-css.js';
  *
  * Maps `specs/designer-live-source/spec.md`:
  *   - "Bars on the authoring surfaces, nothing in the exports"
- *   - "An authored zone cannot fill the hole on air"
+ *   - "An authored zone cannot fill the hole on air" (a countdown STEP's change since
+ *     `DELTA-RUN-NEXT-VERSION-01-A`)
  *
- * The zone case has no UI to drive it (`zoneOverrides` is reachable from no
- * Designer surface), so it is pinned HERE rather than in the E2E — it is
- * representable in a hand-edited scene, which is the whole reason it is a hazard.
+ * That case has no UI to drive it (the Designer offers no change on a Live Source), so it is
+ * pinned HERE rather than in the E2E — it is representable in a hand-edited scene, which is the
+ * whole reason it is a hazard.
  */
 
 const baseTransform = {
@@ -176,27 +177,58 @@ describe("D-137 — 'output' mode paints NOTHING", () => {
   });
 });
 
-describe('D-137 §9 — the zone-css hazard is closed in output mode', () => {
-  /** A Live Source whose zone override would paint its hole. */
-  const zoned = liveSource({
-    zoneOverrides: [{ zone: 'danger', backgroundColor: '#ff0000' }],
-  } as never);
+describe('D-137 §9 — the step-stylesheet hazard is closed in output mode', () => {
+  /*
+    `DELTA-RUN-NEXT-VERSION-01-A` — what was a zone override is now a countdown step's change. The
+    Designer offers NO change on a Live Source (`changePropertiesOf`), but a hand-edited scene can
+    still carry one, which is exactly why it is pinned here.
+  */
+  const countdownChanging = (changes: unknown[]): Element =>
+    ({
+      ...baseElProps,
+      id: 'cd',
+      name: 'cd',
+      type: 'clock',
+      font: {
+        family: 'Vazirmatn',
+        weight: 600,
+        style: 'normal',
+        size: 48,
+        lineHeight: 1.2,
+        letterSpacing: 0,
+      },
+      color: '#ffffff',
+      align: 'center',
+      verticalAlign: 'middle',
+      mode: 'countdown',
+      format: 'mm:ss',
+      digits: 'latin',
+      target: { kind: 'duration', ms: 60_000 },
+      steps: { steps: [{ name: 'danger', atMs: 0, changes }] },
+    }) as unknown as Element;
+  const paintHole = { elementId: 'live-a', property: 'backgroundColor', value: '#ff0000' };
 
-  it("'author' still compiles its zone slot — nothing about authoring changed", () => {
-    const css = compileZoneCss(sceneWith([zoned]), 'author').css;
+  it("'author' still compiles its rule — nothing about authoring changed", () => {
+    const css = compileStepCss(
+      sceneWith([liveSource(), countdownChanging([paintHole])]),
+      'author',
+    ).css;
     expect(css).toContain('background-color');
     expect(css).toContain('#ff0000');
   });
 
   it("'output' compiles NOTHING for it — no rule can fill the hole on air", () => {
-    const css = compileZoneCss(sceneWith([zoned]), 'output').css;
-    // The whole stylesheet is empty: it was this element's only slot.
-    expect(css).toBe('');
+    const css = compileStepCss(
+      sceneWith([liveSource(), countdownChanging([paintHole])]),
+      'output',
+    ).css;
+    expect(css).not.toContain('#ff0000');
+    expect(css).not.toContain('background-color');
   });
 
-  it('the zone NUMBERING stays mode-independent, so other elements keep their slots', () => {
-    // A Live Source authored BEFORE a zoned shape. If the exclusion renumbered, the
-    // shape's index would shift in 'output' and every compiled rule would mis-target.
+  it('the NUMBERING stays mode-independent, so other elements keep their indices', () => {
+    // A Live Source authored BEFORE a stepped shape. If the exclusion renumbered, the shape's
+    // index would shift in 'output' and every compiled rule would mis-target.
     const shape = {
       ...baseElProps,
       id: 'shape-b',
@@ -204,19 +236,24 @@ describe('D-137 §9 — the zone-css hazard is closed in output mode', () => {
       type: 'shape',
       shape: 'rect',
       fill: { kind: 'solid', color: '#123456' },
-      zoneOverrides: [{ zone: 'danger', fill: '#00ff00' }],
     } as unknown as Element;
-    const scene = sceneWith([zoned, shape]);
-    // Distinct scene OBJECTS: `assignZoneIndices` caches per scene identity.
-    const authorCss = compileZoneCss(scene, 'author').css;
-    const outputCss = compileZoneCss(sceneWith([zoned, shape]), 'output').css;
-    // The shape is index 1 in BOTH — it was authored second, and the Live Source
-    // still occupies index 0 even though 'output' emits no rule for it.
-    expect(authorCss).toContain("[data-cg-zone-el='1']");
-    expect(outputCss).toContain("[data-cg-zone-el='1']");
+    const changes = [paintHole, { elementId: 'shape-b', property: 'fill', value: '#00ff00' }];
+    // Distinct scene OBJECTS: the step plan caches per scene identity.
+    const authorCss = compileStepCss(
+      sceneWith([liveSource(), shape, countdownChanging(changes)]),
+      'author',
+    ).css;
+    const outputCss = compileStepCss(
+      sceneWith([liveSource(), shape, countdownChanging(changes)]),
+      'output',
+    ).css;
+    // The shape is index 1 in BOTH — the Live Source still occupies index 0 even though
+    // 'output' emits no rule for it.
+    expect(authorCss).toContain("[data-cg-step-el='1']");
+    expect(outputCss).toContain("[data-cg-step-el='1']");
     expect(outputCss).toContain('#00ff00');
     // …and 'output' emits nothing at all for index 0.
-    expect(outputCss).not.toContain("[data-cg-zone-el='0']");
+    expect(outputCss).not.toContain("[data-cg-step-el='0']");
   });
 });
 

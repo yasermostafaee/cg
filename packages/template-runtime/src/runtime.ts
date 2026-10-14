@@ -89,7 +89,8 @@ function resolveScopeValues(values: NestedFieldValues, path: string): NestedFiel
   return cur;
 }
 import { ensureBaselineCss } from './css.js';
-import { ensureZoneCss } from './zone-css.js';
+import { ensureStepCss, STEP_ROOT_DATASET, stepAttribute, stepPlanOf } from './step-css.js';
+import { createStepEffects, type StepEffects, type StepInstance } from './step-effects.js';
 import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { PlayoutController } from './playout-controller.js';
@@ -201,8 +202,40 @@ interface ScopeNode {
    * B-034 — the instance's own `visible` (root = true). A HIDDEN instance's whole subtree is inert:
    * the parent's `aggregateContentWait` + content-start skip it, so a visible content driver INSIDE a
    * hidden instance can't keep the parent open. Set by the parent from its `FieldScopeChild`.
+   *
+   * `DELTA-RUN-NEXT-VERSION-01-F` — and flipped by a countdown step's cue: an instance waiting
+   * hidden for its step is out of the graphic exactly as a hidden one is, until it is shown.
    */
   visible: boolean;
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-F` — re-arm and start THIS scope's own Lotties, videos and sounds,
+   * as `play()` and a loop-cycle boundary do: what a step's SHOW runs beside the instance's
+   * entrance, so its media enters with it.
+   */
+  restartOwnMedia: () => void;
+}
+
+/** A countdown with steps, its driver, and what its steps do beyond CSS. */
+interface StepDriverEntry {
+  id: string;
+  driver: ClockDriver;
+  effects: StepEffects;
+}
+
+/**
+ * `DELTA-RUN-NEXT-VERSION-01-F` — a composition instance a countdown step can cue. `state`: `in`
+ * (entering or holding), `exiting` (its own exit is playing), or `out` (waiting hidden — the
+ * graphic's own lifecycle cascade skips it). `token` makes a late settle of an exit that a show
+ * superseded a no-op.
+ */
+interface InstanceCue {
+  node: ScopeNode;
+  /** The instance ELEMENT's node — hidden by `visibility` while out, so no `display` writer fights it. */
+  el: HTMLElement;
+  /** Its authored state at Take: in, unless it `startsHidden`. */
+  authoredIn: boolean;
+  state: 'in' | 'exiting' | 'out';
+  token: number;
 }
 
 /**
@@ -373,6 +406,8 @@ interface WiredSubtree {
   videos: VideoDriver[];
   /** `D-165` — sound drivers of this subtree (they never gate a hold). */
   audios: AudioDriver[];
+  /** `DELTA-RUN-NEXT-VERSION-01-A` — the countdowns with steps wired in this subtree. */
+  stepDrivers: StepDriverEntry[];
   /** Stop + destroy every driver and controller of this subtree, deregister. */
   destroy(): void;
 }
@@ -454,14 +489,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // TEXT-FIT-01 — and every other registered migration (scene-migrations.ts), in order.
   scene = migrateScene(scene);
 
-  // D-141 — compile this scene's colour zones into `<style id="cg-zones">`, beside
-  // the baseline block. Emitted from the SCENE by the runtime, which is what makes
-  // preview/export parity structural: the single-file export embeds the scene and
-  // boots this same code, so both carry byte-identical rules and neither exporter
-  // needs a zone code path. A scene with no zone overrides injects nothing.
-  // Runs AFTER the path migration so the compiler and the builder see one object.
+  // DELTA-RUN-NEXT-VERSION-01-A — compile this scene's countdown STEPS into `<style id="cg-steps">`,
+  // beside the baseline block. Emitted from the SCENE by the runtime, which is what makes
+  // preview/export parity structural: the single-file export embeds the scene and boots this same
+  // code, so both carry byte-identical rules and neither exporter needs a step code path. A scene
+  // with no steps injects nothing. Runs AFTER the migrations (D-141's zones arrive here as steps),
+  // so the compiler and the builder see one object.
   // D-137 §9 — the render mode, named once and threaded to BOTH consumers (the
-  // zone compiler and the builder). Absent ⇒ `'output'`: a forgotten boot site
+  // step compiler and the builder). Absent ⇒ `'output'`: a forgotten boot site
   // paints nothing, which is the safe direction on air. See `RenderMode`.
   const mode = options.mode ?? 'output';
   // B-134 — the editor backdrop paints on the editing CANVAS only. A second axis
@@ -470,12 +505,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // in `'output'` (the backdrop is never painted there anyway).
   const paintEditorBackdrop = options.paintEditorBackdrop ?? true;
 
-  const zoneCss = ensureZoneCss(scene, doc, mode);
-  for (const warning of zoneCss.warnings) {
-    // A build-time drop (an unescapable key, a clash) degrades the styling, never
-    // the render — reported, never thrown.
-    console.warn(`[cg] zone stylesheet: ${warning}`);
+  const stepCss = ensureStepCss(scene, doc, mode);
+  for (const warning of stepCss.warnings) {
+    // A build-time drop (an invalid colour) degrades the styling, never the render — reported,
+    // never thrown.
+    console.warn(`[cg] step stylesheet: ${warning}`);
   }
+  const stepPlan = stepPlanOf(scene);
 
   const built = buildScene(scene, doc, mode, paintEditorBackdrop);
   root.appendChild(built.container);
@@ -854,6 +890,60 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    */
   const clockDriversByScope = new WeakMap<FieldScope, Map<string, ClockDriver>>();
 
+  /*
+    `DELTA-RUN-NEXT-VERSION-01-F` — A COUNTDOWN STEP CUES A COMPOSITION INSTANCE'S OWN ENTRANCE AND
+    EXIT, through the nested lifecycle every instance already has (its own `PlayoutController`). No
+    second lifecycle: `show` is the instance's `play()` cascade, `hide` its `stop()` cascade, exactly
+    the operations the graphic's own Take and Stop cascade into it — and therefore with the engine's
+    own interruption behaviour (a hide during the entrance jumps to the exit's first frame and plays
+    it forward; a show during the exit starts the entrance again). There is no reverse in the engine.
+  */
+  const nodeByScope = new WeakMap<FieldScope, ScopeNode>();
+  const cues = new Map<ScopeNode, InstanceCue>();
+  /** At rest (Take, wiring): in or out, playing nothing. */
+  const setCueAtRest = (c: InstanceCue, isIn: boolean): void => {
+    c.token += 1;
+    c.state = isIn ? 'in' : 'out';
+    c.node.visible = isIn;
+    c.el.style.visibility = isIn ? '' : 'hidden';
+  };
+  // Assigned below, once the cascade and the outro ledger exist; only ever called at a step change.
+  let showInstanceCue: (c: InstanceCue) => void = noop;
+  let hideInstanceCue: (c: InstanceCue) => void = noop;
+  const handleOf = (c: InstanceCue): StepInstance => ({
+    show: () => showInstanceCue(c),
+    hide: () => hideInstanceCue(c),
+    prime: (isIn) => setCueAtRest(c, isIn),
+  });
+  /**
+   * The instances of composition element `elementId` that a countdown in `scope` governs: its own
+   * scope's instances and those nested in compositions WITHOUT a countdown with steps of their own
+   * (nearest wins — the same reach the step stylesheet has).
+   */
+  const stepInstancesOf = (scope: FieldScope, elementId: string): StepInstance[] => {
+    const out: StepInstance[] = [];
+    const walk = (s: FieldScope): void => {
+      for (const child of s.children) {
+        const node = nodeByScope.get(child.scope);
+        const cue = node === undefined ? undefined : cues.get(node);
+        if (child.elementId === elementId && cue !== undefined) out.push(handleOf(cue));
+        if (child.scope.container.dataset[STEP_ROOT_DATASET] === undefined) walk(child.scope);
+      }
+    };
+    walk(scope);
+    return out;
+  };
+  /** Instances a step may cue: every one that starts hidden or that some step shows or hides. */
+  const cuedInstanceIds = new Set<string>();
+  for (const el of stepPlan.byId.values()) {
+    if (el.type === 'composition' && el.startsHidden === true) cuedInstanceIds.add(el.id);
+    if (el.type !== 'clock' || el.mode !== 'countdown' || el.steps === undefined) continue;
+    const sets = [el.steps.before?.changes ?? [], ...el.steps.steps.map((s) => s.changes)];
+    for (const change of sets.flat()) {
+      if (change.property === 'visible') cuedInstanceIds.add(change.elementId);
+    }
+  }
+
   const wireScopeSubtree = (
     subtreeScope: FieldScope,
     subtreePath: string,
@@ -868,6 +958,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const videos: VideoDriver[] = [];
     const audios: AudioDriver[] = [];
     const controllers: PlayoutController[] = [];
+    const stepDrivers: StepDriverEntry[] = [];
+    /** The cue entries this subtree registered — dropped with it on teardown. */
+    const subtreeCues: ScopeNode[] = [];
 
     const wireScope = (
       scope: FieldScope,
@@ -994,6 +1087,24 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           durationOverride !== undefined
             ? { kind: 'duration', ms: durationOverride }
             : c.element.target;
+        // DELTA-RUN-NEXT-VERSION-01-A — the countdown's steps, published on THIS scope's own
+        // container. `FieldScope.container` is the root stage for the scene and the
+        // `.cg-comp-inner` div for a nested instance, which is exactly the scope-root granularity
+        // nearest-wins resolves at: a nested instance with its own countdown with steps governs its
+        // own subtree, one without is reached by its host's steps. `onStep` applies what CSS
+        // cannot — a picture, a composition instance's own entrance and exit (`-F`).
+        const countdownIndex =
+          c.element.mode === 'countdown' ? stepPlan.countdowns.get(c.element.id) : undefined;
+        let effects: StepEffects | undefined;
+        if (countdownIndex !== undefined && c.element.steps !== undefined) {
+          effects = createStepEffects({
+            steps: c.element.steps,
+            root: scope.container,
+            plan: stepPlan,
+            ...(options.assetUrls !== undefined ? { assetUrls: options.assetUrls } : {}),
+            instances: (elementId) => stepInstancesOf(scope, elementId),
+          });
+        }
         const driver = new ClockDriver({
           node: c.node,
           mode: c.element.mode,
@@ -1003,17 +1114,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           timezone: c.element.timezone,
           blinkColon: c.element.blinkColon,
           blinkPeriodMs: c.element.blinkPeriodMs,
-          // D-141 — the countdown's colour zones, published on THIS scope's own
-          // container. `FieldScope.container` is the root stage for the scene and
-          // the `.cg-comp-inner` div for a nested instance, which is exactly the
-          // scope-root granularity nearest-wins resolves at: a nested instance with
-          // its own zoned countdown governs its own subtree, one without stays
-          // transparent to its host's zone. The driver ignores zones for
-          // `wall`/`countup` (the schema refuses to author them there at all).
-          zones: c.element.zones,
-          zoneRoot: scope.container,
+          steps: countdownIndex === undefined ? undefined : c.element.steps,
+          stepRoot: scope.container,
+          stepAttr: countdownIndex === undefined ? undefined : stepAttribute(countdownIndex),
+          onStep: effects?.apply,
+          afterZero: c.element.mode === 'countdown' ? c.element.afterZero : undefined,
           clock: options.clock,
         });
+        if (effects !== undefined) stepDrivers.push({ id: c.element.id, driver, effects });
         scopeClockDrivers.set(c.element.id, driver);
         // D-105 — mark the content root for the coordinated exit (out/stop).
         c.node.dataset['cgContent'] = 'clock';
@@ -1873,6 +1981,28 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           gate.node.style.display = inside ? gate.naturalDisplay : 'none';
         }
       };
+      /**
+       * Re-arm and start THIS scope's own Lotties, videos and sounds: a loop-cycle boundary
+       * (`onCycleRestart`) and a countdown step's SHOW of this instance (`-F`) both run it, so the
+       * media of an instance enters with it however it entered.
+       */
+      const restartOwnMedia = (): void => {
+        for (const l of scopeLotties) {
+          l.reset();
+          l.start();
+        }
+        // D-128 — this scope's OWN videos re-arm too (reset re-mints whenComplete + parks at intro
+        // start; start replays it).
+        for (const v of scopeVideos) {
+          v.reset();
+          v.start();
+        }
+        // `D-165` — a new occurrence: its entrance sound plays again, once.
+        for (const a of scopeAudios) {
+          a.reset();
+          a.start();
+        }
+      };
       const controller = new PlayoutController({
         frameRate: scene.frameRate,
         active: activeRange,
@@ -2000,21 +2130,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // non-final gate's reach above: descendants were not exited at the
           // boundary, so there is nothing of theirs to re-arm.
           for (const d of scopeOutroLotties) outroLedger.delete(d);
-          for (const l of scopeLotties) {
-            l.reset();
-            l.start();
-          }
-          // D-128 — this scope's OWN videos re-arm at the loop-cycle boundary too
-          // (reset re-mints whenComplete + parks at intro start; start replays it).
-          for (const v of scopeVideos) {
-            v.reset();
-            v.start();
-          }
-          // `D-165` — a new cycle is a new occurrence: its entrance sound plays again, once.
-          for (const a of scopeAudios) {
-            a.reset();
-            a.start();
-          }
+          restartOwnMedia();
           // `B-150` — CONTENT-START CALLER 2 of 3: a loop-cycle boundary re-arms this scope's
           // own media, which un-pauses whatever the park had frozen.
           lookMediaPark.reassert();
@@ -2040,7 +2156,27 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // B-034 — default visible; the parent overrides each child from its FieldScopeChild (below),
         // like `holdOverrides`. The root scope has no instancing parent, so it stays visible.
         visible: true,
+        restartOwnMedia,
       };
+      nodeByScope.set(scope, node);
+      // DELTA-RUN-NEXT-VERSION-01-F — register the instances a countdown step may cue, at rest in
+      // their AUTHORED state, so one that starts hidden is hidden before any Take. An instance
+      // hidden with the eye (`visible: false`) stays inert (B-034): no step shows it.
+      scope.children.forEach((c, i) => {
+        const child = instanceChildren[i];
+        if (child === undefined || c.elementId === undefined || c.node === undefined) return;
+        if (c.visible === false || !cuedInstanceIds.has(c.elementId)) return;
+        const cue: InstanceCue = {
+          node: child,
+          el: c.node,
+          authoredIn: c.startsHidden !== true,
+          state: 'in',
+          token: 0,
+        };
+        cues.set(child, cue);
+        subtreeCues.push(child);
+        setCueAtRest(cue, cue.authoredIn);
+      });
 
       // D-030 — repeater drivers (after the node exists: stamped rows attach
       // under it so the cascade reaches them like authored children). Each
@@ -2124,7 +2260,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       lotties,
       videos,
       audios,
+      stepDrivers,
       destroy(): void {
+        for (const n of subtreeCues) cues.delete(n);
         // Symmetric teardown: rows first (each tears down its OWN subtree),
         // then controllers (stop timers/rAF before the drivers release their
         // DOM), then drivers — matching remove()'s original order.
@@ -2253,6 +2391,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // Apply an operation to every controller in the tree (parent first), so
   // play/stop/pause/remove cascade to every nested instance.
   const cascade = (node: ScopeNode, op: (c: PlayoutController) => void): void => {
+    // DELTA-RUN-NEXT-VERSION-01-F — an instance waiting HIDDEN for its step takes no part in the
+    // graphic's lifecycle: the Take does not play it, a Stop does not exit it (it is not on screen).
+    if (cues.get(node)?.state === 'out') return;
     op(node.controller);
     for (const child of node.children) cascade(child, op);
   };
@@ -2570,6 +2711,61 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     cascade(rootNode, (c) => c.stop());
   };
 
+  /*
+    DELTA-RUN-NEXT-VERSION-01-F — a step SHOWS an instance: it is re-armed as `play()` re-arms a
+    run (its settle signal, its one-shot element outros, its own media), then its controller cascade
+    PLAYS — its own entrance, then its own hold — and its content starts. A step HIDES it: its
+    controller cascade STOPS — its own exit, element outros included — and once it has settled it is
+    hidden, because a nested exit leaves the instance painted at its last frame.
+  */
+  showInstanceCue = (c: InstanceCue): void => {
+    if (c.state === 'in') return;
+    c.token += 1;
+    c.state = 'in';
+    c.node.visible = true;
+    c.el.style.visibility = '';
+    const rearm = (n: ScopeNode): void => {
+      n.resetSettled();
+      for (const d of n.outroLotties) outroLedger.delete(d);
+      n.restartOwnMedia();
+      for (const child of n.children) rearm(child);
+    };
+    rearm(c.node);
+    cascade(c.node, (ctl) => ctl.play());
+    // A coordinator starts its own content at its own hold entry; any other instance's content was
+    // the graphic's to start, and the graphic's content start has long passed.
+    if (!c.node.isCoordinator) startContentTree(c.node);
+    lookMediaPark.reassert();
+  };
+  hideInstanceCue = (c: InstanceCue): void => {
+    if (c.state !== 'in') return;
+    c.token += 1;
+    const token = c.token;
+    c.state = 'exiting';
+    cascade(c.node, (ctl) => ctl.stop());
+    void c.node.whenSettled().then(() => {
+      if (c.token !== token) return; // a show superseded this exit
+      c.state = 'out';
+      c.node.visible = false;
+      c.el.style.visibility = 'hidden';
+    });
+  };
+
+  /**
+   * At Take, BEFORE the entrance cascade: every instance at rest in its authored state, then each
+   * countdown's CURRENT step primes the instances it governs — so the cascade plays an instance the
+   * step shows WITH the graphic's entrance and skips one it hides.
+   */
+  const primeStepsForTake = (): void => {
+    for (const c of cues.values()) setCueAtRest(c, c.authoredIn);
+    for (const sub of subtrees)
+      for (const s of sub.stepDrivers) s.effects.prime(s.driver.currentStep);
+  };
+  /** At Take, AFTER the cascade: publish each countdown's step (the clock itself starts later). */
+  const publishStepsForTake = (): void => {
+    for (const sub of subtrees) for (const s of sub.stepDrivers) s.driver.syncStep();
+  };
+
   const runtime: TemplateRuntime = {
     ready,
 
@@ -2731,7 +2927,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         already told keeps the token it has.
       */
       if (control?.take !== undefined) takeToken = control.take;
+      // DELTA-RUN-NEXT-VERSION-01-A / -F — the step current at Take is in force from the first
+      // frame of the entrance: instances primed before the cascade, the step published after it.
+      primeStepsForTake();
       cascade(rootNode, (c) => c.play());
+      publishStepsForTake();
       // Session Z — THE TRIPWIRE. Everything above put a graphic ON AIR. If the machine
       // did not follow, the two have diverged, and the consequence is SILENT and total:
       // `stop()`/`out()` return at their `on-air`/`playing` guard for the life of this
@@ -2787,6 +2987,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     activeLookId(): string | undefined {
       return currentLookId;
+    },
+
+    rehearseStep(clockId: string, step: 'before' | number | null | undefined): void {
+      if (machine.state === 'removed') return;
+      for (const sub of subtrees) {
+        for (const s of sub.stepDrivers) if (s.id === clockId) s.driver.forceStep(step);
+      }
     },
 
     async update(data, opts: UpdateOptions = {}): Promise<void> {

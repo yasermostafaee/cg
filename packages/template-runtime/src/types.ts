@@ -138,6 +138,15 @@ export interface TemplateRuntime {
   /** The active look's id, `undefined` when the scene has no multi-frame group. */
   activeLookId(): string | undefined;
 
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-A` — REHEARSE a countdown's steps: show step `step` of countdown
+   * `clockId` (`'before'`, a step index, or `null` for no step) whatever the remaining time, or
+   * return to the live step with `undefined`. It runs the SAME latch, stylesheet and effects the
+   * live steps run — a composition instance a step shows plays its own entrance — so the author
+   * sees on the preview exactly what air will show. Session-only; the Designer preview's caller.
+   */
+  rehearseStep(clockId: string, step: 'before' | number | null | undefined): void;
+
   /** Play the exit animation. Stub for M3.2-α — instant transition. */
   stop(opts?: StopOptions): Promise<void>;
 
@@ -620,6 +629,13 @@ export interface FieldScopeChild {
    * element's own `drivesHold`. Lives on the instance, so two instances of the same child differ.
    */
   holdOverrides?: Readonly<Record<string, boolean>> | undefined;
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-F` — the instance ELEMENT's id and node, so a countdown step can cue
+   * this instance's own entrance and exit (`step-effects.ts`), and its `startsHidden`.
+   */
+  elementId?: string | undefined;
+  node?: HTMLElement | undefined;
+  startsHidden?: boolean | undefined;
 }
 
 /** A nested element + its node + animation, collected during comp expansion. */

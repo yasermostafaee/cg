@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from 'lucide-react';
 import type { Element, ZoneColor, ZoneOverride } from '@cg/shared-schema';
-import { zoneColorTargets, type ZoneSlot } from '@cg/template-runtime/zone-css';
+import { colorPropertiesOf, type ColorChangeProperty as ZoneSlot } from '@cg/shared-schema';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -40,7 +40,7 @@ export function ZoneOverridesSection({ element }: { element: Element }): JSX.Ele
     return null;
   const keys = enclosingZoneKeys(scene, activeCompositionId);
   if (keys.length === 0) return null;
-  const slots = zoneColorTargets(element).map((t) => t.slot);
+  const slots = colorPropertiesOf(element);
   if (slots.length === 0) return null;
 
   const palette = enclosingZonePalette(scene, activeCompositionId);

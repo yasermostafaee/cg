@@ -18,10 +18,6 @@
     "./position": {
       "types": "./dist/position.d.ts",
       "import": "./dist/position.js"
-    },
-    "./zone-css": {
-      "types": "./dist/zone-css.d.ts",
-      "import": "./dist/zone-css.js"
     }
   },
   "files": [
