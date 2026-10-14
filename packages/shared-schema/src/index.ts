@@ -6,6 +6,8 @@ export * from './assets.js';
 export * from './path-points.js';
 export * from './animation.js';
 export * from './elements.js';
+export * from './element-changes.js';
+export * from './countdown.js';
 export * from './follow-window.js';
 export * from './fields.js';
 export * from './bindings.js';

@@ -17,6 +17,12 @@ import { ElementAnimationSchema, FrameRangeSchema } from './animation.js';
 import { AnchorPointSchema, type AnchorPoint } from './path-points.js';
 import { FieldDigitsSchema, ListItemSchema, type FieldDigits } from './fields.js';
 import { LiveFitModeSchema } from './live-fit.js';
+import {
+  ChangeTransitionSchema,
+  ElementChangeSchema,
+  refineChangeList,
+} from './element-changes.js';
+import { AfterZeroSchema } from './countdown.js';
 
 const TextDirectionSchema = z.enum(['auto', 'ltr', 'rtl']);
 
@@ -154,12 +160,11 @@ export const ElementBaseSchema = z.object({
    */
   timelineColor: HexColorSchema.optional(),
   /**
-   * D-141 — opt-in per-zone colour overrides. Optional and applied to every
-   * element type by the runtime when present (cf. `filter` / `lifespan` /
-   * `timelineColor` above), which is why it lives on the BASE rather than on each
-   * kind: one edit covers every kind — including the clock itself, which restyles
-   * through this SAME mechanism (it is an element in its own subtree, so no
-   * special case). Absent ⇒ the element is untouched by any zone.
+   * D-141 — ⚠ LEGACY input only (`DELTA-RUN-NEXT-VERSION-01-A`): per-zone colour overrides,
+   * superseded by a countdown's {@link CountdownStepsSchema} changes, which name the element they
+   * change from the countdown's side. Kept PARSEABLE (the shape shipped in the schema of `0.11.6`);
+   * `migrateCountdownZones` turns every override into the equivalent step change on every load, with
+   * the same on-air result, and drops the key. Nothing writes it.
    */
   zoneOverrides: ZoneOverridesSchema.optional(),
 });
@@ -472,6 +477,64 @@ export const ClockZonesSchema = z
 export type ClockZones = z.infer<typeof ClockZonesSchema>;
 
 /**
+ * 🔴 `DELTA-RUN-NEXT-VERSION-01-A` §2 / `-D` §2 — **ONE STEP OF A COUNTDOWN: when this much or less
+ * remains, make these changes.**
+ *
+ * `atMs` is a threshold on REMAINING time, compared on the ONE-SECOND QUANTUM the digits paint, so a
+ * step is entered on exactly the frame the display reaches it — never up to a second early:
+ *
+ * - `atMs > 0` — "when N min (or s) or less remain";
+ * - `atMs === 0` — **At zero**: the event time is reached;
+ * - `atMs < 0` — "|N| after zero": time keeps passing after zero even while the digits hold.
+ *
+ * The step holds a list of {@link ElementChange}s — any element of the countdown's composition or of
+ * a composition instanced inside it — and the transition they arrive with. Leaving a step returns
+ * every property it set to the element's authored value, unless the step entered sets it too.
+ */
+export const CountdownStepSchema = z.object({
+  /** The author's name for the step: `Step 1` … by default, `60 min` from the preset. */
+  name: z.string(),
+  atMs: z.number().int(),
+  changes: z.array(ElementChangeSchema),
+  transition: ChangeTransitionSchema.optional(),
+});
+export type CountdownStep = z.infer<typeof CountdownStepSchema>;
+
+/** The optional **Before** step: active while remaining is above every threshold. */
+export const CountdownBeforeSchema = z.object({
+  name: z.string(),
+  changes: z.array(ElementChangeSchema),
+  transition: ChangeTransitionSchema.optional(),
+});
+export type CountdownBefore = z.infer<typeof CountdownBeforeSchema>;
+
+/**
+ * A countdown's steps: an optional `before`, then thresholds STRICTLY DECREASING across zero (the
+ * offending row is named by its path, so the Designer marks that row rather than refusing the
+ * section). Within one step, at most one change per element and property.
+ */
+export const CountdownStepsSchema = z
+  .object({
+    before: CountdownBeforeSchema.optional(),
+    steps: z.array(CountdownStepSchema),
+  })
+  .superRefine((s, ctx) => {
+    s.steps.forEach((step, i) => {
+      const prev = s.steps[i - 1];
+      if (prev !== undefined && step.atMs >= prev.atMs) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['steps', i, 'atMs'],
+          message: `step thresholds must be strictly decreasing (${String(step.atMs)} is not below ${String(prev.atMs)})`,
+        });
+      }
+      refineChangeList(step.changes, ctx, ['steps', i, 'changes']);
+    });
+    if (s.before !== undefined) refineChangeList(s.before.changes, ctx, ['before', 'changes']);
+  });
+export type CountdownSteps = z.infer<typeof CountdownStepsSchema>;
+
+/**
  * Digital clock element (D-027) — renders live time as text through a format
  * string (`HH H hh h mm m ss s A a` tokens + literal characters; the largest
  * unit present absorbs overflow, so `mm:ss` shows `90:00` for 90 minutes).
@@ -524,13 +587,24 @@ export const ClockElementSchema = ElementBaseSchema.extend({
   /** Countdown target; ignored by `wall`/`countup`. */
   target: ClockTargetSchema.optional(),
   /**
-   * D-141 — optional colour zones. COUNTDOWN-ONLY at BOTH layers: the refinement
-   * below REFUSES them on `wall`/`countup` so they cannot be authored, and the
-   * runtime independently IGNORES them for those modes, so a hand-edited `.vcg`
-   * degrades to base styles rather than misbehaving. Additive +
-   * backward-compatible — no schema-version bump.
+   * D-141 — ⚠ LEGACY input only (`DELTA-RUN-NEXT-VERSION-01-A`): colour zones, superseded by
+   * {@link steps}. Kept PARSEABLE because the shape shipped in the schema of `0.11.6` and a scene
+   * saved by a development build may carry it; `migrateCountdownZones` (scene-migrations.ts) turns
+   * it into steps with the same on-air result on every load, and nothing writes it. Still
+   * countdown-only (the refinement below).
    */
   zones: ClockZonesSchema.optional(),
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-A` — the countdown's STEPS: what changes, on which elements, as the
+   * remaining time crosses each threshold. Countdown-only at both layers (refined below; the
+   * runtime ignores them on `wall` / `countup`). Absent ⇒ no step ever changes anything.
+   */
+  steps: CountdownStepsSchema.optional(),
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-D` / `-E` — what the countdown does after zero. Absent ⇒ `hold`, the
+   * behaviour every countdown had before, so no existing scene changes.
+   */
+  afterZero: AfterZeroSchema.optional(),
   /**
    * D-084 — optional IANA time-zone name (e.g. 'Europe/London'). When set,
    * `wall` mode renders that zone's current time (via Intl.DateTimeFormat);
@@ -576,6 +650,21 @@ export const ClockElementSchema = ElementBaseSchema.extend({
         code: z.ZodIssueCode.custom,
         path: ['zones'],
         message: "zones are countdown-only — 'wall' and 'countup' have no remaining time",
+      });
+    }
+    // DELTA-RUN-NEXT-VERSION-01-A / -D — steps and the after-zero choice ride on remaining time too.
+    if (el.mode !== 'countdown' && el.steps !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['steps'],
+        message: "steps are countdown-only — 'wall' and 'countup' have no remaining time",
+      });
+    }
+    if (el.mode !== 'countdown' && el.afterZero !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['afterZero'],
+        message: "afterZero is countdown-only — 'wall' and 'countup' never reach zero",
       });
     }
   });
@@ -1590,6 +1679,15 @@ export const CompositionElementSchema = ElementBaseSchema.extend({
    * Optional + additive: pre-D-112 scenes round-trip unchanged (no schema-version bump).
    */
   holdOverrides: z.record(z.string(), z.boolean()).optional(),
+  /**
+   * 🔴 `DELTA-RUN-NEXT-VERSION-01-F` — **STARTS HIDDEN: this instance waits for a countdown step to
+   * show it.** At Take it does NOT enter with the graphic (unless the step current at Take shows it);
+   * a step's `visible: true` plays its OWN entrance and it then holds per its own settings, and a
+   * step's `visible: false` plays its OWN exit. Unlike `visible: false` (B-034: never shown, its
+   * subtree inert), a hidden-at-start instance is a live part of the graphic waiting for its cue.
+   * Absent ⇒ `false`: every instance authored before this enters with its graphic, as it did.
+   */
+  startsHidden: z.boolean().optional(),
 });
 export type CompositionElement = z.infer<typeof CompositionElementSchema>;
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { HexColorSchema, IdSchema } from './primitives.js';
+import { CountdownTargetFieldSchema } from './countdown.js';
 
 const DynamicFieldBaseSchema = z.object({
   id: z.string().min(1),
@@ -80,6 +81,14 @@ const TextFieldSchema = DynamicFieldBaseSchema.extend({
   direction: z.enum(['auto', 'ltr', 'rtl']).optional(),
   digits: FieldDigitsSchema.optional(),
   ...FileSourceGrant,
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-C` §2 — present when this field drives a countdown's target: CG
+   * Control then offers the date and time control and states a passed target in the author's words.
+   * ⚠ DERIVED at import from the `clock-target` binding (`countdownTargetFieldsOf`), never authored
+   * by the Designer — one source of truth, the binding. A template imported before this shows the
+   * field as plain text until it is imported again.
+   */
+  countdown: CountdownTargetFieldSchema.optional(),
 });
 
 const MultilineFieldSchema = DynamicFieldBaseSchema.extend({
