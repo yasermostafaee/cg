@@ -79,6 +79,22 @@ export const VideoProvenanceSchema = z.object({
    * the pre-convert dedupe can distinguish outputs that genuinely differ.
    */
   alphaBleed: z.boolean().optional(),
+  /**
+   * `D-164` — present when the source was a numbered IMAGE SEQUENCE rather than one clip: the
+   * first and last frame's file names (in the natural order they were converted in), how many
+   * frames, and the rate the author gave it — a sequence has no rate of its own. `sourceFilename`
+   * is then the first frame's name and `sourceFps` this same rate; `sourceSha256` hashes the
+   * ordered frames' bytes, `sourceBytes` is their sum. Additive + optional: every asset stored
+   * before it parses unchanged.
+   */
+  sequence: z
+    .object({
+      firstFile: z.string().min(1),
+      lastFile: z.string().min(1),
+      frameCount: z.number().int().positive(),
+      fps: z.number().positive(),
+    })
+    .optional(),
 });
 export type VideoProvenance = z.infer<typeof VideoProvenanceSchema>;
 

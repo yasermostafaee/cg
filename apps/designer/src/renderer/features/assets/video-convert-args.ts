@@ -197,6 +197,11 @@ function buildAlphaGraph(crop: CropRect | undefined, premultiplied: boolean): st
  */
 export function buildConvertArgs(opts: {
   inputPath: string;
+  /**
+   * `D-164` — options that must come BEFORE `-i` (an image sequence's `-framerate` and
+   * `-start_number`). Absent for a clip, whose args are exactly as before.
+   */
+  inputOptions?: readonly string[] | undefined;
   outputPath: string;
   targetFps: number;
   crop?: CropRect | undefined;
@@ -218,6 +223,7 @@ export function buildConvertArgs(opts: {
         : [];
   return [
     '-y',
+    ...(opts.inputOptions ?? []),
     '-i',
     opts.inputPath,
     ...filterArgs,
@@ -229,6 +235,69 @@ export function buildConvertArgs(opts: {
 }
 
 /**
+ * 🔴 `D-164` — **a numbered IMAGE SEQUENCE as a conversion source**, beside a picked clip. The
+ * frames arrive already in NATURAL order (`image-sequence.ts` decided it, gaps and all, and told
+ * the author); the converter mounts them renamed `000001.png …` so ffmpeg's `image2` input reads a
+ * contiguous run whatever the original names, padding or digit set were.
+ */
+export interface ImageSequenceSource {
+  readonly kind: 'image-sequence';
+  /** The frames, in the order they are converted. */
+  readonly frames: readonly File[];
+  readonly ext: 'png' | 'tga';
+  /** The rate the author gave the frames — a sequence has none of its own. */
+  readonly fps: number;
+  /** What the author reads: `frame_001.png … frame_300.png (300 frames)`. */
+  readonly label: string;
+  /** The converted WebM's name: `frame.webm`. */
+  readonly assetName: string;
+}
+
+/** What the converter takes: a picked clip, or (`D-164`) a numbered image sequence. */
+export type VideoSource = File | ImageSequenceSource;
+
+export function isImageSequence(source: VideoSource): source is ImageSequenceSource {
+  return (source as { kind?: unknown }).kind === 'image-sequence';
+}
+
+/** The name the `index`-th frame (0-based) is mounted under: `000001.png …`. */
+export function sequenceFrameName(index: number, ext: ImageSequenceSource['ext']): string {
+  return `${String(index + 1).padStart(6, '0')}.${ext}`;
+}
+
+/**
+ * The `image2` input for a mounted sequence: its pattern, and the options that must precede `-i`
+ * — its rate (`-framerate`, not `-r`, which would RE-time the input) and where its numbering starts.
+ */
+export function sequenceInput(
+  seq: Pick<ImageSequenceSource, 'ext' | 'fps'>,
+  dir: string,
+): { inputPath: string; inputOptions: string[] } {
+  return {
+    inputPath: `${dir}/%06d.${seq.ext}`,
+    inputOptions: ['-framerate', String(seq.fps), '-start_number', '1'],
+  };
+}
+
+/** `D-164` — the frame count in one of ffmpeg's progress lines (`frame=  123 fps=…`), or null. */
+export function encodedFrameOf(logLine: string): number | null {
+  const m = /\bframe=\s*(\d+)/.exec(logLine);
+  return m === null ? null : Number(m[1]);
+}
+
+/** The source's name and size, for the modal and the dedupe pre-filter. */
+export function sourceDisplayName(source: VideoSource): string {
+  return isImageSequence(source) ? source.label : source.name;
+}
+export function sourceByteSize(source: VideoSource): number {
+  return isImageSequence(source) ? source.frames.reduce((sum, f) => sum + f.size, 0) : source.size;
+}
+/** The stored WebM's file name: a clip's name with `.webm`, a sequence's own. */
+export function sourceWebmName(source: VideoSource): string {
+  return isImageSequence(source) ? source.assetName : source.name.replace(/\.[^.]*$/, '') + '.webm';
+}
+
+/**
  * Extract ONE source frame as a PNG — the modal's crop-preview image. When
  * `atSec` is given, seek there first with a FAST keyframe seek (`-ss` BEFORE
  * `-i`; poster accuracy is irrelevant) so the preview is a MID-CLIP frame, not
@@ -236,9 +305,26 @@ export function buildConvertArgs(opts: {
  * frame, so a frame-0 poster reads as a blank box. Omit `atSec` (or ≤ 0) to
  * keep the frame-0 behaviour (e.g. a source whose duration is unknown).
  */
-export function buildPosterArgs(inputPath: string, outputPath: string, atSec?: number): string[] {
+export function buildPosterArgs(
+  inputPath: string,
+  outputPath: string,
+  atSec?: number,
+  /** `D-164` — an image sequence's input options (they precede `-i`, as the seek does). */
+  inputOptions: readonly string[] = [],
+): string[] {
   const seek = atSec !== undefined && atSec > 0 ? ['-ss', atSec.toFixed(3)] : [];
-  return ['-y', ...seek, '-i', inputPath, '-frames:v', '1', '-f', 'image2', outputPath];
+  return [
+    '-y',
+    ...inputOptions,
+    ...seek,
+    '-i',
+    inputPath,
+    '-frames:v',
+    '1',
+    '-f',
+    'image2',
+    outputPath,
+  ];
 }
 
 /**
@@ -323,6 +409,8 @@ export function buildProvenance(opts: {
   premultipliedAlpha?: boolean | undefined;
   /** Whether the ALPHA BLEED (transparent-region colour fill) ran at conversion. */
   alphaBleed?: boolean | undefined;
+  /** `D-164` — the image sequence this asset was made from (first / last file, count, rate). */
+  sequence?: NonNullable<VideoProvenance['sequence']> | undefined;
 }): VideoProvenance {
   return {
     sourceFilename: opts.sourceFilename,
@@ -340,6 +428,7 @@ export function buildProvenance(opts: {
       ? { premultipliedAlpha: opts.premultipliedAlpha }
       : {}),
     ...(opts.alphaBleed !== undefined ? { alphaBleed: opts.alphaBleed } : {}),
+    ...(opts.sequence !== undefined ? { sequence: opts.sequence } : {}),
   };
 }
 
@@ -381,6 +470,11 @@ export function matchesConversionParams(
     crop: CropRect | undefined;
     premultipliedAlpha?: boolean;
     alphaBleed?: boolean;
+    /**
+     * `D-164` — the rate an image sequence was given; absent for a clip. Part of the key: the same
+     * frames at 25 and at 50 are two different clips, and a clip never matches a sequence.
+     */
+    sequenceFps?: number | undefined;
   },
 ): boolean {
   return (
@@ -388,7 +482,8 @@ export function matchesConversionParams(
     p.targetFps === match.targetFps &&
     cropsEqual(p.crop, match.crop) &&
     (p.premultipliedAlpha === true) === (match.premultipliedAlpha === true) &&
-    (p.alphaBleed === true) === (match.alphaBleed === true)
+    (p.alphaBleed === true) === (match.alphaBleed === true) &&
+    (p.sequence?.fps ?? null) === (match.sequenceFps ?? null)
   );
 }
 
@@ -402,6 +497,7 @@ export function findDuplicateVideoAsset<
     crop: CropRect | undefined;
     premultipliedAlpha?: boolean;
     alphaBleed?: boolean;
+    sequenceFps?: number | undefined;
   },
 ): A | null {
   for (const a of assets) {

@@ -57,10 +57,15 @@ import coreWasmUrl from '@ffmpeg/core/wasm?url';
 import {
   buildConvertArgs,
   buildPosterArgs,
+  encodedFrameOf,
+  isImageSequence,
   parseProbeLog,
   posterTimeMs,
+  sequenceFrameName,
+  sequenceInput,
   type CropRect,
   type SourceProbe,
+  type VideoSource,
 } from './video-convert-args.js';
 
 const MOUNT_DIR = '/mnt';
@@ -192,7 +197,19 @@ async function withLogCapture<T>(ff: FFmpeg, lines: string[], fn: () => Promise<
   }
 }
 
-async function mountSource(ff: FFmpeg, file: File): Promise<string> {
+/**
+ * Mount the source read-only in the worker and say how ffmpeg reads it: the path after `-i`, and
+ * any options that must come BEFORE `-i`.
+ *
+ * 🔴 `D-164` — an IMAGE SEQUENCE is mounted the same zero-copy way: WORKERFS `blobs`, each frame
+ * renamed `000001.png …` in the order it arrives, read lazily by the worker. MEASURED
+ * (`tools/spikes/png-sequence/README.md`): 300 × 1080p frames weighing 1.3 GB cost the browser
+ * +460 MB at its peak, against +1.68 GB when every frame is copied into MEMFS.
+ */
+async function mountSource(
+  ff: FFmpeg,
+  source: VideoSource,
+): Promise<{ inputPath: string; inputOptions: string[] }> {
   try {
     await ff.createDir(MOUNT_DIR);
   } catch {
@@ -203,8 +220,22 @@ async function mountSource(ff: FFmpeg, file: File): Promise<string> {
   } catch {
     /* nothing mounted yet */
   }
-  await ff.mount('WORKERFS' as Parameters<FFmpeg['mount']>[0], { files: [file] }, MOUNT_DIR);
-  return `${MOUNT_DIR}/${file.name}`;
+  const workerfs = 'WORKERFS' as Parameters<FFmpeg['mount']>[0];
+  if (isImageSequence(source)) {
+    await ff.mount(
+      workerfs,
+      {
+        blobs: source.frames.map((data, i) => ({
+          name: sequenceFrameName(i, source.ext),
+          data,
+        })),
+      },
+      MOUNT_DIR,
+    );
+    return sequenceInput(source, MOUNT_DIR);
+  }
+  await ff.mount(workerfs, { files: [source] }, MOUNT_DIR);
+  return { inputPath: `${MOUNT_DIR}/${source.name}`, inputOptions: [] };
 }
 
 export type ProbeResult =
@@ -238,7 +269,8 @@ export type ProbeResult =
  * deliberately left alive for the next probe.
  */
 export async function probeSource(
-  file: File,
+  /** The picked clip, or (`D-164`) a numbered image sequence. */
+  file: VideoSource,
   opts: { signal?: AbortSignal | undefined } = {},
 ): Promise<ProbeResult> {
   const { signal } = opts;
@@ -250,7 +282,7 @@ export async function probeSource(
       held = await ensureLoaded();
       const ff = held;
       throwIfAborted(signal);
-      const input = await mountSource(ff, file);
+      const { inputPath: input, inputOptions } = await mountSource(ff, file);
       // Abort between ops only: a single-threaded exec can't be interrupted
       // without terminating the shared worker, which an abort must never do.
       // (An abandoned mount is fine — the next mountSource unmounts it first.)
@@ -259,7 +291,7 @@ export async function probeSource(
       // → `converter-crashed`. The old `.catch(() => 1)` swallowed real crashes
       // into "code 1 + empty log", which parseProbeLog then misread as
       // "no-stream" — blaming a perfectly good file for our own crash.
-      await withLogCapture(ff, lines, () => ff.exec(['-i', input]));
+      await withLogCapture(ff, lines, () => ff.exec([...inputOptions, '-i', input]));
       throwIfAborted(signal);
       const probe = parseProbeLog(lines);
       if (probe === null) {
@@ -273,7 +305,7 @@ export async function probeSource(
         const posterPath = '/poster.png';
         // Mid-clip poster (decision (a)); frame 0 only when the duration is unknown.
         const posterSec = probe.durationMs > 0 ? posterTimeMs(probe.durationMs) / 1000 : undefined;
-        const code = await ff.exec(buildPosterArgs(input, posterPath, posterSec));
+        const code = await ff.exec(buildPosterArgs(input, posterPath, posterSec, inputOptions));
         if (code === 0) {
           const png = await ff.readFile(posterPath);
           await ff.deleteFile(posterPath).catch(() => undefined);
@@ -433,7 +465,8 @@ export const ALPHA_SAMPLE_FRACTIONS = [0.1, 0.3, 0.5, 0.7, 0.9] as const;
  * {@link ALPHA_SAMPLE_FRACTIONS} so the source/output comparison is frame-honest.
  */
 export async function sampleSourceAlpha(
-  file: File,
+  /** The picked clip, or (`D-164`) a numbered image sequence. */
+  file: VideoSource,
   durationMs: number,
 ): Promise<AlphaStats | null> {
   return withExclusive(async () => {
@@ -441,7 +474,7 @@ export async function sampleSourceAlpha(
     try {
       held = await ensureLoaded();
       const ff = held;
-      const input = await mountSource(ff, file);
+      const { inputPath: input, inputOptions } = await mountSource(ff, file);
       const buffers: Uint8Array[] = [];
       const times =
         durationMs > 0 ? ALPHA_SAMPLE_FRACTIONS.map((f) => f * (durationMs / 1000)) : [0];
@@ -450,6 +483,7 @@ export async function sampleSourceAlpha(
         const seek = t > 0 ? ['-ss', t.toFixed(3)] : [];
         const code = await ff.exec([
           '-y',
+          ...inputOptions,
           ...seek,
           '-i',
           input,
@@ -722,7 +756,8 @@ let lastConvertLog: string[] = [];
  * (the next call re-loads and re-mounts — a cancel can never wedge the module).
  */
 export async function convertToWebm(opts: {
-  file: File;
+  /** The picked clip, or (`D-164`) a numbered image sequence. */
+  file: VideoSource;
   targetFps: number;
   crop?: CropRect | undefined;
   /** D-128 — un-premultiply a matted-against-black source (fringe fix). OPT-IN. */
@@ -730,6 +765,11 @@ export async function convertToWebm(opts: {
   /** D-128 — the alpha-bleed robustness layer (transparent-region colour fill). OPT-IN. */
   alphaBleed?: boolean | undefined;
   onProgress?: ((ratio: number) => void) | undefined;
+  /**
+   * `D-164` — the count of frames encoded so far, read from ffmpeg's own `frame=` lines; the modal
+   * shows an image sequence's progress in FRAMES.
+   */
+  onFrame?: ((frame: number) => void) | undefined;
 }): Promise<Uint8Array<ArrayBuffer> | null> {
   return withExclusive(async () => {
     const output = '/out.webm';
@@ -738,19 +778,25 @@ export async function convertToWebm(opts: {
     try {
       held = await ensureLoaded();
       const ff = held;
-      const input = await mountSource(ff, opts.file);
+      const { inputPath: input, inputOptions } = await mountSource(ff, opts.file);
       // Per-call progress listener — attached around the exec, detached in
       // finally; no module-global sink (same rule as the log capture).
       const onProgress = (e: ProgressEvent): void => {
         opts.onProgress?.(e.progress);
       };
       ff.on('progress', onProgress);
+      const onFrameLog = (e: LogEvent): void => {
+        const frame = encodedFrameOf(e.message);
+        if (frame !== null) opts.onFrame?.(frame);
+      };
+      if (opts.onFrame !== undefined) ff.on('log', onFrameLog);
       let code: number;
       try {
         code = await withLogCapture(ff, lines, () =>
           ff.exec(
             buildConvertArgs({
               inputPath: input,
+              inputOptions,
               outputPath: output,
               targetFps: opts.targetFps,
               crop: opts.crop,
@@ -761,6 +807,7 @@ export async function convertToWebm(opts: {
         );
       } finally {
         ff.off('progress', onProgress);
+        if (opts.onFrame !== undefined) ff.off('log', onFrameLog);
       }
       // Keep the tail around even on SUCCESS: a conversion that exits 0 can still
       // produce an undecodable file (the 1920×282 field case), and the post-convert

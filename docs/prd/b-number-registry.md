@@ -3383,3 +3383,13 @@ refs returned nothing, and the same with `--untracked`; control: the same sweep'
 `dev`; no stash.
 
 ⇒ **Next free after this entry is `B-342`**, **`D-164`**, **`P-068`**, **`R-101`** and **`C-049`**.
+
+### 2026-10-14 — `PNG-SEQUENCE-IMPORT-01` takes `D-164`
+
+- `D-164` — import a numbered image sequence (PNG, TGA) as one video layer — [designer.md](designer.md).
+
+Measured free before use: `git grep -n -E "^## \[.\] D-164 " <ref> -- docs` on all 8 local and remote-tracking refs
+returned nothing, and the same with `--untracked`; control: the same sweep's shape found the heading `D-163` on `dev`;
+no stash.
+
+⇒ **Next free after this entry is `B-342`**, **`D-165`**, **`P-068`**, **`R-101`** and **`C-049`**.

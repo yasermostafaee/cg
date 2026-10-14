@@ -5701,3 +5701,27 @@ natural order and `12 pages`; WHEN a duplicate file is added THEN one asset; WHE
 Next arrives (or its first and Previous) THEN it stays; WHEN `goTo` arrives mid-transition THEN it is applied
 when the transition ends; WHEN a page turn's picture is missing or undecodable THEN the previous page stays; WHEN an
 old sequence is parsed THEN it is unchanged; WHEN a picture sequence is exported and unpacked THEN it round-trips.
+
+## [~] D-164 — import a numbered image sequence (PNG, TGA) as ONE video layer ⟨priority: high — the owner, 2026-10-14⟩ — FILED 2026-10-14 by `PNG-SEQUENCE-IMPORT-01` · `openspec/changes/add-image-sequence-import/`
+
+**What:** in the place a video is imported (the Assets panel's `+`), the author picks a FOLDER or MANY FILES of a
+numbered image sequence, and it comes in as one `video` asset and one `video` element — the same as any imported clip
+([[D-128]]): the same in-app ffmpeg.wasm converter, VP8+alpha WebM conformed to the project's rate, crop, verify before
+store, dedupe. **No new element type.** Frames are ordered by the number in the file name (natural order, any digit
+set, Persian and Arabic-Indic included); a GAP in the numbering or a frame of DIFFERENT DIMENSIONS is reported in the
+import modal BY NAME before converting (the author continues or cancels); a folder holding several sequences lists
+them and the author picks one. A sequence has no rate of its own: the modal asks for it, defaulting to the project's
+rate, then conforms as a clip does. Alpha is kept exactly (straight alpha, no pixel math on the default path).
+Provenance records that the asset was a sequence (first and last file, frame count, the chosen rate — additive,
+optional). The pre-convert dedupe key is a hash over the ordered frames' bytes plus the rate and crop. Progress is in
+frames, Cancel is honoured, and nothing half-imported is left on cancel or failure. **Why (the owner, 2026-10-14):**
+_"Like importing a video, it must be possible to import a PNG sequence, and all of its frames must come into the
+Designer as one layer."_ **Measured first (§0, `tools/spikes/png-sequence/README.md`):** the frames enter the wasm by
+`WORKERFS` `blobs` with no copy (300 × 1080p: browser +288..+460 MB whatever the folder weighs, against +1.68 GB if
+copied), 58–130 s for 300 frames on an i5-10400, and a white alpha ramp decodes back within 2/255, never darker over
+white. **Acceptance:** WHEN `f1 … f300` (or `f۱ … f۳۰۰`) are picked THEN one video of 300 frames in natural order;
+WHEN `f7` is missing or `f12` is 1280 × 720 among 1920 × 1080 THEN the modal names it before converting and the author
+continues or cancels; WHEN a folder holds `a_*` and `b_*` THEN the modal lists both and converts the one picked; WHEN
+the same folder is imported twice with the same rate and crop THEN the second skips the encode; WHEN the author cancels
+THEN the project is unchanged; WHEN the imported element is on the timeline THEN it behaves as any video (phases, hold,
+scrub); WHEN its alpha ramp is shown over black and over white THEN no fringe.
