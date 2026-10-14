@@ -19,7 +19,18 @@ import { acceptAttr, type PickKind } from '../shared/asset-types.js';
  * adding an image failed intermittently ("works after a few tries"), B-020. With
  * `cancel` handling dismissal there is nothing left to detect by timing, so the
  * race source is removed entirely: nothing pre-empts `change`.
+ *
+ * 🔴 `DELTA-RUN-NEXT-VERSION-01-G` — **AND THE INPUT IS HELD UNTIL IT SETTLES.** It is never
+ * attached to the document, and Chrome's open dialog does not keep it alive: with nothing else
+ * referring to it, the collector could take it WHILE THE DIALOG WAS OPEN — and then neither `change`
+ * nor `cancel` ever fired and the pick never settled. Nothing happened, no message: exactly the
+ * owner's ten-frame multi-select and his folder pick, which give the collector seconds a quick
+ * single pick does not (measured: a forced collection during an open chooser leaves "no node for
+ * the backend id", `picker-held-input.spec.ts`). {@link PENDING} holds each input until its pick
+ * settles either way.
  */
+const PENDING = new Set<HTMLInputElement>();
+
 export function pickFiles(
   kind?: PickKind,
   opts: { folder?: boolean; accept?: string } = {},
@@ -45,12 +56,14 @@ export function pickFiles(
     function settle(files: File[]): void {
       if (settled) return;
       settled = true;
+      PENDING.delete(input);
       resolve(files);
     }
+    PENDING.add(input);
 
     // Both listeners are `{ once: true }`; the `settled` guard makes whichever fires
     // first win and the other a no-op. Once the picker closes either way the
-    // detached <input>, its listeners and this promise are all collectable.
+    // <input> leaves PENDING, and it, its listeners and this promise are collectable.
     input.addEventListener(
       'change',
       () => settle(input.files !== null ? Array.from(input.files) : []),

@@ -73,7 +73,9 @@ export function ImageSequenceImportModal(props: {
   const size = check?.size ?? null;
   const unreadable = check?.mismatches.filter((m) => m.width === 0) ?? [];
   const otherSize = check?.mismatches.filter((m) => m.width !== 0) ?? [];
-  const ready = plan !== null && plan.frames.length > 0 && fps > 0;
+  // DELTA-RUN-NEXT-VERSION-01-G — a sequence is two frames or more; one is a picture.
+  const single = seq !== undefined && seq.frames.length < 2;
+  const ready = plan !== null && plan.frames.length > 0 && fps > 0 && !single;
 
   function continueImport(): void {
     if (seq === undefined || plan === null || !ready) return;
@@ -184,6 +186,14 @@ export function ImageSequenceImportModal(props: {
 
             {plan !== null && plan.frames.length === 0 && (
               <Callout variant="danger">No frame of this sequence can be read.</Callout>
+            )}
+
+            {single && (
+              <Callout variant="caution">
+                <span data-testid="sequence-single">
+                  One frame is a picture, not a sequence — choose a sequence of two or more.
+                </span>
+              </Callout>
             )}
 
             {found.ignored.length > 0 && (

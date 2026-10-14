@@ -291,8 +291,16 @@ export function ProjectAssetsPanel(): JSX.Element {
       folder ? { folder: true } : { accept: SEQUENCE_ACCEPT },
     );
     if (files.length === 0) return; // cancelled
-    if (findImageSequences(files).sequences.length === 0) {
+    const { sequences } = findImageSequences(files);
+    if (sequences.length === 0) {
       designerStore.showNotice('No numbered PNG or TGA frames in the selection.');
+      return;
+    }
+    // DELTA-RUN-NEXT-VERSION-01-G — one frame is a picture, never a one-frame video made silently.
+    if (sequences.every((q) => q.frames.length < 2)) {
+      designerStore.showNotice(
+        'One picture is not a sequence. Pick two or more numbered frames, or their folder; for one picture use Image….',
+      );
       return;
     }
     setSequenceFiles(files);
