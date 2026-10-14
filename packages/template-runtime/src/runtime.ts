@@ -285,7 +285,18 @@ function nestedContentWait(node: ScopeNode): Promise<void> | null {
       if (childWait !== null) waits.push(childWait);
     }
   }
-  return waits.length > 0 ? Promise.all(waits).then(() => undefined) : null;
+  if (waits.length === 0) return null;
+  /*
+    🔴 `B-030` — A COVERED CHILD THAT SETTLES ON ITS OWN ENDS ITS PART OF THE WAIT.
+
+    A non-coordinator child set to TIMED `auto-out` plays out on its own hold; its settle runs
+    `stopScopeContent`, which halts the very drivers this wait is on, so they never complete —
+    and the content-driven parent held ON AIR forever, a frozen graphic only `stop()` could take
+    off. Once the child has settled its content cannot complete, so its settle resolves this
+    child's share. It never cuts a live hold short: a child that has not settled (a manual one,
+    or one still holding) is still waited on for its content, exactly as before.
+  */
+  return Promise.race([Promise.all(waits).then(() => undefined), node.whenSettled()]);
 }
 
 /**

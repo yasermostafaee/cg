@@ -64,3 +64,29 @@ nested host is never found and the gate silently applies to nothing.
 
 - **WHEN** the clock and sequence sit directly in the template, under a marker at frame 60
 - **THEN** they are hidden before it and revealed after it, as before
+
+### Requirement: A nested composition that plays out on its own never strands a content-driven parent
+
+A content-driven parent's wait on a nested (non-coordinator) composition's content SHALL end when
+that composition SETTLES on its own (a timed `auto-out` whose hold is shorter than its content),
+because its settle halts its content and that content can then never complete (`B-030`). The parent
+SHALL therefore reach a terminal state — play out — instead of holding on air until `stop()`. A
+nested composition that has not settled (a manual one, or one still holding) SHALL still hold the
+parent for its content, exactly as before.
+
+#### Scenario: A timed child shorter than its content
+
+- **WHEN** a content-driven parent nests a composition set to timed `auto-out` with a 300 ms hold
+  over a 10 s countdown, and plays
+- **THEN** the parent is on air while the child holds, and plays out after the child has played
+  out — long before the countdown would end
+
+#### Scenario: Content that ends first still holds the parent
+
+- **WHEN** the child's countdown (200 ms) ends inside its 300 ms hold
+- **THEN** the parent holds for that content and then plays out, as before
+
+#### Scenario: A manual child is unchanged
+
+- **WHEN** the nested composition is manual with a 1.5 s countdown
+- **THEN** the parent is still on air at 1 s, and plays out after the countdown ends

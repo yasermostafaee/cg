@@ -443,3 +443,69 @@ describe('D-104 — nested-composition content participates in the parent lifecy
     r.remove();
   });
 });
+
+/**
+ * 🔴 `B-030` — THE STRAND. A nested composition set to TIMED `auto-out` with a hold SHORTER than its
+ * content plays out on its own; its settle halts its content (`stopScopeContent`), so its countdown
+ * never completes — and the content-driven parent, waiting on that countdown, held ON AIR forever
+ * (a frozen graphic, exitable only by `stop()`). A covered child that settles on its own now ends
+ * its part of the parent's wait: its content can never complete once it is halted.
+ */
+describe('B-030 — a timed auto-out child no longer strands a content-driven parent', () => {
+  const timedChild = (countdownMs: number) =>
+    comp('tm', 10, [countdownClock('clk', countdownMs)], {
+      mode: 'auto-out',
+      holdSource: 'timed',
+      holdMs: 300,
+    });
+  const strandScene = (countdownMs: number) =>
+    parentScene({
+      compositions: [timedChild(countdownMs)],
+      children: [instance('i-tm', 'tm', 'tm')],
+      lifecycle: { outPoint: 25 },
+      playout: { mode: 'auto-out', holdSource: 'content-driven' },
+    });
+
+  it('🔴 the parent reaches a terminal state after the child plays out — not held forever', async () => {
+    const clock = makeClock();
+    // The child's countdown (10s) outlives its 300ms timed hold.
+    const r = createRuntime(strandScene(10_000), { skipFontLoad: true, clock });
+    await r.play({});
+    await run(clock, 150);
+    expect(onAir()).toBe(true); // the child is still in its 300ms hold — so is the parent
+    await run(clock, 3000); // the child played out at ~0.3s; the parent follows, long before 10s
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
+
+  it('a timed child whose content ends FIRST still holds the parent for that content', async () => {
+    const clock = makeClock();
+    // Positive control: the countdown (200ms) completes inside the child's 300ms hold, so the
+    // parent's wait is the content's, exactly as before — the fix changes nothing here.
+    const r = createRuntime(strandScene(200), { skipFontLoad: true, clock });
+    await r.play({});
+    await run(clock, 3000);
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
+
+  it('a MANUAL child (it never settles on its own) still holds the parent for its content', async () => {
+    const clock = makeClock();
+    const child = comp('cd', 25, [countdownClock('clk', 1500)], { mode: 'manual' });
+    const r = createRuntime(
+      parentScene({
+        compositions: [child],
+        children: [instance('i-cd', 'cd', 'cd')],
+        lifecycle: { outPoint: 25 },
+        playout: { mode: 'auto-out', holdSource: 'content-driven' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await r.play({});
+    await run(clock, 1000);
+    expect(onAir()).toBe(true); // the countdown is still running — the parent waits for it
+    await run(clock, 2000);
+    expect(onAir()).toBe(false);
+    r.remove();
+  });
+});

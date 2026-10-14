@@ -20,7 +20,8 @@
       fact (golden rule 13); the toggles requirement in `designer-inspector` no longer lists it.
 - [x] 2.2 `B-099` probe reported; fixed if frozen. PROBED FROZEN (nested clock host `flex` at frame ~30,
       marker 60); the gate now reads the scope's own element map. The probe is the regression test.
-- [ ] 2.3 `B-030` a timed auto-out child no longer strands a content-driven parent.
+- [x] 2.3 `B-030` a timed auto-out child no longer strands a content-driven parent. Reproduced red; a
+      settled child ends its share of the wait (ablation reddens it again).
 
 ## 3. Sequences (FULL)
 

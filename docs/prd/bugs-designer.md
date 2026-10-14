@@ -632,7 +632,14 @@ appears at/after its in-point and plays, and lifespan is honored during play (no
 `packages/template-runtime/tests/runtime.test.ts` (B-029) +
 `apps/designer/tests/e2e/trimmed-content-start.spec.ts`. Capability: `designer-playout-lifecycle`.
 
-## [ ] B-030 — a nested TIMED-auto-out content-holder under a content-driven parent strands the parent on-air until stop() ⟨priority: low⟩ — D-104 follow-up
+## [~] B-030 — a nested TIMED-auto-out content-holder under a content-driven parent strands the parent on-air until stop() ⟨priority: low⟩ — D-104 follow-up — `openspec/changes/designer-fix-02/`
+
+— **Reproduced red and closed in code (DESIGNER-FIX-02, 2026-10-14), fix option (a):** a covered
+child that SETTLES on its own ends its share of the parent's wait (`nestedContentWait` races the
+child's content against its `whenSettled()`), because its settle has halted that content. A child
+that has not settled is still waited on. Tests: `nested-content-lifecycle.test.ts` › "B-030 — …" —
+the STRAND (red before: still on air at 3.3 s; and red again with the fix ablated), plus two
+controls (content that ends first; a manual child). Whole template-runtime suite green (1,170).
 
 > A non-coordinator nested composition that contains finite content (ticker / countdown / sequence) but
 > is itself set to `auto-out` with `holdSource: 'timed'`, nested under a content-driven parent, stops its
