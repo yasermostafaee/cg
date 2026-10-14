@@ -591,12 +591,26 @@ export class SequenceDriver {
   private paintTransition(): void {
     const spec = this.transitionSpec();
     const frame = sampleTransition(spec, this.phaseElapsedMs());
+    this.applyMix(frame.mix);
     if (this.currentNode !== null) this.applyPose(this.currentNode, frame.out);
     if (this.incomingNode !== null) this.applyPose(this.incomingNode, frame.in);
     if (frame.done || transitionTotalMs(spec) <= 0) this.finishTransition();
   }
 
+  /**
+   * `D-163` — a DISSOLVE adds its two items (`plus-lighter`) inside the box, isolated so the sum is
+   * of the two items alone and never of whatever lies behind the sequence. Set only while the
+   * dissolve runs; every other moment the box and its items carry neither.
+   */
+  private applyMix(on: boolean): void {
+    const mode = on ? 'plus-lighter' : '';
+    this.o.host.style.isolation = on ? 'isolate' : '';
+    if (this.currentNode !== null) this.currentNode.style.mixBlendMode = mode;
+    if (this.incomingNode !== null) this.incomingNode.style.mixBlendMode = mode;
+  }
+
   private finishTransition(): void {
+    this.applyMix(false);
     this.currentHooks?.hide(); // D-083 — teardown the outgoing item's inner drivers
     this.currentNode?.remove();
     this.currentNode = this.incomingNode;
@@ -608,6 +622,7 @@ export class SequenceDriver {
     if (this.currentNode !== null) {
       this.currentNode.style.transform = '';
       this.currentNode.style.visibility = '';
+      this.currentNode.style.opacity = '';
     }
     this.enterPhase('dwell');
     this.consumePending(); // D-163 — a goTo that arrived mid-transition
@@ -672,6 +687,7 @@ export class SequenceDriver {
       if (this.currentNode !== null) {
         this.currentNode.style.transform = '';
         this.currentNode.style.visibility = '';
+        this.currentNode.style.opacity = '';
       }
       this.enterPhase('dwell');
       this.consumePending(); // D-163 — a goTo that arrived during the entrance
@@ -690,6 +706,8 @@ export class SequenceDriver {
         ? ''
         : `translate(${pose.offset.x}px, ${pose.offset.y}px)`;
     node.style.visibility = pose.visible ? '' : 'hidden';
+    // `D-163` — a `fade` side; an opaque pose writes nothing, so a slide's items are unchanged.
+    node.style.opacity = pose.opacity >= 1 ? '' : String(pose.opacity);
   }
 
   /** rAF runs only while something is time-driven: a transition, or an auto dwell. */

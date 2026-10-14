@@ -364,3 +364,27 @@ describe('SequenceDriver (D-029)', () => {
     });
   });
 });
+
+describe('D-163 — a crossfade in the driver', () => {
+  it('🔴 adds the two items while it runs, and leaves the page at rest with no trace of it', () => {
+    const h = make({ advance: 'manual', transitionIn: 'fade', transitionOut: 'fade' });
+    h.driver.start();
+    h.driver.next();
+    h.clock.advance(200);
+    const during = [...h.host.querySelectorAll<HTMLElement>('[data-cg-sequence-item]')];
+    expect(during).toHaveLength(2);
+    // The dissolve: isolated, added — never one dimmed page laid over another.
+    expect(h.host.style.isolation).toBe('isolate');
+    expect(during.map((n) => n.style.mixBlendMode)).toEqual(['plus-lighter', 'plus-lighter']);
+    expect(Number(during[0]?.style.opacity)).toBeCloseTo(0.5, 2);
+    expect(Number(during[1]?.style.opacity)).toBeCloseTo(0.5, 2);
+    h.clock.advance(200);
+    expect(visible(h.host)).toEqual([ITEMS[1]?.text]);
+    const page = h.host.querySelector<HTMLElement>('[data-cg-sequence-item]');
+    expect([h.host.style.isolation, page?.style.mixBlendMode, page?.style.opacity]).toEqual([
+      '',
+      '',
+      '',
+    ]);
+  });
+});

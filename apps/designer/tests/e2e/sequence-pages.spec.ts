@@ -29,10 +29,21 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
     await expect(app.inspector.getByRole('button', { name: /^Remove .* item \d+$/ })).toHaveCount(
       0,
     );
-    // The sequence is a book: Cut, manual, one pass.
+    // The sequence is a book: a Crossfade between pages (never a jump), manual, one pass.
     await expect(app.inspector.getByLabel('advance', { exact: true })).toHaveValue('manual');
-    await expect(app.inspector.getByLabel('in', { exact: true })).toHaveValue('none');
-    await expect(app.inspector.getByLabel('out', { exact: true })).toHaveValue('none');
+    await expect(app.inspector.getByLabel('transition', { exact: true })).toHaveValue('crossfade');
+    await expect(app.inspector.getByLabel('in', { exact: true })).toHaveValue('fade');
+    await expect(app.inspector.getByLabel('out', { exact: true })).toHaveValue('fade');
+    // ONE field is "transition" (which one) and one is "duration" (how long) — not two "transition"s.
+    await expect(app.inspector.getByLabel('transition', { exact: true })).toHaveCount(1);
+    const duration = app.inspector.getByLabel('duration', { exact: true });
+    await expect(duration).toBeEnabled();
+    // Hide-show swaps at once: its duration is withheld, and says why.
+    await app.inspector.getByLabel('transition', { exact: true }).selectOption('hide-show');
+    await expect(duration).toBeDisabled();
+    await expect(duration).toHaveAttribute('title', /Hide-show swaps at once/);
+    await app.inspector.getByLabel('transition', { exact: true }).selectOption('crossfade');
+    await expect(duration).toBeEnabled();
 
     // Every page is in the Pages manager — the untouched samples gone, and `page2` before
     // `page10`: the order is the NUMBER in the name, not the characters.
@@ -201,6 +212,23 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
         /\S/,
       );
     }
+
+    // …and the tooltip is SEEN over the dialog: the owner's report was that it drew underneath.
+    await manager.getByRole('button', { name: 'Sort by name', exact: true }).hover();
+    const tip = app.page.getByRole('tooltip');
+    await expect(tip).toBeVisible();
+    await expect(tip).toContainText('file-name order');
+    const stacked = await tip.evaluate((el) => {
+      const dialog = document.querySelector('[role="dialog"]');
+      const backdrop = dialog?.parentElement ?? null;
+      return {
+        onBody: el.parentElement === document.body,
+        tip: Number(getComputedStyle(el).zIndex),
+        dialog: backdrop === null ? NaN : Number(getComputedStyle(backdrop).zIndex),
+      };
+    });
+    expect(stacked.onBody).toBe(true);
+    expect(stacked.tip).toBeGreaterThan(stacked.dialog);
 
     // One sequence, two views: the List view holds the same text.
     await manager.getByRole('button', { name: 'List view', exact: true }).click();

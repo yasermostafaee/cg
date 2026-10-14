@@ -61,6 +61,20 @@ describe('sequence transition presets (D-029)', () => {
     ).toBe('hide-show');
   });
 
+  it('🔴 D-163 — Crossfade dissolves (fade/fade together); Fade out, fade in goes one then the other', () => {
+    expect(SEQUENCE_TRANSITION_PRESETS['crossfade']).toEqual({
+      transitionIn: 'fade',
+      transitionOut: 'fade',
+      transitionTiming: 'simultaneous',
+    });
+    expect(SEQUENCE_TRANSITION_PRESETS['fade-through']).toEqual({
+      transitionIn: 'fade',
+      transitionOut: 'fade',
+      transitionTiming: 'sequential',
+    });
+    expect(SEQUENCE_PRESET_ORDER.find((p) => p.key === 'crossfade')?.label).toBe('Crossfade');
+  });
+
   it('the dropdown order covers every preset exactly once, plus custom', () => {
     const keys = SEQUENCE_PRESET_ORDER.map((p) => p.key);
     expect(new Set(keys).size).toBe(keys.length);

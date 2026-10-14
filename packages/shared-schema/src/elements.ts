@@ -678,8 +678,13 @@ export function sequenceItemsBinding(
   return pictures === items.length ? 'pages' : null;
 }
 
-/** A transition edge: where an item enters from / exits to. `none` = instant cut. */
-const SequenceEdgeSchema = z.enum(['top', 'bottom', 'left', 'right', 'none']);
+/**
+ * A transition edge: where an item enters from / exits to. `none` = instant cut. `fade` (`D-163`)
+ * = no motion, the item's opacity eased in or out over `transitionMs`; IN and OUT both `fade` under
+ * `simultaneous` is a true DISSOLVE (the two items mixed, never dimmed in the middle) — the smooth
+ * page turn a book needs. Additive: every sequence authored before it parses unchanged.
+ */
+export const SequenceEdgeSchema = z.enum(['top', 'bottom', 'left', 'right', 'none', 'fade']);
 
 /**
  * Sequence / now-next element (D-029) — a clipped box that shows ONE item of
@@ -687,7 +692,7 @@ const SequenceEdgeSchema = z.enum(['top', 'bottom', 'left', 'right', 'none']);
  * command (`CG NEXT` / `runtime.next()`). The move between items is a
  * DECOMPOSED transition: an IN edge, an OUT edge, and a timing
  * (`simultaneous` push vs `sequential` out-then-in), each motion over
- * `transitionMs` — named presets (Push/Slide/Hide-show) are just values over
+ * `transitionMs` — named presets (Push/Slide/Crossfade/Hide-show) are just values over
  * these fields, and the decomposition is the extensible seam for future
  * styles. `repeat` counts full passes; a FINITE sequence is a content
  * source: advancing past the last item of pass N signals completion to the

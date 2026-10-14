@@ -920,7 +920,20 @@ describe('SequenceElement (D-029)', () => {
   it('rejects a non-positive defaultDwellMs / transitionMs and a bad edge', () => {
     expect(() => SequenceElementSchema.parse({ ...sequence, defaultDwellMs: 0 })).toThrow();
     expect(() => SequenceElementSchema.parse({ ...sequence, transitionMs: -1 })).toThrow();
-    expect(() => SequenceElementSchema.parse({ ...sequence, transitionIn: 'fade' })).toThrow();
+    // `fade` was this test's bad edge until `D-163` made it a real one; a bad edge is still refused.
+    expect(() => SequenceElementSchema.parse({ ...sequence, transitionIn: 'spin' })).toThrow();
+    expect(() => SequenceElementSchema.parse({ ...sequence, transitionOut: 'dissolve' })).toThrow();
+  });
+  it('D-163 — `fade` is an edge, on both sides; an older sequence parses unchanged', () => {
+    const faded = SequenceElementSchema.parse({
+      ...sequence,
+      transitionIn: 'fade',
+      transitionOut: 'fade',
+    });
+    expect([faded.transitionIn, faded.transitionOut]).toEqual(['fade', 'fade']);
+    // A sequence that names no edge keeps the defaults it always had: bottom in, top out.
+    const plain = SequenceElementSchema.parse(sequence);
+    expect([plain.transitionIn, plain.transitionOut]).toEqual(['bottom', 'top']);
   });
   it('rejects an item without a stable id', () => {
     expect(() =>

@@ -4,7 +4,8 @@ import type { SequenceElement } from '@cg/shared-schema';
  * D-029 — named transition presets over the sequence's DECOMPOSED fields
  * (IN edge / OUT edge / timing). A preset is just VALUES: Push ×4 moves both
  * items together (simultaneous), Slide ×4 plays out-then-in (sequential),
- * Hide-show is the none/none hard swap. The select shows 'custom' when the
+ * Crossfade dissolves (fade/fade simultaneous, `D-163`), Fade out, fade in
+ * fades through (fade/fade sequential), Hide-show is the none/none hard swap. The select shows 'custom' when the
  * current combination matches no preset (the EasingEditor Preset pattern) —
  * every IN × OUT × timing combination stays authorable through the three
  * field selects. Pure module so the mapping is unit-testable.
@@ -16,6 +17,10 @@ export type SequenceTransitionFields = Pick<
 >;
 
 export const SEQUENCE_TRANSITION_PRESETS: Record<string, SequenceTransitionFields> = {
+  // `D-163` — Crossfade: the next item dissolves over the current one (a true mix, never dimmed
+  // mid-way) — the smooth page turn. Fade out, fade in: the current item fades away first.
+  crossfade: { transitionIn: 'fade', transitionOut: 'fade', transitionTiming: 'simultaneous' },
+  'fade-through': { transitionIn: 'fade', transitionOut: 'fade', transitionTiming: 'sequential' },
   // Push: the incoming item shoves the outgoing one ahead of it.
   'push-up': { transitionIn: 'bottom', transitionOut: 'top', transitionTiming: 'simultaneous' },
   'push-down': { transitionIn: 'top', transitionOut: 'bottom', transitionTiming: 'simultaneous' },
@@ -32,6 +37,8 @@ export const SEQUENCE_TRANSITION_PRESETS: Record<string, SequenceTransitionField
 
 /** Dropdown order; 'custom' is shown when the fields match no preset. */
 export const SEQUENCE_PRESET_ORDER: readonly { key: string; label: string }[] = [
+  { key: 'crossfade', label: 'Crossfade' },
+  { key: 'fade-through', label: 'Fade out, fade in' },
   { key: 'push-up', label: 'Push up' },
   { key: 'push-down', label: 'Push down' },
   { key: 'push-left', label: 'Push left' },

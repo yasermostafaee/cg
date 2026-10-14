@@ -12,6 +12,7 @@ import {
   followsComposition,
   ImageFitSchema,
   NumberFieldDigitsSchema,
+  SequenceEdgeSchema,
 } from '@cg/shared-schema';
 import type {
   DynamicField,
@@ -2704,7 +2705,7 @@ function SequenceSections({
         <SelectField
           label="in"
           value={element.transitionIn}
-          options={['top', 'bottom', 'left', 'right', 'none'] as const}
+          options={SequenceEdgeSchema.options}
           onCommit={(transitionIn) =>
             designerStore.updateElement(id, { transitionIn } as Partial<Element>)
           }
@@ -2712,7 +2713,7 @@ function SequenceSections({
         <SelectField
           label="out"
           value={element.transitionOut}
-          options={['top', 'bottom', 'left', 'right', 'none'] as const}
+          options={SequenceEdgeSchema.options}
           onCommit={(transitionOut) =>
             designerStore.updateElement(id, { transitionOut } as Partial<Element>)
           }
@@ -2725,12 +2726,20 @@ function SequenceSections({
             designerStore.updateElement(id, { transitionTiming } as Partial<Element>)
           }
         />
+        {/* `D-163` — the DURATION of the transition the select above names (it was a second field
+            called "transition"). Hide-show moves and fades nothing, so it has no duration to set:
+            the field stays, withheld, and says why. */}
         <NumberField
-          label="transition"
+          label="duration"
           value={element.transitionMs}
           step={50}
           min={50}
           suffix="ms"
+          withheld={
+            element.transitionIn === 'none' && element.transitionOut === 'none'
+              ? 'Hide-show swaps at once, so it has no duration. A crossfade, fade, push or slide takes this time.'
+              : undefined
+          }
           onCommit={(v) =>
             designerStore.updateElement(id, {
               transitionMs: Math.max(50, Math.round(v)),

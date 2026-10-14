@@ -18,10 +18,18 @@ import { EASING_PRESETS, cubicBezierEase, type BezierEasing } from '@cg/shared-s
  * entry begins (total = 2 × `transitionMs` when both sides move). EACH
  * motion lasts `transitionMs`, eased with the SHARED `ease-in-out` curve
  * from `@cg/shared-schema` — never a hand-rolled easing. Everything is
- * transform-only (translate; visibility flips for `none` sides).
+ * transform-and-opacity only (translate; opacity for `fade`; visibility flips
+ * for `none` sides).
+ *
+ * `D-163` — `fade` is that future style: no offset, the item's OPACITY eased in
+ * (0 → 1) or out (1 → 0). IN and OUT both `fade` under `simultaneous` is a
+ * DISSOLVE, flagged `mix`: two layers fading against each other with plain
+ * "over" compositing dim in the middle (0.5 over 0.5 is 75 % coverage — a page
+ * darkens mid-turn on air), so the driver adds them instead (`plus-lighter` in
+ * an isolated group): old × (1 − t) + new × t, exact for a page and for text.
  */
 
-export type SequenceEdge = 'top' | 'bottom' | 'left' | 'right' | 'none';
+export type SequenceEdge = 'top' | 'bottom' | 'left' | 'right' | 'none' | 'fade';
 export type SequenceTiming = 'simultaneous' | 'sequential';
 
 export interface MotionBox {
@@ -51,6 +59,9 @@ export function edgeOffset(edge: SequenceEdge, box: MotionBox): MotionVector | n
       return { x: -box.width, y: 0 };
     case 'right':
       return { x: box.width, y: 0 };
+    case 'fade':
+      // A fade moves nothing: it is a motion in time (it lasts `transitionMs`), not in space.
+      return { x: 0, y: 0 };
     case 'none':
       return null;
   }
@@ -70,6 +81,8 @@ export interface MotionPose {
   /** Translate offset from the resting position. */
   offset: MotionVector;
   visible: boolean;
+  /** `D-163` — 1 at rest; a `fade` side eases it. */
+  opacity: number;
 }
 
 export interface SequenceTransitionFrame {
@@ -79,6 +92,8 @@ export interface SequenceTransitionFrame {
   in: MotionPose;
   /** The whole transition has finished — the incoming item is at rest. */
   done: boolean;
+  /** `D-163` — a dissolve: the two poses are ADDED (see the header), not laid one over the other. */
+  mix: boolean;
 }
 
 /** Total wall time of the transition (active ms; pauses freeze the clock upstream). */
@@ -115,24 +130,33 @@ export function sampleTransition(
   // complete), eased through the shared curve.
   const progress = (ms: number, duration: number): number =>
     duration <= 0 ? 1 : cubicBezierEase(EASE, Math.min(1, ms / duration));
+  // `D-163` — a `fade` side's opacity at progress p; every other side stays opaque.
+  const outOpacity = (p: number): number => (spec.outEdge === 'fade' ? 1 - p : 1);
+  const inOpacity = (p: number): number => (spec.inEdge === 'fade' ? p : 1);
 
   if (spec.timing === 'sequential') {
     // Phase 1: the exit runs alone; the incoming item is not yet on stage.
     if (t < outMs && outVec !== null) {
       const p = progress(t, outMs);
       return {
-        out: { offset: scaled(outVec, p), visible: true },
-        in: { offset: inVec ?? AT_REST, visible: false },
+        out: { offset: scaled(outVec, p), visible: true, opacity: outOpacity(p) },
+        in: { offset: inVec ?? AT_REST, visible: false, opacity: inOpacity(0) },
         done: false,
+        mix: false,
       };
     }
     // Phase 2: the exit is complete (or was an instant cut); the entry runs.
     const inElapsed = t - outMs;
     const p = progress(inElapsed, inMs);
     return {
-      out: { offset: outVec ?? AT_REST, visible: false },
-      in: { offset: inVec === null ? AT_REST : scaled(inVec, 1 - p), visible: true },
+      out: { offset: outVec ?? AT_REST, visible: false, opacity: outOpacity(1) },
+      in: {
+        offset: inVec === null ? AT_REST : scaled(inVec, 1 - p),
+        visible: true,
+        opacity: inOpacity(p),
+      },
       done,
+      mix: false,
     };
   }
 
@@ -144,9 +168,14 @@ export function sampleTransition(
   return {
     out:
       outVec === null
-        ? { offset: AT_REST, visible: false }
-        : { offset: scaled(outVec, outP), visible: outP < 1 },
-    in: { offset: inVec === null ? AT_REST : scaled(inVec, 1 - inP), visible: true },
+        ? { offset: AT_REST, visible: false, opacity: 1 }
+        : { offset: scaled(outVec, outP), visible: outP < 1, opacity: outOpacity(outP) },
+    in: {
+      offset: inVec === null ? AT_REST : scaled(inVec, 1 - inP),
+      visible: true,
+      opacity: inOpacity(inP),
+    },
     done,
+    mix: spec.inEdge === 'fade' && spec.outEdge === 'fade' && !done,
   };
 }

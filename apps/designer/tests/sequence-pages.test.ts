@@ -51,8 +51,12 @@ describe('D-163 — adding pictures to a sequence', () => {
     expect(seq.items.map((i) => (i.kind === 'image' ? i.name : ''))).toEqual(
       pages(12).map((p) => p.name),
     );
-    expect(seq.transitionIn).toBe('none');
-    expect(seq.transitionOut).toBe('none');
+    // A book CROSSFADES between pages (the owner: a Cut's jump is "not good").
+    expect([seq.transitionIn, seq.transitionOut, seq.transitionTiming]).toEqual([
+      'fade',
+      'fade',
+      'simultaneous',
+    ]);
     expect(seq.advance).toBe('manual');
     expect(seq.repeat).toBe(1);
   });

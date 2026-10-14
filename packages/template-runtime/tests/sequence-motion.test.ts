@@ -114,3 +114,51 @@ describe('sequence motion mapper (D-029)', () => {
     }
   });
 });
+
+describe('D-163 — the fade edge', () => {
+  it('a fade moves nothing and lasts transitionMs', () => {
+    expect(edgeOffset('fade', BOX)).toEqual({ x: 0, y: 0 });
+    expect(transitionTotalMs(spec({ inEdge: 'fade', outEdge: 'fade' }))).toBe(400);
+    expect(transitionTotalMs(spec({ inEdge: 'fade', outEdge: 'fade', timing: 'sequential' }))).toBe(
+      800,
+    );
+  });
+
+  it('🔴 a CROSSFADE (both fade, simultaneous) is a mixed dissolve, eased, then plain at rest', () => {
+    const s = spec({ inEdge: 'fade', outEdge: 'fade' });
+    const start = sampleTransition(s, 0);
+    expect([start.out.opacity, start.in.opacity, start.mix]).toEqual([1, 0, true]);
+    const mid = sampleTransition(s, 200); // symmetric ease: t=½ ⇒ p=½
+    expect(mid.out.opacity).toBeCloseTo(0.5, 5);
+    expect(mid.in.opacity).toBeCloseTo(0.5, 5);
+    expect(mid.mix).toBe(true);
+    // Both stay where they are: a fade has no motion in space.
+    expect([mid.out.offset, mid.in.offset]).toEqual([
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+    ]);
+    const end = sampleTransition(s, 400);
+    expect([end.done, end.in.opacity, end.mix]).toEqual([true, 1, false]);
+  });
+
+  it('sequential fades OUT, then IN — never mixed', () => {
+    const s = spec({ inEdge: 'fade', outEdge: 'fade', timing: 'sequential' });
+    const first = sampleTransition(s, 200);
+    expect(first.out.opacity).toBeCloseTo(0.5, 5);
+    expect(first.in.visible).toBe(false);
+    const second = sampleTransition(s, 600);
+    expect(second.out.visible).toBe(false);
+    expect(second.in.opacity).toBeCloseTo(0.5, 5);
+    expect(first.mix || second.mix).toBe(false);
+  });
+
+  it('a one-sided fade does not mix; a slide never touches opacity', () => {
+    const half = sampleTransition(spec({ inEdge: 'fade', outEdge: 'none' }), 200);
+    expect([half.out.visible, half.mix]).toEqual([false, false]);
+    expect(half.in.opacity).toBeCloseTo(0.5, 5);
+    for (let t = 0; t <= 400; t += 100) {
+      const f = sampleTransition(spec({}), t);
+      expect([f.out.opacity, f.in.opacity, f.mix]).toEqual([1, 1, false]);
+    }
+  });
+});

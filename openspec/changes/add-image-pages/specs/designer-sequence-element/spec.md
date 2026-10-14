@@ -33,9 +33,9 @@ digits alike (`page2` before `page10`, `صفحه۲` before `صفحه۱۰`). For 
 the Inspector's Items section SHALL be a card — the page count, the first pages as thumbnails,
 `Manage pages…`, and the add row `Add pictures…`, `Add folder…`, `Add text`, `Add composition` — and
 SHALL NOT list the pages one row each; the pages are seen and arranged in the Pages manager. Every
-button SHALL say what it does in its tooltip. The first pictures added to a sequence SHALL make it
-a book: transition Cut (`none`/`none`), `advance: 'manual'`, `repeat: 1`, all of which the author can
-change.
+button SHALL say what it does in its tooltip, drawn above any dialog. The first pictures added to a
+sequence SHALL make it a book: transition Crossfade (`fade`/`fade`, simultaneous), `advance:
+'manual'`, `repeat: 1`, all of which the author can change.
 
 #### Scenario: Twelve files become twelve pages in natural order
 
@@ -56,7 +56,29 @@ change.
 #### Scenario: The first pictures make a book
 
 - **WHEN** pictures are added to a sequence that has none
-- **THEN** its transition is Cut, its advance manual and its repeat one pass
+- **THEN** its transition is Crossfade, its advance manual and its repeat one pass
+
+### Requirement: Fade and crossfade between items
+
+A sequence edge SHALL also be `fade`: no motion, the item's opacity eased in (IN) or out (OUT) over
+`transitionMs` through the shared ease-in-out curve. IN and OUT both `fade` under `simultaneous` SHALL
+be a DISSOLVE that adds the two items (`plus-lighter` in an isolated box) so the picture never dims
+mid-way, and SHALL leave the item at rest with no opacity, blend or isolation of its own; under
+`sequential` the current item fades out, then the next fades in. The Inspector SHALL offer the
+presets `Crossfade` (fade/fade simultaneous) and `Fade out, fade in` (fade/fade sequential), name the
+preset field `transition` and the time field `duration`, and withhold `duration` — shown, disabled,
+saying why — when Hide-show leaves nothing to time.
+
+#### Scenario: A crossfade never dims the page
+
+- **WHEN** a book of opaque pages crossfades from one page to the next
+- **THEN** every frame shows the pages mixed at full brightness — no darker frame between them, no
+  blank frame — and at rest the page carries no fade styling
+
+#### Scenario: Hide-show has no duration to set
+
+- **WHEN** the author picks Hide-show
+- **THEN** the `duration` field is disabled and its tooltip says Hide-show swaps at once
 
 ### Requirement: The Pages manager
 

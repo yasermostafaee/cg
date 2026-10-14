@@ -745,8 +745,9 @@ export const fieldsSlice = {
 
   /**
    * `D-163` — add PICTURES (already-imported image assets, in the order given) to a sequence as
-   * ONE intent — one undo step. The FIRST pictures make the sequence a book: transition Cut
-   * (`none`/`none`), manual advance, one pass — every one of which the author can change after.
+   * ONE intent — one undo step. The FIRST pictures make the sequence a book: transition Crossfade
+   * (`fade`/`fade`, simultaneous — a dissolve; the owner's report found a Cut's jump between pages
+   * "not good"), manual advance, one pass — every one of which the author can change after.
    * The three sample items a new sequence starts with are REPLACED when they are untouched; any
    * item the author wrote is kept. Returns how many pages were added.
    */
@@ -781,8 +782,9 @@ export const fieldsSlice = {
     }));
     if (firstPictures) {
       designerStore.updateElement(elementId, {
-        transitionIn: 'none',
-        transitionOut: 'none',
+        transitionIn: 'fade',
+        transitionOut: 'fade',
+        transitionTiming: 'simultaneous',
         advance: 'manual',
         repeat: 1,
       } as Partial<Element>);
