@@ -172,14 +172,14 @@ describe('clock-target binding — re-target through the driver seam (D-141)', (
       fields: [
         {
           type: 'text',
-          id: 'azanTime',
-          label: 'Azan time',
+          id: 'targetTime',
+          label: 'Target time',
           required: false,
           default: '20:32',
           pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$',
         },
       ],
-      bindings: [{ fieldId: 'azanTime', target: { kind: 'clock-target', elementId: 'clk' } }],
+      bindings: [{ fieldId: 'targetTime', target: { kind: 'clock-target', elementId: 'clk' } }],
     });
 
   it('a bound HH:mm value re-targets on update() WITHOUT replaying', async () => {
@@ -194,7 +194,7 @@ describe('clock-target binding — re-target through the driver seam (D-141)', (
     const events: string[] = [];
     rt.on('play.start', () => events.push('play.start'));
 
-    await rt.update({ azanTime: '21:00' });
+    await rt.update({ targetTime: '21:00' });
     await flush();
     expect(timeText(document.body)).toBe('02:00:00'); // re-aimed at once
     // No replay: the play cascade did not re-run.
@@ -222,20 +222,45 @@ describe('clock-target binding — re-target through the driver seam (D-141)', (
     await flush();
     expect(timeText(document.body)).toBe('01:32:00');
 
-    await rt.update({ azanTime: '۲۱:۰۰' });
+    await rt.update({ targetTime: '۲۱:۰۰' });
     await flush();
     expect(timeText(document.body)).toBe('02:00:00');
 
-    await rt.update({ azanTime: '٢١:٣٠' });
+    await rt.update({ targetTime: '٢١:٣٠' });
     await flush();
     expect(timeText(document.body)).toBe('02:30:00');
     expect(errors, 'a Persian time is not an unparseable one').toEqual([]);
 
     // The control: a value that is not a time is still refused, in any digit set.
-    await rt.update({ azanTime: '۲۵:۳۲' });
+    await rt.update({ targetTime: '۲۵:۳۲' });
     await flush();
     expect(timeText(document.body)).toBe('02:30:00');
     expect(errors.map((e) => e.code)).toEqual(['clock-target-unparseable']);
+  });
+
+  /*
+    `DELTA-RUN-NEXT-VERSION-01-C` — CG Control's date and time control sends the STORED value: an
+    ISO instant. The value decides the kind, so the same field re-aims a countdown at that exact
+    instant — on another day if need be — through the same driver seam, without a replay.
+  */
+  it('an ISO date and time re-targets the countdown at that instant, without replaying', async () => {
+    const clock = makeClock();
+    clock.advance(AT(19, 0));
+    const rt = createRuntime(boundScene(), { clock });
+    const events: string[] = [];
+    await rt.ready;
+    await rt.play({});
+    await flush();
+    rt.on('play.start', () => events.push('play.start'));
+
+    await rt.update({ targetTime: new Date(AT(19, 45)).toISOString() });
+    await flush();
+    expect(timeText(document.body)).toBe('00:45:00');
+    // Tomorrow at 19:00 is 24 h away — a time of day could never say that.
+    await rt.update({ targetTime: new Date(AT(19, 0) + 86_400_000).toISOString() });
+    await flush();
+    expect(timeText(document.body)).toBe('24:00:00');
+    expect(events).toEqual([]);
   });
 
   it('the field DEFAULT applies at play() when the operator sent nothing', async () => {
@@ -246,8 +271,8 @@ describe('clock-target binding — re-target through the driver seam (D-141)', (
     s.fields = [
       {
         type: 'text',
-        id: 'azanTime',
-        label: 'Azan time',
+        id: 'targetTime',
+        label: 'Target time',
         required: false,
         default: '19:45',
       },
@@ -270,7 +295,7 @@ describe('clock-target binding — re-target through the driver seam (D-141)', (
     await flush();
     expect(timeText(document.body)).toBe('01:32:00');
 
-    await rt.update({ azanTime: '25:99' });
+    await rt.update({ targetTime: '25:99' });
     await flush();
     // Unchanged — never a countdown blanked or zeroed by a typo.
     expect(timeText(document.body)).toBe('01:32:00');
@@ -283,7 +308,7 @@ describe('clock-target binding — re-target through the driver seam (D-141)', (
     expect(timeText(document.body)).toBe('01:31:00');
 
     // Reported ONCE — the same bad value on every UPDATE does not spam.
-    await rt.update({ azanTime: '25:99' });
+    await rt.update({ targetTime: '25:99' });
     await flush();
     expect(errors).toHaveLength(1);
   });
@@ -308,14 +333,16 @@ describe('clock-target binding — re-target through the driver seam (D-141)', (
           layers: [
             layerOf('CL', [clockEl({ id: 'clk', target: { kind: 'timeofday', time: '20:32' } })]),
           ],
-          fields: [{ type: 'text', id: 'azanTime', label: 'Azan', required: false, default: '' }],
-          bindings: [{ fieldId: 'azanTime', target: { kind: 'clock-target', elementId: 'clk' } }],
+          fields: [
+            { type: 'text', id: 'targetTime', label: 'Target time', required: false, default: '' },
+          ],
+          bindings: [{ fieldId: 'targetTime', target: { kind: 'clock-target', elementId: 'clk' } }],
         },
       ] as Scene['compositions'],
     });
     const rt = createRuntime(s, { clock });
     await rt.ready;
-    await rt.play({ early: { azanTime: '19:30' }, late: { azanTime: '21:30' } });
+    await rt.play({ early: { targetTime: '19:30' }, late: { targetTime: '21:30' } });
     await flush();
 
     const spans = document.body.querySelectorAll<HTMLElement>('[data-cg-clock-time]');
@@ -324,7 +351,7 @@ describe('clock-target binding — re-target through the driver seam (D-141)', (
     expect(spans[1]?.textContent).toBe('02:30:00'); // the `late` instance
 
     // One namespace updating leaves the other alone.
-    await rt.update({ early: { azanTime: '19:45' } });
+    await rt.update({ early: { targetTime: '19:45' } });
     await flush();
     expect(spans[0]?.textContent).toBe('00:45:00');
     expect(spans[1]?.textContent).toBe('02:30:00');

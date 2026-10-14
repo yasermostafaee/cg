@@ -112,6 +112,23 @@ export function parseTimeOfDay(raw: unknown): string | undefined {
   return TIME_OF_DAY.test(latin) ? latin : undefined;
 }
 
+/** An ISO 8601 date and time, over Latin digits: a `Z` or an offset, or neither (local). */
+const ISO_INSTANT =
+  /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(?::[0-9]{2}(?:\.[0-9]+)?)?(?:Z|[+-][0-9]{2}:[0-9]{2})?$/;
+
+/**
+ * `DELTA-RUN-NEXT-VERSION-01-C` — an ISO 8601 date and time typed or sent in any digit set, as its
+ * canonical Latin text — or `undefined` when it is not one (or names no real instant). What a
+ * countdown's date-and-time target field carries: `2026-10-15T21:45:00+03:30`. Like
+ * {@link parseTimeOfDay}, a bound value is untrusted, so the caller applies NOTHING on `undefined`.
+ */
+export function parseIsoInstant(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const latin = latinDigits(clean(raw));
+  if (!ISO_INSTANT.test(latin)) return undefined;
+  return Number.isNaN(Date.parse(latin)) ? undefined : latin;
+}
+
 const CLOCK_PART = /^[0-9]{2}$/;
 const SECONDS_PART = /^([0-9]{2})(?:\.([0-9]+))?$/;
 

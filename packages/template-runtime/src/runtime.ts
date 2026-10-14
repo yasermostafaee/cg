@@ -110,7 +110,7 @@ import {
   lottieTiming,
 } from '@cg/lottie-bridge';
 import { registerLottiePlayer } from './lottie-registry.js';
-import { ClockDriver, parseTimeOfDay } from './clock-driver.js';
+import { ClockDriver, parseClockTarget } from './clock-driver.js';
 import { LottieDriver } from './lottie-driver.js';
 import { VideoDriver, type VideoHandle, type ElementOutroDriver } from './video-driver.js';
 import { AudioDriver, gainOfDb } from './audio-driver.js';
@@ -2519,20 +2519,22 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           const raw =
             binding.fieldId in values ? values[binding.fieldId] : defaults.get(binding.fieldId);
           if (raw === undefined) continue;
-          const time = parseTimeOfDay(raw);
-          if (time === undefined) {
+          // DELTA-RUN-NEXT-VERSION-01-C — the value decides the kind: `HH:mm[:ss]` is a time of
+          // day, an ISO date and time an instant (what CG Control's date and time control sends).
+          const target = parseClockTarget(raw);
+          if (target === undefined) {
             const key = `${binding.target.elementId}:${String(raw)}`;
             if (!reportedClockTargets.has(key)) {
               reportedClockTargets.add(key);
               bus.emit('error', {
                 code: 'clock-target-unparseable',
-                message: `clock target value ${JSON.stringify(raw)} is not HH:mm or HH:mm:ss; keeping the current target`,
+                message: `clock target value ${JSON.stringify(raw)} is not HH:mm, HH:mm:ss or an ISO date and time; keeping the current target`,
                 elementId: binding.target.elementId,
               });
             }
             continue;
           }
-          driver.retarget({ kind: 'timeofday', time });
+          driver.retarget(target);
         }
       }
       for (const child of scope.children) {

@@ -6,6 +6,7 @@ import {
   parseDurationMs,
   parseLocalizedNumber,
   parseTimeOfDay,
+  parseIsoInstant,
   readLocalizedDuration,
   readLocalizedNumber,
 } from '../src/numerals.js';
@@ -112,6 +113,22 @@ describe('parseTimeOfDay — a time typed in any digit set, returned canonical',
     }
     expect(parseTimeOfDay(2032)).toBeUndefined();
     expect(parseTimeOfDay(undefined)).toBeUndefined();
+  });
+});
+
+describe('parseIsoInstant — a date and time target, in any digit set (DELTA-RUN-NEXT-VERSION-01-C)', () => {
+  it('reads an ISO date and time with an offset, a Z, or neither, and returns it canonical', () => {
+    expect(parseIsoInstant('2026-10-15T21:45:00+03:30')).toBe('2026-10-15T21:45:00+03:30');
+    expect(parseIsoInstant('۲۰۲۶-۱۰-۱۵T۲۱:۴۵:۰۰+۰۳:۳۰')).toBe('2026-10-15T21:45:00+03:30');
+    expect(parseIsoInstant('2026-10-15T18:15:00Z')).toBe('2026-10-15T18:15:00Z');
+    expect(parseIsoInstant('2026-10-15T21:45')).toBe('2026-10-15T21:45');
+  });
+
+  it('refuses what is not one — a time of day, a date alone, a day that does not exist', () => {
+    for (const v of ['21:45', '2026-10-15', '2026-13-01T00:00:00Z', 'tomorrow', '']) {
+      expect(parseIsoInstant(v), v).toBeUndefined();
+    }
+    expect(parseIsoInstant(1_700_000_000_000)).toBeUndefined();
   });
 });
 

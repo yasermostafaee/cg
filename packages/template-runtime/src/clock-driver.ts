@@ -5,7 +5,7 @@ import {
   type ClockTarget,
   type CountdownSteps,
 } from '@cg/shared-schema';
-import { parseTimeOfDay } from '@cg/text-shaping';
+import { parseIsoInstant, parseTimeOfDay } from '@cg/text-shaping';
 import { formatCountClock, formatWallClock, type ClockDigits } from './clock-format.js';
 import { displayedRemainingMs, pickStep, stepTokenValue, type StepToken } from './step-css.js';
 import type { RuntimeClock } from './types.js';
@@ -41,6 +41,20 @@ export type StepChangeReason = 'step' | 'reset';
  * on-air target is kept.
  */
 export { parseTimeOfDay };
+
+/**
+ * `DELTA-RUN-NEXT-VERSION-01-C` — what a `clock-target` binding's value re-aims a countdown at. The
+ * VALUE decides, so one field serves both target kinds CG Control offers: `HH:mm[:ss]` is a time of
+ * day (the next occurrence), an ISO date and time is that instant. Any digit set. `undefined` for
+ * anything else — the caller then applies nothing and keeps the current, possibly on-air target.
+ */
+export function parseClockTarget(raw: unknown): ClockTarget | undefined {
+  const time = parseTimeOfDay(raw);
+  if (time !== undefined) return { kind: 'timeofday', time };
+  const iso = parseIsoInstant(raw);
+  if (iso !== undefined) return { kind: 'datetime', iso };
+  return undefined;
+}
 
 /**
  * D-027 — the digital-clock driver, on the ticker's self-wire pattern.
