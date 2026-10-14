@@ -2027,9 +2027,11 @@ first client delivery it becomes a breaking change with its own migration story.
 deferring is that the window closes**, which is the whole argument for deciding now rather than
 later. Related: [[P-031]] (the policy and the enumerated removals).
 
-## [ ] P-033 — `typecheck` covers `src/**` only, so 557 test files are OUTSIDE the compile guarantee ⟨priority: medium⟩
+## [~] P-033 — `typecheck` covers `src/**` only, so 557 test files are OUTSIDE the compile guarantee ⟨priority: medium⟩
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q20): **(a)** — one workspace at a time: the Designer first, then `template-runtime`, `shared-schema`, `vcg-format`.
+
+— **four slices done 2026-10-14** (`DESIGNER-FIX-01` Part A), each typechecking its tests in its own commit: `apps/designer` (`be1c01f0`, 45 errors), `packages/template-runtime` (`93701200`, 34), `packages/shared-schema` (`3a134eeb`, 2), `packages/vcg-format` (`45cdca91`, 5). The other workspaces are still outside the guarantee; the next slices follow the same shape (`tsconfig.typecheck.json` for a `tsc -b` package).
 
 **What:** no workspace typechecks its tests. Every app's `tsconfig.json` includes `src/**/*` only,
 and every package's explicitly EXCLUDES its tests. So a test can call a function with the wrong

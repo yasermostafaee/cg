@@ -3284,9 +3284,11 @@ what this repo keeps paying for.
 
 ---
 
-## [ ] B-186 — the Designer's tests are NEVER typechecked: `tsconfig.json` includes `src/**` only, so a call site with a removed argument compiles green ⟨priority: medium⟩
+## [x] B-186 — the Designer's tests are NEVER typechecked: `tsconfig.json` includes `src/**` only, so a call site with a removed argument compiles green ⟨priority: medium⟩
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q20): **(a)** — one workspace at a time, the Designer first.
+
+— **FIXED 2026-10-14** by `be1c01f0` (`DESIGNER-FIX-01` Part A): `pnpm typecheck` covers all 249 Designer test files and the vite/vitest/playwright configs, in two programs (`tsconfig.json` and `tsconfig.page-realm.json`, one per `window.cg` realm). 45 errors surfaced and were fixed in the tests; none was a product defect. A planted error in a test fails `pnpm typecheck` twice with no cache hit.
 
 **What:** `apps/designer/tsconfig.json` has `"include": ["src/**/*", "vite.config.ts"]`. The
 `tests/**` tree is not in it, so `pnpm typecheck` never looks at a single designer test.
