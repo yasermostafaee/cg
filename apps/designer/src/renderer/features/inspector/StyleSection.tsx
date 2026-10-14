@@ -2658,6 +2658,24 @@ function SequenceSections({
   const dataBound = scene !== null && elementDataField(scene, id) !== undefined;
   // D-163 — the book's pages: how many, and the ONE fit they are drawn at.
   const pageCount = element.items.filter((it) => it.kind === 'image').length;
+  const itemsEditor = (
+    <ListItemsEditor
+      items={element.items}
+      label={element.name || 'Sequence'}
+      dir={element.direction}
+      showDwell
+      compositions={compChoicesAll}
+      digits={typedTextDigits(scene, element)}
+      onChange={(items) => designerStore.setSequenceItems(id, items)}
+      itemDataKey={itemDataKey}
+      onItemDataKey={(itemId, key) => designerStore.setSequenceItemDataKey(id, itemId, key)}
+      itemDigits={itemDigits}
+      onItemDigits={(itemId, digits) => {
+        const key = itemDataKey(itemId);
+        if (key !== '') designerStore.updateField(key, { digits } as Partial<DynamicField>);
+      }}
+    />
+  );
   return (
     <>
       <CollapseSection title="Sequence" pinned>
@@ -2805,23 +2823,16 @@ function SequenceSections({
           </InfoTip>
         }
       >
-        <SequencePagesControl elementId={id} pageCount={pageCount} />
-        <ListItemsEditor
+        {/* `D-163` — a book (any picture item) shows a card here and its pages in the Pages
+            manager, whose List view is this same item editor; a text or composition rotation
+            keeps its item list inline, as before. */}
+        <SequencePagesControl
+          elementId={id}
+          title={element.name || 'Sequence'}
           items={element.items}
-          label={element.name || 'Sequence'}
-          dir={element.direction}
-          showDwell
-          compositions={compChoicesAll}
-          digits={typedTextDigits(scene, element)}
-          onChange={(items) => designerStore.setSequenceItems(id, items)}
-          itemDataKey={itemDataKey}
-          onItemDataKey={(itemId, key) => designerStore.setSequenceItemDataKey(id, itemId, key)}
-          itemDigits={itemDigits}
-          onItemDigits={(itemId, digits) => {
-            const key = itemDataKey(itemId);
-            if (key !== '') designerStore.updateField(key, { digits } as Partial<DynamicField>);
-          }}
+          listView={itemsEditor}
         />
+        {pageCount === 0 && itemsEditor}
       </CollapseSection>
 
       {/* Style parity with the ticker/clock text sections. D-052 — colour /

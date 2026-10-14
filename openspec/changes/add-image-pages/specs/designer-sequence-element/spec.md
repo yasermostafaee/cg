@@ -29,15 +29,23 @@ additive: every sequence authored before it parses unchanged, with no schema-ver
 The Designer SHALL offer `Add pictures…` (many files) and `Add folder…` on a sequence. Each file
 SHALL be imported through the existing asset import (deduplicated by SHA-256) and become one picture
 item, in natural file-name order: digit runs compare as numbers in Latin, Persian and Arabic-Indic
-digits alike (`page2` before `page10`, `صفحه۲` before `صفحه۱۰`). The Items section SHALL show the
-page count. The first pictures added to a sequence SHALL make it a book: transition Cut
-(`none`/`none`), `advance: 'manual'`, `repeat: 1`, all of which the author can change.
+digits alike (`page2` before `page10`, `صفحه۲` before `صفحه۱۰`). For a sequence holding pictures,
+the Inspector's Items section SHALL be a card — the page count, the first pages as thumbnails,
+`Manage pages…`, `Add pictures…` and `Add folder…` — and SHALL NOT list the pages one row each; the
+pages are seen and arranged in the Pages manager. The first pictures added to a sequence SHALL make it
+a book: transition Cut (`none`/`none`), `advance: 'manual'`, `repeat: 1`, all of which the author can
+change.
 
 #### Scenario: Twelve files become twelve pages in natural order
 
 - **WHEN** the author adds twelve files named `page1.png` … `page12.png`, picked in any order
-- **THEN** the sequence holds twelve picture items in the order 1 … 12 and the Items section reads
-  `12 pages`
+- **THEN** the sequence holds twelve picture items in the order 1 … 12, the Inspector reads
+  `12 pages` with no row per page, and the Pages manager lists them 1 … 12
+
+#### Scenario: The pages render where the author works
+
+- **WHEN** pictures are added with the Assets panel closed
+- **THEN** the canvas and Preview draw the pictures themselves, not the missing-image placeholder
 
 #### Scenario: A duplicate file is one asset
 
@@ -48,6 +56,23 @@ page count. The first pictures added to a sequence SHALL make it a book: transit
 
 - **WHEN** pictures are added to a sequence that has none
 - **THEN** its transition is Cut, its advance manual and its repeat one pass
+
+### Requirement: The Pages manager
+
+The Pages manager SHALL show every item of the sequence as a numbered card in reading order — a
+picture as a thumbnail scaled down once and kept for the session (never every page decoded at full
+size), with its file name. It SHALL move a page by dragging it (the selected pages move together) and
+by an earlier / later button on each card; remove one page, or a selection made by clicking
+thumbnails (Shift-click selects a run); sort the pictures in natural file-name order, a text or
+composition item keeping its place; add pictures or a folder; and offer the sequence's item editor as
+a List view. Each change SHALL be one edit, applied at once and undoable; Done SHALL only close.
+
+#### Scenario: Drag, step, remove a selection, sort
+
+- **WHEN** the author drags page 4 before page 1, moves page 1 one step later, selects two pages and
+  removes them, then sorts by name
+- **THEN** the cards follow each change in that order, the count reads the pages left, and the sort
+  restores natural file-name order
 
 ### Requirement: Previous and Go to beside Next
 

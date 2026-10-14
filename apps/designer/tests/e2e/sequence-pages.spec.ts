@@ -25,17 +25,78 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
     ).setFiles(shuffled.map((name) => ({ name, mimeType: 'image/png', buffer: png(name) })));
 
     await expect(app.inspector.getByTestId('sequence-page-count')).toHaveText('12 pages');
-    // `page2` before `page10`: the order is the NUMBER in the name, not the characters.
-    await expect(app.inspector.getByLabel(/ item \d+ picture$/)).toHaveText(
-      Array.from({ length: 12 }, (_, i) => `page${String(i + 1)}.png`),
-    );
-    // The untouched sample items are gone, and the sequence is a book: Cut, manual, one pass.
+    // The Inspector stays a CARD — no row per page (the owner's report: 88 rows filled it).
     await expect(app.inspector.getByRole('button', { name: /^Remove .* item \d+$/ })).toHaveCount(
-      12,
+      0,
     );
+    // The sequence is a book: Cut, manual, one pass.
     await expect(app.inspector.getByLabel('advance', { exact: true })).toHaveValue('manual');
     await expect(app.inspector.getByLabel('in', { exact: true })).toHaveValue('none');
     await expect(app.inspector.getByLabel('out', { exact: true })).toHaveValue('none');
+
+    // Every page is in the Pages manager — the untouched samples gone, and `page2` before
+    // `page10`: the order is the NUMBER in the name, not the characters.
+    await app.inspector.getByRole('button', { name: 'Manage pages…', exact: true }).click();
+    const manager = app.page.getByRole('dialog', { name: /^Pages — / });
+    await expect(manager.getByTestId('pages-manager-count')).toHaveText('12 pages');
+    await expect(manager.locator('[data-page-name]')).toHaveText(
+      Array.from({ length: 12 }, (_, i) => `page${String(i + 1)}.png`),
+    );
+  });
+
+  test('🔴 the Pages manager: drag a page, step one, remove a selection, sort by name', async ({
+    app,
+  }) => {
+    await app.newProject('BookManager');
+    await app.addSequence({ x: 200, y: 200 });
+    const chooser = app.page.waitForEvent('filechooser');
+    await app.inspector.getByRole('button', { name: 'Add pictures…', exact: true }).click();
+    await (
+      await chooser
+    ).setFiles(
+      [1, 2, 3, 4, 5].map((n) => ({
+        name: `p${String(n)}.png`,
+        mimeType: 'image/png',
+        buffer: png(`p${String(n)}`),
+      })),
+    );
+    await app.inspector.getByRole('button', { name: 'Manage pages…', exact: true }).click();
+    const manager = app.page.getByRole('dialog', { name: /^Pages — / });
+    const names = manager.locator('[data-page-name]');
+    const cards = manager.locator('[data-page-card]');
+    await expect(names).toHaveText(['p1.png', 'p2.png', 'p3.png', 'p4.png', 'p5.png']);
+
+    // Drag page 4 onto the leading half of page 1: it becomes page 1.
+    await cards
+      .nth(3)
+      .locator('[data-page-name]')
+      .dragTo(cards.nth(0), { targetPosition: { x: 6, y: 30 } });
+    await expect(names).toHaveText(['p4.png', 'p1.png', 'p2.png', 'p3.png', 'p5.png']);
+
+    // One step later, from the card's own button (the keyboard's way).
+    await manager.getByRole('button', { name: 'Move page 1 later', exact: true }).click();
+    await expect(names).toHaveText(['p1.png', 'p4.png', 'p2.png', 'p3.png', 'p5.png']);
+
+    // Select two pages and remove them together.
+    await manager.getByRole('button', { name: 'Page 2: p4.png', exact: true }).click();
+    await manager.getByRole('button', { name: 'Page 5: p5.png', exact: true }).click();
+    await manager.getByRole('button', { name: 'Remove selected', exact: true }).click();
+    await expect(names).toHaveText(['p1.png', 'p2.png', 'p3.png']);
+    await expect(manager.getByTestId('pages-manager-count')).toHaveText('3 pages');
+
+    // Out of order again, then Sort by name puts it back.
+    await cards
+      .nth(2)
+      .locator('[data-page-name]')
+      .dragTo(cards.nth(0), { targetPosition: { x: 6, y: 30 } });
+    await expect(names).toHaveText(['p3.png', 'p1.png', 'p2.png']);
+    await manager.getByRole('button', { name: 'Sort by name', exact: true }).click();
+    await expect(names).toHaveText(['p1.png', 'p2.png', 'p3.png']);
+
+    // Done closes; the Inspector's card reads the book as it now is.
+    await manager.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(manager).toBeHidden();
+    await expect(app.inspector.getByTestId('sequence-page-count')).toHaveText('3 pages');
   });
 
   test('🔴 the pages RENDER — on the canvas and in Preview, with the Assets panel closed', async ({
@@ -103,11 +164,10 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
       await app.inspector.getByRole('button', { name: 'Add folder…', exact: true }).click();
       await (await chooser).setFiles(dir);
       await expect(app.inspector.getByTestId('sequence-page-count')).toHaveText('3 pages');
-      await expect(app.inspector.getByLabel(/ item \d+ picture$/)).toHaveText([
-        'p1.png',
-        'p2.png',
-        'p10.png',
-      ]);
+      await app.inspector.getByRole('button', { name: 'Manage pages…', exact: true }).click();
+      await expect(
+        app.page.getByRole('dialog', { name: /^Pages — / }).locator('[data-page-name]'),
+      ).toHaveText(['p1.png', 'p2.png', 'p10.png']);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

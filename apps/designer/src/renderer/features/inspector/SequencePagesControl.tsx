@@ -1,71 +1,60 @@
-import { useState } from 'react';
-import { naturalCompare } from '@cg/text-shaping';
-import { partitionSupported, skippedFilesMessage } from '../../../shared/asset-types.js';
-import { designerStore } from '../../state/store.js';
+import { useState, type ReactNode } from 'react';
+import type { SequenceImageItem, SequenceItem } from '@cg/shared-schema';
 import { Button } from '../../ui/Button.js';
 import * as listCss from '../fields/ListItemsEditor.css.js';
 import { StateLine } from './InfoTip.js';
+import { isPicture } from './pageItems.js';
+import { PagesModal } from './PagesModal.js';
+import { usePageThumb } from './pageThumbs.js';
+import { useAddPictures } from './useAddPictures.js';
+import * as s from './Pages.css.js';
 
-/** A file's name for ORDERING: its path inside a picked folder, else its own name. */
-function orderName(file: File): string {
-  return file.webkitRelativePath !== '' ? file.webkitRelativePath : file.name;
-}
+/** How many pages the Inspector's card shows before `+N`. */
+const STRIP = 4;
 
 /**
- * `D-163` — a book's pages, added many at a time. `Add pictures…` takes a multi-file pick and
- * `Add folder…` a whole folder; the files are put in NATURAL order (`page2` before `page10`, in any
- * digit set — the one comparison CG Control uses too), imported one by one through the ordinary
- * asset import (deduplicated by SHA-256), and added to the sequence as ONE edit. The page count is
- * a fact, stated as one.
+ * `D-163` — **A BOOK'S PAGES IN THE INSPECTOR: a card, not a list.** The count, the first few pages
+ * as thumbnails, and `Manage pages…`, which opens the Pages manager where every page is seen and
+ * arranged. `Add pictures…` / `Add folder…` add pages many at a time. A 300-page book costs the
+ * Inspector these few lines, exactly as a 3-page one does (the owner's report: a row per page
+ * filled the panel).
  */
 export function SequencePagesControl({
   elementId,
-  pageCount,
+  title,
+  items,
+  listView,
 }: {
   elementId: string;
-  pageCount: number;
+  title: string;
+  items: readonly SequenceItem[];
+  /** The sequence's item editor, shown by the manager's List view. */
+  listView: ReactNode;
 }): JSX.Element {
-  const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
-
-  async function add(folder: boolean): Promise<void> {
-    const files = await window.cg.assets.pick('image', { folder });
-    if (files.length === 0) return;
-    const { valid, rejected } = partitionSupported('image', files);
-    if (rejected.length > 0) {
-      designerStore.showNotice(skippedFilesMessage(rejected.map((f) => f.name)));
-    }
-    if (valid.length === 0) return;
-    const ordered = [...valid].sort((a, b) => naturalCompare(orderName(a), orderName(b)));
-    const pictures: { assetId: string; name: string }[] = [];
-    const failed: string[] = [];
-    setBusy({ done: 0, total: ordered.length });
-    try {
-      for (const [i, file] of ordered.entries()) {
-        try {
-          const { asset } = await window.cg.assets.store(file, 'image');
-          pictures.push({ assetId: asset.assetId, name: file.name });
-        } catch {
-          failed.push(file.name);
-        }
-        setBusy({ done: i + 1, total: ordered.length });
-      }
-    } finally {
-      setBusy(null);
-    }
-    if (failed.length > 0) {
-      const shown = failed.slice(0, 3).join(', ');
-      const more = failed.length > 3 ? `, +${String(failed.length - 3)} more` : '';
-      designerStore.showNotice(`Could not add ${String(failed.length)} pictures: ${shown}${more}`);
-    }
-    designerStore.addSequencePictures(elementId, pictures);
-  }
+  const [open, setOpen] = useState(false);
+  const { busy, add } = useAddPictures(elementId);
+  const pictures = items.filter(isPicture);
+  const shown = pictures.slice(0, STRIP);
 
   return (
-    <>
-      {pageCount > 0 && (
-        <StateLine tone="text" testId="sequence-page-count">
-          {pageCount === 1 ? '1 page' : `${String(pageCount)} pages`}
-        </StateLine>
+    <div className={s.summary}>
+      {pictures.length > 0 && (
+        <>
+          <StateLine tone="text" testId="sequence-page-count">
+            {pictures.length === 1 ? '1 page' : `${String(pictures.length)} pages`}
+          </StateLine>
+          <div className={s.strip} aria-hidden="true">
+            {shown.map((page) => (
+              <StripThumb key={page.id} page={page} />
+            ))}
+            {pictures.length > shown.length && (
+              <span className={s.more}>{`+${String(pictures.length - shown.length)}`}</span>
+            )}
+          </div>
+          <Button variant="secondary" onClick={() => setOpen(true)}>
+            Manage pages…
+          </Button>
+        </>
       )}
       <div className={listCss.pageButtons}>
         <Button variant="secondary" disabled={busy !== null} onClick={() => void add(false)}>
@@ -75,6 +64,24 @@ export function SequencePagesControl({
           Add folder…
         </Button>
       </div>
-    </>
+      {open && (
+        <PagesModal
+          elementId={elementId}
+          title={title}
+          items={items}
+          listView={listView}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function StripThumb({ page }: { page: SequenceImageItem }): JSX.Element {
+  const thumb = usePageThumb(page.assetId);
+  return (
+    <span className={s.stripThumb}>
+      {thumb !== null && <img src={thumb} alt="" className={s.thumbImg} draggable={false} />}
+    </span>
   );
 }

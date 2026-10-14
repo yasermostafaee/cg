@@ -64,6 +64,11 @@ export const seqItem = style({
   display: 'flex',
   flexDirection: 'column',
   gap: '0.25rem',
+  // `D-163` — a rule under each item, so an item's second line (a picture's file name, an item's
+  // text) reads as ITS line and not as a label for the item below it.
+  paddingBottom: '0.4rem',
+  borderBottom: `1px solid ${colors.border}`,
+  selectors: { '&:last-child': { borderBottom: 'none', paddingBottom: 0 } },
 });
 
 export const seqTopLine = style({
