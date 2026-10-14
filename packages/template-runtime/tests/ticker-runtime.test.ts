@@ -95,6 +95,7 @@ const tickerElement = {
   },
   color: '#FFFFFF',
   direction: 'rtl' as const,
+  verticalAlign: 'middle' as const,
   speed: 100,
   gap: 10,
   repeat: 'infinite' as const,

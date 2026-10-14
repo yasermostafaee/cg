@@ -56,6 +56,7 @@ function mockHandle(): LottiePlayerHandle & { frames: number[]; destroyed: boole
     goToFrame(f: number) {
       frames.push(f);
     },
+    applyOverride: () => false,
     get isAlive() {
       return !handle.destroyed;
     },

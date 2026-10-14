@@ -23,7 +23,7 @@ describe('applyFieldValues — transform + lottie-override targets', () => {
   /** Build the lower-third, add one extra field+binding, return the bound node. */
   function bindExtra(
     target: Scene['bindings'][number]['target'],
-    value: unknown,
+    value: number | string,
     fieldType: 'number' | 'text' = 'number',
   ): HTMLElement | undefined {
     const scene = structuredClone(lowerThirdScene);
@@ -165,7 +165,8 @@ describe('applyFieldValues — transform + lottie-override targets', () => {
       label: 'Logo',
       required: false,
       type: 'image',
-      default: { assetId: 'placeholder' },
+      defaultAssetId: 'placeholder',
+      accept: ['svg', 'png', 'jpg', 'webp'],
     });
     scene.bindings.push({ fieldId: 'logo', target: { kind: 'image', elementId: 'im' } });
     const { container, elementMap, textOriginals } = buildScene(scene);

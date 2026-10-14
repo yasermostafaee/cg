@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as LottieBridge from '@cg/lottie-bridge';
 import type { Scene } from '@cg/shared-schema';
 import { LottieDriver } from '../src/lottie-driver.js';
-import { VideoDriver, type VideoHandle } from '../src/video-driver.js';
+import { VideoDriver, type VideoDriverOptions, type VideoHandle } from '../src/video-driver.js';
 
 /**
  * Session Z — §D6.4.1's "playOutro() ALWAYS resolves", checked on BOTH implementers and
@@ -183,7 +183,9 @@ beforeEach(() => {
 });
 
 describe('VideoDriver.playOutro under session Y’s anchors', () => {
-  const opts = (over: Record<string, unknown>) => ({
+  const opts = (
+    over: Pick<VideoDriverOptions, 'outroStartMs' | 'outroEndMs'> & Partial<VideoDriverOptions>,
+  ): VideoDriverOptions => ({
     handle: stalledVideo(),
     durationMs: 10_000,
     introEndMs: 2000,

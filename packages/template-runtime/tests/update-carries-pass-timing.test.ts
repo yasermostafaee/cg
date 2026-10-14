@@ -92,7 +92,7 @@ async function onAir(): Promise<Live> {
   const clock = makeClock();
   const host = document.createElement('div');
   document.body.appendChild(host);
-  const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+  const rt = createRuntime(loopingScene(), { root: host, skipFontLoad: true, clock });
   let settles = 0;
   rt.on('stop.end', () => {
     settles += 1;
@@ -168,7 +168,7 @@ describe('DELTA B · R1 — a count delivered on the ADD, through update(), then
     const clock = makeClock();
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    const rt = createRuntime(loopingScene(), { root: host, skipFontLoad: true, clock });
     let n = 0;
     rt.on('stop.end', () => {
       n += 1;
@@ -251,7 +251,7 @@ describe('DELTA B6 — a count delivered on the TAKE, through play()', () => {
     const clock = makeClock();
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    const rt = createRuntime(loopingScene(), { root: host, skipFontLoad: true, clock });
     let settles = 0;
     rt.on('stop.end', () => {
       settles += 1;
@@ -277,7 +277,7 @@ describe('DELTA B6 — a count delivered on the TAKE, through play()', () => {
     const clock = makeClock();
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    const rt = createRuntime(loopingScene(), { root: host, skipFontLoad: true, clock });
     let settles = 0;
     rt.on('stop.end', () => {
       settles += 1;
@@ -296,7 +296,7 @@ describe('DELTA B6 — a count delivered on the TAKE, through play()', () => {
     const clock = makeClock();
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    const rt = createRuntime(loopingScene(), { root: host, skipFontLoad: true, clock });
     let settles = 0;
     rt.on('stop.end', () => {
       settles += 1;
@@ -315,7 +315,7 @@ describe('DELTA B6 — a count delivered on the TAKE, through play()', () => {
     const clock = makeClock();
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    const rt = createRuntime(loopingScene(), { root: host, skipFontLoad: true, clock });
     let settles = 0;
     rt.on('stop.end', () => {
       settles += 1;

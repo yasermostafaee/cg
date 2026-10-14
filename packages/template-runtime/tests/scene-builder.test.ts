@@ -420,6 +420,7 @@ describe('buildClock — static initial render (D-027)', () => {
       },
       color: '#FFFFFF',
       align: 'center',
+      verticalAlign: 'middle',
       mode: 'wall',
       format: 'HH:mm:ss',
       digits: 'persian',
@@ -623,6 +624,7 @@ describe('buildSequence — static item-1 render (D-029)', () => {
       },
       color: '#FFFFFF',
       align: 'start',
+      verticalAlign: 'middle',
       direction: 'rtl',
       items: [
         { id: 'a', text: 'اکنون: برنامهٔ نخست' },
@@ -812,9 +814,14 @@ describe('buildTicker — vertical align of the static authoring row (D-045)', (
           name: 'L1',
           visible: true,
           locked: false,
+          blendMode: 'normal',
           children: [{ ...element, ...ticker }],
         },
       ],
+      fields: [],
+      bindings: [],
+      fonts: [],
+      metadata: { createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
     };
   }
   /** The static authoring row inside the band (the canvas layout, pre-crawl). */

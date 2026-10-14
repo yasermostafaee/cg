@@ -56,7 +56,8 @@ interface Harness {
 function make(
   playout: Playout,
   opts: {
-    lifecycle?: Lifecycle;
+    /** Read by KEY PRESENCE below: `{ lifecycle: undefined }` means "no out-point". */
+    lifecycle?: Lifecycle | undefined;
     hasAnimation?: boolean;
     waitForContent?: () => Promise<void> | null;
   } = {},

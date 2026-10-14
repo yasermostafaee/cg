@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PlayoutSchema, playoutOf, repeatOf, delayMsOf, type Playout } from '@cg/shared-schema';
 import { mergePlayoutOverride } from '../src/playout-merge.js';
+import type { PlayoutOverride } from '../src/types.js';
 
 /**
  * 🔴 `TIMING-BUILD-21` §2 — THE SILENT-DROP GUARD.
@@ -72,7 +73,9 @@ describe('TIMING-BUILD-21 §2(b) — the playout merge must not drop a field', (
     const stored = PlayoutSchema.parse(FULLY_POPULATED) as Playout;
     // `exactOptionalPropertyTypes` distinguishes absent from present-and-undefined; a naive
     // spread would let the second overwrite a resolved value with nothing.
-    const merged = mergePlayoutOverride(stored, { delayMs: undefined, repeat: undefined });
+    // The TYPE forbids present-and-undefined; a JS caller can still send it, which is the case.
+    const holes = { delayMs: undefined, repeat: undefined } as unknown as PlayoutOverride;
+    const merged = mergePlayoutOverride(stored, holes);
     expect(merged.delayMs).toBe(FULLY_POPULATED.delayMs);
     expect(merged.repeat).toBe(FULLY_POPULATED.repeat);
   });

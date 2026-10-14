@@ -1,0 +1,15 @@
+{
+  // `P-033` — the TYPECHECK view of this package: src + tests + the vitest config, no emit.
+  // It exists as a second config because tsconfig.json is the BUILD config (`tsc -b`,
+  // rootDir ./src) and cannot include tests/. Same shape as tools/caspar-bridge's.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src/**/*", "tests/**/*", "vitest.config.ts"],
+  "exclude": ["dist", "node_modules"]
+}

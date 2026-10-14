@@ -33,6 +33,7 @@ function imageScene(assetId: string): Scene {
             name: 'logo',
             type: 'image',
             assetId,
+            source: 'project',
             fit: 'contain',
             preserveAspect: true,
             opacity: 1,

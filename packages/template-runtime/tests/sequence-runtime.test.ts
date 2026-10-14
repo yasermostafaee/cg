@@ -89,6 +89,7 @@ function sequenceElement(overrides: Partial<SequenceElement>): SequenceElement {
     },
     color: '#FFFFFF',
     align: 'start',
+    verticalAlign: 'middle',
     direction: 'rtl',
     items: [
       { id: 'a', text: 'اکنون: یک' },
@@ -125,6 +126,7 @@ const tickerElement = {
   },
   color: '#FFFFFF',
   direction: 'rtl' as const,
+  verticalAlign: 'middle' as const,
   speed: 100,
   gap: 10,
   repeat: 1,
@@ -154,6 +156,7 @@ const clockElement = {
   },
   color: '#FFFFFF',
   align: 'center' as const,
+  verticalAlign: 'middle' as const,
   mode: 'countdown' as const,
   format: 'mm:ss',
   digits: 'latin' as const,
@@ -329,7 +332,7 @@ describe('createRuntime — sequence content source + next() dispatch (D-029)', 
     await runtime.play({});
     await run(clock, 5000, 500); // manual: time alone never advances
     expect(visibleItems()).toEqual(['اکنون: یک']);
-    await runtime.next();
+    await runtime.next!();
     await run(clock, 400); // the transition plays
     expect(visibleItems()).toEqual(['سپس: دو']);
   });

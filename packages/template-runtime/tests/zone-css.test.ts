@@ -242,6 +242,7 @@ describe('compileZoneCss — author-controlled strings never reach a selector (D
       layer('L1', [countdown('clock-1'), shape('shape-1', [{ zone: 'critical', fill: 'zone' }])]),
       layer('L2', [
         countdown('clock-2', {
+          base: ZONES.base,
           steps: [{ atOrBelowMs: 600_000, key: 'critical', color: '#0000ff' }],
         }),
       ]),
