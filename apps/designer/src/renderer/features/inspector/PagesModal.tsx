@@ -1,12 +1,16 @@
 import { useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import { ArrowDownAZ, ChevronLeft, ChevronRight, LayoutGrid, List, X } from 'lucide-react';
-import type { SequenceItem } from '@cg/shared-schema';
+import type { FieldDigits, SequenceItem } from '@cg/shared-schema';
 import { cx } from '../../cx.js';
 import { designerStore } from '../../state/store.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
+import { Select } from '../../ui/Select.js';
+import { Textarea } from '../../ui/Textarea.js';
+import { shown, typedInto, type CompositionChoice } from '../fields/ListItemsEditor.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
+import { PageAddButtons } from './PageAddButtons.js';
 import {
   isPicture,
   itemLabel,
@@ -16,20 +20,30 @@ import {
   stepItem,
 } from './pageItems.js';
 import { usePageThumb } from './pageThumbs.js';
-import { useAddPictures } from './useAddPictures.js';
 import * as s from './Pages.css.js';
 
+/** What the manager needs to edit a text or composition item where it stands. */
+interface ItemEditing {
+  /** Every composition an item may show (its picker), missing references included. */
+  compositions: readonly CompositionChoice[];
+  /** The sequence's reading direction, for a text item's box. */
+  dir: 'ltr' | 'rtl';
+  /** The Digits a text item's box is typed in (`TEXT-DIGITS-01`), as the item editor's. */
+  textDigits: (itemId: string) => FieldDigits | undefined;
+}
+
 /**
- * `D-163` — **THE PAGES MANAGER.** Every page of a book, seen as a picture and arranged in one
- * place: a grid of thumbnails, numbered in reading order, with the file name under each.
+ * `D-163` — **THE PAGES MANAGER.** Every item of a book, seen and arranged in one place: a grid of
+ * cards numbered in reading order — a picture as its thumbnail with its file name, a text item as a
+ * box to type in, a composition item as its picker.
  *
- * - **Drag** a page (or the selected pages) between two others to move it; the bar shows where it
- *   lands. **‹ ›** move one page one step, for the keyboard.
- * - **Click** a thumbnail to select it, **Shift-click** to select a run; **Remove selected** takes
- *   them out, **×** takes out one.
+ * - **Add** pictures, a folder, a text item or a composition item (the same row the Inspector shows).
+ * - **Drag** a card (or the selected cards) between two others to move it; the bar shows where it
+ *   lands. **‹ ›** move one card one step, for the keyboard.
+ * - **Click** a thumbnail, or a card's number, to select it; **Shift-click** selects a run;
+ *   **Remove selected** takes them out, **×** takes out one.
  * - **Sort by name** puts the pictures in natural file-name order (`page2` before `page10`).
- * - **Add pictures… / Add folder…** append, exactly as in the Inspector.
- * - **List** shows the same items in the item editor, for dwell, data keys and text items.
+ * - **List** shows the same items in the item editor, for dwell and data keys.
  *
  * Every change is ONE store edit as it is made (so one undo step each, and the canvas follows);
  * **Done** only closes.
@@ -39,6 +53,8 @@ export function PagesModal({
   title,
   items,
   listView,
+  editing,
+  firstComposition,
   onClose,
 }: {
   elementId: string;
@@ -46,6 +62,9 @@ export function PagesModal({
   items: readonly SequenceItem[];
   /** The sequence's own item editor, for the List view. */
   listView: ReactNode;
+  editing: ItemEditing;
+  /** The composition a new composition item shows first; absent ⇒ there is none to add. */
+  firstComposition: string | undefined;
   onClose: () => void;
 }): JSX.Element {
   const [view, setView] = useState<'grid' | 'list'>('grid');
@@ -53,7 +72,6 @@ export function PagesModal({
   const [anchor, setAnchor] = useState<string | null>(null);
   const [dragIds, setDragIds] = useState<ReadonlySet<string> | null>(null);
   const [over, setOver] = useState<{ index: number; side: 'before' | 'after' } | null>(null);
-  const { busy, add } = useAddPictures(elementId);
 
   // The selection only ever names items that still exist.
   const chosen = useMemo(() => {
@@ -63,6 +81,8 @@ export function PagesModal({
   const allPictures = items.length > 0 && items.every(isPicture);
   const pictureCount = items.filter(isPicture).length;
   const commit = (next: SequenceItem[]): void => designerStore.setSequenceItems(elementId, next);
+  const change = (id: string, patch: Partial<Record<'text' | 'compositionId', string>>): void =>
+    commit(items.map((it) => (it.id === id ? ({ ...it, ...patch } as SequenceItem) : it)));
 
   function toggle(id: string, index: number, range: boolean): void {
     const from = anchor === null ? -1 : items.findIndex((i) => i.id === anchor);
@@ -111,7 +131,11 @@ export function PagesModal({
       width="min(1080px, 94vw)"
       minBodyHeight="60vh"
       footer={
-        <ModalButton variant="primary" onClick={onClose}>
+        <ModalButton
+          variant="primary"
+          onClick={onClose}
+          title="Close — every change is already made"
+        >
           Done
         </ModalButton>
       }
@@ -126,6 +150,7 @@ export function PagesModal({
             <Button
               variant="danger"
               size="sm"
+              title="Remove the selected items from the sequence"
               onClick={() => {
                 commit(removeItems(items, chosen));
                 setPicked(new Set());
@@ -133,7 +158,12 @@ export function PagesModal({
             >
               Remove selected
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setPicked(new Set())}>
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Select nothing"
+              onClick={() => setPicked(new Set())}
+            >
               Clear selection
             </Button>
           </>
@@ -142,6 +172,7 @@ export function PagesModal({
             <Button
               variant="ghost"
               size="sm"
+              title="Select every item"
               onClick={() => setPicked(new Set(items.map((i) => i.id)))}
             >
               Select all
@@ -153,31 +184,16 @@ export function PagesModal({
           variant="secondary"
           size="sm"
           disabled={pictureCount < 2}
+          title="Put the pictures in file-name order (page2 before page10); other items keep their place"
           onClick={() => commit(sortPicturesByName(items))}
         >
           <Icon icon={ArrowDownAZ} size={14} />
           Sort by name
         </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={busy !== null}
-          onClick={() => void add(false)}
-        >
-          {busy === null ? 'Add pictures…' : `Adding ${String(busy.done)} / ${String(busy.total)}…`}
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={busy !== null}
-          onClick={() => void add(true)}
-        >
-          Add folder…
-        </Button>
         <div className={s.viewGroup} role="group" aria-label="View">
           <Control
             aria-label="Grid view"
-            title="Grid view"
+            title="Grid view — every item as a card"
             aria-pressed={view === 'grid'}
             selected={view === 'grid'}
             onClick={() => setView('grid')}
@@ -186,7 +202,7 @@ export function PagesModal({
           </Control>
           <Control
             aria-label="List view"
-            title="List view"
+            title="List view — the item editor, with dwell and data keys"
             aria-pressed={view === 'list'}
             selected={view === 'list'}
             onClick={() => setView('list')}
@@ -195,11 +211,20 @@ export function PagesModal({
           </Control>
         </div>
       </div>
+      <div className={s.addBar}>
+        <PageAddButtons
+          elementId={elementId}
+          items={items}
+          firstComposition={firstComposition}
+          size="sm"
+          picturesOnly={view === 'list'}
+        />
+      </div>
 
       {view === 'list' ? (
         <div className={s.listView}>{listView}</div>
       ) : items.length === 0 ? (
-        <p className={s.empty}>No pages yet.</p>
+        <p className={s.empty}>No items yet.</p>
       ) : (
         <ol className={s.grid} aria-label="Pages">
           {items.map((item, index) => (
@@ -211,6 +236,9 @@ export function PagesModal({
               selected={chosen.has(item.id)}
               dragging={dragIds?.has(item.id) === true}
               mark={over?.index === index ? over.side : null}
+              editing={editing}
+              onText={(text) => change(item.id, { text })}
+              onComposition={(compositionId) => change(item.id, { compositionId })}
               onToggle={(range) => toggle(item.id, index, range)}
               onStep={(by) => commit(stepItem(items, item.id, by))}
               onRemove={() => commit(removeItems(items, new Set([item.id])))}
@@ -237,6 +265,9 @@ function PageCard({
   selected,
   dragging,
   mark,
+  editing,
+  onText,
+  onComposition,
   onToggle,
   onStep,
   onRemove,
@@ -251,6 +282,9 @@ function PageCard({
   selected: boolean;
   dragging: boolean;
   mark: 'before' | 'after' | null;
+  editing: ItemEditing;
+  onText: (text: string) => void;
+  onComposition: (compositionId: string) => void;
   onToggle: (range: boolean) => void;
   onStep: (by: -1 | 1) => void;
   onRemove: () => void;
@@ -259,8 +293,31 @@ function PageCard({
   onDrop: (e: DragEvent<HTMLLIElement>) => void;
   onDragEnd: () => void;
 }): JSX.Element {
-  const label = itemLabel(item);
-  const thumb = usePageThumb(isPicture(item) ? item.assetId : undefined);
+  const picture = isPicture(item);
+  const thumb = usePageThumb(picture ? item.assetId : undefined);
+  const composition = !picture && 'compositionId' in item ? item.compositionId : undefined;
+  const name = picture
+    ? itemLabel(item)
+    : composition !== undefined
+      ? (editing.compositions.find((c) => c.id === composition)?.name ?? 'Composition')
+      : 'Text';
+  // The number is the select toggle on every card; on a picture the whole thumbnail is too.
+  const badge = (
+    <Control
+      variant="bare"
+      className={cx(s.badge, s.badgeButton, selected && s.badgeSelected)}
+      aria-label={`Select item ${String(number)}`}
+      aria-pressed={selected}
+      title={
+        selected
+          ? 'Selected — click to deselect (Shift-click selects a run)'
+          : 'Select (Shift-click selects a run)'
+      }
+      onClick={(e) => onToggle(e.shiftKey)}
+    >
+      {number}
+    </Control>
+  );
   return (
     <li
       className={cx(
@@ -277,27 +334,59 @@ function PageCard({
       onDrop={onDrop}
       onDragEnd={onDragEnd}
     >
-      <Control
-        variant="bare"
-        className={s.thumbButton}
-        aria-label={`Page ${String(number)}: ${label}`}
-        aria-pressed={selected}
-        onClick={(e) => onToggle(e.shiftKey)}
-      >
-        {isPicture(item) ? (
-          thumb !== null && <img src={thumb} alt="" className={s.thumbImg} draggable={false} />
-        ) : (
-          <span className={s.thumbText}>{label}</span>
-        )}
-        <span className={cx(s.badge, selected && s.badgeSelected)}>{number}</span>
-      </Control>
+      {picture ? (
+        <div className={s.thumbBox}>
+          <Control
+            variant="bare"
+            className={s.thumbButton}
+            aria-label={`Page ${String(number)}: ${name}`}
+            aria-pressed={selected}
+            title={`${name} — click to select (Shift-click selects a run); drag to move`}
+            onClick={(e) => onToggle(e.shiftKey)}
+          >
+            {thumb !== null && <img src={thumb} alt="" className={s.thumbImg} draggable={false} />}
+          </Control>
+          {badge}
+        </div>
+      ) : composition !== undefined ? (
+        <div className={cx(s.thumbBox, s.itemBox)}>
+          <Select
+            value={composition}
+            aria-label={`Item ${String(number)} composition`}
+            title="The composition this item shows"
+            onChange={(e) => onComposition(e.target.value)}
+          >
+            {editing.compositions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name || c.id}
+              </option>
+            ))}
+          </Select>
+          {badge}
+        </div>
+      ) : (
+        <div className={cx(s.thumbBox, s.itemBox)}>
+          <Textarea
+            className={s.cardText}
+            value={shown(itemLabel(item), editing.textDigits(item.id))}
+            dir={editing.dir}
+            placeholder="Text"
+            aria-label={`Item ${String(number)} text`}
+            title="The text this item shows"
+            onChange={(e) =>
+              onText(typedInto(e.currentTarget, e.nativeEvent, editing.textDigits(item.id)))
+            }
+          />
+          {badge}
+        </div>
+      )}
       <div className={s.cardFoot}>
-        <span className={s.cardName} title={label} data-page-name="">
-          {label}
+        <span className={s.cardName} title={name} data-page-name="">
+          {name}
         </span>
         <Control
           size="sm"
-          aria-label={`Move page ${String(number)} earlier`}
+          aria-label={`Move item ${String(number)} earlier`}
           title="Move earlier"
           disabled={number === 1}
           onClick={() => onStep(-1)}
@@ -306,7 +395,7 @@ function PageCard({
         </Control>
         <Control
           size="sm"
-          aria-label={`Move page ${String(number)} later`}
+          aria-label={`Move item ${String(number)} later`}
           title="Move later"
           disabled={last}
           onClick={() => onStep(1)}
@@ -315,8 +404,8 @@ function PageCard({
         </Control>
         <Control
           size="sm"
-          aria-label={`Remove page ${String(number)}`}
-          title="Remove"
+          aria-label={`Remove item ${String(number)}`}
+          title="Remove from the sequence"
           onClick={onRemove}
         >
           <Icon icon={X} size={14} />

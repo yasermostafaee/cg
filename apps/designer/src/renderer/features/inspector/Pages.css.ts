@@ -122,18 +122,61 @@ export const dropAfter = style({
   selectors: { '&::after': { ...dropBar, right: '-0.4rem' } },
 });
 
-/** The thumbnail is the card's select toggle (a `bare` Control brings no chrome of its own). */
-export const thumbButton = style({
+/** A card's 16:9 box: a picture's thumbnail, or a text / composition item's own editor. */
+export const thumbBox = style({
   position: 'relative',
-  display: 'block',
   width: '100%',
   aspectRatio: '16 / 9',
-  padding: 0,
-  border: 'none',
   borderRadius: '0.25rem',
   overflow: 'hidden',
   background: colors.background,
+});
+
+/** A text or composition item: its editor below the number, filling the box. */
+export const itemBox = style({
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  gap: '0.3rem',
+  padding: '1.6rem 0.3rem 0.3rem',
+  boxSizing: 'border-box',
+});
+
+export const cardText = style({
+  flex: 1,
+  width: '100%',
+  minHeight: 0,
+  resize: 'none',
+  fontSize: '0.72rem',
+  boxSizing: 'border-box',
+});
+
+/** The thumbnail is the picture card's select toggle (a `bare` Control brings no chrome). */
+export const thumbButton = style({
+  display: 'block',
+  width: '100%',
+  height: '100%',
+  padding: 0,
+  border: 'none',
+  background: 'transparent',
   cursor: 'pointer',
+});
+
+/** The number is every card's select toggle too. */
+export const badgeButton = style({
+  border: 'none',
+  cursor: 'pointer',
+});
+
+/** The manager's add row, under its toolbar. */
+export const addBar = style({
+  paddingTop: '0.5rem',
+});
+
+export const addButtons = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '0.3rem',
 });
 
 export const thumbImg = style({

@@ -31,8 +31,9 @@ SHALL be imported through the existing asset import (deduplicated by SHA-256) an
 item, in natural file-name order: digit runs compare as numbers in Latin, Persian and Arabic-Indic
 digits alike (`page2` before `page10`, `صفحه۲` before `صفحه۱۰`). For a sequence holding pictures,
 the Inspector's Items section SHALL be a card — the page count, the first pages as thumbnails,
-`Manage pages…`, `Add pictures…` and `Add folder…` — and SHALL NOT list the pages one row each; the
-pages are seen and arranged in the Pages manager. The first pictures added to a sequence SHALL make it
+`Manage pages…`, and the add row `Add pictures…`, `Add folder…`, `Add text`, `Add composition` — and
+SHALL NOT list the pages one row each; the pages are seen and arranged in the Pages manager. Every
+button SHALL say what it does in its tooltip. The first pictures added to a sequence SHALL make it
 a book: transition Cut (`none`/`none`), `advance: 'manual'`, `repeat: 1`, all of which the author can
 change.
 
@@ -61,11 +62,13 @@ change.
 
 The Pages manager SHALL show every item of the sequence as a numbered card in reading order — a
 picture as a thumbnail scaled down once and kept for the session (never every page decoded at full
-size), with its file name. It SHALL move a page by dragging it (the selected pages move together) and
-by an earlier / later button on each card; remove one page, or a selection made by clicking
-thumbnails (Shift-click selects a run); sort the pictures in natural file-name order, a text or
-composition item keeping its place; add pictures or a folder; and offer the sequence's item editor as
-a List view. Each change SHALL be one edit, applied at once and undoable; Done SHALL only close.
+size) with its file name, a text item as its text box (typed in the sequence's Digits), a composition
+item as its composition picker. It SHALL add pictures, a folder, a text item or a composition item in
+the grid itself; move an item by dragging it (the selected items move together) and by an earlier /
+later button on each card; remove one item, or a selection made by clicking a thumbnail or a card's
+number (Shift-click selects a run); sort the pictures in natural file-name order, a text or
+composition item keeping its place; and offer the sequence's item editor as a List view. Each change
+SHALL be one edit, applied at once and undoable; Done SHALL only close.
 
 #### Scenario: Drag, step, remove a selection, sort
 
@@ -73,6 +76,13 @@ a List view. Each change SHALL be one edit, applied at once and undoable; Done S
   removes them, then sorts by name
 - **THEN** the cards follow each change in that order, the count reads the pages left, and the sort
   restores natural file-name order
+
+#### Scenario: Every kind is added where the author is
+
+- **WHEN** the author adds a text item from the Inspector's card, types its text in the grid, and
+  adds a composition item in the grid
+- **THEN** the sequence holds them in that order, the composition card shows the first composition,
+  the List view shows the same text, and every add button carries a tooltip
 
 ### Requirement: Previous and Go to beside Next
 

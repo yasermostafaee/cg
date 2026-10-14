@@ -105,10 +105,10 @@ interface Props {
  * `TEXT-DIGITS-01` — an item box's text as shown, and as typed: in `digits` (absent: untouched), each
  * entered digit written through the one writer, the caret kept.
  */
-function shown(text: string, digits: FieldDigits | undefined): string {
+export function shown(text: string, digits: FieldDigits | undefined): string {
   return digits === undefined ? text : writeFieldDigits(text, digits);
 }
-function typedInto(
+export function typedInto(
   el: HTMLInputElement | HTMLTextAreaElement,
   event: Event,
   digits: FieldDigits | undefined,
@@ -147,8 +147,11 @@ function withKind(item: ListItem, kind: 'text' | 'composition', firstCompId: str
 }
 
 let seq = 0;
-/** Session-unique id for a NEW item (no secure-context APIs — see memory). */
-function newItemId(): string {
+/**
+ * Session-unique id for a NEW item (no secure-context APIs — see memory). Exported so the Pages
+ * manager's `Add text` / `Add composition` make items exactly as `Add item` does here (`D-163`).
+ */
+export function newItemId(): string {
   seq += 1;
   return `item-${Date.now().toString(36)}-${String(seq)}`;
 }

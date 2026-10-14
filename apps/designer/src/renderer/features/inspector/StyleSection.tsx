@@ -2831,6 +2831,10 @@ function SequenceSections({
           title={element.name || 'Sequence'}
           items={element.items}
           listView={itemsEditor}
+          compositions={compChoicesAll}
+          firstComposition={compChoices[0]?.id}
+          dir={element.direction}
+          textDigits={(itemId) => itemDigits(itemId) ?? typedTextDigits(scene, element)}
         />
         {pageCount === 0 && itemsEditor}
       </CollapseSection>

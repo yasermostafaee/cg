@@ -74,7 +74,7 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
     await expect(names).toHaveText(['p4.png', 'p1.png', 'p2.png', 'p3.png', 'p5.png']);
 
     // One step later, from the card's own button (the keyboard's way).
-    await manager.getByRole('button', { name: 'Move page 1 later', exact: true }).click();
+    await manager.getByRole('button', { name: 'Move item 1 later', exact: true }).click();
     await expect(names).toHaveText(['p1.png', 'p4.png', 'p2.png', 'p3.png', 'p5.png']);
 
     // Select two pages and remove them together.
@@ -150,6 +150,61 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
         groupBox!.x + groupBox!.width + 0.5,
       );
     }
+  });
+
+  test('🔴 the grid and the Inspector add every kind — pictures, text, a composition — and say what each does', async ({
+    app,
+  }) => {
+    // The owner's report: only the List view could add a text or composition item, the
+    // Inspector card only pictures, and the buttons had no tooltips.
+    await app.newProject('BookKinds');
+    await app.newComposition('Logo');
+    await app.openComposition('comp1');
+    await app.addSequence({ x: 200, y: 200 });
+    const chooser = app.page.waitForEvent('filechooser');
+    await app.inspector.getByRole('button', { name: 'Add pictures…', exact: true }).click();
+    await (
+      await chooser
+    ).setFiles(
+      ['p1.png', 'p2.png'].map((name) => ({ name, mimeType: 'image/png', buffer: png(name) })),
+    );
+    await expect(app.inspector.getByTestId('sequence-page-count')).toHaveText('2 pages');
+
+    // The Inspector's card adds a text item too: a book has no item list there.
+    await app.inspector.getByRole('button', { name: 'Add text', exact: true }).click();
+    const manage = app.inspector.getByRole('button', { name: 'Manage pages…', exact: true });
+    await expect(manage).toHaveAttribute('title', /\S/);
+    await manage.click();
+    const manager = app.page.getByRole('dialog', { name: /^Pages — / });
+    await expect(manager.getByTestId('pages-manager-count')).toHaveText('3 items');
+
+    // In the GRID: the text item is typed where it stands, and a composition item is added.
+    await manager.getByRole('textbox', { name: 'Item 3 text', exact: true }).fill('سرخط خبر');
+    await manager.getByRole('button', { name: 'Add composition', exact: true }).click();
+    await expect(manager.getByTestId('pages-manager-count')).toHaveText('4 items');
+    await expect(
+      manager
+        .getByRole('combobox', { name: 'Item 4 composition', exact: true })
+        .locator('option:checked'),
+    ).toHaveText('Logo');
+
+    // Every control says what it does.
+    for (const name of ['Add pictures…', 'Add folder…', 'Add text', 'Add composition']) {
+      await expect(manager.getByRole('button', { name, exact: true })).toHaveAttribute(
+        'title',
+        /\S/,
+      );
+    }
+    for (const name of ['Sort by name', 'Select all', 'Move item 1 later', 'Remove item 1']) {
+      await expect(manager.getByRole('button', { name, exact: true })).toHaveAttribute(
+        'title',
+        /\S/,
+      );
+    }
+
+    // One sequence, two views: the List view holds the same text.
+    await manager.getByRole('button', { name: 'List view', exact: true }).click();
+    await expect(manager.getByLabel('Sequence item 3', { exact: true })).toHaveValue('سرخط خبر');
   });
 
   test('a FOLDER of pictures is added the same way', async ({ app }) => {
