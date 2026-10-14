@@ -399,7 +399,7 @@ describe('D-163 — the first item enters with the chosen effect, infinite or no
     expect(visible(h.host)).toEqual([ITEMS[1]?.text]); // once, not twice
   });
 
-  it('Hide-show (none) still shows the first item at once', () => {
+  it('Cut (none) still shows the first item at once', () => {
     const h = make({ repeat: 'infinite', transitionIn: 'none', transitionOut: 'none' });
     h.driver.start();
     const first = h.host.querySelector<HTMLElement>('[data-cg-sequence-item]');

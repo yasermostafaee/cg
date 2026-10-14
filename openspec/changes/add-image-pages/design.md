@@ -130,7 +130,7 @@ repair verb never queues). The same burst now answers pages 2 … 11, in order.
 - Memory: nodes exist only for the page on screen and the one coming in; the page keeps the
   addresses of the three most recent pictures.
 
-## 2a. Fade and crossfade (the owner's report: Hide-show jumped)
+## 2a. Fade and crossfade (the owner's report: Hide-show — now "Cut" — jumped)
 
 A sequence edge may be `fade` (schema, additive): no motion, opacity eased over `transitionMs`.
 Fade/fade under `simultaneous` is a DISSOLVE. Two half-faded layers laid one over the other cover
@@ -140,7 +140,7 @@ the dissolve (`mix-blend-mode: plus-lighter` on both items, `isolation: isolate`
 Presets: `Crossfade` (fade/fade simultaneous) and `Fade out, fade in` (fade/fade sequential). The
 Inspector names the preset field `transition` and the time field `transition time` (both were
 "transition"), in SECONDS like the dwell beside it (it was ms), and withholds the time under
-Hide-show, saying why. A new book crossfades.
+Cut (was "Hide-show"), saying why. A new book crossfades.
 
 ## 3. Designer
 

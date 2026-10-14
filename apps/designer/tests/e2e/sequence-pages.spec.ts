@@ -47,10 +47,10 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
         .locator('.cg-unit');
     await expect(unitOf('transition time')).toHaveText('s');
     await expect(unitOf('default dwell')).toHaveText('s');
-    // Hide-show swaps at once: its time is withheld, and says why.
-    await app.inspector.getByLabel('transition', { exact: true }).selectOption('hide-show');
+    // Cut swaps at once: its time is withheld, and says why.
+    await app.inspector.getByLabel('transition', { exact: true }).selectOption('cut');
     await expect(time).toBeDisabled();
-    await expect(time).toHaveAttribute('title', /Hide-show swaps at once/);
+    await expect(time).toHaveAttribute('title', /Cut swaps at once/);
     await app.inspector.getByLabel('transition', { exact: true }).selectOption('crossfade');
     await expect(time).toBeEnabled();
     // The drift crossfade: the current item fades in place, the next fades in with a nudge.

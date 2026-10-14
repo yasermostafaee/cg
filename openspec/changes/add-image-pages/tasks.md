@@ -40,7 +40,7 @@
       and composition cards edited in place (`8dd48f40`).
 - [x] 3.9 Tooltips on every control, drawn above dialogs (`73850bd7`).
 - [x] 3.10 `fade` edge, a true Crossfade dissolve, presets, `transition time` (in seconds) named and withheld under
-      Hide-show; a new book crossfades (`6803bbfe`).
+      Cut (was "Hide-show"); a new book crossfades (`6803bbfe`).
 
 ## 4. CG Control and CG Bridge
 

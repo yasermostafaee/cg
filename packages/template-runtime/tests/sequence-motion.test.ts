@@ -85,7 +85,7 @@ describe('sequence motion mapper (D-029)', () => {
     expect(sampleTransition(s, 400).done).toBe(true);
   });
 
-  it('IN none + OUT none = the hide-show hard swap (zero total)', () => {
+  it('IN none + OUT none = the Cut hard swap (zero total)', () => {
     const s = spec({ inEdge: 'none', outEdge: 'none' });
     expect(transitionTotalMs(s)).toBe(0);
     const frame = sampleTransition(s, 0);

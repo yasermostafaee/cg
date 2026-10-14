@@ -741,7 +741,7 @@ between items is a DECOMPOSED, fully authorable transition: an IN edge
 (`top|bottom|left|right|none`), an OUT edge (same set), and a timing
 (`simultaneous` push vs `sequential` out-then-in), each motion over
 `transitionMs` — with named presets over those fields (Push up/down/left/
-right, Slide up/down/left/right, Hide-show, else Custom), and the
+right, Slide up/down/left/right, Cut — was "Hide-show", `B-105` — else Custom), and the
 decomposition itself as the extensible seam for future styles (e.g. fade).
 Items are authored on the element (`{ id, text, dwellMs? }`) and can be
 driven dynamically through the D-028 `list` field (reconciled by stable id).
@@ -773,9 +773,9 @@ the per-scope dispatch seam the future steps model (D-031) plugs into.
   `'simultaneous'` moves both together (push), `'sequential'` completes the
   exit before the entry begins — each motion lasting `transitionMs`, clipped
   to the box; an edge of `'none'` makes that side an instant cut (IN `none`
-  - OUT `none` = the hide-show hard swap)
+  - OUT `none` = the Cut hard swap)
 - WHEN the operator picks a transition preset THEN the three fields are set
-  accordingly (Push × 4 = simultaneous, Slide × 4 = sequential, Hide-show =
+  accordingly (Push × 4 = simultaneous, Slide × 4 = sequential, Cut =
   none/none) and editing any field afterwards shows **Custom** — every
   IN × OUT × timing combination is authorable
 - WHEN `direction` is `'rtl'` THEN items render with per-item bidi

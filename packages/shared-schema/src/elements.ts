@@ -707,7 +707,7 @@ export const SequenceEdgeSchema = z.enum([
  * command (`CG NEXT` / `runtime.next()`). The move between items is a
  * DECOMPOSED transition: an IN edge, an OUT edge, and a timing
  * (`simultaneous` push vs `sequential` out-then-in), each motion over
- * `transitionMs` — named presets (Push/Slide/Crossfade/Hide-show) are just values over
+ * `transitionMs` — named presets (Push/Slide/Crossfade/Cut) are just values over
  * these fields, and the decomposition is the extensible seam for future
  * styles. `repeat` counts full passes; a FINITE sequence is a content
  * source: advancing past the last item of pass N signals completion to the

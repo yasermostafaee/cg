@@ -72,7 +72,7 @@ in` (fade/fade sequential), and the drift crossfades — in from right, from lef
 from above (the current item fades where it is; the next fades in with the drift), name the
 preset field `transition` and the time field `transition time` (in seconds, as the dwell is), and
 withhold that time — shown, disabled,
-saying why — when Hide-show leaves nothing to time.
+saying why — when Cut leaves nothing to time.
 
 #### Scenario: A crossfade never dims the page
 
@@ -88,14 +88,14 @@ saying why — when Hide-show leaves nothing to time.
 
 #### Scenario: Every sequence's first item enters with its effect
 
-- **WHEN** a sequence — infinite or counted — starts with a transition other than Hide-show
+- **WHEN** a sequence — infinite or counted — starts with a transition other than Cut
 - **THEN** its first item enters with that transition, and a NEXT pressed during that entrance is
   applied as it ends, once
 
-#### Scenario: Hide-show has no transition time to set
+#### Scenario: Cut has no transition time to set
 
-- **WHEN** the author picks Hide-show
-- **THEN** the `transition time` field is disabled and its tooltip says Hide-show swaps at once
+- **WHEN** the author picks Cut
+- **THEN** the `transition time` field is disabled and its tooltip says Cut swaps at once
 
 ### Requirement: The author decides whether the operator steps a sequence
 

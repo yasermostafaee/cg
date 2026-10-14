@@ -6,7 +6,7 @@ import {
 } from '../src/renderer/features/inspector/sequence-presets.js';
 
 describe('sequence transition presets (D-029)', () => {
-  it('Push ×4 are simultaneous with opposite edges; Slide ×4 sequential; Hide-show none/none', () => {
+  it('Push ×4 are simultaneous with opposite edges; Slide ×4 sequential; Cut none/none', () => {
     expect(SEQUENCE_TRANSITION_PRESETS['push-up']).toEqual({
       transitionIn: 'bottom',
       transitionOut: 'top',
@@ -17,7 +17,7 @@ describe('sequence transition presets (D-029)', () => {
       transitionOut: 'left',
       transitionTiming: 'sequential',
     });
-    expect(SEQUENCE_TRANSITION_PRESETS['hide-show']).toEqual({
+    expect(SEQUENCE_TRANSITION_PRESETS['cut']).toEqual({
       transitionIn: 'none',
       transitionOut: 'none',
       transitionTiming: 'simultaneous',
@@ -51,14 +51,20 @@ describe('sequence transition presets (D-029)', () => {
     ).toBe('slide-up');
   });
 
-  it('hide-show matches on the two none edges regardless of timing', () => {
+  it('🔴 B-105 — the none/none preset is called "Cut"; no label says "Hide-show" again', () => {
+    // Owner decision 2026-10-14 (Q7 a): "Hide-show" promised a motion it never had.
+    expect(SEQUENCE_PRESET_ORDER.find((p) => p.key === 'cut')?.label).toBe('Cut');
+    expect(SEQUENCE_PRESET_ORDER.filter((p) => /hide/i.test(p.label))).toEqual([]);
+  });
+
+  it('cut matches on the two none edges regardless of timing', () => {
     expect(
       sequencePresetKeyFor({
         transitionIn: 'none',
         transitionOut: 'none',
         transitionTiming: 'sequential',
       }),
-    ).toBe('hide-show');
+    ).toBe('cut');
   });
 
   it('🔴 D-163 — Crossfade dissolves (fade/fade together); Fade out, fade in goes one then the other', () => {

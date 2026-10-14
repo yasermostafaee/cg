@@ -2730,8 +2730,8 @@ function SequenceSections({
         />
         {/* `D-163` — HOW LONG the transition the select above names takes (it was a second field
             called "transition", then "duration", which did not say whose). In SECONDS like the dwell
-            below — the owner: one in ms and one in s was wrong; the stored value stays ms. Hide-show
-            moves and fades nothing, so it has no time to set: the field stays, withheld, and says
+            below — the owner: one in ms and one in s was wrong; the stored value stays ms. Cut moves
+            and fades nothing, so it has no time to set: the field stays, withheld, and says
             why. */}
         <NumberField
           label="transition time"
@@ -2741,7 +2741,7 @@ function SequenceSections({
           suffix="s"
           withheld={
             element.transitionIn === 'none' && element.transitionOut === 'none'
-              ? 'Hide-show swaps at once, so it has no transition time. A crossfade, fade, push or slide takes this time.'
+              ? 'Cut swaps at once, so it has no transition time. A crossfade, fade, push or slide takes this time.'
               : undefined
           }
           onCommit={(secs) =>

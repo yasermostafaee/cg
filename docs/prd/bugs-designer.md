@@ -1341,9 +1341,10 @@ the repro is the truth, the suspicion is not.
 both `.vcg` and single-file output, PLUS the preview/hardware parity scenario (the render path,
 not just collection).
 
-## [ ] B-103 — first sequence item enters WITHOUT its transition when `repeat: 'infinite'` ⟨priority: medium⟩
+## [~] B-103 — first sequence item enters WITHOUT its transition when `repeat: 'infinite'` ⟨priority: medium⟩ — `openspec/changes/designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q6): **(a)** — a looping sequence's first item slides in, always (no exit).
+— **Closed in code `0ea672fa` (2026-10-14):** every sequence's first item enters with its `transitionIn`; a `next()` during that entrance is kept once. Tests: `sequence-driver.test.ts` › "🔴 an INFINITE sequence fades its first item in…", "🔴 a NEXT pressed during that entrance is kept…". Reaches existing templates on re-import (or with `PAGE-REBUILD-01`).
 
 **Repro:**
 
@@ -1414,9 +1415,10 @@ project; same or different browser session; whether the remembered-directory per
 MUST be pinned before a fix is credible. What the report does add is that the loss is reproducible
 on demand for the owner, so those conditions can now actually be captured rather than guessed.
 
-## [ ] B-105 — the sequence "Hide-show" transition produces no perceptible change ⟨priority: medium⟩
+## [~] B-105 — the sequence "Hide-show" transition produces no perceptible change ⟨priority: medium⟩ — `openspec/changes/designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q7): **(a)** — rename "Hide-show" to "Cut" and pin it with a test.
+— **Closed in code (DESIGNER-FIX-02):** the preset reads **Cut** (key `cut`); pinned by `sequence-presets.test.ts` › "🔴 B-105 — the none/none preset is called "Cut"; no label says "Hide-show" again". The smooth alternative the owner asked for separately is `Crossfade` (`D-163`).
 
 **Repro:**
 
