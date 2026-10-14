@@ -2728,23 +2728,25 @@ function SequenceSections({
             designerStore.updateElement(id, { transitionTiming } as Partial<Element>)
           }
         />
-        {/* `D-163` — the DURATION of the transition the select above names (it was a second field
-            called "transition"). Hide-show moves and fades nothing, so it has no duration to set:
-            the field stays, withheld, and says why. */}
+        {/* `D-163` — HOW LONG the transition the select above names takes (it was a second field
+            called "transition", then "duration", which did not say whose). In SECONDS like the dwell
+            below — the owner: one in ms and one in s was wrong; the stored value stays ms. Hide-show
+            moves and fades nothing, so it has no time to set: the field stays, withheld, and says
+            why. */}
         <NumberField
-          label="duration"
-          value={element.transitionMs}
-          step={50}
-          min={50}
-          suffix="ms"
+          label="transition time"
+          value={element.transitionMs / 1000}
+          step={0.05}
+          min={0.05}
+          suffix="s"
           withheld={
             element.transitionIn === 'none' && element.transitionOut === 'none'
-              ? 'Hide-show swaps at once, so it has no duration. A crossfade, fade, push or slide takes this time.'
+              ? 'Hide-show swaps at once, so it has no transition time. A crossfade, fade, push or slide takes this time.'
               : undefined
           }
-          onCommit={(v) =>
+          onCommit={(secs) =>
             designerStore.updateElement(id, {
-              transitionMs: Math.max(50, Math.round(v)),
+              transitionMs: Math.max(50, Math.round(secs * 1000)),
             } as Partial<Element>)
           }
         />

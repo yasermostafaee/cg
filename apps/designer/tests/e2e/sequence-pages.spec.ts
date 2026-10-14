@@ -34,16 +34,25 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
     await expect(app.inspector.getByLabel('transition', { exact: true })).toHaveValue('crossfade');
     await expect(app.inspector.getByLabel('in', { exact: true })).toHaveValue('fade');
     await expect(app.inspector.getByLabel('out', { exact: true })).toHaveValue('fade');
-    // ONE field is "transition" (which one) and one is "duration" (how long) — not two "transition"s.
+    // ONE field is "transition" (which one) and one is "transition time" (how long) — and the time is
+    // in SECONDS, the dwell's unit (the owner: one in ms beside one in s was wrong).
     await expect(app.inspector.getByLabel('transition', { exact: true })).toHaveCount(1);
-    const duration = app.inspector.getByLabel('duration', { exact: true });
-    await expect(duration).toBeEnabled();
-    // Hide-show swaps at once: its duration is withheld, and says why.
+    const time = app.inspector.getByLabel('transition time', { exact: true });
+    await expect(time).toBeEnabled();
+    await expect(time).toHaveValue('0.4');
+    const unitOf = (label: string) =>
+      app.inspector
+        // `has:` is resolved INSIDE each candidate field, so it is rooted at the page, not the Inspector.
+        .locator('.cg-field', { has: app.page.getByLabel(label, { exact: true }) })
+        .locator('.cg-unit');
+    await expect(unitOf('transition time')).toHaveText('s');
+    await expect(unitOf('default dwell')).toHaveText('s');
+    // Hide-show swaps at once: its time is withheld, and says why.
     await app.inspector.getByLabel('transition', { exact: true }).selectOption('hide-show');
-    await expect(duration).toBeDisabled();
-    await expect(duration).toHaveAttribute('title', /Hide-show swaps at once/);
+    await expect(time).toBeDisabled();
+    await expect(time).toHaveAttribute('title', /Hide-show swaps at once/);
     await app.inspector.getByLabel('transition', { exact: true }).selectOption('crossfade');
-    await expect(duration).toBeEnabled();
+    await expect(time).toBeEnabled();
     // The drift crossfade: the current item fades in place, the next fades in with a nudge.
     await app.inspector
       .getByLabel('transition', { exact: true })

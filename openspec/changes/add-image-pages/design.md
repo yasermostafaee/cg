@@ -138,8 +138,9 @@ only 75 % mid-way — an opaque page visibly darkens on air — so the driver AD
 the dissolve (`mix-blend-mode: plus-lighter` on both items, `isolation: isolate` on the box): old ×
 (1 − t) + new × t, exact for a page and for text. The styling is cleared when the item rests.
 Presets: `Crossfade` (fade/fade simultaneous) and `Fade out, fade in` (fade/fade sequential). The
-Inspector names the preset field `transition` and the time field `duration` (both were
-"transition"), and withholds `duration` under Hide-show, saying why. A new book crossfades.
+Inspector names the preset field `transition` and the time field `transition time` (both were
+"transition"), in SECONDS like the dwell beside it (it was ms), and withholds the time under
+Hide-show, saying why. A new book crossfades.
 
 ## 3. Designer
 

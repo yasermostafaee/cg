@@ -70,7 +70,8 @@ along that axis, at least 6 and at most 40 px, never from off-screen — and cou
 dissolve. The Inspector SHALL offer the presets `Crossfade` (fade/fade simultaneous), `Fade out, fade
 in` (fade/fade sequential), and the drift crossfades — in from right, from left, up from below, down
 from above (the current item fades where it is; the next fades in with the drift), name the
-preset field `transition` and the time field `duration`, and withhold `duration` — shown, disabled,
+preset field `transition` and the time field `transition time` (in seconds, as the dwell is), and
+withhold that time — shown, disabled,
 saying why — when Hide-show leaves nothing to time.
 
 #### Scenario: A crossfade never dims the page
@@ -91,10 +92,10 @@ saying why — when Hide-show leaves nothing to time.
 - **THEN** its first item enters with that transition, and a NEXT pressed during that entrance is
   applied as it ends, once
 
-#### Scenario: Hide-show has no duration to set
+#### Scenario: Hide-show has no transition time to set
 
 - **WHEN** the author picks Hide-show
-- **THEN** the `duration` field is disabled and its tooltip says Hide-show swaps at once
+- **THEN** the `transition time` field is disabled and its tooltip says Hide-show swaps at once
 
 ### Requirement: The author decides whether the operator steps a sequence
 

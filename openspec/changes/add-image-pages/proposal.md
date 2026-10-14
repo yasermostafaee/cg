@@ -35,7 +35,8 @@ the template's defaults.
   Preview transport gains Previous.
 - **Fade (schema, runtime, Designer).** A sequence edge may be `fade`; fade/fade together is a true
   dissolve (the two items added, never dimmed mid-way) — presets `Crossfade` and `Fade out, fade in`.
-  The preset field is `transition` and the time field `duration`, withheld under Hide-show.
+  The preset field is `transition` and the time field `transition time`, in seconds like the dwell,
+  withheld under Hide-show.
 - **CG Control and CG Bridge.** On a row whose template has a page list, the operator picks pictures
   or a folder. Each picture travels to CG Bridge on the existing authenticated socket and is stored
   under the bridge's state home, beside the template store, by content hash. The Inspector reads
