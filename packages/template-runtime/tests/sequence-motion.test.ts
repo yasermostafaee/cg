@@ -174,6 +174,20 @@ describe('D-163 — the fade edge', () => {
     expect([end.in.offset, end.in.opacity, end.done]).toEqual([{ x: 0, y: 0 }, 1, true]);
   });
 
+  it('🔴 the drift goes up and down too — along the HEIGHT, by the same nudge rule', () => {
+    // BOX is 720 × 72: 3 % of 72 is ~2 px, so the 6 px floor holds; a 1080-high book drifts 32 px.
+    expect(driftOf(BOX, 'y')).toBe(6);
+    expect(driftOf({ width: 1920, height: 1080 }, 'y')).toBe(32);
+    expect(edgeOffset('fade-bottom', BOX)).toEqual({ x: 0, y: 6 });
+    expect(edgeOffset('fade-top', BOX)).toEqual({ x: 0, y: -6 });
+    const s = spec({ inEdge: 'fade-bottom', outEdge: 'fade', box: { width: 1920, height: 1080 } });
+    const mid = sampleTransition(s, 200);
+    expect(mid.in.offset.y).toBeCloseTo(16, 5); // half-way up from 32 px below
+    expect(mid.in.opacity).toBeCloseTo(0.5, 5);
+    expect(mid.mix).toBe(true);
+    expect(sampleTransition(s, 400).in.offset).toEqual({ x: 0, y: 0 });
+  });
+
   it('a one-sided fade does not mix; a slide never touches opacity', () => {
     const half = sampleTransition(spec({ inEdge: 'fade', outEdge: 'none' }), 200);
     expect([half.out.visible, half.mix]).toEqual([false, false]);

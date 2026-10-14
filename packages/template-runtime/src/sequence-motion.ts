@@ -37,20 +37,24 @@ export type SequenceEdge =
   | 'none'
   | 'fade'
   | 'fade-right'
-  | 'fade-left';
+  | 'fade-left'
+  | 'fade-bottom'
+  | 'fade-top';
 
 /** `D-163` — a side that fades (in place, or with a short drift). */
 export function isFadeEdge(edge: SequenceEdge): boolean {
-  return edge === 'fade' || edge === 'fade-right' || edge === 'fade-left';
+  return edge === 'fade' || edge.startsWith('fade-');
 }
 
 /**
- * `D-163` — how far a `fade-right` / `fade-left` side drifts: a NUDGE, not an entrance — 3 % of the
- * box width, at least 6 px and at most 40 px (40 px across a 1920 px book, ~22 px across a 720 px
- * strap). The item always stays almost where it rests; only a slide comes from off-screen.
+ * `D-163` — how far a drifting fade side moves: a NUDGE, not an entrance — 3 % of the box along its
+ * axis (the width for `fade-right` / `fade-left`, the height for `fade-bottom` / `fade-top`), at
+ * least 6 px and at most 40 px (40 px across a 1920 px book, ~22 px across a 720 px strap, 6 px up a
+ * 72 px one). The item always stays almost where it rests; only a slide comes from off-screen.
  */
-export function driftOf(box: MotionBox): number {
-  return Math.round(Math.max(6, Math.min(40, box.width * 0.03)));
+export function driftOf(box: MotionBox, axis: 'x' | 'y' = 'x'): number {
+  const span = axis === 'x' ? box.width : box.height;
+  return Math.round(Math.max(6, Math.min(40, span * 0.03)));
 }
 export type SequenceTiming = 'simultaneous' | 'sequential';
 
@@ -88,6 +92,10 @@ export function edgeOffset(edge: SequenceEdge, box: MotionBox): MotionVector | n
       return { x: driftOf(box), y: 0 };
     case 'fade-left':
       return { x: -driftOf(box), y: 0 };
+    case 'fade-bottom':
+      return { x: 0, y: driftOf(box, 'y') };
+    case 'fade-top':
+      return { x: 0, y: -driftOf(box, 'y') };
     case 'none':
       return null;
   }

@@ -33,6 +33,17 @@ export const SEQUENCE_TRANSITION_PRESETS: Record<string, SequenceTransitionField
     transitionOut: 'fade',
     transitionTiming: 'simultaneous',
   },
+  // …and up or down (the owner: the sideways drift was an example; a vertical one is needed too).
+  'crossfade-drift-up': {
+    transitionIn: 'fade-bottom',
+    transitionOut: 'fade',
+    transitionTiming: 'simultaneous',
+  },
+  'crossfade-drift-down': {
+    transitionIn: 'fade-top',
+    transitionOut: 'fade',
+    transitionTiming: 'simultaneous',
+  },
   // Push: the incoming item shoves the outgoing one ahead of it.
   'push-up': { transitionIn: 'bottom', transitionOut: 'top', transitionTiming: 'simultaneous' },
   'push-down': { transitionIn: 'top', transitionOut: 'bottom', transitionTiming: 'simultaneous' },
@@ -53,6 +64,8 @@ export const SEQUENCE_PRESET_ORDER: readonly { key: string; label: string }[] = 
   { key: 'fade-through', label: 'Fade out, fade in' },
   { key: 'crossfade-drift-right', label: 'Crossfade, drift in from right' },
   { key: 'crossfade-drift-left', label: 'Crossfade, drift in from left' },
+  { key: 'crossfade-drift-up', label: 'Crossfade, drift up from below' },
+  { key: 'crossfade-drift-down', label: 'Crossfade, drift down from above' },
   { key: 'push-up', label: 'Push up' },
   { key: 'push-down', label: 'Push down' },
   { key: 'push-left', label: 'Push left' },

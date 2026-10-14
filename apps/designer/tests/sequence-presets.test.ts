@@ -86,6 +86,9 @@ describe('sequence transition presets (D-029)', () => {
       transitionOut: 'fade',
       transitionTiming: 'simultaneous',
     });
+    // …and vertically: up from below, down from above.
+    expect(SEQUENCE_TRANSITION_PRESETS['crossfade-drift-up']?.transitionIn).toBe('fade-bottom');
+    expect(SEQUENCE_TRANSITION_PRESETS['crossfade-drift-down']?.transitionIn).toBe('fade-top');
   });
 
   it('the dropdown order covers every preset exactly once, plus custom', () => {
