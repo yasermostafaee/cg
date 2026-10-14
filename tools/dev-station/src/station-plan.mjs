@@ -171,6 +171,8 @@ export function stationPaths(stateDir, platform) {
     fixedLayers: p.join(runtime, 'bridge-fixed-layers.json'),
     reservedLayers: p.join(runtime, 'bridge-reserved-layers.json'),
     templates: p.join(runtime, 'bridge-templates'),
+    // `R-100` — the pictures of operators' books, beside the templates and never inside them.
+    pages: p.join(runtime, 'bridge-pages'),
     sourceCatalog: p.join(runtime, 'bridge-source-catalog.json'),
     sourceAssignments: p.join(runtime, 'bridge-source-assignments.json'),
     // `PLAYOUT-SOURCES-01` — the Playout's last good input list and the media items bound.
@@ -255,6 +257,8 @@ function pathFlags(paths) {
     paths.reservedLayers,
     '--templates-dir',
     paths.templates,
+    '--pages-dir',
+    paths.pages,
     '--source-catalog-path',
     paths.sourceCatalog,
     '--source-assignments-path',

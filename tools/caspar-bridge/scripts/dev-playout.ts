@@ -215,6 +215,9 @@ const bridge = spawn(
     path.join(stateDir, 'bridge-audit.ndjson'),
     '--templates-dir',
     path.join(stateDir, 'bridge-templates'),
+    // `R-100` — the pictures of operators' books, beside the templates.
+    '--pages-dir',
+    path.join(stateDir, 'bridge-pages'),
     // Loopback unless the caller says otherwise. The plant is not reachable by default.
     ...(caller('--caspar-host') ? [] : ['--caspar-host', '127.0.0.1']),
     ...passthrough,
