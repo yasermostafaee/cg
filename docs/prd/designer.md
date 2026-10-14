@@ -5682,9 +5682,11 @@ no change closes at once; Playwright: the leave prompt with unsaved changes and 
 
 **What:** a sequence can hold PICTURE items, one fit for all of them, and `Add pictures…` / `Add folder…` turn
 many files into pages at once, in natural file-name order (`page2` before `page10`; Persian and Arabic-Indic
-digits sort as numbers), deduplicated by SHA-256, with the page count shown. The page gains Previous and Go to page
-beside Next; a book (`repeat: 1`) does not wrap, `'infinite'` wraps both ways; a page is decoded before it
-replaces the old one, so a page turn never shows a blank frame. **Why (the owner, 2026-10-14):** _"Someone reads a
+digits sort as numbers), deduplicated by SHA-256. The Inspector shows a book as a card (count, thumbnails,
+`Manage pages…`); the Pages manager shows and arranges every item. The page gains Previous and Go to page beside
+Next; a book (`repeat: 1`) does not wrap, `'infinite'` wraps both ways; a page is decoded before it replaces the
+old one, so a page turn never shows a blank frame, and a book CROSSFADES between pages (a new `fade` edge; the
+owner found a Cut's jump "not good"). **Why (the owner, 2026-10-14):** _"Someone reads a
 book on air … the operator must be able to move between the pages. Today it can be done with a sequence and one
 composition per page, but with many pages that is very hard. It must be possible to choose all the pictures, or
 their folder, at once."_ **Acceptance:** WHEN twelve files (or a folder) are added THEN twelve picture items in

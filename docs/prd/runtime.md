@@ -4653,12 +4653,15 @@ reads (control: every read happened), none for an unreachable Playout.
 **What:** on a row whose template has a page list, the Inspector offers `Load pictures…` and `Load folder…`;
 the files are sorted naturally, checked against the limits (4 MB and 3840 × 2160 pixels a picture, 500 pages a
 row), sent to CG Bridge on the existing signed-in socket and stored there by content hash beside the template
-store. The row shows `12 / 300` with Previous, Next and a page box. Each press sends ONE `CG UPDATE` carrying
-that one page as a `data:` image (`__cg.page`); a row not on air changes state only. Pages survive a bridge and
-a console restart, leave with their row, and every console on the channel sees the same book. **Why:** the
-owner's book read on air; see [[D-163]]. **Transport, measured (design.md §0.4):** the template server's route set
-is a security boundary (`SECURITY.md`), so pictures cannot be served from it without the owner amending that rule;
-inline they show ~0.1 s after the press, but CasparCG logs each command in full (~1.4 MB per 1 MB page).
+store. The Inspector reads `12 / 300` with Previous, Next and a page box; the row shows `12 / 300`, its NEXT
+turns the page and PREV is in its menu. Each press sends ONE `CG UPDATE` naming that one page by its address on
+the template server (`__cg.page`), and CasparCG fetches it from `GET /page/<sha256>.<ext>`; a row with nothing on
+its layer changes state only; a row's presses apply one at a time. Pages survive a bridge and a console restart,
+leave with their row, and every console on the channel sees the same book. **Why:** the owner's book read on air;
+see [[D-163]]. **Transport, measured (design.md §0.4):** the pictures first rode inside the `CG UPDATE`, and
+CasparCG 2.5.0 kept ~2.6 MB of memory per 1 MB update for the life of the process — overturned for the page route
+the prompt asked for (`SECURITY.md` amended). With it: main process flat over 1,198 turns, 2 ms replies, no blank
+frame.
 **Acceptance:** WHEN a folder of 300 pictures is loaded and applied THEN `300 pages` in natural order; WHEN Next /
 Previous / `۱۲` THEN `2 / 300`, `1 / 300`, `12 / 300`; WHEN a picture is over a limit THEN a refusal naming it;
 WHEN the bridge restarts THEN the row keeps its pages and page; WHEN the row is removed THEN its pictures are
