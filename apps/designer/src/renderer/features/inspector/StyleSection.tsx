@@ -2203,6 +2203,19 @@ function VideoSections({
                 {String(provenance.sourceWidth)}×{String(provenance.sourceHeight)}
               </span>
             </div>
+            {/* `D-164` — made from a numbered image sequence: how many frames, at the given rate. */}
+            {provenance.sequence !== undefined && (
+              <div className={fieldCss.row} data-testid="video-provenance-sequence">
+                <span className={fieldCss.label}>sequence</span>
+                <span
+                  className={fieldCss.readout}
+                  title={`${provenance.sequence.firstFile} … ${provenance.sequence.lastFile}`}
+                >
+                  {String(provenance.sequence.frameCount)} frames ·{' '}
+                  {String(provenance.sequence.fps)} fps
+                </span>
+              </div>
+            )}
             {provenance.sourceFps !== provenance.targetFps && (
               <div className={fieldCss.row}>
                 <span className={fieldCss.label}>conformed</span>

@@ -13,6 +13,9 @@ import {
   sequenceInput,
   sourceByteSize,
   sourceDisplayName,
+  sourceHashInput,
+  sourceSequenceFps,
+  sourceSequenceProvenance,
   sourceWebmName,
   type ImageSequenceSource,
 } from '../src/renderer/features/assets/video-convert-args.js';
@@ -31,6 +34,8 @@ const seq = (fps = 25): ImageSequenceSource => ({
   fps,
   label: 'f_1.png … f_10.png (3 frames)',
   assetName: 'f.webm',
+  firstFile: 'f_1.png',
+  lastFile: 'f_10.png',
 });
 
 describe('D-164 — the image2 input', () => {
@@ -103,6 +108,22 @@ describe('D-164 — a sequence as a source, beside a clip', () => {
     expect(sourceByteSize(seq())).toBe(350);
     expect(sourceWebmName(seq())).toBe('f.webm');
     expect(sourceWebmName(clip)).toBe('intro.webm');
+  });
+
+  it('hashes the frames in order, keys on its rate, and records first / last / count / rate', () => {
+    const clip = frame('intro.avi', 4096);
+    const s = seq(25);
+    expect(sourceHashInput(clip)).toBe(clip);
+    expect(sourceHashInput(s)).toBe(s.frames);
+    expect(sourceSequenceFps(clip)).toBeUndefined();
+    expect(sourceSequenceFps(s)).toBe(25);
+    expect(sourceSequenceProvenance(clip)).toBeUndefined();
+    expect(sourceSequenceProvenance(s)).toEqual({
+      firstFile: 'f_1.png',
+      lastFile: 'f_10.png',
+      frameCount: 3,
+      fps: 25,
+    });
   });
 });
 

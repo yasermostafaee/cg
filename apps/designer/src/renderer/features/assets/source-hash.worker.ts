@@ -7,14 +7,15 @@
  */
 
 import { hashSourceStream } from './source-hash.js';
-import type { SourceHashWorkerOut } from './source-hash.js';
+import type { HashSource, SourceHashWorkerOut } from './source-hash.js';
 
 const post = (msg: SourceHashWorkerOut): void => {
   (self as unknown as { postMessage(m: SourceHashWorkerOut): void }).postMessage(msg);
 };
 
-self.onmessage = (e: MessageEvent<{ file: File }>) => {
-  void hashSourceStream(e.data.file, {
+// `D-164` — a File, or a sequence's ordered frames (an array of Files clones as one message).
+self.onmessage = (e: MessageEvent<{ source: HashSource }>) => {
+  void hashSourceStream(e.data.source, {
     onProgress: (ratio) => post({ kind: 'progress', ratio }),
   }).then(
     (hex) => post({ kind: 'done', hex }),

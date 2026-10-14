@@ -20,7 +20,10 @@ import { acceptAttr, type PickKind } from '../shared/asset-types.js';
  * `cancel` handling dismissal there is nothing left to detect by timing, so the
  * race source is removed entirely: nothing pre-empts `change`.
  */
-export function pickFiles(kind?: PickKind, opts: { folder?: boolean } = {}): Promise<File[]> {
+export function pickFiles(
+  kind?: PickKind,
+  opts: { folder?: boolean; accept?: string } = {},
+): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -35,6 +38,8 @@ export function pickFiles(kind?: PickKind, opts: { folder?: boolean } = {}): Pro
     // `accept` is only a hint — bypassable via "All files". The selection is enforced
     // after the fact against the SAME source of truth (see partitionSupported, B-021).
     if (kind !== undefined) input.accept = acceptAttr(kind);
+    // D-164 — an image sequence's PNG / TGA frames: a hint no kind gives.
+    else if (opts.accept !== undefined) input.accept = opts.accept;
 
     let settled = false;
     function settle(files: File[]): void {

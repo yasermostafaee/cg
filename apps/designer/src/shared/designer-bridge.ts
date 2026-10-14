@@ -193,8 +193,12 @@ export interface DesignerBridge {
      * if cancelled). Split from the old single-shot `import()` so the caller drives
      * picking: it shows a loading tile per file only after a real selection (a cancel
      * returns `[]`), then `store()`s each file independently.
+     *
+     * `accept` (`D-164`) is the picker's hint when no `kind` gives one — an image
+     * sequence's frames are PNG or TGA, which no asset kind names. A hint only: the
+     * caller still validates what comes back.
      */
-    pick(kind?: AssetMeta['kind'], opts?: { folder?: boolean }): Promise<File[]>;
+    pick(kind?: AssetMeta['kind'], opts?: { folder?: boolean; accept?: string }): Promise<File[]>;
     /** D-067 — import one already-picked file (decode / store / dedupe by sha256). */
     store(
       file: File,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   findImageSequences,
   frameSizeFromHeader,
+  framesToConvert,
   missingFrameName,
   sequenceAssetName,
   sequenceLabel,
@@ -147,5 +148,50 @@ describe('D-164 — sizeMismatches', () => {
     const frames = [f('f1.png'), f('f2.png')];
     const { mismatches } = sizeMismatches(frames, [{ width: 64, height: 64 }, null]);
     expect(mismatches.map((m) => m.file.name)).toEqual(['f2.png']);
+  });
+});
+
+describe('D-164 — framesToConvert: one frame per number, a hole HELD', () => {
+  const names = (frames: readonly { name: string }[]): string[] => frames.map((x) => x.name);
+  const only = (files: ReturnType<typeof f>[]) => {
+    const seq = findImageSequences(files).sequences[0];
+    if (seq === undefined) throw new Error('no sequence');
+    return seq;
+  };
+
+  it('🔴 a GAP is filled with the frame before it — every later frame keeps its time', () => {
+    const seq = only([f('f1.png'), f('f2.png'), f('f4.png'), f('f5.png')]);
+    const { frames, held } = framesToConvert(seq);
+    // Control: closing the gap up would give 4 frames and put f4 at slot 3.
+    expect(names(frames)).toEqual(['f1.png', 'f2.png', 'f2.png', 'f4.png', 'f5.png']);
+    expect(held).toBe(1);
+  });
+
+  it('🔴 a frame LEFT OUT (another size, unreadable) is held the same way, never scaled', () => {
+    const files = [f('f1.png'), f('f2.png'), f('f3.png')];
+    const seq = only(files);
+    const odd = seq.frames[1]!.file;
+    const { frames, held } = framesToConvert(seq, new Set([odd]));
+    expect(names(frames)).toEqual(['f1.png', 'f1.png', 'f3.png']);
+    expect(held).toBe(1);
+  });
+
+  it('a hole BEFORE the first usable frame holds that frame', () => {
+    const seq = only([f('f1.png'), f('f2.png'), f('f3.png')]);
+    const { frames } = framesToConvert(seq, new Set([seq.frames[0]!.file]));
+    expect(names(frames)).toEqual(['f2.png', 'f2.png', 'f3.png']);
+  });
+
+  it('no usable frame gives nothing to convert', () => {
+    const seq = only([f('f1.png'), f('f2.png')]);
+    expect(framesToConvert(seq, new Set(seq.frames.map((x) => x.file)))).toEqual({
+      frames: [],
+      held: 0,
+    });
+  });
+
+  it('a whole sequence is passed through untouched', () => {
+    const seq = only([f('f3.png'), f('f1.png'), f('f2.png')]);
+    expect(names(framesToConvert(seq).frames)).toEqual(['f1.png', 'f2.png', 'f3.png']);
   });
 });

@@ -242,7 +242,10 @@ export function buildConvertArgs(opts: {
  */
 export interface ImageSequenceSource {
   readonly kind: 'image-sequence';
-  /** The frames, in the order they are converted. */
+  /**
+   * The frames, in the order they are converted — one per number, a held frame repeated
+   * (`framesToConvert`), so the same File may appear more than once.
+   */
   readonly frames: readonly File[];
   readonly ext: 'png' | 'tga';
   /** The rate the author gave the frames — a sequence has none of its own. */
@@ -251,6 +254,9 @@ export interface ImageSequenceSource {
   readonly label: string;
   /** The converted WebM's name: `frame.webm`. */
   readonly assetName: string;
+  /** The sequence's first and last file names, as picked — for provenance. */
+  readonly firstFile: string;
+  readonly lastFile: string;
 }
 
 /** What the converter takes: a picked clip, or (`D-164`) a numbered image sequence. */
@@ -295,6 +301,26 @@ export function sourceByteSize(source: VideoSource): number {
 /** The stored WebM's file name: a clip's name with `.webm`, a sequence's own. */
 export function sourceWebmName(source: VideoSource): string {
   return isImageSequence(source) ? source.assetName : source.name.replace(/\.[^.]*$/, '') + '.webm';
+}
+/** What `hashSourceFile` reads: the clip, or the sequence's frames in order. */
+export function sourceHashInput(source: VideoSource): File | readonly File[] {
+  return isImageSequence(source) ? source.frames : source;
+}
+/** `D-164` — the dedupe key's rate half: a sequence's given rate; absent for a clip. */
+export function sourceSequenceFps(source: VideoSource): number | undefined {
+  return isImageSequence(source) ? source.fps : undefined;
+}
+/** `D-164` — the provenance record of a sequence; absent for a clip. */
+export function sourceSequenceProvenance(
+  source: VideoSource,
+): NonNullable<VideoProvenance['sequence']> | undefined {
+  if (!isImageSequence(source)) return undefined;
+  return {
+    firstFile: source.firstFile,
+    lastFile: source.lastFile,
+    frameCount: source.frames.length,
+    fps: source.fps,
+  };
 }
 
 /**

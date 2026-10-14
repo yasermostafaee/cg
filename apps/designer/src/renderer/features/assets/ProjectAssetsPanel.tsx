@@ -13,6 +13,9 @@ import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './asset
 import { clearAll as clearAllLottieAssets } from './lottieAssetCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 import { VideoImportModal } from './VideoImportModal.js';
+import { ImageSequenceImportModal } from './ImageSequenceImportModal.js';
+import { findImageSequences, SEQUENCE_ACCEPT } from './image-sequence.js';
+import type { VideoSource } from './video-convert-args.js';
 import { fitVideoElement } from '../../state/element-defaults.js';
 import { guardedAddVideo } from '../addGuard/duration-guard.js';
 import { cx } from '../../cx.js';
@@ -56,8 +59,10 @@ export function ProjectAssetsPanel(): JSX.Element {
     lottieUses: number;
     videoUses: number;
   } | null>(null);
-  // D-128 — a picked video file awaiting the crop/convert modal.
-  const [videoImport, setVideoImport] = useState<File | null>(null);
+  // D-128 — a picked video file (or, D-164, a chosen image sequence) awaiting the crop/convert modal.
+  const [videoImport, setVideoImport] = useState<VideoSource | null>(null);
+  // D-164 — picked files or a folder awaiting the image-sequence step.
+  const [sequenceFiles, setSequenceFiles] = useState<File[] | null>(null);
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
   const [assetView, setAssetView] = useState<'grid' | 'list'>(() =>
     typeof localStorage !== 'undefined' && localStorage.getItem(ASSET_VIEW_KEY) === 'list'
@@ -212,6 +217,26 @@ export function ProjectAssetsPanel(): JSX.Element {
       designerStore.showNotice('Video clips import one at a time — taking the first selection.');
     }
     setVideoImport(first);
+  }
+
+  /**
+   * 🔴 D-164 — a numbered IMAGE SEQUENCE becomes ONE video asset and ONE video element: pick many
+   * frames or a folder → the sequence step (`ImageSequenceImportModal`: which sequence, every gap
+   * and odd frame named, the rate) → the SAME crop/convert modal a clip uses. A pick holding no
+   * numbered PNG / TGA frame says so and opens nothing.
+   */
+  async function importSequence(folder: boolean): Promise<void> {
+    setAddMenu(null);
+    const files = await window.cg.assets.pick(
+      undefined,
+      folder ? { folder: true } : { accept: SEQUENCE_ACCEPT },
+    );
+    if (files.length === 0) return; // cancelled
+    if (findImageSequences(files).sequences.length === 0) {
+      designerStore.showNotice('No numbered PNG or TGA frames in the selection.');
+      return;
+    }
+    setSequenceFiles(files);
   }
 
   /**
@@ -382,7 +407,33 @@ export function ProjectAssetsPanel(): JSX.Element {
           >
             Video…
           </Button>
+          <Button
+            variant="bare"
+            role="menuitem"
+            className={s.menuItem}
+            onClick={() => void importSequence(false)}
+          >
+            Image sequence…
+          </Button>
+          <Button
+            variant="bare"
+            role="menuitem"
+            className={s.menuItem}
+            onClick={() => void importSequence(true)}
+          >
+            Image sequence folder…
+          </Button>
         </div>
+      )}
+      {sequenceFiles !== null && (
+        <ImageSequenceImportModal
+          files={sequenceFiles}
+          onClose={() => setSequenceFiles(null)}
+          onContinue={(source) => {
+            setSequenceFiles(null);
+            setVideoImport(source);
+          }}
+        />
       )}
       {videoImport !== null && (
         <VideoImportModal

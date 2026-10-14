@@ -17,9 +17,17 @@
  *
  * Bounded memory as before: the file streams one chunk at a time into the
  * incremental sha256 — a multi-GB source never lands in memory whole.
+ *
+ * `D-164` — an IMAGE SEQUENCE hashes as its frames IN ORDER, each preceded by its
+ * byte length (8 bytes, big-endian), so moving a byte across a frame boundary is a
+ * different key. One file hashes exactly as it always did: a clip's digest already
+ * stored in provenance must keep matching.
  */
 
 import { sha256HexOfChunks } from '@cg/vcg-format';
+
+/** What is hashed: one picked file, or (`D-164`) the ordered frames of a sequence. */
+export type HashSource = Blob | readonly Blob[];
 
 /**
  * The PURE streaming hash — chunked read → incremental sha256. Runs inside the
@@ -27,24 +35,29 @@ import { sha256HexOfChunks } from '@cg/vcg-format';
  * shell is environment-bound while this logic is not.
  */
 export async function hashSourceStream(
-  file: File,
+  source: HashSource,
   opts: {
     signal?: AbortSignal | undefined;
     onProgress?: ((ratio: number) => void) | undefined;
   } = {},
 ): Promise<string> {
   const { signal, onProgress } = opts;
-  const total = file.size;
-  const reader = file.stream().getReader();
+  const parts = Array.isArray(source) ? (source as readonly Blob[]) : null;
+  const total = parts === null ? (source as Blob).size : parts.reduce((n, b) => n + b.size, 0);
 
-  async function* chunks(): AsyncGenerator<Uint8Array> {
+  function throwIfAborted(): void {
+    if (signal?.aborted === true) {
+      throw signal.reason instanceof Error
+        ? signal.reason
+        : new DOMException('The operation was aborted.', 'AbortError');
+    }
+  }
+
+  async function* blobChunks(blob: Blob): AsyncGenerator<Uint8Array> {
+    const reader = blob.stream().getReader();
     try {
       for (;;) {
-        if (signal?.aborted === true) {
-          throw signal.reason instanceof Error
-            ? signal.reason
-            : new DOMException('The operation was aborted.', 'AbortError');
-        }
+        throwIfAborted();
         const { done, value } = await reader.read();
         if (done) break;
         yield value;
@@ -61,6 +74,20 @@ export async function hashSourceStream(
     }
   }
 
+  async function* chunks(): AsyncGenerator<Uint8Array> {
+    if (parts === null) {
+      yield* blobChunks(source as Blob);
+      return;
+    }
+    for (const part of parts) {
+      throwIfAborted();
+      const length = new Uint8Array(8);
+      new DataView(length.buffer).setBigUint64(0, BigInt(part.size));
+      yield length;
+      yield* blobChunks(part);
+    }
+  }
+
   return sha256HexOfChunks(chunks(), (bytesHashed) => {
     onProgress?.(total > 0 ? Math.min(1, bytesHashed / total) : 1);
   });
@@ -73,12 +100,12 @@ export type SourceHashWorkerOut =
   | { kind: 'error'; message: string };
 
 /**
- * Hash `file` in a dedicated Worker. Same contract as the old main-thread
+ * Hash `source` in a dedicated Worker. Same contract as the old main-thread
  * implementation: resolves the hex digest, reports 0..1 progress, rejects
  * promptly on abort (the worker is terminated — nothing keeps grinding).
  */
 export function hashSourceFile(
-  file: File,
+  source: HashSource,
   opts: {
     signal?: AbortSignal | undefined;
     onProgress?: ((ratio: number) => void) | undefined;
@@ -122,6 +149,6 @@ export function hashSourceFile(
     worker.onerror = (e) => {
       finish(() => reject(new Error(e.message !== '' ? e.message : 'source-hash worker failed')));
     };
-    worker.postMessage({ file });
+    worker.postMessage({ source });
   });
 }

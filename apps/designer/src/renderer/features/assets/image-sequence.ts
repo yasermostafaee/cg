@@ -154,6 +154,40 @@ export function findImageSequences<F extends PickedFile>(
   return { sequences, ignored };
 }
 
+/**
+ * The frames the converter takes: ONE PER NUMBER from the first to the last, so every frame keeps
+ * its own time (`number / rate`). A missing number, and a frame left out (another size, an
+ * unreadable header), is HELD — the frame before it shows again — never closed up, which would pull
+ * every later frame earlier, and never scaled, which would distort it. Before the first usable
+ * frame, that frame is held. `held` counts the slots filled that way; `frames` is empty when no
+ * frame is usable.
+ */
+export function framesToConvert<F extends PickedFile>(
+  seq: FoundSequence<F>,
+  leftOut: ReadonlySet<F> = new Set<F>(),
+): { frames: F[]; held: number } {
+  const usable = seq.frames.filter((f) => !leftOut.has(f.file));
+  const first = usable[0];
+  const lo = seq.frames[0]?.number;
+  const hi = seq.frames[seq.frames.length - 1]?.number;
+  if (first === undefined || lo === undefined || hi === undefined) return { frames: [], held: 0 };
+  const byNumber = new Map(usable.map((f) => [f.number, f.file]));
+  const frames: F[] = [];
+  let held = 0;
+  let previous = first.file;
+  for (let n = lo; n <= hi; n++) {
+    const file = byNumber.get(n);
+    if (file === undefined) {
+      frames.push(previous);
+      held++;
+    } else {
+      previous = file;
+      frames.push(file);
+    }
+  }
+  return { frames, held };
+}
+
 /** A frame whose pixel size differs from the size most of the sequence has. */
 export interface SizeMismatch<F extends PickedFile> {
   readonly file: F;

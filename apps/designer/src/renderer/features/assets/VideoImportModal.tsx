@@ -29,10 +29,18 @@ import {
   clampCrop,
   findDuplicateVideoAsset,
   fpsConformNotice,
+  isImageSequence,
   matchesConversionParams,
   posterTimeMs,
+  sourceByteSize,
+  sourceDisplayName,
+  sourceHashInput,
+  sourceSequenceFps,
+  sourceSequenceProvenance,
+  sourceWebmName,
   type CropRect,
   type SourceProbe,
+  type VideoSource,
 } from './video-convert-args.js';
 import { hashSourceFile } from './source-hash.js';
 import { probeStoredVideo, verifyStoredPoster } from './video-asset-probe.js';
@@ -96,12 +104,21 @@ export interface VideoImportResult {
 }
 
 export function VideoImportModal(props: {
-  file: File;
+  /** The picked clip, or (`D-164`) a numbered image sequence the author has already chosen. */
+  file: VideoSource;
   onClose: () => void;
   onDone: (result: VideoImportResult) => void;
 }): JSX.Element {
   const projectFps = useDesignerSelector((st) => st.scene?.frameRate) ?? 50;
+  // `D-164` — everything the modal reads about its source goes through these, so a sequence
+  // and a clip share one path: the name, the size the dedupe pre-filter compares, the rate
+  // the dedupe key carries, and the frame count its progress counts in.
+  const sequence = isImageSequence(props.file) ? props.file : null;
+  const sourceName = sourceDisplayName(props.file);
+  const sequenceFps = sourceSequenceFps(props.file);
   const [phase, setPhase] = useState<Phase>({ kind: 'probing' });
+  // `D-164` — frames encoded so far (ffmpeg's own count), for a sequence's progress in frames.
+  const [encodedFrames, setEncodedFrames] = useState(0);
   const [probe, setProbe] = useState<SourceProbe | null>(null);
   // D-128 — the SOURCE's alpha profile (sampled after the probe, non-blocking). A source
   // whose alpha is (near) zero everywhere decodes fine, converts fine, stores fine — and
@@ -221,6 +238,7 @@ export function VideoImportModal(props: {
           crop: effectiveCrop,
           premultipliedAlpha,
           alphaBleed,
+          sequenceFps,
         })
       : null;
   useEffect(() => {
@@ -310,8 +328,9 @@ export function VideoImportModal(props: {
     cancelled.current = false;
     setSupersededRun(false); // a conversion matching the shown settings is starting
     const list = await window.cg.assets.list();
+    const sourceBytes = sourceByteSize(props.file);
     const sizeMatches = list.filter(
-      (a) => a.kind === 'video' && a.provenance?.sourceBytes === props.file.size,
+      (a) => a.kind === 'video' && a.provenance?.sourceBytes === sourceBytes,
     );
     // STRICT pre-filter (2026-07-25, the main-thread-freeze fix): the up-front
     // hash exists ONLY to offer "you already imported this", and every OTHER
@@ -330,6 +349,7 @@ export function VideoImportModal(props: {
           crop: effectiveCrop,
           premultipliedAlpha,
           alphaBleed,
+          sequenceFps,
         }),
     );
     if (!duplicatePossible) {
@@ -343,7 +363,7 @@ export function VideoImportModal(props: {
     setPhase({ kind: 'checking', progress: 0 });
     let sourceSha256: string;
     try {
-      sourceSha256 = await hashSourceFile(props.file, {
+      sourceSha256 = await hashSourceFile(sourceHashInput(props.file), {
         signal: controller.signal,
         onProgress: (ratio) =>
           setPhase({ kind: 'checking', progress: Math.max(0, Math.min(1, ratio)) }),
@@ -365,6 +385,7 @@ export function VideoImportModal(props: {
       crop: effectiveCrop,
       premultipliedAlpha,
       alphaBleed,
+      sequenceFps,
     });
     if (existing !== null) {
       // The specific matching asset is recomputed LIVE in render (Bug 4) — carry
@@ -383,6 +404,7 @@ export function VideoImportModal(props: {
     if (conv === null || probe === null) return;
     cancelled.current = false;
     setSupersededRun(false); // this run WILL match the shown settings
+    setEncodedFrames(0);
     setPhase({ kind: 'converting', progress: 0 });
     // Bug 3 — the source hash goes into provenance for FUTURE dedupe, but the
     // operator must never WAIT on it. When we didn't hash up front (no size
@@ -393,7 +415,9 @@ export function VideoImportModal(props: {
     const hashPromise: Promise<string | undefined> =
       precomputedHash !== undefined
         ? Promise.resolve(precomputedHash)
-        : hashSourceFile(props.file, { signal: hashCtrl.signal }).catch(() => undefined);
+        : hashSourceFile(sourceHashInput(props.file), { signal: hashCtrl.signal }).catch(
+            () => undefined,
+          );
     // D-128 FAST PATH — per-stage wall times, summarized in ONE console.warn at
     // the end so the owner can see where an import's seconds actually go (the
     // reading that exposed the unconditional bleed in the first place).
@@ -415,6 +439,7 @@ export function VideoImportModal(props: {
         alphaBleed,
         onProgress: (ratio) =>
           setPhase({ kind: 'converting', progress: Math.max(0, Math.min(1, ratio)) }),
+        ...(sequence !== null ? { onFrame: setEncodedFrames } : {}),
       }),
     );
     if (bytes === null) {
@@ -508,21 +533,22 @@ export function VideoImportModal(props: {
       // (or resolves in a blink for a small clip); undefined only if hashing
       // failed — provenance omits it and the post-convert sha dedupe still holds.
       const sourceSha256 = await hashPromise;
-      const webmName = props.file.name.replace(/\.[^.]*$/, '') + '.webm';
+      const webmName = sourceWebmName(props.file);
       const { asset } = await timed('store', () =>
         window.cg.assets.storeBytes({
           bytes,
           filename: webmName,
           kind: 'video',
           provenance: buildProvenance({
-            sourceFilename: props.file.name,
+            sourceFilename: sourceName,
             probe,
             targetFps: projectFps,
             crop,
             sourceSha256,
-            sourceBytes: props.file.size,
+            sourceBytes: sourceByteSize(props.file),
             premultipliedAlpha,
             alphaBleed,
+            sequence: sourceSequenceProvenance(props.file),
           }),
         }),
       );
@@ -635,6 +661,15 @@ export function VideoImportModal(props: {
   const showDuplicate = phase.kind === 'duplicate' && duplicateMatch !== null;
   const progressPct =
     phase.kind === 'converting' || phase.kind === 'checking' ? Math.round(phase.progress * 100) : 0;
+  // `D-164` — a sequence's progress in ITS frames: ffmpeg counts the frames it ENCODES, at the
+  // project's rate, so the count is carried back to the author's rate before it is shown.
+  const sequenceFramesDone =
+    sequence === null
+      ? 0
+      : Math.min(
+          sequence.frames.length,
+          Math.round((encodedFrames * sequence.fps) / Math.max(1, projectFps)),
+        );
   // The footer is the Modal shell's STICKY region (the body above scrolls). The
   // progress (hashing OR converting) lives HERE, above the action row, so it —
   // and the buttons — stay visible at every modal height even when the
@@ -660,7 +695,9 @@ export function VideoImportModal(props: {
           <div className={s.meta}>
             {checking
               ? `Checking for a previous import… ${String(progressPct)}%`
-              : `Converting… ${String(progressPct)}% (single-threaded — large sources take a while)`}
+              : sequence !== null
+                ? `Converting… frame ${String(sequenceFramesDone)} of ${String(sequence.frames.length)}`
+                : `Converting… ${String(progressPct)}% (single-threaded — large sources take a while)`}
           </div>
         </div>
       )}
@@ -713,7 +750,7 @@ export function VideoImportModal(props: {
 
   return (
     <Modal
-      title="Import video"
+      title={sequence !== null ? 'Import image sequence' : 'Import video'}
       onClose={busy ? cancel : props.onClose}
       footer={footer}
       width="min(560px, 94vw)"
@@ -723,7 +760,7 @@ export function VideoImportModal(props: {
         {phase.kind === 'probing' && (
           <div className={s.meta} role="status">
             <span className={s.spinner} aria-hidden />
-            Probing {props.file.name}…
+            Probing {sourceName}…
           </div>
         )}
 
@@ -731,14 +768,16 @@ export function VideoImportModal(props: {
           <>
             {phase.reason === 'no-stream' ? (
               <Callout variant="danger">
-                {props.file.name} could not be read as a video — ffmpeg found no decodable video
-                stream in it. The log below names the reason (codec / container).
+                {sequence !== null
+                  ? `${sourceName} could not be read as an image sequence — ffmpeg found no decodable frame in it.`
+                  : `${sourceName} could not be read as a video — ffmpeg found no decodable video stream in it.`}{' '}
+                The log below names the reason (codec / container).
               </Callout>
             ) : (
               // OUR worker crashed — the file may be fine; never blame it here.
               <Callout variant="caution">
                 The converter hit an internal error and needs to reload — this does NOT mean{' '}
-                {props.file.name} is unsupported. Close this dialog and try the import again.
+                {sourceName} is unsupported. Close this dialog and try the import again.
               </Callout>
             )}
             {phase.logTail.length > 0 && (
@@ -752,7 +791,7 @@ export function VideoImportModal(props: {
         {probe !== null && phase.kind !== 'probing' && phase.kind !== 'probe-failed' && (
           <>
             <div className={s.meta} data-testid="video-probe-meta">
-              {props.file.name} — {probe.width}×{probe.height}
+              {sourceName} — {probe.width}×{probe.height}
               {probe.fps > 0 ? `, ${String(probe.fps)} fps` : ''} ·{' '}
               {(probe.durationMs / 1000).toFixed(2)} s → VP8+alpha WebM at {String(projectFps)} fps
             </div>
@@ -773,9 +812,9 @@ export function VideoImportModal(props: {
 
             {showDuplicate && duplicateMatch !== null && (
               <Callout variant="caution">
-                “{duplicateMatch.provenance?.sourceFilename ?? props.file.name}” was already
-                imported with these settings (same crop and target frame rate). Use the existing
-                clip, or convert a second copy. Changing the crop imports it as a new clip.
+                “{duplicateMatch.provenance?.sourceFilename ?? sourceName}” was already imported
+                with these settings (same crop and target frame rate). Use the existing clip, or
+                convert a second copy. Changing the crop imports it as a new clip.
               </Callout>
             )}
 
@@ -784,7 +823,7 @@ export function VideoImportModal(props: {
                 <img
                   className={s.previewImg}
                   src={posterUrl}
-                  alt={`First frame of ${props.file.name}`}
+                  alt={`First frame of ${sourceName}`}
                   width={Math.round(probe.width * scale)}
                   height={Math.round(probe.height * scale)}
                   draggable={false}
