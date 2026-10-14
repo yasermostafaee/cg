@@ -122,9 +122,12 @@ function ElementInspector({
   return (
     <aside className={s.panel} aria-label="Inspector">
       <ElementNameRow elementId={element.id} name={element.name} />
-      <CollapseSection title="Transform" pinned>
-        <TransformSection element={element} selectedKeyframe={selectedKeyframe} />
-      </CollapseSection>
+      {/* `D-165` — a sound draws nothing: it has no transform to show. */}
+      {element.type !== 'audio' && (
+        <CollapseSection title="Transform" pinned>
+          <TransformSection element={element} selectedKeyframe={selectedKeyframe} />
+        </CollapseSection>
+      )}
       <StyleSection element={element} selectedKeyframe={selectedKeyframe} />
       {(element.type === 'text' ||
         element.type === 'ticker' ||

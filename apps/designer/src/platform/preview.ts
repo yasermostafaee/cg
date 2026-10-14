@@ -254,7 +254,7 @@ export class Preview {
       import '${cgJsLottieUrl}';`
           : ''
       }
-      import { createRuntime, installCasparGlobals } from '${cgJsUrl}';
+      import { createRuntime, installCasparGlobals, setSoundMuted } from '${cgJsUrl}';
       (async () => {
         // D-087 — false in a broadcast (Preview-modal) document: keep the
         // runtime's native cg-pending (blank) state on load and reveal only on
@@ -441,10 +441,16 @@ export class Preview {
           const nodes = document.querySelectorAll('[data-cg-asset-id]');
           nodes.forEach((node) => {
             const tag = node.tagName;
-            if (tag !== 'IMG' && tag !== 'VIDEO') return;
+            // D-165 — and AUDIO: a sound's blob URL, set as an image's is. A sound has no
+            // picture, so an unresolved one is simply left without a src (never the missing picture).
+            if (tag !== 'IMG' && tag !== 'VIDEO' && tag !== 'AUDIO') return;
             const id = node.dataset && node.dataset.cgAssetId;
             if (!id) return;
             const url = assetUrls[id];
+            if (tag === 'AUDIO') {
+              if (url && node.getAttribute('src') !== url) node.src = url;
+              return;
+            }
             if (url) {
               if (tag === 'VIDEO') {
                 // D-128 Phase 5 — the runtime's export-side walk now sets
@@ -1080,6 +1086,10 @@ export class Preview {
                 // D-163 — CasparCG has no PREVIOUS verb, so there is no global to call: the
                 // preview turns back through the runtime it holds (a bridge does it with __cg.page).
                 if (runtime && typeof runtime.previous === 'function') void runtime.previous();
+              } else if (msg.action === 'sound-muted') {
+                // D-165 — the Preview's sound switch: the page's own runtime mutes every sound it
+                // makes (the same switch CG Control's PVW uses). Takes effect on sounds playing now.
+                if (typeof setSoundMuted === 'function') setSoundMuted(msg.muted === true);
               } else if (msg.action === 'pause') {
                 // D-020 — freeze the lifecycle (intro / hold countdown / outro).
                 if (runtime && typeof runtime.pause === 'function') runtime.pause();

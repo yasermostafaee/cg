@@ -44,7 +44,15 @@ export async function prime(asset: AssetMeta): Promise<void> {
   // rides `mergedAssetUrls()` into the canvas iframe (the `<video>` src is wired
   // by preview.ts, exactly like an `<img>`). Lottie stays OUT — it needs parsed
   // JSON (lottieAssetCache), not a blob URL.
-  if (asset.kind !== 'image' && asset.kind !== 'font' && asset.kind !== 'video') return;
+  // `D-165` — and 'audio': a sound's blob URL rides the same map into the preview, where
+  // preview.ts sets `<audio src>` as it sets a video's.
+  if (
+    asset.kind !== 'image' &&
+    asset.kind !== 'font' &&
+    asset.kind !== 'video' &&
+    asset.kind !== 'audio'
+  )
+    return;
   if (urls.has(asset.assetId)) return;
   const url = await window.cg.assets.url(asset.assetId);
   if (url === null) return;

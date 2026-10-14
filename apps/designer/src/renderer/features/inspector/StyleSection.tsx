@@ -41,9 +41,12 @@ import type {
   TextElement,
   TickerElement,
   VideoElement,
+  AudioElement,
   VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import { LiveSourceIdSchema } from '@cg/shared-schema';
+import { AUDIO_VOLUME_DB_MAX, AUDIO_VOLUME_DB_MIN } from '@cg/shared-schema';
+import { formatPeak, formatSeconds } from '../assets/wav-stats.js';
 import {
   ASPECT_CUSTOM,
   ASPECT_PRESETS,
@@ -247,6 +250,8 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
   // props: filters paint pixels and a Live Source paints none on air (in `'author'`
   // mode one would tint only the SMPTE bars, showing an effect that reaches nothing).
   if (element.type === 'video-placeholder') return <LiveSourceSections element={element} />;
+  // `D-165` — a sound: its settings and facts, and NO filter section (it paints nothing).
+  if (element.type === 'audio') return <AudioSections element={element} />;
   // composition / container have no kind-specific style section, but the universal
   // CSS Filter is animatable on every kind — render it so the right inspector's
   // keyframe-able set matches the timeline-left (D-051 parity). Transform comes from
@@ -1999,6 +2004,84 @@ function VideoFollowPanel({
  * keyframe rows come from the shared Transform + Filter sections (field-registry
  * `video: UNIVERSAL_ONLY`). Playback lifecycle is Phase 4.
  */
+/**
+ * 🔴 `D-165` — a SOUND's settings: WHEN it starts (the graphic's entrance, a time after it, or its
+ * exit), its volume in dB and its fades — and its two facts, length and peak, read from the stored
+ * asset. A sound draws nothing, so it has no transform, style or filter section, and nothing here
+ * is keyframed. The peak is shown, never corrected: nothing normalises a sound.
+ */
+function AudioSections({ element }: { element: AudioElement }): JSX.Element {
+  const id = element.id;
+  const info = useAssets().find((a) => a.assetId === element.assetId)?.audio;
+  const start = element.start;
+  const commit = (patch: Partial<AudioElement>): void => {
+    designerStore.updateElement(id, patch as Partial<Element>);
+  };
+  const clampDb = (v: number): number =>
+    Math.min(AUDIO_VOLUME_DB_MAX, Math.max(AUDIO_VOLUME_DB_MIN, Math.round(v * 10) / 10));
+  const ms = (v: number): number => Math.max(0, Math.round(v));
+  return (
+    <CollapseSection title="Sound" defaultExpanded>
+      <div className={fieldCss.row}>
+        <span className={fieldCss.label}>length</span>
+        <span className={fieldCss.readout} data-testid="audio-length">
+          {formatSeconds(element.durationMs)}
+        </span>
+      </div>
+      {info !== undefined && (
+        <div className={fieldCss.row}>
+          <span className={fieldCss.label}>peak</span>
+          <span className={fieldCss.readout} data-testid="audio-peak">
+            {formatPeak(info.peakDbfs)}
+          </span>
+        </div>
+      )}
+      <SelectField
+        label="starts"
+        value={start.at}
+        options={['entrance', 'time', 'exit'] as const}
+        labels={['At the entrance', 'At a time', 'At the exit']}
+        onCommit={(at) =>
+          commit({
+            start: at === 'time' ? { at, ms: start.at === 'time' ? start.ms : 0 } : { at },
+          })
+        }
+      />
+      {start.at === 'time' && (
+        <NumberField
+          label="at (ms)"
+          value={start.ms}
+          step={100}
+          min={0}
+          onCommit={(v) => commit({ start: { at: 'time', ms: ms(v) } })}
+        />
+      )}
+      <NumberField
+        label="volume (dB)"
+        value={element.volumeDb}
+        step={1}
+        min={AUDIO_VOLUME_DB_MIN}
+        max={AUDIO_VOLUME_DB_MAX}
+        onCommit={(v) => commit({ volumeDb: clampDb(v) })}
+      />
+      <NumberField
+        label="fade in (ms)"
+        value={element.fadeInMs ?? 0}
+        step={10}
+        min={0}
+        onCommit={(v) => commit({ fadeInMs: ms(v) })}
+      />
+      <NumberField
+        label="fade out (ms)"
+        value={element.fadeOutMs ?? 0}
+        step={10}
+        min={0}
+        onCommit={(v) => commit({ fadeOutMs: ms(v) })}
+      />
+    </CollapseSection>
+  );
+}
+
 function VideoSections({
   element,
   currentFrame,

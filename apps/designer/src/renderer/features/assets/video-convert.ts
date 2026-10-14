@@ -67,6 +67,7 @@ import {
   type SourceProbe,
   type VideoSource,
 } from './video-convert-args.js';
+import { buildAudioConvertArgs, probedMono } from './audio-convert-args.js';
 
 const MOUNT_DIR = '/mnt';
 
@@ -847,6 +848,48 @@ export async function convertToWebm(opts: {
       // convert still share a single load; the ~150–350 ms reload is paid once
       // per import, invisible next to a multi-second conversion.
       // Caller-scoped: drops only the worker THIS convert used.
+      if (held !== null) dropWorker(held);
+    }
+  });
+}
+
+/**
+ * 🔴 `D-165` — convert a picked SOUND (WAV, MP3, OGG, M4A, …: whatever the core decodes) to the one
+ * stored form, by the SAME worker and the SAME mutex a clip uses: probe it (a MONO sound is copied
+ * into both channels at unity, never through the −3 dB pan law — `audio-convert-args.ts`), then
+ * convert its first audio stream. Measured to play from a template page on CasparCG 2.5.0
+ * (`AUDIO-ELEMENT-01` §0.1). Resolves the bytes, or the ffmpeg log tail when nothing decodable was
+ * found. Every call ends with a fresh worker, as a clip's does.
+ */
+export async function convertAudioToWav(
+  file: File,
+): Promise<{ ok: true; bytes: Uint8Array<ArrayBuffer> } | { ok: false; logTail: string[] }> {
+  return withExclusive(async () => {
+    const output = '/out.wav';
+    const lines: string[] = [];
+    let held: FFmpeg | null = null;
+    try {
+      held = await ensureLoaded();
+      const ff = held;
+      const { inputPath } = await mountSource(ff, file);
+      const probeLines: string[] = [];
+      // A probe exec has no output, so it exits non-zero by design; the LOG is what is read.
+      await withLogCapture(ff, probeLines, () => ff.exec(['-i', inputPath]));
+      const code = await withLogCapture(ff, lines, () =>
+        ff.exec(
+          buildAudioConvertArgs({ inputPath, outputPath: output, mono: probedMono(probeLines) }),
+        ),
+      );
+      if (code !== 0) return { ok: false as const, logTail: lines.slice(-8) };
+      const data = await ff.readFile(output);
+      const raw = typeof data === 'string' ? new TextEncoder().encode(data) : data;
+      const out = new Uint8Array(raw.byteLength);
+      out.set(raw);
+      return { ok: true as const, bytes: out };
+    } catch (err) {
+      console.error('[audio-convert] conversion threw — the underlying error:', err);
+      return { ok: false as const, logTail: [...lines.slice(-6), String(err)] };
+    } finally {
       if (held !== null) dropWorker(held);
     }
   });

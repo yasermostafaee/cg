@@ -30,6 +30,7 @@ import {
   defaultClock,
   defaultEllipse,
   defaultImage,
+  defaultAudio,
   defaultLiveSource,
   defaultLottie,
   fitVideoElement,
@@ -225,6 +226,25 @@ export async function insertLottieFromAsset(
  * 1920-wide clip at 1/4 size. An unreadable asset surfaces a notice and inserts
  * nothing.
  */
+/**
+ * `D-165` — place a SOUND: an `audio` element, starting at the entrance at 0 dB, its length the
+ * asset's own measurement and its name the file's. It draws nothing, so it has no position; it is
+ * selected, so the Inspector shows its start, volume and fades at once.
+ */
+export async function insertAudioFromAsset(assetId: string): Promise<void> {
+  const meta = (await window.cg.assets.list()).find((a) => a.assetId === assetId);
+  const durationMs = meta?.audio?.durationMs;
+  if (meta === undefined || durationMs === undefined || !(durationMs > 0)) {
+    designerStore.showNotice('That sound could not be read.');
+    return;
+  }
+  const id = `el-${String(Date.now())}`;
+  const dot = meta.filename.lastIndexOf('.');
+  const name = dot === -1 ? meta.filename : meta.filename.slice(0, dot);
+  designerStore.addElement(defaultAudio(id, assetId, durationMs, name));
+  designerStore.setSelection([id]);
+}
+
 export async function insertVideoFromAsset(
   assetId: string,
   scenePoint: { x: number; y: number },
@@ -338,7 +358,9 @@ export function CanvasOverlay({
     );
     for (const layer of scene.layers) {
       for (const el of layer.children) {
-        if (!hiddenInstances.has(el.id)) allElements.push(el);
+        // `D-165` — a sound draws nothing, so there is nothing of it on the canvas to hit; it is
+        // selected from the timeline.
+        if (!hiddenInstances.has(el.id) && el.type !== 'audio') allElements.push(el);
       }
     }
   }
@@ -757,6 +779,11 @@ export function CanvasOverlay({
     // D-128 — a dropped video asset places a `video` element (async metadata probe).
     if (e.dataTransfer.getData('application/x-cg-asset-kind') === 'video') {
       void insertVideoFromAsset(assetId, scenePoint, scene.resolution);
+      return;
+    }
+    // `D-165` — a dropped sound places an `audio` element (no box; the drop point is not used).
+    if (e.dataTransfer.getData('application/x-cg-asset-kind') === 'audio') {
+      void insertAudioFromAsset(assetId);
       return;
     }
     const id = `el-${String(Date.now())}`;

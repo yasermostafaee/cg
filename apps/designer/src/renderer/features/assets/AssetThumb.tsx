@@ -4,6 +4,9 @@ import { cx } from '../../cx.js';
 import * as s from './AssetThumb.css.js';
 import { useAssetUrl } from './useAssets.js';
 import { VideoPoster } from './VideoPoster.js';
+import { Volume2 } from 'lucide-react';
+import { Icon } from '../../ui/Icon.js';
+import { formatPeak, formatSeconds } from './wav-stats.js';
 
 interface Props {
   asset: AssetMeta;
@@ -33,10 +36,13 @@ export function AssetThumb({
   const isFont = asset.kind === 'font';
   const isLottie = asset.kind === 'lottie';
   const isVideo = asset.kind === 'video';
+  // `D-165` — a sound: its two facts, length and peak, are what the tile shows.
+  const isAudio = asset.kind === 'audio';
+  const audio = isAudio ? asset.audio : undefined;
   const isList = layout === 'list';
   // D-125 — image AND lottie tiles drag onto the canvas (the canvas drop reads the
   // asset kind from the payload to build the right element). D-128 adds video.
-  const isDraggable = isImage || isLottie || isVideo;
+  const isDraggable = isImage || isLottie || isVideo || isAudio;
   // For fonts we register a CSS font-family scoped by assetId so the
   // sample text in the thumbnail uses the actual face.
   const fontFamily = isFont ? `asset-${asset.assetId}` : undefined;
@@ -99,12 +105,27 @@ export function AssetThumb({
             Abc
           </span>
         )}
-        {!isImage && !isFont && !isVideo && asset.kind.toUpperCase().slice(0, 3)}
+        {isAudio && (
+          <span className={s.audioFacts} data-testid="audio-tile-facts">
+            <Icon icon={Volume2} size={isList ? 12 : 16} />
+            {!isList && audio !== undefined && (
+              <>
+                <span>{formatSeconds(audio.durationMs)}</span>
+                <span>{formatPeak(audio.peakDbfs)}</span>
+              </>
+            )}
+          </span>
+        )}
+        {!isImage && !isFont && !isVideo && !isAudio && asset.kind.toUpperCase().slice(0, 3)}
       </div>
       <span className={isList ? s.captionList : s.caption}>{displayName}</span>
       {isList && (
         <>
-          <span className={s.metaType}>{fileExt(asset.filename) || asset.kind}</span>
+          <span className={s.metaType}>
+            {audio !== undefined
+              ? `${formatSeconds(audio.durationMs)} · ${formatPeak(audio.peakDbfs)}`
+              : fileExt(asset.filename) || asset.kind}
+          </span>
           <span className={s.metaSize}>{formatBytes(asset.byteSize)}</span>
         </>
       )}

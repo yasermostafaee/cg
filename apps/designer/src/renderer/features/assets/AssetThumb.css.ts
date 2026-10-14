@@ -50,6 +50,19 @@ export const thumbList = style({
   borderRadius: '0.25rem',
 });
 
+/** `D-165` — a sound's tile: the speaker, its length and its peak, stacked. */
+export const audioFacts = style({
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '1px',
+  fontSize: '0.55rem',
+  fontWeight: 500,
+  letterSpacing: 0,
+  fontVariantNumeric: 'tabular-nums',
+  lineHeight: 1.1,
+});
+
 export const thumbImg = style({
   width: '100%',
   height: '100%',

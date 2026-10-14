@@ -55,7 +55,8 @@ type Converter = typeof VideoConvertModule;
  * own single-flight worker load (D-128 reentrancy fix).
  */
 let converterModule: Promise<Converter> | null = null;
-function loadConverter(): Promise<Converter> {
+/** Exported for `D-165`: the Assets panel converts sounds through the SAME single-flight load. */
+export function loadConverter(): Promise<Converter> {
   converterModule ??= import('./video-convert.js').catch((err: unknown) => {
     // A failed chunk fetch (e.g. a redeploy swapped the hashed assets) must be
     // RETRYABLE on the next attempt — mirror ensureLoaded's reset-on-failure.

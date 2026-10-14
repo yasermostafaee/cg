@@ -355,6 +355,8 @@ export const elementsSlice = {
         // D-128 — a video element without its clip is unrenderable; remove it
         // exactly like an image (the delete dialog warned about the usage count).
         if (child.type === 'video' && child.assetId === assetId) continue;
+        // `D-165` — and a sound without its WAV plays nothing; it goes with its asset too.
+        if (child.type === 'audio' && child.assetId === assetId) continue;
         if (child.type === 'text' && child.font.family === family) {
           out.push({ ...child, font: { ...child.font, family: 'Inter' } });
           continue;
@@ -372,7 +374,10 @@ export const elementsSlice = {
     const removedImageIds = new Set<string>();
     function collectRemoved(children: readonly Element[]): void {
       for (const child of children) {
-        if ((child.type === 'image' || child.type === 'video') && child.assetId === assetId) {
+        if (
+          (child.type === 'image' || child.type === 'video' || child.type === 'audio') &&
+          child.assetId === assetId
+        ) {
           removedImageIds.add(child.id);
         } else if (child.type === 'container') {
           collectRemoved(child.children);

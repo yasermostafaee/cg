@@ -1,4 +1,14 @@
-import { LogOut, Pause, Play, RotateCcw, SkipBack, SkipForward, Square } from 'lucide-react';
+import {
+  LogOut,
+  Pause,
+  Play,
+  RotateCcw,
+  SkipBack,
+  SkipForward,
+  Square,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import * as s from './PreviewTransport.css.js';
@@ -21,6 +31,9 @@ import * as s from './PreviewTransport.css.js';
  *
  * **Reset** is a PREVIEW-ONLY utility (re-seeds the form to defaults), kept visually
  * distinct from the playout commands.
+ *
+ * `D-165` — **Sound** is the other preview-only utility: shown only when the template makes sound,
+ * ON by default, and it mutes the page's own runtime (the switch CG Control's PVW keeps OFF).
  */
 export function PreviewTransport({
   paused,
@@ -32,6 +45,9 @@ export function PreviewTransport({
   onPrevious,
   onNext,
   onReset,
+  hasSound = false,
+  soundMuted = false,
+  onToggleSound,
 }: {
   paused: boolean;
   canStep: boolean;
@@ -42,6 +58,10 @@ export function PreviewTransport({
   onPrevious: () => void;
   onNext: () => void;
   onReset: () => void;
+  /** `D-165` — the template makes sound: the Sound switch is shown. */
+  hasSound?: boolean;
+  soundMuted?: boolean;
+  onToggleSound?: () => void;
 }): JSX.Element {
   return (
     <div className={s.bar}>
@@ -95,6 +115,18 @@ export function PreviewTransport({
           <Icon icon={RotateCcw} size={14} />
           Reset
         </Button>
+        {hasSound && (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-pressed={!soundMuted}
+            onClick={onToggleSound}
+            data-testid="preview-sound"
+          >
+            <Icon icon={soundMuted ? VolumeX : Volume2} size={14} />
+            {soundMuted ? 'Sound off' : 'Sound on'}
+          </Button>
+        )}
       </div>
     </div>
   );

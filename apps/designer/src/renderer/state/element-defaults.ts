@@ -14,6 +14,7 @@ import type {
   TickerElement,
   Transform,
   VideoElement,
+  AudioElement,
   VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import { pathVisualBBox } from '@cg/shared-schema';
@@ -524,6 +525,32 @@ export function defaultVideo(
     assetId,
     durationMs,
     holdBehavior: 'loop',
+  };
+}
+
+/**
+ * `D-165` — a SOUND: it draws nothing, so its transform is a zero box at the origin, carried only
+ * because every element has one. It starts at the entrance at 0 dB (the asset as imported).
+ */
+export function defaultAudio(
+  id: string,
+  assetId: string,
+  durationMs: number,
+  name = 'Sound',
+): AudioElement {
+  return {
+    id,
+    name,
+    type: 'audio',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    zIndex: 0,
+    transform: baseTransform(0, 0, 0, 0),
+    assetId,
+    durationMs,
+    start: { at: 'entrance' },
+    volumeDb: 0,
   };
 }
 

@@ -12,7 +12,8 @@ import { emitAssetRemoved, useAssets } from './useAssets.js';
 import { clearAll as clearAllAssetUrls, revoke as revokeAssetUrl } from './assetUrlCache.js';
 import { clearAll as clearAllLottieAssets } from './lottieAssetCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
-import { VideoImportModal } from './VideoImportModal.js';
+import { VideoImportModal, loadConverter } from './VideoImportModal.js';
+import { wavStats } from './wav-stats.js';
 import { ImageSequenceImportModal } from './ImageSequenceImportModal.js';
 import { findImageSequences, SEQUENCE_ACCEPT } from './image-sequence.js';
 import type { VideoSource } from './video-convert-args.js';
@@ -58,6 +59,7 @@ export function ProjectAssetsPanel(): JSX.Element {
     imageUses: number;
     lottieUses: number;
     videoUses: number;
+    audioUses: number;
   } | null>(null);
   // D-128 — a picked video file (or, D-164, a chosen image sequence) awaiting the crop/convert modal.
   const [videoImport, setVideoImport] = useState<VideoSource | null>(null);
@@ -220,6 +222,63 @@ export function ProjectAssetsPanel(): JSX.Element {
   }
 
   /**
+   * 🔴 D-165 — SOUNDS import as a batch, like images: each picked file (WAV, MP3, OGG, M4A, …) is
+   * converted by the in-app converter to the ONE stored form — a 48 kHz stereo 16-bit WAV — and
+   * measured from those bytes (length, peak dBFS); a loading tile per file meanwhile. Nothing is
+   * normalised. A file that does not convert is skipped and named in one notice; the others still
+   * import. The sound is placed by dragging its tile onto the canvas.
+   */
+  async function importAudio(): Promise<void> {
+    setAddMenu(null);
+    const files = await window.cg.assets.pick('audio');
+    if (files.length === 0) return; // cancelled
+    const { valid, rejected } = partitionSupported('audio', files);
+    if (rejected.length > 0) {
+      designerStore.showNotice(skippedFilesMessage(rejected.map((file) => file.name)));
+    }
+    if (valid.length === 0) return;
+    const items = valid.map((file) => ({ file, end: begin() }));
+    const failed: string[] = [];
+    let conv: Awaited<ReturnType<typeof loadConverter>>;
+    try {
+      conv = await loadConverter();
+    } catch {
+      for (const { end } of items) end();
+      designerStore.showNotice('The sound converter could not be loaded. Try the import again.');
+      return;
+    }
+    for (const { file, end } of [...items].reverse()) {
+      try {
+        const converted = await conv.convertAudioToWav(file);
+        const stats = converted.ok ? wavStats(converted.bytes) : null;
+        if (!converted.ok || stats === null || !(stats.durationMs > 0)) {
+          failed.push(file.name);
+          continue;
+        }
+        await window.cg.assets.storeBytes({
+          bytes: converted.bytes,
+          filename: `${stripExt(file.name)}.wav`,
+          kind: 'audio',
+          audio: {
+            sourceFilename: file.name,
+            durationMs: stats.durationMs,
+            peakDbfs: stats.peakDbfs,
+            sampleRate: stats.sampleRate,
+            channels: stats.channels,
+          },
+        });
+      } catch {
+        failed.push(file.name);
+      } finally {
+        end();
+      }
+    }
+    if (failed.length > 0) {
+      designerStore.showNotice(`Could not be read as sound: ${failed.join(', ')}`);
+    }
+  }
+
+  /**
    * 🔴 D-164 — a numbered IMAGE SEQUENCE becomes ONE video asset and ONE video element: pick many
    * frames or a folder → the sequence step (`ImageSequenceImportModal`: which sequence, every gap
    * and odd frame named, the rate) → the SAME crop/convert modal a clip uses. A pick holding no
@@ -273,8 +332,11 @@ export function ProjectAssetsPanel(): JSX.Element {
 
   function openDeleteConfirm(asset: AssetMeta): void {
     setCtxMenu(null);
-    const { fontUses, imageUses, lottieUses, videoUses } = countUsages(asset, scene?.layers ?? []);
-    setConfirm({ asset, fontUses, imageUses, lottieUses, videoUses });
+    const { fontUses, imageUses, lottieUses, videoUses, audioUses } = countUsages(
+      asset,
+      scene?.layers ?? [],
+    );
+    setConfirm({ asset, fontUses, imageUses, lottieUses, videoUses, audioUses });
   }
 
   async function runDelete(asset: AssetMeta): Promise<void> {
@@ -423,6 +485,14 @@ export function ProjectAssetsPanel(): JSX.Element {
           >
             Image sequence folder…
           </Button>
+          <Button
+            variant="bare"
+            role="menuitem"
+            className={s.menuItem}
+            onClick={() => void importAudio()}
+          >
+            Audio…
+          </Button>
         </div>
       )}
       {sequenceFiles !== null && (
@@ -469,6 +539,7 @@ export function ProjectAssetsPanel(): JSX.Element {
           imageUses={confirm.imageUses}
           lottieUses={confirm.lottieUses}
           videoUses={confirm.videoUses}
+          audioUses={confirm.audioUses}
           onCancel={() => setConfirm(null)}
           onConfirm={() => void runDelete(confirm.asset)}
         />
@@ -492,11 +563,18 @@ function stripExt(filename: string): string {
 function countUsages(
   asset: AssetMeta,
   layers: readonly { children: readonly Element[] }[],
-): { fontUses: number; imageUses: number; lottieUses: number; videoUses: number } {
+): {
+  fontUses: number;
+  imageUses: number;
+  lottieUses: number;
+  videoUses: number;
+  audioUses: number;
+} {
   let fontUses = 0;
   let imageUses = 0;
   let lottieUses = 0;
   let videoUses = 0;
+  let audioUses = 0;
   const family = `asset-${asset.assetId}`;
 
   function walk(children: readonly Element[]): void {
@@ -505,11 +583,12 @@ function countUsages(
       else if (el.type === 'image' && el.assetId === asset.assetId) imageUses += 1;
       else if (el.type === 'lottie' && el.assetId === asset.assetId) lottieUses += 1;
       else if (el.type === 'video' && el.assetId === asset.assetId) videoUses += 1;
+      else if (el.type === 'audio' && el.assetId === asset.assetId) audioUses += 1;
       else if (el.type === 'container') walk(el.children);
     }
   }
   for (const layer of layers) walk(layer.children);
-  return { fontUses, imageUses, lottieUses, videoUses };
+  return { fontUses, imageUses, lottieUses, videoUses, audioUses };
 }
 
 /**
@@ -561,6 +640,7 @@ function DeleteConfirmDialog({
   imageUses,
   lottieUses,
   videoUses,
+  audioUses,
   onCancel,
   onConfirm,
 }: {
@@ -569,11 +649,12 @@ function DeleteConfirmDialog({
   imageUses: number;
   lottieUses: number;
   videoUses: number;
+  audioUses: number;
   onCancel: () => void;
   onConfirm: () => void;
 }): JSX.Element {
   const displayName = stripExt(asset.filename);
-  const message = buildWarningMessage(asset, fontUses, imageUses, lottieUses, videoUses);
+  const message = buildWarningMessage(asset, fontUses, imageUses, lottieUses, videoUses, audioUses);
   return (
     <Modal
       title={`Delete “${displayName}”?`}
@@ -600,6 +681,7 @@ function buildWarningMessage(
   imageUses: number,
   lottieUses: number,
   videoUses: number,
+  audioUses: number,
 ): string {
   if (asset.kind === 'font') {
     if (fontUses === 0) {
@@ -628,6 +710,13 @@ function buildWarningMessage(
     }
     const noun = videoUses === 1 ? 'video element' : 'video elements';
     return `This clip is used by ${String(videoUses)} ${noun}. Deleting it will remove ${videoUses === 1 ? 'that element' : 'those elements'} from the canvas and the timeline.`;
+  }
+  if (asset.kind === 'audio') {
+    if (audioUses === 0) {
+      return 'This sound is not used anywhere in the scene. It will be removed from the project assets.';
+    }
+    const noun = audioUses === 1 ? 'sound element' : 'sound elements';
+    return `This sound is used by ${String(audioUses)} ${noun}. Deleting it will remove ${audioUses === 1 ? 'that element' : 'those elements'} from the timeline.`;
   }
   return 'This asset will be removed from the project. Any references in the scene will be cleared.';
 }

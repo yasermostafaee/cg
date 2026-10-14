@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  hasSoundEffects,
   aggregateCompositionFields,
   defaultNestedValues,
   hasNextStep,
@@ -340,6 +341,21 @@ export function PreviewModal({
     },
     [applied, values, dispatch],
   );
+  /*
+    `D-165` — the preview's SOUND switch, ON by default (the Designer is where an author listens to
+    the sound they placed). Sent to the page's own runtime, and sent again whenever the page boots,
+    because a rebuilt page starts unmuted.
+  */
+  const hasSound = useMemo(() => hasSoundEffects(scene, scene.compositions), [scene]);
+  const [soundMuted, setSoundMuted] = useState(false);
+  // The page-boot handler reads the switch without re-subscribing on every toggle.
+  const soundMutedRef = useRef(false);
+  const onToggleSound = useCallback(() => {
+    const next = !soundMutedRef.current;
+    soundMutedRef.current = next;
+    setSoundMuted(next);
+    post({ action: 'sound-muted', muted: next });
+  }, [post]);
   const pendingPaths = useMemo(() => dirtyPaths(values, applied), [values, applied]);
   const anyPending = pendingPaths.size > 0;
 
@@ -380,6 +396,8 @@ export function PreviewModal({
       post({ action: 'lottie-assets', lottieAssets: lottieAssetsForScene(scene) });
       post({ action: 'scrub', frame: 0 });
       post({ action: 'update', fields: defaultNestedValues(aggregate) });
+      // `D-165` — a freshly booted page starts unmuted; carry the author's switch over.
+      post({ action: 'sound-muted', muted: soundMutedRef.current });
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -444,6 +462,9 @@ export function PreviewModal({
               onPrevious={onPrevious}
               onNext={onNext}
               onReset={onReset}
+              hasSound={hasSound}
+              soundMuted={soundMuted}
+              onToggleSound={onToggleSound}
             />
             <div className={s.timingScroll}>
               <PreviewScopeTiming

@@ -19,6 +19,7 @@ import {
   Triangle,
   Type,
   Video,
+  Volume2,
   type LucideIcon,
 } from 'lucide-react';
 import { resolveVisibilityOf } from '@cg/shared-schema';
@@ -335,6 +336,9 @@ export function layerTypeIcon(element: Element): LucideIcon {
       // D-128 — an imported video FILE. Camera-style imagery is reserved for the
       // live-source element above, so this takes the film strip.
       return Film;
+    case 'audio':
+      // D-165 — a sound effect: the speaker, as CG Control marks a template that makes sound.
+      return Volume2;
     case 'container':
       return Group;
     case 'composition':
