@@ -430,6 +430,7 @@ describe('createRuntime — sequence content source + next() dispatch (D-029)', 
       ],
     });
     expect(visibleItems()).toEqual(['اکنون: ویرایش‌شده']);
+    await run(clock, 400); // `D-163` — the first item's entrance plays first (every sequence)
     // The appended item (with its per-item dwell) is reachable by next().
     await runtime.next?.();
     await run(clock, 400);
@@ -752,6 +753,7 @@ describe('createRuntime — D-083 composition sequence items (text | composition
     );
     await runtime.play({});
     expect(clockText()).not.toBeNull();
+    await run(clock, 100); // `D-163` — the first item's entrance plays first (every sequence)
     await runtime.next?.();
     await run(clock, 300); // the transition completes; the old comp item is removed
     expect(visibleItems()).toEqual(['NEXT']);
@@ -840,6 +842,7 @@ describe('createRuntime — a sequence draws in its Digits choice (TEXT-DIGITS-0
     expect(visibleItems()).toEqual(['ساعت ۱۴']); // the Designer canvas, before the run
     await runtime.play({});
     expect(visibleItems()).toEqual(['ساعت ۱۴']);
+    await run(clock, 400); // `D-163` — the first item's entrance plays first (every sequence)
     await runtime.next?.();
     await run(clock, 400);
     expect(visibleItems()).toEqual(['ساعت ۱۵']);

@@ -85,6 +85,7 @@ describe('SequenceDriver (D-029)', () => {
       ],
     });
     h.driver.start();
+    h.clock.advance(400); // `D-163` — every sequence's first item enters with its effect first
     expect(visible(h.host)).toEqual(['A']);
     h.clock.advance(499);
     expect(visible(h.host)).toEqual(['A']);
@@ -111,6 +112,7 @@ describe('SequenceDriver (D-029)', () => {
       dwellOverrideMs: 500,
     });
     h.driver.start();
+    h.clock.advance(400); // `D-163` — the first item's entrance
     expect(visible(h.host)).toEqual(['A']);
     h.clock.advance(499);
     expect(visible(h.host)).toEqual(['A']); // the override dwell, not the item's 5000
@@ -130,6 +132,7 @@ describe('SequenceDriver (D-029)', () => {
       ],
     });
     h.driver.start();
+    h.clock.advance(400); // `D-163` — the first item's entrance
     h.clock.advance(500);
     h.clock.advance(400);
     expect(visible(h.host)).toEqual(['B']); // a's own 500ms dwell, exactly as before
@@ -217,6 +220,7 @@ describe('SequenceDriver (D-029)', () => {
     const h = make({ defaultDwellMs: 500 });
     const done = completionFlag(h.driver);
     h.driver.start();
+    h.clock.advance(400); // `D-163` — the first item's entrance
     for (let i = 0; i < 3; i += 1) {
       h.clock.advance(500);
       h.clock.advance(400);
@@ -229,6 +233,7 @@ describe('SequenceDriver (D-029)', () => {
   it('pause() freezes the dwell; resume() continues with no jump', () => {
     const h = make({ defaultDwellMs: 1000 });
     h.driver.start();
+    h.clock.advance(400); // `D-163` — the first item's entrance
     h.clock.advance(800);
     h.driver.pause();
     h.clock.advance(30_000); // paused time must not count
@@ -244,6 +249,7 @@ describe('SequenceDriver (D-029)', () => {
   it('pause() freezes an IN-FLIGHT transition mid-motion; resume() continues it', () => {
     const h = make({ defaultDwellMs: 500 });
     h.driver.start();
+    h.clock.advance(400); // `D-163` — the first item's entrance
     h.clock.advance(500); // dwell over — transition begins
     h.clock.advance(200); // mid-transition (ease midpoint: ±36px)
     const nodes = h.host.querySelectorAll<HTMLElement>('[data-cg-sequence-item]');
@@ -305,6 +311,7 @@ describe('SequenceDriver (D-029)', () => {
     it('removing the current item takes effect at the NEXT advance', () => {
       const h = make({ advance: 'manual' });
       h.driver.start();
+      h.clock.advance(400); // `D-163` — the first item's entrance
       // Remove 'a' while it displays: it stays on screen…
       h.driver.setItems(ITEMS.slice(1).map((i) => ({ ...i })));
       expect(visible(h.host)).toEqual([ITEMS[0]?.text]);
@@ -317,6 +324,7 @@ describe('SequenceDriver (D-029)', () => {
     it('order and per-item dwellMs come from the NEW list', () => {
       const h = make({ defaultDwellMs: 1000 });
       h.driver.start();
+      h.clock.advance(400); // `D-163` — the first item's entrance
       // Reorder: after 'a' now comes 'c'; give the current item a longer dwell.
       h.driver.setItems([
         { id: 'a', text: ITEMS[0]?.text ?? '', dwellMs: 2000 },
@@ -365,10 +373,45 @@ describe('SequenceDriver (D-029)', () => {
   });
 });
 
+describe('D-163 — the first item enters with the chosen effect, infinite or not', () => {
+  it('🔴 an INFINITE sequence fades its first item in (it used to appear at once)', () => {
+    // The owner: "the first item must start with the chosen effect — wrong under infinite,
+    // right under count".
+    const h = make({ repeat: 'infinite', transitionIn: 'fade', transitionOut: 'fade' });
+    h.driver.start();
+    const first = h.host.querySelector<HTMLElement>('[data-cg-sequence-item]');
+    expect(Number(first?.style.opacity)).toBe(0); // the entrance begins transparent…
+    h.clock.advance(200);
+    expect(Number(first?.style.opacity)).toBeCloseTo(0.5, 2); // …fades in…
+    h.clock.advance(200);
+    expect(first?.style.opacity).toBe(''); // …and rests, plain.
+  });
+
+  it('🔴 a NEXT pressed during that entrance is kept and applied as it ends — never lost', () => {
+    const h = make({ advance: 'manual' });
+    h.driver.start();
+    h.clock.advance(100); // mid-entrance
+    h.driver.next(); // the operator presses NEXT right after the take
+    h.clock.advance(300); // the entrance ends — the kept NEXT begins its transition
+    h.clock.advance(400);
+    expect(visible(h.host)).toEqual([ITEMS[1]?.text]);
+    h.clock.advance(5_000);
+    expect(visible(h.host)).toEqual([ITEMS[1]?.text]); // once, not twice
+  });
+
+  it('Hide-show (none) still shows the first item at once', () => {
+    const h = make({ repeat: 'infinite', transitionIn: 'none', transitionOut: 'none' });
+    h.driver.start();
+    const first = h.host.querySelector<HTMLElement>('[data-cg-sequence-item]');
+    expect([first?.style.opacity, first?.style.transform]).toEqual(['', '']);
+  });
+});
+
 describe('D-163 — a crossfade in the driver', () => {
   it('🔴 adds the two items while it runs, and leaves the page at rest with no trace of it', () => {
     const h = make({ advance: 'manual', transitionIn: 'fade', transitionOut: 'fade' });
     h.driver.start();
+    h.clock.advance(400); // the first item fades in (its entrance), then rests
     h.driver.next();
     h.clock.advance(200);
     const during = [...h.host.querySelectorAll<HTMLElement>('[data-cg-sequence-item]')];

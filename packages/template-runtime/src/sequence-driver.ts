@@ -157,7 +157,8 @@ interface NormalizedDriverClock {
   now: () => number;
 }
 
-// D-116 — `entrance` plays the FIRST item's transitionIn on start (finite only); `exit` plays the
+// D-116 — `entrance` plays the FIRST item's transitionIn on start (every sequence since `D-163`;
+// it was finite only); `exit` plays the
 // LAST item's transitionOut before completion (finite only) so the parent's outro fires AFTER the
 // content has left (D-105 content-first / background-last).
 // `D-163` — `loading`: the incoming item is being made ready (a picture decoding); the current item
@@ -189,6 +190,8 @@ export class SequenceDriver {
   private startIdx = 0;
   /** `D-163` — a `goTo` that arrived while the stage was busy; applied as soon as it is not. */
   private pendingIdx: number | null = null;
+  /** `D-163` — a `next()` that arrived during the first item's entrance, applied as it ends. */
+  private nextAfterEntrance = false;
   /** `D-163` — the item being made ready, and the generation that names its load. */
   private loadingHooks: RenderedSequenceItem | null = null;
   private loadGen = 0;
@@ -252,10 +255,11 @@ export class SequenceDriver {
       this.running = false;
       return;
     }
-    // D-116 — a FINITE sequence enters its first item with `transitionIn` (not an abrupt cut-in)
-    // before dwelling. Infinite sequences are unchanged; a 'none' edge / zero duration goes straight
-    // to dwell (today's behavior).
-    if (this.o.repeat !== 'infinite' && this.o.transitionIn !== 'none' && this.o.transitionMs > 0) {
+    // D-116 — the sequence enters its first item with `transitionIn` (not an abrupt cut-in) before
+    // dwelling. `D-163` (the owner, 2026-10-14): EVERY sequence, infinite ones too — the first item
+    // starts "with the chosen effect" as each later one does. A 'none' edge / zero duration still
+    // goes straight to dwell.
+    if (this.o.transitionIn !== 'none' && this.o.transitionMs > 0) {
       this.enterPhase('entrance');
       this.paintBoundary('entrance');
       this.scheduleIfNeeded();
@@ -279,9 +283,16 @@ export class SequenceDriver {
    * Advance one item with the transition. In `'auto'` the new item's dwell
    * restarts. Ignored before `start()` (no queueing), after completion, and
    * while a transition is already in flight (v1 — no mid-motion restarts).
+   * `D-163` — pressed during the FIRST item's entrance it is KEPT, once, and applied as the
+   * entrance ends: every sequence now enters with its effect, and an operator's NEXT right after
+   * the take must not be lost to it.
    */
   next(): void {
     if (!this.running || this.paused || this.completed) return;
+    if (this.phase === 'entrance') {
+      this.nextAfterEntrance = true;
+      return;
+    }
     if (this.phase !== 'dwell') return;
     this.advance();
   }
@@ -377,6 +388,7 @@ export class SequenceDriver {
     this.loadingHooks?.hide();
     this.loadingHooks = null;
     this.pendingIdx = null;
+    this.nextAfterEntrance = false;
     // D-083 — tear down the on-screen item's inner drivers (a composition item's clock stops).
     this.currentHooks?.hide();
     this.incomingHooks?.hide();
@@ -691,6 +703,10 @@ export class SequenceDriver {
       }
       this.enterPhase('dwell');
       this.consumePending(); // D-163 — a goTo that arrived during the entrance
+      // …or a NEXT, unless a goTo already took the stage.
+      const nextWaiting = this.nextAfterEntrance;
+      this.nextAfterEntrance = false;
+      if (nextWaiting && this.phase === 'dwell') this.advance();
       return;
     }
     // exit — the last item has left the box; NOW signal completion and freeze (the parent's outro
