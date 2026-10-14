@@ -100,7 +100,11 @@ import type {
   TemplatesGetChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
+  TemplatesRebuildChannel,
+  TemplatesRebuildPlanChannel,
   TemplatesRemoveChannel,
+  TemplatesSourceGetChannel,
+  TemplatesSourcePutChannel,
   DelimitersListChannel,
   DelimitersSetChannel,
   DelimiterOption,
@@ -892,6 +896,25 @@ export interface RuntimeBridge {
      * was that note's real concern.
      */
     page(templateId: string, channel?: number): Promise<PvwPage>;
+    /**
+     * 🔴 `PAGE-REBUILD-01` (`C-034`) — keep the VERIFIED package on CG Bridge, before the import that
+     * names it, so the page can be built again when CG Control's template runtime changes.
+     */
+    putSource(
+      req: ChannelRequest<typeof TemplatesSourcePutChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesSourcePutChannel>>;
+    /** `PAGE-REBUILD-01` — a kept package, read back for a rebuild. */
+    source(
+      req: ChannelRequest<typeof TemplatesSourceGetChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesSourceGetChannel>>;
+    /** `PAGE-REBUILD-01` — what this console's runtime should rebuild, and what it cannot. */
+    rebuildPlan(
+      req: ChannelRequest<typeof TemplatesRebuildPlanChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesRebuildPlanChannel>>;
+    /** `PAGE-REBUILD-01` — one rebuilt page, or why it could not be built. */
+    rebuild(
+      req: ChannelRequest<typeof TemplatesRebuildChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesRebuildChannel>>;
   };
 
   /**

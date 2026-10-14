@@ -4,6 +4,8 @@ import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
 import {
   auditMatches,
   holdsPermissionClass,
+  rebuildClause,
+  rebuildDetail,
   type AuditCursor,
   type AuditFilter,
   type AuditNaming,
@@ -867,6 +869,19 @@ function Row({
         {timing !== null ? (
           <span className="cg-audit-timing" data-audit-timing="">
             {timing}
+          </span>
+        ) : null}
+        {/*
+          `PAGE-REBUILD-01` (`C-034`) — a rebuild row's VALUE: the releases its page moved between.
+          The runtime fingerprints and a failure's reason are technical facts, so they ride the title.
+        */}
+        {entry.rebuild !== undefined ? (
+          <span
+            className="cg-audit-rebuild"
+            data-audit-rebuild=""
+            title={rebuildDetail(entry.rebuild)}
+          >
+            {rebuildClause(entry.rebuild)}
           </span>
         ) : null}
         {/*

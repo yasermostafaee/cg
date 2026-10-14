@@ -2340,6 +2340,21 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#templatesSubs.add(handler),
     onActed: (handler: (act: TemplateAct) => void): Unsubscribe =>
       this.#templatesActedSubs.add(handler),
+    /*
+      🔴 `PAGE-REBUILD-01` (`C-034`) — the kept package and the rebuild. All four are the bridge's or
+      nothing: offline there is no store to keep a package in and no page to rebuild, and the caller
+      treats a refusal as "nothing kept" / "nothing to do" — never as a failure of the import.
+    */
+    putSource: (req: ChannelRequest<typeof ipcChannels.TemplatesSourcePutChannel>) => {
+      if (this.#status !== 'live') throw new Error(TEMPLATE_IMPORT_NEEDS_BRIDGE);
+      return this.#invoke(ipcChannels.TemplatesSourcePutChannel, req);
+    },
+    source: (req: ChannelRequest<typeof ipcChannels.TemplatesSourceGetChannel>) =>
+      this.#invoke(ipcChannels.TemplatesSourceGetChannel, req),
+    rebuildPlan: (req: ChannelRequest<typeof ipcChannels.TemplatesRebuildPlanChannel>) =>
+      this.#invoke(ipcChannels.TemplatesRebuildPlanChannel, req),
+    rebuild: (req: ChannelRequest<typeof ipcChannels.TemplatesRebuildChannel>) =>
+      this.#invoke(ipcChannels.TemplatesRebuildChannel, req),
   };
 
   readonly audit = {

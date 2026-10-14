@@ -57,6 +57,7 @@ import { useBackupChannels } from './hooks/useBackupChannels.js';
 import { initDelimiters } from './features/inspector/delimiterStore.js';
 import { initSources } from './features/sources/sourceStore.js';
 import { useStackHousekeeping } from './hooks/useStackHousekeeping.js';
+import { useTemplateRebuild } from './features/library/useTemplateRebuild.js';
 import { useLock, useLockCoverage } from './hooks/useLock.js';
 import { useOrphans } from './hooks/useOrphans.js';
 import { useClearedOutside } from './hooks/useClearedOutside.js';
@@ -266,6 +267,9 @@ export function App(): JSX.Element {
   // it re-ran on every fullscreen round-trip (which unmounts that panel) against a
   // bootstrap snapshot, and deleted every staged edit. See `useStackHousekeeping`.
   useStackHousekeeping();
+  // `PAGE-REBUILD-01` (`C-034`) — on each connect, build again every page an earlier runtime
+  // built. HERE for the same reason: one pass per connect, not one per mount of a view.
+  useTemplateRebuild();
 
   // Narrow: one column, the Inspector is an overlay. Fullscreen: the focused
   // panel takes everything. Otherwise: workspace | divider | Inspector.

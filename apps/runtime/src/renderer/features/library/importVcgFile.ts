@@ -5,6 +5,7 @@ import { recordDefaultPosition } from '../stack/defaultPositionStore.js';
 import { recordListFieldTargets } from '../inspector/fieldTargetStore.js';
 import { noteAssignmentsCarriedOver } from '../sources/sourceStore.js';
 import type { ListFieldTargets } from '../inspector/listFieldTargets.js';
+import { APP_VERSION } from '../../appVersion.js';
 // B-038 Phase 3 — the bundled app @font-face CSS (Vazirmatn / Exo 2) as a raw
 // string. Passed to the single-file export so the bundled faces inline as base64
 // and the template HTML CasparCG loads renders Persian with the correct face.
@@ -66,6 +67,8 @@ export async function importVcgFile(file: File, channel?: number): Promise<Impor
       fontsCss: appFontsCss,
       sourceFileName: file.name,
       ...(channel !== undefined && { channel }),
+      // `PAGE-REBUILD-01` — stamp the runtime and keep the verified package for a later rebuild.
+      consoleVersion: APP_VERSION,
     });
   } catch (err) {
     throw new Error(`“${file.name}” ${err instanceof Error ? err.message : String(err)}`);

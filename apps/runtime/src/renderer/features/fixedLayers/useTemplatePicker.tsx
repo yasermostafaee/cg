@@ -49,6 +49,12 @@ import {
   subscribeTemplateActs,
 } from '../library/templateActs.js';
 import { Tag } from '../../ui/Tag.js';
+import { Notice } from '../../ui/Notice.js';
+import { APP_VERSION } from '../../appVersion.js';
+import { pageBuildOf } from '../library/templateDelivery.js';
+import { REIMPORT_TITLE, reimportLine } from '../library/templateRebuild.js';
+// `PAGE-REBUILD-01` — the faces every page is built with: part of the runtime a plan is asked for.
+import appFontsCss from '../../fonts.css?inline';
 
 /**
  * R-021 stage 3 — the template picker, shaped like `useConfirm`: a
@@ -452,6 +458,25 @@ export function useTemplatePicker(): {
   */
   const [usage, setUsage] = useState<ReadonlyMap<string, number>>(new Map());
   /*
+    🔴 `PAGE-REBUILD-01` (`C-034`) — the templates on this list that this console's runtime cannot
+    rebuild (imported before CG Bridge kept their packages, or their rebuild failed). PULLED at open
+    and on every catalogue change while open, for the reason the list and the usage are: this hook is
+    mounted by every row. A bridge that cannot answer lists nothing — the line is a courtesy, never a
+    gate, and it must not claim templates it cannot name.
+  */
+  const [reimport, setReimport] = useState<readonly TemplateInfo[]>([]);
+  const readReimport = useCallback(async (onChannel: number | undefined): Promise<void> => {
+    try {
+      const plan = await window.cg.templates.rebuildPlan({
+        build: pageBuildOf(APP_VERSION, appFontsCss),
+        ...(onChannel !== undefined && { channel: onChannel }),
+      });
+      setReimport(plan.reimport.map((entry) => entry.template));
+    } catch {
+      setReimport([]);
+    }
+  }, []);
+  /*
     🔴 `RUNTIME-REPAIR-05` — THE SELECTION. The owner reversed the one-press contract
     after seeing the built picker: a row is now SELECTED, the aside reads the selection out,
     and the footer's primary commits it.
@@ -530,6 +555,8 @@ export function useTemplatePicker(): {
         // An unanswered re-read leaves the list as it was; the next change re-reads again.
         () => undefined,
       );
+      // `PAGE-REBUILD-01` — a rebuild, a re-import or a failure changes who must be re-imported.
+      void readReimport(channel);
     };
     const offChanged = window.cg.templates.onChanged(relist);
     const offActed = subscribeTemplateActs((act, fromHere) => {
@@ -545,7 +572,7 @@ export function useTemplatePicker(): {
       offChanged();
       offActed();
     };
-  }, [open, channel]);
+  }, [open, channel, readReimport]);
 
   /**
    * Read how many rows hold each template — the aside's usage line.
@@ -593,11 +620,13 @@ export function useTemplatePicker(): {
         setUsage(new Map());
         // A selection is per-opening: the row that asked last time is not this row.
         setSelected(null);
+        setReimport([]);
         setRequest({ title, templates, accepts, destination: destination ?? null });
         void readUsage(destination?.channel);
+        void readReimport(destination?.channel);
       });
     },
-    [readUsage],
+    [readUsage, readReimport],
   );
 
   /**
@@ -1085,6 +1114,30 @@ export function useTemplatePicker(): {
             */}
             <ImportDoor onImport={openImport} busy={importBusy} />
           </div>
+          {/*
+            🔴 `PAGE-REBUILD-01` (`C-034`) — THE TEMPLATES THIS CONSOLE CANNOT REBUILD, NAMED ONCE.
+            Imported before CG Bridge kept the packages pages are built from (or their rebuild
+            failed), so an earlier runtime's page is what they play. One line, each name isolated,
+            the long form on hover; nothing else changes for them — no chip, no refusal.
+          */}
+          {reimport.length > 0 && (
+            <div
+              className="cg-tpl-reimport"
+              data-template-reimport={String(reimport.length)}
+              title={REIMPORT_TITLE}
+            >
+              <Notice
+                noticeRole="notice"
+                aria="note"
+                text={reimportLine(reimport.length)}
+                remedies={reimport.map((t) => (
+                  <IsolatedName key={t.templateId} title={t.templateId}>
+                    {templateDisplayName(t)}
+                  </IsolatedName>
+                ))}
+              />
+            </div>
+          )}
           {
             /*
               `RUNTIME-REPAIR-04` — the reference's `.template-layout`: a main column that reads

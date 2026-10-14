@@ -1,9 +1,12 @@
-import type {
-  AssetMeta,
-  ChannelRequest,
-  ChannelResponse,
-  TemplateInfo,
-  TemplatesImportChannel,
+import {
+  TEMPLATE_SOURCE_MAX_BYTES,
+  type AssetMeta,
+  type ChannelRequest,
+  type ChannelResponse,
+  type PageBuild,
+  type TemplateInfo,
+  type TemplatesImportChannel,
+  type TemplatesSourcePutChannel,
 } from '@cg/shared-ipc';
 import {
   aggregateCompositionFields,
@@ -17,15 +20,17 @@ import {
   type Manifest,
   type Position,
 } from '@cg/shared-schema';
-import { buildTemplateLiveSources, unpack, verify } from '@cg/vcg-format';
+import { buildTemplateLiveSources, sha256Hex, unpack, verify } from '@cg/vcg-format';
 import {
   ExporterSingleFile,
   cgCss,
   cgJsIife,
   cgJsLottieIife,
+  pageRuntimeBuild,
   type ImageAssetSource,
 } from '@cg/single-file-export';
 import { pickTemplateName, templateDisplayName } from './templateName.js';
+import { bytesToBase64 } from './packageBytes.js';
 import { collectListFieldTargets, type ListFieldTargets } from '../inspector/listFieldTargets.js';
 
 /**
@@ -92,6 +97,12 @@ export interface ProduceOptions {
    * changes. Omitted, the station-wide import (every declared channel).
    */
   channel?: number;
+  /**
+   * 🔴 `PAGE-REBUILD-01` (`C-034`) — this console's release. With it, the import stamps the page
+   * with the runtime that built it and keeps the verified package on CG Bridge, so the page can be
+   * built again when the runtime changes. Omitted (a test, a byte-only caller), nothing is kept.
+   */
+  consoleVersion?: string;
 }
 
 /** The minimal `window.cg` surface this module needs (the extended import channel). */
@@ -100,7 +111,49 @@ export interface TemplateImportBridge {
     import(
       req: ChannelRequest<typeof TemplatesImportChannel>,
     ): Promise<ChannelResponse<typeof TemplatesImportChannel>>;
+    /** `PAGE-REBUILD-01` — keep the verified package. Absent on a bridge stub: nothing is kept. */
+    putSource?(
+      req: ChannelRequest<typeof TemplatesSourcePutChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesSourcePutChannel>>;
   };
+}
+
+let lastBuild: { fontsCss: string; runtimeBuild: string } | null = null;
+
+/**
+ * 🔴 `PAGE-REBUILD-01` (`C-034`) — **WHICH TEMPLATE RUNTIME THIS CONSOLE BUILDS PAGES WITH**: its
+ * release and the fingerprint of what it bakes into every page (`pageRuntimeBuild` — the runtime
+ * bundles, the base CSS, these font faces and the exporter's shell revision). Stamped on every
+ * import and every rebuild.
+ */
+export function pageBuildOf(consoleVersion: string, fontsCss: string): PageBuild {
+  // The fingerprint hashes ~800 KB of runtime text; it cannot change while the page runs.
+  if (lastBuild?.fontsCss !== fontsCss) {
+    lastBuild = { fontsCss, runtimeBuild: pageRuntimeBuild(fontsCss) };
+  }
+  return { consoleVersion, runtimeBuild: lastBuild.runtimeBuild };
+}
+
+/**
+ * 🔴 `PAGE-REBUILD-01` — **KEEP THE VERIFIED PACKAGE ON CG BRIDGE**, and answer its SHA-256 only when
+ * the bridge holds exactly these bytes. Never fails the import: a package too large for one socket
+ * frame, a bridge that refuses, or one that answers another hash keeps nothing, and the template is
+ * then listed for re-import once a newer runtime runs — which is what happened to every template
+ * before this existed.
+ */
+async function keepPackage(
+  bridge: TemplateImportBridge,
+  bytes: Uint8Array,
+): Promise<string | undefined> {
+  const put = bridge.templates.putSource;
+  if (put === undefined || bytes.byteLength > TEMPLATE_SOURCE_MAX_BYTES) return undefined;
+  const sha256 = sha256Hex(bytes);
+  try {
+    const kept = await put({ base64: bytesToBase64(bytes) });
+    return kept.stored && kept.sha256 === sha256 ? sha256 : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -327,10 +380,22 @@ export async function importTemplateFromBytes(
 }> {
   const { template, html, warnings, defaultPosition, listFieldTargets } =
     await produceTemplateDelivery(bytes, opts);
+  /*
+    🔴 `PAGE-REBUILD-01` (`C-034`) — the bytes just VERIFIED are the ones kept, and the page names
+    the runtime that built it. Kept BEFORE the import, in a frame of its own (the page fills most of
+    the import's), so the import can name the package by the hash CG Bridge answered.
+  */
+  const build =
+    opts.consoleVersion === undefined
+      ? undefined
+      : pageBuildOf(opts.consoleVersion, opts.fontsCss ?? '');
+  const sourceSha256 = build === undefined ? undefined : await keepPackage(bridge, bytes);
   await bridge.templates.import({
     template,
     html,
     ...(opts.channel !== undefined && { channel: opts.channel }),
+    ...(build !== undefined && { build }),
+    ...(sourceSha256 !== undefined && { sourceSha256 }),
   });
   return {
     templateId: template.templateId,

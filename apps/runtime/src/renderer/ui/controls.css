@@ -6788,6 +6788,14 @@ input[type='checkbox']:disabled:checked {
   padding: var(--r-tpl-tools-pad);
   padding-bottom: var(--r-tpl-tools-pad-bottom);
 }
+/*
+  `PAGE-REBUILD-01` (`C-034`) — the Library's one re-import line, under the tools row and at its
+  inset. The line itself is the shared `Notice`; this only seats it.
+*/
+.cg-tpl-reimport {
+  padding: var(--r-tpl-tools-pad);
+  padding-top: 0;
+}
 /* `.btn.quiet.small` at the end of the tools row — 69.9 × 33, radius 7, `6px 10px`, 13 px. */
 /* The aside before anything is chosen — one line, so the column is never blank. */
 .cg-tpl-aside__hint {
@@ -7339,6 +7347,7 @@ input[type='checkbox']:disabled:checked {
  * chips. Green in every gate, wrong on screen.
  */
 .cg-audit-timing,
+.cg-audit-rebuild,
 .cg-audit-command {
   display: flex;
   flex-wrap: wrap;

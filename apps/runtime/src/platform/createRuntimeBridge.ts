@@ -480,6 +480,12 @@ export function createMockBridge(): RuntimeBridge {
       // says so in one line rather than showing a blank box — the truthful answer
       // in test mode, not a degradation.
       page: () => Promise.resolve({ kind: 'missing', reason: 'unreachable' } as const),
+      // `PAGE-REBUILD-01` — test mode keeps no package and holds no page, so there is nothing to
+      // rebuild and nothing listed for re-import: the honest empty answers.
+      putSource: () => Promise.resolve({ stored: false, message: 'Test mode has no CG Bridge.' }),
+      source: () => Promise.resolve({ ok: false, reason: 'no-source' } as const),
+      rebuildPlan: () => Promise.resolve({ rebuild: [], reimport: [] }),
+      rebuild: () => Promise.resolve({ outcome: 'stale' } as const),
     },
 
     audit: {
