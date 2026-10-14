@@ -104,9 +104,13 @@ export interface CgPassTiming {
  *
  * - `field` — the page-list field whose bound sequence turns.
  * - `index` — 0-based, already clamped or wrapped by the bridge.
- * - `media` — the operator pictures this turn needs, SHA-256 → `data:image/…`. Carried INLINE because
- *   the template origin serves templates and nothing else (`SECURITY.md`) and the page's CSP takes
- *   images only as `data:`. Usually exactly the one page being shown.
+ * - `media` — the operator pictures this turn needs, SHA-256 → {@link pageMediaPath}: the page fetches
+ *   each one from its OWN origin. Usually exactly the one page being shown.
+ *
+ * 🔴 **NEVER THE PICTURE'S BYTES.** They rode here inline at first, and CasparCG 2.5.0 keeps memory
+ * in its main process in proportion to every `CG UPDATE`'s bytes, for the life of the process: ~2.6
+ * MB per 1 MB update, and a `CLEAR` gives none of it back (measured, `IMAGE-PAGES-01`). A book read on
+ * air is hundreds of turns, so a turn now names its picture and the page fetches it.
  */
 export interface CgPage {
   field: string;
@@ -115,11 +119,16 @@ export interface CgPage {
 }
 
 /**
- * `D-163` — the only `data:` images a page turn may carry. Anything else in `media` is dropped by the
- * reader: this arrives over AMCP from a process that may be another build, and a page must never be
- * handed a script or a document under an image's name.
+ * `R-100` — **WHERE A BOOK PAGE IS FETCHED FROM: the template's own origin, by the picture's
+ * SHA-256.** Root-relative, so a page fetches it from whichever server served it its template (a
+ * backup core included) — the one host rule templates already follow. CG Bridge's template server
+ * answers this path and only for a picture it stored (`SECURITY.md`).
  */
-export const PAGE_MEDIA_DATA_URL = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+export const PAGE_MEDIA_PATH_RE = /^\/page\/([0-9a-f]{64})\.(png|jpg|webp)$/;
+
+export function pageMediaPath(sha256: string, ext: 'png' | 'jpg' | 'webp'): string {
+  return `/page/${sha256}.${ext}`;
+}
 
 /** Bridge→page control data. Every member optional: a payload may carry any subset. */
 export interface CgControl {
@@ -268,9 +277,11 @@ function readPage(raw: unknown): { page?: CgPage } {
   const media: Record<string, string> = {};
   if (typeof mediaRaw === 'object' && mediaRaw !== null && !Array.isArray(mediaRaw)) {
     for (const [sha, url] of Object.entries(mediaRaw as Record<string, unknown>)) {
-      if (/^[0-9a-f]{64}$/.test(sha) && typeof url === 'string' && PAGE_MEDIA_DATA_URL.test(url)) {
-        media[sha] = url;
-      }
+      // Only this origin's page path, and only for the picture the entry is filed under: this
+      // arrives over AMCP from a process that may be another build, and a page must never be
+      // pointed at another host, a script, or a picture other than the one named.
+      const m = typeof url === 'string' ? PAGE_MEDIA_PATH_RE.exec(url) : null;
+      if (m !== null && m[1] === sha && typeof url === 'string') media[sha] = url;
     }
   }
   return { page: { field, index, ...(Object.keys(media).length > 0 ? { media } : {}) } };

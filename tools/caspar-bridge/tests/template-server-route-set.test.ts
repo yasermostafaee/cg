@@ -52,17 +52,22 @@ function probe(port: number, method: string, path: string): Promise<number> {
   });
 }
 
+/** The one picture the fixture's page store holds. */
+const STORED = 'a'.repeat(64);
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
 async function serve(): Promise<number> {
   server = new TemplateHttpServer(
     (id) => (id === 't1' ? '<html>t1</html>' : null),
     () => false,
+    (sha) => Promise.resolve(sha === STORED ? { bytes: PNG, mime: 'image/png' } : null),
   );
   await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
   return server.port;
 }
 
-describe('REPLY 1 §R3 — the template server hosts exactly two routes', () => {
-  it('🔴 the route table is EXACTLY these two, by name', () => {
+describe('REPLY 1 §R3 — the template server hosts exactly three routes', () => {
+  it('🔴 the route table is EXACTLY these three, by name', () => {
     /*
       🔴 IF THIS FAILS, READ `SECURITY.md` BEFORE CHANGING THE EXPECTATION.
 
@@ -74,14 +79,19 @@ describe('REPLY 1 §R3 — the template server hosts exactly two routes', () => 
 
       Adding a route is not forbidden; adding one WITHOUT a decision is. Update this list only
       together with `SECURITY.md`'s statement of the rule.
+
+      `GET /page/<sha256>.<ext>` is such a decision (`R-100`, `IMAGE-PAGES-01`, 2026-10-14): a
+      read-only picture route, named by content hash, serving only pictures CG Bridge stored —
+      recorded in `SECURITY.md` in the same change.
     */
     expect(TEMPLATE_SERVER_ROUTES.map((r) => r.name)).toEqual([
       'GET /template/<id>',
       `POST ${TEMPLATE_COMPLETE_PATH}`,
+      'GET /page/<sha256>.<ext>',
     ]);
   });
 
-  it('🔴 the table carries exactly TWO KINDS — a route class cannot be added silently', () => {
+  it('🔴 the table carries exactly THREE KINDS — a route class cannot be added silently', () => {
     /*
       🔴 `C-037` / ADR 0010 rule 13 — THE AXIS THE FORBIDDEN-PATH LIST CANNOT COVER.
 
@@ -95,9 +105,13 @@ describe('REPLY 1 §R3 — the template server hosts exactly two routes', () => 
       Two independent passes over one boundary — the rule golden rule 9 states for a sweep,
       applied to a guard.
     */
-    expect([...TEMPLATE_SERVER_ROUTES.map((r) => r.kind)].sort()).toEqual(['complete', 'template']);
+    expect([...TEMPLATE_SERVER_ROUTES.map((r) => r.kind)].sort()).toEqual([
+      'complete',
+      'page',
+      'template',
+    ]);
     // The positive control: the table is not empty, so the equality above is a real comparison.
-    expect(TEMPLATE_SERVER_ROUTES.length).toBe(2);
+    expect(TEMPLATE_SERVER_ROUTES.length).toBe(3);
   });
 
   it('each table entry declares one method, and no entry is a wildcard', () => {
@@ -152,6 +166,21 @@ describe('REPLY 1 §R3 — the template server hosts exactly two routes', () => 
       '/.well-known/openid-configuration',
       '/api/cg/auth/token',
       '/signin',
+      /*
+        🔴 `R-100` — THE PAGE ROUTE'S OWN EDGES. It serves a picture by its full hash and a
+        picture type, and nothing near it: no listing, no partial hash, no other extension, no
+        path below a page, and — the one that matters — no picture the store does not hold.
+      */
+      '/page',
+      '/page/',
+      '/pages',
+      '/page/abc.png',
+      `/page/${'a'.repeat(64)}`,
+      `/page/${'a'.repeat(64)}.gif`,
+      `/page/${'a'.repeat(64)}.svg`,
+      `/page/${'a'.repeat(64)}.png/extra`,
+      `/page/${'b'.repeat(64)}.png`,
+      `/page/../template/t1`,
     ];
     for (const path of forbidden) {
       expect(await probe(port, 'GET', path), `GET ${path} is served by the template origin`).toBe(
@@ -163,7 +192,7 @@ describe('REPLY 1 §R3 — the template server hosts exactly two routes', () => 
     }
   });
 
-  it('the two real routes are reachable — so the 404s above are a refusal, not a dead server', async () => {
+  it('the three real routes are reachable — so the 404s above are a refusal, not a dead server', async () => {
     // The positive control. Without it "everything 404s" is satisfied by a server that serves
     // nothing at all, and the test above would pass over a broken boundary.
     const port = await serve();
@@ -171,6 +200,28 @@ describe('REPLY 1 §R3 — the template server hosts exactly two routes', () => 
     // POST /complete reaches the handler; this fixture's handler says "no live take", so 404 —
     // the point is that it is ROUTED, which `template-complete-route.test.ts` proves in full.
     expect(await probe(port, 'GET', TEMPLATE_COMPLETE_PATH)).toBe(404);
+    // `R-100` — a stored picture is served, by GET only.
+    expect(await probe(port, 'GET', `/page/${STORED}.png`)).toBe(200);
+    expect(await probe(port, 'POST', `/page/${STORED}.png`)).toBe(404);
+  });
+
+  it('🔴 a stored page comes back as the stored bytes, typed, never cached, never sniffed', async () => {
+    const port = await serve();
+    const got = await new Promise<{ headers: http.IncomingHttpHeaders; body: Buffer }>(
+      (resolve, reject) => {
+        http
+          .get({ host: '127.0.0.1', port, path: `/page/${STORED}.png` }, (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (c: Buffer) => chunks.push(c));
+            res.on('end', () => resolve({ headers: res.headers, body: Buffer.concat(chunks) }));
+          })
+          .on('error', reject);
+      },
+    );
+    expect(got.body.equals(PNG)).toBe(true);
+    expect(got.headers['content-type']).toBe('image/png');
+    expect(got.headers['cache-control']).toBe('no-store');
+    expect(got.headers['x-content-type-options']).toBe('nosniff');
   });
 
   it('a template cannot reach the control socket — it is a different origin', () => {

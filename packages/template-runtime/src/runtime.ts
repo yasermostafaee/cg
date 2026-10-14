@@ -654,10 +654,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // when present here; unbound items stay static. Element ids are globally unique, so one
   // merged map serves every scope (each sequence reads its own entry by element id).
   /*
-    `D-163` — PAGES OF PICTURES. An operator page's bytes arrive with the page turn that shows it
-    (`__cg.page.media`, inline because the template origin serves templates and nothing else), and
-    the page keeps only the last few: the one on screen, the one coming in, one spare. A book of
-    300 pages is never held, let alone decoded, at once.
+    `D-163` — PAGES OF PICTURES. An operator page's ADDRESS arrives with the page turn that shows it
+    (`__cg.page.media`: `/page/<sha256>.<ext>` on this template's own origin — never its bytes, which
+    CasparCG would keep in memory for every turn), and the page keeps only the last few: the one on
+    screen, the one coming in, one spare. A book of 300 pages is never held, let alone decoded, at
+    once.
   */
   const PAGE_MEDIA_KEPT = 3;
   const pageMedia = new Map<string, string>();

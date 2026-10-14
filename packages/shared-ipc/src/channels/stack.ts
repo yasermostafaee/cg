@@ -155,10 +155,11 @@ export const StackNextChannel = defineChannel(
  *
  * Not `stack.next`: AMCP has `CG NEXT` and nothing for previous or a page number, and a relative
  * NEXT that a page drops mid-transition would leave the console's `12 / 300` lying. So the bridge
- * owns the page number, moves it (a book stops at its ends; a wrapping list wraps), and tells an
- * on-air page the ABSOLUTE page in `__cg.page` on ONE `CG UPDATE` carrying that page's picture. A
- * row that does not own live layers changes state only — nothing reaches CasparCG (golden rule 10);
- * the next take carries the page.
+ * owns the page number, moves it (a book stops at its ends; a wrapping list wraps), and tells a page
+ * that is on its layer (pre-rolled or on air) the ABSOLUTE page in `__cg.page` on ONE `CG UPDATE`
+ * naming that page's picture by its address on the template server — never carrying its bytes. A
+ * row with nothing on its layer changes state only — nothing reaches CasparCG (golden rule 10); the
+ * next take carries the page. A row's turns are applied one at a time, in the order received.
  *
  * `to` is `next`, `previous`, or the operator's PAGE NUMBER (1-based). The answer is the page the
  * row is now on (1-based) and the count, so the console reads back what happened.

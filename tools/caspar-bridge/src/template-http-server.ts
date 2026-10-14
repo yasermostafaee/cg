@@ -1,7 +1,7 @@
 import * as http from 'node:http';
 import type * as net from 'node:net';
 import * as os from 'node:os';
-import { TEMPLATE_COMPLETE_PATH } from '@cg/shared-schema';
+import { PAGE_MEDIA_PATH_RE, TEMPLATE_COMPLETE_PATH } from '@cg/shared-schema';
 
 /** Where/how the template HTTP server binds + the host CasparCG uses to reach it. */
 export interface TemplateServeOptions {
@@ -231,7 +231,7 @@ export interface TemplateServerRoute {
   /** The single method this route answers. Anything else is refused. */
   readonly method: 'GET' | 'POST';
   /** Which handler serves it — the router's discriminant. */
-  readonly kind: 'template' | 'complete';
+  readonly kind: 'template' | 'complete' | 'page';
   /** Does this path select the route? Query already stripped. */
   readonly match: (path: string) => boolean;
 }
@@ -249,6 +249,24 @@ export const TEMPLATE_SERVER_ROUTES: readonly TemplateServerRoute[] = [
     kind: 'complete',
     match: (path) => path === TEMPLATE_COMPLETE_PATH,
   },
+  /*
+    🔴 `R-100` (`IMAGE-PAGES-01`, `SECURITY.md`) — A BOOK'S PAGES, AND ONLY THOSE.
+
+    A READ-ONLY picture route, named by the picture's SHA-256: it serves a picture CG Bridge stored
+    after its own checks (a PNG, JPEG or WebP within the limits, `page-store.ts`) and nothing else —
+    no listing, no other file, no method but GET. It is here, on the template's origin, because the
+    owner's prompt asked for the pages to be served the way templates are (the one host rule, a
+    backup core included, no new port), and because the other road — the bytes inside `CG UPDATE` —
+    makes CasparCG 2.5.0 keep ~2.6 MB of memory per 1 MB page turn for the life of the process.
+    It is not a control, identity or data route: a template that can reach it learns only the
+    pictures it was told the names of.
+  */
+  {
+    name: 'GET /page/<sha256>.<ext>',
+    method: 'GET',
+    kind: 'page',
+    match: (path) => PAGE_MEDIA_PATH_RE.test(path),
+  },
 ];
 
 /** The served-template path, in one place so the route table and the handler cannot disagree. */
@@ -262,7 +280,8 @@ const TEMPLATE_PATH_RE = /^\/template\/([^/]+)$/;
  * Holds no template state itself: it reads the current HTML from the injected
  * `getHtml` (the bridge's `TemplateRegistry`), so a re-import/remove is reflected
  * with no server change. Separate from the control WebSocket (which stays
- * loopback); this server exposes template HTML only — no control surface.
+ * loopback); this server exposes template HTML and, since `R-100`, the book pages the bridge
+ * stored (`GET /page/<sha256>.<ext>`, read-only) — no control surface.
  */
 export class TemplateHttpServer {
   #server: http.Server | null = null;
@@ -309,12 +328,22 @@ export class TemplateHttpServer {
    */
   readonly #onComplete: ((take: string) => boolean) | undefined;
 
+  /**
+   * `R-100` — the page store's reader: a stored picture's bytes and type by its SHA-256, or `null`.
+   * Absent ⇒ the page route answers `404`, as `#onComplete`'s absence does for its route.
+   */
+  readonly #readPage:
+    | ((sha256: string) => Promise<{ bytes: Buffer; mime: string } | null>)
+    | undefined;
+
   constructor(
     getHtml: (templateId: string) => string | null,
     onComplete?: (take: string) => boolean,
+    readPage?: (sha256: string) => Promise<{ bytes: Buffer; mime: string } | null>,
   ) {
     this.#getHtml = getHtml;
     this.#onComplete = onComplete;
+    this.#readPage = readPage;
   }
 
   /** Start listening. Idempotent — a second call resolves without rebinding. */
@@ -377,6 +406,10 @@ export class TemplateHttpServer {
       this.#handleComplete(req, res);
       return;
     }
+    if (route.kind === 'page') {
+      void this.#handlePage(req, res, path);
+      return;
+    }
     const match = TEMPLATE_PATH_RE.exec(path);
     if (match !== null) {
       const id = decodeURIComponent(match[1] ?? '');
@@ -406,6 +439,43 @@ export class TemplateHttpServer {
     // does not own, and an exception on an HTTP handler is not.
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('not found');
+  }
+
+  /**
+   * `R-100` — serve one stored book page by its SHA-256, or `404`. GET only; the bytes are the
+   * stored file's, under the type its own header proved (`nosniff`, so nothing is re-read as a
+   * script). `no-store` for the template's reason (`B-293`): CasparCG's CEF keeps what it may on
+   * the playout machine's disk, and a page is never left there.
+   */
+  async #handlePage(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    path: string,
+  ): Promise<void> {
+    const notFound = (): void => {
+      res.writeHead(404, {
+        'content-type': 'text/plain; charset=utf-8',
+        'cache-control': 'no-store',
+      });
+      res.end('not found');
+    };
+    const sha256 = PAGE_MEDIA_PATH_RE.exec(path)?.[1];
+    if (req.method !== 'GET' || sha256 === undefined || this.#readPage === undefined) {
+      notFound();
+      return;
+    }
+    const page = await this.#readPage(sha256).catch(() => null);
+    if (page === null) {
+      notFound();
+      return;
+    }
+    res.writeHead(200, {
+      'content-type': page.mime,
+      'content-length': String(page.bytes.byteLength),
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+    });
+    res.end(page.bytes);
   }
 
   /**

@@ -11,6 +11,7 @@ import {
   type ImageProbe,
   type PageRefusalCode,
 } from '@cg/shared-ipc';
+import { pageMediaPath } from '@cg/shared-schema';
 
 /**
  * `R-100` — **A BOOK'S PAGES, as CG Bridge keeps them.**
@@ -33,7 +34,7 @@ export type PagePutResult =
   | { ok: true; page: StoredPage }
   | { ok: false; code: PageRefusalCode; message: string };
 
-const EXT: Record<ImageProbe['mime'], string> = {
+const EXT: Record<ImageProbe['mime'], 'png' | 'jpg' | 'webp'> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
@@ -122,16 +123,25 @@ export class PageStore {
     return { ok: true, page };
   }
 
-  /** The page as the `data:` URL a template's CSP accepts, or `null` when it is not held. */
-  async dataUrl(sha256: string): Promise<string | null> {
+  /**
+   * Where a page fetches this picture from — its own template origin, {@link pageMediaPath} — or
+   * `null` when it is not held. A page turn names this; it never carries the bytes (CasparCG keeps
+   * every `CG UPDATE`'s bytes in memory, `control-payload.ts`).
+   */
+  pathOf(sha256: string): string | null {
+    const page = this.#index.get(sha256);
+    return page === undefined ? null : pageMediaPath(page.sha256, EXT[page.mime]);
+  }
+
+  /** The picture's bytes and type, for the template server's page route; `null` when not held. */
+  async read(sha256: string): Promise<{ bytes: Buffer; mime: StoredPage['mime'] } | null> {
     const page = this.#index.get(sha256);
     if (page === undefined) return null;
     const bytes =
       this.#dir === null
         ? this.#memory.get(sha256)
         : await readFile(path.join(this.#dir, fileName(page))).catch(() => undefined);
-    if (bytes === undefined) return null;
-    return `data:${page.mime};base64,${bytes.toString('base64')}`;
+    return bytes === undefined ? null : { bytes, mime: page.mime };
   }
 
   /**

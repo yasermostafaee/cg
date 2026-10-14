@@ -250,9 +250,9 @@ export class CommandBuilder {
    *
    * The same `CG UPDATE` verb, escape chain and reserved key as {@link updateLook} and
    * {@link updatePassTiming}: AMCP has `CG NEXT` and nothing for "previous" or "page N", so the
-   * ABSOLUTE page rides `__cg.page`, with that page's picture inline when it is an operator page
-   * (the template origin serves templates and nothing else, and the page's CSP takes images only
-   * as `data:`). ONE command per press, carrying exactly the page asked for.
+   * ABSOLUTE page rides `__cg.page`, naming an operator page's picture by its ADDRESS on the
+   * template server (`/page/<sha256>.<ext>`), never its bytes — CasparCG 2.5.0 keeps memory for
+   * every `CG UPDATE`'s bytes. ONE command per press, naming exactly the page asked for.
    */
   updatePage(slot: CommandSlot, page: CgPage, fields: FieldValues = {}): string {
     const control: CgControl = { page };

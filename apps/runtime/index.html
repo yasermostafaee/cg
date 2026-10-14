@@ -33,7 +33,8 @@
       `connect-src` already admits the same (the socket, the reachability probe). Measured: with
       `img-src 'self' data: blob:` Chromium refused the picture ("violates … img-src") and the
       PROGRAM strip never left "No return signal". A rehearsed template stays narrow: its srcdoc
-      frame enforces its OWN policy as well (`img-src data:`), and the intersection wins.
+      frame enforces its OWN policy as well (`img-src data: 'self'` since R-100 — `'self'` in a
+      srcdoc frame is this console's own origin), and the intersection wins.
       Pinned by `tests/e2e/pgm-return.spec.ts` and `dev-station.spec.ts`, in a real browser.
     -->
     <meta

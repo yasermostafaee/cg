@@ -155,11 +155,23 @@ it('🔴 a page turn on air is ONE CG UPDATE carrying exactly the page asked for
   expect(sent).toHaveLength(1);
   expect(sent[0]?.startsWith(`${cg(r, 'item1')} UPDATE 0 `)).toBe(true);
   expect(sent[0]).toContain('"page":{"field":"pages","index":1');
-  // Exactly page 2's picture travels — no other page, and no PLAY / ADD / CLEAR.
-  expect(sent[0]).toContain(`"${book[1]!.media}":"data:image/png;base64,`);
+  // Exactly page 2's ADDRESS travels — never its bytes, no other page, and no PLAY / ADD / CLEAR.
+  expect(sent[0]).toContain(`"${book[1]!.media}":"/page/${book[1]!.media}.png"`);
+  expect(sent[0]).not.toContain('base64');
   for (const other of [book[0]!, book[2]!, book[3]!, book[4]!])
     expect(sent[0]).not.toContain(other.media);
   expect(pagesOf(r, 'item1')).toEqual({ pages: 1 });
+
+  // …and the address answers: CasparCG fetches that picture from the template server, where the
+  // template came from — the stored bytes, nothing else.
+  const serve = r.templateServe;
+  if (serve === null) throw new Error('the template server is not serving');
+  const served = await fetch(
+    `http://${serve.serveHost}:${String(serve.port)}/page/${book[1]!.media}.png`,
+  );
+  expect(served.status).toBe(200);
+  expect(served.headers.get('content-type')).toBe('image/png');
+  expect(Buffer.from(await served.arrayBuffer()).equals(pngBytes(1920, 1080, 2))).toBe(true);
 
   // The audit record: ONE `page-turn` row, `ok`, naming the item (the audit census names it).
   const deadline = Date.now() + 4000;

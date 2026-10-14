@@ -51,7 +51,8 @@ const T = (w: number, h: number) => ({
 });
 
 const SHA = (n: number): string => n.toString(16).padStart(64, '0');
-const DATA = (n: number): string => `data:image/png;base64,PAGE${String(n)}AAAA`;
+/** A page's address on the template's own origin — what the bridge sends, never the bytes. */
+const DATA = (n: number): string => `/page/${SHA(n)}.png`;
 
 function book(
   items: Record<string, unknown>[],

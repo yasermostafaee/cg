@@ -424,8 +424,12 @@ function buildSingleFileHtml(parts: HtmlParts): string {
          take token, and a token arrives only inside __cg, which only the bridge writes. A
          template served by anything else never sends a byte. Widening this directive would be
          the thing SECURITY.md forbids; narrowing the token would silently kill the feature. -->
+    <!-- 🔴 R-100 (IMAGE-PAGES-01, 2026-10-14) — img-src 'self' admits a BOOK'S PAGES, fetched from
+         the template server's read-only GET /page/<sha256>.<ext> (SECURITY.md). 'self' and no
+         host list: a page loads pictures from the bridge that served it, never from elsewhere.
+         Over file:// the origin is opaque, so this admits nothing there. -->
     <meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; media-src data:; connect-src 'self';" />
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data: 'self'; media-src data:; connect-src 'self';" />
     <title>${escapeHtml(scene.name)}</title>
     <!-- CEF-compat: keep CSS within common CasparCG builds (CEF 63=2.2,
          71=2.3.x, 117=2.4.x) — avoid bleeding-edge properties. -->

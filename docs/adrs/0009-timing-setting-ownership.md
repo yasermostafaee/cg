@@ -374,6 +374,11 @@ it outside `'self'`. Enforced by `TEMPLATE_SERVER_ROUTES` (the router consults i
 else) and pinned by `template-server-route-set.test.ts`. `PLAYOUT-LINK-01`'s identity routes
 belong on the control socket's side.
 
+> **Amended 2026-10-14 (`R-100`, `IMAGE-PAGES-01`).** A third route, `GET /page/<sha256>.<ext>`,
+> serves a book's pages: read-only, named by content hash, only pictures CG Bridge stored. Not a
+> control, identity or data route; recorded in `SECURITY.md` with its reason (CasparCG 2.5.0 keeps
+> memory for every `CG UPDATE`'s bytes, so a page cannot ride the command).
+
 ⚠ **And the "Related PRD items" block above is now stale in TWO ways, both of them this
 session's doing.** Its coordinates have drifted — `C-013` is at `docs/prd/caspar.md:304` and
 `C-017` at `:661`, not `:284` / `:641` — and, more importantly, **its statuses are no longer

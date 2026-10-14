@@ -85,9 +85,9 @@ describe('D-163 — the schema widening is additive', () => {
 });
 
 describe('R-100 — `__cg.page` is read defensively', () => {
-  const png = `data:image/png;base64,iVBORw0KGgo=`;
+  const png = `/page/${SHA}.png`;
 
-  it('reads a page turn with its picture', () => {
+  it('reads a page turn with its picture’s address on the template’s own origin', () => {
     expect(
       readCgControl({
         [CG_CONTROL_KEY]: { page: { field: 'pages', index: 11, media: { [SHA]: png } } },
@@ -118,6 +118,24 @@ describe('R-100 — `__cg.page` is read defensively', () => {
         },
       }),
     ).toEqual({ page: { field: 'pages', index: 2 } });
+  });
+
+  it('🔴 only THIS origin’s page path, for the picture it is filed under — never bytes, never a host', () => {
+    const other = 'c'.repeat(64);
+    const media = {
+      // The bytes themselves: CasparCG keeps every CG UPDATE's bytes in memory, so never again.
+      [SHA]: 'data:image/png;base64,iVBORw0KGgo=',
+      // Another host, and a protocol-relative one.
+      ['d'.repeat(64)]: `http://evil.example/page/${'d'.repeat(64)}.png`,
+      ['e'.repeat(64)]: `//evil.example/page/${'e'.repeat(64)}.png`,
+      // A path that names a DIFFERENT picture than the one it is filed under.
+      ['f'.repeat(64)]: `/page/${other}.png`,
+      // Not a picture type.
+      [other]: `/page/${other}.svg`,
+    };
+    expect(
+      readCgControl({ [CG_CONTROL_KEY]: { page: { field: 'pages', index: 0, media } } }),
+    ).toEqual({ page: { field: 'pages', index: 0 } });
   });
 
   it('an older payload with no page member reads exactly as before', () => {

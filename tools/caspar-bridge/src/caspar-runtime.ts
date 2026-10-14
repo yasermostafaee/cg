@@ -2455,6 +2455,8 @@ export class CasparRuntime {
         // `SELF-STOP-24` — the completion route's decision. Bound here rather than passed down
         // because the server holds no take state: this is the only object that can answer it.
         (take) => this.#onTemplateComplete(take),
+        // `R-100` — a book's pages, by their SHA-256: only pictures this bridge stored.
+        (sha256) => this.#pages.read(sha256),
       );
     this.#config = config;
     this.#serveOverride = serveOverride;
@@ -6297,13 +6299,17 @@ export class CasparRuntime {
   }
 
   /**
-   * The picture a page turn must carry: `undefined` when it needs none (an AUTHORED page is
+   * The picture a page turn must NAME — its address on the template's own origin, which the
+   * template server's page route answers: `undefined` when it needs none (an AUTHORED page is
    * inlined in the template), `null` when it is an operator page this bridge no longer holds.
+   *
+   * 🔴 The address, never the bytes: CasparCG 2.5.0 keeps memory in proportion to every
+   * `CG UPDATE`'s bytes for the life of the process (`IMAGE-PAGES-01`, measured).
    */
   async #pageMediaFor(ref: PageRef): Promise<Record<string, string> | null | undefined> {
     if (ref.media === undefined) return undefined;
-    const url = await this.#pages.dataUrl(ref.media);
-    return url === null ? null : { [ref.media]: url };
+    const url = this.#pages.pathOf(ref.media);
+    return Promise.resolve(url === null ? null : { [ref.media]: url });
   }
 
   /**

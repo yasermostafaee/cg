@@ -68,11 +68,18 @@ describe('R-100 — the page store', () => {
     expect(fs.readdirSync(dir!)).toHaveLength(0);
   });
 
-  it('a page is handed out as the data: URL a template accepts', async () => {
+  it('🔴 a page is named by its ADDRESS on the template origin, and read back as its own bytes', async () => {
     const store = new PageStore(null);
-    const put = await store.put(jpegBytes(640, 480, 3), 'p.jpg');
+    const bytes = jpegBytes(640, 480, 3);
+    const put = await store.put(bytes, 'p.jpg');
     if (!put.ok) throw new Error(put.message);
-    expect(await store.dataUrl(put.page.sha256)).toMatch(/^data:image\/jpeg;base64,\/9j\//);
+    // The address a page turn carries — never the bytes (CasparCG keeps every CG UPDATE's bytes).
+    expect(store.pathOf(put.page.sha256)).toBe(`/page/${put.page.sha256}.jpg`);
+    const read = await store.read(put.page.sha256);
+    expect(read?.mime).toBe('image/jpeg');
+    expect(read?.bytes.equals(bytes)).toBe(true);
+    expect(store.pathOf('e'.repeat(64))).toBeNull();
+    expect(await store.read('e'.repeat(64))).toBeNull();
   });
 
   it('🔴 a restart re-reads the store from its file names, and keeps every page', async () => {
@@ -86,7 +93,8 @@ describe('R-100 — the page store', () => {
       width: 320,
       height: 240,
     });
-    expect(await again.dataUrl(put.page.sha256)).toMatch(/^data:image\/webp;base64,/);
+    expect(again.pathOf(put.page.sha256)).toBe(`/page/${put.page.sha256}.webp`);
+    expect((await again.read(put.page.sha256))?.mime).toBe('image/webp');
   });
 
   it('🔴 the sweep deletes a NAMED page no row names, at once; an unnamed new one waits its grace', async () => {

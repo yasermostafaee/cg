@@ -76,6 +76,13 @@ describe('SELF-STOP-24 — the served page can reach its own origin, and nothing
     );
   });
 
+  it('🔴 img-src is EXACTLY data: and the own origin — a book page, never another host', async () => {
+    // `R-100` — a book's pages are fetched from the template server's page route; the page's own
+    // origin and inlined data are the only image sources, so a template cannot load from elsewhere.
+    const img = /img-src ([^;]*)/.exec(cspOf(await produce()))?.[1]?.trim();
+    expect(img).toBe("data: 'self'");
+  });
+
   it('keeps default-src none — the relaxation is one directive, not a loosening', async () => {
     expect(cspOf(await produce())).toContain("default-src 'none'");
   });

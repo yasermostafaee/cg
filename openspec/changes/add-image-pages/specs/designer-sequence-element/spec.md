@@ -104,7 +104,9 @@ A bridge-driven page turn SHALL arrive as the `__cg.page` member of a `CG UPDATE
 
 A picture SHALL be decoded before it replaces the page on screen. A picture whose bytes are missing
 or cannot be decoded SHALL leave the previous page on screen. Only the page on screen and the page
-coming in SHALL exist as nodes, and the page SHALL keep at most three delivered operator pictures.
+coming in SHALL exist as nodes. An operator page SHALL arrive as an ADDRESS on the template's own
+origin (`/page/<sha256>.<ext>`) — never as bytes — and the page SHALL keep at most three of them; any
+other value in `__cg.page.media` SHALL be dropped.
 
 #### Scenario: The old page holds until the new one is decoded
 

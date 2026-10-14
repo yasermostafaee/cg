@@ -37,15 +37,24 @@ should be treated like signed software:
   the bridge handed it a per-take token inside the reserved `__cg` payload. A single-file
   template dropped into CasparCG by hand, a template served by anything that is not this bridge,
   and the Designer's own preview all receive no token and therefore never open a socket.
-- 🔴 **THE TEMPLATE-SERVING ORIGIN HOSTS NOTHING BUT TEMPLATES.** `'self'` is an ORIGIN, not a
-  path, so a served template can reach **every route on the server that served it**. That
-  origin therefore hosts exactly two routes — `GET /template/<id>` and `POST /complete` — and
-  **no control, identity or data route may ever be added to it.** The control WebSocket is
-  deliberately a separate server on a separate port (`DEFAULT_BRIDGE_PORT`), which is what
-  keeps it outside `'self'`. The rule is enforced, not merely stated: the router consults
-  `TEMPLATE_SERVER_ROUTES` and nothing else, and
+- 🔴 **THE TEMPLATE-SERVING ORIGIN HOSTS TEMPLATES AND THEIR BOOK PAGES, NOTHING ELSE.** `'self'`
+  is an ORIGIN, not a path, so a served template can reach **every route on the server that
+  served it**. That origin therefore hosts exactly three routes — `GET /template/<id>`,
+  `POST /complete` and `GET /page/<sha256>.<ext>` — and **no control, identity or data route may
+  ever be added to it.** The control WebSocket is deliberately a separate server on a separate
+  port (`DEFAULT_BRIDGE_PORT`), which is what keeps it outside `'self'`. The rule is enforced,
+  not merely stated: the router consults `TEMPLATE_SERVER_ROUTES` and nothing else, and
   `tools/caspar-bridge/tests/template-server-route-set.test.ts` fails on any change to that
   list. Identity work belongs on the control socket's origin.
+  - **The page route (added 2026-10-14, `R-100` / `IMAGE-PAGES-01`).** A book read on air turns
+    hundreds of pictures, and the owner asked for them to be served the way templates are — one
+    host rule, a backup core included, no new port. The other road, the picture's bytes inside
+    the operator's `CG UPDATE`, was built first and MEASURED: CasparCG 2.5.0 keeps ~2.6 MB in
+    its main process for every 1 MB update, for the life of the process (`CLEAR` gives none of it
+    back). The route is READ-ONLY and GET-only, named by the picture's SHA-256, and serves only a
+    PNG, JPEG or WebP that CG Bridge stored after its own checks, `no-store` and `nosniff`. A
+    template that can reach it learns only the pictures it was told the names of. The template's
+    CSP admits it as `img-src data: 'self'` — the own origin, never a host list.
 
 ## Reporting a vulnerability
 
