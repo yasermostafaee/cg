@@ -64,8 +64,12 @@ A sequence edge SHALL also be `fade`: no motion, the item's opacity eased in (IN
 `transitionMs` through the shared ease-in-out curve. IN and OUT both `fade` under `simultaneous` SHALL
 be a DISSOLVE that adds the two items (`plus-lighter` in an isolated box) so the picture never dims
 mid-way, and SHALL leave the item at rest with no opacity, blend or isolation of its own; under
-`sequential` the current item fades out, then the next fades in. The Inspector SHALL offer the
-presets `Crossfade` (fade/fade simultaneous) and `Fade out, fade in` (fade/fade sequential), name the
+`sequential` the current item fades out, then the next fades in. `fade-right` / `fade-left` SHALL fade
+and drift a short way from that side into place — 3 % of the box width, at least 6 and at most 40 px,
+never from off-screen — and count as fades for the dissolve. The Inspector SHALL offer the presets
+`Crossfade` (fade/fade simultaneous), `Fade out, fade in` (fade/fade sequential), and `Crossfade,
+drift in from right` / `from left` (the current item fades where it is; the next fades in with the
+drift), name the
 preset field `transition` and the time field `duration`, and withhold `duration` — shown, disabled,
 saying why — when Hide-show leaves nothing to time.
 
@@ -74,6 +78,12 @@ saying why — when Hide-show leaves nothing to time.
 - **WHEN** a book of opaque pages crossfades from one page to the next
 - **THEN** every frame shows the pages mixed at full brightness — no darker frame between them, no
   blank frame — and at rest the page carries no fade styling
+
+#### Scenario: A drift crossfade nudges the next item into place
+
+- **WHEN** a sequence crossfades with a drift in from the right
+- **THEN** the current item fades out where it is, and the next fades in while moving a few pixels
+  from the right to its place, ending exactly at rest
 
 #### Scenario: Hide-show has no duration to set
 

@@ -931,6 +931,12 @@ describe('SequenceElement (D-029)', () => {
       transitionOut: 'fade',
     });
     expect([faded.transitionIn, faded.transitionOut]).toEqual(['fade', 'fade']);
+    const drift = SequenceElementSchema.parse({
+      ...sequence,
+      transitionIn: 'fade-right',
+      transitionOut: 'fade-left',
+    });
+    expect([drift.transitionIn, drift.transitionOut]).toEqual(['fade-right', 'fade-left']);
     // A sequence that names no edge keeps the defaults it always had: bottom in, top out.
     const plain = SequenceElementSchema.parse(sequence);
     expect([plain.transitionIn, plain.transitionOut]).toEqual(['bottom', 'top']);

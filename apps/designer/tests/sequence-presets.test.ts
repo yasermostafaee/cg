@@ -75,6 +75,19 @@ describe('sequence transition presets (D-029)', () => {
     expect(SEQUENCE_PRESET_ORDER.find((p) => p.key === 'crossfade')?.label).toBe('Crossfade');
   });
 
+  it('🔴 D-163 — the drift crossfades: the current item fades in place, the next fades in with a nudge', () => {
+    expect(SEQUENCE_TRANSITION_PRESETS['crossfade-drift-right']).toEqual({
+      transitionIn: 'fade-right',
+      transitionOut: 'fade',
+      transitionTiming: 'simultaneous',
+    });
+    expect(SEQUENCE_TRANSITION_PRESETS['crossfade-drift-left']).toEqual({
+      transitionIn: 'fade-left',
+      transitionOut: 'fade',
+      transitionTiming: 'simultaneous',
+    });
+  });
+
   it('the dropdown order covers every preset exactly once, plus custom', () => {
     const keys = SEQUENCE_PRESET_ORDER.map((p) => p.key);
     expect(new Set(keys).size).toBe(keys.length);

@@ -44,6 +44,12 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
     await expect(duration).toHaveAttribute('title', /Hide-show swaps at once/);
     await app.inspector.getByLabel('transition', { exact: true }).selectOption('crossfade');
     await expect(duration).toBeEnabled();
+    // The drift crossfade: the current item fades in place, the next fades in with a nudge.
+    await app.inspector
+      .getByLabel('transition', { exact: true })
+      .selectOption('crossfade-drift-right');
+    await expect(app.inspector.getByLabel('in', { exact: true })).toHaveValue('fade-right');
+    await expect(app.inspector.getByLabel('out', { exact: true })).toHaveValue('fade');
 
     // Every page is in the Pages manager — the untouched samples gone, and `page2` before
     // `page10`: the order is the NUMBER in the name, not the characters.

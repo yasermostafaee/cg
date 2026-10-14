@@ -682,9 +682,21 @@ export function sequenceItemsBinding(
  * A transition edge: where an item enters from / exits to. `none` = instant cut. `fade` (`D-163`)
  * = no motion, the item's opacity eased in or out over `transitionMs`; IN and OUT both `fade` under
  * `simultaneous` is a true DISSOLVE (the two items mixed, never dimmed in the middle) — the smooth
- * page turn a book needs. Additive: every sequence authored before it parses unchanged.
+ * page turn a book needs. `fade-right` / `fade-left` fade AND drift a short way (a few percent of
+ * the box, never from off-screen) from that side into place — the broadcast "fade with a nudge"
+ * the owner asked for; under RTL text the drift from the right moves with the reading. Additive:
+ * every sequence authored before them parses unchanged.
  */
-export const SequenceEdgeSchema = z.enum(['top', 'bottom', 'left', 'right', 'none', 'fade']);
+export const SequenceEdgeSchema = z.enum([
+  'top',
+  'bottom',
+  'left',
+  'right',
+  'none',
+  'fade',
+  'fade-right',
+  'fade-left',
+]);
 
 /**
  * Sequence / now-next element (D-029) — a clipped box that shows ONE item of

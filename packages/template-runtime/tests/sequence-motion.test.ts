@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  driftOf,
   edgeOffset,
   sampleTransition,
   transitionTotalMs,
@@ -150,6 +151,27 @@ describe('D-163 — the fade edge', () => {
     expect(second.out.visible).toBe(false);
     expect(second.in.opacity).toBeCloseTo(0.5, 5);
     expect(first.mix || second.mix).toBe(false);
+  });
+
+  it('🔴 a DRIFT fade nudges a few pixels into place while fading in — never from off-screen', () => {
+    // 3 % of the box, 6..40 px: 720 → 22 px, 1920 → 40 px (capped), 100 → 6 px (floor).
+    expect(driftOf({ width: 720, height: 72 })).toBe(22);
+    expect(driftOf({ width: 1920, height: 1080 })).toBe(40);
+    expect(driftOf({ width: 100, height: 40 })).toBe(6);
+    expect(edgeOffset('fade-right', BOX)).toEqual({ x: 22, y: 0 });
+    expect(edgeOffset('fade-left', BOX)).toEqual({ x: -22, y: 0 });
+    const s = spec({ inEdge: 'fade-right', outEdge: 'fade' });
+    const start = sampleTransition(s, 0);
+    expect([start.in.offset.x, start.in.opacity, start.out.offset.x, start.out.opacity]).toEqual([
+      22, 0, 0, 1,
+    ]);
+    expect(start.mix).toBe(true); // both sides fade: still a dissolve, so nothing dims
+    const mid = sampleTransition(s, 200);
+    expect(mid.in.offset.x).toBeCloseTo(11, 5);
+    expect(mid.in.opacity).toBeCloseTo(0.5, 5);
+    expect(mid.out.offset).toEqual({ x: 0, y: 0 }); // the current item fades where it is
+    const end = sampleTransition(s, 400);
+    expect([end.in.offset, end.in.opacity, end.done]).toEqual([{ x: 0, y: 0 }, 1, true]);
   });
 
   it('a one-sided fade does not mix; a slide never touches opacity', () => {

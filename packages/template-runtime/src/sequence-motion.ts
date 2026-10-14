@@ -29,7 +29,29 @@ import { EASING_PRESETS, cubicBezierEase, type BezierEasing } from '@cg/shared-s
  * an isolated group): old × (1 − t) + new × t, exact for a page and for text.
  */
 
-export type SequenceEdge = 'top' | 'bottom' | 'left' | 'right' | 'none' | 'fade';
+export type SequenceEdge =
+  | 'top'
+  | 'bottom'
+  | 'left'
+  | 'right'
+  | 'none'
+  | 'fade'
+  | 'fade-right'
+  | 'fade-left';
+
+/** `D-163` — a side that fades (in place, or with a short drift). */
+export function isFadeEdge(edge: SequenceEdge): boolean {
+  return edge === 'fade' || edge === 'fade-right' || edge === 'fade-left';
+}
+
+/**
+ * `D-163` — how far a `fade-right` / `fade-left` side drifts: a NUDGE, not an entrance — 3 % of the
+ * box width, at least 6 px and at most 40 px (40 px across a 1920 px book, ~22 px across a 720 px
+ * strap). The item always stays almost where it rests; only a slide comes from off-screen.
+ */
+export function driftOf(box: MotionBox): number {
+  return Math.round(Math.max(6, Math.min(40, box.width * 0.03)));
+}
 export type SequenceTiming = 'simultaneous' | 'sequential';
 
 export interface MotionBox {
@@ -62,6 +84,10 @@ export function edgeOffset(edge: SequenceEdge, box: MotionBox): MotionVector | n
     case 'fade':
       // A fade moves nothing: it is a motion in time (it lasts `transitionMs`), not in space.
       return { x: 0, y: 0 };
+    case 'fade-right':
+      return { x: driftOf(box), y: 0 };
+    case 'fade-left':
+      return { x: -driftOf(box), y: 0 };
     case 'none':
       return null;
   }
@@ -131,8 +157,8 @@ export function sampleTransition(
   const progress = (ms: number, duration: number): number =>
     duration <= 0 ? 1 : cubicBezierEase(EASE, Math.min(1, ms / duration));
   // `D-163` — a `fade` side's opacity at progress p; every other side stays opaque.
-  const outOpacity = (p: number): number => (spec.outEdge === 'fade' ? 1 - p : 1);
-  const inOpacity = (p: number): number => (spec.inEdge === 'fade' ? p : 1);
+  const outOpacity = (p: number): number => (isFadeEdge(spec.outEdge) ? 1 - p : 1);
+  const inOpacity = (p: number): number => (isFadeEdge(spec.inEdge) ? p : 1);
 
   if (spec.timing === 'sequential') {
     // Phase 1: the exit runs alone; the incoming item is not yet on stage.
@@ -176,6 +202,6 @@ export function sampleTransition(
       opacity: inOpacity(inP),
     },
     done,
-    mix: spec.inEdge === 'fade' && spec.outEdge === 'fade' && !done,
+    mix: isFadeEdge(spec.inEdge) && isFadeEdge(spec.outEdge) && !done,
   };
 }
