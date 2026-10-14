@@ -3547,7 +3547,7 @@ error-prone.
 
 **Notes:** additive schema field, default absent.
 
-## [~] D-133 — loop range visualization ON the timeline, and an UNCONDITIONALLY authorable loop range (Cinegy-style) ⟨priority: high — client-required⟩ — **BUILT 2026-08-14** in `openspec/changes/timeline-drives-loop-and-media/` (with [[D-135]] as ONE change; all four owner decisions ANSWERED 2026-08-12, `tasks.md` §1–§3 now all `[x]`)
+## [x] D-133 — loop range visualization ON the timeline, and an UNCONDITIONALLY authorable loop range (Cinegy-style) ⟨priority: high — client-required⟩ — **BUILT 2026-08-14** in `openspec/changes/timeline-drives-loop-and-media/` (with [[D-135]] as ONE change; all four owner decisions ANSWERED 2026-08-12, `tasks.md` §1–§3 now all `[x]`) — archived 2026-10-04 (`openspec/changes/archive/2026-10-04-timeline-drives-loop-and-media/`); status corrected by DESIGNER-TRIAGE-01
 
 > **✅ BUILT (2026-08-14) — all three sections.** Authoring (the `hasContent` half of the "Pin
 > content start" gate removed, so a shapes-only scene with an out-point can author the range),
@@ -4154,7 +4154,7 @@ property that has to be specified rather than left to whoever writes the third c
 **Severity `unrated`:** net-new capability with no defect evidence behind it. Source: owner report
 via the `DEBT.md` sweep (no `DEBT.md` line — reported directly).
 
-## [ ] D-146 — neither product has an in-app about/version surface, though the build stamp is ready for one ⟨priority: low⟩
+## [x] D-146 — neither product has an in-app about/version surface, though the build stamp is ready for one ⟨priority: low⟩ — archived 2026-09-30 and 2026-10-04 (`openspec/changes/archive/2026-09-30-release-0-9-1/` task 4.1, `openspec/changes/archive/2026-10-04-client-test-release/` tasks 1.4–1.5); status corrected by DESIGNER-TRIAGE-01
 
 **What:** neither the Designer nor the Runtime shows the operator which build they are running.
 `__CG_BUILD__` is defined in **both** products and already carries `{ version, sha, builtAt }` —
@@ -4437,7 +4437,7 @@ class of defect B-104 is. Packaging reuses `@cg/vcg-format`'s `writeZip`/`readZi
 `.cgproj` is a different DOCUMENT from `.vcg` (which strips `editorBackdrop`, embeds the runtime,
 and carries a signable broadcast manifest) — reasoning in the proposal.
 
-## [~] D-151 — adding content LONGER than its host warns, and offers to extend the host duration ⟨priority: high — client-required⟩ — in progress: `openspec/changes/add-time-duration-guard/`
+## [x] D-151 — adding content LONGER than its host warns, and offers to extend the host duration ⟨priority: high — client-required⟩ — in progress: `openspec/changes/add-time-duration-guard/` — archived 2026-10-04 (`openspec/changes/archive/2026-10-04-add-time-duration-guard/`); status corrected by DESIGNER-TRIAGE-01
 
 **What:** At the moment content is **ADDED TO A SCENE OR COMPOSITION**, compare the added content's
 intrinsic duration against the host's duration. If the content is longer, warn that the host is too
@@ -5311,7 +5311,7 @@ strings — the preflight refusals — that this table did not list.
   filed and never advanced, so HEADINGS and the pointer DISAGREE by one; the headings win and
   `D-158` is taken here. Recorded in the registry's 2026-09-04 entry.
 
-## [~] D-159 — the Inspector explains in prose what it could express in state ⟨priority: high — the owner's words: "long and small and unreadable"⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905`; `openspec/changes/inspector-state-over-prose/`); Linux `gate:e2e` DISCHARGED for `c305f9ad` — <https://github.com/yasermostafaee/cg/actions/runs/33921378832> (`E2E (Playwright)` RAN, 621 s, `success`)
+## [x] D-159 — the Inspector explains in prose what it could express in state ⟨priority: high — the owner's words: "long and small and unreadable"⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905`; `openspec/changes/inspector-state-over-prose/`); Linux `gate:e2e` DISCHARGED for `c305f9ad` — <https://github.com/yasermostafaee/cg/actions/runs/33921378832> (`E2E (Playwright)` RAN, 621 s, `success`) — archived 2026-10-04 (`openspec/changes/archive/2026-10-04-inspector-state-over-prose/`); status corrected by DESIGNER-TRIAGE-01
 
 **What:** the Inspector's explanatory paragraphs become STATE where they can — a control the mode
 ignores is withheld (present, disabled, its reason as its own tooltip), a degenerate value reads as
