@@ -16,7 +16,7 @@ function stripExt(filename: string): string {
 
 /**
  * D-039ext — the ticker separator control: choose a Text glyph or an Image/logo.
- * The image picker lists BOTH the project's assets and the shared library
+ * The image picker lists BOTH the project's pictures and the shared library
  * (each option encoded `source:assetId`) plus a size (w×h) box. Text mode is the
  * prior plain separator field. The committed separator stays schema-valid: the
  * Text/Image toggle is UI state, and an image separator is only written once an
@@ -35,7 +35,11 @@ export function TickerSeparatorControl({
   const imageSep = typeof sep === 'object' && sep !== null ? sep : null;
   const hasImage = imageSep !== null;
 
-  const project = useAssets();
+  // 🔴 `B-128` — PICTURES ONLY. The project store also holds fonts, videos and animations, and a
+  // separator is drawn as `<img>`: a font or video there paints a broken-image icon on air. The
+  // shared library holds pictures only. A saved separator that is not one is repaired on open
+  // (`state/separator-repair.ts`).
+  const project = useAssets().filter((a) => a.kind === 'image');
   const shared = useSharedImages();
   const projectUrl = useAssetUrl(imageSep?.source === 'project' ? imageSep.assetId : null);
   const sharedUrl = useSharedImageUrl(imageSep?.source === 'shared' ? imageSep.assetId : null);

@@ -22,6 +22,7 @@ import {
 } from './features/assets/assetUrlCache.js';
 import { primeAll as primeAllSharedImages } from './features/sharedLibrary/sharedImageUrlCache.js';
 import { useIssues } from './hooks/useIssues.js';
+import { useSeparatorRepairOnOpen } from './hooks/useSeparatorRepairOnOpen.js';
 import { designerStore, editSceneOf, shallowEqual, useDesignerSelector } from './state/store.js';
 import { colors } from './theme.js';
 import { comboKey } from './keyboard.js';
@@ -262,6 +263,8 @@ export function App(): JSX.Element {
   // panel's own hook subscribed before, so pictures added from the Inspector (a book's pages)
   // rendered `missing image` on the canvas and in Preview while that panel was closed.
   useEffect(() => window.cg.assets.onImported((asset) => void primeAsset(asset)), []);
+  // `B-128` — a saved separator that is not an image is dropped on open, the author told once.
+  useSeparatorRepairOnOpen(activeSceneId);
 
   // D-040 — the shared image library is project-independent, so prime its blob
   // URLs once on mount; logos then render on the canvas regardless of which

@@ -1553,7 +1553,21 @@ makes it a candidate to **stabilise or quarantine deliberately** (a fixture whos
 fragile should not be able to redden a shared gate), rather than to "fix". Decide which before
 touching it. Source: `DEBT.md:1343`.
 
-## [ ] B-128 — the ticker separator picker lists EVERY asset, and selecting a font or a video records it as `kind: 'image'` ⟨priority: medium⟩
+## [~] B-128 — the ticker separator picker lists EVERY asset, and selecting a font or a video records it as `kind: 'image'` ⟨priority: medium⟩ — `openspec/changes/designer-fix-02/`
+
+— **On-air behaviour MEASURED before the fix (DESIGNER-FIX-02, 2026-10-14):** the page draws the
+separator as `<img alt="">` at its authored box (`ticker-driver.ts` `applyImageSeparator`), and the
+exporter packs the font or video under `assets/font/…` / `assets/video/…` and maps the id to it. In
+Chrome 155 (the engine CasparCG's CEF is built on) an `<img alt="">` 48×48 pointing at a `.woff2`
+or a `.webm` paints a **broken-image icon with a grey border** — 421 of 2,304 px, the same as the
+no-`alt` control — so every gap between ticker items shows it ON AIR. Not measured on CasparCG
+itself (this run may not use it for this prompt).
+— **Closed in code:** the picker offers project assets of kind `image` and the shared library only;
+a project that opens with a separator pointing at a font, a video or an animation has it REMOVED
+(outside the undo history, the project left unsaved so Save writes the repair) and the author is
+told once, naming each ticker (`state/separator-repair.ts`, `hooks/useSeparatorRepairOnOpen.ts`).
+Tests: `separator-repair.test.ts`, `separator-picker-repair.dom.test.ts` (the picker test was
+ablated red by removing the filter).
 
 **Repro:**
 

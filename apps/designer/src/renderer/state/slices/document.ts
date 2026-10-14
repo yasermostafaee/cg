@@ -96,6 +96,24 @@ export const documentSlice = {
     }
   },
 
+  /**
+   * 🔴 `B-128` — replace the just-opened project's scene with its REPAIRED form.
+   *
+   * Outside the undo history on purpose: an undo would put back a record the page draws as a
+   * broken-image icon on air. The saved baseline is NOT moved, so the project reads unsaved — the
+   * repair is real, and Save is what writes it to the file. Ignored when another project has
+   * been opened since (the repair was computed for `sceneId` only).
+   */
+  applyOpenRepair(sceneId: string, repaired: Scene): void {
+    if (current.scene === null || current.scene.id !== sceneId) return;
+    setSuppressHistory(true);
+    try {
+      set({ scene: repaired });
+    } finally {
+      setSuppressHistory(false);
+    }
+  },
+
   /** Explicitly switch top-level view (used by "back to projects"). */
   setView(view: DesignerView): void {
     if (view === current.view) return;

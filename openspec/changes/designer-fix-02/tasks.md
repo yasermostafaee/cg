@@ -5,7 +5,9 @@
 - [x] 1.1 `B-148` groupless duplicate box composition refused at export, both copies named; `look-carrier.test.ts`
       pin changed. `live-source-repeated`, read from `platesSharingASource`; separate plates on one source
       refused alike; each copy marked.
-- [ ] 1.2 `B-128` separator picker images only; a saved font / video separator repaired on open, told once.
+- [x] 1.2 `B-128` separator picker images only; a saved font / video separator repaired on open, told once.
+      On-air behaviour measured first (Chrome 155: a broken-image icon with a grey border in every gap);
+      the repair is outside undo and leaves the project unsaved.
 - [ ] 1.3 `B-106` repeater `maxItems` in the row editor and at play.
 - [ ] 1.4 `B-249` per-composition export writes no dangling `entryCompositionId`.
 
