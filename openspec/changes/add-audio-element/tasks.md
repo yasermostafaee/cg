@@ -43,7 +43,11 @@
 - [x] 4.5 Designer: wav-stats, conversion args (mono level), panel import, placement
 - [x] 4.6 e2e `audio-element.spec.ts` through the real converter — four formats, the Sound section,
       the Preview switch, the `.vcg`. Local Windows: 3 passed
-- [ ] 4.7 Linux `e2e` RAN on the commit carrying the change — run URL here
+- [x] 4.7 Linux `e2e` RAN on the commit carrying the change —
+      [38625458531](https://github.com/yasermostafaee/cg/actions/runs/38625458531) (`f0c3c062`):
+      the `E2E` step RAN and completed green — Designer 319 passed / 13 skipped, Runtime 343
+      passed / 2 skipped; the three `audio-element.spec.ts` cases passed on Linux (read from the
+      run log, not the step badge)
 
 ## 5. Docs
 

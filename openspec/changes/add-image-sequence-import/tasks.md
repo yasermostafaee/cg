@@ -52,12 +52,14 @@
 - [x] 5.7 `e2e/image-sequence-import.spec.ts` — a folder with a gap through the real converter, the
       alpha ramp over black and over white (ablated: premultiplied colour fails it), two sequences and
       the same frames twice, Cancel at both steps. Local Windows: 3 passed
-- [ ] 5.8 Linux `e2e` RAN on the commit carrying the change — run URL here. **Not yet discharged:**
+- [x] 5.8 Linux `e2e` RAN on the commit carrying the change —
+      [38625458531](https://github.com/yasermostafaee/cg/actions/runs/38625458531) (`f0c3c062`, which
+      carries this change and the `f934ff39` fix): the `E2E` step RAN and completed green — Designer
+      319 passed / 13 skipped, Runtime 343 passed / 2 skipped; the three
+      `image-sequence-import.spec.ts` cases passed (read from the run log). The earlier
       [38616898470](https://github.com/yasermostafaee/cg/actions/runs/38616898470) (`70dd1cad`) RAN
-      the `E2E` step and the three `image-sequence-import.spec.ts` cases PASSED on Linux, but the job
-      was red — `project-package.spec.ts:49`'s `/Image/` locator now also matched this change's
-      `Image sequence…` items (1 failed of 316). Fixed in `f934ff39`; the green run that discharges
-      this rides the next push.
+      the step but was red — `project-package.spec.ts:49`'s `/Image/` locator also matched this
+      change's `Image sequence…` items (1 failed of 316), fixed in `f934ff39`.
 
 ## 6. Docs
 
