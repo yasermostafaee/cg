@@ -296,6 +296,40 @@ describe('a timeofday countdown is absolute and PINNED per run (D-141)', () => {
     expect(h.node.textContent).toBe('00:00:30'); // true remaining, not 00:01:30
   });
 
+  it('🔴 AZAN-DESIGNER-01 — a target PAST MIDNIGHT counts down across the day (and year) boundary, in Persian digits, and completes once', async () => {
+    // 23:50 on New Year's Eve, machine-local; the azan is at 00:10 — tomorrow, next year.
+    const h = make(
+      {
+        mode: 'countdown',
+        format: 'mm:ss',
+        digits: 'persian',
+        target: { kind: 'timeofday', time: '00:10' },
+        zones: PRESET,
+      },
+      AT(2026, 11, 31, 23, 50, 0),
+    );
+    const done = completionFlag(h.driver);
+    h.driver.start();
+    // Twenty minutes, not 00:10's "today" (already 23 h 40 min in the past).
+    expect(h.node.textContent).toBe('۲۰:۰۰');
+    expect(zoneOf(h.root)).toBe('warning');
+    // Across midnight: 00:00:30 on 1 January is still ten minutes and thirty seconds before 00:10.
+    h.clock.advance(10 * 60_000 + 30_000);
+    expect(new Date(h.clock.now()).getFullYear()).toBe(2027);
+    expect(h.node.textContent).toBe('۰۹:۳۰');
+    expect(zoneOf(h.root)).toBe('critical');
+    await flush();
+    expect(done.done).toBe(false);
+    // …to zero at 00:10, once, and it stays there.
+    h.clock.advance(9 * 60_000 + 30_000);
+    expect(h.node.textContent).toBe('۰۰:۰۰');
+    await flush();
+    expect(done.count).toBe(1);
+    h.clock.advance(60_000);
+    expect(h.node.textContent).toBe('۰۰:۰۰');
+    expect(zoneOf(h.root)).toBe('critical');
+  });
+
   it('a run started EXACTLY at the target arrives immediately (remaining 0)', async () => {
     const h = make(
       { mode: 'countdown', target: { kind: 'timeofday', time: '20:32' } },
