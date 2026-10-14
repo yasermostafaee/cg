@@ -20,6 +20,7 @@ import { Modal } from '../shell/Modal.js';
 import { PreviewFieldForm, type PreviewDispatch } from './PreviewFieldForm.js';
 import { columnsForFields, type ListItemColumn } from './repeater-columns.js';
 import { PreviewTransport } from './PreviewTransport.js';
+import { definedZoneKeys } from '../inspector/zone-scope.js';
 import { PreviewScopeTiming } from './PreviewScopeTiming.js';
 import { type TimingOverride } from './PreviewTimingControls.js';
 import * as s from './PreviewModal.css.js';
@@ -356,6 +357,33 @@ export function PreviewModal({
     setSoundMuted(next);
     post({ action: 'sound-muted', muted: next });
   }, [post]);
+  /*
+    `D-141` (design §7.4) — the two zone rehearsal knobs, shown only when a countdown carries zones:
+    a clock RATE (the page's one clock runs N× faster, so an hour of zones replays in a minute) and a
+    FORCED zone (paint one zone's colours without running anything). Session-only, like Sound, and
+    re-sent when the page boots.
+  */
+  const zoneKeys = useMemo(() => [...definedZoneKeys(scene)], [scene]);
+  const [clockRate, setClockRate] = useState(1);
+  const clockRateRef = useRef(1);
+  const onClockRate = useCallback(
+    (rate: number) => {
+      clockRateRef.current = rate;
+      setClockRate(rate);
+      post({ action: 'clock-rate', rate });
+    },
+    [post],
+  );
+  const [forcedZone, setForcedZone] = useState<string | null>(null);
+  const forcedZoneRef = useRef<string | null>(null);
+  const onForceZone = useCallback(
+    (zone: string | null) => {
+      forcedZoneRef.current = zone;
+      setForcedZone(zone);
+      post({ action: 'force-zone', zone });
+    },
+    [post],
+  );
   const pendingPaths = useMemo(() => dirtyPaths(values, applied), [values, applied]);
   const anyPending = pendingPaths.size > 0;
 
@@ -398,6 +426,10 @@ export function PreviewModal({
       post({ action: 'update', fields: defaultNestedValues(aggregate) });
       // `D-165` — a freshly booted page starts unmuted; carry the author's switch over.
       post({ action: 'sound-muted', muted: soundMutedRef.current });
+      // `D-141` — and the zone rehearsal knobs, which a fresh page has forgotten too.
+      if (clockRateRef.current > 1) post({ action: 'clock-rate', rate: clockRateRef.current });
+      if (forcedZoneRef.current !== null)
+        post({ action: 'force-zone', zone: forcedZoneRef.current });
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -465,6 +497,11 @@ export function PreviewModal({
               hasSound={hasSound}
               soundMuted={soundMuted}
               onToggleSound={onToggleSound}
+              zoneKeys={zoneKeys}
+              clockRate={clockRate}
+              onClockRate={onClockRate}
+              forcedZone={forcedZone}
+              onForceZone={onForceZone}
             />
             <div className={s.timingScroll}>
               <PreviewScopeTiming

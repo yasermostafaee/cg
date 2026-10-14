@@ -322,6 +322,30 @@ export class Preview {
         // rebuilds for the same reason. Phase 2's Designer UI is this seam's first caller;
         // in phase 1 nothing posts 'look' yet (said so the seam is not taken for dead).
         let activeLookId = undefined;
+        // D-141 (design 7.4a) — the session-only REHEARSAL RATE. Above 1, the runtime's ONE clock
+        // runs that many times faster, so an hour of countdown zones replays in a minute through
+        // the REAL driver, thresholds and transitions. Never stored, never exported. It also
+        // speeds the lifecycle timing of this preview run, which is honest: it is a rehearsal.
+        let clockRate = 1;
+        // D-141 (design 7.4b) — a zone FORCED on every zoned scope root with no driver involved,
+        // so an author can check each zone's colours while styling. null = the driver decides.
+        let forcedZone = null;
+        function rehearsalClock(rate) {
+          if (!(rate > 1)) return undefined;
+          const t0 = Date.now();
+          return {
+            now: () => t0 + (Date.now() - t0) * rate,
+            setTimeout: (cb, ms) => window.setTimeout(cb, ms / rate),
+            clearTimeout: (handle) => window.clearTimeout(handle),
+          };
+        }
+        function applyForcedZone() {
+          const roots = document.querySelectorAll('[data-cg-zone-root]');
+          for (const root of roots) {
+            if (forcedZone === null) root.removeAttribute('data-cg-zone');
+            else root.setAttribute('data-cg-zone', forcedZone);
+          }
+        }
         // Families we've already loaded into this iframe's
         // document.fonts. Keyed by family name; the value is the
         // assetUrl we loaded from, so we can re-fetch when a font
@@ -653,6 +677,8 @@ export class Preview {
               // D-125 — parsed Lottie animationData (assetId → object); the runtime mounts a
               // player per Lottie element from this map.
               lottieAssets: lottieAssets,
+              // D-141 — the rehearsal clock, only while a rate above 1 is chosen.
+              ...(clockRate > 1 ? { clock: rehearsalClock(clockRate) } : {}),
             });
             installCasparGlobals(runtime);
             // Session Z — the runtime's OWN diagnostics reach the parent console on the
@@ -691,6 +717,8 @@ export class Preview {
             // playhead, not the pooled node's stale frame.
             runtime.tick(currentFrame);
             applyEditingHide();
+            // D-141 — a forced zone survives the rebuild (the new roots are stamped again).
+            if (forcedZone !== null) applyForcedZone();
           } finally {
             busy = false;
           }
@@ -1090,6 +1118,20 @@ export class Preview {
                 // D-165 — the Preview's sound switch: the page's own runtime mutes every sound it
                 // makes (the same switch CG Control's PVW uses). Takes effect on sounds playing now.
                 if (typeof setSoundMuted === 'function') setSoundMuted(msg.muted === true);
+              } else if (msg.action === 'clock-rate') {
+                // D-141 — a new rehearsal rate takes a fresh runtime (the clock is a boot
+                // option), so it rebuilds — and only when the rate actually changed.
+                const rate = typeof msg.rate === 'number' && msg.rate > 1 ? msg.rate : 1;
+                if (rate !== clockRate) {
+                  clockRate = rate;
+                  playing = false;
+                  if (currentScene) await applyScene(currentScene);
+                }
+              } else if (msg.action === 'force-zone') {
+                // D-141 — force (or release) a zone on every zoned scope root. Releasing clears
+                // the attribute; the countdown re-establishes its own zone on its next run.
+                forcedZone = typeof msg.zone === 'string' && msg.zone !== '' ? msg.zone : null;
+                applyForcedZone();
               } else if (msg.action === 'pause') {
                 // D-020 — freeze the lifecycle (intro / hold countdown / outro).
                 if (runtime && typeof runtime.pause === 'function') runtime.pause();

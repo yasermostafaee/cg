@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { Select } from '../../ui/Select.js';
 import * as s from './PreviewTransport.css.js';
 
 /**
@@ -48,6 +49,11 @@ export function PreviewTransport({
   hasSound = false,
   soundMuted = false,
   onToggleSound,
+  zoneKeys = [],
+  clockRate = 1,
+  onClockRate,
+  forcedZone = null,
+  onForceZone,
 }: {
   paused: boolean;
   canStep: boolean;
@@ -62,6 +68,14 @@ export function PreviewTransport({
   hasSound?: boolean;
   soundMuted?: boolean;
   onToggleSound?: () => void;
+  /** `D-141` — the keys a countdown's zones define; empty hides the two zone knobs. */
+  zoneKeys?: readonly string[];
+  /** `D-141` — the rehearsal rate (1 = real time). */
+  clockRate?: number;
+  onClockRate?: (rate: number) => void;
+  /** `D-141` — a zone painted with no countdown running; `null` = the countdown decides. */
+  forcedZone?: string | null;
+  onForceZone?: (zone: string | null) => void;
 }): JSX.Element {
   return (
     <div className={s.bar}>
@@ -126,6 +140,38 @@ export function PreviewTransport({
             <Icon icon={soundMuted ? VolumeX : Volume2} size={14} />
             {soundMuted ? 'Sound off' : 'Sound on'}
           </Button>
+        )}
+        {/*
+          `D-141` (design §7.4) — rehearse the zones without waiting an hour: the page's clock runs
+          N× faster through the real countdown, or one zone is painted with nothing running.
+        */}
+        {zoneKeys.length > 0 && (
+          <>
+            <Select
+              aria-label="Rehearse zones"
+              data-testid="preview-zone-rate"
+              value={String(clockRate)}
+              onChange={(e) => onClockRate?.(Number(e.target.value))}
+            >
+              <option value="1">Real time</option>
+              <option value="10">Rehearse ×10</option>
+              <option value="60">Rehearse ×60</option>
+              <option value="600">Rehearse ×600</option>
+            </Select>
+            <Select
+              aria-label="Show zone"
+              data-testid="preview-zone-force"
+              value={forcedZone ?? ''}
+              onChange={(e) => onForceZone?.(e.target.value === '' ? null : e.target.value)}
+            >
+              <option value="">Zone: live</option>
+              {zoneKeys.map((key) => (
+                <option key={key} value={key}>
+                  Zone: {key}
+                </option>
+              ))}
+            </Select>
+          </>
         )}
       </div>
     </div>

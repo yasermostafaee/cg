@@ -46,6 +46,9 @@ import type {
 } from '@cg/shared-schema';
 import { LiveSourceIdSchema } from '@cg/shared-schema';
 import { AUDIO_VOLUME_DB_MAX, AUDIO_VOLUME_DB_MIN } from '@cg/shared-schema';
+import { parseTimeOfDay } from '@cg/text-shaping';
+import { ClockTargetDataKey } from './ClockTargetDataKey.js';
+import { ClockZonesSection } from './ClockZonesSection.js';
 import { formatPeak, formatSeconds } from '../assets/wav-stats.js';
 import {
   ASPECT_CUSTOM,
@@ -2511,6 +2514,20 @@ function TickerSections({
 /** Seeded when the operator switches a clock to countdown with no target. */
 const DEFAULT_CLOCK_TARGET: ClockTarget = { kind: 'duration', ms: 60_000 };
 
+/** `D-141` / `B-344` — every target kind the schema accepts, in the select's order. */
+const CLOCK_TARGET_KINDS = ['duration', 'timeofday', 'datetime'] as const;
+const CLOCK_TARGET_LABELS = ['duration', 'time of day', 'date & time'] as const;
+
+/**
+ * `D-141` 5.1 — the time a switch to `timeofday` starts from: an hour from now, to the minute, on
+ * this machine's clock. A starting value only; the author types the real azan time over it.
+ */
+function seedTimeOfDay(nowMs: number): string {
+  const d = new Date(nowMs + 60 * 60_000);
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 /** Stored ISO → `<input type="datetime-local">` value (local components). */
 function isoToLocalInput(iso: string): string {
   const d = new Date(iso);
@@ -2566,11 +2583,14 @@ function ClockSections({
           onCommit={(mode) =>
             // Switching to countdown must keep the element schema-valid:
             // countdown REQUIRES a target, so seed one if none is stored yet.
+            // `D-141` 5.9 — and switching AWAY drops its zones: the schema refuses
+            // zones on `wall` / `countup` (the runtime would ignore them anyway).
             designerStore.updateElement(id, {
               mode,
               ...(mode === 'countdown' && target === undefined
                 ? { target: DEFAULT_CLOCK_TARGET }
                 : {}),
+              ...(mode !== 'countdown' && element.zones !== undefined ? { zones: undefined } : {}),
             } as Partial<Element>)
           }
         />
@@ -2636,21 +2656,58 @@ function ClockSections({
         )}
         {element.mode === 'countdown' && (
           <>
+            {/*
+              🔴 `B-344` / `D-141` 5.1 — THREE target kinds, each with its own input. The select
+              offered only `duration` and `datetime`, so a stored `timeofday` target matched no
+              option and fell into the date-time branch below, whose first touch rewrote it to a
+              fixed date. Every kind the schema accepts is now an option, and each value renders
+              its own input.
+            */}
             <SelectField
               label="target"
               value={(target ?? DEFAULT_CLOCK_TARGET).kind}
-              options={['duration', 'datetime'] as const}
+              options={CLOCK_TARGET_KINDS}
+              labels={CLOCK_TARGET_LABELS}
               onCommit={(kind) => {
                 if (kind === (target ?? DEFAULT_CLOCK_TARGET).kind) return;
                 designerStore.updateElement(id, {
                   target:
                     kind === 'duration'
                       ? DEFAULT_CLOCK_TARGET
-                      : { kind: 'datetime', iso: new Date().toISOString() },
+                      : kind === 'timeofday'
+                        ? { kind: 'timeofday', time: seedTimeOfDay(Date.now()) }
+                        : { kind: 'datetime', iso: new Date().toISOString() },
                 } as Partial<Element>);
               }}
             />
-            {(target ?? DEFAULT_CLOCK_TARGET).kind === 'duration' ? (
+            {target?.kind === 'timeofday' ? (
+              <>
+                {/*
+                  `D-141` — the azan time, in the clock's own Digits (typed in any digit set,
+                  stored as canonical Latin `HH:mm[:ss]` by the same reader the page uses).
+                  A value that is not a time is not stored.
+                */}
+                <TextField
+                  label="time"
+                  ariaLabel="Countdown target time of day"
+                  value={target.time}
+                  resetKey={id}
+                  digits={element.digits}
+                  onCommit={(raw) => {
+                    const time = parseTimeOfDay(raw);
+                    if (time === undefined || time === target.time) return;
+                    designerStore.updateElement(id, {
+                      target: { kind: 'timeofday', time },
+                    } as Partial<Element>);
+                  }}
+                />
+                <p className={dds.hint}>
+                  Counts down to the next {target.time} on the playout machine’s own clock — today,
+                  or tomorrow once today’s has passed.
+                </p>
+                <ClockTargetDataKey elementId={id} time={target.time} />
+              </>
+            ) : (target ?? DEFAULT_CLOCK_TARGET).kind === 'duration' ? (
               <NumberField
                 label="duration"
                 value={Math.round((target?.kind === 'duration' ? target.ms : 60_000) / 1000)}
@@ -2686,6 +2743,9 @@ function ClockSections({
           Time-driven — scrubbing does not move it.
         </StateLine>
       </CollapseSection>
+
+      {/* `D-141` 5.2 — zones, under the target, for a countdown only. */}
+      {element.mode === 'countdown' && <ClockZonesSection element={element} />}
 
       {/* Style parity with the ticker text section: family/weight/size, colour
           (solid or gradient fill), align, box background (default transparent).
