@@ -8,3 +8,4 @@ export * from './field-digits.js';
 export * from './keyboard-digits.js';
 export * from './date.js';
 export * from './truncate.js';
+export * from './natural-order.js';
