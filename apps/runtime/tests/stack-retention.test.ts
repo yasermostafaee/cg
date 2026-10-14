@@ -746,6 +746,8 @@ it('🔴 every OPEN-AXIS field a published row carries survives retainedFromStac
     // was added, because this guard refuses to run against a fixture that does not populate
     // every carriable key: an unpopulated field would make the assertion below pass vacuously.
     timingOverride: { repeat: 2, delayMs: 1500 },
+    // `R-100` — the page a row's book is on, added the day the field was, for the reason above.
+    pages: { book: 11 },
   } as unknown as StackItemState;
 
   /*

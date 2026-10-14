@@ -108,6 +108,13 @@ export const TakeRefusalSchema = z.object({
 export type TakeRefusal = z.infer<typeof TakeRefusalSchema>;
 
 /** Reconciled view of one item on the operator's stack. */
+/**
+ * `R-100` — the page a row's page lists are on: page-list field id → 0-based page index. One entry
+ * per page list the row has turned; a list with no entry is on its first page.
+ */
+export const StackItemPagesSchema = z.record(z.string().min(1), z.number().int().min(0));
+export type StackItemPages = z.infer<typeof StackItemPagesSchema>;
+
 export const StackItemStateSchema = z.object({
   itemId: IdSchema,
   templateId: IdSchema,
@@ -238,6 +245,12 @@ export const StackItemStateSchema = z.object({
    * ⚠ ABSENT MEANS INHERITING the template's authored values, not "zero" and not "one".
    */
   timingOverride: StackItemTimingOverrideSchema.optional(),
+  /**
+   * `R-100` — the PAGE each of the row's page lists is on (field id → 0-based index), the
+   * published half of the pair whose retained half is {@link RetainedStackItemSchema.pages}.
+   * The console's `12 / 300` reads it; a page turn changes it. ABSENT means page 1 of every list.
+   */
+  pages: StackItemPagesSchema.optional(),
   /**
    * `FIELD-FIXES-01` B — why this row's last take was refused (see {@link TakeRefusalSchema}).
    * ABSENT on every row whose last take landed, or that has been cleared since.
@@ -621,6 +634,12 @@ export const RetainedStackItemSchema = z.object({
    * looping forever with the console showing it as normal. `B-107` / `B-109` exactly.
    */
   timingOverride: StackItemTimingOverrideSchema.optional(),
+  /**
+   * `R-100` — the page each page list is on, RETAINED for `timingOverride`'s reason: this schema
+   * is a strict whitelist, so an undeclared key is stripped in silence and a book would reopen
+   * at page 1 after every bridge restart while the reader is on page 140.
+   */
+  pages: StackItemPagesSchema.optional(),
 });
 export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;
 
@@ -670,5 +689,6 @@ export function retainedFromStackItem(item: StackItemState): RetainedStackItem {
     ...(item.plateVolumes !== undefined && { plateVolumes: item.plateVolumes }),
     ...(item.timingOverride !== undefined && { timingOverride: item.timingOverride }),
     ...(item.activeLookId !== undefined && { activeLookId: item.activeLookId }),
+    ...(item.pages !== undefined && { pages: item.pages }),
   };
 }

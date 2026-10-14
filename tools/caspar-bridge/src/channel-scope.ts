@@ -358,6 +358,10 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'stack.load': INTENT,
   'stack.media-plate-transport': INTENT,
   'stack.next': INTENT,
+  // `R-100` — a page turn is a playout verb on the row's own channel, like NEXT.
+  'stack.page': INTENT,
+  // `R-100` — storing one picture of a book: the answer is the verdict on the principal's own press.
+  'pages.put': INTENT,
   'stack.out': INTENT,
   'stack.remove': INTENT,
   'stack.remove-all': INTENT,

@@ -289,6 +289,14 @@ export const TemplateInfoSchema = z.object({
    */
   hasNext: z.boolean().optional(),
   /**
+   * `R-100` — this template's PAGE LISTS: each `list` field marked `pages` that drives a sequence,
+   * and whether that sequence wraps (`repeat: 'infinite'`) or is a book that stops at its ends.
+   * Derived ONCE at import from the unpacked scene, for `hasNext`'s reason — it rides the catalogue
+   * of record so every console and the bridge know which rows load pictures, and how Next and
+   * Previous behave at page 1 and the last page. Absent: the template has no page list.
+   */
+  pageLists: z.array(z.object({ fieldId: z.string().min(1), wrap: z.boolean() })).optional(),
+  /**
    * 🔴 `TIMING-WIRE-22` §4 — **WHAT THIS TEMPLATE'S TIMING IS, so the console can STATE it.**
    *
    * Derived at import from the unpacked scene by the canonical `playoutOf`, exactly as

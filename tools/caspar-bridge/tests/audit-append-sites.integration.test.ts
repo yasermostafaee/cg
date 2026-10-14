@@ -56,6 +56,14 @@ const PLAYOUT_VERBS = ['load', 'take', 'update', 'stop', 'next', 'out', 'remove'
  */
 const CONFIG_VERBS = ['set-pass-timing'] as const;
 
+/**
+ * `R-100` — a PAGE TURN on a row's book: a playout verb (it changes what is on air), but one that
+ * acts only on a template with a page list, so the lower third this suite takes cannot drive it.
+ * Driven by `tests/book-pages.integration.test.ts`, which asserts one `ok` row per accepted turn,
+ * naming the item.
+ */
+const PAGE_VERBS = ['page-turn'] as const;
+
 const NON_VERB_ACTIONS = [
   'failover',
   'reconnect',
@@ -129,7 +137,7 @@ const NON_VERB_ACTIONS = [
 ] as const;
 
 it('the "every playout verb" list is COMPLETE — each schema action is driven or named non-verb', () => {
-  expect([...PLAYOUT_VERBS, ...CONFIG_VERBS, ...NON_VERB_ACTIONS].sort()).toEqual(
+  expect([...PLAYOUT_VERBS, ...CONFIG_VERBS, ...PAGE_VERBS, ...NON_VERB_ACTIONS].sort()).toEqual(
     [...AuditEntrySchema.shape.action.options].sort(),
   );
 });

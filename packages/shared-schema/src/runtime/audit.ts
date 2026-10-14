@@ -29,6 +29,8 @@ export const AuditEntrySchema = z.object({
     'stop',
     // R-028 (5.4) — advancing a template's sequence (`CG NEXT`).
     'next',
+    // `R-100` — turning a row's book: Next, Previous or Go to on a page list (`__cg.page`).
+    'page-turn',
     'lock-engage',
     'lock-release',
     /*

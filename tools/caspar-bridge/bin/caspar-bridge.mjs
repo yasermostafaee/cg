@@ -408,6 +408,13 @@ const templatesDir =
     ? args['templates-dir']
     : path.join(stateHome, '.cg-runtime', 'bridge-templates');
 
+// `R-100` — the pictures of operators' books: one file per picture by SHA-256, BESIDE the
+// template store and never inside it (the registry reads every *.json there as a template).
+const pagesDir =
+  typeof args['pages-dir'] === 'string'
+    ? args['pages-dir']
+    : path.join(stateHome, '.cg-runtime', 'bridge-pages');
+
 // D-137/C-015 — the Live Source catalog and the per-plate assignments. Each has
 // its own path, NEVER inside templatesDir (see the header): the registry would
 // read either of them as a template.
@@ -780,6 +787,7 @@ const bridgeOptions = {
   reservedLayers,
   reservedLayersPath,
   templatesDir,
+  pagesDir,
   sourceCatalogPath,
   sourceAssignmentsPath,
   playoutInputsPath,

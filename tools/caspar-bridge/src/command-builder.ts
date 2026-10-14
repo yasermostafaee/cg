@@ -3,6 +3,7 @@ import { redactUrlCredentials, type SourceProducer } from '@cg/shared-ipc';
 import {
   withCgControl,
   type CgControl,
+  type CgPage,
   type CgPassTiming,
   type FieldValues,
 } from '@cg/shared-schema';
@@ -24,6 +25,8 @@ export interface TakeControl {
   readonly take: string;
   readonly look?: string;
   readonly timing?: CgPassTiming;
+  /** `R-100` — the page a row's page list is on, with that page's picture when it needs one. */
+  readonly page?: CgPage;
 }
 
 /**
@@ -234,9 +237,27 @@ export class CommandBuilder {
       take: control.take,
       ...(control.look !== undefined && { look: control.look }),
       ...(control.timing !== undefined && { timing: control.timing }),
+      // `R-100` — LAST, so a row with no page list puts exactly the bytes it always did.
+      ...(control.page !== undefined && { page: control.page }),
     };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
       serialize(withCgControl(fields, ordered)),
+    )}`;
+  }
+
+  /**
+   * `R-100` — **TURN A PAGE: the operator's Next, Previous or Go to on a page list.**
+   *
+   * The same `CG UPDATE` verb, escape chain and reserved key as {@link updateLook} and
+   * {@link updatePassTiming}: AMCP has `CG NEXT` and nothing for "previous" or "page N", so the
+   * ABSOLUTE page rides `__cg.page`, with that page's picture inline when it is an operator page
+   * (the template origin serves templates and nothing else, and the page's CSP takes images only
+   * as `data:`). ONE command per press, carrying exactly the page asked for.
+   */
+  updatePage(slot: CommandSlot, page: CgPage, fields: FieldValues = {}): string {
+    const control: CgControl = { page };
+    return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
+      serialize(withCgControl(fields, control)),
     )}`;
   }
 

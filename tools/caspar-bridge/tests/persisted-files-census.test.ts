@@ -72,6 +72,12 @@ const BEFORE_AND_AFTER = {
     'bridge-imported-state.json',
     'bridge-live-layers.json',
     /*
+      `R-100` — NEW: the pictures of operators' books (`page-store.ts`), one file per picture named
+      by its SHA-256 and its size, BESIDE `bridge-templates` and never inside it. No migration is
+      owed: absent means no book was ever loaded.
+    */
+    'bridge-pages',
+    /*
       🔴 `C-037` — the Playout link's config: the auth MODE and the `playout.*` addresses.
       Its OWN file, deliberately not part of `bridge-connection.json`, because that file is
       the `connections.set-config` REQUEST body — auth configuration living there would be

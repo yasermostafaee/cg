@@ -150,6 +150,35 @@ export const StackNextChannel = defineChannel(
   z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
 );
 
+/**
+ * `R-100` — **TURN A ROW'S BOOK: Next, Previous or Go to page N, on one page list.**
+ *
+ * Not `stack.next`: AMCP has `CG NEXT` and nothing for previous or a page number, and a relative
+ * NEXT that a page drops mid-transition would leave the console's `12 / 300` lying. So the bridge
+ * owns the page number, moves it (a book stops at its ends; a wrapping list wraps), and tells an
+ * on-air page the ABSOLUTE page in `__cg.page` on ONE `CG UPDATE` carrying that page's picture. A
+ * row that does not own live layers changes state only — nothing reaches CasparCG (golden rule 10);
+ * the next take carries the page.
+ *
+ * `to` is `next`, `previous`, or the operator's PAGE NUMBER (1-based). The answer is the page the
+ * row is now on (1-based) and the count, so the console reads back what happened.
+ */
+export const StackPageChannel = defineChannel(
+  'stack.page',
+  z.object({
+    itemId: IdSchema,
+    field: z.string().min(1),
+    to: z.union([z.literal('next'), z.literal('previous'), z.number().int().min(1)]),
+  }),
+  z.object({
+    accepted: z.boolean(),
+    page: z.number().int().min(1).optional(),
+    count: z.number().int().min(0).optional(),
+    errorCode: z.string().optional(),
+    message: z.string().optional(),
+  }),
+);
+
 export const StackOutChannel = defineChannel(
   'stack.out',
   z.object({ itemId: IdSchema, immediate: z.boolean().optional() }),

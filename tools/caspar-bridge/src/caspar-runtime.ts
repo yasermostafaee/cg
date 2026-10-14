@@ -40,6 +40,9 @@ import type {
   TakeRefusal,
 } from '@cg/shared-schema';
 import { isOnAirStatus, isRetainedOnAir, ownsLiveSeats, withCgControl } from '@cg/shared-schema';
+import type { CgPage } from '@cg/shared-schema';
+import { PageStore } from './page-store.js';
+import { pageRefsOf, pageTarget, type PageRef, type PageTurn } from './page-turn.js';
 import {
   bankForChannel,
   firstBank,
@@ -167,6 +170,8 @@ import {
   ledgerChannels,
   templateAdmitsPassTiming,
   unlicensedTakeRefusal,
+  PAGES_MAX_PER_ROW,
+  pageRefusalMessage,
   CG_UNLICENSED_CODE,
   BACKUP_UNMAPPED_CODE,
   backupUnmappedRefusal,
@@ -1698,6 +1703,13 @@ export class CasparRuntime {
    * by a failed send is not inert, it is what the next reconcile and the next take would read.
    */
   readonly #passTimings = new Map<string, StackItemTimingOverride>();
+  /**
+   * `R-100` — the page each of a row's page lists is on (field id → 0-based index). Written only
+   * by a turn that succeeded (or a state-only one); published and retained like `#passTimings`.
+   */
+  readonly #pageIndexes = new Map<string, Record<string, number>>();
+  /** `R-100` — the pictures operators loaded, kept by SHA-256 (see `page-store.ts`). */
+  readonly #pages: PageStore;
   /*
     🔴 `SELF-STOP-24` / `C-013` — **ITEM ID → THE TOKEN THAT NAMES ITS CURRENT TAKE.**
 
@@ -2242,6 +2254,11 @@ export class CasparRuntime {
        */
       templatesDir?: string;
       /**
+       * `R-100` — where the pictures of operators' books persist (one file per picture, by
+       * SHA-256), beside the template store and never inside it. Absent = in memory only.
+       */
+      pagesDir?: string;
+      /**
        * D-137 / C-015 — the VALIDATED source catalog (resolved and checked in
        * `createBridge` before the WebSocket binds). Absent = NO SOURCES, which
        * is the fail-closed default and never a guessed one.
@@ -2344,6 +2361,13 @@ export class CasparRuntime {
       the first `CG ADD`, which a runtime that is never started can still reach in a unit test.
     */
     this.#reconciler.on('item-removed', (info) => this.#templates.release(info.itemId));
+    // `R-100` — a removed row's book leaves with it: its page number, and every picture no other
+    // row names (the sweep reads the row as already gone).
+    this.#pages = new PageStore(options.pagesDir ?? null);
+    this.#reconciler.on('item-removed', (info) => {
+      this.#pageIndexes.delete(info.itemId);
+      void this.#sweepPages(info.itemId);
+    });
     // R-034 — same shape, same reason: the delimiter list is read from disk
     // before the WebSocket can answer a `delimiters.list`, so a bridge restart
     // never hands a browser the defaults over the operator's own list.
@@ -3026,6 +3050,8 @@ export class CasparRuntime {
       // visible on the picture either. Without this the Inspector would have to guess, and a
       // surface that guesses about air is the class of defect this product refuses.
       const timingOverride = this.#passTimings.get(item.itemId);
+      // `R-100` — the page each page list is on: the console's `12 / 300` reads it.
+      const pages = this.#pageIndexes.get(item.itemId);
       /*
         🔴 `B-228` — THE BRIDGE'S OWN ANSWER TO "may this be removed", SAID OUT LOUD.
 
@@ -3075,6 +3101,8 @@ export class CasparRuntime {
         // The comment above names `lookSourceOverride` as having been missed here on the day it
         // was added; this is that list, one entry longer, added on the day of.
         timingOverride === undefined &&
+        // `R-100` — and the page number, for `timingOverride`'s reason, on the day it was added.
+        pages === undefined &&
         !removeExempt &&
         takeRefusal === undefined &&
         !backupUnmirrored &&
@@ -3090,6 +3118,7 @@ export class CasparRuntime {
         ...(plateVolumes !== undefined && { plateVolumes }),
         ...(activeLookId !== undefined && { activeLookId }),
         ...(timingOverride !== undefined && { timingOverride }),
+        ...(pages !== undefined && { pages }),
         ...(removeExempt && { removeExempt: true }),
         ...(backupUnmirrored && { backupUnmirrored: true }),
         ...(backupNoCopy.length > 0 && { backupNoCopy }),
@@ -3834,6 +3863,9 @@ export class CasparRuntime {
       if (item.timingOverride !== undefined) {
         this.#passTimings.set(item.itemId, { ...item.timingOverride });
       }
+      // `R-100` — a book reopens on the page it was on, not page 1. A direct re-apply, like the
+      // two above: no page turn is sent mid-restore.
+      if (item.pages !== undefined) this.#pageIndexes.set(item.itemId, { ...item.pages });
       /*
        * 🔴 B-109 / B-107 — THE PENDING RESTORE IS THE LICENCE TO TOUCH THE LAYER, and
        * only a restorable state gets one.
@@ -3883,6 +3915,8 @@ export class CasparRuntime {
       );
     }
     this.#setRestoreReport(skipped, migrated);
+    // `R-100` — every picture no restored row names is deleted (nothing is recent after a start).
+    void this.#sweepPages();
     return { restored, skipped, migrated };
   }
 
@@ -5839,6 +5873,10 @@ export class CasparRuntime {
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     // R-006 — see #noServerReachable(): refuse before the intent exists.
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+    // `R-100` — a page list must name pictures this bridge holds, within the row's limit; refused
+    // before anything else, so a refused book refuses the WHOLE update (BM-2's rule).
+    const pageRefusal = this.#refusePageLists(itemId, fields);
+    if (pageRefusal !== null) return { accepted: false, ...pageRefusal };
     /*
       🔴 **BM-2 §4.3 — THE BINDINGS MOVE THE FILLS FIRST, AND THE PAGE IS TOLD LAST AND ONLY
       ON SUCCESS (BD).**
@@ -5897,6 +5935,8 @@ export class CasparRuntime {
 
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
+    // `R-100` — a new book keeps the page number when it still has that page, else page 1.
+    const touchedPages = this.#keepPagesAfterUpdate(itemId, fields);
 
     // B-070 — PRESCRIPTIVE, the rule `update` never had (take has it since
     // B-039; setPosition checks the same set). `CG UPDATE` needs a live
@@ -5917,9 +5957,16 @@ export class CasparRuntime {
 
     // Send the merged field set the Reconciler now holds.
     const merged = this.#reconciler.get(itemId)?.fields ?? fields;
+    // `R-100` — a page on its layer whose book changed is told the page now shown, with its
+    // picture, IN THE SAME COMMAND as the new book: two commands could land apart.
+    const pageTurn =
+      touchedPages === undefined ? undefined : await this.#pageTurnFor(itemId, touchedPages);
     this.#armExpiry(seq);
     const { ok, errorCode, command } = await this.#send(
-      this.#builder.update(slot, merged),
+      this.#builder.update(
+        slot,
+        pageTurn === undefined ? merged : withCgControl(merged, { page: pageTurn }),
+      ),
       seq,
       'normal',
     );
@@ -6044,6 +6091,273 @@ export class CasparRuntime {
           errorCode: errorCode ?? 'amcp-error',
           ...(command !== undefined && { command }),
         };
+  }
+
+  /**
+   * `R-100` — **STORE ONE PICTURE of a book an operator is loading.** The bytes are checked from
+   * themselves (a PNG, JPEG or WebP within the limits) and stored once by their SHA-256, which the
+   * console then names in the row's page list. Nothing reaches CasparCG: a picture travels to a
+   * page only inside the take or the page turn that shows it.
+   */
+  async putPage(
+    name: string,
+    base64: string,
+  ): Promise<{
+    accepted: boolean;
+    sha256?: string;
+    width?: number;
+    height?: number;
+    errorCode?: string;
+    message?: string;
+  }> {
+    const put = await this.#pages.put(Buffer.from(base64, 'base64'), name);
+    return put.ok
+      ? {
+          accepted: true,
+          sha256: put.page.sha256,
+          width: put.page.width,
+          height: put.page.height,
+        }
+      : { accepted: false, errorCode: put.code, message: put.message };
+  }
+
+  /**
+   * `R-100` — **TURN A ROW'S BOOK: Next, Previous, or Go to page N.**
+   *
+   * The bridge owns the page number ({@link pageTarget}: a book stops at its ends, a wrapping list
+   * wraps) and tells a page that is ON ITS LAYER the absolute page in ONE `CG UPDATE`, carrying that
+   * page's picture when it is an operator page. A row with no page on its layer changes state only
+   * and sends nothing; the next take carries the page (`#pageControl`). No `PLAY`, ever.
+   */
+  async pageItem(
+    itemId: string,
+    field: string,
+    to: PageTurn,
+  ): Promise<{
+    accepted: boolean;
+    page?: number;
+    count?: number;
+    errorCode?: string;
+    message?: string;
+  }> {
+    return this.#audited('page-turn', this.#itemDetail(itemId), () =>
+      this.#pageItemImpl(itemId, field, to),
+    );
+  }
+
+  async #pageItemImpl(
+    itemId: string,
+    field: string,
+    to: PageTurn,
+  ): Promise<{
+    accepted: boolean;
+    page?: number;
+    count?: number;
+    errorCode?: string;
+    message?: string;
+  }> {
+    // B-093 — the operator is acting; any parked restore for this item is stale.
+    this.#retirePendingRestore(itemId);
+    const slot = this.#slots.get(itemId);
+    const item = this.#reconciler.get(itemId);
+    if (slot === undefined || item === null) return { accepted: false, errorCode: 'unknown-item' };
+    const list = this.#pageList(itemId, item.templateId, field);
+    if (list === undefined) {
+      return {
+        accepted: false,
+        errorCode: 'not-a-page-list',
+        message: 'This row has no page list by that name.',
+      };
+    }
+    const count = list.items.length;
+    if (count === 0) {
+      return {
+        accepted: false,
+        errorCode: 'no-pages',
+        message: 'This row has no pages yet.',
+        count,
+      };
+    }
+    const current = Math.min(this.#pageIndexes.get(itemId)?.[field] ?? 0, count - 1);
+    const target = pageTarget(current, count, list.wrap, to);
+    // Nothing on the layer: the page number is STATE, carried by the next take (golden rule 10).
+    if (!this.#loaded.has(itemId)) {
+      this.#setPageIndex(itemId, field, target);
+      return { accepted: true, page: target + 1, count };
+    }
+    if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+    const ref = list.items[target];
+    const media = ref === undefined ? undefined : await this.#pageMediaFor(ref);
+    if (media === null) {
+      return {
+        accepted: false,
+        errorCode: 'page-missing',
+        message: pageRefusalMessage('page-missing', {
+          name: ref?.name ?? `Page ${String(target + 1)}`,
+        }),
+      };
+    }
+    const page: CgPage = { field, index: target, ...(media !== undefined ? { media } : {}) };
+    const { ok, errorCode, command } = await this.#send(
+      this.#builder.updatePage(slot, page),
+      this.#nextSeq(),
+      'urgent',
+    );
+    if (!ok) {
+      return {
+        accepted: false,
+        errorCode: errorCode ?? 'amcp-error',
+        ...(command !== undefined && { command }),
+      };
+    }
+    this.#setPageIndex(itemId, field, target);
+    return { accepted: true, page: target + 1, count };
+  }
+
+  #setPageIndex(itemId: string, field: string, index: number): void {
+    this.#pageIndexes.set(itemId, { ...this.#pageIndexes.get(itemId), [field]: index });
+    this.#markDirty(itemId);
+  }
+
+  /**
+   * `R-100` — a row's page list, as it stands: the row's own value when it has one, else the
+   * template's default (the pages the author put in it). `fieldId` absent ⇒ the template's FIRST
+   * page list — the one a take carries.
+   */
+  #pageList(
+    itemId: string,
+    templateId: string | undefined,
+    fieldId?: string,
+  ): { fieldId: string; wrap: boolean; items: PageRef[] } | undefined {
+    if (templateId === undefined) return undefined;
+    const info = this.#templateOfItem(itemId, templateId);
+    const lists = info?.pageLists ?? [];
+    const entry = fieldId === undefined ? lists[0] : lists.find((l) => l.fieldId === fieldId);
+    if (info === null || entry === undefined) return undefined;
+    const value: unknown = this.#reconciler.get(itemId)?.fields[entry.fieldId];
+    const field = info.fields.find((f) => f.id === entry.fieldId);
+    const raw: unknown = Array.isArray(value) ? value : field?.type === 'list' ? field.default : [];
+    const items = pageRefsOf(raw);
+    this.#pages.markNamed(items.flatMap((ref) => (ref.media === undefined ? [] : [ref.media])));
+    return { fieldId: entry.fieldId, wrap: entry.wrap, items };
+  }
+
+  /**
+   * The picture a page turn must carry: `undefined` when it needs none (an AUTHORED page is
+   * inlined in the template), `null` when it is an operator page this bridge no longer holds.
+   */
+  async #pageMediaFor(ref: PageRef): Promise<Record<string, string> | null | undefined> {
+    if (ref.media === undefined) return undefined;
+    const url = await this.#pages.dataUrl(ref.media);
+    return url === null ? null : { [ref.media]: url };
+  }
+
+  /**
+   * `R-100` — what a TAKE tells its page about its book: the first page list's current page, with
+   * that page's picture. Empty for a template with no page list, so every other template's take
+   * puts exactly the bytes on the wire it always did.
+   */
+  async #pageControl(itemId: string, templateId: string | undefined): Promise<{ page?: CgPage }> {
+    const list = this.#pageList(itemId, templateId);
+    if (list === undefined || list.items.length === 0) return {};
+    const index = Math.min(
+      this.#pageIndexes.get(itemId)?.[list.fieldId] ?? 0,
+      list.items.length - 1,
+    );
+    const ref = list.items[index];
+    const media = ref === undefined ? undefined : await this.#pageMediaFor(ref);
+    return {
+      page: {
+        field: list.fieldId,
+        index,
+        ...(media !== undefined && media !== null ? { media } : {}),
+      },
+    };
+  }
+
+  /**
+   * `R-100` — a page list an update carries must name pictures this bridge HOLDS, and no more than
+   * a row may hold. Checked before anything else in the update, so a refused book refuses the WHOLE
+   * update (BM-2's rule): nothing staged, nothing sent.
+   */
+  #refusePageLists(
+    itemId: string,
+    fields: FieldValues,
+  ): { errorCode: string; message: string } | null {
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    if (templateId === undefined) return null;
+    const info = this.#templateOfItem(itemId, templateId);
+    for (const { fieldId } of info?.pageLists ?? []) {
+      const value: unknown = fields[fieldId];
+      if (!Array.isArray(value)) continue;
+      if (value.length > PAGES_MAX_PER_ROW) {
+        return {
+          errorCode: 'page-too-many',
+          message: pageRefusalMessage('page-too-many', { count: value.length }),
+        };
+      }
+      for (const ref of pageRefsOf(value)) {
+        if (ref.media !== undefined && this.#pages.get(ref.media) === undefined) {
+          return {
+            errorCode: 'page-missing',
+            message: pageRefusalMessage('page-missing', { name: ref.name ?? 'A page' }),
+          };
+        }
+      }
+    }
+    // Accepted: every picture these lists name is NAMED now, so it leaves with the last row naming it.
+    for (const { fieldId } of info?.pageLists ?? []) {
+      const refs = pageRefsOf(fields[fieldId]);
+      this.#pages.markNamed(refs.flatMap((ref) => (ref.media === undefined ? [] : [ref.media])));
+    }
+    return null;
+  }
+
+  /**
+   * `R-100` — after an update that carried a page list: the row keeps its page number when the new
+   * book still has that page, else it goes to page 1. Returns the page-list field the update
+   * touched (the first), so an on-air page can be told in the same command.
+   */
+  #keepPagesAfterUpdate(itemId: string, fields: FieldValues): string | undefined {
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    if (templateId === undefined) return undefined;
+    const info = this.#templateOfItem(itemId, templateId);
+    let touched: string | undefined;
+    for (const { fieldId } of info?.pageLists ?? []) {
+      const value: unknown = fields[fieldId];
+      if (!Array.isArray(value)) continue;
+      touched ??= fieldId;
+      const current = this.#pageIndexes.get(itemId)?.[fieldId] ?? 0;
+      if (current >= value.length) this.#setPageIndex(itemId, fieldId, 0);
+    }
+    return touched;
+  }
+
+  /** The page turn that tells an on-air page its book changed: the page now shown, with its picture. */
+  async #pageTurnFor(itemId: string, fieldId: string): Promise<CgPage | undefined> {
+    const list = this.#pageList(itemId, this.#reconciler.get(itemId)?.templateId, fieldId);
+    if (list === undefined || list.items.length === 0) return undefined;
+    const index = Math.min(this.#pageIndexes.get(itemId)?.[fieldId] ?? 0, list.items.length - 1);
+    const ref = list.items[index];
+    const media = ref === undefined ? undefined : await this.#pageMediaFor(ref);
+    return { field: fieldId, index, ...(media !== undefined && media !== null ? { media } : {}) };
+  }
+
+  /**
+   * `R-100` — **DELETE EVERY PICTURE NO ROW NAMES.** Run when a row is removed (`removed` is the
+   * row leaving, read as already gone) and at start against the restored rows. A picture loaded in
+   * the last half hour is kept even unnamed: a console may still be sending a book's other pages
+   * and has not yet applied the list that names them.
+   */
+  async #sweepPages(removed?: string): Promise<void> {
+    const keep = new Set<string>();
+    for (const item of this.#reconciler.snapshot()) {
+      if (item.itemId === removed) continue;
+      for (const value of Object.values(item.fields)) {
+        for (const ref of pageRefsOf(value)) if (ref.media !== undefined) keep.add(ref.media);
+      }
+    }
+    await this.#pages.sweep(keep);
   }
 
   async out(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
@@ -7964,7 +8278,12 @@ export class CasparRuntime {
     itemId: string,
     slot: CommandSlot,
   ): Promise<{ ok: boolean; lookId?: string; errorCode?: string; pageGone?: true }> {
-    const control = this.#takeControl(itemId, this.#reconciler.get(itemId)?.templateId);
+    const takeTemplateId = this.#reconciler.get(itemId)?.templateId;
+    // `R-100` — the take tells a resident page its book's page too: the one helper, both routes.
+    const control = {
+      ...this.#takeControl(itemId, takeTemplateId),
+      ...(await this.#pageControl(itemId, takeTemplateId)),
+    };
     const lookId = control.look;
     const told = await this.#send(
       this.#builder.updateTake(slot, control),
@@ -16144,7 +16463,11 @@ export class CasparRuntime {
       page's token could report a run that is already over.
     */
     // `LOGO-LOOP-01` — built by the one helper the resident route's tell uses too.
-    const control: CgControl = this.#takeControl(itemId, templateId);
+    // `R-100` — and the row's page, with its picture: a rebuilt page opens on the page it was on.
+    const control: CgControl = {
+      ...this.#takeControl(itemId, templateId),
+      ...(await this.#pageControl(itemId, templateId)),
+    };
     const addFields = withCgControl(fields, control);
     const { ok, errorCode, command } = await this.#send(
       this.#builder.load(slot, templateArg, addFields),

@@ -112,6 +112,8 @@ import {
   type MediaWhenHidden,
   StackLoadChannel,
   StackNextChannel,
+  StackPageChannel,
+  PagesPutChannel,
   BridgeCapabilitiesChannel,
   StackRestoreReportChangedChannel,
   StackRestoreReportChannel,
@@ -430,6 +432,11 @@ export interface BridgeOptions {
    * library exactly as before.
    */
   templatesDir?: string;
+  /**
+   * `R-100` — where the pictures of operators' books persist, beside {@link templatesDir} and
+   * never inside it. Absent = in memory only; a restart then forgets them.
+   */
+  pagesDir?: string;
   /**
    * D-137 / C-015 — a PRE-RESOLVED source catalogue, explicit (tests, embedders). When given it is
    * the catalogue in force as-is, and the Playout's lists are not read.
@@ -1572,6 +1579,13 @@ export function channelsForRequest(
     return [];
   }
 
+  /*
+    `R-100` — STORING A PICTURE ACTS ON NO CHANNEL. It reaches air only when a row names it, and
+    that is a `stack.update` judged on the row's own channel like every field. So `pages.put` is
+    judged by its permission (`operator`) alone; an unnamed picture is swept after its grace.
+  */
+  if (name === PagesPutChannel.name) return [];
+
   // (a) the request carries the coordinate itself.
   const explicit = explicitChannel(req);
   if (explicit !== undefined) return [explicit];
@@ -2282,6 +2296,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     reservedLayers,
     fixedBanks,
     ...(options.templatesDir !== undefined ? { templatesDir: options.templatesDir } : {}),
+    ...(options.pagesDir !== undefined ? { pagesDir: options.pagesDir } : {}),
     sourceCatalog: bootCatalog,
     sourceAssignments: resolvedAssignments.value,
     ...(options.auditLogPath !== undefined ? { auditLogPath: options.auditLogPath } : {}),
@@ -4589,6 +4604,17 @@ export function buildRoutes(
     // R-028 (o2 / 5.4) — advance the template's sequence.
     route(StackNextChannel, 'operator', 'operator', (r: { itemId: string }) =>
       b.nextItem(r.itemId),
+    ),
+    // `R-100` — turn a row's book (Next / Previous / Go to), and store one of its pictures.
+    route(
+      StackPageChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; field: string; to: 'next' | 'previous' | number }) =>
+        b.pageItem(r.itemId, r.field, r.to),
+    ),
+    route(PagesPutChannel, 'operator', 'operator', (r: { name: string; base64: string }) =>
+      b.putPage(r.name, r.base64),
     ),
     route(StackOutChannel, 'operator', 'operator', (r: { itemId: string }) => b.out(r.itemId)),
     route(StackRemoveChannel, 'operator', 'operator', (r: { itemId: string }) =>
