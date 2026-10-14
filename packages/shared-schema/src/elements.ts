@@ -1365,8 +1365,22 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    * Two rejected alternatives, recorded so they are not relitigated: defaulting to the first
    * source already in use silently binds two plates to one input and the error is never seen;
    * keeping `live-N` means drawing a box invents a source the author never asked for.
+   *
+   * ⭐ **`B-187` (owner, 2026-10-14, Q2 (c)) re-opens the second half, ON A CONDITION.** A plate
+   * drawn with the canvas tool now gets the next free `live-N` IN ITS LOOK — but marked
+   * {@link routeKeyAuto} until the author confirms or replaces it, so the surface says the tool
+   * chose it. That is what keeps "nothing lands unconfirmed": the name lands, labelled as not yet
+   * the author's. A plate made any other way (the factory, a paste) is still unassigned.
    */
   routeKey: LiveSourceIdSchema.optional(),
+  /**
+   * 🔴 `B-187` — `true` while {@link routeKey} is an AUTOMATIC name the canvas tool gave a new
+   * plate and the author has not confirmed or replaced it. The Inspector marks it "auto";
+   * confirming it, or committing any id, drops the flag. Nothing reaches air differently: the
+   * operator maps the id in CG Control either way, and the Live Source carrier never emits this
+   * flag. Absent means the id (if any) is the author's.
+   */
+  routeKeyAuto: z.literal(true).optional(),
   /**
    * ⚠ DEPRECATED (owner, 2026-08-10; `live-source-multibox` design.md §1a).
    *

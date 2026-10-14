@@ -291,6 +291,10 @@ export function defaultEllipse(id: string, x: number, y: number): ShapeElement {
  *
  * ⭐ **`B-183` — `routeKey` is OMITTED: a new plate points at NOTHING.**
  *
+ * `B-187` — the factory still names nothing. The CANVAS TOOL names what it draws, the next
+ * free `live-N` in its look, marked `routeKeyAuto` so the Inspector says the tool chose it
+ * (`state/auto-source-id.ts`). That is the one place a name is generated, and it is labelled.
+ *
  * This used to default to `live-1`, argued for here on the grounds that "the id is required
  * by the schema … so an empty default would create an element that cannot be saved" and that
  * `live-1` is "visible on the canvas (it is the bars' label), which is what tells the author

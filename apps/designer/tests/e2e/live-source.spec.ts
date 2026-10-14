@@ -85,36 +85,27 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.addLiveSource({ x: 200, y: 160 });
 
     /*
-      ⭐ `B-183` — IT EXISTS ON THE CANVAS AND POINTS AT NOTHING.
+      🔴 `B-187` (owner, 2026-10-14, Q2 (c)) — IT EXISTS ON THE CANVAS WITH AN AUTOMATIC NAME,
+      AND SAYS THE NAME IS AUTOMATIC.
 
-      This asserted `toHaveValue('live-1')`. That default was the placeholder text of the
-      Looks panel's source input — a suggestion the author had not accepted — so a freshly
-      drawn plate was born pointed at something the owner never typed. ⚠ `B-188` has since
-      deleted the DECLARATION the guess used to contradict; the reason survives it unchanged,
-      because it was never about the declaration. The owner's principle: nothing lands
-      unconfirmed.
+      `B-183` made a drawn plate point at NOTHING, because its old `live-1` was a suggestion the
+      author had not accepted. The owner reopened the default on one condition — the surface
+      says the tool chose it — so the plate is born `live-1`, marked "auto" until the author
+      keeps it or types another. "Nothing lands unconfirmed" holds: the name lands labelled.
     */
     await expect(holes(app)).toHaveCount(1);
-    await expect(app.liveSourceIdInput).toHaveValue('');
-    // And the bars SAY so, rather than looking finished.
-    await expect(label(app)).toHaveText('no source');
-
-    /*
-      🔴 So a freshly drawn hole is NOT exportable — that is the feature, not a regression.
-
-      ⚠ Asserted on the PILL only, deliberately. Opening the Issues modal to read the message
-      DESELECTS the plate (measured — the next `setLiveSourceId` then timed out waiting for an
-      Inspector input that is not rendered for an empty selection), and re-selecting it here
-      would be plumbing in service of a string this suite is not the right place to pin. The
-      message is asserted BY VALUE in `plate-source-unassigned.dom.test.ts`, and the modal's
-      own mechanics are covered by the `D-157` tests below.
-    */
-    await expect(errorPill(app)).toHaveCount(1);
+    await expect(app.liveSourceIdInput).toHaveValue('live-1');
+    await expect(label(app)).toHaveText('live-1');
+    const auto = app.inspector.getByTestId('live-source-auto');
+    await expect(auto).toHaveText('auto');
+    // …and it is exportable: the operator maps `live-1` in CG Control, as any id.
+    await expect(errorPill(app)).toHaveCount(0);
 
     // Choose one — the bars' label follows, which is what makes several holes on one
-    // frame distinguishable at a glance.
+    // frame distinguishable at a glance. A typed id is the author's: "auto" goes.
     await app.setLiveSourceId('guest-1');
     await expect(label(app)).toHaveText('guest-1');
+    await expect(auto).toHaveCount(0);
 
     // ONE id. The key-source-id control is gone: whether an id resolves to a single
     // device or to a fill/key PAIR is a property of the installation's mapping in CG
@@ -123,8 +114,31 @@ test.describe('Live Source (D-137 phase 1)', () => {
       app.inspector.getByRole('textbox', { name: 'Live Source key source id' }),
     ).toHaveCount(0);
 
-    // `B-183` — and choosing a source CLEARS it: the refusal is a prompt, not a wall.
+    /*
+      `B-183` survives for a CLEARED plate: emptying the field unassigns it, the bars say
+      `no source`, and the export refuses it (`live-source-unset`) until a source is chosen.
+      ⚠ Asserted on the PILL only: opening the Issues modal deselects the plate, and the
+      message is pinned by value in `plate-source-unassigned.dom.test.ts`.
+    */
+    await app.setLiveSourceId('');
+    await expect(label(app)).toHaveText('no source');
+    await expect(errorPill(app)).toHaveCount(1);
+    await app.setLiveSourceId('guest-1');
     await expect(errorPill(app)).toHaveCount(0);
+  });
+
+  test('B-187 — keeping the automatic name drops "auto" and keeps the name', async ({ app }) => {
+    await app.newProject('LiveSourceAutoKeep');
+    await app.addLiveSource({ x: 200, y: 160 });
+    const auto = app.inspector.getByTestId('live-source-auto');
+    await expect(auto).toHaveAttribute(
+      'title',
+      'Named automatically when the plate was drawn. Keep it, or type your own.',
+    );
+    await app.inspector.getByRole('button', { name: 'Keep the automatic source id' }).click();
+    await expect(auto).toHaveCount(0);
+    await expect(app.liveSourceIdInput).toHaveValue('live-1');
+    await expect(label(app)).toHaveText('live-1');
   });
 
   test('a device reference is REFUSED as a source id, and the value reverts', async ({ app }) => {
@@ -315,17 +329,13 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.newProject('ExportBlockMarks');
     await app.addLiveSource({ x: 200, y: 160 });
     /*
-      ⭐ `B-183` — THE FIRST PLATE GETS A SOURCE; THE SECOND DELIBERATELY DOES NOT.
+      ⭐ `B-183` — THE FIRST PLATE GETS A SOURCE; THE SECOND IS LEFT AS DRAWN.
 
-      A plate now points at nothing until the author chooses, so with both left unassigned the
-      marks could never reach zero: after the undo the SURVIVING plate still carries its own
-      `live-source-unset` error, and this test failed exactly there (`expected 0, received 1`).
-
-      Assigning only the FIRST is what keeps the undo honest. Setting a source on the second
-      would add a history entry between the two the test relies on, so the single `undo()`
-      below would revert that id instead of removing the plate — and the test would then be
-      asserting undo granularity rather than the marks. The second plate is removed wholesale,
-      so whether it had a source never mattered.
+      Written when a drawn plate pointed at nothing: with both unassigned the marks could never
+      reach zero (the surviving plate's own `live-source-unset`). `B-187` now names a drawn plate
+      `live-N` (marked "auto"), so that hazard is gone, and the reason that remains is the undo:
+      setting a source on the second would add a history entry between the two the test relies
+      on, so the single `undo()` below would revert that id instead of removing the plate.
     */
     await app.setLiveSourceId('guest-1');
     await app.addLiveSource({ x: 230, y: 190 });
@@ -544,20 +554,18 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.setInspectorNumber('Y position', 0);
 
     /*
-      ⭐ `B-183` — THE TOOL NO LONGER HANDS OUT IDS, SO INDEPENDENCE IS THE AUTHOR'S.
+      🔴 `B-187` — THE TOOL HANDS OUT `live-1`, `live-2` AGAIN, AND SAYS IT DID.
 
-      This asserted `['live-1', 'live-2']` on the grounds that "two holes sharing an id
-      would map to ONE producer with nothing saying so". That reasoning still holds and is
-      now enforced where it belongs — on ids the author actually chose (`look-source-duplicate`
-      in a template with looks, `live-source-repeated` without, `B-148`) — rather than by a
-      generator inventing undeclared names nobody had accepted.
-
-      Both plates therefore start unassigned, SAY so on their bars, and are refused until the
-      author names them. Independence is then asserted on the chosen ids.
+      `B-183` had stopped the tool naming plates (its names were suggestions nobody accepted);
+      the owner reopened it marked "auto" (Q2 (c)). Two plates drawn in one template get two
+      DIFFERENT names — the next free one each time — so they never land on one input
+      (`live-source-repeated` / `look-source-duplicate` would refuse that), and the export is
+      not blocked. Independence is then asserted on ids the author chooses.
     */
-    const before = await holes(app).locator('[data-cg-live-source-label]').allTextContents();
-    expect(before).toEqual(['no source', 'no source']);
-    await expect(errorPill(app)).toHaveCount(1);
+    await expect
+      .poll(async () => await holes(app).locator('[data-cg-live-source-label]').allTextContents())
+      .toEqual(['live-1', 'live-2']);
+    await expect(errorPill(app)).toHaveCount(0);
 
     await app.selectElementById(ids[0]!);
     await app.setLiveSourceId('guest-1');

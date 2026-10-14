@@ -202,7 +202,8 @@ export class DesignerApp {
 
   /**
    * D-137 — add a Live Source by placing the Live Source tool (auto-selected).
-   * Ids are handed out `live-1`, `live-2`, … per existing hole in the scene.
+   * `B-187` — the tool names it the next free `live-N` in its look, marked "auto" in the
+   * Inspector until kept or renamed.
    */
   async addLiveSource(pos: { x: number; y: number } = { x: 200, y: 160 }): Promise<void> {
     await this.selectTool('Live Source');

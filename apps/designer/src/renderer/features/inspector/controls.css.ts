@@ -62,6 +62,20 @@ export const fieldRefusal = style({
   lineHeight: 1.3,
 });
 
+/**
+ * `B-187` — the "auto" mark beside a value the TOOL chose (a new plate's `live-N`): a fact, text
+ * only, no control chrome (golden rule 13), muted and italic so it reads as "not yet yours"
+ * rather than as an error.
+ */
+export const autoMark = style({
+  flexShrink: 0,
+  color: colors.textMuted,
+  fontSize: '0.66rem',
+  fontStyle: 'italic',
+  whiteSpace: 'nowrap',
+  marginInlineStart: '0.3rem',
+});
+
 export const inputInner = style({
   background: 'transparent',
   color: colors.text,

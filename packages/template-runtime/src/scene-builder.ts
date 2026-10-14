@@ -1689,8 +1689,9 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
     The label's job has always been to tell the author what this hole is pointed at, and the
     old `live-1` default was justified in `element-defaults.ts` precisely because it was
     "visible on the canvas … which is what tells the author there is something to set". Now
-    that a new plate points at NOTHING, that sentence is only honoured by saying nothing is
-    set — an empty label would leave the bars looking finished.
+    that a plate can point at NOTHING (the factory's plate, a cleared one — a DRAWN plate is
+    named `live-N` since `B-187`), that sentence is only honoured by saying nothing is set — an
+    empty label would leave the bars looking finished.
 
     ⚠ The plate paints NOTHING on air (the hole is transparent and the picture is composited
     behind it), so this text is an authoring-preview affordance and never reaches broadcast

@@ -72,6 +72,7 @@ import { Gizmo, MultiGizmo, lockCursor } from './Gizmo.js';
 import { TextEditor } from './TextEditor.js';
 import * as s from './CanvasOverlay.css.js';
 import { hasNoActiveCell, renderedTransformAt } from '../../state/slices/arrangements.js';
+import { nextAutoSourceId } from '../../state/auto-source-id.js';
 import { lookGroupOf } from '@cg/shared-schema';
 
 /**
@@ -106,6 +107,9 @@ function logoSize(image: AssetMeta): { width: number; height: number } {
   and there is no id to pick. ⚠ `B-188` has since deleted the DECLARATION the guess was wrong
   against — the reason survives it unchanged: the author never typed the id, and a plate that
   starts pointed at something nobody chose is the defect, group or no group.
+  ⭐ `B-187` (owner, 2026-10-14) reopened a generated name ON THE CONDITION that the surface says
+  so: the plate is marked "auto". It is not this function revived — `state/auto-source-id.ts`
+  judges "free" per LOOK, where this swept the scene with no notion of one.
 
   Recorded rather than silently removed because its docstring made a real argument — a
   scene-wide rather than composition-local sweep, because the bridge resolves ids against one
@@ -604,9 +608,21 @@ export function CanvasOverlay({
         would map to ONE producer") is not lost: it now applies to ids the author actually
         chose, and `look-source-duplicate` is the rule that states it. An unassigned plate
         cannot collide with anything.
+
+        🔴 `B-187` (owner, 2026-10-14, Q2 (c)) — the plate gets the next free `live-N` IN ITS
+        LOOK, MARKED `routeKeyAuto` until the author confirms or renames it. The tool still
+        chooses, but now it SAYS it chose: the Inspector shows "auto", which is the condition
+        on which the owner reopened this. The name never collides where one source is one seat
+        (`state/auto-source-id.ts`), and the operator still maps it in CG Control.
       */
       const id = `el-${String(Date.now())}`;
-      designerStore.addElement(defaultLiveSource(id, scenePoint.x, scenePoint.y));
+      const st = designerStore.get();
+      const routeKey =
+        st.scene === null ? undefined : nextAutoSourceId(st.scene, st.activeCompositionId);
+      designerStore.addElement({
+        ...defaultLiveSource(id, scenePoint.x, scenePoint.y),
+        ...(routeKey !== undefined ? { routeKey, routeKeyAuto: true as const } : {}),
+      });
       designerStore.setTool('cursor');
       return;
     }

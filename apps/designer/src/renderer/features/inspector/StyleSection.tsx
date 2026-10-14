@@ -1,5 +1,5 @@
 import { useCallback, useState, useSyncExternalStore } from 'react';
-import { ChevronDown, ChevronRight, Crop, Maximize, Scan, Square } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Crop, Maximize, Scan, Square } from 'lucide-react';
 import { lottieClipMidpoint, lottieFollowWindow, lottieTiming } from '@cg/lottie-bridge';
 import type { LottieTiming } from '@cg/lottie-bridge';
 import {
@@ -107,6 +107,7 @@ import { AlignButtonGroup, H_ALIGN_OPTIONS, V_ALIGN_OPTIONS } from './AlignButto
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
+import { Tag } from '../../ui/Tag.js';
 import * as radiusCss from './BorderRadiusSection.css.js';
 import * as fieldCss from './controls.css.js';
 
@@ -676,6 +677,10 @@ function ImageSections({
  */
 const UNASSIGNED = '';
 
+/** `B-187` — why a plate's source id reads "auto", as the mark's title. */
+export const AUTO_SOURCE_ID_TITLE =
+  'Named automatically when the plate was drawn. Keep it, or type your own.';
+
 function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): JSX.Element {
   const id = element.id;
   // The scene ref is stable between edits, so deriving the group in the render body
@@ -697,9 +702,15 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
       a refusal aimed at a typo, for a deliberate act.
     */
     if (value === UNASSIGNED) {
-      designerStore.updateElement(id, { routeKey: undefined } as Partial<Element>);
+      designerStore.updateElement(id, {
+        routeKey: undefined,
+        routeKeyAuto: undefined,
+      } as Partial<Element>);
       return;
     }
+    // `B-187` — the field commits on every blur, so an UNCHANGED commit is no confirmation: the
+    // automatic name stays marked until it is renamed here or kept with the confirm control.
+    if (value === element.routeKey) return;
     if (!LiveSourceIdSchema.safeParse(value).success) {
       designerStore.showNotice(
         `“${value}” is not a Live Source id. Use letters, digits, “_” and “-”, starting ` +
@@ -709,7 +720,11 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
       setRejectSeq((n) => n + 1);
       return;
     }
-    designerStore.updateElement(id, { routeKey: value } as Partial<Element>);
+    // A typed id is the author's: it is no longer automatic.
+    designerStore.updateElement(id, {
+      routeKey: value,
+      routeKeyAuto: undefined,
+    } as Partial<Element>);
   };
   /*
     🔴 `B-188` — **ONE CONTROL NOW, AND IT IS THE FREE-TEXT ONE.**
@@ -756,6 +771,33 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
           onCommit={commitId}
           suggestions={suggestions}
           datalistId={`live-source-ids-${id}`}
+          trailing={
+            /* 🔴 `B-187` — the tool chose this name, and the field SAYS so until the author
+               keeps it (the check) or types another. A fact (`Tag`) beside one real control. */
+            element.routeKeyAuto === true && element.routeKey !== undefined ? (
+              <>
+                <Tag
+                  className={fieldCss.autoMark}
+                  title={AUTO_SOURCE_ID_TITLE}
+                  data-testid="live-source-auto"
+                >
+                  auto
+                </Tag>
+                <Control
+                  size="sm"
+                  title="Keep this name"
+                  aria-label="Keep the automatic source id"
+                  onClick={() =>
+                    designerStore.updateElement(id, {
+                      routeKeyAuto: undefined,
+                    } as Partial<Element>)
+                  }
+                >
+                  <Icon icon={Check} size={12} />
+                </Control>
+              </>
+            ) : undefined
+          }
         />
         <AspectRow element={element} />
         <FitModeRow element={element} />

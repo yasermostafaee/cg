@@ -3391,9 +3391,20 @@ found it only looked at `apps/designer`.
 
 ---
 
-## [ ] B-187 — a new Live Source plate starts UNASSIGNED even where a default could not be wrong, so a six-plate layout is six manual assignments ⟨priority: medium — the TWO-HALF rule COLLAPSED to one by [[B-188]]; still unimplemented⟩
+## [~] B-187 — a new Live Source plate starts UNASSIGNED even where a default could not be wrong, so a six-plate layout is six manual assignments ⟨priority: medium — the TWO-HALF rule COLLAPSED to one by [[B-188]]; still unimplemented⟩ — `openspec/changes/designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q2): **(c)** — a newly drawn Live Source box gets the next free automatic name in its look (`live-1`, `live-2` …), marked "auto" in the Inspector until the author confirms or renames it. Nothing reaches air differently: the operator still maps it.
+— **Closed in code (DESIGNER-FIX-02).** Schema first: `routeKeyAuto?: true` on the plate. The canvas
+tool names a drawn plate with `nextAutoSourceId` (`state/auto-source-id.ts`): the next free `live-N`
+among the plates on air with it — the look's own plus the plates outside every look when drawn in a
+look's composition (so the owner's `l1` / `l1,l2` / `l1,l2,l3` falls out), every plate in the project
+otherwise — read through the shared `flattenElements` + `lookContaining`, never a second spelling.
+The Inspector shows an "auto" `Tag` (titled "Named automatically when the plate was drawn. Keep it,
+or type your own.") beside a keep control; typing another id drops it, an unchanged blur does not,
+clearing unassigns. The factory still makes an unassigned plate. The open questions above answered:
+applied at creation (not staged), shown as "auto", nested plates in the look COUNT. Tests:
+`auto-source-id.test.ts` (incl. the real preflight finding no one-seat refusal),
+`live-source-auto-name.dom.test.ts`, e2e `live-source.spec.ts` (placeable, keep, two plates).
 
 **What:** [[B-183]] stopped the tool inventing a source id. It stopped it in BOTH cases, and only one
 of them was the defect. The owner is now assigning every plate by hand.

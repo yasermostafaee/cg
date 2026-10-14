@@ -250,7 +250,7 @@ function issuesNow(): readonly { code: string; message: string; elementId?: stri
   }[];
 }
 
-describe('B-183 — a new plate is created UNASSIGNED', () => {
+describe('B-183 — a plate made by the FACTORY is UNASSIGNED (a DRAWN one is named — B-187)', () => {
   it('holds no routeKey, and the box is EMPTY while the keys in use are offered beside it', () => {
     seed(defaultLiveSource('p1', 0, 0) as unknown as Element);
     const el = held('p1');

@@ -30,7 +30,9 @@
 
 ## 4. Live Source authoring (FULL)
 
-- [ ] 4.1 `B-187` automatic `live-N` name per look, marked **auto** until confirmed or renamed.
+- [x] 4.1 `B-187` automatic `live-N` name per look, marked **auto** until confirmed or renamed. Schema
+      `routeKeyAuto`; `nextAutoSourceId`; the Inspector's "auto" `Tag` + keep control; the `B-183`
+      requirement RENAMED + MODIFIED; the e2e that pinned an unassigned drawn plate updated.
 
 ## 5. FAST
 
