@@ -4231,3 +4231,16 @@ wraps), so this belongs to the hold loop's wrap (pause at the end, then seek to 
 **Expected:** a loop that repeats seamlessly — the frame after the last is the first. **Acceptance:** the same
 measurement reads 0 skipped frames at the loop point over ≥ 10 wraps, on CasparCG 2.5.0. Nothing is changed by this
 filing.
+
+## [~] B-344 — The clock Inspector shows a `timeofday` countdown as a date-time and rewrites it to one ⟨priority: medium — the Azan countdown's own target, and the first edit loses it silently⟩ — FILED 2026-10-15 by `AZAN-DESIGNER-01` (found by `DESIGNER-TRIAGE-01` row 7) · `openspec/changes/add-azan-countdown/`
+
+**Repro / Actual:** a clock in `countdown` mode whose target is `{ kind: 'timeofday', time: '20:32' }`. This comes
+from a `.vcg` or a hand-edited project, because no Designer screen could author one. The Inspector's `target` select
+offers only `duration` and `datetime`. Its value `timeofday` matches neither option, so the control shows whatever the
+browser picks, and the branch under it renders the `datetime-local` input, empty. The first touch of that input, or
+choosing `datetime` to "fix" the empty field, writes `{ kind: 'datetime', iso: … }`. The `timeofday` target is gone,
+and nothing says so. On air, a countdown to the next 20:32 has become a countdown to one fixed date. **Expected:**
+`timeofday` is a target kind of its own in the select, with its own `HH:mm[:ss]` input. A stored `timeofday` target
+loads as `timeofday`, with its time intact, and is never rewritten by opening the Inspector. **Acceptance:** a dom
+test loads a `timeofday` clock, sees `timeofday` selected and `20:32` in its input, and after editing an unrelated
+field the stored target is still `{ kind: 'timeofday', time: '20:32' }`. The test is red on the old select.

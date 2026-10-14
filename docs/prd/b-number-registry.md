@@ -3415,3 +3415,14 @@ Measured free before use: `git grep -h -e "## \[.\] D-165" <ref> -- docs/prd` on
 returned nothing; control: the same sweep found `D-164` (on 2 refs); no stash.
 
 ⇒ **Next free after this entry is `B-344`**, **`D-166`**, **`P-068`**, **`R-101`** and **`C-049`**.
+
+### 2026-10-15 — `AZAN-DESIGNER-01` takes `B-344`
+
+- `B-344` — the clock Inspector shows a `timeofday` countdown as a date-time and rewrites it to one —
+  [bugs-designer.md](bugs-designer.md). Found by `DESIGNER-TRIAGE-01` (row 7), fixed in `add-azan-countdown`.
+
+Measured free before use: `git grep -q -e "## \[.\] B-344" <ref> -- docs/prd` on all 8 local and remote-tracking refs
+after `git fetch` returned nothing, and `git grep --untracked` over the tree likewise; control: the same sweep found
+`B-343` on 2 refs; no stash.
+
+⇒ **Next free after this entry is `B-345`**, **`D-166`**, **`P-068`**, **`R-101`** and **`C-049`**.
