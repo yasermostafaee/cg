@@ -113,7 +113,8 @@ export function CanvasToolbar({ tool }: Props): JSX.Element {
         title={
           hasGroup
             ? 'This template already has its multi-frame group (v1: exactly one)'
-            : 'Add a multi-frame group — looks authored as sub-scenes, sources declared once'
+            : // `B-188` — the group declares no sources any more; each plate names its own.
+              'Add a multi-frame group — looks authored as sub-scenes; each plate names its source'
         }
         aria-label="Add multi-frame group"
       >

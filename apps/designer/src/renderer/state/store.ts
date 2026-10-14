@@ -58,8 +58,9 @@ export const designerStore = {
   // COUNT and no state here caches one: the count IS `cells.length`.
   ...arrangementsSlice,
 
-  // LOOKS phase 2 (`design.md` §14) — the multi-frame group: sources declared once,
-  // looks as instanced sub-scene compositions, the session's active look.
+  // LOOKS phase 2 (`design.md` §14) — the multi-frame group: looks as instanced sub-scene
+  // compositions and the session's active look. (Its sources are derived from the plates
+  // since `B-188`; nothing is declared here.)
   ...looksSlice,
 
   // Undo/redo + the history boundary/save markers live in `store-core.ts` — the
