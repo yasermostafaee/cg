@@ -208,17 +208,17 @@ sentence described Phase 0 alone.
       per boundary and that BOTH the top-level and the nested element restyle. (`apps/designer/tests/e2e/azan-countdown.spec.ts`, `94dee038`; local Windows: passed)
 - [x] 7.2 A second E2E for the operator path: bind the target to a field, update it live, assert
       the countdown re-targets without replaying. (same spec; local Windows: passed)
-- [ ] 7.3 `pnpm test:e2e` green (turbo builds first — never against a stale `dist/`).
-- [ ] 7.4 Full green gate: `pnpm gate` (plain, never `--force`), with the test task having run
-      uncached at least once.
-- [ ] 7.5 `pnpm gate:e2e` — and note explicitly that this change alters UI, layout AND rendering,
-      so **a Linux `gate:e2e` is OWED**; a green Windows run does not discharge it.
+- [x] 7.3 `pnpm test:e2e` green (turbo builds first — never against a stale `dist/`). (CI `pnpm test:e2e` on `5c5422ff`, https://github.com/yasermostafaee/cg/actions/runs/38645221172 — the E2E step RAN: designer 321 passed / 13 skipped, runtime 344 passed / 2 skipped; both `azan-countdown.spec.ts` tests among them)
+- [x] 7.4 Full green gate: `pnpm gate` (plain, never `--force`), with the test task having run
+      uncached at least once. (the pre-push `pnpm gate` for `5c5422ff`, uncached; CI `ci` job green on the same run)
+- [x] 7.5 `pnpm gate:e2e` — and note explicitly that this change alters UI, layout AND rendering,
+      so **a Linux `gate:e2e` is OWED**; a green Windows run does not discharge it. (UI, layout AND rendering changed, so a Linux `gate:e2e` was OWED; DISCHARGED by https://github.com/yasermostafaee/cg/actions/runs/38645221172, `completed` / `success`, the E2E step RAN — not a Windows pass)
 - [x] 7.6 Engine doc-sync: `packages/template-runtime/README.md` gains the zone mechanism (a new
       extension point + the scope-root contract); `docs/engines/overview.md` updated if the
       compiler counts as a new engine surface. (`packages/template-runtime/README.md` "Countdown ZONES" + the `zone-css` subpath; `docs/engines/overview.md`)
 
 ## 8. Before archive
 
-- [ ] 8.1 The owed Linux `gate:e2e` (7.5) run and reported.
+- [x] 8.1 The owed Linux `gate:e2e` (7.5) run and reported. (https://github.com/yasermostafaee/cg/actions/runs/38645221172)
 - [x] 8.2 `docs/prd/designer.md` D-141 flipped (`[~]`; `[x]` at archive), and the D-139 item cross-referenced with the
       helpers it should reuse (design.md §1) so the boundary survives into D-139's own design.
