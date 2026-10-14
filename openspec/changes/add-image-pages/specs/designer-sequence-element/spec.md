@@ -90,6 +90,27 @@ saying why — when Hide-show leaves nothing to time.
 - **WHEN** the author picks Hide-show
 - **THEN** the `duration` field is disabled and its tooltip says Hide-show swaps at once
 
+### Requirement: The author decides whether the operator steps a sequence
+
+A sequence SHALL carry `operatorSteps` (absent ⇒ the operator steps it, so every template authored
+before keeps its NEXT), shown in the Inspector as `operator steps`, on by default. One predicate
+(`sequenceStepsByOperator`) SHALL answer it, and `hasNextStep` — CG Control's NEXT and the Designer
+Preview's Next / Previous — the page's `CG NEXT`, Previous and Go to, and a page list's `step` SHALL
+all read it: a sequence that runs by itself is moved by no console verb, still advances on its own
+dwell, and a book of it shows no Previous / Next / Go to while its pictures stay the operator's to
+load. The bridge SHALL refuse a page turn on such a list, sending nothing.
+
+#### Scenario: Clocks that run by themselves offer no Next
+
+- **WHEN** a template's only sequence has `operator steps` off
+- **THEN** CG Control offers no NEXT for it, the Preview's Next and Previous are disabled, and a
+  `CG NEXT` leaves it where it is while its own dwell still advances it
+
+#### Scenario: An older template keeps its Next
+
+- **WHEN** a sequence authored before this option is imported
+- **THEN** it is stepped exactly as before
+
 ### Requirement: The Pages manager
 
 The Pages manager SHALL show every item of the sequence as a numbered card in reading order — a

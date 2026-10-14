@@ -756,6 +756,13 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
   defaultDwellMs: z.number().int().positive().default(5000),
   /** `auto` = dwell timer + next(); `manual` = only next() advances. */
   advance: z.enum(['auto', 'manual']).default('auto'),
+  /**
+   * `D-163` (the owner, 2026-10-14) — may the OPERATOR step this sequence: CG Control's NEXT, and a
+   * book's Previous / Next / Go to? Absent ⇒ yes, so every template authored before keeps its
+   * NEXT. A sequence that runs by itself — the clocks of several cities turning beside a strap —
+   * sets `false`, and no console verb moves it. Read it through {@link sequenceStepsByOperator}.
+   */
+  operatorSteps: z.boolean().optional(),
   /** Where the incoming item enters from. */
   transitionIn: SequenceEdgeSchema.default('bottom'),
   /** Where the outgoing item exits to. */
@@ -791,6 +798,15 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
   digits: FieldDigitsSchema.optional(),
 }).merge(BoxStyleSchema);
 export type SequenceElement = z.infer<typeof SequenceElementSchema>;
+
+/**
+ * `D-163` — **THE ONE ANSWER to "may the operator step this sequence?"** (golden rule 6): CG
+ * Control's NEXT (`hasNextStep`), the page's `CG NEXT` / Previous / Go to, and a book's stepping all
+ * read it. Absent is yes.
+ */
+export function sequenceStepsByOperator(element: Pick<SequenceElement, 'operatorSteps'>): boolean {
+  return element.operatorSteps !== false;
+}
 
 /**
  * `TEXT-DIGITS-01` — THE ANSWER to "which digits is the text an author typed into this element drawn

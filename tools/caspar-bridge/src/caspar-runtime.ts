@@ -6225,6 +6225,14 @@ export class CasparRuntime {
         message: 'This row has no page list by that name.',
       };
     }
+    // `D-163` — a sequence its author says runs by itself is not turned from the console.
+    if (!list.step) {
+      return {
+        accepted: false,
+        errorCode: 'page-not-stepped',
+        message: pageRefusalMessage('page-not-stepped', {}),
+      };
+    }
     const count = list.items.length;
     if (count === 0) {
       return {
@@ -6284,7 +6292,7 @@ export class CasparRuntime {
     itemId: string,
     templateId: string | undefined,
     fieldId?: string,
-  ): { fieldId: string; wrap: boolean; items: PageRef[] } | undefined {
+  ): { fieldId: string; wrap: boolean; step: boolean; items: PageRef[] } | undefined {
     if (templateId === undefined) return undefined;
     const info = this.#templateOfItem(itemId, templateId);
     const lists = info?.pageLists ?? [];
@@ -6295,7 +6303,7 @@ export class CasparRuntime {
     const raw: unknown = Array.isArray(value) ? value : field?.type === 'list' ? field.default : [];
     const items = pageRefsOf(raw);
     this.#pages.markNamed(items.flatMap((ref) => (ref.media === undefined ? [] : [ref.media])));
-    return { fieldId: entry.fieldId, wrap: entry.wrap, items };
+    return { fieldId: entry.fieldId, wrap: entry.wrap, step: entry.step !== false, items };
   }
 
   /**

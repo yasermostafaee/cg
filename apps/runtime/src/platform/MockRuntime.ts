@@ -876,6 +876,14 @@ export class MockRuntime {
         message: 'This row has no page list by that name.',
       };
     }
+    // `D-163` — the bridge's refusal, in its words: this sequence runs by itself.
+    if (entry.step === false) {
+      return {
+        accepted: false,
+        errorCode: 'page-not-stepped',
+        message: pageRefusalMessage('page-not-stepped', {}),
+      };
+    }
     const value: unknown = item.fields[field];
     const declared = info.fields.find((f) => f.id === field);
     const count = pageRefsOf(

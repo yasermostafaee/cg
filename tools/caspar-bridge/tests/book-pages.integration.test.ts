@@ -269,6 +269,22 @@ it('🔴 golden rule 10 — a row with nothing on its layer changes state only: 
   expect(add).toContain(book[2]!.media);
 }, 40_000);
 
+it('🔴 D-163 — a list the template turns by itself is refused, and nothing is sent', async () => {
+  const r = await boot();
+  r.templateImport({ ...BOOK, pageLists: [{ fieldId: 'pages', wrap: false, step: false }] }, HTML);
+  const book = await storeBook(r, 3);
+  expect((await r.load('item1', 'book', { pages: book })).accepted).toBe(true);
+  await expect(mock!.waitForCgAddResolution(slotOf(r, 'item1'))).resolves.toBe('resolved');
+  expect((await r.take('item1')).accepted).toBe(true);
+  const before = await lineCount();
+  expect(await r.pageItem('item1', 'pages', 'next')).toEqual({
+    accepted: false,
+    errorCode: 'page-not-stepped',
+    message: 'This template turns these pages by itself; they are not turned from the console.',
+  });
+  expect(await linesSince(before)).toEqual([]);
+}, 40_000);
+
 it('🔴 a page list naming a picture the bridge does not hold is refused, in the operator’s words', async () => {
   const r = await boot();
   const book = await storeBook(r, 2);

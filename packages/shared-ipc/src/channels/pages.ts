@@ -55,7 +55,9 @@ export type PageRefusalCode =
   | 'page-too-large'
   | 'page-too-many-pixels'
   | 'page-too-many'
-  | 'page-missing';
+  | 'page-missing'
+  /** `D-163` — the template runs these pages by itself; the operator does not turn them. */
+  | 'page-not-stepped';
 
 /**
  * The ONE wording of each refusal, in the operator's words: the file's own name and the limit it
@@ -77,6 +79,8 @@ export function pageRefusalMessage(
       return `${String(detail.count ?? 0)} pages is more than a row can hold (${String(PAGES_MAX_PER_ROW)}).`;
     case 'page-missing':
       return `${name} is not on CG Bridge any more. Load the pages again.`;
+    case 'page-not-stepped':
+      return 'This template turns these pages by itself; they are not turned from the console.';
   }
 }
 

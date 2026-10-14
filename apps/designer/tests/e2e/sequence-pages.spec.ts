@@ -241,6 +241,32 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
     await expect(manager.getByLabel('Sequence item 3', { exact: true })).toHaveValue('سرخط خبر');
   });
 
+  test('🔴 a sequence the operator does not step offers no Next — on by default for every sequence', async ({
+    app,
+  }) => {
+    // The owner: clocks of several cities turning beside a strap run by themselves.
+    await app.newProject('Clocks');
+    await app.addSequence({ x: 200, y: 200 });
+    const steps = app.inspector.getByRole('checkbox', { name: 'operator steps', exact: true });
+    await expect(steps).toBeChecked();
+    await app.openPreviewModal();
+    await expect(
+      app.previewDialog.getByRole('button', { name: 'Next', exact: true }),
+    ).toBeEnabled();
+    // Closed by its own ✕ (Escape would also clear the canvas selection).
+    await app.previewDialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(app.previewDialog).toBeHidden();
+
+    await steps.uncheck();
+    await app.openPreviewModal();
+    await expect(
+      app.previewDialog.getByRole('button', { name: 'Next', exact: true }),
+    ).toBeDisabled();
+    await expect(
+      app.previewDialog.getByRole('button', { name: 'Previous', exact: true }),
+    ).toBeDisabled();
+  });
+
   test('a FOLDER of pictures is added the same way', async ({ app }) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-book-'));
     try {

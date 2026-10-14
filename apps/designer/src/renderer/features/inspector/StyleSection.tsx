@@ -13,6 +13,7 @@ import {
   ImageFitSchema,
   NumberFieldDigitsSchema,
   SequenceEdgeSchema,
+  sequenceStepsByOperator,
 } from '@cg/shared-schema';
 import type {
   DynamicField,
@@ -61,6 +62,7 @@ import {
 } from './sequence-presets.js';
 import { ListItemsEditor } from '../fields/ListItemsEditor.js';
 import { SequencePagesControl } from './SequencePagesControl.js';
+import { CheckRow } from './DynamicDataSection.js';
 import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
 import { TickerSeparatorControl } from './TickerSeparatorControl.js';
 import * as dds from './DynamicDataSection.css.js';
@@ -2743,6 +2745,19 @@ function SequenceSections({
           onCommit={(v) =>
             designerStore.updateElement(id, {
               transitionMs: Math.max(50, Math.round(v)),
+            } as Partial<Element>)
+          }
+        />
+        {/* `D-163` (the owner) — does CG Control's NEXT step this sequence? On by default, so every
+            template authored before keeps its NEXT; off for a sequence that runs by itself
+            (clocks of several cities beside a strap). */}
+        <CheckRow
+          label="operator steps"
+          checked={sequenceStepsByOperator(element)}
+          title="On: CG Control's NEXT (and a book's Previous / Next / Go to) steps this sequence. Off: it runs by itself and no console button moves it."
+          onChange={(on) =>
+            designerStore.updateElement(id, {
+              operatorSteps: on ? undefined : false,
             } as Partial<Element>)
           }
         />

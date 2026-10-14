@@ -417,17 +417,21 @@ function FileSourceRow({
   );
 }
 
-function CheckRow({
+/** An on/off inspector row. Exported so a second one is never written (`D-163` reuses it). */
+export function CheckRow({
   label,
   checked,
   onChange,
+  title,
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  /** What the option does, as the row's tooltip. */
+  title?: string;
 }): JSX.Element {
   return (
-    <div className={cs.row}>
+    <div className={cs.row} {...(title !== undefined ? { title } : {})}>
       <span className={cs.label}>{label}</span>
       <input
         type="checkbox"

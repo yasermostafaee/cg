@@ -1,4 +1,4 @@
-import type { Element } from './elements.js';
+import { sequenceStepsByOperator, type Element } from './elements.js';
 import type { Scene } from './scene.js';
 
 /** `R-100` — one PAGE LIST of a template: its field, and whether Next/Previous wrap around. */
@@ -6,6 +6,11 @@ export interface PageListInfo {
   fieldId: string;
   /** `true` when the sequence it drives repeats forever; `false` for a book that stops at its ends. */
   wrap: boolean;
+  /**
+   * `D-163` — `false` when the operator does not step the sequence (`sequenceStepsByOperator`): its
+   * pictures are still the operator's to load, but no console verb turns them. Absent ⇒ steps.
+   */
+  step?: false;
 }
 
 /**
@@ -36,7 +41,11 @@ export function pageListsOf(scene: Scene): PageListInfo[] {
       );
       if (sequence === undefined || sequence.type !== 'sequence') continue;
       seen.add(field.id);
-      out.push({ fieldId: field.id, wrap: sequence.repeat === 'infinite' });
+      out.push({
+        fieldId: field.id,
+        wrap: sequence.repeat === 'infinite',
+        ...(sequenceStepsByOperator(sequence) ? {} : { step: false as const }),
+      });
     }
   }
   return out;

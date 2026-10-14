@@ -198,6 +198,12 @@ describe('R-100 — the refusal words, one per code', () => {
     );
   });
 
+  it('D-163 — a list the template turns by itself is refused in one sentence', () => {
+    expect(pageRefusalMessage('page-not-stepped', {})).toBe(
+      'This template turns these pages by itself; they are not turned from the console.',
+    );
+  });
+
   it('with no name, the sentence still reads', () => {
     expect(pageRefusalMessage('page-not-a-picture', {})).toBe(
       'This picture is not a PNG, JPEG or WebP picture.',

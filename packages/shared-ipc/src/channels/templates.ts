@@ -295,7 +295,16 @@ export const TemplateInfoSchema = z.object({
    * of record so every console and the bridge know which rows load pictures, and how Next and
    * Previous behave at page 1 and the last page. Absent: the template has no page list.
    */
-  pageLists: z.array(z.object({ fieldId: z.string().min(1), wrap: z.boolean() })).optional(),
+  pageLists: z
+    .array(
+      z.object({
+        fieldId: z.string().min(1),
+        wrap: z.boolean(),
+        /** `D-163` — `false`: the operator loads this book's pictures but does not step it. */
+        step: z.literal(false).optional(),
+      }),
+    )
+    .optional(),
   /**
    * 🔴 `TIMING-WIRE-22` §4 — **WHAT THIS TEMPLATE'S TIMING IS, so the console can STATE it.**
    *

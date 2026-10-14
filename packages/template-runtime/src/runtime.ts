@@ -21,6 +21,7 @@ import {
   elementDigitsOf,
   lookGroupOf,
   readCgControl,
+  sequenceStepsByOperator,
   stripCgControl,
   type CgPage,
   type Look,
@@ -663,6 +664,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const PAGE_MEDIA_KEPT = 3;
   const pageMedia = new Map<string, string>();
   const sequenceElementOf = new WeakMap<SequenceDriver, string>();
+  // `D-163` — the sequences the operator does NOT step (`sequenceStepsByOperator`): `CG NEXT`,
+  // Previous and Go to pass them by; they run by themselves. A take still sets a book's first page.
+  const operatorFixed = new WeakSet<SequenceDriver>();
   // Which sequences a list field drives (`sequence-items`), across the scene and every composition:
   // a page turn names its FIELD, and every sequence that field feeds turns.
   const pageListTargets = new Map<string, Set<string>>();
@@ -1149,6 +1153,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         });
         registerSequenceDriver(s.host, driver);
         sequenceElementOf.set(driver, s.element.id);
+        if (!sequenceStepsByOperator(s.element)) operatorFixed.add(driver);
         // D-105 — mark the content root for the coordinated exit (out/stop).
         s.host.dataset['cgContent'] = 'sequence';
         // D-102 Phase 2 — stamp the EFFECTIVE (post-override) timing on the host so the operator
@@ -2209,7 +2214,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // global (caspar-globals) already calls.
   const dispatchNext = (): void => {
     for (const sub of subtrees) {
-      for (const s of sub.sequences) s.next();
+      for (const s of sub.sequences) if (!operatorFixed.has(s)) s.next();
     }
   };
 
@@ -2890,12 +2895,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     async previous(): Promise<void> {
       if (machine.state === 'removed') return;
-      for (const sub of subtrees) for (const s of sub.sequences) s.previous();
+      for (const sub of subtrees) {
+        for (const s of sub.sequences) if (!operatorFixed.has(s)) s.previous();
+      }
     },
 
     async goTo(index: number): Promise<void> {
       if (machine.state === 'removed') return;
-      for (const sub of subtrees) for (const s of sub.sequences) s.goTo(index);
+      for (const sub of subtrees) {
+        for (const s of sub.sequences) if (!operatorFixed.has(s)) s.goTo(index);
+      }
     },
 
     remove(): void {

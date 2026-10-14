@@ -6,7 +6,8 @@ import type { StackItemState } from '@cg/shared-schema';
  * (1-based) and how many pages it has. The ONE reading for the row's `12 / 300` and the
  * Inspector's book bar, so the two cannot disagree. The page number is the bridge's (`item.pages`);
  * the count is the row's APPLIED page list, else the template's own pages. `null` for a row whose
- * template has no page list.
+ * template has no page list — or whose page list the operator does not step (`step: false`, `D-163`):
+ * that sequence runs by itself, so there is no page to state and no Previous / Next to offer.
  */
 export interface RowBook {
   fieldId: string;
@@ -18,7 +19,8 @@ export interface RowBook {
 
 export function bookOf(template: TemplateInfo | null, item: StackItemState | null): RowBook | null {
   const entry = template?.pageLists?.[0];
-  if (template === null || item === null || entry === undefined) return null;
+  if (template === null || item === null || entry === undefined || entry.step === false)
+    return null;
   const applied: unknown = item.fields[entry.fieldId];
   const declared = template.fields.find((f) => f.id === entry.fieldId);
   const count = Array.isArray(applied)

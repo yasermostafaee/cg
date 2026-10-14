@@ -76,6 +76,14 @@ describe('R-100 — bookOf, the one reading of a row’s book', () => {
     expect(bookOf(templateWith(), item())).toBeNull();
     expect(bookOf(BOOK, item({ fields: {} }))).toMatchObject({ page: 0, count: 0 });
   });
+
+  it('🔴 D-163 — a list the operator does not step is no book: no counter, no Previous / Next', () => {
+    const selfRunning = {
+      ...BOOK,
+      pageLists: [{ fieldId: 'pages', wrap: false, step: false as const }],
+    };
+    expect(bookOf(selfRunning, item({ fields: { pages: [] } }))).toBeNull();
+  });
 });
 
 describe('R-100 — test mode turns a book with the bridge’s rules', () => {
@@ -101,6 +109,17 @@ describe('R-100 — test mode turns a book with the bridge’s rules', () => {
     expect(mock.page('item-1', 'pages', 3)).toMatchObject({ page: 3 });
     expect(mock.page('item-1', 'pages', 'next')).toMatchObject({ page: 3 });
     expect(mock.stackSnapshot().find((i) => i.itemId === 'item-1')?.pages).toEqual({ pages: 2 });
+  });
+
+  it('🔴 D-163 — a list the template turns by itself is not turned: the bridge’s refusal', () => {
+    const mock = new MockRuntime();
+    mock.templateImport({ ...BOOK, pageLists: [{ fieldId: 'pages', wrap: false, step: false }] });
+    expect(mock.load('item-1', 'tpl-book', {}).accepted).toBe(true);
+    expect(mock.page('item-1', 'pages', 'next')).toEqual({
+      accepted: false,
+      errorCode: 'page-not-stepped',
+      message: 'This template turns these pages by itself; they are not turned from the console.',
+    });
   });
 
   it('🔴 a picture over the limit, or not a picture, is refused in the operator’s words', async () => {

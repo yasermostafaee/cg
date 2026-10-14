@@ -9,7 +9,7 @@ import {
 } from './primitives.js';
 import { ArrangementsSchema } from './arrangements.js';
 import { LookGroupsSchema } from './looks.js';
-import { ElementSchema, type Element } from './elements.js';
+import { ElementSchema, sequenceStepsByOperator, type Element } from './elements.js';
 import { DynamicFieldSchema } from './fields.js';
 import { FieldBindingSchema } from './bindings.js';
 import { FrameRangeSchema, type FrameRange } from './animation.js';
@@ -949,8 +949,9 @@ export function hasNextStep(
       if (el.type === 'sequence') {
         // The sequence itself is steppable; its composition ITEMS need no
         // further inspection for that answer (a sequence with any items — or a
-        // list binding supplying them — is what NEXT advances).
-        return true;
+        // list binding supplying them — is what NEXT advances). `D-163` — unless
+        // its author said the operator does not step it (it runs by itself).
+        return sequenceStepsByOperator(el);
       }
       if (el.type === 'container') return walk(el.children);
       if (el.type === 'composition') return intoComposition(el.compositionId);

@@ -228,6 +228,58 @@ describe('D-163 — Next, Previous and Go to', () => {
   });
 });
 
+describe('D-163 — a sequence the operator does not step (operatorSteps: false)', () => {
+  it('🔴 CG NEXT, Previous and Go to pass it by', async () => {
+    const clock = makeClock();
+    const rt = createRuntime(
+      book([authored(1), authored(2), authored(3)], { operatorSteps: false }),
+      { skipFontLoad: true, clock, assetUrls: urls(3), decodeImage: () => Promise.resolve(true) },
+    );
+    await rt.play({});
+    await flush(clock);
+    expect(onStage()).toEqual(['assets/p1.png']);
+    await rt.next!();
+    await flush(clock, 600);
+    await rt.goTo!(2);
+    await flush(clock, 600);
+    await rt.previous!();
+    await flush(clock, 600);
+    expect(onStage()).toEqual(['assets/p1.png']);
+  });
+
+  it('…and still runs by itself: an auto sequence advances on its own dwell', async () => {
+    const clock = makeClock();
+    const rt = createRuntime(
+      book([authored(1), authored(2)], {
+        operatorSteps: false,
+        advance: 'auto',
+        defaultDwellMs: 1000,
+      }),
+      { skipFontLoad: true, clock, assetUrls: urls(2), decodeImage: () => Promise.resolve(true) },
+    );
+    await rt.play({});
+    await flush(clock);
+    expect(onStage()).toEqual(['assets/p1.png']);
+    await flush(clock, 1500);
+    expect(onStage()).toEqual(['assets/p2.png']);
+  });
+
+  it('a sequence with no flag is stepped exactly as before', async () => {
+    const clock = makeClock();
+    const rt = createRuntime(book([authored(1), authored(2)]), {
+      skipFontLoad: true,
+      clock,
+      assetUrls: urls(2),
+      decodeImage: () => Promise.resolve(true),
+    });
+    await rt.play({});
+    await flush(clock);
+    await rt.next!();
+    await flush(clock, 600);
+    expect(onStage()).toEqual(['assets/p2.png']);
+  });
+});
+
 describe('D-163 — a page turn never shows a blank frame', () => {
   it('🔴 the old page stays alone on stage until the new one is decoded', async () => {
     const clock = makeClock();
