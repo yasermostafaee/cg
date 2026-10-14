@@ -57,6 +57,16 @@ function probes(overrides: Partial<CheckProbes> = {}): CheckProbes {
     // `B-318` — pinned: the dev host runs a TUN (`singbox_tun`), and a test must not read it.
     adapters: () => [],
     portHolder: async () => ({ kind: 'free' }),
+    /*
+      Pinned for the same reason, and to the answer a CI runner gets: nothing listens on
+      `127.0.0.1:5250` there, so the real probe reads `refused`. The DEV host is also a CasparCG
+      host (the owner's local 2.5.0 on 5250), and the real probe dialled it on every gate —
+      uninvited, and nondeterministic: `R-084`'s CONTROL compares two runs' lines, and on
+      2026-10-14 that CasparCG answered `VERSION` inside the 300 ms in one run and not the other
+      (passed 3/3 alone, failed once in a loaded gate). Every test that is ABOUT the AMCP line
+      passes its own `amcp` (a mock port, a refused port, or a fake outcome) and is untouched.
+    */
+    amcp: async () => ({ kind: 'refused' }),
     ...overrides,
   };
 }
