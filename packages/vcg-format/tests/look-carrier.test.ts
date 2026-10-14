@@ -491,11 +491,6 @@ describe('per-look maps: absence is NO ENTRY, and the empty look is valid', () =
 
   it('a ROOT-LEVEL plate appears in the map of EVERY look — including the empty one', () => {
     const s = twoLookScene({
-      sources: [
-        { routeKey: 'guest-1', dynamic: false },
-        { routeKey: 'guest-2', dynamic: false },
-        { routeKey: 'presenter', dynamic: false },
-      ],
       rootExtra: [plate('root-1', 'presenter', 1280, 720, 640, 360)],
     });
     for (const lookId of ['look-a', 'look-solo', 'look-empty']) {

@@ -6,6 +6,8 @@
     "types": ["node"]
   },
   "include": ["src/**/*"],
+  // A BUILD constraint, not a statement that tests go unchecked: this config drives `tsc -b`
+  // (rootDir ./src). `pnpm typecheck` runs tsconfig.typecheck.json, which DOES include tests/.
   "exclude": ["src/**/*.test.ts"],
   "references": [{ "path": "../shared-schema" }]
 }

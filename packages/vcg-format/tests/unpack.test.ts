@@ -23,7 +23,7 @@ describe('unpack', () => {
     });
     const { scene, manifest, files } = await unpack(buf);
     expect(scene.id).toBe(fixtureScene.id);
-    expect(scene.fields[0]?.default).toBe('سارا نادری');
+    expect(scene.fields[0]).toMatchObject({ type: 'text', default: 'سارا نادری' });
     expect(manifest.id).toBe('tpl-fixture-1');
     expect(files.has('manifest.json')).toBe(true);
     expect(files.has('template.json')).toBe(true);
