@@ -2229,7 +2229,8 @@ textarea.cg-field--autogrow {
    without the layout — its buttons are the same secondary controls whether they
    sit beside "Add item" or under a text field. */
 .cg-field-foot .cg-btn,
-.cg-from-file .cg-btn {
+.cg-from-file .cg-btn,
+.cg-book-row .cg-btn {
   height: 28px;
   min-height: 28px;
   padding-block: 0;
@@ -2260,6 +2261,29 @@ textarea.cg-field--autogrow {
 .cg-position-row input.cg-field {
   height: var(--r-insp-position-field-h);
   min-height: var(--r-insp-position-field-h);
+}
+/*
+ * `R-100` — a row's BOOK in the Inspector (`PageListEditor`, `BookBar`): one wrapping line of
+ * secondary controls — the count or the page, then its buttons — centred on the text, at the
+ * field footers' 28 px (named in that rule above).
+ */
+.cg-book-row {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  flex-wrap: wrap;
+}
+.cg-book-count {
+  font-variant-numeric: tabular-nums;
+  min-width: 5ch;
+}
+/* The page box holds a page number — three digits at most, in any digit set — so it is sized to
+   that and stays on the line beside Go, not stretched across the panel by `.cg-field`'s 100 %. */
+input.cg-field.cg-book-page {
+  width: 7em;
+  flex: 0 0 auto;
+  height: 28px;
+  min-height: 28px;
 }
 /* ── Inspector metadata chips (status / layer / channel / server) ───────────
  *

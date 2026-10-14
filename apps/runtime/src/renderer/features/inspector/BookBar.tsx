@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import { parseLocalizedNumber } from '@cg/text-shaping';
 import { Button } from '../../ui/Button.js';
 import { Notice } from '../../ui/Notice.js';
@@ -10,16 +10,8 @@ import type { RowBook } from '../layers/bookOf.js';
  * box that takes the operator's page number in Latin, Persian or Arabic-Indic digits. Every press is
  * one `stack.page`; the bridge owns the number and answers it, so the counter always reads what the
  * bridge holds. On a row with nothing on its layer a turn changes the number only (golden rule 10).
+ * One line (`.cg-book-row`): the page box is sized to a page number, so Go stays beside it.
  */
-const styles = {
-  row: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.35rem',
-    flexWrap: 'wrap',
-  } satisfies CSSProperties,
-  counter: { fontVariantNumeric: 'tabular-nums', minWidth: '5ch' } satisfies CSSProperties,
-};
 
 export function BookBar({ itemId, book }: { itemId: string; book: RowBook }): JSX.Element {
   const [typed, setTyped] = useState('');
@@ -44,8 +36,8 @@ export function BookBar({ itemId, book }: { itemId: string; book: RowBook }): JS
 
   return (
     <div data-book-bar="">
-      <div style={styles.row}>
-        <span style={styles.counter} data-testid="book-counter">
+      <div className="cg-book-row">
+        <span className="cg-book-count" data-testid="book-counter">
           {none ? '0 / 0' : `${String(book.page)} / ${String(book.count)}`}
         </span>
         <Button
@@ -65,6 +57,7 @@ export function BookBar({ itemId, book }: { itemId: string; book: RowBook }): JS
           Next
         </Button>
         <TextInput
+          className="cg-book-page"
           value={typed}
           onChange={setTyped}
           inputMode="numeric"

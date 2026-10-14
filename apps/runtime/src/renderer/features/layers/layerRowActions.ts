@@ -916,6 +916,9 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       number and turns it ABSOLUTELY, so on air the page is told the page, and off air the number
       moves and nothing is sent (golden rule 10) — which is why it is not gated on `onAir`. A book
       stops at page 1; a wrapping list goes round.
+      🔴 MENU-ONLY. The button row's columns are fixed by the sticky header (`rowAction.ts`), and a
+      seventh button wrapped CLEAR onto a second line and moved every verb off its column. NEXT
+      keeps its column and turns the page; PREV is in the row's menu and on the Inspector's book bar.
     */
     ...(deps.book !== undefined && deps.book !== null && deps.page !== undefined
       ? (() => {
@@ -933,6 +936,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
                   (!book.wrap && book.page <= 1),
                 () => (item === null ? noop() : page(item.itemId, book.fieldId, 'previous')),
                 ArrowLeftFromLine,
+                'menu',
               ),
               ...(blocked ? { title: RESTORE_BLOCKED_REASON } : {}),
               tone: 'next' as const,

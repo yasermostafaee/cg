@@ -3,6 +3,7 @@ import type { StackItemState } from '@cg/shared-schema';
 import { MockRuntime } from '../src/platform/MockRuntime.js';
 import { bookOf } from '../src/renderer/features/layers/bookOf.js';
 import { layerRowActions } from '../src/renderer/features/layers/layerRowActions.js';
+import { buttonActions } from '../src/renderer/ui/rowAction.js';
 import { bindingFor, itemWith, rowDeps, templateWith } from './support/layerRow.js';
 
 /**
@@ -157,6 +158,18 @@ describe('R-100 — the row’s verbs on a book row', () => {
     expect(next?.key).toBe('page-next');
     expect(next?.disabled).toBe(false);
     expect(prev?.disabled).toBe(false);
+  });
+
+  it('🔴 a book row has the same six buttons as any row: PREV is in the row’s menu', () => {
+    // The button row's columns are fixed by the sticky header; a seventh button wrapped CLEAR
+    // onto a second line and moved every verb off its column.
+    const labels = (deps: Parameters<typeof layerRowActions>[0]): string[] =>
+      buttonActions(layerRowActions(deps)).map((a) => a.label);
+    const sameRowNoBook = rowDeps({
+      binding: bindingFor(itemWith('loaded', { templateId: 'tpl-book' })),
+    });
+    expect(labels(bookRow(5, 300))).toEqual(labels(sameRowNoBook));
+    expect(layerRowActions(bookRow(5, 300)).find((a) => a.label === 'PREV')?.surface).toBe('menu');
   });
 
   it('a book stops at its ends: PREV off on page 1, NEXT off on the last page', () => {

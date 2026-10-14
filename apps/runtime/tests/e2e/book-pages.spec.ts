@@ -72,6 +72,25 @@ test('🔴 a folder’s pictures load in natural order; Next, Previous and Go to
   const rowCounter = app.stackRow(templateId).first().locator('[data-page-counter]');
   await expect(rowCounter).toHaveText('1 / 3');
 
+  // Measured in the engine (golden rule 12 c): the book row keeps the table's shape — its verbs
+  // on one line under their headers (PREV is in the row's menu, not a seventh button) — and the
+  // book bar's page box sits on the line beside Go.
+  const bookRowBox = await app.stackRow(templateId).first().boundingBox();
+  const emptyRowBox = await app.layers
+    .locator('[data-layer]:not([data-item-id])')
+    .first()
+    .boundingBox();
+  expect(bookRowBox).not.toBeNull();
+  expect(emptyRowBox).not.toBeNull();
+  expect(bookRowBox!.height).toBeLessThanOrEqual(emptyRowBox!.height + 1);
+  const pageBox = await app.inspector.getByRole('textbox', { name: 'Page number' }).boundingBox();
+  const goBox = await app.inspector.getByRole('button', { name: 'Go to page' }).boundingBox();
+  expect(pageBox).not.toBeNull();
+  expect(goBox).not.toBeNull();
+  expect(Math.abs(pageBox!.y + pageBox!.height / 2 - (goBox!.y + goBox!.height / 2))).toBeLessThan(
+    2,
+  );
+
   await app.inspector.getByRole('button', { name: 'Next page' }).click();
   await expect(counter).toHaveText('2 / 3');
   await app.inspector.getByRole('button', { name: 'Previous page' }).click();

@@ -26,13 +26,6 @@ const PICTURE_EXT = /\.(png|jpe?g|webp)$/i;
 
 const styles = {
   wrap: { display: 'flex', flexDirection: 'column', gap: '0.35rem' } satisfies CSSProperties,
-  row: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.35rem',
-    flexWrap: 'wrap',
-  } satisfies CSSProperties,
-  count: { fontVariantNumeric: 'tabular-nums' } satisfies CSSProperties,
 };
 
 /** A page list value's length; with no value yet, the template's own pages. */
@@ -152,8 +145,8 @@ export function PageListEditor({
 
   return (
     <div data-page-list="" style={styles.wrap}>
-      <div style={styles.row}>
-        <span style={styles.count} data-testid={`page-count-${fieldId}`}>
+      <div className="cg-book-row">
+        <span className="cg-book-count" data-testid={`page-count-${fieldId}`}>
           {count === 1 ? '1 page' : `${String(count)} pages`}
         </span>
         <Button
