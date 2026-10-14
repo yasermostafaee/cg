@@ -1961,7 +1961,9 @@ tree only) — now filed as D-064. Capabilities: designer-image-export (new). Ch
 > on panel adjacency. **Project Assets keeps its own canvas drag-drop (D-001),
 > unchanged** — that panel is per-project and stays in the left rail.
 
-## [ ] D-064 — Re-wire repeater-stamped image `src` at play time ⟨priority: medium⟩
+## [~] D-064 — Re-wire repeater-stamped image `src` at play time ⟨priority: medium⟩ — CLOSED IN CODE 2026-10-14 by `IMAGE-PAGES-01` §0.1, with [[B-102]]
+
+— The same cause as [[B-102]]: a repeater row is stamped at every fresh play, after the page-wide `applyAssetUrls` walk. `stampRows` now runs it on each row it builds. Pinned by `packages/template-runtime/tests/nested-image-assets.test.ts` (authored rows, and rows stamped from a bound list delivered with the take). Stays `[~]` until the on-air check and a Linux `e2e` that RAN.
 
 **What:** D-062 wires image `src` for the STATIC element tree only (the
 runtime applies the `assetUrls` map once over the built tree). Images stamped

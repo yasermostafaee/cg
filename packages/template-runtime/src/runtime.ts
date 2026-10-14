@@ -978,6 +978,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             const noop = (): void => undefined;
             return { node: empty, show: noop, pause: noop, resume: noop, hide: noop };
           }
+          // 🔴 B-102 — this item is built NOW, long after the page-wide `applyAssetUrls` walk
+          // at build, so its images get their `src` here or never (the exported page has no
+          // other wiring; only the Designer preview re-attaches on its own).
+          applyAssetUrls(built.cell, options.assetUrls);
           // D-102 Phase 2 — a sequence composition item is a STAMPED subtree (a synthetic path no
           // scope override addresses): it inherits this scope's per-element timing maps, so an
           // authored element's preview override reaches the drivers built inside the item.
@@ -1911,6 +1915,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             paintEditorBackdrop,
           );
           return rows.map((row, i) => {
+            // 🔴 D-064 — a row is stamped at every bound-list change, after the page-wide
+            // `applyAssetUrls` walk at build: its images get their `src` here or never.
+            applyAssetUrls(row.cell, options.assetUrls);
             // D-102 Phase 2 — a repeater row is a STAMPED subtree: every row is built from the SAME
             // child-composition layers, so its ticker/sequence/countdown carries the SAME authored
             // element id, and its synthetic path is addressed by no scope override. Inheriting this

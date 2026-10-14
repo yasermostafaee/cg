@@ -1311,7 +1311,9 @@ survived the phase.
 **Env:** Browser / Designer preview.
 **Notes:** `apps/designer/src/platform/preview.ts:730` — the `lottie-assets` branch does `lottieAssets = msg.lottieAssets; if (currentScene && …) { await applyScene(currentScene); }`, a full rebuild with **no `!playing` guard**, unlike the `update` handler ~13 lines below (`if (runtime && !playing) runtime.tick(currentFrame)`). Introduced by D-125 (Phase 1). **Not causal for B-088** — it cannot produce that symptom, and B-088 reproduces with no Lottie at all — but it is a real latent teardown. Candidate for D-125 Phase 3.
 
-## [ ] B-102 — images inside a sequence-item composition render in preview but NOT on CasparCG hardware ⟨priority: high⟩
+## [~] B-102 — images inside a sequence-item composition render in preview but NOT on CasparCG hardware ⟨priority: high⟩ — CLOSED IN CODE 2026-10-14 by `IMAGE-PAGES-01` §0.1
+
+— **Cause:** the exported page wired image `src` from its `assetUrls` map ONCE, at build (`runtime.ts` `applyAssetUrls(built.container, …)`); a sequence composition item is built later, when it comes on stage (`renderComposition`), so its `<img>` never got a `src`. The Designer preview hid it by re-attaching images itself. **Fix:** `renderComposition` runs the same `applyAssetUrls` on the item it just built. **Pinned** by `packages/template-runtime/tests/nested-image-assets.test.ts` (the first item at play, the next item at the transition; 4 red without the fix, a top-level image as the positive control). Stays `[~]` until the on-air check on CasparCG and a Linux `e2e` that RAN.
 
 **Repro:**
 
