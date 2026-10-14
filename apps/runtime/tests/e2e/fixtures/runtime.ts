@@ -824,6 +824,85 @@ export async function buildListFieldVcg(templateId = 'tpl-e2e-list'): Promise<Ui
 }
 
 /**
+ * `R-100` — a verifiable `.vcg` carrying a BOOK: a picture sequence (manual, one pass, Cut) bound
+ * to a `list` field marked as a page list (`pages`). Its own pages are empty — the operator loads
+ * them. CG Control's import records it as the template's page list (`TemplateInfo.pageLists`).
+ */
+export async function buildBookVcg(templateId = 'tpl-e2e-book'): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  const layer = scene.layers[0];
+  if (layer === undefined) throw new Error('fixture scene has no layer');
+  layer.children = [
+    ...layer.children,
+    {
+      id: 'el-book',
+      name: 'book',
+      type: 'sequence',
+      transform: {
+        position: { x: 0, y: 0 },
+        size: { w: 1920, h: 1080 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 0,
+      font: {
+        family: 'Vazirmatn',
+        weight: 400,
+        style: 'normal',
+        size: 24,
+        lineHeight: 1.2,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      align: 'start',
+      verticalAlign: 'middle',
+      direction: 'rtl',
+      items: [],
+      imageFit: 'contain',
+      defaultDwellMs: 5000,
+      advance: 'manual',
+      transitionIn: 'none',
+      transitionOut: 'none',
+      transitionTiming: 'simultaneous',
+      transitionMs: 400,
+      repeat: 1,
+    },
+  ];
+  scene.fields = [
+    ...scene.fields,
+    { id: 'pages', label: 'Pages', required: false, type: 'list', default: [], pages: true },
+  ];
+  scene.bindings = [
+    ...scene.bindings,
+    { fieldId: 'pages', target: { kind: 'sequence-items', elementId: 'el-book' } },
+  ];
+  const fontDeps: readonly FontReference[] = scene.fonts;
+  const assetIndex: readonly AssetEntry[] = [];
+  return pack({
+    scene,
+    manifestExtras: {
+      id: templateId,
+      name: 'e2e-book',
+      authoring: {
+        designerVersion: '0.0.0',
+        createdAt: '2026-10-14T00:00:00.000Z',
+        exportedAt: '2026-10-14T00:01:00.000Z',
+      },
+      compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+      fontDeps,
+      assetIndex,
+    },
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
+/**
  * R-003 — a verifiable `.vcg` that adds a `number` dynamic field (`fontSize`)
  * alongside the text `anchor`, so the number control's staged multi-digit typing
  * can be exercised (a remount-on-keystroke would drop focus and lose digits).
