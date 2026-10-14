@@ -114,7 +114,7 @@ import { ClockDriver, parseTimeOfDay } from './clock-driver.js';
 import { LottieDriver } from './lottie-driver.js';
 import { VideoDriver, type VideoHandle, type ElementOutroDriver } from './video-driver.js';
 import { AudioDriver, gainOfDb } from './audio-driver.js';
-import { createAudioHandle } from './audio-graph.js';
+import { createAudioHandle, type SoundAudition } from './audio-graph.js';
 import {
   RepeaterDriver,
   registerRepeaterDriver,
@@ -898,6 +898,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     own interruption behaviour (a hide during the entrance jumps to the exit's first frame and plays
     it forward; a show during the exit starts the entrance again). There is no reverse in the engine.
   */
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-G` — every sound of the page with its place on the timeline, for the
+   * Designer's timeline Play ({@link TemplateRuntime.auditionSounds}). `active` is whether the
+   * audition is sounding it now.
+   */
+  const soundAuditions: {
+    audition: SoundAudition;
+    startFrame: number;
+    durationMs: number;
+    active: boolean;
+  }[] = [];
+
   const nodeByScope = new WeakMap<FieldScope, ScopeNode>();
   const cues = new Map<ScopeNode, InstanceCue>();
   /** At rest (Take, wiring): in or out, playing nothing. */
@@ -1785,7 +1797,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // B-034 — a HIDDEN element is fully inert: a hidden sound never plays.
         if (el.visible === false) continue;
         let playRejectionReported = false;
-        const { handle, silence } = createAudioHandle(
+        const { handle, silence, audition } = createAudioHandle(
           a.node,
           {
             gain: gainOfDb(el.volumeDb),
@@ -1806,6 +1818,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         audios.push(driver);
         lookMediaPark.register({ node: a.node, driver, parkable: true, audio: silence });
         if (el.start.at === 'exit') scopeOutroLotties.push(driver);
+        // DELTA-RUN-NEXT-VERSION-01-G — where this sound sits on THIS scope's timeline, for the
+        // Designer's timeline Play: the entrance at the active range's first frame, the exit at
+        // the out point, a time `ms` after the entrance.
+        const startFrame =
+          el.start.at === 'exit'
+            ? outPoint
+            : el.start.at === 'time'
+              ? activeRange.in + Math.round((el.start.ms * scene.frameRate) / 1000)
+              : activeRange.in;
+        soundAuditions.push({ audition, startFrame, durationMs: el.durationMs, active: false });
       }
 
       // D-028/D-027/D-029 — this scope's OWN content completion from its CONTENT
@@ -2987,6 +3009,26 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
 
     activeLookId(): string | undefined {
       return currentLookId;
+    },
+
+    auditionSounds(state: { playing: boolean; frame: number }): void {
+      if (machine.state === 'removed') return;
+      const fps = scene.frameRate > 0 ? scene.frameRate : 50;
+      for (const s of soundAuditions) {
+        const t = (state.frame - s.startFrame) / fps;
+        const inside = state.playing && t >= 0 && t < s.durationMs / 1000;
+        if (inside) {
+          // Start it at its place; re-seat it only when the playhead and the sound drift apart
+          // (a loop wrap, a jump) — never every frame, which would stutter it.
+          if (!s.active || Math.abs(s.audition.position() - t) > 0.25) {
+            s.audition.playAt(t);
+            s.active = true;
+          }
+        } else if (s.active) {
+          s.audition.pause();
+          s.active = false;
+        }
+      }
     },
 
     rehearseStep(clockId: string, step: 'before' | number | null | undefined): void {

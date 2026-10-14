@@ -83,6 +83,29 @@ export function isSoundMuted(doc: Document = document): boolean {
   return pageOf(doc).muted;
 }
 
+/**
+ * `DELTA-RUN-NEXT-VERSION-01-G` — create the page's sound output if it has none yet, and resume it
+ * if Chrome started it suspended. The Designer calls this INSIDE the click that starts playback, so
+ * the output is running before the first sound is asked to play.
+ */
+export function resumeSoundOutput(doc: Document = document): void {
+  const page = contextOf(doc);
+  if (page !== null && page.ctx.state === 'suspended')
+    void page.ctx.resume().catch(() => undefined);
+}
+
+/**
+ * `DELTA-RUN-NEXT-VERSION-01-G` — the Designer timeline's way of playing ONE sound: from a position,
+ * through the sound's own gain, fades and park, and the page's master mute — the same graph air
+ * uses, never a second one (a media element feeds only one Web Audio source).
+ */
+export interface SoundAudition {
+  playAt(posSec: number): void;
+  pause(): void;
+  /** Where the sound is, in seconds. */
+  position(): number;
+}
+
 export interface AudioShape {
   /** Linear gain (the element's `volumeDb`, converted). */
   readonly gain: number;
@@ -112,7 +135,7 @@ export function createAudioHandle(
   node: HTMLAudioElement,
   shape: AudioShape,
   onPlayRejected?: (reason: unknown) => void,
-): { handle: AudioHandle; silence: Silenceable } {
+): { handle: AudioHandle; silence: Silenceable; audition: SoundAudition } {
   const doc = node.ownerDocument;
   let parkMuted = false;
   let graph: { ctx: AudioContext; gain: GainNode; park: GainNode } | null | undefined;
@@ -231,5 +254,20 @@ export function createAudioHandle(
     },
   };
 
-  return { handle, silence };
+  const audition: SoundAudition = {
+    playAt: (posSec) => {
+      build();
+      try {
+        node.currentTime = posSec;
+      } catch {
+        /* not loaded yet */
+      }
+      schedule(posSec);
+      startMedia();
+    },
+    pause: () => handle.pause(),
+    position: () => node.currentTime,
+  };
+
+  return { handle, silence, audition };
 }

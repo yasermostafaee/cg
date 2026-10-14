@@ -115,6 +115,16 @@ export interface DesignerStoreState {
    */
   currentFrame: number;
   /**
+   * `DELTA-RUN-NEXT-VERSION-01-G` — the timeline transport is PLAYING (not a scrub, not a step): the
+   * canvas then plays each sound at its place. Session-only, never saved.
+   */
+  timelinePlaying: boolean;
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-G` — the ONE sound switch the timeline and the Preview share: off by
+   * default (sound ON — the Designer is where an author listens to what they placed). Session-only.
+   */
+  soundMuted: boolean;
+  /**
    * Currently-selected keyframe in the timeline. Drives the yellow
    * highlight on the diamond glyph (in the timeline lane, the track
    * row's left label, and the Inspector's per-row indicator). A bare
@@ -237,6 +247,8 @@ export const initialState: DesignerStoreState = {
   editingPathId: null,
   bindModeFieldId: null,
   currentFrame: 0,
+  timelinePlaying: false,
+  soundMuted: false,
   selectedKeyframe: null,
   selectedKeyframes: [],
   keyframeInspectorOpen: false,
@@ -611,6 +623,8 @@ export function _resetCore(): void {
     editingPathId: null,
     bindModeFieldId: null,
     currentFrame: 0,
+    timelinePlaying: false,
+    soundMuted: false,
     selectedKeyframe: null,
     selectedKeyframes: [],
     keyframeInspectorOpen: false,

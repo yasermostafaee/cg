@@ -227,6 +227,18 @@ export const timelineSlice = {
     set({ timelineZoom: clamped });
   },
 
+  /** `DELTA-RUN-NEXT-VERSION-01-G` — the transport started or stopped PLAYING (not a scrub). */
+  setTimelinePlaying(playing: boolean): void {
+    if (current.timelinePlaying === playing) return;
+    set({ timelinePlaying: playing });
+  },
+
+  /** `DELTA-RUN-NEXT-VERSION-01-G` — the one sound switch, shared by the timeline and the Preview. */
+  setSoundMuted(muted: boolean): void {
+    if (current.soundMuted === muted) return;
+    set({ soundMuted: muted });
+  },
+
   /** Move the authoring cursor frame, clamped to the scene's frame range. */
   setCurrentFrame(frame: number): void {
     if (current.scene === null) return;

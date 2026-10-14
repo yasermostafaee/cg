@@ -1,6 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeftRight, Pause, Play, Repeat, SkipBack, StepBack, StepForward } from 'lucide-react';
-import { activeRangeOf, type Scene } from '@cg/shared-schema';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowLeftRight,
+  Pause,
+  Play,
+  Repeat,
+  SkipBack,
+  StepBack,
+  StepForward,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
+import { activeRangeOf, hasSoundEffects, type Scene } from '@cg/shared-schema';
+import { resumeCanvasSound } from '../canvas/canvasSound.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
@@ -39,6 +50,17 @@ export function TransportBar({ scene }: Props): JSX.Element {
   const { in: frameIn, out: frameOut } = activeRangeOf(scene);
   const totalOut = scene.frameRange.out;
   const [playing, setPlaying] = useState(false);
+  /*
+    DELTA-RUN-NEXT-VERSION-01-G — Play on the timeline plays the sounds at their places (the canvas
+    page auditions them); scrubbing and stepping stay silent. The store carries "playing" to the
+    canvas, and the ONE sound switch the Preview shares.
+  */
+  const soundMuted = useDesignerSelector((st) => st.soundMuted);
+  const hasSound = useMemo(() => hasSoundEffects(scene, scene.compositions), [scene]);
+  useEffect(() => {
+    designerStore.setTimelinePlaying(playing);
+  }, [playing]);
+  useEffect(() => () => designerStore.setTimelinePlaying(false), []);
   const [loopMode, setLoopMode] = useState<LoopMode>('off');
   const [hovered, setHovered] = useState<string | null>(null);
   const lastWallRef = useRef<number>(0);
@@ -117,6 +139,8 @@ export function TransportBar({ scene }: Props): JSX.Element {
 
   function playDir(dir: 1 | -1): void {
     playDirRef.current = dir;
+    // Inside the user's gesture: make the canvas page's sound output run before any sound plays.
+    resumeCanvasSound();
     setPlaying(true);
   }
 
@@ -142,16 +166,14 @@ export function TransportBar({ scene }: Props): JSX.Element {
           setPlaying(false);
           designerStore.setCurrentFrame(designerStore.get().currentFrame + 1);
         } else {
-          playDirRef.current = 1;
-          setPlaying(true);
+          playDir(1);
         }
       } else if (k === 'KeyJ') {
         if (kHeldRef.current) {
           setPlaying(false);
           designerStore.setCurrentFrame(designerStore.get().currentFrame - 1);
         } else {
-          playDirRef.current = -1;
-          setPlaying(true);
+          playDir(-1);
         }
       } else {
         return;
@@ -256,6 +278,23 @@ export function TransportBar({ scene }: Props): JSX.Element {
         >
           <Icon icon={ArrowLeftRight} size={17} className={s.icon} />
         </Button>
+        {hasSound && (
+          <>
+            <span className={s.groupDivider} aria-hidden />
+            <Button
+              variant="bare"
+              className={btnClass('sound', !soundMuted)}
+              {...hoverProps('sound')}
+              onClick={() => designerStore.setSoundMuted(!soundMuted)}
+              aria-pressed={!soundMuted}
+              data-testid="transport-sound"
+              title="Sound — the timeline and the Preview share this switch"
+            >
+              <Icon icon={soundMuted ? VolumeX : Volume2} size={17} className={s.icon} />
+              {soundMuted ? 'Sound off' : 'Sound on'}
+            </Button>
+          </>
+        )}
       </div>
       <span className={s.frameReadout} aria-label="Current frame">
         frame {currentFrame} / {totalOut}

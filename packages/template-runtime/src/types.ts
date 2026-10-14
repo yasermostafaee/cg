@@ -147,6 +147,16 @@ export interface TemplateRuntime {
    */
   rehearseStep(clockId: string, step: 'before' | number | null | undefined): void;
 
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-G` — the Designer TIMELINE's sound: while `playing`, every sound whose
+   * place on the timeline covers `frame` plays from where the playhead is in it (an entrance sound
+   * at the active range's first frame, an exit sound at the out point, a timed one `ms` after the
+   * entrance), through the page's own audio graph and master mute; outside its place, or with
+   * `playing` false — scrubbing, stepping, a stopped playhead — it is silent. Called on every
+   * playhead move. On air nothing calls it: a take plays sounds through the lifecycle.
+   */
+  auditionSounds(state: { playing: boolean; frame: number }): void;
+
   /** Play the exit animation. Stub for M3.2-α — instant transition. */
   stop(opts?: StopOptions): Promise<void>;
 

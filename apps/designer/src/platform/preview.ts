@@ -254,7 +254,13 @@ export class Preview {
       import '${cgJsLottieUrl}';`
           : ''
       }
-      import { createRuntime, installCasparGlobals, setSoundMuted } from '${cgJsUrl}';
+      import { createRuntime, installCasparGlobals, setSoundMuted, resumeSoundOutput } from '${cgJsUrl}';
+      // DELTA-RUN-NEXT-VERSION-01-G — the Designer calls this INSIDE the click that starts the
+      // timeline's playback (same-origin frame), so the page's sound output is running before a
+      // sound is asked to play.
+      window.cgResumeSound = () => {
+        if (typeof resumeSoundOutput === 'function') resumeSoundOutput(document);
+      };
       (async () => {
         // D-087 — false in a broadcast (Preview-modal) document: keep the
         // runtime's native cg-pending (blank) state on load and reveal only on
@@ -1070,6 +1076,11 @@ export class Preview {
                 applyFrameOffset(msg.frameOffset);
                 currentFrame = msg.frame;
                 if (runtime) runtime.tick(currentFrame);
+                // DELTA-RUN-NEXT-VERSION-01-G — the timeline's Play sounds each sound at its place;
+                // a scrub, a step or a stopped playhead (playing false) is silent.
+                if (runtime && typeof runtime.auditionSounds === 'function') {
+                  runtime.auditionSounds({ playing: msg.playing === true, frame: currentFrame });
+                }
               } else if (msg.action === 'play') {
                 currentFields = msg.fields ?? {};
                 // B-091 — mount any Lottie map deferred during the LAST run before this one

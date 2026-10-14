@@ -242,15 +242,19 @@ export function CanvasArea({
     clientX: number;
     clientY: number;
   } | null>(null);
-  const { rulerVisible, guides, snapGuides, currentFrame } = useDesignerSelector(
-    (s) => ({
-      rulerVisible: s.rulerVisible,
-      guides: s.guides,
-      snapGuides: s.snapGuides,
-      currentFrame: s.currentFrame,
-    }),
-    shallowEqual,
-  );
+  const { rulerVisible, guides, snapGuides, currentFrame, timelinePlaying, soundMuted } =
+    useDesignerSelector(
+      (s) => ({
+        rulerVisible: s.rulerVisible,
+        guides: s.guides,
+        snapGuides: s.snapGuides,
+        currentFrame: s.currentFrame,
+        // DELTA-RUN-NEXT-VERSION-01-G — the timeline's Play sounds the page; one shared switch.
+        timelinePlaying: s.timelinePlaying,
+        soundMuted: s.soundMuted,
+      }),
+      shallowEqual,
+    );
   // Screen offset (within the scroll viewport) of the scene's (0,0), so the
   // pinned rulers and the guide lines stay aligned with the canvas as it
   // zooms / scrolls / resizes.
@@ -538,7 +542,12 @@ export function CanvasArea({
       if (msg?.kind === 'cg-preview-ready') {
         const cw = iframeRef.current?.contentWindow;
         if (cw === undefined || cw === null) return;
-        cw.postMessage({ kind: 'cg-preview', action: 'scrub', frame: currentFrame }, '*');
+        cw.postMessage(
+          { kind: 'cg-preview', action: 'scrub', frame: currentFrame, playing: timelinePlaying },
+          '*',
+        );
+        // A rebuilt page starts unmuted: give it the shared sound switch again.
+        cw.postMessage({ kind: 'cg-preview', action: 'sound-muted', muted: soundMuted }, '*');
         cw.postMessage(
           { kind: 'cg-preview', action: 'editing-text', elementId: editingTextId },
           '*',
@@ -572,7 +581,7 @@ export function CanvasArea({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [currentFrame, editingTextId]);
+  }, [currentFrame, editingTextId, timelinePlaying, soundMuted]);
 
   // D-060 — expose the live preview document so the selection gizmo (and the
   // auto→fixed one-shot size commit) can measure an auto-sized text box's rendered
@@ -592,10 +601,21 @@ export function CanvasArea({
         action: 'scrub',
         frame: currentFrame,
         frameOffset: frameOffsetRef.current,
+        // DELTA-RUN-NEXT-VERSION-01-G — PLAYING sounds each sound at its place; a scrub, a step or
+        // a stopped playhead is silent (`runtime.auditionSounds`).
+        playing: timelinePlaying,
       },
       '*',
     );
-  }, [currentFrame]);
+  }, [currentFrame, timelinePlaying]);
+
+  // DELTA-RUN-NEXT-VERSION-01-G — the ONE sound switch, shared with the Preview.
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { kind: 'cg-preview', action: 'sound-muted', muted: soundMuted },
+      '*',
+    );
+  }, [soundMuted]);
 
   // Zoom by `factor`, keeping the scene point under (clientX, clientY) pinned there —
   // so Ctrl+wheel zooms toward the CURSOR and the +/−/1× buttons toward the viewport

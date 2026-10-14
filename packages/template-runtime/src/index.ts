@@ -28,7 +28,14 @@ export {
 } from './position.js';
 // `D-165` — the page's sound switch: the host (CG Control's PVW, silent by default; the Designer's
 // preview toggle) calls the page's OWN copy, as PVW calls `applyOutputPosition`.
-export { setSoundMuted, isSoundMuted, envelopeAt, type AudioShape } from './audio-graph.js';
+export {
+  setSoundMuted,
+  isSoundMuted,
+  resumeSoundOutput,
+  envelopeAt,
+  type AudioShape,
+  type SoundAudition,
+} from './audio-graph.js';
 export { AudioDriver, gainOfDb, type AudioHandle } from './audio-driver.js';
 export { buildScene } from './scene-builder.js';
 export { applyFieldValues } from './bindings.js';

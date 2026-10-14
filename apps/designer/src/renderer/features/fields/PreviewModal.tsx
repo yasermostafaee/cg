@@ -17,6 +17,7 @@ import {
 } from '../assets/lottieAssetCache.js';
 import { getAll as sharedUrlGetAll } from '../sharedLibrary/sharedImageUrlCache.js';
 import { Modal } from '../shell/Modal.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { PreviewFieldForm, type PreviewDispatch } from './PreviewFieldForm.js';
 import { columnsForFields, type ListItemColumn } from './repeater-columns.js';
 import { PreviewTransport } from './PreviewTransport.js';
@@ -346,17 +347,22 @@ export function PreviewModal({
     `D-165` — the preview's SOUND switch, ON by default (the Designer is where an author listens to
     the sound they placed). Sent to the page's own runtime, and sent again whenever the page boots,
     because a rebuilt page starts unmuted.
+
+    `DELTA-RUN-NEXT-VERSION-01-G` — ONE switch, the timeline's and this one: it lives in the store
+    (session-only), so turning the sound off under the canvas leaves the Preview off too, and the
+    state is shown on both — a muted preview is never mistaken for a broken one.
   */
   const hasSound = useMemo(() => hasSoundEffects(scene, scene.compositions), [scene]);
-  const [soundMuted, setSoundMuted] = useState(false);
+  const soundMuted = useDesignerSelector((st) => st.soundMuted);
   // The page-boot handler reads the switch without re-subscribing on every toggle.
-  const soundMutedRef = useRef(false);
+  const soundMutedRef = useRef(soundMuted);
+  soundMutedRef.current = soundMuted;
+  useEffect(() => {
+    post({ action: 'sound-muted', muted: soundMuted });
+  }, [post, soundMuted]);
   const onToggleSound = useCallback(() => {
-    const next = !soundMutedRef.current;
-    soundMutedRef.current = next;
-    setSoundMuted(next);
-    post({ action: 'sound-muted', muted: next });
-  }, [post]);
+    designerStore.setSoundMuted(!soundMutedRef.current);
+  }, []);
   /*
     `D-141` (design §7.4) — the two zone rehearsal knobs, shown only when a countdown carries zones:
     a clock RATE (the page's one clock runs N× faster, so an hour of zones replays in a minute) and a
