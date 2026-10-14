@@ -38,6 +38,34 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
     await expect(app.inspector.getByLabel('out', { exact: true })).toHaveValue('none');
   });
 
+  test('🔴 the preview’s six playout commands all sit inside the panel — Next is not pushed off', async ({
+    app,
+  }) => {
+    await app.newProject('BookPreview');
+    await app.addSequence({ x: 200, y: 200 });
+    await app.openPreviewModal();
+    const group = app.previewDialog.getByRole('group', { name: 'Playout commands' });
+    const groupBox = await group.boundingBox();
+    const dialogBox = await app.previewDialog.boundingBox();
+    expect(groupBox).not.toBeNull();
+    expect(dialogBox).not.toBeNull();
+    // Measured in the engine, not asserted from the stylesheet (golden rule 12 c).
+    expect(groupBox!.x + groupBox!.width).toBeLessThanOrEqual(dialogBox!.x + dialogBox!.width);
+    for (const name of [/Play|Resume/, 'Pause', 'Out', 'Stop', 'Previous', 'Next']) {
+      const button = group.getByRole('button', {
+        name,
+        ...(typeof name === 'string' && { exact: true }),
+      });
+      await expect(button).toBeVisible();
+      const box = await button.boundingBox();
+      expect(box, String(name)).not.toBeNull();
+      expect(box!.x, String(name)).toBeGreaterThanOrEqual(groupBox!.x - 0.5);
+      expect(box!.x + box!.width, String(name)).toBeLessThanOrEqual(
+        groupBox!.x + groupBox!.width + 0.5,
+      );
+    }
+  });
+
   test('a FOLDER of pictures is added the same way', async ({ app }) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-book-'));
     try {

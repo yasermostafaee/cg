@@ -15,8 +15,9 @@ import * as s from './PreviewTransport.css.js';
  *   first, then the background closes, never closing over fully-visible content).
  * - **Stop** → `stop()` (D-105 — the quick clear: remove the content immediately,
  *   then close the background; settles cleared).
- * - **Next** → `next()` (advance a paginated template). Disabled when the
- *   composition has a single step, since there is nothing to advance to.
+ * - **Previous** / **Next** → `previous()` / `next()` (step a paginated template or a
+ *   book — `D-163`). Disabled when the composition has a single step. They share the
+ *   row below the other four, half each, so all six stay inside the panel.
  *
  * **Reset** is a PREVIEW-ONLY utility (re-seeds the form to defaults), kept visually
  * distinct from the playout commands.
@@ -71,7 +72,7 @@ export function PreviewTransport({
           Stop
         </Button>
         <Button
-          className={s.command}
+          className={`${s.command} ${s.step}`}
           onClick={onPrevious}
           disabled={!canStep}
           title={canStep ? undefined : 'Single-step template — nothing to go back to'}
@@ -80,7 +81,7 @@ export function PreviewTransport({
           Previous
         </Button>
         <Button
-          className={s.command}
+          className={`${s.command} ${s.step}`}
           onClick={onNext}
           disabled={!canStep}
           title={canStep ? undefined : 'Single-step template — nothing to advance to'}
