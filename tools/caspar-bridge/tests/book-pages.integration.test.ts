@@ -188,6 +188,54 @@ it('🔴 a book stops at its ends, and Go to takes the operator’s page number'
   expect(await r.pageItem('item1', 'pages', 99)).toMatchObject({ page: 3 });
 }, 40_000);
 
+/** The page index each `CG UPDATE` since `from` told the page, in wire order. */
+async function toldIndexes(from: number): Promise<number[]> {
+  return (await linesSince(from)).flatMap((l) => {
+    const m = /"page":\{"field":"pages","index":(\d+)/.exec(l);
+    return m === null ? [] : [Number(m[1])];
+  });
+}
+
+it('🔴 ten Next presses at once turn ten pages, in order — not one is lost', async () => {
+  // Measured on CasparCG 2.5.0 (IMAGE-PAGES-01): unqueued, all ten read page 1 and answered page 2.
+  const r = await boot();
+  const book = await storeBook(r, 12);
+  expect((await r.load('item1', 'book', { pages: book })).accepted).toBe(true);
+  await expect(mock!.waitForCgAddResolution(slotOf(r, 'item1'))).resolves.toBe('resolved');
+  expect((await r.take('item1')).accepted).toBe(true);
+  const before = await lineCount();
+
+  const answers = await Promise.all(
+    Array.from({ length: 10 }, () => r.pageItem('item1', 'pages', 'next')),
+  );
+
+  expect(answers.map((a) => a.page)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  expect(pagesOf(r, 'item1')).toEqual({ pages: 10 });
+  expect(await toldIndexes(before)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+}, 40_000);
+
+it('🔴 a new book applied during a page turn waits for it: the page and the book agree', async () => {
+  const r = await boot();
+  const book = await storeBook(r, 6);
+  expect((await r.load('item1', 'book', { pages: book })).accepted).toBe(true);
+  await expect(mock!.waitForCgAddResolution(slotOf(r, 'item1'))).resolves.toBe('resolved');
+  expect((await r.take('item1')).accepted).toBe(true);
+  await r.pageItem('item1', 'pages', 5);
+  const before = await lineCount();
+
+  const [turn, update] = await Promise.all([
+    r.pageItem('item1', 'pages', 'next'),
+    r.update('item1', { pages: book.slice(0, 3) }, 'merge'),
+  ]);
+
+  expect(turn).toMatchObject({ accepted: true, page: 6 });
+  expect(update.accepted).toBe(true);
+  // The new book has three pages, so the row is on page 1 — and the LAST thing the page was told
+  // says so too.
+  expect(pagesOf(r, 'item1')).toEqual({ pages: 0 });
+  expect((await toldIndexes(before)).at(-1)).toBe(0);
+}, 40_000);
+
 it('🔴 golden rule 10 — a row with nothing on its layer changes state only: nothing is sent', async () => {
   const r = await boot();
   const book = await storeBook(r, 4);

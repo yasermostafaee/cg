@@ -1197,6 +1197,29 @@ const ROW_LEFT_AIR_MID_SWITCH =
 const sleepMs = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * The ONE spelling of "run this after whatever this key already has running" — the per-row queues
+ * (`#withLiveSeatLock`, `#withPageQueue`) are this over their own map. Sequential calls chain onto
+ * an already-resolved promise, so the common path is unchanged. The stored tail swallows a failure
+ * so one refused action cannot poison the queue for every later one; `run` still rejects to its
+ * caller.
+ */
+async function chainOn<T>(
+  queues: Map<string, Promise<unknown>>,
+  key: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const prev = queues.get(key) ?? Promise.resolve();
+  const run = prev.then(fn);
+  const tail = run.catch(() => undefined);
+  queues.set(key, tail);
+  try {
+    return await run;
+  } finally {
+    if (queues.get(key) === tail) queues.delete(key);
+  }
+}
+
+/**
  * `ROUTE-PLATES-01` §1.E — the layer a PRODUCER command puts something on (`PLAY`/`LOADBG`/`LOAD`
  * `<ch>-<L>`, `CG <ch>-<L> ADD`), or `null`. The seam's "holds a seated plate" answer reads it.
  */
@@ -5860,7 +5883,13 @@ export class CasparRuntime {
     lookBindings?: LookSourceBindings,
   ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
     return this.#audited('update', this.#itemDetail(itemId), () =>
-      this.#updateImpl(itemId, fields, mergeMode, lookBindings),
+      // `R-100` — a book's update queues with its page turns (`#withPageQueue`); every other row's
+      // update runs exactly as it always did.
+      this.#hasBook(itemId)
+        ? this.#withPageQueue(itemId, () =>
+            this.#updateImpl(itemId, fields, mergeMode, lookBindings),
+          )
+        : this.#updateImpl(itemId, fields, mergeMode, lookBindings),
     );
   }
 
@@ -6144,8 +6173,30 @@ export class CasparRuntime {
     message?: string;
   }> {
     return this.#audited('page-turn', this.#itemDetail(itemId), () =>
-      this.#pageItemImpl(itemId, field, to),
+      this.#withPageQueue(itemId, () => this.#pageItemImpl(itemId, field, to)),
     );
+  }
+
+  /**
+   * `R-100` — **A ROW'S BOOK MOVES ONE PRESS AT A TIME.** The bridge dispatches requests without
+   * awaiting the previous one (`#withLiveSeatLock` names it), and a turn reads the page, awaits the
+   * picture and CasparCG's reply, and only then records the new page. Unqueued, ten Next presses
+   * at once all read page 1 and all answered page 2 — measured on CasparCG 2.5.0
+   * (`IMAGE-PAGES-01`). So a row's turns queue, and so does an update on a row with a book (it
+   * rewrites the book and the page under a turn): each reads the page the one before it left.
+   * Not the take: it is the operator's repair verb and never queues (`#withLiveSeatLock`'s rule).
+   */
+  readonly #pageQueues = new Map<string, Promise<unknown>>();
+
+  #withPageQueue<T>(itemId: string, fn: () => Promise<T>): Promise<T> {
+    return chainOn(this.#pageQueues, itemId, fn);
+  }
+
+  /** `R-100` — does this row's template have a page list (a book)? */
+  #hasBook(itemId: string): boolean {
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    if (templateId === undefined) return false;
+    return (this.#templateOfItem(itemId, templateId)?.pageLists?.length ?? 0) > 0;
   }
 
   async #pageItemImpl(
@@ -8931,18 +8982,8 @@ export class CasparRuntime {
    */
   readonly #liveSeatQueues = new Map<string, Promise<unknown>>();
 
-  async #withLiveSeatLock<T>(itemId: string, fn: () => Promise<T>): Promise<T> {
-    const prev = this.#liveSeatQueues.get(itemId) ?? Promise.resolve();
-    const run = prev.then(fn);
-    // The stored tail swallows the failure so one refused action cannot poison the
-    // queue for every later one; `run` itself still rejects to the caller.
-    const tail = run.catch(() => undefined);
-    this.#liveSeatQueues.set(itemId, tail);
-    try {
-      return await run;
-    } finally {
-      if (this.#liveSeatQueues.get(itemId) === tail) this.#liveSeatQueues.delete(itemId);
-    }
+  #withLiveSeatLock<T>(itemId: string, fn: () => Promise<T>): Promise<T> {
+    return chainOn(this.#liveSeatQueues, itemId, fn);
   }
 
   /**
