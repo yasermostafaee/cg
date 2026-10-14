@@ -358,14 +358,15 @@ describe('B-175 — beginRotate pivots about the DRAWN box', () => {
     act(() => {
       zone.dispatchEvent(pointer('pointerdown', grab.x, grab.y));
     });
-    // Shift held: snapping off, so the committed angle is the raw swept angle.
+    // Alt held (`D-156` — the one bypass-snapping key; it was Shift here): snapping off, so the
+    // committed angle is the raw swept angle.
     act(() => {
       window.dispatchEvent(
         new MouseEvent('pointermove', {
           bubbles: true,
           clientX: to.x,
           clientY: to.y,
-          shiftKey: true,
+          altKey: true,
         }),
       );
     });

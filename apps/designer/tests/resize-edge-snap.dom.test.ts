@@ -155,14 +155,20 @@ function mountGizmo(id: string): HTMLDivElement {
 }
 
 /** jsdom has no `PointerEvent`; React and the window listeners both read a MouseEvent fine. */
-function pointer(type: string, clientX: number, clientY: number, shift = false): MouseEvent {
+function pointer(
+  type: string,
+  clientX: number,
+  clientY: number,
+  mods: { shift?: boolean; alt?: boolean } = {},
+): MouseEvent {
   return new MouseEvent(type, {
     bubbles: true,
     cancelable: true,
     clientX,
     clientY,
     button: 0,
-    shiftKey: shift,
+    shiftKey: mods.shift === true,
+    altKey: mods.alt === true,
   });
 }
 
@@ -187,7 +193,7 @@ function dragHandleTo(
   handle: (typeof CORNER_ORDER)[number] | (typeof EDGE_ORDER)[number],
   from: { x: number; y: number },
   to: { x: number; y: number },
-  opts: { shift?: boolean } = {},
+  opts: { shift?: boolean; alt?: boolean } = {},
 ): DragResult {
   const isCorner = (CORNER_ORDER as readonly string[]).includes(handle);
   const hits = host.querySelectorAll(isCorner ? '.cg-gizmo-corner' : '.cg-gizmo-edge');
@@ -196,17 +202,16 @@ function dragHandleTo(
     : EDGE_ORDER.indexOf(handle as (typeof EDGE_ORDER)[number]);
   const hit = hits[idx];
   if (hit === undefined) throw new Error(`no ${handle} handle rendered`);
-  const shift = opts.shift === true;
   act(() => {
-    hit.dispatchEvent(pointer('pointerdown', from.x, from.y, shift));
+    hit.dispatchEvent(pointer('pointerdown', from.x, from.y, opts));
   });
   act(() => {
-    window.dispatchEvent(pointer('pointermove', to.x, to.y, shift));
+    window.dispatchEvent(pointer('pointermove', to.x, to.y, opts));
   });
   const live = designerStore.get().snapGuides;
   const snapshot = { x: [...live.x], y: [...live.y] };
   act(() => {
-    window.dispatchEvent(pointer('pointerup', to.x, to.y, shift));
+    window.dispatchEvent(pointer('pointerup', to.x, to.y, opts));
   });
   return { guides: snapshot };
 }
@@ -259,8 +264,9 @@ describe('B-181 — an aspect-LOCKED corner snaps the BOX EDGE, not the pointer'
     */
     designerStore.setAspectLock('plate', true);
     const host = mountGizmo('plate');
-    // Shift bypasses the snap, so this is the raw locked solve at the same pointer.
-    dragHandleTo(host, 'br', GRAB_BR, AIM, { shift: true });
+    // Alt bypasses the snap (`D-156`; it was Shift), so this is the raw locked solve at the
+    // same pointer.
+    dragHandleTo(host, 'br', GRAB_BR, AIM, { alt: true });
     const c = committed('plate');
     expect(c.x + c.w).toBe(UNSNAPPED_X);
     // The pointer was ON the target while the box was ~4 px away — inside the 7 px threshold.
@@ -413,17 +419,26 @@ describe('B-181 — the UNLOCKED path is the positive control and must not move'
   });
 });
 
-describe('B-181 — Shift still bypasses everything', () => {
-  it('Shift held: no snap, no guide, free placement — exactly as today', () => {
+describe('D-156 — Alt bypasses everything in a resize; Shift no longer does', () => {
+  it('🔴 Alt held: no snap, no guide, free placement — the bypass Shift used to be', () => {
     const host = mountGizmo('plate');
-    const { guides } = dragHandleTo(host, 'br', GRAB_BR, AIM, { shift: true });
+    const { guides } = dragHandleTo(host, 'br', GRAB_BR, AIM, { alt: true });
     const c = committed('plate');
     // Not pulled onto the neighbour …
     expect(c.x + c.w).toBe(UNSNAPPED_X);
     // … and nothing drawn.
     expect(guides.x).toEqual([]);
     expect(guides.y).toEqual([]);
-    // Shift bypasses `B-180`'s quantise too, so the free resize keeps its fraction.
+    // Alt bypasses `B-180`'s quantise too, so the free resize keeps its fraction.
     expect(Number.isInteger(c.w) && Number.isInteger(c.h)).toBe(false);
+  });
+
+  it('🔴 Shift held: it does NOT bypass — the edge still snaps onto the neighbour', () => {
+    // Two keys for one job is what `D-156` ends: the losing spelling is removed, not aliased.
+    const host = mountGizmo('plate');
+    const { guides } = dragHandleTo(host, 'br', GRAB_BR, AIM, { shift: true });
+    const c = committed('plate');
+    expect(c.x + c.w).toBe(NEIGHBOUR_LEFT);
+    expect(guides.x).toEqual([NEIGHBOUR_LEFT]);
   });
 });

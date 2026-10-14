@@ -5060,9 +5060,16 @@ plate is still deformed by a mis-shaped cell, because `preScale` is per-axis —
 cell preserves is the COMPOSITION'S RESOLUTION ASPECT**. That is written up as a requirement in the
 change's `designer-multibox-arrangements` delta rather than only here.
 
-## [ ] D-156 — `Shift` and `Alt` are two spellings of ONE job — bypass snapping — and which one works depends on which gesture you are in ⟨priority: low⟩
+## [~] D-156 — `Shift` and `Alt` are two spellings of ONE job — bypass snapping — and which one works depends on which gesture you are in ⟨priority: low⟩ — `openspec/changes/designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q5): **(a)** — Alt bypasses snapping in every gesture.
+— **Closed in code (DESIGNER-FIX-02):** the resize and rotate gestures (`Gizmo.tsx`) read `altKey`;
+move, group move and nudge already did. `Shift` bypasses nothing — removed, not aliased — and keeps
+its 10 px nudge stride. The aspect-lock tooltip now says "Alt already bypasses snapping". Tests:
+`resize-edge-snap.dom.test.ts` › "D-156 — Alt bypasses everything in a resize; Shift no longer does"
+(incl. a Shift-held drag that still snaps), `arrangement-gizmo-read.dom.test.ts` (Alt frees the
+rotation), `pixel-snap.spec.ts` unchanged (move / nudge were Alt). The pending
+`aspect-lock-live-source` delta that still said "Shift … resize and rotate" was corrected.
 
 **What:** Make ONE key mean "bypass snapping" across every canvas gesture.
 

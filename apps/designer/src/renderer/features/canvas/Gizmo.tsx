@@ -511,9 +511,10 @@ function beginResize(
   };
 
   const onMove = (e: PointerEvent): void => {
-    // `Shift` is this gesture's bypass — unchanged, and it suppresses BOTH the snap and
-    // `B-180`'s quantise, exactly as before.
-    const bypass = e.shiftKey === true;
+    // `D-156` (owner, Q5 (a)) — `Alt` is the ONE bypass-snapping key, in every gesture (move,
+    // nudge, resize, rotate); it used to be `Shift` here alone. It suppresses BOTH the snap and
+    // `B-180`'s quantise, exactly as `Shift` did. `Shift` no longer bypasses anything here.
+    const bypass = e.altKey === true;
     let pointer = {
       x: grabScene.x + (e.clientX - startX) / scale,
       y: grabScene.y + (e.clientY - startY) / scale,
@@ -654,13 +655,9 @@ function beginRotate(
 
   const onMove = (e: PointerEvent): void => {
     const ang = Math.atan2(e.clientY - pivot.y, e.clientX - pivot.x) * (180 / Math.PI);
-    // Snap to the nearest 15° when close (hold Shift to rotate freely).
-    const next = computeRotationAngle(
-      startAngle,
-      startCursor,
-      ang,
-      snapping && e.shiftKey !== true,
-    );
+    // Snap to the nearest 15° when close (hold Alt to rotate freely — `D-156`: the one
+    // bypass-snapping key in every gesture; it was Shift here).
+    const next = computeRotationAngle(startAngle, startCursor, ang, snapping && e.altKey !== true);
     designerStore.commitAnimatable(element.id, 'rotation', next);
   };
   const onUp = (): void => {

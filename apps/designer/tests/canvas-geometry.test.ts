@@ -281,7 +281,7 @@ describe('computeRotationAngle', () => {
     expect(computeRotationAngle(0, 0, 22, true)).toBe(22);
   });
 
-  it('snap disabled (e.g. Shift held) rotates freely', () => {
+  it('snap disabled (e.g. Alt held — D-156) rotates freely', () => {
     expect(computeRotationAngle(0, 0, 13, false)).toBe(13);
   });
 });

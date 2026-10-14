@@ -38,7 +38,8 @@
 
 - [x] 5.1 `B-138` a missing video shows the "missing" picture as its still frame (its poster; measured
       in Chromium by pixel; ablation reddens the e2e).
-- [ ] 5.2 `D-156` Alt bypasses snapping in move, nudge, resize, rotate.
+- [x] 5.2 `D-156` Alt bypasses snapping in move, nudge, resize, rotate. Shift removed as a bypass (not
+      aliased); `designer-canvas-view` restated; the pending `aspect-lock-live-source` delta corrected.
 - [ ] 5.3 `R-040` + `R-037` `<composition> — item N` headings, stub on collision, `<bdi>`.
 
 ## 6. Verification

@@ -48,7 +48,9 @@
       value the runtime never reads) and is deliberately NOT made here; recorded under `B-218`.
 - [x] 3.3 NO keyboard override. Record which bindings took both candidates: `Shift` is the
       snap override in resize/rotate (`Gizmo.tsx`), `Alt` is the snap override in the move
-      gestures (`CanvasOverlay.tsx`, `D-122`).
+      gestures (`CanvasOverlay.tsx`, `D-122`). ⚠ Superseded 2026-10-14 by `D-156`
+      (`designer-fix-02`): `Alt` is the snap override in every gesture; `Shift` is none. The lock
+      still binds no key.
 - [x] 3.4 Re-word FIT as a REPAIR, and make the already-matches state read as SATISFIED.
 
 ## 4. The CELLS fields

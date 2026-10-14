@@ -316,7 +316,8 @@ pointer gestures live in `Gizmo.tsx` (they read the store and run the
   grabbed corner, applying the element's `Scale·Rotate` to the corner offset so the
   pivot is correct under a prior (non-uniform) scale; `computeRotationAngle` adds the
   change in cursor angle (`atan2` about the pivot) to the start angle, snapping to the
-  nearest 15° within `SNAP_DEG` (Shift = free).
+  nearest 15° within `SNAP_DEG` (Alt = free — `D-156`: Alt is the one bypass-snapping key in
+  every gesture).
 - Resize/rotate commit via `designerStore.commitAnimatable(...)` (writes a keyframe
   when the property is animated, else the static value) and call
   `markHistoryBoundary()` on pointer-up for a single undo step.
@@ -353,7 +354,7 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
   near / centre / far anchors) snap to **canvas edges + centre, every other
   element's edges + centre, and the operator's ruler guides**, within ~6–7 screen px
   (converted to scene px by `/zoom`). Snapping is suppressed while rotated (H/V snap
-  is undefined) and while Shift is held; matched snaps draw a guide line.
+  is undefined) and while Alt is held (`D-156`; it was Shift); matched snaps draw a guide line.
 - **Resize snapping is decided in EDGE space, not pointer space (B-181)** — and the
   distinction only matters under an aspect lock, which is why it went unseen. `beginResize`
   solves a candidate rect from the raw pointer with the lock applied, asks
@@ -396,8 +397,8 @@ to grab. The `size === 1` path keeps the full `Gizmo` above, untouched.
   fractional coordinate the Inspector then rounded away — `B-180`'s first residue generator,
   and it blocked the Live Source Export over geometry the author could not see. A second
   gate, `quantiseDragCommit(alt)`, rounds the COMMIT in `beginDrag` / `beginGroupDrag` and
-  in the Gizmo's resize (which is why resize snapping is no longer a follow-up; **Shift** is
-  that gesture's bypass, as it already was for its other snapping). 🔴 In the resize the
+  in the Gizmo's resize (which is why resize snapping is no longer a follow-up; **Alt** is
+  that gesture's bypass — `D-156` made it the one key in every gesture; it was Shift here). 🔴 In the resize the
   quantise is applied to the POINTER before `computeRectResize`, never to the rect it returns:
   the solver pins the corner opposite the grabbed handle (`B-175`) for any pointer position, and
   rounding its `position` / `size` separately walks that pin off by up to half a pixel under

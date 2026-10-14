@@ -110,16 +110,15 @@ reuses and would otherwise read as forgotten rather than declined.
 
 ### Requirement: The canvas gesture layer's modifier keys
 
-`Shift` SHALL continue to override snapping in the resize and rotate gestures, and `Alt` SHALL
-continue to override snapping in the single-element and group move gestures (`D-122`).
+`Alt` SHALL override snapping in every canvas gesture — the single-element and group moves
+(`D-122`), the nudge, the resize and the rotation — and `Shift` SHALL NOT (`D-156`, the owner's
+decision 2026-10-14, settled in `openspec/changes/designer-fix-02/`; this change used to say `Shift`
+held the resize and rotate bypass, and that sentence was superseded there, not here).
 
-The aspect lock SHALL NOT bind a keyboard modifier. Both plausible keys are already spent on the
-same job — bypass snapping — so overloading either would put two meanings on one key in one
-canvas, and inventing a third chord for a feature that has a visible toggle is worse than having
-no keyboard path at all.
-
-⚠ That `Shift` and `Alt` mean the same thing in different gestures is a real inconsistency. It is
-`D-156`'s, NOT this change's, and SHALL NOT be folded in here.
+The aspect lock SHALL NOT bind a keyboard modifier. `Alt` is spent on bypassing snapping and
+`Shift` keeps its other meanings (the 10 px nudge stride), so overloading either would put two
+meanings on one key in one canvas, and inventing a third chord for a feature that has a visible
+toggle is worse than having no keyboard path at all.
 
 #### Scenario: no new modifier is introduced
 

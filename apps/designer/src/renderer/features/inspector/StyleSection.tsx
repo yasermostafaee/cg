@@ -1192,7 +1192,7 @@ function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Eleme
             title={
               locked
                 ? 'ON — dragging a handle keeps this plate at its aspect. Turn it off to resize ' +
-                  'freely. There is no keyboard override: Shift and Alt already bypass snapping.'
+                  'freely. There is no keyboard override: Alt already bypasses snapping.'
                 : 'OFF — dragging a handle can deform this plate. Turn it on to keep its aspect ' +
                   'while you resize.'
             }
