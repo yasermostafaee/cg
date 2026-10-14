@@ -2263,9 +2263,23 @@ real run will print the notice for `decklink@301`.
 - **Number:** taken from the headings (highest `C-032`) and cross-checked against the registry's
   dated pointer — they agree; see the registry entry.
 
-## [ ] C-034 — after an upgrade the station RE-DERIVES every template's page and metadata from what it retained, and says so in one line ⟨priority: high — every page-runtime fix so far has carried an unannounced manual step, and until it is done an old page silently ignores the new controls⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B · R4`
+## [~] C-034 — after an upgrade the station RE-DERIVES every template's page and metadata from what it retained, and says so in one line ⟨priority: high — every page-runtime fix so far has carried an unannounced manual step, and until it is done an old page silently ignores the new controls⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B · R4`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q23): **(a)** — keep each template's manifest beside its page and rebuild the page from it.
+
+**Built 2026-10-15 by `PAGE-REBUILD-01` — change `openspec/changes/add-page-rebuild/` (`cec75cfa`,
+`2091dec6`). This block and the Acceptance below supersede the 2026-09-15 sizing that follows.**
+
+- **What is kept.** The WHOLE verified `.vcg` is kept, on CG Bridge, by its SHA-256
+  (`templates/template-sources/`). It is the manifest, scene and assets the page was built from, plus
+  what `verify` needs to check them again. An extracted manifest could not be re-verified, so this is
+  the reading of (a) that does not weaken the check.
+- **Who rebuilds, and when.** CG Control rebuilds, when it connects. The bake needs the runtime bundle
+  and the console's fonts, which CG Bridge does not have. Putting them there would change what
+  `stage-bridge.mjs` stages, which is an installer change. Until an upgraded console connects, CG
+  Bridge serves the page it served before.
+- **Templates imported before this** have no kept package. They are named once in the Library
+  ("Re-import these N templates") and nothing else about them changes.
 
 **What:** On an app or bridge upgrade, the station rebuilds each registered template's served
 HTML and its `TemplateInfo` from the record it already keeps, without the operator finding and
@@ -2292,7 +2306,8 @@ session said so out loud. **A station that upgrades without reading a commit mes
 old page that ignores the new controls, with nothing on any surface saying why.**
 
 **⚠ THE CRUX, ESTABLISHED AND MEASURED (2026-09-15), so this item is sized rather than
-guessed:** the `.vcg` bytes are kept NOWHERE — not by the bridge (`TemplateRegistry` persists
+guessed** — ⚠ SUPERSEDED by the build above: the verified bytes are now kept, so nothing in this
+table is lost any more. Kept as the record of why (a) was read as "keep the package". Then: the `.vcg` bytes were kept NOWHERE — not by the bridge (`TemplateRegistry` persists
 exactly `{info, html, importedAt}`), not by the browser (`LibraryStore` keeps
 `{template, html}`), and `importVcgFile` drops the bytes on return. **But the retained `html`
 is sufficient.** Every input the exporter needs is inlined in it:
@@ -2313,29 +2328,33 @@ is sufficient.** Every input the exporter needs is inlined in it:
 CONTENT and carries no publisher attestation.** That is a real trade and it must be decided, not
 slipped in — see the open question.
 
-**Acceptance:**
+**Acceptance** (as built — replaces the 2026-09-15 bullets, which re-derived from the stored HTML):
 
-- WHEN the app or the bridge starts with a build whose template-runtime differs from the one a
-  record was produced with THEN every such template is re-derived from its retained `html` +
-  `info`, and the served page and `TemplateInfo` are replaced atomically
-- WHEN the re-derive runs THEN the operator is told in ONE line — how many templates, and that
-  it happened — and never with a per-template list or a progress dialog
-- WHEN a row is ON AIR or mid-take THEN its served page is NOT swapped underneath it; the
-  re-derive defers that template until the row is off air, and says which are deferred
-- WHEN a template cannot be re-derived (an unparseable stored page, a scene the current schema
-  rejects) THEN it is left exactly as it was, the operator is told WHICH ones and that they need
-  a `.vcg` re-import, and no other template is affected
-- WHEN a re-derived template is inspected THEN the console states its timing facts from the
-  CURRENT derivation version — i.e. the re-import sentence is gone for it
-- AND the re-derive is IDEMPOTENT: running it twice produces the same page and the same
-  `TemplateInfo`
+- WHEN CG Control imports a `.vcg` THEN CG Bridge keeps the exact verified bytes and the page names
+  them and the runtime that built it; a package that cannot be kept never fails the import
+- WHEN a console whose template runtime differs from a kept page's connects THEN it rebuilds that page
+  from the kept package through the import's own verify → unpack → bake, and the new page is served
+  at a new path (`<templateId>~<version>`)
+- WHEN a row holding the old page is on air, exiting, loaded (a stopped row keeps its page on its
+  layer), unconfirmed or not known THEN the rebuilt page is held back and nothing is swapped under it;
+  the first change that leaves no such row swaps it in
+- WHEN the pass rebuilt or held back anything THEN the operator reads ONE confirmation — how many, and
+  by name which wait for their row to be cleared — never a per-template list of the rebuilt ones, and
+  never a progress dialog
+- WHEN a rebuild fails (the package no longer verifies, the bake throws) THEN the old page stays, the
+  operator reads ONE sentence naming it and saying to import it again, and the same runtime does not
+  try it again
+- WHEN a template was imported before packages were kept THEN the Library names it once ("Re-import
+  these N templates") and nothing else about it changes
+- WHEN a page is rebuilt THEN one `template-rebuild` audit row records the template and the old → new
+  runtime
+- AND a rebuilt template's `TemplateInfo` is re-derived by the CURRENT code, and a second pass by the
+  same runtime finds nothing to do
 
-**Open question the owner must answer before this is built:** a re-derived page carries no
-`manifest.integrity`, no signature and no `minRuntimeVersion`. Three options — (a) accept it and
-mark the record `re-derived`, dropping the ability to re-verify; (b) persist the `.vcg` bytes
-instead, which is [[C-011]]'s approach and makes this item unnecessary; (c) persist just the
-manifest beside `{info, html}`, which is small and keeps the gate. **(b) and this item are
-genuine alternatives and only one should be built.**
+**Open question — ANSWERED 2026-10-14 (Q23 (a)), built as the verified package (see above).** The
+2026-09-15 options were: re-derive from the HTML and lose re-verification; persist the `.vcg` bytes
+([[C-011]]'s approach); or persist only the manifest. Keeping the verified package is the reading of
+(a) that keeps the check, and it does make the HTML re-derive unnecessary — only one was built.
 
 **Notes:**
 

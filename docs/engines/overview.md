@@ -174,6 +174,21 @@ and the other as a fallback, so the same resolver covers all three outputs; a
 reference that resolves in neither store is reported by `Exporter.preflight`
 (`.vcg` blocks, HTML warns) and renders a placeholder in preview.
 
+**The page CasparCG plays is baked by CG Control, and rebuilt when its runtime
+changes (`C-034`, `PAGE-REBUILD-01`).** CG Control never serves the `cg.js` inside a
+`.vcg`. At import it runs `verify` → `unpack` → `ExporterSingleFile` with its OWN
+`cgJsIife`, Lottie player, base CSS and font faces (`produceTemplateDelivery`), so a
+page is as old as the console that built it. It also keeps the verified `.vcg` on
+CG Bridge (`templates.source.put`) and stamps the page with a `PageBuild`: the
+console's release, and `pageRuntimeBuild`, a fingerprint of those inputs plus
+`EXPORTER_SHELL_REVISION`, which a test pins beside the shell's output.
+
+A console whose fingerprint differs rebuilds each kept page on connect, through the
+same call. CG Bridge stores the new page as a new version at a new serve path. It
+swaps it into the channel lists only once no row has the old page on a layer.
+Extension point: anything new that goes into every page must enter the fingerprint;
+a change to the shell itself must bump the revision.
+
 ## The editor ↔ schema ↔ runtime triangle
 
 ```
