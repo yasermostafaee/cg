@@ -76,6 +76,18 @@ integrations to validate. They live here so the conversation isn't the only reco
   possibly both. Do NOT allocate a D-/C- number or design anything until the client specifies;
   revisit when details arrive.
 
+## In-house tools — not product features
+
+- **Brand Pack Factory (was `D-142`, re-filed 2026-10-14 by the owner's decision Q14 (a)).** A
+  factory for brand packs: a reusable set of brand assets, colours and type that a station's
+  templates are built against, so its identity is applied once rather than re-authored per
+  template. The owner's 1 Aug 2026 note calls it **an in-house service, not a Designer feature**.
+  That note (`claude/feature-template-pack.md`) is in neither this repo nor `Claude outputs/`;
+  only a zip outside the repo holds it, so its text is not reproduced here. Promote to a real item
+  when a station contract is near (the triage's option (c): hand-build one pack first, to measure
+  the effort). [[D-143]] (`.vcg` back into the Designer) was filed from the same note and stays a
+  D- item.
+
 ## Already tracked elsewhere (do not duplicate)
 
 - **End-user product documentation site (Loopic-style).** Tracked as **P-006** in

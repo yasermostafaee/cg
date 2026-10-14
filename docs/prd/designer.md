@@ -21,7 +21,9 @@ the renderer has no button, so images can't be added at all today.
   currently skips assets — inline imported bytes as data URLs in
   `src/platform/preview.ts`.
 
-## [ ] D-002 — Connect a real on-disk folder (File System Access) ⟨priority: medium⟩ — 2026-07-07 review: the persistence half is superseded by D-088 desktop-style save (per-file FS-Access handles, archive `2026-06-20-desktop-save-mechanism`); KEPT OPEN for the backend-indicator half — on the OPFS/memory tiers a save still lands silently in the browser profile with no UI signal of the active backend
+## [!] D-002 — Connect a real on-disk folder (File System Access) ⟨priority: medium⟩ — 2026-07-07 review: the persistence half is superseded by D-088 desktop-style save (per-file FS-Access handles, archive `2026-06-20-desktop-save-mechanism`); KEPT OPEN for the backend-indicator half — on the OPFS/memory tiers a save still lands silently in the browser profile with no UI signal of the active backend
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS, status corrections): **superseded.** The folder half by D-088 (desktop-style save, archive `2026-06-20-desktop-save-mechanism`); the indicator half by D-150 (archive `2026-08-11-designer-project-package`), whose spec keeps the normal case quiet.
 
 **What:** A "Connect folder" control + an indicator of the active storage
 backend (folder / OPFS / memory).
@@ -435,7 +437,9 @@ this later would mean re-authoring every template and reworking the frame driver
   control layer schedule precise timed auto-out.
   Change: `openspec/changes/add-animation-lifecycle-timing/`.
 
-## [ ] D-021 — Idle loop during hold ⟨priority: high⟩
+## [x] D-021 — Idle loop during hold ⟨priority: high⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q9): **close it** — Lottie and video already loop on their own, and content-driven holds loop since D-133. No code.
 
 **What:** بگذار یک composition به‌اختیار **یک تکهٔ انتهایی را حینِ hold لوپ کند**،
 به‌جای یخ‌زدن — تا لوگو نبض بزند، یک bug «نفس بکشد» و... . یک marker اختیاریِ
@@ -931,7 +935,9 @@ this composition.
   grid layout, explicit `itemSize` override, guaranteed row drill-in.
   Change dir: `openspec/changes/archive/2026-06-13-add-repeater-element/`.
 
-## [ ] D-031 — Multi-step templates (`steps`) + real `next()` ⟨priority: medium⟩
+## [!] D-031 — Multi-step templates (`steps`) + real `next()` ⟨priority: medium⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q10): **not needed — a sequence of compositions is enough.** Parked.
 
 **What:** Author discrete steps in a template and wire CasparCG `next()` /
 `runtime.next()` to advance between them.
@@ -1006,7 +1012,9 @@ harden it.
 **Acceptance to be detailed when scheduled.**
 **Notes:** docs + tests only, no behaviour change; quality item. Companion to D-036.
 
-## [ ] D-038 — Broaden Designer UI unit coverage ⟨priority: low⟩
+## [x] D-038 — Broaden Designer UI unit coverage ⟨priority: low⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q15): **close it** — the item has no measurable target, and the Designer's unit test files grew about 6× since it was filed.
 
 **What:** Grow unit-test coverage of the Designer renderer (inspector sections,
 panels, store reducers) beyond the current animation/binding focus.
@@ -1983,6 +1991,8 @@ logo) exports without that image rendering.
 
 ## [ ] D-065 — Shared library: keyboard-Delete to remove a selected library image ⟨priority: low⟩
 
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q13): built against the home-screen library, after D-066 moves it there.
+
 **What:** In the Shared Library panel, selecting a library image (clicking a
 thumbnail) currently only marks it as the canvas logo tool's target — there is
 no keyboard affordance to act on it. Support removing the selected library
@@ -2010,6 +2020,8 @@ delete-selection muscle memory and makes the panel selection meaningful.
   surface rather than re-done. Builds on D-040 (`designer-shared-image-library`).
 
 ## [ ] D-066 — Relocate shared-library management out of the per-project UI ⟨priority: low⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q13): **(a)** — manage the device-wide image library on the home screen; then D-065 there.
 
 **What:** The shared image library is DEVICE-LEVEL (shared across every
 project), but its management panel currently lives inside a single project's
@@ -3533,6 +3545,8 @@ easeIn/easeOut-style motion and a configurable pause between items.
 
 ## [ ] D-132 — composition start delay (global animation delay) ⟨priority: low-medium⟩
 
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q11): **(a)** — a timeline "shift everything later by N frames" command, as one undo step. Nothing new goes on air.
+
 **What:** A per-composition start delay: on play, the whole timeline (all element in-animations)
 begins after the delay.
 **Why:** delaying the whole animation currently means dragging every layer right — tedious and
@@ -3954,6 +3968,8 @@ own design.md.**
 
 ## [ ] D-141 — Azan countdown: time-of-day target + color zones (composition-deep) ⟨priority: high⟩ — change dir authored, NOT yet implemented: `openspec/changes/add-azan-countdown/` (42/63 tasks). Stays `[ ]` — per `docs/prd/README.md`, `[~]` means "change implemented, not yet archived", which this is not; the pointer is recorded so the change dir is reachable from the item
 
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q24): **needed for the next version.** Its Designer half (the 21 open tasks of `add-azan-countdown`) is in scope.
+
 **What:** Extend the clock element so a countdown can target a wall-clock time of day
 and drive named color zones that restyle the composition — including elements inside
 nested composition instances — as the deadline approaches. Three parts:
@@ -4033,7 +4049,9 @@ default for broadcast. Design-shaped: implementation starts with an openspec cha
 (design-only first) since it widens ClockElementSchema, binding targets, and runtime
 behavior.
 
-## [ ] D-142 — Brand Pack Factory ⟨priority: unrated⟩
+## [!] D-142 — Brand Pack Factory ⟨priority: unrated⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q14): **re-filed as an in-house tool** in [roadmap.md](roadmap.md) (strategic, not a D- item). The owner's 1 Aug note (`claude/feature-template-pack.md`) is in neither the repo nor `Claude outputs/`; it was not brought in.
 
 **What:** a factory for brand packs — a reusable set of brand assets, colours and type that a
 template can be built against, so a station's identity is applied once rather than re-authored per
@@ -4105,6 +4123,8 @@ to boot completion rather than hiding a boot still in progress.
 Source: `DEBT.md:1968`, inside the Designer-splash section at `DEBT.md:1961`.
 
 ## [ ] D-145 — a GUIDE LAYER: mark an element as reference-only, visible on canvas and absent from preview and export ⟨priority: unrated⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q12): **(a)** — a guide is removed from the export.
 
 **What:** let an element be marked as a **guide** — it renders on the Designer canvas as a
 reference, and does **not** appear in preview or in any export. Reference is the Loopic behaviour
@@ -4500,7 +4520,9 @@ holds once the intent is declarable in one click. Two consequences for the imple
 item is where "a loop range is authorable unconditionally" lives, and it is what makes the open
 question above answerable at all.
 
-## [ ] D-152 — multi-box LOOKS: authoring the looks, the declared sources and the background ⟨priority: high⟩
+## [~] D-152 — multi-box LOOKS: authoring the looks, the declared sources and the background ⟨priority: high⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS, status corrections): **reads `[~]`.** Built by `multibox-layout-switch` (`b47f3eca`, `5d56c5a5`; e2e run 32292697141); that change dir is still open.
 
 **What:** the Designer half of the multi-box look switch — how an author builds a template that
 holds several **LOOKS**, declares its **SOURCES once**, and what the exporter emits for them.
@@ -4604,7 +4626,9 @@ rect}` map per look, a source absent from a look has no entry, and the `.vcg` fo
   mapping and seating), [[D-060]] (`fitMode`, and the one fit mode that IS implemented), [[D-083]]
   (composition items — the tree's one-of-N primitive, and why it could NOT be the carrier).
 
-## [ ] D-153 — the arrangement surface authors CELLS the author cannot see, bound to BOXES it does not name, under a CONVENTION it never states ⟨priority: high — the feature shipped and could not be used⟩
+## [!] D-153 — the arrangement surface authors CELLS the author cannot see, bound to BOXES it does not name, under a CONVENTION it never states ⟨priority: high — the feature shipped and could not be used⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS, status corrections): **superseded by LOOKS** (owner, 2026-08-19, the "DIES" row of `multibox-layout-switch/design.md`). Built in `6f0d1266`, disabled the same day in `8d3414a5`; no component imports an arrangement view.
 
 **What:** three faces of ONE defect in the arrangement authoring surface that [[D-152]] delivered.
 Filed as one item because they are one failure — **the model is right and the surface does not teach
@@ -4689,7 +4713,9 @@ format, not a tool.
   `openspec/changes/multibox-layout-switch/specs/designer-multibox-arrangements/spec.md` (the
   contract this surface is meant to make usable).
 
-## [ ] D-154 — a box has TWO geometry editors: the discoverable one is global AND inert, and the gizmo is drawn where the element is not ⟨priority: high — the owner could not author, and nothing on screen said why⟩
+## [!] D-154 — a box has TWO geometry editors: the discoverable one is global AND inert, and the gizmo is drawn where the element is not ⟨priority: high — the owner could not author, and nothing on screen said why⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS, status corrections): **superseded by LOOKS**, the same decision as D-153; `setActiveArrangement` is reachable from no mounted surface.
 
 **What:** with an arrangement active, a box's geometry lives in the arrangement's **CELL**. The
 control an author naturally reaches for — the canvas gizmo, and the Transform panel behind it — went
@@ -4782,6 +4808,8 @@ element's rect?", and every reader and writer goes through it:
   refusal, not a control fault).
 
 ## [~] D-155 — a Live Source with a declared aspect KEEPS it during the resize, instead of being deformed and then repaired ⟨priority: medium⟩ — IMPLEMENTED 2026-08-25 (`openspec/changes/aspect-lock-live-source/`). Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/32834755257 (contains `4c4880c0`; `e2e` job `success`, step RAN). Scenario-level E2E still owed — see task 6.3
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q4): **(a)** — keep-aspect is NOT saved: every plate opens locked (`aspect-lock-live-source` task 3.7).
 
 <!--
   🔴 STATUS CORRECTION, 2026-08-24 — this item was briefly marked `[~]` and it was WRONG.
@@ -5031,6 +5059,8 @@ cell preserves is the COMPOSITION'S RESOLUTION ASPECT**. That is written up as a
 change's `designer-multibox-arrangements` delta rather than only here.
 
 ## [ ] D-156 — `Shift` and `Alt` are two spellings of ONE job — bypass snapping — and which one works depends on which gesture you are in ⟨priority: low⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q5): **(a)** — Alt bypasses snapping in every gesture.
 
 **What:** Make ONE key mean "bypass snapping" across every canvas gesture.
 

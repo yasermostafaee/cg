@@ -4821,7 +4821,9 @@ checking). Turning it on is its own piece of work: **113 pre-existing errors, me
   as a pair), [[R-049]] (the overlay whose purpose this defeats), [[R-048]] (level 4, which the
   overlay now honours), [[B-146]] (the class: a surface showing what air does not).
 
-## [ ] B-158 — a look switch is not visually ATOMIC: the pictures move first and the page's chrome follows, so the OLD look's outlines are briefly drawn around the NEW look's picture ⟨priority: medium — cosmetic, but it is on air and it is every switch⟩ — OPEN. Mechanism established from the code; the FRAME COUNT is a plant reading nothing in this repo can take
+## [!] B-158 — a look switch is not visually ATOMIC: the pictures move first and the page's chrome follows, so the OLD look's outlines are briefly drawn around the NEW look's picture ⟨priority: medium — cosmetic, but it is on air and it is every switch⟩ — OPEN. Mechanism established from the code; the FRAME COUNT is a plant reading nothing in this repo can take
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS, status corrections): **superseded** by `single-clock-look-switch` (`a7976e14`); the owner's re-observation (task 7.14b) stays with that change.
 
 **Observed 2026-08-22, by the owner, on air.** Switching between looks, the two halves of one
 switch land at different times: **the pictures move first, the background and the strokes around

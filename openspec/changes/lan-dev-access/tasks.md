@@ -71,7 +71,8 @@
 - [x] 5.1 Verified here: binding, HMR over the LAN address, the derived bridge URL (dev and
       preview), the unit and E2E suites. **UNVERIFIED — needs the owner on a second machine:**
       reachability through the firewall and from a box where `localhost` is not this one. Steps
-      are in P-041.
+      are in P-041. The owner has noted that this second-machine check is still unverified
+      (2026-10-14, DESIGNER-DECISIONS, "Statements owed to the owner").
 - [x] 5.2 Firewall REPORT (nothing changed): active profile DomainAuthenticated; inbound Allow
       rules already exist for `C:\program files\nodejs\node.exe` (TCP+UDP, Domain and Public) and
       that is the node in use (v26.4.0) — so no rule is expected to be needed. If the second

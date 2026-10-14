@@ -1982,6 +1982,8 @@ place:** `0.11.6`'s installers are tested on a clean runner from each release's 
 
 ## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
 
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q21): **(a)** — keep the legacy `mode: 'content-driven'` shim, as ONE copy with a test.
+
 **What:** `PlayoutSchema` still carries a `z.preprocess` that rewrites the pre-D-028 spelling
 `mode: 'content-driven'` into `{ mode: 'loop-cycle', holdSource: 'content-driven' }`
 (`packages/shared-schema/src/scene.ts:77`–`85`). [[P-031]] deleted every other legacy
@@ -2026,6 +2028,8 @@ deferring is that the window closes**, which is the whole argument for deciding 
 later. Related: [[P-031]] (the policy and the enumerated removals).
 
 ## [ ] P-033 — `typecheck` covers `src/**` only, so 557 test files are OUTSIDE the compile guarantee ⟨priority: medium⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q20): **(a)** — one workspace at a time: the Designer first, then `template-runtime`, `shared-schema`, `vcg-format`.
 
 **What:** no workspace typechecks its tests. Every app's `tsconfig.json` includes `src/**/*` only,
 and every package's explicitly EXCLUDES its tests. So a test can call a function with the wrong
@@ -3676,6 +3680,8 @@ and CG Control never installs while anything is on air (ADR 0002's update-cadenc
 
 ## [ ] P-054 — CG Designer: a desktop file backend behind `@cg/storage`, if the folder permission does not survive a restart ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §1.4
 
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q19): **the owner does the hand check** in the browser Designer (`http://127.0.0.1:4000`); the steps are in `REPORT-DESIGNER-FIX-01`.
+
 **What.** A Tauri file backend implementing the existing `Workspace` abstraction. **Why.** It
 was REPORTED that WebView2 keeps the File System Access pickers working but drops a handle's
 permission across a restart, so the Designer would ask for the file again on each launch. Filed
@@ -4017,7 +4023,9 @@ the settings, the first screen with WebView2 blocked on Server 2022 and 2025, th
 now. **Not verified on a runner:** Windows 11's rounded corners (Windows does not round without a GPU)
 and 200 % (the runner's display stops at 175 %). **Owed:** the owner's look on his own PC; archive.
 
-## [~] P-064 — Release `0.11.0`: the delivery build — three installers, the Persian guide, accepted on clean Windows ⟨priority: high⟩ — FILED 2026-10-04 by `RELEASE-0110-01` (v3) · `openspec/changes/release-0-11-0` · `0.10.0` is never delivered
+## [!] P-064 — Release `0.11.0`: the delivery build — three installers, the Persian guide, accepted on clean Windows ⟨priority: high⟩ — FILED 2026-10-04 by `RELEASE-0110-01` (v3) · `openspec/changes/release-0-11-0` · `0.10.0` is never delivered
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS, status corrections): **superseded** — `0.11.0` was never delivered (`0.11.6` is the trial build with the client). Its change dir is archived on the owner's word, not in this commit.
 
 **What.** `0.11.0` is the build the client receives (the owner, 2026-10-03): CG Bridge, CG Control and CG
 Designer from one green commit, behind CG Setup ([[P-063]]), with the Persian install guide and

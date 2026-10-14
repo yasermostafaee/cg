@@ -125,7 +125,9 @@ external API into the sports state model.
 **Notes:** depends on C-004; API ingestion may need the bridge/host (browsers can't
 reach arbitrary origins) — confirm CORS/host story when scheduled.
 
-## [ ] C-007 — Confirm single-file CEF / file:// hardening ⟨priority: medium⟩
+## [!] C-007 — Confirm single-file CEF / file:// hardening ⟨priority: medium⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS, status corrections): **superseded.** The CEF71 / `file://` premise is retired: CasparCG 2.5.0, and templates are served over HTTP.
 
 **What:** Verify the D-019 single-file HTML export runs correctly under CasparCG's CEF
 from `file://` (no module/CORS/codec surprises) and harden any gaps found.
@@ -711,7 +713,9 @@ facilities — a station with a monitor wall and a station with none are both ta
 design.** That is why the acceptance bullet about being OFF by default and toggleable stops being a
 nicety: it is the mechanism by which one product serves both. Do not quietly design it away.
 
-## [ ] C-017 — auto-clear a layer when a finite template run completes: the served template pings its own origin, the bridge CLEARs ⟨priority: medium⟩ — ⚠ TERMINAL VERB SUPERSEDED 2026-09-15 (owner): the verb is [[C-012]] STOP, not CLEAR. The same-origin PING half STANDS and is being built once for both items in `openspec/changes/template-signals-completion/` ([[C-013]]). This item is annotated, not rewritten: what it got right is the transport.
+## [!] C-017 — auto-clear a layer when a finite template run completes: the served template pings its own origin, the bridge CLEARs ⟨priority: medium⟩ — ⚠ TERMINAL VERB SUPERSEDED 2026-09-15 (owner): the verb is [[C-012]] STOP, not CLEAR. The same-origin PING half STANDS and is being built once for both items in `openspec/changes/template-signals-completion/` ([[C-013]]). This item is annotated, not rewritten: what it got right is the transport.
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS, status corrections): **superseded** by C-012 STOP; the same-origin ping was built under C-013.
 
 **What:** A finite graphic (e.g. a ticker with a set repeat count) should leave air by itself:
 after content completes AND the outro has played, the layer should CLEAR without operator
@@ -2260,6 +2264,8 @@ real run will print the notice for `decklink@301`.
   dated pointer — they agree; see the registry entry.
 
 ## [ ] C-034 — after an upgrade the station RE-DERIVES every template's page and metadata from what it retained, and says so in one line ⟨priority: high — every page-runtime fix so far has carried an unannounced manual step, and until it is done an old page silently ignores the new controls⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B · R4`
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q23): **(a)** — keep each template's manifest beside its page and rebuild the page from it.
 
 **What:** On an app or bridge upgrade, the station rebuilds each registered template's served
 HTML and its `TemplateInfo` from the record it already keeps, without the operator finding and

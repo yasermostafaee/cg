@@ -1098,7 +1098,9 @@ render as FIXED boxes": renders the fixture through the real runtime and asserts
 three known instances of the same stale-`autosize` pattern, and B-112 tracks the pattern — the
 repo-wide inventory and the open question of whether user-saved `.vcg` documents were migrated.
 
-## [ ] B-112 — documents authored before D-060 carry a stale `fitMode: 'autosize'` that has since become real, so they render differently than they were authored — silently ⟨priority: medium⟩
+## [!] B-112 — documents authored before D-060 carry a stale `fitMode: 'autosize'` that has since become real, so they render differently than they were authored — silently ⟨priority: medium⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS, status corrections): **superseded.** P-031's compatibility floor (0.11.4) makes a pre-D-060 migration moot; only test fixtures still carry `autosize`.
 
 **Repro:** take any document authored before **2026-06-29** that has a text element with
 `fitMode: 'autosize'` and `direction: 'rtl'` — its author saw the box come from

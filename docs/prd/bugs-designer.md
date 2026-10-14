@@ -972,7 +972,9 @@ guards. Capability: `designer-playout-lifecycle`.
 **Notes:** Introduced by #320 (D-102 Phase 2 — per-element preview timing). UI display/input-conversion ONLY: the session override, the drivers and the schema keep milliseconds; only the two controls convert (ms ÷ 1000 to display, × 1000 on commit). Each preview row mirrors its inspector counterpart's rounding exactly — the countdown duration is INTEGER seconds (`step 1`), the sequence dwell allows FRACTIONAL seconds (`step 0.5`, `min 0.1`), as `StyleSection` does. The preview's per-scope HOLD control is deliberately NOT changed: the inspector's Playout section shows hold in milliseconds too, so it is already consistent — converting it would create the very mismatch this bug is about. No schema / session-shape / runtime / export / on-air change ⇒ no CasparCG hardware validation needed.
 **Regression test:** unit `preview-timing-rows.test.ts` (a 60000 ms countdown DISPLAYS `60`; a 5000 ms dwell DISPLAYS `5`; typing `6` writes `durationMs: 6000`; typing `0.8` writes `dwellMs: 800`); E2E `preview-timing-phase2.spec.ts` (drive the seconds inputs, assert the runtime's EFFECTIVE ms stamps `data-cg-countdown-ms` / `data-cg-sequence-dwell` are unchanged in ms).
 
-## [~] B-088 — a start-trimmed element ignores its in-point during play: the whole intro is ONE painted frame ⟨priority: high⟩ — code merged (#342, `62bbb44`) but DELIBERATELY still `[~]`: this fix changes playout TIMING and reaches the exported outputs, and ONE of its two verification gates is still outstanding. **Gate 2 (Linux `pnpm gate:e2e`) is DISCHARGED 2026-08-11** — <https://github.com/yasermostafaee/cg/actions/runs/31414808016>, commit `bd88ede`, a later `dev` HEAD that CONTAINS `62bbb44`; run `conclusion: success` and the `E2E (Playwright)` job's own conclusion is `success` (it RAN). **Gate 1 (real-CasparCG hardware check, PREVIEW + EXPORTED OUTPUT) is still OWED and has never been performed** — that is the sole reason this item is not `[x]`, and no e2e run can substitute for it: the gate exists precisely because a green suite cannot settle elapsed-time behaviour on air. See **Gates still OWED** below. Focused fix, no change dir
+## [x] B-088 — a start-trimmed element ignores its in-point during play: the whole intro is ONE painted frame ⟨priority: high⟩ — code merged (#342, `62bbb44`) but DELIBERATELY still `[~]`: this fix changes playout TIMING and reaches the exported outputs, and ONE of its two verification gates is still outstanding. **Gate 2 (Linux `pnpm gate:e2e`) is DISCHARGED 2026-08-11** — <https://github.com/yasermostafaee/cg/actions/runs/31414808016>, commit `bd88ede`, a later `dev` HEAD that CONTAINS `62bbb44`; run `conclusion: success` and the `E2E (Playwright)` job's own conclusion is `success` (it RAN). **Gate 1 (real-CasparCG hardware check, PREVIEW + EXPORTED OUTPUT) is still OWED and has never been performed** — that is the sole reason this item is not `[x]`, and no e2e run can substitute for it: the gate exists precisely because a green suite cannot settle elapsed-time behaviour on air. See **Gates still OWED** below. Focused fix, no change dir
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q16): **accepted without the real-CasparCG check.** The fix `62bbb44` is on `dev` and changes playout timing; no hardware run was done, by the owner's choice. Closed.
 
 **Repro:**
 
@@ -1339,6 +1341,8 @@ not just collection).
 
 ## [ ] B-103 — first sequence item enters WITHOUT its transition when `repeat: 'infinite'` ⟨priority: medium⟩
 
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q6): **(a)** — a looping sequence's first item slides in, always (no exit).
+
 **Repro:**
 
 1. Create a sequence with ≥2 items, `transitionIn` at its default (`bottom`).
@@ -1409,6 +1413,8 @@ MUST be pinned before a fix is credible. What the report does add is that the lo
 on demand for the owner, so those conditions can now actually be captured rather than guessed.
 
 ## [ ] B-105 — the sequence "Hide-show" transition produces no perceptible change ⟨priority: medium⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q7): **(a)** — rename "Hide-show" to "Cut" and pin it with a test.
 
 **Repro:**
 
@@ -1506,7 +1512,9 @@ which is why this surfaces locally — the same exposure asymmetry [B-078](bugs.
 concurrently. Verify by running the file at `--workers=6` repeatedly, NOT at `--workers=1` (which
 removes the overlap and would pass vacuously).
 
-## [ ] B-127 — the VP8+alpha canvas spec fails with `PIPELINE_ERROR_DECODE` on a seek-fragile fixture ⟨priority: medium⟩
+## [x] B-127 — the VP8+alpha canvas spec fails with `PIPELINE_ERROR_DECODE` on a seek-fragile fixture ⟨priority: medium⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q18): **close the flake item and keep the test as a guard** (`video-canvas-render.spec.ts` stays as it is).
 
 **Repro:** (intermittent — one red observed, passed on immediate re-run and in the two gate runs
 before it)
@@ -2223,6 +2231,8 @@ identity and `currentTime` — never `!paused` after a rebuild.
 
 ## [ ] B-138 — an unresolved VIDEO asset in the preview is SILENTLY invisible: no placeholder, no marker, no console line ⟨priority: medium — it makes a whole class of asset failure undiagnosable⟩
 
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q3): **(a)** — a video whose file is missing shows the image "missing" picture as its still frame.
+
 **Repro (constructed — this is a latent trap, not a reported field failure):**
 
 1. Place a video element on a scene.
@@ -2282,6 +2292,8 @@ mutations). An E2E asserting the marker appears on a video whose assetId resolve
 this), [[B-137]] (the once-per-element logging precedent).
 
 ## [ ] B-147 — three schema spellings of "make the text fit" and the runtime implements NONE; the Designer ships an `autoSqueeze` control that writes a field nothing reads ⟨priority: high — it is a control that silently does nothing, and the failure lands on air with the next long name⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q8): **(a) now** — the toggle shows as unavailable with one short reason (the D-159 pattern); **then real shrink-to-fit** (bundle 4) as soon as possible.
 
 **What:** the schema offers **three** ways to say "shrink the text so it fits its box". The runtime
 honours **none** of them.
@@ -3173,7 +3185,9 @@ all of them red.
 
 ---
 
-## [ ] B-185 — under an aspect lock the resize HANDLE slides out from under the pointer, by far more than the snap threshold; the owner has now objected twice and the anchoring is a decision he has not been offered ⟨priority: medium — a DECISION is wanted, not a patch⟩
+## [x] B-185 — under an aspect lock the resize HANDLE slides out from under the pointer, by far more than the snap threshold; the owner has now objected twice and the anchoring is a decision he has not been offered ⟨priority: medium — a DECISION is wanted, not a patch⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q1): **keep it as it is — accepted by the owner, 2026-10-14.** The opposite corner holds and the handle drifts along the edge; parked, and no option (d) visual handle either. Closed.
 
 **What:** immediately after [[B-181]] shipped, the owner reported _"dragging the edges is not
 fixed."_ Three separate readings were measured against an aspect-locked plate before anything was
@@ -3272,6 +3286,8 @@ what this repo keeps paying for.
 
 ## [ ] B-186 — the Designer's tests are NEVER typechecked: `tsconfig.json` includes `src/**` only, so a call site with a removed argument compiles green ⟨priority: medium⟩
 
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q20): **(a)** — one workspace at a time, the Designer first.
+
 **What:** `apps/designer/tsconfig.json` has `"include": ["src/**/*", "vite.config.ts"]`. The
 `tests/**` tree is not in it, so `pnpm typecheck` never looks at a single designer test.
 
@@ -3305,6 +3321,8 @@ found it only looked at `apps/designer`.
 ---
 
 ## [ ] B-187 — a new Live Source plate starts UNASSIGNED even where a default could not be wrong, so a six-plate layout is six manual assignments ⟨priority: medium — the TWO-HALF rule COLLAPSED to one by [[B-188]]; still unimplemented⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q2): **(c)** — a newly drawn Live Source box gets the next free automatic name in its look (`live-1`, `live-2` …), marked "auto" in the Inspector until the author confirms or renames it. Nothing reaches air differently: the operator still maps it.
 
 **What:** [[B-183]] stopped the tool inventing a source id. It stopped it in BOTH cases, and only one
 of them was the defect. The owner is now assigning every plate by hand.
@@ -3726,6 +3744,8 @@ green after, with the whole package suite run three times.
 
 ## [~] B-217 — a canvas video went BLANK after look switches and undo, and a brand-new video rendered nothing; the reported blank is NOT reproduced, and three defects in the seam it went through are closed in code ⟨priority: high — the canvas misrepresents the composition and the owner's only cure is a reload⟩ — FILED 2026-09-04 from `DESIGNER-FIX-0902` §1; the three mechanisms CLOSED IN CODE the same day; the owner's specific blank still OPEN; Linux `gate:e2e` DISCHARGED for `48ef55ce` — <https://github.com/yasermostafaee/cg/actions/runs/33910015631> (`E2E (Playwright)` RAN, 601 s, `success`)
 
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q17): **stays open.** The owner has seen it since early September (2026-10-14); waiting for the browser console lines (F12) the next time it happens in the browser Designer.
+
 **Repro (owner, 2026-08-30):** a LOOKS template with a video used as the background. Several look
 switches through the `Active look` picker, then some `Ctrl+Z`.
 
@@ -3862,6 +3882,8 @@ this stays `[~]`: three defects closed in code, the reported blank filed and ope
 ---
 
 ## [~] B-218 — "keep aspect / free" was ONE flag for every plate in every look: setting one box to FREE freed all of them ⟨priority: medium — a per-plate control that silently reaches every other plate⟩ — FILED AND CLOSED IN CODE 2026-09-04 (`DESIGNER-FIX-0902` §2; `openspec/changes/aspect-lock-live-source/` 3.5–3.7); Linux `gate:e2e` DISCHARGED for `48ef55ce` — <https://github.com/yasermostafaee/cg/actions/runs/33910015631> (`E2E (Playwright)` RAN, 601 s, `success`)
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q4): **(a)** — keep-aspect is NOT saved: every plate opens locked (`aspect-lock-live-source` task 3.7).
 
 **Repro (owner, 2026-08-30):** a two-box look. Select one box, press its `keep aspect` toggle to
 `FREE`.

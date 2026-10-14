@@ -1820,6 +1820,8 @@ have caught the reported incident. Source: `DEBT.md:195`.
 
 ## [ ] R-037 — the sequence item heading is technical, and the fix is a schema decision rather than a restyle ⟨priority: medium⟩
 
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q22): **(a)** — sequence-item field headings read "`<composition> — item N`", with a short stub only when two still collide; done together with R-040.
+
 **What:** the remainder of `dev-b6-inspector-finish`, which landed seven of nine. Two pieces are
 open and only the first is substantial:
 
@@ -1901,6 +1903,8 @@ shell or overlay change disturbs silently.
 the owner UI review batch at `DEBT.md:1360`.
 
 ## [ ] R-040 — two same-named sequences produce IDENTICAL Inspector headings ⟨priority: low⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q22): **(a)** — sequence-item field headings read "`<composition> — item N`", with a short stub only when two still collide; done together with R-037.
 
 **What:** a sequence composition item's display label is built from the sequence ELEMENT's name
 via `sequenceItemNamespace`, so two sequences both called `Sequence`, each with an item at
@@ -3170,7 +3174,9 @@ Number.isFinite(n) ? n : 0; }` (`PositionPicker.tsx:106-109`). An emptied or hal
   re-argue it), [[B-072]] (the seed precedence the marker depends on), [[R-011]] (the position
   override itself).
 
-## [ ] R-057 — the multi-box LOOK switch: the OPERATOR half ⟨priority: high — the client runs a 3-box show and cannot change it live⟩
+## [~] R-057 — the multi-box LOOK switch: the OPERATOR half ⟨priority: high — the client runs a 3-box show and cannot change it live⟩
+
+— owner decision 2026-10-14 (DESIGNER-DECISIONS, status corrections): **reads `[~]`.** The operator half of LOOKS is mostly built; the plant check and the animated phase are owed.
 
 **What:** the operator can switch a running row between the **LOOKS** its template authors — the
 6-box grid → the 1-box solo and back — with **exactly ONE active at a time, so the operator cannot

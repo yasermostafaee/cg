@@ -93,9 +93,11 @@
 ## 7. Gate and hand-off
 
 - [x] 7.1 Full green gate.
-- [ ] 7.2 ⚠ STATE THE COST in the report: an operator using FROM FILE today loses the control on
+- [x] 7.2 ⚠ STATE THE COST in the report: an operator using FROM FILE today loses the control on
       any template not re-exported with the box ticked. `P-031`'s floor permits it; the owner
-      should hear it as a decision, not discover it.
+      should hear it as a decision, not discover it. **Stated** in
+      `REPORT-DESIGNER-TRIAGE-01` §3.4 and **noted by the owner on 2026-10-14**
+      (DESIGNER-DECISIONS, "Statements owed to the owner").
 - [x] 7.3 **Linux `gate:e2e` DISCHARGED.** This alters what renders in the Runtime Inspector (a
       control disappears from most fields; the Inspector's content height changes, which is exactly
       what R-018 flagged `panel-scroll.spec.ts` for). A COMPLETED, GREEN `e2e` job on
