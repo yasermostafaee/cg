@@ -46,7 +46,8 @@ test.describe('B-104 — a saved project carries its assets across a restart', (
     await page.getByRole('button', { name: 'Project assets', exact: true }).click();
     await page.getByRole('button', { name: 'Add asset', exact: true }).click();
     const chooser = page.waitForEvent('filechooser');
-    await page.getByRole('menuitem', { name: /Image/ }).click();
+    // The exact item: `D-164` added `Image sequence…` and `Image sequence folder…` beside it.
+    await page.getByRole('menuitem', { name: 'Image…', exact: true }).click();
     await (await chooser).setFiles({ name: ASSET_NAME, mimeType: 'image/png', buffer: PNG });
 
     const panel = page.locator('aside[aria-label="Project assets"]');
