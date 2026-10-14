@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import type { Composition, Element, Scene, VideoElement } from '@cg/shared-schema';
+import type { Composition, Element, LottieElement, Scene, VideoElement } from '@cg/shared-schema';
 import { activeRangeOf } from '@cg/shared-schema';
 
 /**
@@ -238,7 +238,7 @@ describe('the guard decision — video (adapter: durationMs)', () => {
 
 describe('lottie parity (adapter: (op − ip) / fr at 1× — the creation default)', () => {
   const meta = { ip: 0, op: 150, fr: 30 }; // 5 s
-  const lottieEl = (): Element =>
+  const lottieEl = (): LottieElement =>
     ({
       id: 'lot-1',
       name: 'Lottie',
@@ -258,7 +258,7 @@ describe('lottie parity (adapter: (op − ip) / fr at 1× — the creation defau
       speed: 1,
       loopMode: 'none',
       holdBehavior: 'freeze',
-    }) as unknown as Element;
+    }) as unknown as LottieElement;
 
   it('raises, extends, and cancels exactly as the video does', () => {
     act(() => guard.guardedAddLottie(lottieEl(), meta));
@@ -280,9 +280,9 @@ describe('lottie parity (adapter: (op − ip) / fr at 1× — the creation defau
 
   it('a Lottie that arrived WITH markers keeps its marker values in the slots on backdrop', () => {
     const el = {
-      ...(lottieEl() as object),
+      ...lottieEl(),
       phases: { introEnd: 30, outroStart: 120, idle: [40, 80], source: 'markers' },
-    } as Element;
+    } as LottieElement;
     act(() => guard.guardedAddLottie(el, meta));
     click(dialogButton(/backdrop/i)!);
     const added = children()[0] as Extract<Element, { type: 'lottie' }>;

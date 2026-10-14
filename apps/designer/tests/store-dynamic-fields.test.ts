@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import type { SequenceElement } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
@@ -344,9 +345,7 @@ describe('designerStore — D-029 sequence Data key + items', () => {
   function addSequence(id: string): void {
     designerStore.addElement(defaultSequence(id, 0, 0));
   }
-  function sequenceItemsOf(
-    id: string,
-  ): { id: string; text: string; dwellMs?: number }[] | undefined {
+  function sequenceItemsOf(id: string): SequenceElement['items'] | undefined {
     const st = designerStore.get();
     const scene = editSceneOf(st.scene, st.activeCompositionId)!;
     for (const layer of scene.layers) {

@@ -83,10 +83,11 @@ function clickButton(c: HTMLElement, label: string): void {
   });
 }
 
-const hGroup = (c: HTMLElement): Element | null =>
-  c.querySelector('[role="group"][aria-label="Horizontal alignment"]');
-const vGroup = (c: HTMLElement): Element | null =>
-  c.querySelector('[role="group"][aria-label="Vertical alignment"]');
+// DOM nodes: `Element` in this file is the SCHEMA element (imported above).
+const hGroup = (c: HTMLElement): HTMLElement | null =>
+  c.querySelector<HTMLElement>('[role="group"][aria-label="Horizontal alignment"]');
+const vGroup = (c: HTMLElement): HTMLElement | null =>
+  c.querySelector<HTMLElement>('[role="group"][aria-label="Vertical alignment"]');
 
 describe('D-045 — non-keyframable: align / verticalAlign are not AnimatableProperties', () => {
   it('neither align nor verticalAlign is a member of AnimatablePropertySchema', () => {

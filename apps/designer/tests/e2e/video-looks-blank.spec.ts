@@ -112,7 +112,7 @@ async function sampleVideo(
           readyState: v.readyState,
           src: src.slice(0, 5),
           armed: v.getAttribute('data-cg-poster-armed'),
-          error: v.error === null ? undefined : v.error.message,
+          ...(v.error === null ? {} : { error: v.error.message }),
         };
         if (v.error !== null) return last;
         if (

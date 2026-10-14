@@ -62,7 +62,7 @@ describe('Exporter (.vcg) preflight — D-028 ticker', () => {
 
   it('flags a ticker IMAGE separator that references an unknown asset (D-039ext)', async () => {
     const scene = makeScene();
-    const ticker = (scene.layers[0] as { children: { separator?: unknown }[] }).children[0];
+    const ticker = (scene.layers[0] as { children: { separator?: unknown }[] }).children[0]!;
     ticker.separator = {
       kind: 'image',
       assetId: 'ghost-logo',
@@ -78,7 +78,7 @@ describe('Exporter (.vcg) preflight — D-028 ticker', () => {
 
   it('does not flag a plain TEXT separator (no asset)', async () => {
     const scene = makeScene();
-    const ticker = (scene.layers[0] as { children: { separator?: unknown }[] }).children[0];
+    const ticker = (scene.layers[0] as { children: { separator?: unknown }[] }).children[0]!;
     ticker.separator = ' • ';
     const issues = await makeExporter().preflight(scene);
     expect(issues.some((i) => i.code === 'missing-asset')).toBe(false);

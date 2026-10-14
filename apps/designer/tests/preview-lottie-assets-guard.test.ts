@@ -34,6 +34,10 @@ const SCENE: Scene = {
   editorBackdrop: 'transparent',
   layers: [],
   compositions: [],
+  fonts: [],
+  fields: [],
+  bindings: [],
+  metadata: { createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
 };
 
 /** The source of one `msg.action === '<name>'` branch, up to the next `else if`. */

@@ -12,6 +12,29 @@
     "declarationMap": false,
     "allowImportingTsExtensions": false
   },
-  "include": ["src/**/*", "vite.config.ts"],
-  "exclude": ["dist", "node_modules", "src/generated"]
+  // `B-186` — the tests are typechecked with the app. ONE realm per program: this one is the
+  // Designer's own window, where `window.cg` is the DesignerBridge (App.tsx). The four tests
+  // that import `@cg/template-runtime`'s main entry live in the TEMPLATE PAGE's realm, where
+  // `window.cg` is the TemplateRuntime (caspar-globals.ts) — the two declarations cannot share
+  // one program (TS2687), the same clash TextEditor.tsx avoids. They are typechecked by
+  // tsconfig.page-realm.json instead, so every test is still checked by exactly one program.
+  // A NEW test that imports the runtime's main entry fails loudly here (TS2687 on App.tsx):
+  // move it to both lists.
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "../../tools/release/types/release-version.d.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/generated",
+    "tests/field-digits.test.ts",
+    "tests/follow-document-shape.test.ts",
+    "tests/live-source-frame.test.ts",
+    "tests/preview-control-silence.dom.test.ts"
+  ]
 }

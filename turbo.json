@@ -22,11 +22,27 @@
         "tests/**",
         "types/**",
         "tsconfig.json",
-        "tsconfig.typecheck.json",
+        "tsconfig.*.json",
         "vite.config.*",
         "vitest.config.*",
+        "playwright.config.*",
         "src-tauri/starting/**",
         "package.json"
+      ]
+    },
+    "@cg/designer#typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": [],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "tsconfig.json",
+        "tsconfig.*.json",
+        "vite.config.*",
+        "vitest.config.*",
+        "playwright.config.*",
+        "package.json",
+        "$TURBO_ROOT$/tools/release/types/release-version.d.ts"
       ]
     },
     "lint": {

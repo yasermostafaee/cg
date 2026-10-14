@@ -176,7 +176,8 @@ describe('D-102 Phase 2 — the preview timing panel’s sequence / countdown ro
     expect(overrides['']?.sequences).toEqual({ 'sq-a': { dwellMs: 800 } });
     // The other sequence is untouched, and no lifecycle axis was written.
     expect(overrides['']?.sequences?.['sq-b']).toBeUndefined();
-    expect(overrides['']?.mode).toBeUndefined();
+    // `mode` is not in the override TYPE (golden rule 13); pin that no stray key was written either.
+    expect(Object.keys(overrides[''] ?? {})).not.toContain('mode');
     expect(overrides['']?.holdMs).toBeUndefined();
     // The second sequence's row still shows ITS authored dwell (5000ms ⇒ 5s).
     expect(input(DWELL_B).value).toBe('5');

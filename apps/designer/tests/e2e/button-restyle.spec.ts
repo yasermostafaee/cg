@@ -1,4 +1,5 @@
-import { test, expect, type Locator } from './fixtures/designer.js';
+import type { Locator } from '@playwright/test';
+import { test, expect } from './fixtures/designer.js';
 
 /**
  * D-094 — the shared button recipe draws NO default border (the old opaque

@@ -260,7 +260,6 @@ describe('B.3 — the visible-set overlap pass, and the v1 single-group refusal'
   it('🔴 a root plate overlapping a plate of the ACTIVE look is refused, naming the look', () => {
     // Root plate sits exactly where look B's solo plate is; look A's plates are elsewhere.
     const s = twoLookScene({
-      sources: [src('guest-1'), src('guest-2'), src('presenter')],
       rootChildren: [plate('root-1', 'presenter', 320, 180, 1280, 720)],
     });
     const issues = byCode(s, 'live-source-overlap');
@@ -283,7 +282,6 @@ describe('B.3 — the visible-set overlap pass, and the v1 single-group refusal'
 
   it('a root plate that overlaps NOTHING in either look is clean (positive control)', () => {
     const s = twoLookScene({
-      sources: [src('guest-1'), src('guest-2'), src('presenter')],
       lookAChildren: [plate('a-1', 'guest-1', 0, 0), plate('a-2', 'guest-2', 960, 0)],
       lookBChildren: [plate('b-1', 'guest-1', 0, 0, 960, 540)],
       rootChildren: [plate('root-1', 'presenter', 1280, 720, 640, 360)],

@@ -89,7 +89,7 @@ const TO_UNIFORM = 'Use a single border radius';
 describe('B-015 — border-radius keyframe migration on toggle', () => {
   it('uniform→per-corner copies value + keyframes into all four corners with distinct ids', () => {
     freshShape(8);
-    designerStore.upsertKeyframe('el-1', 'cornerRadius', 0, 8, 'easeIn');
+    designerStore.upsertKeyframe('el-1', 'cornerRadius', 0, 8, 'ease-in');
     designerStore.upsertKeyframe('el-1', 'cornerRadius', 25, 20, 'linear');
     designerStore.setKeyframeBezier('el-1', 'cornerRadius', 25, [0.1, 0.2, 0.3, 0.4]);
     const src = tracks()['cornerRadius']!.keyframes.map(byValue);
@@ -118,7 +118,7 @@ describe('B-015 — border-radius keyframe migration on toggle', () => {
   it('per-corner→uniform keeps value + keyframes when all four corners are identical', () => {
     freshShape([12, 12, 12, 12]);
     for (const c of CORNERS) {
-      designerStore.upsertKeyframe('el-1', c, 0, 12, 'easeOut');
+      designerStore.upsertKeyframe('el-1', c, 0, 12, 'ease-out');
       designerStore.upsertKeyframe('el-1', c, 30, 4, 'linear');
     }
     const tlVals = tracks()['cornerRadius.tl']!.keyframes.map(byValue);
@@ -133,7 +133,7 @@ describe('B-015 — border-radius keyframe migration on toggle', () => {
 
   it('per-corner→uniform takes the top-left representative when corners differ', () => {
     freshShape([5, 6, 7, 8]);
-    designerStore.upsertKeyframe('el-1', 'cornerRadius.tl', 0, 5, 'easeIn');
+    designerStore.upsertKeyframe('el-1', 'cornerRadius.tl', 0, 5, 'ease-in');
     designerStore.upsertKeyframe('el-1', 'cornerRadius.tr', 0, 99, 'linear'); // must be dropped
     const tlVals = tracks()['cornerRadius.tl']!.keyframes.map(byValue);
 
@@ -147,19 +147,19 @@ describe('B-015 — border-radius keyframe migration on toggle', () => {
 
   it('easing and bezier survive the migration in both directions', () => {
     freshShape(9);
-    designerStore.upsertKeyframe('el-1', 'cornerRadius', 10, 9, 'easeInOut');
+    designerStore.upsertKeyframe('el-1', 'cornerRadius', 10, 9, 'ease-in-out');
     designerStore.setKeyframeBezier('el-1', 'cornerRadius', 10, [0.2, 0, 0.8, 1]);
 
     clickToggle(TO_PER_CORNER);
     for (const c of CORNERS) {
       const k = tracks()[c]!.keyframes[0]!;
-      expect(k.easing).toBe('easeInOut');
+      expect(k.easing).toBe('ease-in-out');
       expect(k.bezier).toEqual([0.2, 0, 0.8, 1]);
     }
 
     clickToggle(TO_UNIFORM); // top-left carries it back
     const k = tracks()['cornerRadius']!.keyframes[0]!;
-    expect(k.easing).toBe('easeInOut');
+    expect(k.easing).toBe('ease-in-out');
     expect(k.bezier).toEqual([0.2, 0, 0.8, 1]);
   });
 

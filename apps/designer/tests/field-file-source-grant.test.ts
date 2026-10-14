@@ -217,7 +217,9 @@ describe('the grant survives the Designer’s own save / load', () => {
     designerStore.setElementDataKey('t1', 'headline');
     designerStore.setElementFieldMeta('t1', { allowFileSource: true });
 
-    const { path } = await projects.save(designerStore.get().scene, 'grant-demo');
+    const saved = designerStore.get().scene;
+    if (saved === null) throw new Error('no scene to save');
+    const { path } = await projects.save(saved, 'grant-demo');
     const reopened = await projects.open(path);
     if (reopened.scene === null) throw new Error('the saved project did not re-open');
 

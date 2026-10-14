@@ -36,6 +36,10 @@ const SCENE: Scene = {
   editorBackdrop: 'transparent',
   layers: [],
   compositions: [],
+  fonts: [],
+  fields: [],
+  bindings: [],
+  metadata: { createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
 };
 
 describe('B-217 — the canvas video pool drops a node with a terminal media error', () => {

@@ -17,7 +17,7 @@ import { hashSourceStream } from '../src/renderer/features/assets/source-hash.js
  * under test here is identical in both.
  */
 
-function fileOf(bytes: Uint8Array, name = 'clip.avi'): File {
+function fileOf(bytes: Uint8Array<ArrayBuffer>, name = 'clip.avi'): File {
   return new File([bytes], name, { type: 'video/x-msvideo' });
 }
 

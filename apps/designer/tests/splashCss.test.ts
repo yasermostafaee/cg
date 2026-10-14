@@ -32,7 +32,7 @@ const literals = [
 /** `--cg-name: value;` → value → name. */
 const constants = new Map(
   [...code.matchAll(/(--cg-[a-z0-9-]+)\s*:\s*([^;]+);/g)].map(
-    (m) => [m[2].trim().toLowerCase(), m[1]] as const,
+    (m) => [m[2]!.trim().toLowerCase(), m[1]!] as const,
   ),
 );
 
@@ -120,13 +120,13 @@ function keyframeBodies(css: string): Map<string, string> {
       else if (css[i] === '}') depth -= 1;
       i += 1;
     }
-    out.set(match[1], css.slice(opener.lastIndex, i - 1));
+    out.set(match[1]!, css.slice(opener.lastIndex, i - 1));
   }
   return out;
 }
 
 function animatedProperties(body: string): string[] {
-  return [...new Set([...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]))].sort();
+  return [...new Set([...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]!))].sort();
 }
 
 describe('THE KEYFRAME AUDIT — a loop may cost a compositor frame and nothing more', () => {
@@ -135,10 +135,10 @@ describe('THE KEYFRAME AUDIT — a loop may cost a compositor frame and nothing 
   /** Keyframe names referenced by an `animation:` that repeats forever. */
   const looping = new Set(
     [...code.matchAll(/animation:\s*([^;]+);/g)]
-      .filter((m) => m[1].includes('infinite'))
+      .filter((m) => m[1]!.includes('infinite'))
       .flatMap((m) =>
         [...bodies.keys()].filter((name) =>
-          new RegExp(`\\b${name}\\b[^,]*infinite`).test(m[1].replace(/\s+/g, ' ')),
+          new RegExp(`\\b${name}\\b[^,]*infinite`).test(m[1]!.replace(/\s+/g, ' ')),
         ),
       ),
   );
@@ -154,7 +154,7 @@ describe('THE KEYFRAME AUDIT — a loop may cost a compositor frame and nothing 
     const referenced = [
       ...new Set(
         [...code.matchAll(/animation:\s*([^;]+);/g)].flatMap((m) =>
-          m[1].split(/[\s,]+/).filter((token) => /^cg-[\w-]+$/.test(token)),
+          m[1]!.split(/[\s,]+/).filter((token) => /^cg-[\w-]+$/.test(token)),
         ),
       ),
     ];
@@ -217,10 +217,10 @@ describe('THE KEYFRAME AUDIT — a loop may cost a compositor frame and nothing 
     const entranceEnds: number[] = [];
     const loopStarts: number[] = [];
     for (const [, value] of [...code.matchAll(/animation:\s*([^;]+);/g)]) {
-      for (const part of value.split(',')) {
+      for (const part of value!.split(',')) {
         const times = [...part.matchAll(/(\d*\.?\d+)s/g)].map((m) => Number(m[1]));
         if (times.length === 0) continue;
-        const [duration, delay = 0] = times;
+        const [duration = 0, delay = 0] = times;
         if (/infinite/.test(part)) loopStarts.push(delay);
         else entranceEnds.push(duration + delay);
       }
@@ -275,7 +275,7 @@ describe('the APASAI mark', () => {
   );
 
   function paths(svg: string): string[] {
-    return [...svg.matchAll(/\sd="([^"]+)"/g)].map((m) => m[1].replace(/\s+/g, ' ').trim());
+    return [...svg.matchAll(/\sd="([^"]+)"/g)].map((m) => m[1]!.replace(/\s+/g, ' ').trim());
   }
 
   function inlinedMark(document: string): string {

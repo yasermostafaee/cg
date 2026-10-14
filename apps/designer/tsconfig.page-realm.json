@@ -1,0 +1,17 @@
+{
+  // `B-186` — the TEMPLATE PAGE's realm: the tests that import `@cg/template-runtime`'s main
+  // entry, whose `declare global` makes `window.cg` the TemplateRuntime. Kept out of
+  // tsconfig.json's program, where `window.cg` is the DesignerBridge (see the note there).
+  // Only the ambient declarations come from src directly; every other src file enters
+  // through a test's own imports. `pnpm typecheck` runs both programs.
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/vite-env.d.ts",
+    "src/platform/fs-access.d.ts",
+    "tests/field-digits.test.ts",
+    "tests/follow-document-shape.test.ts",
+    "tests/live-source-frame.test.ts",
+    "tests/preview-control-silence.dom.test.ts"
+  ],
+  "exclude": ["dist", "node_modules", "src/generated"]
+}

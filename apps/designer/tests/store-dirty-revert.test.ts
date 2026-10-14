@@ -68,7 +68,7 @@ function activeLayers(): readonly Layer[] {
 /** Load a one-composition scene whose comp holds `layers`, opened as the active doc. */
 function loadWithLayers(layers: Layer[]): void {
   const scene = newProjectScene();
-  scene.compositions![0].layers = layers;
+  scene.compositions![0]!.layers = layers;
   designerStore.setScene(scene, null);
 }
 

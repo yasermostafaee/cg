@@ -164,7 +164,7 @@ test.describe('D-077 — copy / cut / paste keyboard shortcuts', () => {
               cancelable: true,
             }),
           ),
-        [code, key],
+        [code, key] as const,
       );
 
     await persianCombo('KeyC', 'ع'); // copy

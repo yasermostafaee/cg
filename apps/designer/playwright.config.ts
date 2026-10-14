@@ -81,8 +81,11 @@ function resolveWorkers(): number | undefined {
  */
 const CI_GLOBAL_TIMEOUT_MS = 8 * 60_000;
 
+const workers = resolveWorkers();
+
 export default defineConfig({
-  globalTimeout: process.env.CI ? CI_GLOBAL_TIMEOUT_MS : undefined,
+  // Locally: no global timeout (Playwright's default), so the key is absent rather than undefined.
+  ...(process.env.CI ? { globalTimeout: CI_GLOBAL_TIMEOUT_MS } : {}),
   // P-036 — refuse to run against a stale build. See tools/gate-hook/src/e2e-staleness.mjs.
   globalSetup: './tests/e2e-global-setup.mjs',
   testDir: './tests/e2e',
@@ -90,7 +93,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  workers: resolveWorkers(),
+  // Unset ⇒ Playwright's own default, so the key is absent rather than undefined.
+  ...(workers === undefined ? {} : { workers }),
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
   timeout: 30_000,
   expect: { timeout: 7_000 },
@@ -106,7 +110,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'], channel },
+      use: { ...devices['Desktop Chrome'], ...(channel === undefined ? {} : { channel }) },
     },
   ],
   webServer: {
