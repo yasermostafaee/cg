@@ -4647,3 +4647,19 @@ open question this line settles on the next outage (`DONGLE-RECOVER-01` H5).
 
 **Acceptance:** `license-change-lines.test.ts` — one line per change for both readers, none across many unchanged
 reads (control: every read happened), none for an unreachable Playout.
+
+## [~] R-100 — the operator loads a book of pictures on a row and turns its pages: `12 / 300`, Previous, Next, Go to ⟨priority: high — confirmed by the owner 2026-10-14: the OPERATOR changes the book⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · `openspec/changes/add-image-pages/` · the Designer half is [[D-163]]
+
+**What:** on a row whose template has a page list, the Inspector offers `Load pictures…` and `Load folder…`;
+the files are sorted naturally, checked against the limits (4 MB and 3840 × 2160 pixels a picture, 500 pages a
+row), sent to CG Bridge on the existing signed-in socket and stored there by content hash beside the template
+store. The row shows `12 / 300` with Previous, Next and a page box. Each press sends ONE `CG UPDATE` carrying
+that one page as a `data:` image (`__cg.page`); a row not on air changes state only. Pages survive a bridge and
+a console restart, leave with their row, and every console on the channel sees the same book. **Why:** the
+owner's book read on air; see [[D-163]]. **Transport, measured (design.md §0.4):** the template server's route set
+is a security boundary (`SECURITY.md`), so pictures cannot be served from it without the owner amending that rule;
+inline they show ~0.1 s after the press, but CasparCG logs each command in full (~1.4 MB per 1 MB page).
+**Acceptance:** WHEN a folder of 300 pictures is loaded and applied THEN `300 pages` in natural order; WHEN Next /
+Previous / `۱۲` THEN `2 / 300`, `1 / 300`, `12 / 300`; WHEN a picture is over a limit THEN a refusal naming it;
+WHEN the bridge restarts THEN the row keeps its pages and page; WHEN the row is removed THEN its pictures are
+deleted unless another row names them; WHEN a second console looks THEN it sees the same book.

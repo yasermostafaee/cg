@@ -5677,3 +5677,18 @@ Cancel); `Save` saves and closes, and a failed save keeps the window with its re
 window closes at once. The browser's warning stays, and both read ONE dirty predicate. **Acceptance:** the
 desktop smoke (UIA): a change, a close, the dialog with the window kept, `Cancel` keeps it, `Don't save` closes;
 no change closes at once; Playwright: the leave prompt with unsaved changes and none without.
+
+## [~] D-163 — pages of pictures turned with Next / Previous / Go to: a book read on air, loaded as a whole folder ⟨priority: high — the owner: "a very important feature"⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · `openspec/changes/add-image-pages/` · the operator half is [[R-100]]
+
+**What:** a sequence can hold PICTURE items, one fit for all of them, and `Add pictures…` / `Add folder…` turn
+many files into pages at once, in natural file-name order (`page2` before `page10`; Persian and Arabic-Indic
+digits sort as numbers), deduplicated by SHA-256, with the page count shown. The page gains Previous and Go to page
+beside Next; a book (`repeat: 1`) does not wrap, `'infinite'` wraps both ways; a page is decoded before it
+replaces the old one, so a page turn never shows a blank frame. **Why (the owner, 2026-10-14):** _"Someone reads a
+book on air … the operator must be able to move between the pages. Today it can be done with a sequence and one
+composition per page, but with many pages that is very hard. It must be possible to choose all the pictures, or
+their folder, at once."_ **Acceptance:** WHEN twelve files (or a folder) are added THEN twelve picture items in
+natural order and `12 pages`; WHEN a duplicate file is added THEN one asset; WHEN a book shows its last page and
+Next arrives (or its first and Previous) THEN it stays; WHEN `goTo` arrives mid-transition THEN it is applied
+when the transition ends; WHEN a page turn's picture is missing or undecodable THEN the previous page stays; WHEN an
+old sequence is parsed THEN it is unchanged; WHEN a picture sequence is exported and unpacked THEN it round-trips.
