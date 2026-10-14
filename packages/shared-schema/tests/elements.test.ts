@@ -592,7 +592,7 @@ describe('Element union dispatch', () => {
     ['image' as const, 'image'],
     ['shape' as const, 'shape'],
     ['path' as const, 'path'],
-  ])('parses kind=%s via the union', (kind) => {
+  ])('parses kind=%s via the union', (kind, _label) => {
     const variants: Record<string, unknown> = {
       text: {
         ...baseProps,

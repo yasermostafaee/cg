@@ -31,7 +31,7 @@ describe('FieldBinding target variants', () => {
       FieldBindingSchema.parse({
         fieldId: 'x',
         target: { kind: 'text', elementId: 'e1' },
-        // @ts-expect-error — verifying runtime rejection
+        // Not a transform the schema knows: verifying the runtime rejection (parse takes unknown).
         transform: 'shout',
       }),
     ).toThrow();
