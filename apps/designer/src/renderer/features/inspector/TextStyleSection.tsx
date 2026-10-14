@@ -22,12 +22,7 @@ import { RealtimeNumberInput } from './controls.js';
 import { TextSettingsButton } from './TextSettingsPopover.js';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
-import { Tag } from '../../ui/Tag.js';
 import * as s from './TextStyleSection.css.js';
-
-/** `B-147` interim — the ONE short reason Auto Squeeze is not offered, as the fact's title. */
-export const AUTO_SQUEEZE_UNAVAILABLE =
-  'Not built yet: on air the text keeps its size and may overflow its box.';
 
 /**
  * D-010-pic-5 — the Text section in the right Inspector. Custom layout
@@ -35,7 +30,8 @@ export const AUTO_SQUEEZE_UNAVAILABLE =
  * because the reference uses dedicated widgets:
  *
  *   Sizing                [ Auto | Fixed ]
- *   Auto Squeeze          not available     (B-147 — a fact, not a control)
+ *   Shrink to Fit         [ Yes  | No    ]   (TEXT-FIT-01 — a fixed box only)
+ *   Overflow              [ Clip | Ellipsis ] (while shrinking)
  *   Text Wrap             [ Yes  | No    ]
  *   Text Color    █ 000000 ◇
  *   Background    ⣿ FFFFFF ◇
@@ -65,12 +61,16 @@ export function TextStyleSection({
   const dataBound = useDesignerSelector(
     (st) => st.scene !== null && elementDataField(st.scene, id) !== undefined,
   );
-  const sizingValue = element.fitMode === 'fixed' ? 'fixed' : 'auto';
+  // TEXT-FIT-01 — shrink-to-fit keeps the authored box, so it is a FIXED box (it read as Auto).
+  const sizingValue = element.fitMode === 'autosize' ? 'auto' : 'fixed';
+  const shrinking = element.fitMode === 'shrink-to-fit';
   // D-046 — guard the switch TO auto when the element has size keyframes (they
   // become content-driven, so they're removed on confirm). No modal otherwise.
   const [confirmAuto, setConfirmAuto] = useState(false);
   const onSizingChange = (v: string): void => {
     if (v === 'fixed') {
+      // A shrink-to-fit box is already fixed: pressing Fixed must not switch the shrink off.
+      if (shrinking) return;
       // D-046 §E — commit the current measured hug size once (no snap-back).
       switchTextToFixedSize(element);
       return;
@@ -121,21 +121,43 @@ export function TextStyleSection({
             />
           </div>
 
-          {/* 🔴 `B-147` interim (owner, Q8 (a)) — Auto Squeeze is NOT BUILT: the renderer never
-              read `autoSqueeze`, so the toggle promised a shrink that never happened and a long
-              Persian name overflowed on air. It is now a FACT, not a disabled control (golden rule
-              13): there is no control to press, and the reason is its title. A saved value is KEPT
-              untouched in the element — real shrink-to-fit is `TEXT-FIT-01`. */}
-          <div className={s.labeledRow}>
-            <span className={s.label}>Auto Squeeze</span>
-            <Tag
-              className={s.unavailable}
-              title={AUTO_SQUEEZE_UNAVAILABLE}
-              data-testid="auto-squeeze-unavailable"
-            >
-              not available
-            </Tag>
-          </div>
+          {/* 🔴 `TEXT-FIT-01` (`B-147`, owner Q8 (b)) — SHRINK TO FIT, the one spelling
+              (`fitMode: 'shrink-to-fit'`). It replaces the interim "not available" fact: the page now
+              shrinks the rendered text until it fits the box, down to half its size. Offered on a
+              FIXED box only — an Auto box grows to its text, so nothing could overflow it. */}
+          {sizingValue === 'fixed' && (
+            <div className={s.labeledRow}>
+              <span className={s.label}>Shrink to Fit</span>
+              <TogglePair
+                value={shrinking ? 'yes' : 'no'}
+                options={[
+                  { value: 'yes', label: 'Yes' },
+                  { value: 'no', label: 'No' },
+                ]}
+                onChange={(v) =>
+                  designerStore.updateElement(id, {
+                    fitMode: v === 'yes' ? 'shrink-to-fit' : 'fixed',
+                  } as Partial<Element>)
+                }
+              />
+            </div>
+          )}
+          {/* TEXT-FIT-01 — what a text still too long at half size does. Read only while shrinking. */}
+          {shrinking && (
+            <div className={s.labeledRow}>
+              <span className={s.label}>Overflow</span>
+              <TogglePair
+                value={element.overflow === 'ellipsis' ? 'ellipsis' : 'clip'}
+                options={[
+                  { value: 'clip', label: 'Clip' },
+                  { value: 'ellipsis', label: 'Ellipsis' },
+                ]}
+                onChange={(v) =>
+                  designerStore.updateElement(id, { overflow: v } as Partial<Element>)
+                }
+              />
+            </div>
+          )}
 
           {/* Text Wrap */}
           <div className={s.labeledRow}>

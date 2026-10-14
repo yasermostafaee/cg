@@ -65,7 +65,7 @@ export const NEW_FIELD_DIGITS = 'persian' satisfies FieldDigits;
 /**
  * Default `maxLength` for a field created via the Data-key convenience layer —
  * a sensible cap for broadcast text that also engages the element's auto-size
- * when an operator sends an over-long value (auto-squeeze is not built — `B-147`). Editable per field in
+ * when an operator sends an over-long value (a shrink-to-fit text then re-fits — `TEXT-FIT-01`). Editable per field in
  * the inspector (set 0 to clear).
  */
 const DEFAULT_DATA_FIELD_MAX_LENGTH = 100;

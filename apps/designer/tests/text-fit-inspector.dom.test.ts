@@ -2,21 +2,19 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import type { Element, TextElement } from '@cg/shared-schema';
+import type { Element, Scene, TextElement } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { defaultText } from '../src/renderer/state/element-defaults.js';
-import {
-  AUTO_SQUEEZE_UNAVAILABLE,
-  TextStyleSection,
-} from '../src/renderer/features/inspector/TextStyleSection.js';
+import { TextStyleSection } from '../src/renderer/features/inspector/TextStyleSection.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 
 /**
- * 🔴 `B-147` interim (owner, Q8 (a)) — Auto Squeeze is NOT BUILT, so the Inspector says so as a
- * FACT: no toggle that promises a shrink nothing performs, and no disabled control either (golden
- * rule 13 — a fact is not a missing permission). Asserted as an ABSENCE too, because that is the
- * direction it regresses in: the next person "restores" the toggle and nothing else fails.
+ * 🔴 `TEXT-FIT-01` (`B-147`, owner Q8 (b)) — **SHRINK TO FIT IS A REAL CONTROL AGAIN, IN ITS ONE
+ * SPELLING.** It replaces the interim "not available" fact `DESIGNER-FIX-02` shipped (Q8 (a)), which
+ * this file used to pin; that requirement is superseded, not loosened — the page now performs the
+ * shrink the control promises. Offered on a fixed box only; its overflow choice shows only while it
+ * shrinks; no explanatory prose; a project saved with a legacy spelling opens with its intent.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -32,13 +30,7 @@ afterEach(() => {
   designerStore._reset();
 });
 
-function seedText(over: Partial<TextElement> = {}): TextElement {
-  const { scene } = new ProjectStore(new MemoryWorkspace(), new MemoryKv()).newScene(
-    'demo',
-    'lower-third',
-  );
-  designerStore.setScene(scene, null);
-  designerStore.addElement({ ...defaultText('t1', 0, 0), ...over } as Element);
+function current(): TextElement {
   const st = designerStore.get();
   const el = editSceneOf(st.scene, st.activeCompositionId)?.layers[0]?.children.find(
     (c) => c.id === 't1',
@@ -46,10 +38,22 @@ function seedText(over: Partial<TextElement> = {}): TextElement {
   return el as TextElement;
 }
 
+function seedText(over: Partial<TextElement> | Record<string, unknown> = {}): TextElement {
+  const { scene } = new ProjectStore(new MemoryWorkspace(), new MemoryKv()).newScene(
+    'demo',
+    'lower-third',
+  );
+  designerStore.setScene(scene, null);
+  designerStore.addElement({ ...defaultText('t1', 0, 0), ...over } as Element);
+  return current();
+}
+
 function render(element: TextElement): HTMLDivElement {
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  root = createRoot(container);
+  if (container === null) {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  }
   act(() => root?.render(createElement(TextStyleSection, { element })));
   return container;
 }
@@ -60,40 +64,83 @@ function rowOf(c: HTMLElement, label: string): HTMLElement | null {
   return span?.parentElement ?? null;
 }
 
-describe('B-147 interim — Auto Squeeze is a fact, not a control', () => {
-  it('🔴 the row reads "not available", with the reason as its title', () => {
+function press(row: HTMLElement | null, label: string): void {
+  const button = [...(row?.querySelectorAll('button') ?? [])].find((b) => b.textContent === label);
+  if (button === undefined) throw new Error(`no ${label} button`);
+  act(() => button.click());
+}
+
+describe('TEXT-FIT-01 — Shrink to Fit in the Inspector', () => {
+  it('🔴 a fixed text offers Shrink to Fit (Yes / No); Yes writes the ONE spelling', () => {
     const c = render(seedText());
-    const fact = c.querySelector('[data-testid="auto-squeeze-unavailable"]');
-    expect(fact?.textContent).toBe('not available');
-    expect(fact?.getAttribute('title')).toBe(AUTO_SQUEEZE_UNAVAILABLE);
-    expect(AUTO_SQUEEZE_UNAVAILABLE).toBe(
-      'Not built yet: on air the text keeps its size and may overflow its box.',
-    );
-    // A Tag — the non-interactive mark — not a span someone styled to look like one.
-    expect(fact?.hasAttribute('data-cg-tag')).toBe(true);
+    const row = rowOf(c, 'Shrink to Fit');
+    expect([...(row?.querySelectorAll('button') ?? [])].map((b) => b.textContent)).toEqual([
+      'Yes',
+      'No',
+    ]);
+    // No overflow choice until it shrinks.
+    expect(rowOf(c, 'Overflow')).toBeNull();
+
+    press(row, 'Yes');
+    expect(current().fitMode).toBe('shrink-to-fit');
+    expect('autoSqueeze' in current()).toBe(false);
   });
 
-  it('🔴 ABSENCE: the row holds no button, no disabled control, nothing focusable', () => {
-    const row = rowOf(render(seedText()), 'Auto Squeeze');
-    expect(row).not.toBeNull();
+  it('while shrinking: Overflow (Clip / Ellipsis) appears, and Sizing still reads Fixed', () => {
+    const c = render(seedText({ fitMode: 'shrink-to-fit' }));
+    const overflow = rowOf(c, 'Overflow');
+    expect([...(overflow?.querySelectorAll('button') ?? [])].map((b) => b.textContent)).toEqual([
+      'Clip',
+      'Ellipsis',
+    ]);
+    press(overflow, 'Ellipsis');
+    expect(current().overflow).toBe('ellipsis');
+
+    // The box is the authored box: Sizing is FIXED (it used to read Auto), and pressing Fixed
+    // must not switch the shrink off.
+    const sizing = rowOf(render(current()), 'Sizing');
+    const fixed = [...(sizing?.querySelectorAll('button') ?? [])].find(
+      (b) => b.textContent === 'Fixed',
+    );
+    expect(fixed?.getAttribute('aria-pressed')).toBe('true');
+    press(sizing, 'Fixed');
+    expect(current().fitMode).toBe('shrink-to-fit');
+  });
+
+  it('an Auto box grows to its text: it offers no Shrink to Fit', () => {
+    const c = render(seedText({ fitMode: 'autosize' }));
+    expect(rowOf(c, 'Shrink to Fit')).toBeNull();
+    expect(rowOf(c, 'Overflow')).toBeNull();
+  });
+
+  it('🔴 ABSENCE: the interim fact and its prose are gone — no "Auto Squeeze", no "not available"', () => {
+    const c = render(seedText({ fitMode: 'shrink-to-fit' }));
+    expect(c.textContent).not.toContain('Auto Squeeze');
+    expect(c.textContent).not.toContain('not available');
+    expect(c.querySelector('[data-testid="auto-squeeze-unavailable"]')).toBeNull();
+    // An operator surface carries no explanatory prose: the two rows are a label and buttons.
+    for (const label of ['Shrink to Fit', 'Overflow']) {
+      const row = rowOf(c, label);
+      expect(row?.querySelectorAll('p')).toHaveLength(0);
+    }
+  });
+
+  it('🔴 a project saved with autoSqueeze: true OPENS as shrink-to-fit — the legacy key gone', () => {
+    // The store's own document, saved with the legacy spelling — then opened through the load path.
+    seedText();
+    const saved = JSON.stringify(designerStore.get().scene);
+    expect(saved.split('"fitMode":"fixed"')).toHaveLength(2); // exactly one text, so one edit
+    const legacy = JSON.parse(
+      saved.replace('"fitMode":"fixed"', '"autoSqueeze":true,"fitMode":"fixed"'),
+    ) as Scene;
+    designerStore._reset();
+    designerStore.setScene(legacy, null);
+    const opened = current();
+    expect(opened.fitMode).toBe('shrink-to-fit');
+    expect('autoSqueeze' in opened).toBe(false);
     expect(
-      row?.querySelectorAll('button, input, select, [role="button"], [tabindex]'),
-    ).toHaveLength(0);
-    expect(row?.textContent).not.toMatch(/Yes|No/);
-  });
-
-  it('a value saved before is KEPT in the element — only the control is gone', () => {
-    const el = seedText({ autoSqueeze: true } as Partial<TextElement>);
-    expect(el.autoSqueeze).toBe(true);
-    const c = render(el);
-    expect(c.querySelector('[data-testid="auto-squeeze-unavailable"]')?.textContent).toBe(
-      'not available',
-    );
-    const st = designerStore.get();
-    const after = editSceneOf(st.scene, st.activeCompositionId)?.layers[0]?.children.find(
-      (n) => n.id === 't1',
-    ) as TextElement | undefined;
-    expect(after?.autoSqueeze).toBe(true);
+      rowOf(render(opened), 'Shrink to Fit')?.querySelector('[aria-pressed="true"]')?.textContent,
+    ).toBe('Yes');
   });
 
   it('the neighbouring toggles are still toggles — Text Wrap keeps its Yes / No', () => {
