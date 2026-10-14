@@ -853,7 +853,7 @@ export const RepeaterElementSchema = ElementBaseSchema.extend({
   flow: z.enum(['rtl', 'ltr']).default('rtl'),
   /** Space between cells (px). */
   gap: z.number().min(0).default(8),
-  /** Optional stamp clamp — at most this many rows per fresh play. */
+  /** Optional stamp clamp — at most this many rows per fresh play. Read through `repeaterRowLimit`. */
   maxItems: z.number().int().positive().optional(),
   /**
    * Authored design-time rows — the open D-028 list-item shape (stable `id`
@@ -862,6 +862,26 @@ export const RepeaterElementSchema = ElementBaseSchema.extend({
   items: z.array(ListItemSchema).default([]),
 });
 export type RepeaterElement = z.infer<typeof RepeaterElementSchema>;
+
+/**
+ * 🔴 `B-106` — **THE ONE reading of a repeater's row limit**: how many rows it may show, or
+ * `undefined` for no limit. The page's build-time stamp, the driver's restamp and the Designer's
+ * row editor all read it, so the three cannot disagree — they did: the stamp and the driver each
+ * spelled the clamp themselves, and on a value the schema refuses they differed (`2.5` stamped 3
+ * rows then 2; `-1` stamped 0 then N-1).
+ *
+ * An exported page never re-parses its scene, so a hand-edited value reaches here unvalidated.
+ * Anything that is not a number of at least 1 — `0`, a negative, `NaN`, `null` — is NO limit,
+ * which is what the Designer already says ("0 = unlimited"); a fraction is floored.
+ */
+export function repeaterRowLimit(element: {
+  readonly maxItems?: number | null | undefined;
+}): number | undefined {
+  const m = element.maxItems;
+  if (typeof m !== 'number' || !Number.isFinite(m)) return undefined;
+  const n = Math.floor(m);
+  return n >= 1 ? n : undefined;
+}
 
 /**
  * Image element. References an asset by id.

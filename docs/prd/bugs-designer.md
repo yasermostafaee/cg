@@ -1442,7 +1442,25 @@ observed behavior is filed as reported either way.
 **Regression test:** sequence transition test asserting item advance is OBSERVABLE under the
 Hide-show values (the item content actually changes at the boundary).
 
-## [ ] B-106 — repeater `maxItems` is not enforced end-to-end ⟨priority: medium⟩
+## [~] B-106 — repeater `maxItems` is not enforced end-to-end ⟨priority: medium⟩ — `openspec/changes/designer-fix-02/`
+
+— **LOCATED (DESIGNER-FIX-02, 2026-10-14): no render path stamps past `maxItems`.** Every row is
+built by `buildRepeaterRows` (`scene-builder.ts`), and both of its callers clamp — the build-time
+stamp and the driver's restamp, on the canvas, before play, at the take, nested, inside a sequence
+item, in Preview and in the export. The "more than `maxItems` rows" the client saw is therefore the
+INSPECTOR (and the Preview form) listing and adding every row while the page shows the first
+`maxItems` — or a build older than the clamp. Two real defects were under it: the Inspector's row
+editor had no limit, and the two clamps spelled `maxItems` separately and disagreed on a hand-edited
+value an exported page never re-parses (`0` stamped zero rows against the Designer's "0 =
+unlimited"; `2.5` stamped 3 then 2; `-1` 0 then N-1).
+— **Closed in code:** one reading, `repeaterRowLimit` (`@cg/shared-schema`), used by both clamps and
+the row editor; anything that is not a number ≥ 1 is no limit, a fraction floored. The Inspector's
+`Add item` is withheld at the limit with its reason, and rows past it read "not shown". Tests:
+`repeater-row-limit.test.ts` (schema), `repeater-runtime.test.ts` › "B-106 — the row limit at every
+stamp" (canvas, a longer bound list before play, mid-hold, the build stamp, the bad values), and
+`repeater-row-limit.dom.test.ts` (the editor). **Not done (owner's call):** the Preview form's list
+editor does not know the limit (the page still clamps), and the GDD does not emit `maxItems` for the
+bound list (an export-format change).
 
 **Repro:**
 

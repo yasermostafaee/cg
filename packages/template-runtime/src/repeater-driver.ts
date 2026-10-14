@@ -1,4 +1,4 @@
-import type { ListItem, RepeaterElement } from '@cg/shared-schema';
+import { repeaterRowLimit, type ListItem, type RepeaterElement } from '@cg/shared-schema';
 
 /**
  * D-030 — the repeater / data-driven-layout driver.
@@ -161,9 +161,11 @@ export class RepeaterDriver {
 
   private restamp(): void {
     this.teardown();
-    const max = this.o.element.maxItems;
+    // `B-106` — the limit is `repeaterRowLimit`'s, the ONE reading the build-time stamp
+    // (`clampRowCount`) and the Designer's row editor share; this used to spell it itself.
+    const limit = repeaterRowLimit(this.o.element);
     const clamped =
-      max !== undefined ? this.effectiveItems.slice(0, max) : [...this.effectiveItems];
+      limit !== undefined ? this.effectiveItems.slice(0, limit) : [...this.effectiveItems];
     this.rows = this.o.stampRows(clamped);
   }
 }

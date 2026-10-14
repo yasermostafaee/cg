@@ -10,6 +10,7 @@ import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
+import { Tag } from '../../ui/Tag.js';
 import { Textarea } from '../../ui/Textarea.js';
 import type { ListItemColumn } from './repeater-columns.js';
 import * as s from './ListItemsEditor.css.js';
@@ -99,6 +100,22 @@ interface Props {
    */
   itemDigits?: ((itemId: string) => FieldDigits | undefined) | undefined;
   onItemDigits?: ((itemId: string, digits: FieldDigits) => void) | undefined;
+  /**
+   * 🔴 `B-106` — the repeater's row LIMIT (`repeaterRowLimit`, the one reading the page shares):
+   * `Add item` is withheld at it, and a row past it — authored before the limit was lowered — is
+   * flagged "not shown", because the page stamps only the first `maxItems`. Absent ⇒ no limit.
+   */
+  maxItems?: number | undefined;
+}
+
+/** `B-106` — why `Add item` is withheld at the limit, as the add row's title. */
+export function rowLimitReason(maxItems: number): string {
+  return `At most ${String(maxItems)} row${maxItems === 1 ? '' : 's'} (max items). Raise max items to add more.`;
+}
+
+/** `B-106` — why a row past the limit is not shown, as its flag's title. */
+export function rowOverLimitReason(maxItems: number): string {
+  return `Past max items (${String(maxItems)}): the page stamps only the first ${String(maxItems)}.`;
 }
 
 /**
@@ -274,7 +291,9 @@ export function ListItemsEditor({
   digits,
   itemDigits,
   onItemDigits,
+  maxItems,
 }: Props): JSX.Element {
+  const atLimit = maxItems !== undefined && items.length >= maxItems;
   /** The Digits an item's text box writes: its own bound field's, else the list's / element's. */
   const digitsFor = (item: ListItem): FieldDigits | undefined => itemDigits?.(item.id) ?? digits;
   // D-106 follow-up — an item is edited-but-unapplied when its value differs from
@@ -485,8 +504,13 @@ export function ListItemsEditor({
           );
         }
 
+        const overLimit = maxItems !== undefined && i >= maxItems;
         return (
-          <div key={item.id} className={s.itemRow}>
+          <div
+            key={item.id}
+            className={cx(s.itemRow, overLimit && s.itemOverLimit)}
+            data-over-limit={overLimit ? 'true' : undefined}
+          >
             {columns !== undefined && columns.length > 0 ? (
               // D-030 — one input per child-composition field (column).
               columns.map((col) =>
@@ -547,15 +571,29 @@ export function ListItemsEditor({
                 }}
               />
             )}
+            {overLimit && maxItems !== undefined && (
+              <Tag className={s.overLimitTag} title={rowOverLimitReason(maxItems)}>
+                not shown
+              </Tag>
+            )}
             {dwellInput}
             {controls}
           </div>
         );
       })}
-      <div className={s.addRow}>
+      {/* `B-106` — withheld at the limit, its reason on the row: a natively disabled button shows
+          no title of its own (`D-157`). */}
+      <div
+        className={s.addRow}
+        title={atLimit && maxItems !== undefined ? rowLimitReason(maxItems) : undefined}
+      >
         <Button
           variant="secondary"
-          onClick={() => onChange([...items, { id: newItemId(), text: '' }])}
+          disabled={atLimit}
+          onClick={() => {
+            if (atLimit) return;
+            onChange([...items, { id: newItemId(), text: '' }]);
+          }}
         >
           Add item
         </Button>

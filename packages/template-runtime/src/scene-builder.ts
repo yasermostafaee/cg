@@ -1,4 +1,9 @@
-import { elementDigitsOf, followsComposition, pathVisualBBox } from '@cg/shared-schema';
+import {
+  elementDigitsOf,
+  followsComposition,
+  pathVisualBBox,
+  repeaterRowLimit,
+} from '@cg/shared-schema';
 import { writeFieldDigits } from '@cg/text-shaping';
 import type {
   AnchorPoint,
@@ -1090,9 +1095,13 @@ function buildRepeater(element: RepeaterElement, ctx: BuildCtx): HTMLElement {
   return el;
 }
 
-/** The effective stamped row count: the list length clamped by `maxItems`. */
+/**
+ * The effective stamped row count: the list length clamped by the row limit. `B-106` — the limit
+ * is `repeaterRowLimit`'s, the ONE reading the driver's restamp and the Designer share.
+ */
 export function clampRowCount(element: Pick<RepeaterElement, 'maxItems'>, count: number): number {
-  return element.maxItems !== undefined ? Math.min(count, element.maxItems) : count;
+  const limit = repeaterRowLimit(element);
+  return limit === undefined ? count : Math.min(count, limit);
 }
 
 /** One stamped repeater row: the flow-positioned cell + its fresh scope. */

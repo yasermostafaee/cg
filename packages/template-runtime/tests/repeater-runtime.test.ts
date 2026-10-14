@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Composition, Element, Playout, Scene } from '@cg/shared-schema';
 import { createRuntime } from '../src/runtime.js';
-import { buildScene } from '../src/scene-builder.js';
+import { buildScene, clampRowCount } from '../src/scene-builder.js';
 
 /**
  * D-030 — repeater: stamped rows are REAL nested scopes (D-025/D-026 by
@@ -345,6 +345,73 @@ describe('repeater — stamping and layout (D-030)', () => {
     await runtime.play({});
     expect(visibleCells()).toHaveLength(2);
   });
+});
+
+/**
+ * 🔴 `B-106` — the row limit at EVERY stamp, not only `play()`. Every row is built by one builder
+ * and every caller clamps; these pin the paths no test covered (the canvas, a longer bound list
+ * before play, the build-time stamp), and the hand-edited values on which the build stamp and the
+ * driver used to disagree — an exported page never re-parses its scene.
+ */
+describe('B-106 — the row limit at every stamp', () => {
+  const eight = Array.from({ length: 8 }, (_, i) => ({
+    id: `n${String(i)}`,
+    name: `R${String(i)}`,
+  }));
+
+  it('the CANVAS (constructed, never played) shows at most maxItems rows', () => {
+    createRuntime(repeaterScene({ element: { maxItems: 2 }, playout: { mode: 'manual' } }), {
+      skipFontLoad: true,
+      clock: makeClock(),
+    });
+    expect(cells()).toHaveLength(2);
+  });
+
+  it('a longer BOUND list sent before play is clamped — on the canvas and at the take', async () => {
+    const runtime = createRuntime(
+      repeaterScene({ ...BOUND, element: { maxItems: 3 }, playout: { mode: 'manual' } }),
+      { skipFontLoad: true, clock: makeClock() },
+    );
+    await runtime.update({ rows: eight });
+    expect(cells()).toHaveLength(3);
+    await runtime.play({});
+    expect(visibleCells()).toHaveLength(3);
+    expect(rowTexts()).toEqual(['R0', 'R1', 'R2']);
+  });
+
+  it('a longer list mid-hold adds NO row — the count is stamped per play', async () => {
+    const runtime = createRuntime(
+      repeaterScene({ ...BOUND, element: { maxItems: 3 }, playout: { mode: 'manual' } }),
+      { skipFontLoad: true, clock: makeClock() },
+    );
+    await runtime.play({});
+    await runtime.update({ rows: eight });
+    expect(cells()).toHaveLength(3);
+  });
+
+  it('the BUILD-TIME stamp clamps through the same reading', () => {
+    expect(clampRowCount({ maxItems: 2 }, 5)).toBe(2);
+    expect(clampRowCount({}, 5)).toBe(5);
+  });
+
+  it.each([
+    // [hand-edited value, rows shown of 3] — no limit unless it is a number of at least 1
+    [0, 3],
+    [-1, 3],
+    [Number.NaN, 3],
+    [null, 3],
+    [2.5, 2],
+  ])(
+    '🔴 a hand-edited maxItems of %s shows %s rows, at build AND after the driver',
+    (max, rows) => {
+      expect(clampRowCount({ maxItems: max as number }, 3)).toBe(rows);
+      createRuntime(repeaterScene({ element: { maxItems: max }, playout: { mode: 'manual' } }), {
+        skipFontLoad: true,
+        clock: makeClock(),
+      });
+      expect(cells()).toHaveLength(rows);
+    },
+  );
 });
 
 describe('repeater — live values mid-hold (model B)', () => {

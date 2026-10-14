@@ -8,7 +8,9 @@
 - [x] 1.2 `B-128` separator picker images only; a saved font / video separator repaired on open, told once.
       On-air behaviour measured first (Chrome 155: a broken-image icon with a grey border in every gap);
       the repair is outside undo and leaves the project unsaved.
-- [ ] 1.3 `B-106` repeater `maxItems` in the row editor and at play.
+- [x] 1.3 `B-106` repeater `maxItems` in the row editor and at play. Located: no render path leaks; one
+      reading (`repeaterRowLimit`) for both clamps and the editor; Add withheld at the limit, rows past
+      it flagged.
 - [x] 1.4 `B-249` per-composition export writes no dangling `entryCompositionId` (omitted, not rewritten;
       `pageListsOf` pinned to "a miss is not found").
 

@@ -12,6 +12,7 @@ import {
   followsComposition,
   ImageFitSchema,
   NumberFieldDigitsSchema,
+  repeaterRowLimit,
   SequenceEdgeSchema,
   sequenceStepsByOperator,
 } from '@cg/shared-schema';
@@ -3059,6 +3060,7 @@ function RepeaterSections({
           items={element.items}
           label={element.name || 'Repeater'}
           columns={columns}
+          maxItems={repeaterRowLimit(element)}
           onChange={(items) => designerStore.setRepeaterItems(id, items)}
         />
       </CollapseSection>

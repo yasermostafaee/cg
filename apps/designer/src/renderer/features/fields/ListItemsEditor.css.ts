@@ -123,6 +123,20 @@ export const addRow = style({
   marginTop: '0.3rem',
 });
 
+/** `B-106` — a row past the repeater's max items: still editable, visibly not shown. */
+export const itemOverLimit = style({
+  opacity: 0.55,
+});
+
+/** `B-106` — the "not shown" fact on such a row: text, no control chrome. */
+export const overLimitTag = style({
+  flexShrink: 0,
+  fontSize: '0.68rem',
+  fontStyle: 'italic',
+  color: colors.textMuted,
+  whiteSpace: 'nowrap',
+});
+
 /** `D-163` — `Add pictures…` / `Add folder…`, side by side. */
 export const pageButtons = style({
   display: 'flex',
