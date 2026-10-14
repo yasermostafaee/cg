@@ -148,6 +148,13 @@ const ListFieldSchema = DynamicFieldBaseSchema.extend({
    */
   digits: FieldDigitsSchema.optional(),
   ...FileSourceGrant,
+  /**
+   * `D-163` — this list is a PAGE LIST: its items are picture items (`{ kind: 'image', … }`) of the
+   * sequence it is bound to, and the operator loads its pages as pictures in CG Control rather than
+   * typing items. Set by the Designer when a picture-only sequence takes a Data key; absent on every
+   * other list, so an old template reads exactly as before.
+   */
+  pages: z.literal(true).optional(),
 });
 
 /** Discriminated union of declared dynamic-field types. */

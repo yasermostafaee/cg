@@ -170,6 +170,19 @@ export interface TemplateRuntime {
   next?(): Promise<void>;
 
   /**
+   * `D-163` — back one step: the mirror of {@link next} (a finite sequence does not wrap; an
+   * infinite one wraps to its last item). Optional, like `next`.
+   */
+  previous?(): Promise<void>;
+
+  /**
+   * `D-163` — show step `index` (0-based) of every sequence: absolute and latest-wins. A bridge
+   * drives a page list through `__cg.page` instead; this is the same move for a host that holds
+   * the runtime directly (the Designer's preview). Optional, like `next`.
+   */
+  goTo?(index: number): Promise<void>;
+
+  /**
    * Paint every animated element at the given frame, without starting an
    * rAF loop. Used by Designer's timeline scrubber (M12.2) to preview a
    * specific frame; the runtime's on-air play() loop manages its own
@@ -271,6 +284,13 @@ export interface RuntimeBootOptions {
    * host-side) is unaffected.
    */
   assetUrls?: Readonly<Record<string, string>>;
+
+  /**
+   * `D-163` — TEST SEAM: how a picture page is decoded before it replaces the one on screen.
+   * Absent ⇒ the image's own `decode()` (resolved `true` where an engine has none). A test DOM
+   * that loads no images passes one to say what decoding does.
+   */
+  decodeImage?: (img: HTMLImageElement) => Promise<boolean>;
 
   /**
    * D-125 — Lottie `assetId` → parsed bodymovin `animationData` (the JSON object,

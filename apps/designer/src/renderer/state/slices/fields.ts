@@ -575,7 +575,8 @@ export const fieldsSlice = {
       el !== undefined && el.type === 'sequence'
         ? el.items.find((it) => it.id === itemId)
         : undefined;
-    if (item === undefined || item.kind === 'composition') return false;
+    // D-083 / D-163 — a composition or a PICTURE item has no text to bind.
+    if (item === undefined || item.kind === 'composition' || item.kind === 'image') return false;
     const seedText = item.text;
 
     const existing = doc.fields.find((f) => f.id === trimmed);

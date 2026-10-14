@@ -45,7 +45,28 @@ import {
  */
 export type SequenceDriverItem =
   | { kind?: 'text' | undefined; id: string; text: string; dwellMs?: number | undefined }
-  | { kind: 'composition'; id: string; compositionId: string; dwellMs?: number | undefined };
+  | { kind: 'composition'; id: string; compositionId: string; dwellMs?: number | undefined }
+  | SequenceDriverImageItem;
+
+/**
+ * `D-163` — a PICTURE item: an authored page (`assetId`, a packaged asset) or an operator page
+ * (`media`, the SHA-256 whose bytes arrive with the page turn that shows it).
+ */
+export interface SequenceDriverImageItem {
+  kind: 'image';
+  id: string;
+  assetId?: string | undefined;
+  media?: string | undefined;
+  name?: string | undefined;
+  dwellMs?: number | undefined;
+}
+
+/** A TEXT item (`kind` absent or `'text'`) — the only kind with editable text. */
+function isTextItem(
+  item: SequenceDriverItem,
+): item is Extract<SequenceDriverItem, { text: string }> {
+  return item.kind === undefined || item.kind === 'text';
+}
 
 /**
  * D-083 — a rendered sequence item: its DOM node + lifecycle hooks for any inner
@@ -65,6 +86,12 @@ export interface RenderedSequenceItem {
    * renderer extracts its own item namespace. No-op / absent for a TEXT item.
    */
   applyFields?(values: Record<string, unknown>): void;
+  /**
+   * `D-163` — resolves `true` once the item can be shown without a blank frame (a picture decoded),
+   * `false` when it cannot be shown at all (bytes missing, not decodable). Absent ⇒ ready now (text,
+   * composition). The driver never puts an item on stage before this resolves `true`.
+   */
+  ready?: Promise<boolean>;
 }
 
 /** D-083 — builds the node + inner-driver lifecycle for a COMPOSITION item. */
@@ -114,6 +141,13 @@ export interface SequenceDriverOptions {
    * the operator edit each text item in the preview form, parallel to composition items.
    */
   textValueFor?: ((itemId: string) => string | undefined) | undefined;
+  /**
+   * `D-163` — factory for PICTURE items: the image element's own render of the page plus a
+   * `ready` promise. Absent ⇒ a picture renders as an empty box (text-only runtimes / tests).
+   */
+  renderImage?: ((item: SequenceDriverImageItem) => RenderedSequenceItem) | undefined;
+  /** `D-163` — a page turn could not be shown (the previous page stayed on screen). */
+  onItemUnavailable?: ((item: SequenceDriverItem) => void) | undefined;
   clock?: RuntimeClock | undefined;
 }
 
@@ -126,7 +160,9 @@ interface NormalizedDriverClock {
 // D-116 — `entrance` plays the FIRST item's transitionIn on start (finite only); `exit` plays the
 // LAST item's transitionOut before completion (finite only) so the parent's outro fires AFTER the
 // content has left (D-105 content-first / background-last).
-type Phase = 'idle' | 'dwell' | 'transition' | 'entrance' | 'exit';
+// `D-163` — `loading`: the incoming item is being made ready (a picture decoding); the current item
+// stays fully on screen and nothing moves until it is.
+type Phase = 'idle' | 'dwell' | 'transition' | 'entrance' | 'exit' | 'loading';
 
 export class SequenceDriver {
   private readonly o: SequenceDriverOptions;
@@ -146,6 +182,18 @@ export class SequenceDriver {
   private incomingHooks: RenderedSequenceItem | null = null;
   /** Passes STARTED this run (1-based once the run starts). */
   private passesStarted = 1;
+  /**
+   * `D-163` — the item a run starts on. `0` unless {@link goTo} moved it: an absolute page sets
+   * where the NEXT run starts too, so a book re-taken at page 12 opens at page 12.
+   */
+  private startIdx = 0;
+  /** `D-163` — a `goTo` that arrived while the stage was busy; applied as soon as it is not. */
+  private pendingIdx: number | null = null;
+  /** `D-163` — the item being made ready, and the generation that names its load. */
+  private loadingHooks: RenderedSequenceItem | null = null;
+  private loadGen = 0;
+  /** `D-163` — stopped by `stop()` (taken out), as opposed to finished by its own last pass. */
+  private stopped = false;
 
   private phase: Phase = 'idle';
   /** Clock time the current phase began (dwell or transition). */
@@ -191,6 +239,7 @@ export class SequenceDriver {
   start(): void {
     if (this.destroyed || this.running) return;
     this.running = true;
+    this.stopped = false;
     this.paused = false;
     // The run owns the stage: render item 1 (or adopt what reset() drew).
     if (this.currentNode === null) this.renderCurrentStatic();
@@ -238,6 +287,46 @@ export class SequenceDriver {
   }
 
   /**
+   * `D-163` — back one item with the transition: the mirror of {@link next}. Under a finite
+   * `repeat` the first item stays (a book does not wrap); under `'infinite'` it wraps to the last.
+   * Ignored while the stage is busy, like `next()`. Works after a finite run has finished — a book
+   * read to its last page can still be paged back.
+   */
+  previous(): void {
+    if (!this.rearm() || this.paused || this.phase !== 'dwell') return;
+    const idx = this.currentIndex();
+    if (idx > 0) {
+      this.beginTransition(idx - 1);
+      return;
+    }
+    if (idx === 0 && this.o.repeat === 'infinite' && this.logical.length > 1) {
+      this.beginTransition(this.logical.length - 1);
+    }
+  }
+
+  /**
+   * `D-163` — show item `index` (0-based, clamped to the list). ABSOLUTE and LATEST-WINS: during a
+   * transition, a load or a pause the request is kept and applied the moment the stage is free, never
+   * dropped — so a page the bridge asked for is the page that ends up on screen. Before a run starts
+   * it sets the item the run starts on, and it always sets where the next run starts.
+   */
+  goTo(index: number): void {
+    if (this.destroyed || !Number.isFinite(index)) return;
+    const len = this.logical.length;
+    if (len === 0) return;
+    const target = Math.max(0, Math.min(len - 1, Math.floor(index)));
+    this.startIdx = target;
+    if (this.phase === 'idle') {
+      this.current = null;
+      this.renderCurrentStatic();
+      return;
+    }
+    if (!this.rearm()) return;
+    this.pendingIdx = target;
+    this.consumePending();
+  }
+
+  /**
    * D-083 — re-apply the operator's field values to the on-screen COMPOSITION item(s)
    * (the `update()` path; the build-time apply covers the initial render). Given the
    * FULL nested value object; each composition item extracts its own namespace. A no-op
@@ -273,14 +362,21 @@ export class SequenceDriver {
     this.incomingHooks?.resume();
     if (this.phase === 'transition') this.paintTransition();
     else if (this.phase === 'entrance' || this.phase === 'exit') this.paintBoundary(this.phase);
+    this.consumePending(); // D-163 — a goTo that arrived while frozen
     this.scheduleIfNeeded();
   }
 
   /** Stop advancing, freezing the stage as-is (scope settled). */
   stop(): void {
     this.running = false;
+    this.stopped = true;
     this.paused = false;
     this.cancelFrame();
+    // D-163 — a picture still decoding is abandoned with the run.
+    this.loadGen += 1;
+    this.loadingHooks?.hide();
+    this.loadingHooks = null;
+    this.pendingIdx = null;
     // D-083 — tear down the on-screen item's inner drivers (a composition item's clock stops).
     this.currentHooks?.hide();
     this.incomingHooks?.hide();
@@ -339,7 +435,7 @@ export class SequenceDriver {
       if (replacement !== undefined) {
         // D-083 — text edit in place only for TEXT items (the bindable kind). A composition item's
         // content is static (its id is stable), so there's nothing to reconcile beyond `dwellMs`.
-        if (shown.kind !== 'composition' && replacement.kind !== 'composition') {
+        if (isTextItem(shown) && isTextItem(replacement)) {
           if (replacement.text !== shown.text && node !== null) node.textContent = replacement.text;
           shown.text = replacement.text;
         }
@@ -449,8 +545,39 @@ export class SequenceDriver {
   private beginTransition(toIdx: number): void {
     const target = this.logical[toIdx];
     if (target === undefined) return;
-    this.incoming = { ...target };
-    const r = this.renderItem(this.incoming);
+    const incoming = { ...target };
+    const r = this.renderItem(incoming);
+    if (r.ready === undefined) {
+      this.startTransition(incoming, r);
+      return;
+    }
+    // D-163 — NOTHING moves until the incoming item is ready: the current page stays fully on
+    // screen while the picture decodes, so a page turn can never paint a blank frame.
+    this.enterPhase('loading');
+    const gen = ++this.loadGen;
+    this.loadingHooks = r;
+    void r.ready.then((ok) => {
+      if (gen !== this.loadGen || this.destroyed) {
+        r.hide();
+        return;
+      }
+      this.loadingHooks = null;
+      if (!ok) {
+        // The page cannot be shown: the previous one stays, and the host is told.
+        r.hide();
+        this.o.onItemUnavailable?.(incoming);
+        this.enterPhase('dwell');
+        this.consumePending();
+        this.scheduleIfNeeded();
+        return;
+      }
+      this.startTransition(incoming, r);
+    });
+  }
+
+  /** Put a READY item on stage and run the transition to it. */
+  private startTransition(incoming: SequenceDriverItem, r: RenderedSequenceItem): void {
+    this.incoming = incoming;
     this.incomingHooks = r;
     this.incomingNode = r.node;
     this.o.host.appendChild(r.node);
@@ -483,6 +610,35 @@ export class SequenceDriver {
       this.currentNode.style.visibility = '';
     }
     this.enterPhase('dwell');
+    this.consumePending(); // D-163 — a goTo that arrived mid-transition
+  }
+
+  /** `D-163` — the on-screen item's position in the list (-1 when it was removed). */
+  private currentIndex(): number {
+    const shown = this.current;
+    return shown === null ? -1 : this.logical.findIndex((i) => i.id === shown.id);
+  }
+
+  /**
+   * `D-163` — may a page verb act? A run that FINISHED its last pass is re-armed (a book read to its
+   * end can still be paged; its completion is not re-signalled); one that was STOPPED or never
+   * started is not.
+   */
+  private rearm(): boolean {
+    if (this.destroyed || this.phase === 'idle') return false;
+    if (this.running) return true;
+    if (!this.completed || this.stopped) return false;
+    this.running = true;
+    return true;
+  }
+
+  /** `D-163` — apply a kept `goTo` once the stage is free (dwelling, running, not frozen). */
+  private consumePending(): void {
+    if (this.pendingIdx === null) return;
+    if (!this.running || this.paused || this.phase !== 'dwell') return;
+    const target = this.pendingIdx;
+    this.pendingIdx = null;
+    if (target !== this.currentIndex()) this.beginTransition(target);
   }
 
   /**
@@ -518,6 +674,7 @@ export class SequenceDriver {
         this.currentNode.style.visibility = '';
       }
       this.enterPhase('dwell');
+      this.consumePending(); // D-163 — a goTo that arrived during the entrance
       return;
     }
     // exit — the last item has left the box; NOW signal completion and freeze (the parent's outro
@@ -594,7 +751,8 @@ export class SequenceDriver {
     this.incoming = null;
     this.incomingNode = null;
     this.incomingHooks = null;
-    const first = this.logical[0];
+    // D-163 — a run starts on `startIdx` (0 unless a goTo moved it), clamped to the list.
+    const first = this.logical[Math.min(this.startIdx, Math.max(0, this.logical.length - 1))];
     if (this.current === null) this.current = first === undefined ? null : { ...first };
     if (this.current === null) {
       this.currentNode = null;
@@ -615,14 +773,16 @@ export class SequenceDriver {
     if (item.kind === 'composition' && this.o.renderComposition !== undefined) {
       return this.o.renderComposition({ id: item.id, compositionId: item.compositionId });
     }
+    if (item.kind === 'image' && this.o.renderImage !== undefined) {
+      return this.o.renderImage(item);
+    }
     const node = this.makeItemNode();
     // D-083 — a TEXT item shows the operator's per-item field value (non-bound sequence)
     // when present, else its current text. `item.text` is read LIVE (not captured): a
     // LIST-BOUND reconcile mutates this snapshot in place via setItems, so on a bound
     // update `applyText` keeps the reconciled text instead of resetting a stale one.
     const applyText = (): void => {
-      node.textContent =
-        this.o.textValueFor?.(item.id) ?? (item.kind === 'composition' ? '' : item.text);
+      node.textContent = this.o.textValueFor?.(item.id) ?? (isTextItem(item) ? item.text : '');
     };
     applyText();
     return { node, show: NOOP, pause: NOOP, resume: NOOP, hide: NOOP, applyFields: applyText };
@@ -711,6 +871,24 @@ export function coerceSequenceItems(raw: readonly unknown[]): SequenceDriverItem
         return dwellMs === undefined
           ? { kind: 'composition', id, compositionId }
           : { kind: 'composition', id, compositionId, dwellMs };
+      }
+      // D-163 — a PICTURE item keeps whichever source it names (a page list from CG Control names
+      // `media`; an authored default names `assetId`), and its file name for people.
+      if (o['kind'] === 'image') {
+        const assetId =
+          typeof o['assetId'] === 'string' && o['assetId'] !== '' ? o['assetId'] : undefined;
+        const media =
+          typeof o['media'] === 'string' && /^[0-9a-f]{64}$/.test(o['media'])
+            ? o['media']
+            : undefined;
+        const name = typeof o['name'] === 'string' ? o['name'] : undefined;
+        return {
+          kind: 'image',
+          id,
+          ...(assetId !== undefined ? { assetId } : media !== undefined ? { media } : {}),
+          ...(name !== undefined ? { name } : {}),
+          ...(dwellMs !== undefined ? { dwellMs } : {}),
+        };
       }
       const text = typeof o['text'] === 'string' ? o['text'] : '';
       return dwellMs === undefined ? { id, text } : { id, text, dwellMs };

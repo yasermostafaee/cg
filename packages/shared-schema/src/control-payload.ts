@@ -94,8 +94,40 @@ export interface CgPassTiming {
   delayMs?: number;
 }
 
+/**
+ * `D-163` / `R-100` — **ONE PAGE TURN of a page list**, as it crosses to the page.
+ *
+ * AMCP has `CG NEXT` and nothing for "previous" or "page N", so a page turn the operator asked for
+ * rides the operator's own `CG UPDATE` (or the take's `CG ADD`) in this member — the extension this
+ * namespace exists for. The index is ABSOLUTE, never relative: the console's counter (`12 / 300`)
+ * and the page cannot drift, because a turn the page receives twice lands on the same page.
+ *
+ * - `field` — the page-list field whose bound sequence turns.
+ * - `index` — 0-based, already clamped or wrapped by the bridge.
+ * - `media` — the operator pictures this turn needs, SHA-256 → `data:image/…`. Carried INLINE because
+ *   the template origin serves templates and nothing else (`SECURITY.md`) and the page's CSP takes
+ *   images only as `data:`. Usually exactly the one page being shown.
+ */
+export interface CgPage {
+  field: string;
+  index: number;
+  media?: Record<string, string>;
+}
+
+/**
+ * `D-163` — the only `data:` images a page turn may carry. Anything else in `media` is dropped by the
+ * reader: this arrives over AMCP from a process that may be another build, and a page must never be
+ * handed a script or a document under an image's name.
+ */
+export const PAGE_MEDIA_DATA_URL = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+
 /** Bridge→page control data. Every member optional: a payload may carry any subset. */
 export interface CgControl {
+  /**
+   * `D-163` — a page turn of a page list (see {@link CgPage}). Absent means "this payload turns no
+   * page", never "go to page 1".
+   */
+  page?: CgPage;
   /**
    * The look the row is showing NOW. The page enters it through its own `setActiveLook`, so
    * the visibility flip and the re-punch happen exactly where they already happened.
@@ -216,7 +248,32 @@ export function readCgControl(payload: unknown): CgControl | undefined {
     */
     ...(typeof take === 'string' && take !== '' ? { take } : {}),
     ...readPassTiming((raw as Record<string, unknown>)['timing']),
+    ...readPage((raw as Record<string, unknown>)['page']),
   };
+}
+
+/**
+ * `D-163` — read the page member, defensively. A malformed `field` or `index` drops the WHOLE turn
+ * (a turn to an unknown list or a non-page is no turn at all); a malformed `media` entry is dropped on
+ * its own, so one bad picture cannot also discard the index the operator asked for.
+ */
+function readPage(raw: unknown): { page?: CgPage } {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const r = raw as Record<string, unknown>;
+  const field = r['field'];
+  const index = r['index'];
+  if (typeof field !== 'string' || field === '') return {};
+  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) return {};
+  const mediaRaw = r['media'];
+  const media: Record<string, string> = {};
+  if (typeof mediaRaw === 'object' && mediaRaw !== null && !Array.isArray(mediaRaw)) {
+    for (const [sha, url] of Object.entries(mediaRaw as Record<string, unknown>)) {
+      if (/^[0-9a-f]{64}$/.test(sha) && typeof url === 'string' && PAGE_MEDIA_DATA_URL.test(url)) {
+        media[sha] = url;
+      }
+    }
+  }
+  return { page: { field, index, ...(Object.keys(media).length > 0 ? { media } : {}) } };
 }
 
 /**

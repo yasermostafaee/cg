@@ -878,6 +878,11 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
         doc,
       );
       if (built !== null) el.appendChild(built.cell);
+    } else if (first.kind === 'image') {
+      // `D-163` — a PICTURE item-1, drawn by the image element's own renderer. An authored page's
+      // `src` is wired by the host's `data-cg-asset-id` walk like any image; an operator page's by
+      // the runtime from the bytes its page turn carried.
+      el.appendChild(buildSequenceImageItem(element, first, doc).cell);
     } else {
       const node = makeSequenceItemNode(doc, element.direction, glyphGradientCss);
       // `TEXT-DIGITS-01` — an authored item in the sequence's Digits choice (the driver's too).
@@ -893,6 +898,72 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
     visited: ctx.visited,
   });
   return el;
+}
+
+/** `D-163` — one rendered PICTURE sequence item: the grid-cell node and the `<img>` inside it. */
+export interface SequenceImageItemBuild {
+  cell: HTMLElement;
+  img: HTMLImageElement;
+}
+
+/**
+ * `D-163` — build a PICTURE sequence item: a grid cell the size of the sequence box holding the
+ * image element's OWN render (`buildImage`) of a synthetic image element at the sequence's ONE
+ * `imageFit` — there is no second image renderer to drift from the first.
+ *
+ * An AUTHORED page keeps `data-cg-asset-id`, so every host resolves its `src` exactly as it resolves
+ * any image (the export's `assetUrls` walk, the Designer preview's own). An OPERATOR page carries
+ * `data-cg-page-media` instead: its bytes arrive with the page turn that shows it, and the runtime
+ * sets `src` from them. The synthetic element's id is dropped from the DOM: it names no element.
+ */
+export function buildSequenceImageItem(
+  element: SequenceElement,
+  item: {
+    id: string;
+    assetId?: string | undefined;
+    media?: string | undefined;
+    name?: string | undefined;
+  },
+  doc: Document,
+): SequenceImageItemBuild {
+  const { w, h } = element.transform.size;
+  const cell = doc.createElement('div');
+  cell.dataset['cgSequenceItem'] = '1';
+  cell.dataset['cgSequencePage'] = item.id;
+  cell.style.gridArea = '1 / 1';
+  cell.style.position = 'relative';
+  cell.style.width = `${String(w)}px`;
+  cell.style.height = `${String(h)}px`;
+  const synthetic: ImageElement = {
+    id: `${element.id}:page:${item.id}`,
+    name: item.name ?? 'page',
+    type: 'image',
+    assetId: item.assetId ?? '',
+    source: 'project',
+    fit: element.imageFit ?? 'contain',
+    preserveAspect: true,
+    transform: {
+      position: { x: 0, y: 0 },
+      size: { w, h },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      anchor: { x: 0, y: 0 },
+    },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+  };
+  const node = buildImage(synthetic, doc);
+  delete node.dataset['cgElementId'];
+  const img = node.tagName === 'IMG' ? (node as HTMLImageElement) : node.querySelector('img');
+  if (img === null) throw new Error('buildImage produced no <img>');
+  if (item.assetId === undefined) {
+    delete img.dataset['cgAssetId'];
+    if (item.media !== undefined) img.dataset['cgPageMedia'] = item.media;
+  }
+  cell.appendChild(node);
+  return { cell, img };
 }
 
 /** D-083 — one rendered composition sequence item: the grid-cell node + its fresh scope. */

@@ -601,15 +601,63 @@ export const SequenceCompositionItemSchema = z.object({
 });
 
 /**
- * D-083 Phase 1 — a sequence item is TEXT or a COMPOSITION reference. A z.union
- * (not z.discriminatedUnion) so an old item without `kind` still parses (its text
- * variant defaults `kind` to `'text'`); the variants are unambiguous via their
- * required fields (`text` vs `compositionId`).
+ * D-149 — how a picture is scaled inside its box: the image element's `fit`, and (`D-163`) the ONE
+ * fit a sequence applies to all its picture items. Declared once so the two cannot drift. The first
+ * four are CSS `object-fit` values; `fit-width` / `fit-height` are resolved by the renderer (see
+ * {@link ImageElementSchema}).
  */
-export const SequenceItemSchema = z.union([SequenceTextItemSchema, SequenceCompositionItemSchema]);
+export const ImageFitSchema = z.enum([
+  'contain',
+  'cover',
+  'fill',
+  'none',
+  'fit-width',
+  'fit-height',
+]);
+export type ImageFit = z.infer<typeof ImageFitSchema>;
+
+/**
+ * `D-163` — a PICTURE sequence item: one page of a book read on air. It names its picture in
+ * exactly ONE of two ways:
+ *
+ * - `assetId` — a page the AUTHOR put in the template (a project asset, packaged with it);
+ * - `media` — the SHA-256 of a page the OPERATOR loaded in CG Control, held by CG Bridge and
+ *   delivered to the page with the turn that shows it (`__cg.page`).
+ *
+ * `name` is the picked file's name, for people (the items list, a refusal); it never decides
+ * anything. Drawn by the image element's own renderer at the sequence's `imageFit`.
+ */
+export const SequenceImageItemSchema = z
+  .object({
+    kind: z.literal('image'),
+    id: z.string().min(1),
+    assetId: IdSchema.optional(),
+    media: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
+    name: z.string().optional(),
+    dwellMs: z.number().int().positive().optional(),
+  })
+  .refine((item) => (item.assetId === undefined) !== (item.media === undefined), {
+    message: 'a picture item names exactly one of assetId or media',
+  });
+
+/**
+ * D-083 Phase 1 — a sequence item is TEXT or a COMPOSITION reference; `D-163` adds a PICTURE. A
+ * z.union (not z.discriminatedUnion) so an old item without `kind` still parses (its text variant
+ * leaves `kind` absent); the variants are unambiguous via their required fields (`text` vs
+ * `compositionId` vs `kind: 'image'`).
+ */
+export const SequenceItemSchema = z.union([
+  SequenceTextItemSchema,
+  SequenceCompositionItemSchema,
+  SequenceImageItemSchema,
+]);
 export type SequenceItem = z.infer<typeof SequenceItemSchema>;
 export type SequenceTextItem = z.infer<typeof SequenceTextItemSchema>;
 export type SequenceCompositionItem = z.infer<typeof SequenceCompositionItemSchema>;
+export type SequenceImageItem = z.infer<typeof SequenceImageItemSchema>;
 
 /** A transition edge: where an item enters from / exits to. `none` = instant cut. */
 const SequenceEdgeSchema = z.enum(['top', 'bottom', 'left', 'right', 'none']);
@@ -662,6 +710,12 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
   direction: z.enum(['ltr', 'rtl']),
   /** Authored default items; a bound `list` field replaces them at playout. */
   items: z.array(SequenceItemSchema),
+  /**
+   * `D-163` — how EVERY picture item of this sequence is scaled in the box (the image element's
+   * `fit` values). Optional, read as `contain` when absent, so a sequence authored before picture
+   * items parses unchanged; it means nothing to a sequence that holds none.
+   */
+  imageFit: ImageFitSchema.optional(),
   /** Per-item display time when the item carries no own `dwellMs`. */
   defaultDwellMs: z.number().int().positive().default(5000),
   /** `auto` = dwell timer + next(); `manual` = only next() advances. */
@@ -789,7 +843,7 @@ export const ImageElementSchema = ElementBaseSchema.extend({
    * a document written before D-149 parses unchanged, and one written after is
    * only unreadable by an older build if it actually USES a new value.
    */
-  fit: z.enum(['contain', 'cover', 'fill', 'none', 'fit-width', 'fit-height']),
+  fit: ImageFitSchema,
   preserveAspect: z.boolean(),
   tint: HexColorSchema.optional(),
 });

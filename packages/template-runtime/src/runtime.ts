@@ -22,7 +22,9 @@ import {
   lookGroupOf,
   readCgControl,
   stripCgControl,
+  type CgPage,
   type Look,
+  type SequenceElement,
 } from '@cg/shared-schema';
 import { writeFieldDigits } from '@cg/text-shaping';
 import { itemsInDigits } from './typed-digits.js';
@@ -95,6 +97,7 @@ import {
   buildRepeaterRows,
   buildScene,
   buildSequenceCompositionItem,
+  buildSequenceImageItem,
   repeaterItemValues,
 } from './scene-builder.js';
 import {
@@ -118,6 +121,7 @@ import {
   registerSequenceDriver,
   type RenderedSequenceItem,
   type SequenceCompositionRenderer,
+  type SequenceDriverImageItem,
 } from './sequence-driver.js';
 import { TickerDriver, registerTickerDriver, type TickerSeparatorImage } from './ticker-driver.js';
 import type {
@@ -649,6 +653,70 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // `sequence elementId → (item id → bound field id)`. A text item is operator-editable ONLY
   // when present here; unbound items stay static. Element ids are globally unique, so one
   // merged map serves every scope (each sequence reads its own entry by element id).
+  /*
+    `D-163` — PAGES OF PICTURES. An operator page's bytes arrive with the page turn that shows it
+    (`__cg.page.media`, inline because the template origin serves templates and nothing else), and
+    the page keeps only the last few: the one on screen, the one coming in, one spare. A book of
+    300 pages is never held, let alone decoded, at once.
+  */
+  const PAGE_MEDIA_KEPT = 3;
+  const pageMedia = new Map<string, string>();
+  const sequenceElementOf = new WeakMap<SequenceDriver, string>();
+  // Which sequences a list field drives (`sequence-items`), across the scene and every composition:
+  // a page turn names its FIELD, and every sequence that field feeds turns.
+  const pageListTargets = new Map<string, Set<string>>();
+  for (const d of [scene, ...(scene.compositions ?? [])]) {
+    for (const b of d.bindings ?? []) {
+      if (b.target.kind !== 'sequence-items') continue;
+      const set = pageListTargets.get(b.fieldId) ?? new Set<string>();
+      set.add(b.target.elementId);
+      pageListTargets.set(b.fieldId, set);
+    }
+  }
+  const decodeImage = (img: HTMLImageElement): Promise<boolean> => {
+    if (options.decodeImage !== undefined) return options.decodeImage(img);
+    if (typeof img.decode !== 'function') return Promise.resolve(true);
+    return img.decode().then(
+      () => true,
+      () => false,
+    );
+  };
+  /**
+   * `D-163` — one picture item, drawn by the image element's own renderer. It is READY when its
+   * picture is decoded, so the driver never swaps it in over a blank: an operator page whose bytes
+   * this page does not hold is NOT ready at all, and the previous page stays.
+   */
+  const renderPageImage = (
+    element: SequenceElement,
+    item: SequenceDriverImageItem,
+  ): RenderedSequenceItem => {
+    const built = buildSequenceImageItem(element, item, doc);
+    const noop = (): void => undefined;
+    let ready: Promise<boolean> | undefined;
+    if (item.assetId !== undefined) {
+      applyAssetUrls(built.cell, options.assetUrls);
+      // The Designer preview passes no map and wires `src` itself once the node is on stage, so
+      // waiting for a decode there would wait forever. Only a picture with a `src` waits.
+      if (built.img.getAttribute('src') !== null) ready = decodeImage(built.img);
+    } else {
+      const url = item.media === undefined ? undefined : pageMedia.get(item.media);
+      if (url !== undefined) {
+        built.img.src = url;
+        ready = decodeImage(built.img);
+      } else {
+        ready = Promise.resolve(false);
+      }
+    }
+    return {
+      node: built.cell,
+      show: noop,
+      pause: noop,
+      resume: noop,
+      hide: () => built.cell.remove(),
+      ...(ready !== undefined ? { ready } : {}),
+    };
+  };
+
   const seqItemTextFields = sequenceItemTextFieldIds(scene);
   // FIELD-DIGITS-01 — and the fields of the doc that owns each such sequence, so a bound item
   // is written in its field's digits exactly as a bound text element is.
@@ -1072,9 +1140,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
               );
             };
           })(),
+          renderImage: (item) => renderPageImage(s.element, item),
+          onItemUnavailable: (item) => {
+            console.warn(`[cg] page "${item.id}" could not be shown; the previous page stays`);
+          },
           clock: options.clock,
         });
         registerSequenceDriver(s.host, driver);
+        sequenceElementOf.set(driver, s.element.id);
         // D-105 — mark the content root for the coordinated exit (out/stop).
         s.host.dataset['cgContent'] = 'sequence';
         // D-102 Phase 2 — stamp the EFFECTIVE (post-override) timing on the host so the operator
@@ -2139,6 +2212,31 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     }
   };
 
+  /**
+   * `D-163` — one page turn: keep the pictures it carried (the last {@link PAGE_MEDIA_KEPT}), then
+   * move every sequence its page-list field drives to the ABSOLUTE index. A field this template does
+   * not bind turns nothing.
+   */
+  const applyPageTurn = (page: CgPage): void => {
+    for (const [sha, url] of Object.entries(page.media ?? {})) {
+      pageMedia.delete(sha);
+      pageMedia.set(sha, url);
+    }
+    while (pageMedia.size > PAGE_MEDIA_KEPT) {
+      const oldest = pageMedia.keys().next().value;
+      if (oldest === undefined) break;
+      pageMedia.delete(oldest);
+    }
+    const targets = pageListTargets.get(page.field);
+    if (targets === undefined) return;
+    for (const sub of subtrees) {
+      for (const s of sub.sequences) {
+        const el = sequenceElementOf.get(s);
+        if (el !== undefined && targets.has(el)) s.goTo(page.index);
+      }
+    }
+  };
+
   // D-083 — re-apply the operator's per-item field values to any on-screen sequence items
   // (a COMPOSITION item's inner fields AND a TEXT item's text). Their nodes are built
   // dynamically by the sequence driver (NOT in the static scope tree applyScopedFieldValues
@@ -2433,6 +2531,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
       reapplySequenceItemFields();
       reapplyClockTargets();
+      // D-163 — the take's page: AFTER the fields (a new book is in place first), BEFORE the run
+      // starts (a goTo before start sets the page the run opens on).
+      if (control?.page !== undefined) applyPageTurn(control.page);
       machine.transition('playing');
       bus.emit('play.start');
       doc.body.classList.remove('cg-pending');
@@ -2663,6 +2764,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         `CG UPDATE` — the same seam `B-191` already uses to tell a resident page its look.
       */
       if (control?.take !== undefined) takeToken = control.take;
+      /*
+        `D-163` — A PAGE TURN, after the fields: when the same payload carries a new book and its
+        page, the book is in place before the page is looked up in it.
+      */
+      if (control?.page !== undefined) applyPageTurn(control.page);
       bus.emit('update');
     },
 
@@ -2779,6 +2885,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // next() is each driver's own no-op). See dispatchNext for the D-031
       // steps-model seam.
       dispatchNext();
+    },
+
+    async previous(): Promise<void> {
+      if (machine.state === 'removed') return;
+      for (const sub of subtrees) for (const s of sub.sequences) s.previous();
+    },
+
+    async goTo(index: number): Promise<void> {
+      if (machine.state === 'removed') return;
+      for (const sub of subtrees) for (const s of sub.sequences) s.goTo(index);
     },
 
     remove(): void {
