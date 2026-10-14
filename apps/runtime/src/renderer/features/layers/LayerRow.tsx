@@ -1053,6 +1053,20 @@ export function LayerRow({
             <Icon icon={Volume2} size={16} />
           </Button>
         )}
+        {/*
+          `D-165` — THE TEMPLATE MAKES SOUND (`TemplateInfo.hasSound`, derived once at import by
+          the one predicate). A fact in the alias cell beside the others — no column, no control:
+          what the operator can do about it (a mute per row) is the owner's decision, not built.
+        */}
+        {template?.hasSound === true && (
+          <Tag
+            data-template-sound=""
+            title="Template sound"
+            aria-label={`${rowName} plays a sound`}
+          >
+            <Icon icon={Volume2} size={12} />
+          </Tag>
+        )}
         {/* `R-100` — where the row's book is: the page and how many. A fact, not a control. */}
         {rowBook !== null && rowBook.count > 0 && (
           <Tag

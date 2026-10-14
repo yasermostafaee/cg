@@ -21,4 +21,8 @@ export type { LottieRef, LottieAssetSource } from './lottie-export.js';
 export { collectVideoElements, resolveVideoAsset, videoMimeOf } from './video-export.js';
 export type { VideoRef, VideoAssetSource } from './video-export.js';
 
+// `D-165` — the sound-asset seam, mirroring video.
+export { collectAudioElements, resolveAudioAsset, audioMimeOf } from './audio-export.js';
+export type { AudioRef, AudioAssetSource } from './audio-export.js';
+
 export { cgJs, cgJsIife, cgJsLottie, cgJsLottieIife, cgCss } from './cg-runtime.js';

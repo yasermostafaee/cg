@@ -28,6 +28,7 @@ import type {
   ShapeElement,
   Transform,
   VideoElement,
+  AudioElement,
   VideoPlaceholderElement,
 } from '@cg/shared-schema';
 import type { BuildSceneResult, FieldScope, LifecycleSource, RenderMode } from './types.js';
@@ -94,6 +95,7 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
     repeaters: [],
     lotties: [],
     videos: [],
+    audios: [],
     lifespanGates: [],
     source,
   };
@@ -259,6 +261,9 @@ function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null 
       // D-128 Phase 3 — render a real <video> at its mid-clip poster frame; Phase
       // 4 registers it on the scope so createRuntime attaches a VideoDriver.
       return buildVideo(element, ctx);
+    case 'audio':
+      // D-165 — a sound: never painted; registered so createRuntime attaches an AudioDriver.
+      return buildAudio(element, ctx);
   }
 }
 
@@ -1338,6 +1343,24 @@ function buildVideo(element: VideoElement, ctx: BuildCtx): HTMLElement {
   // (mirrors buildLottie's ctx.scope.lotties.push). The <video> IS an
   // HTMLVideoElement — the driver commands play/pause/seek on it.
   ctx.scope.videos.push({ element, container: el });
+  return el;
+}
+
+/**
+ * 🔴 `D-165` — a SOUND: an `<audio>` node that is never painted (`display: none`). It is still
+ * built INTO the scope's tree, for two readers that ask the DOM: a look's membership test
+ * (`look-media.ts` — a sound inside a hidden look is silenced) and the hosts' `data-cg-asset-id`
+ * walks, which set its `src` exactly as they set an image's and a video's (runtime.ts
+ * `applyAssetUrls` for both exports, `preview.ts` in the Designer). The playback lifecycle is the
+ * `AudioDriver`'s; nothing here makes a sound.
+ */
+function buildAudio(element: AudioElement, ctx: BuildCtx): HTMLElement {
+  const el = ctx.doc.createElement('audio');
+  el.dataset['cgElementId'] = element.id;
+  el.dataset['cgAssetId'] = element.assetId;
+  el.style.display = 'none';
+  el.setAttribute('preload', 'auto');
+  ctx.scope.audios.push({ element, node: el });
   return el;
 }
 

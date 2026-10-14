@@ -3,7 +3,7 @@ import type { CSSProperties, Ref } from 'react';
 import type { FieldValues, Position } from '@cg/shared-schema';
 import { positionQuery, withCgControl } from '@cg/shared-schema';
 import type { ChannelRaster } from '@cg/shared-ipc';
-import { applyOperatorPosition, type PageRuntimeWindow } from './frameEnvironment.js';
+import { applyOperatorPosition, silencePage, type PageRuntimeWindow } from './frameEnvironment.js';
 import type { TimingToSend } from '../inspector/timingToSend.js';
 import { frameBox } from './rehearsalFrames.js';
 
@@ -331,6 +331,9 @@ export function RehearsalFrame({
       data-rehearsal-frame={itemId}
       srcDoc={html}
       onLoad={() => {
+        // `D-165` — PVW is silent: mute the page's own sound BEFORE the frame reports ready,
+        // so no PLAY reaches a page that could still make a sound.
+        silencePage(frameRef.current?.contentWindow as TemplateWindow | null);
         setReady(true);
       }}
       style={{

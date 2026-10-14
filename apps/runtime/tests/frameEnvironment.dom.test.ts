@@ -4,6 +4,7 @@ import type { Position } from '@cg/shared-schema';
 import { positionQuery } from '@cg/shared-schema';
 import {
   applyOperatorPosition,
+  silencePage,
   type PageRuntimeWindow,
 } from '../src/renderer/features/monitors/frameEnvironment.js';
 
@@ -170,5 +171,19 @@ describe('applyOperatorPosition — the override reaches the frame at last', () 
     expect(stageBefore.replace(/ transform:[^;"]*;?/, '')).toBe(
       (stage?.outerHTML ?? '').replace(/ ?transform:[^;"]*;?/, ''),
     );
+  });
+});
+
+describe('D-165 — silencePage: PVW never makes a sound', () => {
+  it('🔴 mutes the page through its OWN runtime switch', () => {
+    const setSoundMuted = vi.fn();
+    expect(silencePage({ CG: { setSoundMuted } })).toBe(true);
+    expect(setSoundMuted).toHaveBeenCalledWith(true);
+  });
+
+  it('a page built before D-165 has no switch and no sound: nothing to do, nothing thrown', () => {
+    expect(silencePage({ CG: {} })).toBe(false);
+    expect(silencePage({})).toBe(false);
+    expect(silencePage(null)).toBe(false);
   });
 });

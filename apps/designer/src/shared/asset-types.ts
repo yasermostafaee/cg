@@ -9,7 +9,7 @@
  * rule can never drift. The allowed extensions mirror the store's `KIND_BY_EXT`
  * (`apps/designer/src/platform/AssetStore.ts`).
  */
-export type PickKind = 'image' | 'font' | 'lottie' | 'video';
+export type PickKind = 'image' | 'font' | 'lottie' | 'video' | 'audio';
 
 interface KindSpec {
   /** The picker's `accept` hint (UI only — NOT a security boundary). */
@@ -60,6 +60,23 @@ const SPEC: Record<PickKind, KindSpec> = {
       'ogv',
     ],
     mimes: ['video/mp4', 'video/webm', 'video/x-msvideo', 'video/quicktime', 'video/x-matroska'],
+  },
+  audio: {
+    // `D-165` — the IMPORT side takes what the in-app converter decodes (each proven by an e2e
+    // fixture); the STORED kind is always one 48 kHz stereo 16-bit WAV, whatever was picked.
+    accept: 'audio/*,.wav,.mp3,.ogg,.oga,.opus,.m4a,.aac,.flac',
+    extensions: ['wav', 'mp3', 'ogg', 'oga', 'opus', 'm4a', 'aac', 'flac'],
+    mimes: [
+      'audio/wav',
+      'audio/x-wav',
+      'audio/wave',
+      'audio/mpeg',
+      'audio/ogg',
+      'audio/opus',
+      'audio/mp4',
+      'audio/aac',
+      'audio/flac',
+    ],
   },
 };
 

@@ -43,7 +43,27 @@ export interface PageRuntimeWindow {
       scene: { resolution: { width: number; height: number } },
       options: { search?: string },
     ) => void;
+    /** `D-165` — the page's own sound switch (`audio-graph.ts`). Absent on a pre-`D-165` page. */
+    setSoundMuted?: (muted: boolean) => void;
   };
+}
+
+/**
+ * 🔴 `D-165` — **PVW IS SILENT.** A template may carry sound effects, and the rehearsal frame
+ * renders the byte-identical page CasparCG plays — so without this, rehearsing a row would play
+ * its whoosh out of the operator's PC while the programme is on air. The page is muted through its
+ * OWN runtime, as placement is (above): no preview-only page exists to drift from air.
+ *
+ * Called on load, before the frame reports ready, so no PLAY can reach the page first. A page
+ * exported before `D-165` has no switch and no sound, so the optional call is honest.
+ *
+ * @returns whether the page had a switch to set.
+ */
+export function silencePage(win: PageRuntimeWindow | null): boolean {
+  const mute = win?.CG?.setSoundMuted;
+  if (mute === undefined) return false;
+  mute(true);
+  return true;
 }
 
 /**

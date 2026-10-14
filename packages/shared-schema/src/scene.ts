@@ -932,6 +932,45 @@ export function hasEffectiveHoldDrivers(
  * `sequence-items` binding (a sequence with authored items and no binding is
  * steppable). Those would each be a different question.
  */
+/**
+ * 🔴 `D-165` — THE ONE predicate for "does this template make a sound": a REACHABLE, VISIBLE
+ * `audio` element. CG Control marks a row with it (`TemplateInfo.hasSound`, derived once at
+ * import), and nothing may re-derive it locally (golden rule 6).
+ *
+ * Reachability is the runtime's, exactly as {@link hasNextStep} walks it — containers, composition
+ * instances, repeater rows — plus a sequence's COMPOSITION ITEMS, which build their own subtrees
+ * and whose sounds play when the item is on screen. B-034 — a hidden element or instance
+ * short-circuits its subtree (the runtime never starts a hidden sound). Cycle-guarded.
+ */
+export function hasSoundEffects(
+  root: Pick<Scene, 'layers'>,
+  compositions: readonly Composition[] | undefined,
+): boolean {
+  const visited = new Set<string>();
+  const intoComposition = (compositionId: string): boolean => {
+    if (visited.has(compositionId)) return false;
+    visited.add(compositionId);
+    const comp = compositions?.find((c) => c.id === compositionId);
+    return comp !== undefined && comp.layers.some((l) => walk(l.children));
+  };
+  const walk = (children: readonly Element[]): boolean =>
+    children.some((el) => {
+      if (el.visible === false) return false;
+      if (el.type === 'audio') return true;
+      if (el.type === 'container') return walk(el.children);
+      if (el.type === 'composition' || el.type === 'repeater') {
+        return intoComposition(el.compositionId);
+      }
+      if (el.type === 'sequence') {
+        return el.items.some(
+          (item) => item.kind === 'composition' && intoComposition(item.compositionId),
+        );
+      }
+      return false;
+    });
+  return root.layers.some((l) => walk(l.children));
+}
+
 export function hasNextStep(
   root: Pick<Scene, 'layers'>,
   compositions: readonly Composition[] | undefined,

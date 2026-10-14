@@ -442,7 +442,13 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
       // D-128 — raw-bytes ingest for the in-app video converter's canonical WebM
       // (+ optional source provenance). Same dedupe/index path as store().
       storeBytes: async (req) => ({
-        asset: await assets.importBytes(req.bytes, req.filename, req.kind, req.provenance),
+        asset: await assets.importBytes(
+          req.bytes,
+          req.filename,
+          req.kind,
+          req.provenance,
+          req.audio,
+        ),
       }),
       list: () => assets.list(),
       remove: async (req) => ({ ok: await assets.remove(req.assetId) }),
@@ -572,7 +578,7 @@ function shellInvoke(): ShellInvoke | null {
   return (command, args) => internals.invoke?.(command, args) ?? Promise.resolve('unknown');
 }
 
-function mimeOf(kind: 'image' | 'font' | 'lottie' | 'video', filename: string): string {
+function mimeOf(kind: 'image' | 'font' | 'lottie' | 'video' | 'audio', filename: string): string {
   const ext = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase();
   if (kind === 'image') {
     if (ext === 'svg') return 'image/svg+xml';
@@ -591,6 +597,8 @@ function mimeOf(kind: 'image' | 'font' | 'lottie' | 'video', filename: string): 
   }
   if (kind === 'lottie') return 'application/json';
   if (kind === 'video') return ext === 'webm' ? 'video/webm' : 'video/mp4';
+  // `D-165` — a sound is always stored as WAV.
+  if (kind === 'audio') return 'audio/wav';
   return 'application/octet-stream';
 }
 

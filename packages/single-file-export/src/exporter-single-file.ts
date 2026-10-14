@@ -28,6 +28,12 @@ import {
   videoMimeOf,
   type VideoRef,
 } from './video-export.js';
+import {
+  audioMimeOf,
+  collectAudioElements,
+  resolveAudioAsset,
+  type AudioRef,
+} from './audio-export.js';
 
 export interface SingleFileExportOptions {
   /** IIFE runtime bundle (`var CG = …`) — see `cg-runtime.ts` `cgJsIife`. */
@@ -128,6 +134,18 @@ export class ExporterSingleFile {
         code: 'missing-asset',
         severity: 'warning',
         message: `Video element "${ref.elementId}" references an asset whose bytes could not be resolved; it will not render in the exported HTML.`,
+        elementId: ref.elementId,
+      });
+    }
+    // `D-165` — each sound's stored WAV, base64-inlined into the same map
+    // (`data:audio/wav;base64,…`); the runtime's asset-src walk sets `<audio src>` from it. A
+    // missing sound is a warning on this never-blocking path, as a video's is.
+    const { missing: missingAudio } = await this.#inlineAudio(scene, assetUrls);
+    for (const ref of missingAudio) {
+      issues.push({
+        code: 'missing-asset',
+        severity: 'warning',
+        message: `Audio element "${ref.elementId}" references an asset whose bytes could not be resolved; it will not sound in the exported HTML.`,
         elementId: ref.elementId,
       });
     }
@@ -251,6 +269,30 @@ export class ExporterSingleFile {
         continue;
       }
       assetUrls[ref.assetId] = toDataUri(videoMimeOf(resolved.meta.filename), resolved.bytes);
+    }
+    return { missing };
+  }
+
+  /** `D-165` — each sound's stored WAV into `assetUrls`, mirroring `#inlineVideos`. */
+  async #inlineAudio(
+    scene: Scene,
+    assetUrls: Record<string, string>,
+  ): Promise<{ missing: AudioRef[] }> {
+    const failed = new Set<string>();
+    const missing: AudioRef[] = [];
+    for (const ref of collectAudioElements(scene)) {
+      if (assetUrls[ref.assetId] !== undefined) continue; // asset already inlined
+      if (failed.has(ref.assetId)) {
+        missing.push(ref);
+        continue;
+      }
+      const resolved = await resolveAudioAsset(this.#assets, ref.assetId);
+      if (resolved === null) {
+        failed.add(ref.assetId);
+        missing.push(ref);
+        continue;
+      }
+      assetUrls[ref.assetId] = toDataUri(audioMimeOf(resolved.meta.filename), resolved.bytes);
     }
     return { missing };
   }

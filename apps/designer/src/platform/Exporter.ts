@@ -17,6 +17,9 @@ import {
   collectImageElements,
   collectLottieElements,
   collectVideoElements,
+  collectAudioElements,
+  resolveAudioAsset,
+  audioMimeOf,
   compositeImageSource,
   resolveImageAsset,
   resolveVideoAsset,
@@ -137,6 +140,16 @@ export class Exporter {
           elementId: el.id,
         });
       }
+      // `D-165` — a sound follows the video: a missing sound is a silent hole on air, so the
+      // author sees it before any artifact is produced.
+      if (el.type === 'audio' && !knownAssetIds.has(el.assetId)) {
+        issues.push({
+          severity: 'error',
+          code: 'missing-asset',
+          message: `Audio element references unknown asset ${el.assetId}.`,
+          elementId: el.id,
+        });
+      }
       // D-039ext — a ticker IMAGE separator needs the same missing-asset check as an
       // image element (collectImageElements already inlines it), else it silently drops.
       if (
@@ -231,6 +244,7 @@ export class Exporter {
     {
       const inlineIds = new Set<string>();
       for (const { assetId } of collectVideoElements(scene)) inlineIds.add(assetId);
+      for (const { assetId } of collectAudioElements(scene)) inlineIds.add(assetId);
       for (const { assetId } of collectImageElements(scene)) inlineIds.add(assetId);
       for (const { assetId } of collectLottieElements(scene)) inlineIds.add(assetId);
       for (const font of scene.fonts) {
@@ -503,6 +517,26 @@ export class Exporter {
         bytes: bytes.byteLength,
         sha256: meta.sha256,
         mime: videoMimeOf(meta.filename),
+      });
+    }
+    // `D-165` — each sound's stored WAV as `assets/audio/<sha>.wav` + a `kind: 'audio'` index
+    // entry, exactly as a video packs; the boot's `assetUrls` wiring covers it (all non-lottie
+    // entries), and the runtime's asset-src walk sets `<audio src>`.
+    for (const { assetId } of collectAudioElements(scene)) {
+      if (seen.has(assetId)) continue;
+      seen.add(assetId);
+      const resolved = await resolveAudioAsset(this.#assets, assetId);
+      if (resolved === null) continue;
+      const { meta, bytes } = resolved;
+      const relativePath = `assets/audio/${meta.sha256}.wav`;
+      assetsMap.set(relativePath, bytes);
+      assetIndex.push({
+        id: meta.assetId,
+        path: relativePath,
+        kind: 'audio',
+        bytes: bytes.byteLength,
+        sha256: meta.sha256,
+        mime: audioMimeOf(meta.filename),
       });
     }
     // D-125 — pack each Lottie element's JSON as `assets/lottie/<sha>.json` bytes +
@@ -786,6 +820,8 @@ function mimeFor(ext: string): string {
       return 'video/mp4';
     case '.webm':
       return 'video/webm';
+    case '.wav':
+      return 'audio/wav';
     case '.json':
       return 'application/json';
     default:

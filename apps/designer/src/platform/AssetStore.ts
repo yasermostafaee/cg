@@ -1,4 +1,4 @@
-import type { AssetMeta, VideoProvenance } from '@cg/shared-ipc';
+import type { AssetMeta, AudioInfo, VideoProvenance } from '@cg/shared-ipc';
 import type { ProjectAssetEntry } from '@cg/shared-schema';
 import { sha256Hex } from '@cg/vcg-format';
 import type { Workspace } from '@cg/storage';
@@ -19,6 +19,8 @@ const KIND_BY_EXT: Record<string, AssetMeta['kind']> = {
   json: 'lottie',
   mp4: 'video',
   webm: 'video',
+  // `D-165` — the ONE stored form of a sound.
+  wav: 'audio',
 };
 
 function extOf(filename: string): string {
@@ -117,6 +119,8 @@ export class AssetStore {
     filename: string,
     kind: AssetMeta['kind'],
     provenance?: VideoProvenance,
+    /** `D-165` — a sound's measurements (duration, peak, rate, channels). */
+    audio?: AudioInfo,
   ): Promise<AssetMeta> {
     if (this.#projectId === null) {
       throw new Error('Cannot import an asset before a project is active');
@@ -141,6 +145,7 @@ export class AssetStore {
       byteSize: bytes.byteLength,
       workingPath,
       ...(provenance !== undefined ? { provenance } : {}),
+      ...(audio !== undefined ? { audio } : {}),
     };
     this.#index.set(meta.assetId, meta);
     await this.#persistIndex();

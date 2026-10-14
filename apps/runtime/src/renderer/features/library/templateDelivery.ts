@@ -8,6 +8,7 @@ import type {
 import {
   aggregateCompositionFields,
   hasNextStep,
+  hasSoundEffects,
   pageListsOf,
   TEMPLATE_TIMING_VERSION,
   templateTimingOf,
@@ -120,9 +121,9 @@ function vcgImageAssetSource(
       if (entry === undefined) return Promise.resolve(null);
       const meta: AssetMeta = {
         assetId: entry.id,
-        // `assetIndex` allows `'audio'`; `AssetMeta` does not. Image assets are
-        // never audio, so the narrowing is safe (the exporter only resolves images).
-        kind: entry.kind === 'audio' ? 'image' : entry.kind,
+        // `D-165` — `AssetMeta` holds every `assetIndex` kind now, `audio` included, so the
+        // kind is carried as the package states it (a sound resolves as a sound).
+        kind: entry.kind,
         filename: entry.path.slice(entry.path.lastIndexOf('/') + 1),
         sha256: entry.sha256,
         byteSize: entry.bytes,
@@ -220,6 +221,8 @@ export async function produceTemplateDelivery(
     // It rides `TemplateInfo` (not a browser-local store like R-011/R-018) so
     // the bridge persists it and every browser gets the same answer.
     hasNext: hasNextStep(scene, scene.compositions),
+    // `D-165` — the row's speaker mark: derived HERE, once, by the one predicate.
+    ...(hasSoundEffects(scene, scene.compositions) ? { hasSound: true } : {}),
     // `R-100` — the template's PAGE LISTS, at this same one moment and for `hasNext`'s reason:
     // which rows load pictures, and whether Next / Previous wrap. Absent when there are none.
     ...(() => {

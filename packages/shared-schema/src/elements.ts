@@ -1516,6 +1516,46 @@ export const VideoElementSchema = ElementBaseSchema.extend({
 export type VideoElement = z.infer<typeof VideoElementSchema>;
 
 /**
+ * `D-165` — WHEN a sound effect starts: at the graphic's ENTRANCE (its take — `CG PLAY`), a TIME in
+ * ms after that entrance, or at its EXIT (`CG STOP` / an auto-exit). A hard Clear is no exit, so it
+ * starts nothing.
+ */
+export const AudioStartSchema = z.discriminatedUnion('at', [
+  z.object({ at: z.literal('entrance') }),
+  z.object({ at: z.literal('exit') }),
+  z.object({ at: z.literal('time'), ms: z.number().int().nonnegative() }),
+]);
+export type AudioStart = z.infer<typeof AudioStartSchema>;
+
+/** `D-165` — the element's volume bounds, in dB (0 = as imported). */
+export const AUDIO_VOLUME_DB_MIN = -60;
+export const AUDIO_VOLUME_DB_MAX = 6;
+
+/**
+ * 🔴 `D-165` — a SOUND EFFECT authored in the template: a whoosh as the graphic enters, a hit as it
+ * leaves. NOT drawn on the canvas — it lives on the timeline and in the Inspector; the base
+ * `transform` is carried only because every element has one. It plays ONCE per occurrence (a hold
+ * never loops it) and never drives a hold. The referenced asset is the ONE stored form the import
+ * produces: 16-bit PCM WAV, 48 kHz stereo (`kind: 'audio'`) — measured to play from a template
+ * page on CasparCG 2.5.0. The page plays it through its own audio; the bridge sends no command for
+ * it.
+ */
+export const AudioElementSchema = ElementBaseSchema.extend({
+  type: z.literal('audio'),
+  /** The stored WAV asset (`kind: 'audio'`). */
+  assetId: IdSchema,
+  /** Sound duration in ms, measured at import (timeline span). */
+  durationMs: z.number().positive(),
+  start: AudioStartSchema.default({ at: 'entrance' }),
+  /** Gain in dB applied on playback, −60…+6; 0 plays the sound as imported. */
+  volumeDb: z.number().min(AUDIO_VOLUME_DB_MIN).max(AUDIO_VOLUME_DB_MAX).default(0),
+  /** Optional linear fades, in ms, from the sound's start and to its end. */
+  fadeInMs: z.number().int().nonnegative().optional(),
+  fadeOutMs: z.number().int().nonnegative().optional(),
+});
+export type AudioElement = z.infer<typeof AudioElementSchema>;
+
+/**
  * Composition instance — a reference to another composition (by id) placed as
  * a layer. The referenced composition's own layers are NOT copied in; the
  * runtime resolves and renders them nested at playout (a pre-comp instance).
@@ -1553,6 +1593,7 @@ export type Element =
   | LottieElement
   | VideoPlaceholderElement
   | VideoElement
+  | AudioElement
   | CompositionElement
   | ContainerElement;
 
@@ -1574,6 +1615,7 @@ export type ElementInput =
   | z.input<typeof LottieElementSchema>
   | VideoPlaceholderElement
   | z.input<typeof VideoElementSchema>
+  | z.input<typeof AudioElementSchema>
   | CompositionElement
   | ContainerElementInput;
 
@@ -1620,6 +1662,7 @@ export const ElementSchema: z.ZodType<Element, z.ZodTypeDef, ElementInput> = z.l
     LottieElementSchema,
     VideoPlaceholderElementSchema,
     VideoElementSchema,
+    AudioElementSchema,
     CompositionElementSchema,
     ContainerElementSchema,
   ]),

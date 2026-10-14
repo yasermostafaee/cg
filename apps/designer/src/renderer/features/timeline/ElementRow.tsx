@@ -585,6 +585,7 @@ const TYPE_COLORS: Record<Exclude<Element['type'], 'shape'>, string> = {
   lottie: '#A78BFA', // violet
   'video-placeholder': '#EF4444', // red
   video: '#06B6D4', // cyan — D-128 imported clip (distinct from the placeholder's red)
+  audio: '#84CC16', // lime — D-165 sound effect
   container: '#F97316', // orange
   composition: '#6366F1', // indigo — composition instance
 };

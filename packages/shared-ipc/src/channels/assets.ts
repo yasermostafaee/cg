@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { AssetKindSchema, AssetMetaSchema, VideoProvenanceSchema } from '@cg/shared-schema';
+import {
+  AssetKindSchema,
+  AssetMetaSchema,
+  AudioInfoSchema,
+  VideoProvenanceSchema,
+} from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 
@@ -20,9 +25,11 @@ import { definePublishChannel } from '../publish.js';
 export {
   AssetKindSchema,
   VideoProvenanceSchema,
+  AudioInfoSchema,
   AssetMetaSchema,
   type AssetKind,
   type VideoProvenance,
+  type AudioInfo,
   type AssetMeta,
 } from '@cg/shared-schema';
 
@@ -49,6 +56,8 @@ export const AssetsStoreBytesChannel = defineChannel(
     filename: z.string().min(1),
     kind: AssetKindSchema,
     provenance: VideoProvenanceSchema.optional(),
+    /** `D-165` — a sound's measurements, taken at import from the stored WAV. */
+    audio: AudioInfoSchema.optional(),
   }),
   z.object({ asset: AssetMetaSchema }),
 );

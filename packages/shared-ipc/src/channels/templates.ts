@@ -289,6 +289,14 @@ export const TemplateInfoSchema = z.object({
    */
   hasNext: z.boolean().optional(),
   /**
+   * `D-165` — this template MAKES SOUND: it carries a reachable, visible `audio` element
+   * (`hasSoundEffects`, the one predicate). Derived ONCE at import, for `hasNext`'s reason — it
+   * rides the catalogue of record, so every console marks the row alike. A fact the operator
+   * reads; it gates nothing. Absent: no sound (a template imported before this field reads so
+   * until it is imported again).
+   */
+  hasSound: z.boolean().optional(),
+  /**
    * `R-100` — this template's PAGE LISTS: each `list` field marked `pages` that drives a sequence,
    * and whether that sequence wraps (`repeat: 'infinite'`) or is a book that stops at its ends.
    * Derived ONCE at import from the unpacked scene, for `hasNext`'s reason — it rides the catalogue

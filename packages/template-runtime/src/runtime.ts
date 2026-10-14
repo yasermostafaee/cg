@@ -112,6 +112,8 @@ import { registerLottiePlayer } from './lottie-registry.js';
 import { ClockDriver, parseTimeOfDay } from './clock-driver.js';
 import { LottieDriver } from './lottie-driver.js';
 import { VideoDriver, type VideoHandle, type ElementOutroDriver } from './video-driver.js';
+import { AudioDriver, gainOfDb } from './audio-driver.js';
+import { createAudioHandle } from './audio-graph.js';
 import {
   RepeaterDriver,
   registerRepeaterDriver,
@@ -369,6 +371,8 @@ interface WiredSubtree {
   lotties: LottieDriver[];
   /** D-128 — Video drivers of this subtree (self-clocked media players). */
   videos: VideoDriver[];
+  /** `D-165` — sound drivers of this subtree (they never gate a hold). */
+  audios: AudioDriver[];
   /** Stop + destroy every driver and controller of this subtree, deregister. */
   destroy(): void;
 }
@@ -395,8 +399,9 @@ function applyAssetUrls(
   assetUrls?: Readonly<Record<string, string>>,
 ): void {
   if (assetUrls === undefined) return;
-  const nodes = container.querySelectorAll<HTMLImageElement | HTMLVideoElement>(
-    'img[data-cg-asset-id], video[data-cg-asset-id]',
+  // `D-165` — and `<audio data-cg-asset-id>`: a sound's WAV rides the same map in both exports.
+  const nodes = container.querySelectorAll<HTMLImageElement | HTMLVideoElement | HTMLAudioElement>(
+    'img[data-cg-asset-id], video[data-cg-asset-id], audio[data-cg-asset-id]',
   );
   nodes.forEach((node) => {
     const id = node.dataset['cgAssetId'];
@@ -860,6 +865,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     const repeaters: RepeaterDriver[] = [];
     const lotties: LottieDriver[] = [];
     const videos: VideoDriver[] = [];
+    const audios: AudioDriver[] = [];
     const controllers: PlayoutController[] = [];
 
     const wireScope = (
@@ -1212,6 +1218,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // subset that gates the hold (mirrors scopeLotties / holdLotties).
       const scopeVideos: VideoDriver[] = [];
       const holdVideos: VideoDriver[] = [];
+      // `D-165` — this scope's sound drivers. None of them ever joins a hold array.
+      const scopeAudios: AudioDriver[] = [];
       /**
        * D-125 Phase 3a — each VISIBLE, phase-marked Lottie's intro completion, in COMPOSITION
        * frames OFFSET from `active.in` (the frame the Lottie's intro starts — `play()` resets +
@@ -1656,6 +1664,41 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         }
       }
 
+      /*
+        🔴 `D-165` — THE SOUNDS. Each plays ONCE per occurrence and never gates a hold, so it joins
+        no hold array and no `contentDrivers` list. An EXIT sound joins the element-outro list so the
+        exit starts it; its `playOutro()` resolves at once, so a sound never holds the exit
+        (`audio-driver.ts`). Every sound joins the look park: one inside a hidden look is silenced
+        (its `silence` gain) and paused — it gates nothing, so it is always parkable.
+      */
+      for (const a of scope.audios) {
+        const el = a.element;
+        // B-034 — a HIDDEN element is fully inert: a hidden sound never plays.
+        if (el.visible === false) continue;
+        let playRejectionReported = false;
+        const { handle, silence } = createAudioHandle(
+          a.node,
+          {
+            gain: gainOfDb(el.volumeDb),
+            fadeInMs: el.fadeInMs ?? 0,
+            fadeOutMs: el.fadeOutMs ?? 0,
+            durationMs: el.durationMs,
+          },
+          (reason) => {
+            // Once per element, as a video reports its own (B-137): a silent failure to play is
+            // the one that is otherwise invisible.
+            if (playRejectionReported) return;
+            playRejectionReported = true;
+            console.warn(`[cg] audio "${el.id}": play() was rejected`, reason);
+          },
+        );
+        const driver = new AudioDriver({ handle, start: el.start, clock: options.clock });
+        scopeAudios.push(driver);
+        audios.push(driver);
+        lookMediaPark.register({ node: a.node, driver, parkable: true, audio: silence });
+        if (el.start.at === 'exit') scopeOutroLotties.push(driver);
+      }
+
       // D-028/D-027/D-029 — this scope's OWN content completion from its CONTENT
       // SOURCES that DRIVE the hold. D-107 — only content with `drivesHold !== false`
       // (absent ⇒ participates) gates the hold, so a permanent/looping/decorative
@@ -1718,6 +1761,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         // D-128 — halt the video rAF on settle (mirror the Lottie halt): a loop hold or
         // a superseded outro must not keep ticking after the background settles CLEARED.
         for (const v of scopeVideos) v.stop();
+        // `D-165` — entrance and timed sounds stop here; an exit sound plays on to its end.
+        for (const a of scopeAudios) a.stop();
       };
       // B-031 — resolves when THIS scope settles (after its outro), so a content-driven
       // parent can hold until a nested content-driven (coordinator) child has played out.
@@ -1964,6 +2009,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             v.reset();
             v.start();
           }
+          // `D-165` — a new cycle is a new occurrence: its entrance sound plays again, once.
+          for (const a of scopeAudios) {
+            a.reset();
+            a.start();
+          }
           // `B-150` — CONTENT-START CALLER 2 of 3: a loop-cycle boundary re-arms this scope's
           // own media, which un-pauses whatever the park had frozen.
           lookMediaPark.reassert();
@@ -2072,6 +2122,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       repeaters,
       lotties,
       videos,
+      audios,
       destroy(): void {
         // Symmetric teardown: rows first (each tears down its OWN subtree),
         // then controllers (stop timers/rAF before the drivers release their
@@ -2085,6 +2136,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         for (const l of lotties) l.destroy();
         // D-128 — tear down the video drivers (stops ticking + pauses; DOM removed above).
         for (const v of videos) v.destroy();
+        // `D-165` — the page is going away: every sound stops, an exit sound included.
+        for (const a of audios) a.destroy();
         subtrees.delete(sub);
       },
     };
@@ -2217,6 +2270,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // D-128 — halt every video on the root settle (the CLEARED terminal state has no
       // driver still ticking; the outro already played on every exit path).
       for (const v of sub.videos) v.stop();
+      // `D-165` — the settle silences entrance and timed sounds; an exit sound plays on.
+      for (const a of sub.audios) a.stop();
     }
     rootOnSettle();
   };
@@ -2610,6 +2665,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           v.reset();
           v.start();
         }
+      // 🔴 `D-165` — the ENTRANCE: an entrance sound starts at PLAY, a timed one is armed from
+      // here. A new play also silences an exit sound still ringing from the last run.
+      for (const sub of subtrees)
+        for (const a of sub.audios) {
+          a.reset();
+          a.start();
+        }
       /*
         `B-150` — CONTENT-START CALLER 3 of 3, and the one that matters most: a run's `play()`
         resets and starts EVERY driver in EVERY subtree, in every look, because the lifecycle
@@ -2879,6 +2941,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       for (const sub of subtrees) for (const l of sub.lotties) l.pause();
       // D-128 §D3 — pause the <video> AND capture its clock elapsed, so resume re-seeks.
       for (const sub of subtrees) for (const v of sub.videos) v.pause();
+      // `D-165` — a sound pauses where it is; a timed one's countdown holds.
+      for (const sub of subtrees) for (const a of sub.audios) a.pause();
     },
 
     resume(): void {
@@ -2894,6 +2958,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // D-128 §D3 — resume each video by RE-SEEKING to the clock-derived clip-time then
       // playing (the anti-drift re-anchor); a settled freeze-hold stays frozen.
       for (const sub of subtrees) for (const v of sub.videos) v.resume();
+      for (const sub of subtrees) for (const a of sub.audios) a.resume();
       // D-105 — finish an out() exit that was deferred because pause arrived mid-fade.
       if (pendingExitOutro) {
         pendingExitOutro = false;

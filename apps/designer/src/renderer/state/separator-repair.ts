@@ -94,6 +94,7 @@ const KIND_WORDS: Record<NonImageSeparator['kind'], string> = {
   font: 'a font',
   video: 'a video',
   lottie: 'an animation',
+  audio: 'a sound',
 };
 
 /** The ONE sentence the author is told, once, when the repair ran. */

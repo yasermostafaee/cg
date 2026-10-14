@@ -26,6 +26,10 @@ export {
   type Raster,
   type RasterView,
 } from './position.js';
+// `D-165` — the page's sound switch: the host (CG Control's PVW, silent by default; the Designer's
+// preview toggle) calls the page's OWN copy, as PVW calls `applyOutputPosition`.
+export { setSoundMuted, isSoundMuted, envelopeAt, type AudioShape } from './audio-graph.js';
+export { AudioDriver, gainOfDb, type AudioHandle } from './audio-driver.js';
 export { buildScene } from './scene-builder.js';
 export { applyFieldValues } from './bindings.js';
 export { applyTransform, stringifyValue } from './transforms.js';

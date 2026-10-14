@@ -15,6 +15,7 @@ import type {
   Scene,
   TickerElement,
   VideoElement,
+  AudioElement,
 } from '@cg/shared-schema';
 
 /**
@@ -498,6 +499,8 @@ export interface FieldScope {
   lotties: LottieEntry[];
   /** D-128 — video elements rendered directly in this scope (the `<video>` hosts). */
   videos: VideoEntry[];
+  /** `D-165` — audio elements rendered directly in this scope (never-painted `<audio>` nodes). */
+  audios: AudioEntry[];
   /**
    * B-089 — elements rendered directly in this scope that carry an explicit
    * `lifespan` (a timeline trim). Registered at BUILD time, so every scope — not
@@ -543,6 +546,12 @@ export interface LottieEntry {
 export interface VideoEntry {
   element: VideoElement;
   container: HTMLVideoElement;
+}
+
+/** `D-165` — one built sound: its element config + the `<audio>` node the driver plays. */
+export interface AudioEntry {
+  element: AudioElement;
+  node: HTMLAudioElement;
 }
 
 /** D-028 — one built ticker: its element config + the band/track DOM nodes. */

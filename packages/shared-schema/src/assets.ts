@@ -14,7 +14,26 @@ import { z } from 'zod';
  * unchanged — this is a move, not a rename.
  */
 
-export const AssetKindSchema = z.enum(['image', 'font', 'lottie', 'video']);
+export const AssetKindSchema = z.enum(['image', 'font', 'lottie', 'video', 'audio']);
+
+/** `D-165` — the quietest peak recorded; digital silence reads as this, never as −∞ (JSON has none). */
+export const AUDIO_PEAK_FLOOR_DBFS = -120;
+
+/**
+ * 🔴 `D-165` — what an imported SOUND is, measured at import from the stored bytes: its length, its
+ * PEAK sample level in dBFS (shown to the author; never normalised automatically), and the stored
+ * form's rate and channel count (48 kHz stereo, the broadcast rate). Optional + additive: every
+ * asset stored before it parses unchanged.
+ */
+export const AudioInfoSchema = z.object({
+  /** The picked source file's name (the stored asset's filename is the converted WAV's). */
+  sourceFilename: z.string().min(1),
+  durationMs: z.number().positive(),
+  peakDbfs: z.number().min(AUDIO_PEAK_FLOOR_DBFS).max(0),
+  sampleRate: z.number().int().positive(),
+  channels: z.number().int().positive(),
+});
+export type AudioInfo = z.infer<typeof AudioInfoSchema>;
 
 /**
  * D-128 — SOURCE lineage for a converted video asset, captured at conversion and
@@ -115,6 +134,8 @@ export const AssetMetaSchema = z.object({
    * additive: every existing stored asset parses unchanged.
    */
   provenance: VideoProvenanceSchema.optional(),
+  /** `D-165` — a sound's measurements (`kind: 'audio'` only). */
+  audio: AudioInfoSchema.optional(),
 });
 
 export type AssetMeta = z.infer<typeof AssetMetaSchema>;
