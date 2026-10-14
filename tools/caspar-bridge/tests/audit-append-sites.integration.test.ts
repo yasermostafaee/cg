@@ -134,6 +134,14 @@ const NON_VERB_ACTIONS = [
     the actor and the entries as asked.
   */
   'set-backup-channels',
+  /*
+    🔴 `PAGE-REBUILD-01` (`C-034`) — a template's PAGE built again by a console with another runtime.
+    A catalogue write like `template-remove`: it carries no `slot` and reaches air only through a
+    later take (never under a page on a layer). Driven by
+    `tests/template-rebuild.integration.test.ts`, which asserts one `ok` row per swap — written as
+    the console that built it — and one `failed` row with the reason.
+  */
+  'template-rebuild',
 ] as const;
 
 it('the "every playout verb" list is COMPLETE — each schema action is driven or named non-verb', () => {

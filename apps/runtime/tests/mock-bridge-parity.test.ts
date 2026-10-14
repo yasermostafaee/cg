@@ -313,7 +313,20 @@ const BRIDGE_SURFACE: {
     // `unreachable` (it retains no rendered page), so the rehearsal panel shows its one-line
     // reason. It replaced R-022's `html`, a read of this browser's copy alone.
     // `CONSOLE-POLISH-01` (`B-300`) — `onActed`: who changed the catalogue.
-    templates: ['get', 'list', 'import', 'remove', 'onChanged', 'onActed', 'page'],
+    templates: [
+      'get',
+      'list',
+      'import',
+      'remove',
+      'onChanged',
+      'onActed',
+      'page',
+      // `PAGE-REBUILD-01` (`C-034`) — keep the verified package, read it back, the plan, a rebuild.
+      'putSource',
+      'source',
+      'rebuildPlan',
+      'rebuild',
+    ],
     /*
       🔴 `OPERATOR-NAME-SWEEP-01` — **`operatorName` / `setOperatorName` LEFT THIS LIST, and
       this guard is the reason the removal is safe.**
