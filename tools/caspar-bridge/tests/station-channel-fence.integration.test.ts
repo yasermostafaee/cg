@@ -609,7 +609,7 @@ describe('the census: every route that names a channel, classified', () => {
       { fixedBank: BANK },
     );
 
-  it('twenty-two routes carry a channel key; eighteen carry it at the top level, where the fence reads', () => {
+  it('twenty-three routes carry a channel key; nineteen carry it at the top level, where the fence reads', () => {
     const table = buildRoutes(runtime());
     expect(table.size, 'the census is looking at the real table').toBeGreaterThan(50);
     const found = Object.fromEntries(
@@ -689,6 +689,8 @@ describe('the census: every route that names a channel, classified', () => {
       'templates.list': ['req.channel'],
       // `RELEASE-091-01` §1 — PVW reads the page of the version this channel lists.
       'templates.page': ['req.channel'],
+      // `PAGE-REBUILD-01` — what this channel's list needs re-imported or rebuilt: a read of it.
+      'templates.rebuild-plan': ['req.channel'],
       'templates.remove': ['req.channel'],
     });
   });
@@ -729,6 +731,7 @@ describe('the census: every route that names a channel, classified', () => {
       'templates.import',
       'templates.list',
       'templates.page',
+      'templates.rebuild-plan',
       'templates.remove',
     ]);
     for (const [name, route] of fenced) {

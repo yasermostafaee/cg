@@ -2,7 +2,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { TemplateInfoSchema, type TemplateInfo } from '@cg/shared-ipc';
+import {
+  PageBuildSchema,
+  TEMPLATE_SOURCE_MAX_BYTES,
+  TemplateInfoSchema,
+  type PageBuild,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
+import { compareSemver, parseSemver } from '@cg/shared-schema';
+import type { ActorContext } from './actor-context.js';
 
 /**
  * One stored VERSION of a template: its registry metadata, the rendered self-contained HTML
@@ -29,6 +37,22 @@ interface StoredVersion {
   readonly importedAt: string;
   /** The record file this version lives in; `null` with no persist dir (unit tests). */
   readonly file: string | null;
+  /**
+   * 🔴 `PAGE-REBUILD-01` (`C-034`) — the template runtime that built this page. Absent on every page
+   * built before the runtime was recorded.
+   */
+  readonly build?: PageBuild;
+  /**
+   * 🔴 `PAGE-REBUILD-01` — the SHA-256 of the `.vcg` this page was built from, kept in
+   * {@link SOURCES_DIR}: the package the console VERIFIED at import. Absent ⇒ nothing was kept, so
+   * this page cannot be built again and is listed for re-import once another runtime runs.
+   */
+  readonly sourceSha256?: string;
+  /**
+   * 🔴 `PAGE-REBUILD-01` — a rebuild by this runtime failed and the page was kept. A console with the
+   * same runtime does not try again (the operator was told once); one with another runtime does.
+   */
+  readonly rebuildFailed?: { readonly runtimeBuild: string; readonly reason: string };
 }
 
 /**
@@ -53,7 +77,73 @@ const PersistedTemplateSchema = z.object({
     .regex(/^[0-9a-f]{16}$/)
     .optional(),
   serveKey: z.string().min(1).optional(),
+  /** `PAGE-REBUILD-01` — see {@link StoredVersion.build}. Absent on every record written before. */
+  build: PageBuildSchema.optional(),
+  /** `PAGE-REBUILD-01` — see {@link StoredVersion.sourceSha256}. */
+  sourceSha256: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .optional(),
+  /** `PAGE-REBUILD-01` — see {@link StoredVersion.rebuildFailed}. */
+  rebuildFailed: z.object({ runtimeBuild: z.string().min(1), reason: z.string() }).optional(),
 });
+
+/**
+ * 🔴 `PAGE-REBUILD-01` (`C-034`) — **THE KEPT PACKAGES**, a subdirectory of the template store: one
+ * `<sha256>.vcg` per package, the exact bytes a console verified at import. A directory is never a
+ * record (`B-116`'s {@link RECORD_NAME} matches files only), so the record loader cannot read one.
+ */
+const SOURCES_DIR = 'template-sources';
+const SOURCE_NAME = /^([0-9a-f]{64})\.vcg$/;
+
+/**
+ * How long a package put by a console is kept before the import that names it arrives. The two are
+ * separate frames, and a collection in between (another channel's removal) must not delete it.
+ */
+const SOURCE_GRACE_MS = 30 * 60_000;
+
+/** One rebuild outcome the runtime records and announces. */
+export interface AppliedRebuild {
+  readonly from: {
+    readonly versionId: string;
+    readonly info: TemplateInfo;
+    readonly build?: PageBuild;
+  };
+  readonly to: {
+    readonly versionId: string;
+    readonly info: TemplateInfo;
+    readonly build: PageBuild;
+  };
+  /** The console's actor, captured when the page was sent (a deferred swap lands later). */
+  readonly actor: ActorContext | null;
+}
+
+/**
+ * 🔴 `PAGE-REBUILD-01` — **WAS THIS PAGE BUILT BY A NEWER CG CONTROL?** A console never rebuilds such
+ * a page: two consoles of different patch releases on one bridge would otherwise rebuild each other's
+ * pages back and forth. Fails OPEN on an unreadable version (a dev build's), like `runtimeShortfall`.
+ */
+/** A version with no failed-rebuild mark: a fresh build or package supersedes the old failure. */
+function withoutFailure(version: StoredVersion): StoredVersion {
+  return {
+    templateId: version.templateId,
+    versionId: version.versionId,
+    serveKey: version.serveKey,
+    info: version.info,
+    html: version.html,
+    importedAt: version.importedAt,
+    file: version.file,
+    ...(version.build !== undefined && { build: version.build }),
+    ...(version.sourceSha256 !== undefined && { sourceSha256: version.sourceSha256 }),
+  };
+}
+
+function builtByNewer(version: StoredVersion, build: PageBuild): boolean {
+  if (version.build === undefined) return false;
+  const theirs = parseSemver(version.build.consoleVersion);
+  const mine = parseSemver(build.consoleVersion);
+  return theirs !== null && mine !== null && compareSemver(theirs, mine) > 0;
+}
 
 /**
  * 🔴 `CHANNEL-TEMPLATES-01` — **THE LISTS AND THE HOLDS**, in one file beside the version records.
@@ -186,6 +276,18 @@ export class TemplateRegistry {
   readonly #holds = new Map<string, string>();
   /** versionId → `CG ADD`s of it in flight. In memory only: a restart has none in flight. */
   readonly #pins = new Map<string, number>();
+  /**
+   * 🔴 `PAGE-REBUILD-01` — the kept packages: sha256 → when a console last put it in this process
+   * (`null`: found on disk at boot) and, with no persist dir, the bytes themselves.
+   */
+  readonly #sources = new Map<string, { putAt: number | null; bytes: Buffer | null }>();
+  /**
+   * 🔴 `PAGE-REBUILD-01` — **REBUILT PAGES WAITING FOR THEIR OLD PAGE TO BE FREE**: old versionId →
+   * the new one, and who built it. The new version is stored (and kept by {@link #collect}) but no
+   * list names it until {@link settleRebuilds} finds no row with the old page on a layer. In memory
+   * only: after a restart the next console builds it again.
+   */
+  readonly #pending = new Map<string, { to: string; actor: ActorContext | null }>();
   readonly #persistDir: string | null;
   /**
    * 🔴 `CHANNEL-TEMPLATES-01` decision 5 — has the ONE-TIME COPY happened? False only while this
@@ -260,11 +362,31 @@ export class TemplateRegistry {
         html: record.html,
         importedAt,
         file,
+        ...(record.build !== undefined && { build: record.build }),
+        ...(record.sourceSha256 !== undefined && { sourceSha256: record.sourceSha256 }),
+        ...(record.rebuildFailed !== undefined && { rebuildFailed: record.rebuildFailed }),
       });
       this.#byServeKey.set(serveKey, versionId);
     }
+    this.#loadSources();
     this.#loadIndex();
     return { loaded: this.#versions.size, skipped };
+  }
+
+  /** `PAGE-REBUILD-01` — index the kept packages on disk (their bytes are read only when asked). */
+  #loadSources(): void {
+    const dir = this.#sourcesDir();
+    if (dir === null) return;
+    let names: string[];
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      return; // none kept yet
+    }
+    for (const name of names) {
+      const sha256 = SOURCE_NAME.exec(name)?.[1];
+      if (sha256 !== undefined) this.#sources.set(sha256, { putAt: null, bytes: null });
+    }
   }
 
   /**
@@ -456,6 +578,7 @@ export class TemplateRegistry {
     channels: readonly number[],
     info: TemplateInfo,
     html: string,
+    meta: { build?: PageBuild; sourceSha256?: string } = {},
   ): { versionId: string; changed: number[] } {
     const versionId = templateVersionId(info, html);
     const changed: number[] = [];
@@ -465,7 +588,17 @@ export class TemplateRegistry {
       list.set(info.templateId, versionId);
       changed.push(channel);
     }
-    if (!this.#versions.has(versionId)) {
+    /*
+      🔴 `PAGE-REBUILD-01` — a package reference is kept only when THIS store holds those bytes: a
+      reference to a package that is not here would list a page as rebuildable that cannot be.
+    */
+    const kept = {
+      ...(meta.build !== undefined && { build: meta.build }),
+      ...(meta.sourceSha256 !== undefined &&
+        this.#sources.has(meta.sourceSha256) && { sourceSha256: meta.sourceSha256 }),
+    };
+    const stored = this.#versions.get(versionId);
+    if (stored === undefined) {
       /*
         ⚠ COLLECT FIRST, THEN STORE. A re-import with nothing holding the old version releases
         it, and its bare serve key with it — so the new version takes the bare id, and the next
@@ -473,11 +606,277 @@ export class TemplateRegistry {
         a qualified key for an old one about to vanish.
       */
       this.#collect();
-      this.#store(info, html, versionId);
+      this.#store(info, html, versionId, kept);
+    } else if (
+      (kept.sourceSha256 !== undefined && stored.sourceSha256 === undefined) ||
+      (kept.build !== undefined && stored.build === undefined)
+    ) {
+      // The same page imported again by a console that keeps what the first did not.
+      this.#replace({ ...withoutFailure(stored), ...kept });
     }
     this.#persistIndex();
     this.#collect();
     return { versionId, changed };
+  }
+
+  // ── PAGE-REBUILD-01: THE KEPT PACKAGES ───────────────────────────────────────
+
+  /**
+   * 🔴 `PAGE-REBUILD-01` (`C-034`) — **KEEP ONE VERIFIED PACKAGE**, by the SHA-256 of the bytes as
+   * received (never a hash a console claims). Idempotent. Refused above
+   * {@link TEMPLATE_SOURCE_MAX_BYTES}; a failed write is reported and keeps nothing.
+   */
+  putSource(bytes: Buffer): { ok: true; sha256: string } | { ok: false; message: string } {
+    if (bytes.byteLength > TEMPLATE_SOURCE_MAX_BYTES) {
+      return { ok: false, message: 'The package is too large to keep for a rebuild.' };
+    }
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const known = this.#sources.get(sha256);
+    if (known !== undefined) {
+      this.#sources.set(sha256, { ...known, putAt: Date.now() });
+      return { ok: true, sha256 };
+    }
+    const dir = this.#sourcesDir();
+    if (dir === null) {
+      this.#sources.set(sha256, { putAt: Date.now(), bytes: Buffer.from(bytes) });
+      return { ok: true, sha256 };
+    }
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, `${sha256}.vcg`);
+      const tmp = `${file}.${String(process.pid)}.tmp`;
+      fs.writeFileSync(tmp, bytes);
+      fs.renameSync(tmp, file);
+    } catch (err) {
+      process.stderr.write(
+        `[caspar-bridge] ⚠ failed to keep a template package: ` +
+          `${err instanceof Error ? err.message : String(err)} — its page cannot be rebuilt\n`,
+      );
+      return { ok: false, message: 'CG Bridge could not keep the package for a rebuild.' };
+    }
+    this.#sources.set(sha256, { putAt: Date.now(), bytes: null });
+    return { ok: true, sha256 };
+  }
+
+  /** The kept package's bytes, or `null` when this store does not hold it. */
+  readSource(sha256: string): Buffer | null {
+    const entry = this.#sources.get(sha256);
+    if (entry === undefined) return null;
+    if (entry.bytes !== null) return entry.bytes;
+    const dir = this.#sourcesDir();
+    if (dir === null) return null;
+    try {
+      return fs.readFileSync(path.join(dir, `${sha256}.vcg`));
+    } catch {
+      return null;
+    }
+  }
+
+  /** Every kept package's hash — for tests that count what is kept. */
+  keptSources(): string[] {
+    return [...this.#sources.keys()];
+  }
+
+  /** A stored version as the rebuild reads it, or `null`. */
+  versionRecord(versionId: string): Readonly<StoredVersion> | null {
+    return this.#versions.get(versionId) ?? null;
+  }
+
+  // ── PAGE-REBUILD-01: THE PLAN AND THE SWAP ───────────────────────────────────
+
+  /**
+   * 🔴 `PAGE-REBUILD-01` — **WHAT A CONSOLE RUNNING `build` SHOULD REBUILD, AND WHAT IT CANNOT.**
+   * Over the pages a list names (with `channel`, that channel's list; without, every list):
+   *
+   * - built by `build`'s runtime → current, nothing to do;
+   * - built by a NEWER CG Control → not this console's to touch;
+   * - already rebuilt and waiting to be swapped in → in hand;
+   * - its package kept, and no failed rebuild by this runtime → `rebuild`;
+   * - otherwise → `reimport`: `failed` when this runtime's rebuild failed, else `no-source`.
+   *
+   * `reimport` names each template once, whatever versions or channels it is listed at.
+   */
+  rebuildPlan(
+    build: PageBuild,
+    channel?: number,
+  ): {
+    rebuild: { versionId: string; template: TemplateInfo; sourceSha256: string }[];
+    reimport: { template: TemplateInfo; reason: 'no-source' | 'failed' }[];
+  } {
+    const lists =
+      channel === undefined ? [...this.#lists.values()] : [this.#lists.get(channel) ?? new Map()];
+    const seen = new Set<string>();
+    const reimportIds = new Set<string>();
+    const rebuild: { versionId: string; template: TemplateInfo; sourceSha256: string }[] = [];
+    const reimport: { template: TemplateInfo; reason: 'no-source' | 'failed' }[] = [];
+    for (const list of lists) {
+      for (const versionId of list.values()) {
+        if (seen.has(versionId)) continue;
+        seen.add(versionId);
+        const version = this.#versions.get(versionId);
+        if (version === undefined) continue;
+        if (version.build?.runtimeBuild === build.runtimeBuild) continue;
+        if (builtByNewer(version, build) || this.#pending.has(versionId)) continue;
+        const failed = version.rebuildFailed?.runtimeBuild === build.runtimeBuild;
+        if (
+          version.sourceSha256 !== undefined &&
+          this.#sources.has(version.sourceSha256) &&
+          !failed
+        ) {
+          rebuild.push({ versionId, template: version.info, sourceSha256: version.sourceSha256 });
+        } else if (!reimportIds.has(version.templateId)) {
+          reimportIds.add(version.templateId);
+          reimport.push({ template: version.info, reason: failed ? 'failed' : 'no-source' });
+        }
+      }
+    }
+    return { rebuild, reimport };
+  }
+
+  /**
+   * 🔴 `PAGE-REBUILD-01` — **ONE PAGE, BUILT AGAIN** (or the report that it could not be).
+   *
+   * `mayBeOnALayer(versionId)` is the caller's answer to "could a row have this page on a layer
+   * now?" — only the runtime sees the rows. While it says yes, the rebuilt page is STORED and held
+   * back ({@link settleRebuilds} swaps it in later); nothing a list names changes, so nothing on air
+   * or loaded is touched. When it says no, every list naming the old page names the new one, at its
+   * own new serve key; the old page stays stored and served while any row holds it.
+   *
+   * `stale` when there is nothing to do: the old page is gone or no list names it, it is current or
+   * a newer CG Control built it, a rebuild of it is already waiting, or the new page is another
+   * template.
+   */
+  rebuild(
+    oldVersionId: string,
+    build: PageBuild,
+    result: { ok: true; info: TemplateInfo; html: string } | { ok: false; reason: string },
+    mayBeOnALayer: (versionId: string) => boolean,
+    actor: ActorContext | null,
+  ):
+    | { outcome: 'stale' }
+    | { outcome: 'recorded'; from: StoredVersion }
+    | { outcome: 'deferred' }
+    | { outcome: 'rebuilt'; applied: AppliedRebuild } {
+    const old = this.#versions.get(oldVersionId);
+    if (
+      old === undefined ||
+      !this.#listed(oldVersionId) ||
+      old.build?.runtimeBuild === build.runtimeBuild ||
+      builtByNewer(old, build) ||
+      this.#pending.has(oldVersionId) ||
+      (result.ok && result.info.templateId !== old.templateId)
+    ) {
+      return { outcome: 'stale' };
+    }
+    if (!result.ok) {
+      const failed: StoredVersion = {
+        ...old,
+        rebuildFailed: { runtimeBuild: build.runtimeBuild, reason: result.reason },
+      };
+      this.#replace(failed);
+      return { outcome: 'recorded', from: failed };
+    }
+    const newVersionId = templateVersionId(result.info, result.html);
+    const kept = {
+      build,
+      ...(old.sourceSha256 !== undefined && { sourceSha256: old.sourceSha256 }),
+    };
+    if (newVersionId === oldVersionId) {
+      // The new runtime builds the very same page: nothing to serve anew, only the record moves on.
+      this.#replace({ ...withoutFailure(old), ...kept });
+      return {
+        outcome: 'rebuilt',
+        applied: {
+          from: {
+            versionId: oldVersionId,
+            info: old.info,
+            ...(old.build !== undefined && { build: old.build }),
+          },
+          to: { versionId: newVersionId, info: old.info, build },
+          actor,
+        },
+      };
+    }
+    if (!this.#versions.has(newVersionId)) {
+      this.#store(result.info, result.html, newVersionId, kept);
+    }
+    if (mayBeOnALayer(oldVersionId)) {
+      this.#pending.set(oldVersionId, { to: newVersionId, actor });
+      return { outcome: 'deferred' };
+    }
+    return { outcome: 'rebuilt', applied: this.#swap(oldVersionId, newVersionId, actor) };
+  }
+
+  /**
+   * 🔴 `PAGE-REBUILD-01` — **SWAP IN EVERY WAITING REBUILD WHOSE OLD PAGE IS NOW FREE.** Called by the
+   * runtime whenever a row's state changes, a row leaves the stack, or an ADD settles. Answers the
+   * swaps made, for the audit and the push. Cheap when nothing waits.
+   */
+  settleRebuilds(mayBeOnALayer: (versionId: string) => boolean): AppliedRebuild[] {
+    if (this.#pending.size === 0) return [];
+    const applied: AppliedRebuild[] = [];
+    let dropped = false;
+    for (const [from, { to, actor }] of [...this.#pending]) {
+      if (!this.#versions.has(from) || !this.#versions.has(to) || !this.#listed(from)) {
+        // The old page left every list meanwhile (a re-import, a removal): nothing to swap, and
+        // the rebuilt page nobody will list is collected below.
+        this.#pending.delete(from);
+        dropped = true;
+        continue;
+      }
+      if (mayBeOnALayer(from)) continue;
+      this.#pending.delete(from);
+      applied.push(this.#swap(from, to, actor));
+    }
+    if (dropped && applied.length === 0) this.#collect();
+    return applied;
+  }
+
+  /** The rows holding `versionId` (its last page was served from it). */
+  holdersOf(versionId: string): string[] {
+    return [...this.#holds.entries()].filter(([, v]) => v === versionId).map(([itemId]) => itemId);
+  }
+
+  /** Whether a `CG ADD` of `versionId` is in flight. */
+  isPinned(versionId: string): boolean {
+    return (this.#pins.get(versionId) ?? 0) > 0;
+  }
+
+  /** Whether a rebuild of `versionId` is waiting for it to be free — for tests. */
+  isRebuildPending(versionId: string): boolean {
+    return this.#pending.has(versionId);
+  }
+
+  #listed(versionId: string): boolean {
+    for (const list of this.#lists.values()) {
+      for (const v of list.values()) if (v === versionId) return true;
+    }
+    return false;
+  }
+
+  /** Every list naming `from` names `to` instead, in the same place. */
+  #swap(from: string, to: string, actor: ActorContext | null): AppliedRebuild {
+    for (const list of this.#lists.values()) {
+      for (const [templateId, versionId] of list) {
+        if (versionId === from) list.set(templateId, to);
+      }
+    }
+    const old = this.#versions.get(from);
+    const next = this.#versions.get(to);
+    this.#persistIndex();
+    this.#collect();
+    if (old === undefined || next?.build === undefined) {
+      throw new Error(`rebuild swap of ${from} → ${to} lost a version`);
+    }
+    return {
+      from: {
+        versionId: from,
+        info: old.info,
+        ...(old.build !== undefined && { build: old.build }),
+      },
+      to: { versionId: to, info: next.info, build: next.build },
+      actor,
+    };
   }
 
   /**
@@ -601,14 +1000,19 @@ export class TemplateRegistry {
   }
 
   /** Store a new version: memory, then its record (atomic tmp + rename). Non-fatal on error. */
-  #store(info: TemplateInfo, html: string, versionId: string): void {
+  #store(
+    info: TemplateInfo,
+    html: string,
+    versionId: string,
+    kept: { build?: PageBuild; sourceSha256?: string } = {},
+  ): void {
     const serveKey = this.#freeServeKey(info.templateId, versionId);
     const importedAt = new Date().toISOString();
     const file =
       this.#persistDir === null
         ? null
         : path.join(this.#persistDir, registryRecordFileName(serveKey));
-    this.#versions.set(versionId, {
+    const version: StoredVersion = {
       templateId: info.templateId,
       versionId,
       serveKey,
@@ -616,8 +1020,26 @@ export class TemplateRegistry {
       html,
       importedAt,
       file,
-    });
+      ...(kept.build !== undefined && { build: kept.build }),
+      ...(kept.sourceSha256 !== undefined && { sourceSha256: kept.sourceSha256 }),
+    };
+    this.#versions.set(versionId, version);
     this.#byServeKey.set(serveKey, versionId);
+    this.#writeRecord(version);
+  }
+
+  /**
+   * `PAGE-REBUILD-01` — a stored version's facts changed (a kept package attached, a failed rebuild
+   * marked): same page, same serve key, same record file, rewritten.
+   */
+  #replace(version: StoredVersion): void {
+    this.#versions.set(version.versionId, version);
+    this.#writeRecord(version);
+  }
+
+  /** Write one version's record (atomic tmp + rename). Non-fatal on error. */
+  #writeRecord(version: StoredVersion): void {
+    const { file } = version;
     if (file === null || this.#persistDir === null) return;
     try {
       fs.mkdirSync(this.#persistDir, { recursive: true });
@@ -625,22 +1047,29 @@ export class TemplateRegistry {
       fs.writeFileSync(
         tmp,
         `${JSON.stringify({
-          info,
-          html,
-          importedAt,
-          versionId,
-          serveKey,
+          info: version.info,
+          html: version.html,
+          importedAt: version.importedAt,
+          versionId: version.versionId,
+          serveKey: version.serveKey,
+          ...(version.build !== undefined && { build: version.build }),
+          ...(version.sourceSha256 !== undefined && { sourceSha256: version.sourceSha256 }),
+          ...(version.rebuildFailed !== undefined && { rebuildFailed: version.rebuildFailed }),
         } satisfies z.infer<typeof PersistedTemplateSchema>)}\n`,
         'utf8',
       );
       fs.renameSync(tmp, file);
     } catch (err) {
       process.stderr.write(
-        `[caspar-bridge] ⚠ failed to persist template ${info.templateId}: ` +
-          `${err instanceof Error ? err.message : String(err)} — the import is still live ` +
+        `[caspar-bridge] ⚠ failed to persist template ${version.templateId}: ` +
+          `${err instanceof Error ? err.message : String(err)} — the change is still live ` +
           `in memory but will not survive a bridge restart\n`,
       );
     }
+  }
+
+  #sourcesDir(): string | null {
+    return this.#persistDir === null ? null : path.join(this.#persistDir, SOURCES_DIR);
   }
 
   /**
@@ -653,6 +1082,8 @@ export class TemplateRegistry {
     const kept = new Set<string>([...this.#holds.values(), ...this.#pins.keys()]);
     for (const list of this.#lists.values())
       for (const versionId of list.values()) kept.add(versionId);
+    // `PAGE-REBUILD-01` — a rebuilt page waiting to be swapped in is kept until it is.
+    for (const { to } of this.#pending.values()) kept.add(to);
     for (const [versionId, version] of this.#versions) {
       if (kept.has(versionId)) continue;
       this.#versions.delete(versionId);
@@ -665,6 +1096,35 @@ export class TemplateRegistry {
       } catch (err) {
         process.stderr.write(
           `[caspar-bridge] ⚠ failed to delete template record ${version.file}: ` +
+            `${err instanceof Error ? err.message : String(err)}\n`,
+        );
+      }
+    }
+    this.#collectSources();
+  }
+
+  /**
+   * 🔴 `PAGE-REBUILD-01` — a kept package is deleted when no stored page names it, unless a console
+   * put it within {@link SOURCE_GRACE_MS} (its import has not arrived yet). Found on disk at boot
+   * and named by nothing, it goes at once.
+   */
+  #collectSources(now = Date.now()): void {
+    if (this.#sources.size === 0) return;
+    const named = new Set<string>();
+    for (const version of this.#versions.values()) {
+      if (version.sourceSha256 !== undefined) named.add(version.sourceSha256);
+    }
+    const dir = this.#sourcesDir();
+    for (const [sha256, { putAt }] of [...this.#sources]) {
+      if (named.has(sha256)) continue;
+      if (putAt !== null && now - putAt < SOURCE_GRACE_MS) continue;
+      this.#sources.delete(sha256);
+      if (dir === null) continue;
+      try {
+        fs.rmSync(path.join(dir, `${sha256}.vcg`), { force: true });
+      } catch (err) {
+        process.stderr.write(
+          `[caspar-bridge] ⚠ failed to delete a kept template package ${sha256}: ` +
             `${err instanceof Error ? err.message : String(err)}\n`,
         );
       }

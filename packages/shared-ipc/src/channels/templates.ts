@@ -460,6 +460,25 @@ export function requiredBankFor(template: Pick<TemplateInfo, 'liveSources'>): 'l
  */
 const TemplateChannelSchema = z.number().int().positive();
 
+/** A lowercase SHA-256, hex. */
+const Sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/);
+
+/**
+ * 🔴 `PAGE-REBUILD-01` (`C-034`) — **WHICH TEMPLATE RUNTIME BUILT A PAGE.** CG Control builds every
+ * page at import from its own bundled runtime, so a page is as old as the console that built it.
+ *
+ * - `consoleVersion` — CG Control's release (`0.12.0`): a console never rebuilds a page a NEWER
+ *   release built, so two consoles of different patch releases on one bridge cannot undo each other.
+ * - `runtimeBuild` — the fingerprint of what goes into every page (the runtime bundles, the base
+ *   CSS, the app fonts and the exporter's shell revision; `pageRuntimeBuild`). A page whose
+ *   fingerprint differs from the running console's was built by another runtime.
+ */
+export const PageBuildSchema = z.object({
+  consoleVersion: z.string().min(1).max(64),
+  runtimeBuild: z.string().regex(/^[0-9a-f]{16}$/),
+});
+export type PageBuild = z.infer<typeof PageBuildSchema>;
+
 export const TemplatesGetChannel = defineChannel(
   'templates.get',
   z.object({ templateId: IdSchema, channel: TemplateChannelSchema.optional() }),
@@ -537,11 +556,119 @@ export const TemplatesImportChannel = defineChannel(
      * every other channel keeps the version it lists.
      */
     channel: TemplateChannelSchema.optional(),
+    /**
+     * 🔴 `PAGE-REBUILD-01` (`C-034`) — the template runtime this page was built with. Absent from a
+     * console that predates it; such a page is listed for re-import once a newer runtime runs.
+     */
+    build: PageBuildSchema.optional(),
+    /**
+     * 🔴 `PAGE-REBUILD-01` — the SHA-256 of the `.vcg` this page was built from, as CG Bridge
+     * answered `templates.source.put` for it: the package VERIFIED at this import, kept so the page
+     * can be built again when the runtime changes. Absent ⇒ nothing kept, and the page cannot be
+     * rebuilt. The bridge keeps the reference only when it holds those bytes.
+     */
+    sourceSha256: Sha256HexSchema.optional(),
   }),
   z.object({
     registered: z.boolean(),
     templateId: IdSchema,
   }),
+);
+
+/**
+ * 🔴 `PAGE-REBUILD-01` (`C-034`) — **THE BIGGEST PACKAGE CG BRIDGE KEEPS FOR A REBUILD.** The bytes
+ * travel base64 in one socket frame, and the bridge's frame cap is 64 MB, so a larger package would
+ * close the socket rather than be refused. Above this the console keeps nothing, and the template
+ * is listed for re-import when the runtime changes — the import itself is unaffected.
+ */
+export const TEMPLATE_SOURCE_MAX_BYTES = 44 * 1024 * 1024;
+
+/**
+ * 🔴 `PAGE-REBUILD-01` — **KEEP THE VERIFIED PACKAGE**, before the `templates.import` that names it.
+ * A separate frame because the page already fills most of the import's: the two together would
+ * cross the bridge's frame cap for a package that imports today. CG Bridge stores the bytes once,
+ * by its OWN SHA-256 of them (a claimed hash is never trusted), beside the template records, and
+ * deletes them when no stored page names them (after a grace for the import that will).
+ */
+export const TemplatesSourcePutChannel = defineChannel(
+  'templates.source.put',
+  z.object({ base64: z.string().min(1) }),
+  z.object({
+    stored: z.boolean(),
+    sha256: Sha256HexSchema.optional(),
+    message: z.string().optional(),
+  }),
+);
+
+/**
+ * 🔴 `PAGE-REBUILD-01` — **THE KEPT PACKAGE, READ BACK** for a rebuild. A read: the console checks the
+ * bytes hash to what it asked for and then runs the SAME `verify` the import ran, so a page is only
+ * ever rebuilt from bytes that pass the check its first build passed.
+ */
+export const TemplatesSourceGetChannel = defineChannel(
+  'templates.source.get',
+  z.object({ sha256: Sha256HexSchema }),
+  z.union([
+    z.object({ ok: z.literal(true), base64: z.string() }),
+    z.object({ ok: z.literal(false), reason: z.literal('no-source') }),
+  ]),
+);
+
+/**
+ * 🔴 `PAGE-REBUILD-01` — **WHAT A CONSOLE WITH THIS RUNTIME SHOULD REBUILD, AND WHAT IT CANNOT.**
+ *
+ * - `rebuild` — listed pages built by another runtime, whose package was kept: one entry per stored
+ *   version, never one a newer CG Control built, never one whose rebuild already failed for this
+ *   runtime, and never one already waiting to be swapped in.
+ * - `reimport` — listed templates whose page was built by another runtime and cannot be rebuilt:
+ *   imported before the package was kept (`no-source`), or a rebuild for THIS runtime failed
+ *   (`failed`). Named in the Library, once — nothing else changes for them.
+ *
+ * With `channel`, only that channel's list; without, every channel's.
+ */
+export const TemplatesRebuildPlanChannel = defineChannel(
+  'templates.rebuild-plan',
+  z.object({ build: PageBuildSchema, channel: TemplateChannelSchema.optional() }),
+  z.object({
+    rebuild: z.array(
+      z.object({
+        versionId: z.string().min(1),
+        template: TemplateInfoSchema,
+        sourceSha256: Sha256HexSchema,
+      }),
+    ),
+    reimport: z.array(
+      z.object({
+        template: TemplateInfoSchema,
+        reason: z.enum(['no-source', 'failed']),
+      }),
+    ),
+  }),
+);
+
+/**
+ * 🔴 `PAGE-REBUILD-01` — **ONE PAGE, BUILT AGAIN BY THIS CONSOLE** (or the reason it could not be).
+ *
+ * - `rebuilt` — every channel that listed the old page lists the new one; it is served at a new
+ *   path (`<templateId>~<version>`), and the old page stays stored and served while a row holds it.
+ * - `deferred` — a row holding the old page is on air or has it loaded on its layer; the new page is
+ *   swapped in by CG Bridge the moment no row does, and nothing on air is touched meanwhile.
+ * - `recorded` — the console reported a failure: the old page is kept and still listed, and this
+ *   runtime will not try that page again.
+ * - `stale` — nothing to do: the page is already current, gone, built by a newer CG Control, or the
+ *   new page is not the same template.
+ */
+export const TemplatesRebuildChannel = defineChannel(
+  'templates.rebuild',
+  z.object({
+    versionId: z.string().min(1),
+    build: PageBuildSchema,
+    result: z.union([
+      z.object({ ok: z.literal(true), template: TemplateInfoSchema, html: z.string() }),
+      z.object({ ok: z.literal(false), reason: z.string().min(1).max(512) }),
+    ]),
+  }),
+  z.object({ outcome: z.enum(['rebuilt', 'deferred', 'recorded', 'stale']) }),
 );
 
 /**

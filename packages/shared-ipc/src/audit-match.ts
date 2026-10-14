@@ -1,7 +1,7 @@
 import type { AuditEntry } from '@cg/shared-schema';
 import type { BankSet } from './channels/fixedLayers.js';
 import type { AuditFilter } from './channels/audit.js';
-import { commandForDisplay, placeName, timingClause } from './operator-naming.js';
+import { commandForDisplay, placeName, rebuildClause, timingClause } from './operator-naming.js';
 
 /**
  * 🔴 `CONSOLE-POLISH-01` (`R-083`) — **WHICH AUDIT ROWS A FILTER KEEPS: ONE PREDICATE.**
@@ -41,6 +41,8 @@ export function auditShownWords(entry: AuditEntry, naming: AuditNaming): string[
     entry.errorCode,
     entry.command === undefined ? undefined : commandForDisplay(entry.command),
     timingClause(entry.timing),
+    // `PAGE-REBUILD-01` — a rebuild row's releases, as the row shows them.
+    rebuildClause(entry.rebuild),
   ].filter((v): v is string => typeof v === 'string' && v !== '');
 }
 

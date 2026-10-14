@@ -181,6 +181,11 @@ import {
   TemplatesImportChannel,
   TemplatesListChannel,
   TemplatesRemoveChannel,
+  TemplatesRebuildChannel,
+  TemplatesRebuildPlanChannel,
+  TemplatesSourceGetChannel,
+  TemplatesSourcePutChannel,
+  type PageBuild,
   TEMPLATE_REDELIVERY_REFUSAL,
   UpdateCancelChannel,
   UpdateRequestChannel,
@@ -1574,7 +1579,10 @@ export function channelsForRequest(
     name === TemplatesListChannel.name ||
     name === TemplatesGetChannel.name ||
     // `RELEASE-091-01` §1 — PVW's page is a read of the same list, for the same reason.
-    name === TemplatesPageChannel.name
+    name === TemplatesPageChannel.name ||
+    // `PAGE-REBUILD-01` — what needs rebuilding, and a kept package: reads of the same store.
+    name === TemplatesRebuildPlanChannel.name ||
+    name === TemplatesSourceGetChannel.name
   ) {
     return [];
   }
@@ -1585,6 +1593,16 @@ export function channelsForRequest(
     judged by its permission (`operator`) alone; an unnamed picture is swept after its grace.
   */
   if (name === PagesPutChannel.name) return [];
+
+  /*
+    🔴 `PAGE-REBUILD-01` (`C-034`) — KEEPING A PACKAGE AND SENDING A REBUILT PAGE ACT ON NO CHANNEL.
+    A kept package lists nothing; a rebuilt page is the same template, built from the package the
+    station already accepted, and it reaches a channel's air only through that channel's next take
+    — never under a page on a layer (the registry holds it back). So both are judged by their
+    permission (`operator`) alone, like `pages.put`: a console granted one channel keeps every
+    channel's pages current, and a channel's operator is not refused for another's template.
+  */
+  if (name === TemplatesSourcePutChannel.name || name === TemplatesRebuildChannel.name) return [];
 
   // (a) the request carries the coordinate itself.
   const explicit = explicitChannel(req);
@@ -5030,8 +5048,41 @@ export function buildRoutes(
       TemplatesImportChannel,
       'operator',
       'operator',
-      (r: { template: never; html: string; channel?: number }) =>
-        b.templateImport(r.template, r.html, r.channel),
+      (r: {
+        template: never;
+        html: string;
+        channel?: number;
+        build?: PageBuild;
+        sourceSha256?: string;
+      }) =>
+        b.templateImport(r.template, r.html, r.channel, {
+          ...(r.build !== undefined && { build: r.build }),
+          ...(r.sourceSha256 !== undefined && { sourceSha256: r.sourceSha256 }),
+        }),
+    ),
+    // `PAGE-REBUILD-01` (`C-034`) — the verified package kept for a rebuild, read back for one,
+    // what a console's runtime should rebuild, and one rebuilt page (or why it could not be built).
+    route(TemplatesSourcePutChannel, 'operator', 'operator', (r: { base64: string }) =>
+      b.templateSourcePut(r.base64),
+    ),
+    route(TemplatesSourceGetChannel, 'read', 'read', (r: { sha256: string }) =>
+      b.templateSourceGet(r.sha256),
+    ),
+    route(
+      TemplatesRebuildPlanChannel,
+      'read',
+      'read',
+      (r: { build: PageBuild; channel?: number }) => b.templateRebuildPlan(r.build, r.channel),
+    ),
+    route(
+      TemplatesRebuildChannel,
+      'operator',
+      'operator',
+      (r: {
+        versionId: string;
+        build: PageBuild;
+        result: { ok: true; template: never; html: string } | { ok: false; reason: string };
+      }) => b.templateRebuild(r.versionId, r.build, r.result),
     ),
     // R-005 — the bridge is authoritative for the refusal (refuse-while-referenced).
     route(

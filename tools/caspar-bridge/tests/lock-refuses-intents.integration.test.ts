@@ -360,6 +360,9 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'templates.get',
         'templates.list',
         'templates.page',
+        // `PAGE-REBUILD-01` — two reads; keeping a package and a rebuild are refused locked.
+        'templates.rebuild-plan',
+        'templates.source.get',
         'update.state',
       ].sort(),
     );

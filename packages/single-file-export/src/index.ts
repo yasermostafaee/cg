@@ -26,3 +26,6 @@ export { collectAudioElements, resolveAudioAsset, audioMimeOf } from './audio-ex
 export type { AudioRef, AudioAssetSource } from './audio-export.js';
 
 export { cgJs, cgJsIife, cgJsLottie, cgJsLottieIife, cgCss } from './cg-runtime.js';
+
+// `PAGE-REBUILD-01` (`C-034`) — which template runtime a page was built with.
+export { EXPORTER_SHELL_REVISION, pageRuntimeBuild } from './page-build.js';

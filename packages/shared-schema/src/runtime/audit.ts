@@ -116,6 +116,14 @@ export const AuditEntrySchema = z.object({
       CONFIGURATION verb: it seats nothing, and an entry is used only once the backup engine's D4 confirms it.
     */
     'set-backup-channels',
+    /*
+      🔴 `PAGE-REBUILD-01` (`C-034`) — a template's PAGE was built again from the package kept at
+      its import, because CG Control's template runtime changed: `ok` once the rebuilt page is the
+      one its channels list, `failed` when the build failed and the old page was kept. One row per
+      rebuild, carrying the template's name and both runtimes in `rebuild`. The actor is the console
+      that built it; nothing on air was touched (a page on a layer waits until it is not).
+    */
+    'template-rebuild',
   ]),
   /**
    * 🔴 `C-037` / ADR 0010 rule 3 — the token's `sub`: an opaque, stable user id, kept
@@ -239,6 +247,23 @@ export const AuditEntrySchema = z.object({
       }),
     )
     .max(64)
+    .optional(),
+  /**
+   * `PAGE-REBUILD-01` (`C-034`) — WHAT a `template-rebuild` row carried: the template's name as the
+   * operator reads it, the runtime its old page was built with and the one the new page was built
+   * with (`consoleVersion` is CG Control's release, `runtimeBuild` the fingerprint of its template
+   * runtime), and — on a `failed` row — why the build failed. Data, not a sentence: the Log words
+   * it. Absent on every other action.
+   */
+  rebuild: z
+    .object({
+      name: z.string().min(1).max(256),
+      from: z
+        .object({ consoleVersion: z.string().min(1).max(64), runtimeBuild: z.string().min(1) })
+        .optional(),
+      to: z.object({ consoleVersion: z.string().min(1).max(64), runtimeBuild: z.string().min(1) }),
+      reason: z.string().max(512).optional(),
+    })
     .optional(),
 });
 export type AuditEntry = z.infer<typeof AuditEntrySchema>;

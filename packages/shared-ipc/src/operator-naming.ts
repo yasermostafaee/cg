@@ -244,3 +244,28 @@ export function timingClause(
   }
   return parts.length === 0 ? null : parts.join(' · ');
 }
+
+/**
+ * 🔴 `PAGE-REBUILD-01` (`C-034`) — a `template-rebuild` row's VALUE as one clause: the CG Control
+ * release whose runtime built the old page, and the one that built the new (`0.11.6 → 0.12.0`).
+ * The runtime fingerprints and a failure's reason are technical facts — the row's hover carries
+ * them ({@link rebuildDetail}). `null` on every other row.
+ */
+export function rebuildClause(
+  rebuild:
+    | { from?: { consoleVersion: string } | undefined; to: { consoleVersion: string } }
+    | undefined,
+): string | null {
+  if (rebuild === undefined) return null;
+  return `${rebuild.from?.consoleVersion ?? 'earlier'} → ${rebuild.to.consoleVersion}`;
+}
+
+/** `PAGE-REBUILD-01` — the hover of {@link rebuildClause}: both runtime fingerprints, and why it failed. */
+export function rebuildDetail(rebuild: {
+  from?: { runtimeBuild: string } | undefined;
+  to: { runtimeBuild: string };
+  reason?: string | undefined;
+}): string {
+  const runtimes = `Template runtime ${rebuild.from?.runtimeBuild ?? 'unrecorded'} → ${rebuild.to.runtimeBuild}`;
+  return rebuild.reason === undefined ? runtimes : `${runtimes}. ${rebuild.reason}`;
+}

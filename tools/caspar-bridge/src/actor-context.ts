@@ -112,6 +112,25 @@ export function runAsTemplate<T>(fn: () => T): T {
 }
 
 /**
+ * 🔴 `PAGE-REBUILD-01` (`C-034`) — **THE RUNNING REQUEST'S CONTEXT, KEPT TO FINISH ITS ACT LATER.** A
+ * rebuilt page held back while a row has the old one on a layer is swapped in by whichever later
+ * event frees it — a different console's request, or none. Its audit row must still name the
+ * console that built it, so the context is captured with the page and re-entered for the swap
+ * ({@link runAsCaptured}). `null` outside a request.
+ */
+export function captureActorContext(): ActorContext | null {
+  return actorStore.getStore() ?? null;
+}
+
+/**
+ * Run `fn` as a context {@link captureActorContext} kept; `null` runs it as nothing a console
+ * caused ({@link UNATTRIBUTED_ACTOR}), never as whatever request happens to be running now.
+ */
+export function runAsCaptured<T>(context: ActorContext | null, fn: () => T): T {
+  return actorStore.run(context ?? { actor: UNATTRIBUTED_ACTOR, sub: null, session: null }, fn);
+}
+
+/**
  * ⭐ **THE ONE SITE THAT LEARNS WHO ACTED.** Every `actor:` in this package reads it,
  * and nothing else decides the answer — so the day identity becomes provable, this
  * function is the only thing that changes.

@@ -94,6 +94,7 @@ import {
   type AuditFilter,
   type AuditNaming,
   type TemplateInfo,
+  type PageBuild,
   type TemplatePageRefusal,
   type ClearedOutsideLayer,
   type TemplateLook,
@@ -186,9 +187,11 @@ import {
   type ServerBLineVerdict,
 } from './server-b-line.js';
 import {
+  captureActorContext,
   operatorActor,
   operatorConsoleAddress,
   operatorSub,
+  runAsCaptured,
   runAsTemplate,
 } from './actor-context.js';
 import { SILENCE_CHECK_MS, SILENT_LAYER_MS, silentLayersToAsk } from './silent-layer-question.js';
@@ -285,7 +288,7 @@ import {
   releaseLivePlate,
   type LivePlateRelease,
 } from './live-plate-release.js';
-import { TemplateRegistry } from './template-registry.js';
+import { TemplateRegistry, type AppliedRebuild } from './template-registry.js';
 import { DelimiterStore } from './delimiter-store.js';
 import {
   TemplateHttpServer,
@@ -2387,6 +2390,14 @@ export class CasparRuntime {
       the first `CG ADD`, which a runtime that is never started can still reach in a unit test.
     */
     this.#reconciler.on('item-removed', (info) => this.#templates.release(info.itemId));
+    /*
+      🔴 `PAGE-REBUILD-01` (`C-034`) — a rebuilt page held back while a row had the old one on a
+      layer is swapped in by the first event that frees it: a row's state changing (to `idle`), or a
+      row leaving the stack. Subscribed AFTER the release above, so a removed row's hold is already
+      gone when the question is asked. Cheap when nothing waits.
+    */
+    this.#reconciler.on('item-changed', () => this.#settleRebuilds());
+    this.#reconciler.on('item-removed', () => this.#settleRebuilds());
     // `R-100` — a removed row's book leaves with it: its page number, and every picture no other
     // row names (the sweep reads the row as already gone).
     this.#pages = new PageStore(options.pagesDir ?? null);
@@ -14391,6 +14402,7 @@ export class CasparRuntime {
     template: TemplateInfo,
     html: string,
     channel?: number,
+    meta: { build?: PageBuild; sourceSha256?: string } = {},
   ): { registered: boolean; templateId: string } {
     /*
       B-141 — THE FIFTEENTH ACTION, and the one the change's own bookkeeping had
@@ -14405,7 +14417,7 @@ export class CasparRuntime {
     const detail: AuditDetail = { templateId: template.templateId };
     let result: { registered: boolean; templateId: string };
     try {
-      result = this.#templateImportImpl(template, html, channel);
+      result = this.#templateImportImpl(template, html, channel, meta);
     } catch (err) {
       this.#recordOutcome('import', detail, { outcome: 'failed', errorCode: 'internal-error' });
       throw err;
@@ -14418,11 +14430,12 @@ export class CasparRuntime {
     template: TemplateInfo,
     html: string,
     channel: number | undefined,
+    meta: { build?: PageBuild; sourceSha256?: string },
   ): { registered: boolean; templateId: string } {
     const templateId = template.templateId;
     const targets: readonly number[] = channel === undefined ? this.#declaredChannels() : [channel];
     const wasListed = targets.some((c) => this.#templates.hasOn(c, templateId));
-    const { changed } = this.#templates.importOn(targets, template, html);
+    const { changed } = this.#templates.importOn(targets, template, html, meta);
     if (changed.length > 0) {
       // R-028 (o1) — every browser converges on the same catalogue.
       this.templatesChanged.emit(this.#templates.listAll());
@@ -14437,6 +14450,124 @@ export class CasparRuntime {
       this.#publishFixedStateIfChanged();
     }
     return { registered: targets.length > 0, templateId };
+  }
+
+  // ── PAGE-REBUILD-01 (`C-034`): PAGES BUILT AGAIN WHEN THE TEMPLATE RUNTIME CHANGES ──────────
+
+  /**
+   * 🔴 `PAGE-REBUILD-01` — **KEEP ONE VERIFIED PACKAGE** (`templates.source.put`), by this bridge's
+   * own SHA-256 of the bytes. A refusal keeps nothing and changes nothing else: the import that
+   * follows still registers the page, which then simply cannot be rebuilt.
+   */
+  templateSourcePut(base64: string): { stored: boolean; sha256?: string; message?: string } {
+    const put = this.#templates.putSource(Buffer.from(base64, 'base64'));
+    return put.ok ? { stored: true, sha256: put.sha256 } : { stored: false, message: put.message };
+  }
+
+  /** `PAGE-REBUILD-01` — a kept package's bytes, for a console rebuilding its page. A read. */
+  templateSourceGet(
+    sha256: string,
+  ): { ok: true; base64: string } | { ok: false; reason: 'no-source' } {
+    const bytes = this.#templates.readSource(sha256);
+    return bytes === null
+      ? { ok: false, reason: 'no-source' }
+      : { ok: true, base64: bytes.toString('base64') };
+  }
+
+  /** `PAGE-REBUILD-01` — what a console running `build` should rebuild, and what it cannot. */
+  templateRebuildPlan(
+    build: PageBuild,
+    channel?: number,
+  ): ReturnType<TemplateRegistry['rebuildPlan']> {
+    return this.#templates.rebuildPlan(build, channel);
+  }
+
+  /**
+   * 🔴 `PAGE-REBUILD-01` — **A CONSOLE SENT ONE REBUILT PAGE, OR WHY IT COULD NOT BUILD ONE.**
+   *
+   * Nothing on air is touched: while a row holding the old page may have it on a layer
+   * ({@link #mayBeOnALayer}), the new page is stored and held back, and swapped in by the event that
+   * frees the old one ({@link #settleRebuilds}). A swap writes one `template-rebuild` row naming the
+   * console that built it; a failure writes one `failed` row and keeps the old page listed.
+   */
+  templateRebuild(
+    versionId: string,
+    build: PageBuild,
+    result: { ok: true; template: TemplateInfo; html: string } | { ok: false; reason: string },
+  ): { outcome: 'rebuilt' | 'deferred' | 'recorded' | 'stale' } {
+    const answer = this.#templates.rebuild(
+      versionId,
+      build,
+      result.ok ? { ok: true, info: result.template, html: result.html } : result,
+      (v) => this.#mayBeOnALayer(v),
+      captureActorContext(),
+    );
+    if (answer.outcome === 'rebuilt') this.#announceRebuilds([answer.applied]);
+    if (answer.outcome === 'recorded') {
+      this.#recordAudit({
+        actor: operatorActor(),
+        action: 'template-rebuild',
+        templateId: answer.from.templateId,
+        outcome: 'failed',
+        errorCode: 'rebuild-failed',
+        rebuild: {
+          name: templateDisplayName(answer.from.info),
+          ...(answer.from.build !== undefined && { from: answer.from.build }),
+          to: build,
+          ...(!result.ok && { reason: result.reason }),
+        },
+      });
+      // Every Library re-reads its re-import line: this template is on it now.
+      this.templatesChanged.emit(this.#templates.listAll());
+    }
+    return { outcome: answer.outcome };
+  }
+
+  /**
+   * 🔴 `PAGE-REBUILD-01` — **COULD A ROW HAVE THIS PAGE ON A LAYER NOW?** Yes while a `CG ADD` of it
+   * is in flight, and while any row holding it is in any state but `idle`: on air, exiting, loaded
+   * (a stopped row keeps its page on its layer — `B-053`), unconfirmed, or not known at all (a row
+   * the stack has not restored yet). Only `idle` — the layer emptied — frees it. Deliberately the
+   * cautious answer: a rebuild that waits costs nothing, one that lands under a live page would
+   * break the hard stop.
+   */
+  #mayBeOnALayer(versionId: string): boolean {
+    if (this.#templates.isPinned(versionId)) return true;
+    return this.#templates.holdersOf(versionId).some((itemId) => {
+      const item = this.#reconciler.get(itemId);
+      return item === null || item.status !== 'idle';
+    });
+  }
+
+  /** `PAGE-REBUILD-01` — swap in every held-back rebuild whose old page is free now. */
+  #settleRebuilds(): void {
+    const applied = this.#templates.settleRebuilds((v) => this.#mayBeOnALayer(v));
+    if (applied.length > 0) this.#announceRebuilds(applied);
+  }
+
+  /**
+   * One audit row per rebuild that took effect — as the console that built it, even when the swap
+   * lands during another console's request — then the catalogue push.
+   */
+  #announceRebuilds(applied: readonly AppliedRebuild[]): void {
+    for (const swap of applied) {
+      runAsCaptured(swap.actor, () => {
+        this.#recordAudit({
+          actor: operatorActor(),
+          action: 'template-rebuild',
+          templateId: swap.to.info.templateId,
+          outcome: 'ok',
+          rebuild: {
+            name: templateDisplayName(swap.to.info),
+            ...(swap.from.build !== undefined && { from: swap.from.build }),
+            to: swap.to.build,
+          },
+        });
+      });
+    }
+    this.templatesChanged.emit(this.#templates.listAll());
+    // A rebuilt page can carry a newly derived fact (a name, a mark) the rows show.
+    this.#publishFixedStateIfChanged();
   }
 
   /**
@@ -16356,6 +16487,8 @@ export class CasparRuntime {
       return sent;
     } finally {
       this.#templates.unpin(versionId);
+      // `PAGE-REBUILD-01` — the pin may have been all that held a rebuild back.
+      this.#settleRebuilds();
     }
   }
 

@@ -299,6 +299,12 @@ describe('C-038 — the census: every route, classified', () => {
       'templates.list',
       // `RELEASE-091-01` §1 — PVW's page from the bridge's store.
       'templates.page',
+      /*
+        `PAGE-REBUILD-01` (`C-034`) — what a runtime should rebuild, and a kept package read back for
+        it: reads of the same store. Keeping a package and sending a rebuilt page are `operator`.
+      */
+      'templates.rebuild-plan',
+      'templates.source.get',
       'update.state',
     ]);
   });

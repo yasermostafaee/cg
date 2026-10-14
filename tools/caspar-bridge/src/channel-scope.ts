@@ -323,6 +323,9 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'templates.get': STATION_WIDE,
   'templates.list': STATION_WIDE,
   'templates.page': STATION_WIDE,
+  // `PAGE-REBUILD-01` — reads of the same store as `templates.list`, for the same reason.
+  'templates.rebuild-plan': STATION_WIDE,
+  'templates.source.get': STATION_WIDE,
   'update.state': STATION_WIDE,
   'bridgeSession.state': STATION_WIDE,
   'bridgeSession.engines': STATION_WIDE,
@@ -380,6 +383,9 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'station.take-off-air': INTENT,
   'templates.import': INTENT,
   'templates.remove': INTENT,
+  // `PAGE-REBUILD-01` — keeping a package, and one rebuilt page: verdicts on the console's own send.
+  'templates.source.put': INTENT,
+  'templates.rebuild': INTENT,
   'update.cancel': INTENT,
   'update.request': INTENT,
   'bridgeSession.sign-in': INTENT,
