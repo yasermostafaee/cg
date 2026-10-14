@@ -9,8 +9,8 @@
  * pixels, or `null` for anything else.
  *
  * The bridge never trusts a file's name or a claimed type for this: a page the operator loads is
- * handed to a template as a `data:image/…` URL, so the type in that URL must be the type of the
- * bytes. Header-only and dependency-free — nothing is decoded here.
+ * served to CasparCG by the template server's page route under this type (`nosniff`), so the type
+ * must be the type of the bytes. Header-only and dependency-free — nothing is decoded here.
  */
 export interface ImageProbe {
   mime: 'image/png' | 'image/jpeg' | 'image/webp';
