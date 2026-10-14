@@ -23,6 +23,8 @@ export * from './scene-flatten.js';
 export * from './look-sources.js';
 export * from './composition-fields.js';
 export * from './path-migration.js';
+// `TEXT-FIT-01` — the registered scene migrations (every load runs them).
+export * from './scene-migrations.js';
 export * from './manifest.js';
 export * from './runtime-version.js';
 export * from './project-package.js';

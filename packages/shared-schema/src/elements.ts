@@ -172,6 +172,13 @@ const FontWeightSchema = z
     message: 'weight must be one of 100..900 in steps of 100',
   });
 
+/**
+ * 🔴 `TEXT-FIT-01` — **THE SMALLEST A `shrink-to-fit` TEXT GOES: half its authored size.** Below that
+ * a lower third's name stops being readable on air, so the text stops shrinking and its `overflow`
+ * (clip / ellipsis) takes over. Part of what `shrink-to-fit` MEANS, so it lives with the schema.
+ */
+export const TEXT_FIT_MIN_SCALE = 0.5;
+
 /** Text element. */
 export const TextElementSchema = ElementBaseSchema.extend({
   type: z.literal('text'),
@@ -204,13 +211,21 @@ export const TextElementSchema = ElementBaseSchema.extend({
   shadow: ShadowSchema.optional(),
   maxLines: z.number().int().positive().optional(),
   /**
-   * Box sizing mode (D-060). `fixed` sizes the box from `transform.size`
-   * (default). `autosize` makes the runtime hug the content in BOTH dimensions
-   * via CSS intrinsic sizing (honours explicit `\n`, no auto-wrap; size keyframes
-   * are ignored while auto). `shrink-to-fit` (font-shrink) is NOT yet implemented
-   * — it renders like `fixed` today.
+   * 🔴 `TEXT-FIT-01` (`B-147`) — **THE ONE SPELLING OF HOW TEXT AND BOX RELATE.**
+   * `fixed` sizes the box from `transform.size` (default) and the text keeps its size. `autosize`
+   * (D-060) makes the runtime hug the content in BOTH dimensions via CSS intrinsic sizing (honours
+   * explicit `\n`, no auto-wrap; size keyframes are ignored while auto). `shrink-to-fit` keeps the
+   * fixed box and shrinks the FONT (letter spacing with it — it is in `em`) until the rendered,
+   * shaped text fits, down to {@link TEXT_FIT_MIN_SCALE} of the authored size; past that `overflow`
+   * decides (`@cg/template-runtime`'s `text-fit.ts`).
    */
   fitMode: z.enum(['fixed', 'shrink-to-fit', 'autosize']),
+  /**
+   * `TEXT-FIT-01` — what a `shrink-to-fit` text does when it still does not fit at its smallest:
+   * `clip` or `ellipsis` (one line). Read ONLY under `shrink-to-fit`: a `fixed` text renders exactly
+   * as it always has. ⚠ `shrink` is LEGACY input only — a second spelling of fit that nothing ever
+   * read; `migrateTextFit` rewrites it on every load and nothing writes it.
+   */
   overflow: z.enum(['clip', 'ellipsis', 'shrink']),
   /** D-010 — inner padding inside the text box. */
   padding: PaddingSchema.optional(),
@@ -223,9 +238,10 @@ export const TextElementSchema = ElementBaseSchema.extend({
    */
   backgroundFill: FillSchema.optional(),
   /**
-   * D-010-pic-5 — when true, the runtime shrinks the font to fit the
-   * box (CSS-side; analogous to fitMode === 'shrink-to-fit'). Default
-   * false.
+   * ⚠ LEGACY input only (`TEXT-FIT-01`, `B-147`) — D-010-pic-5's third spelling of fit, which the
+   * runtime never read. Kept in the schema so a file that carries it still opens with its intent:
+   * `migrateTextFit` turns `true` on a fixed box into `fitMode: 'shrink-to-fit'` and drops the key
+   * on every load. Nothing writes it; read `fitMode`.
    */
   autoSqueeze: z.boolean().optional(),
   /**

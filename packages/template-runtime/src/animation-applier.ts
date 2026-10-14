@@ -11,6 +11,7 @@ import {
 import { interpolateAtFrame } from './keyframe-eval.js';
 import { pathD } from './scene-builder.js';
 import { textRenderNode } from './text-render-node.js';
+import { fitScaleOf } from './text-fit.js';
 
 /**
  * Per-animated-element bookkeeping. Holds the static transform/style
@@ -117,8 +118,9 @@ export function applyAnimationAtFrame(entry: AnimatedElement, frame: number): vo
   // time-driven kinds, D-052; text stroke stays static).
   applyStroke(entry, tracks, frame);
   // Font sub-properties.
+  // TEXT-FIT-01 — a shrink-to-fit text keeps the scale its last fit found (1 for any other).
   applyNumeric(tracks, 'font.size', frame, (v) => {
-    entry.node.style.fontSize = `${v}px`;
+    entry.node.style.fontSize = `${v * fitScaleOf(entry.node)}px`;
   });
   applyNumeric(tracks, 'font.lineHeight', frame, (v) => {
     entry.node.style.lineHeight = String(v);

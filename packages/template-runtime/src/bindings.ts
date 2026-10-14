@@ -12,6 +12,7 @@ import { itemsInDigits, typedDigitsOf } from './typed-digits.js';
 import { coerceRepeaterItems, repeaterDriverFor } from './repeater-driver.js';
 import { coerceSequenceItems, sequenceDriverFor } from './sequence-driver.js';
 import { textRenderNode } from './text-render-node.js';
+import { fitText } from './text-fit.js';
 import { coerceTickerItems, tickerDriverFor } from './ticker-driver.js';
 import { lottiePlayerFor } from './lottie-registry.js';
 import { applyTransform, stringifyValue } from './transforms.js';
@@ -191,8 +192,8 @@ function applyOne(
       if (!el) return;
       let stringValue = boundText(raw, rule?.field, binding.transform);
       // Cap to the field's maxLength by code point (so a surrogate pair or a
-      // ZWNJ counts as one and isn't split); the element's own auto-size then
-      // handles fit. (Auto-squeeze is NOT built — `B-147`; nothing reads `autoSqueeze`.)
+      // ZWNJ counts as one and isn't split); the element's own fit mode then
+      // handles the box (TEXT-FIT-01: a shrink-to-fit text is re-fitted below).
       if (maxLength !== undefined && [...stringValue].length > maxLength) {
         stringValue = [...stringValue].slice(0, maxLength).join('');
       }
@@ -217,6 +218,9 @@ function applyOne(
       } else {
         glyph.textContent = stringValue;
       }
+      // TEXT-FIT-01 — re-fit NOW, in the same task as the write: the font is right before the
+      // browser paints the new text, so a CG UPDATE shows no jump frame. A no-op unless fitting.
+      fitText(el);
       return;
     }
     case 'image': {

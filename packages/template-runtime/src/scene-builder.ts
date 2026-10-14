@@ -35,6 +35,7 @@ import type { BuildSceneResult, FieldScope, LifecycleSource, RenderMode } from '
 import { clockInitialText } from './clock-driver.js';
 import { makeSequenceItemNode } from './sequence-driver.js';
 import { TEXT_NODE_DATASET } from './text-render-node.js';
+import { markTextFit } from './text-fit.js';
 import { populateTickerStaticRow } from './ticker-driver.js';
 import { itemsInDigits, stampTypedDigits } from './typed-digits.js';
 import { assignZoneIndices, hasZonedCountdown } from './zone-css.js';
@@ -618,6 +619,9 @@ function buildText(element: TextElement, ctx: BuildCtx): HTMLElement {
     }
   }
   renderTextGlyphs(el, element, doc);
+  // TEXT-FIT-01 — a shrink-to-fit text is stamped with what its fit needs and watched: it is
+  // fitted when its box first has a size, again when the box or a font changes (text-fit.ts).
+  markTextFit(el, element);
   // The ORIGINAL stays as typed: a placeholder binding splits it on its marker, then writes each
   // piece in the element's digits (`bindings.ts`), so a marker holding a digit still matches.
   textOriginals.set(element.id, element.text);

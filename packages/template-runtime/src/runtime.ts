@@ -4,7 +4,7 @@ import {
   followWindowMs,
   videoFollowClipFacts,
   listBoundSequenceIds,
-  migrateScenePaths,
+  migrateScene,
   playoutOf,
   sequenceItemInstanceId,
   sequenceItemTextFieldIds,
@@ -451,7 +451,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // IN MEMORY at ingestion, so old `.vcg` packages render pixel-identically under
   // the new viewBox mapping without touching the signed package. Identity for
   // conforming scenes (the Designer migrates at load, so its streams are no-ops).
-  scene = migrateScenePaths(scene);
+  // TEXT-FIT-01 — and every other registered migration (scene-migrations.ts), in order.
+  scene = migrateScene(scene);
 
   // D-141 — compile this scene's colour zones into `<style id="cg-zones">`, beside
   // the baseline block. Emitted from the SCENE by the runtime, which is what makes
