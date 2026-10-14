@@ -111,6 +111,9 @@ async function startStation(bankChannel = 1): Promise<{ bridgeUrl: string }> {
       '127.0.0.1',
       '--amcp-port',
       '1',
+      // OSC on an ephemeral port: the default 6251 is a dev station's, and AMCP here is dead.
+      '--osc-port',
+      '0',
       '--port',
       '0',
       '--template-serve-port',
