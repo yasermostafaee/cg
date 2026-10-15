@@ -78,8 +78,15 @@ function resolveWorkers(): number | undefined {
  * that was not using it. This suite has never spent more than 6.6 of its 11. If it grows
  * past ~7 min, raise it here and lower the other, or raise the job cap in `pr.yml` and
  * redo the arithmetic in one place: the runtime config, which owns it.
+ *
+ * 🔴 **RAISED 2026-10-15 (`RUN-NEXT-VERSION-01`, deltas A–H), 8 → 10, in its own commit and flagged
+ * as shared CI config — the cap is UNCHANGED.** Run 38668193061 (`15be0821`) went red having failed
+ * nothing: `331 passed`, `2 did not run`, _"Timed out waiting 480s for the test suite to run"_ —
+ * the suite now needs ~8.2 min on the 4-core runner (it measured 5.7–6.8 before this run added the
+ * steps, the date and time control, the Steps dialog, the picker and the timeline-sound specs). The
+ * sum the cap allows still has room: 10 + 14 = 24 against ~27.4 usable (see the runtime config).
  */
-const CI_GLOBAL_TIMEOUT_MS = 8 * 60_000;
+const CI_GLOBAL_TIMEOUT_MS = 10 * 60_000;
 
 const workers = resolveWorkers();
 

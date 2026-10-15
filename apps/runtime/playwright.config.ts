@@ -120,6 +120,11 @@ function resolveWorkers(): number | undefined {
  * `24 → 30` min, this budget `10 → 14`, the Designer's unchanged at 8.0. 8 + 14 = 22 min against
  * 30 − ~1.6 setup − ~1 build = ~27.4 usable — 5.4 min of margin. The next growth redoes this
  * arithmetic again, here.
+ *
+ * 🔴 **THE DESIGNER'S HALF RAISED 2026-10-15 (`RUN-NEXT-VERSION-01`), 8 → 10, cap unchanged.** Run
+ * 38668193061 (`15be0821`): the Designer suite ran out of its 8.0 having failed nothing
+ * (`331 passed`, `2 did not run`); this suite used 12.9 of its 14.0 in the same run. 10 + 14 = 24
+ * against ~27.4 usable — 3.4 min of margin. The next growth of either suite needs the cap raised.
  */
 const CI_GLOBAL_TIMEOUT_MS = 14 * 60_000;
 
