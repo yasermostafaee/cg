@@ -3448,3 +3448,12 @@ Measured free before use: `git grep -q -e "## \[.\] B-345"` (and `B-346`) on all
 after `git fetch` returned nothing; control: the same sweep found `B-344` on 3 refs; no stash.
 
 ⇒ **Next free after this entry is `B-347`**, **`D-166`**, **`P-068`**, **`R-102`** and **`C-049`**.
+
+### 2026-10-15 — the owner's screenshot takes `B-347`
+
+- `B-347` — a colour picker opened in a dialog draws under it — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: `git grep -q -e "## \[.\] B-347"` on all 10 local and remote-tracking refs after `git fetch`
+returned nothing; control: the same sweep found `B-346` on 2 refs; no stash.
+
+⇒ **Next free after this entry is `B-348`**, **`D-166`**, **`P-068`**, **`R-102`** and **`C-049`**.

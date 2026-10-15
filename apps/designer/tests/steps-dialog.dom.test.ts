@@ -225,7 +225,7 @@ describe('-H §2 — the Steps dialog', () => {
     expect(designerStore.get().selection.size).toBe(0);
     expect(names()).toHaveLength(3);
     const still = q<HTMLElement>(document.body, '[role="dialog"]');
-    expect(still.querySelectorAll('[data-step]')).toHaveLength(3);
+    expect(still.querySelectorAll('[data-step]:not([data-step="b"])')).toHaveLength(3);
   });
 
   it('Escape inside an open ⋯ menu closes the MENU — the dialog stays', () => {
@@ -244,6 +244,7 @@ describe('-H §2 — the Steps dialog', () => {
     const strip = q<HTMLElement>(dialog, '[data-testid="steps-rehearse"]');
     expect([...strip.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
       'Live',
+      'Default',
       '60 min',
       '30 min',
       '10 min',
@@ -315,5 +316,57 @@ describe('-H — the step operations behind the dialog', () => {
     const { steps, index } = addStep(ladder(600_000, 0, -60_000));
     expect(index).toBe(1);
     expect(steps.steps.map((s) => s.atMs)).toEqual([600_000, 300_000, 0, -60_000]);
+  });
+});
+
+describe('the owner, 2026-10-15 — the steps’ DEFAULT colours, and a picker above the dialog', () => {
+  it('🔴 the Default row is always first; choosing it and Add change gives the countdown’s own text colour — ONE undo step; Clear default removes it', () => {
+    seed();
+    const dialog = openDialog();
+    const rows = [...dialog.querySelectorAll<HTMLElement>('[data-step]')];
+    expect(rows[0]?.dataset['step']).toBe('b');
+    expect(rows[0]?.textContent).toContain('Default');
+    expect(rows[0]?.textContent).toContain('before the first step');
+    // Nothing to clear yet, so no menu — and the old "+ Before" button is gone.
+    expect(dialog.querySelector('[data-testid="steps-row-menu-b"]')).toBeNull();
+    expect(dialog.querySelector('[data-testid="steps-add-before"]')).toBeNull();
+
+    click(q<HTMLButtonElement>(dialog, '[data-testid="steps-row-b"]'));
+    click(q<HTMLButtonElement>(dialog, '[data-testid="steps-add-change"]'));
+    expect(clock().steps?.before).toEqual({
+      name: 'Default',
+      changes: [{ elementId: 'c1', property: 'textColor', value: '#d50000' }],
+    });
+    designerStore.undo();
+    expect(clock().steps?.before).toBeUndefined();
+
+    click(q<HTMLButtonElement>(dialog, '[data-testid="steps-add-change"]'));
+    chooseFromMenu(
+      q<HTMLElement>(dialog, '[data-testid="steps-row-menu-b"]'),
+      'Clear default “Default”',
+    );
+    expect(clock().steps?.before).toBeUndefined();
+    expect(q<HTMLElement>(dialog, '[data-testid="steps-notice"]').textContent).toContain(
+      'Cleared the default.',
+    );
+  });
+
+  it('🔴 Escape while a popover opened from the dialog is open closes the POPOVER — the dialog stays', () => {
+    seed();
+    openDialog();
+    // A popover is portaled to the body, outside the dialog (the colour picker does so).
+    const popover = document.createElement('div');
+    popover.setAttribute('data-cg-popover', '');
+    document.body.appendChild(popover);
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
+    popover.remove();
+    // The control: with no popover, Escape closes the dialog as it always did.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
   });
 });

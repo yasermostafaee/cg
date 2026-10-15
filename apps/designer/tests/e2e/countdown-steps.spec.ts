@@ -88,7 +88,8 @@ async function applyPreset(page: Page): Promise<void> {
   await page.getByRole('complementary', { name: 'Inspector' }).getByTestId('steps-edit').click();
   const dialog = stepsDialog(page);
   await dialog.getByTestId('steps-preset').click();
-  await expect(dialog.locator('[data-step]')).toHaveCount(3);
+  // Three steps, below the Default row that is always offered first.
+  await expect(dialog.locator('[data-step]:not([data-step="b"])')).toHaveCount(3);
   await dialog.getByRole('button', { name: 'Done' }).click();
 }
 

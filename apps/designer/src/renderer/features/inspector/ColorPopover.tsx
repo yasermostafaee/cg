@@ -115,6 +115,7 @@ function Popover({
       ref={rootRef}
       role="dialog"
       aria-label="Colour picker"
+      data-cg-popover=""
       className={s.popover}
       style={{
         // Hidden off-screen for the first paint until useLayoutEffect measures

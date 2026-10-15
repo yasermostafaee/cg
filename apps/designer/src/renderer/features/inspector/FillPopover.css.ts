@@ -70,7 +70,9 @@ export const popover = style({
   borderRadius: '0.4rem',
   padding: '0.6rem',
   boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-  zIndex: 4000,
+  // A popover can be opened from a control INSIDE a dialog (the Steps dialog's colour cells), so it
+  // sits above the Modal's 5000 and below the tooltip layer's 10000. It was 4000 — under the dialog.
+  zIndex: 6000,
   userSelect: 'none',
   touchAction: 'none',
 });

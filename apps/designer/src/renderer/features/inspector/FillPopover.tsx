@@ -205,6 +205,7 @@ function FillPopover({
       ref={rootRef}
       role="dialog"
       aria-label="Fill editor"
+      data-cg-popover=""
       className={s.popover}
       style={{
         top: pos?.top ?? -9999,

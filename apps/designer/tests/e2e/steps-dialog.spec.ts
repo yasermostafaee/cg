@@ -28,13 +28,13 @@ async function seed(app: DesignerApp, name: string): Promise<{ rectId: string; c
   await duration.press('Enter');
   await inspector.getByTestId('steps-edit').click();
   await stepsDialog(app.page).getByTestId('steps-preset').click();
-  await expect(stepsDialog(app.page).locator('[data-step]')).toHaveCount(3);
+  await expect(stepsDialog(app.page).locator('[data-step]:not([data-step="b"])')).toHaveCount(3);
   return { rectId, clockId };
 }
 
 const stepNames = (dialog: Locator): Promise<string[]> =>
   dialog
-    .locator('[data-step] [data-testid^="steps-row-"] bdi')
+    .locator('[data-step]:not([data-step="b"]) [data-testid^="steps-row-"] bdi')
     .evaluateAll((els) => els.map((e) => e.textContent ?? ''));
 
 test.describe('-H — the Steps dialog', () => {
@@ -196,5 +196,37 @@ test.describe('-H — the Steps dialog', () => {
       expect(m.footerInside, `${setup.label}: the footer spills out of the dialog`).toBe(true);
       expect(m.bodyOverflowX, `${setup.label}: the body scrolls sideways`).toBeLessThanOrEqual(0);
     }
+  });
+
+  test('🔴 the owner’s two: a colour picker opened in the dialog draws ABOVE it, and Escape closes only the picker; the Default row sets the countdown’s default colour', async ({
+    app,
+  }) => {
+    test.setTimeout(90_000);
+    await seed(app, 'StepsPicker');
+    const page = app.page;
+    const dialog = stepsDialog(page);
+
+    // The Default row: choose it, Add change — the countdown's own text colour.
+    await dialog.getByTestId('steps-row-b').click();
+    await dialog.getByTestId('steps-add-change').click();
+    const row = dialog.locator('[data-testid="step-changes"] [data-change]').last();
+    await expect(row.getByRole('combobox', { name: 'property' })).toHaveValue('textColor');
+    await expect(dialog.getByTestId('steps-row-b')).toContainText('1 change');
+
+    // Its colour cell opens the picker — on TOP of the dialog, measured where it is drawn.
+    await row.getByRole('button', { name: 'value colour' }).click();
+    const picker = page.getByRole('dialog', { name: 'Colour picker' });
+    await expect(picker).toBeVisible();
+    const onTop = await picker.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return hit !== null && el.contains(hit);
+    });
+    expect(onTop, 'the picker is drawn under the dialog').toBe(true);
+
+    // Escape closes the picker, and the Steps dialog stays.
+    await page.keyboard.press('Escape');
+    await expect(picker).toHaveCount(0);
+    await expect(dialog).toBeVisible();
   });
 });

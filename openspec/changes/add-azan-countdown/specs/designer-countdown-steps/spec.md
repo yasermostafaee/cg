@@ -154,7 +154,9 @@ that changes it, with each change as a chip (a colour shown with its own swatch)
 icon SHALL remain in the Inspector.
 
 The Steps dialog (the shared Modal) SHALL hold the countdown's name, After zero, the preset and a
-rehearse strip; the steps as a list — Before pinned first, At zero pinned between the steps before
+rehearse strip; the steps as a list — the **Default** row (the look before the first step, the
+schema's Before) pinned first and ALWAYS offered, so the countdown's default colours can be chosen
+even before it changes anything, At zero pinned between the steps before
 and after zero — reordered by a drag handle or ↑ / ↓ on it, each with a `⋯` menu of WORDS
 (`Duplicate step`, `Delete step`); and the selected step in short lines (name; when; transition) with
 its changes as a table (`Element | Property | Value | ⋯`, the menu saying `Delete change`), a

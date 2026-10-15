@@ -54,15 +54,19 @@ export function Modal({
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (e.key === 'Escape') {
-        // `DELTA-RUN-NEXT-VERSION-01-H` — a menu open INSIDE the dialog owns this Escape: it closes
+        // `DELTA-RUN-NEXT-VERSION-01-H` — a menu open INSIDE the dialog, or a popover opened from one
+        // of its controls (portaled to the body: the colour picker), owns this Escape: it closes
         // itself (its own handler, after this capture listener), and the dialog stays.
         if ((boxRef.current?.querySelector('[role="menu"]') ?? null) !== null) return;
+        if (document.querySelector('[data-cg-popover]') !== null) return;
         onClose();
         return;
       }
       if (e.key !== 'Tab') return;
       const box = boxRef.current;
       if (box === null) return;
+      // Focus inside an open popover (outside the dialog's box, above it) moves within it.
+      if ((document.activeElement?.closest('[data-cg-popover]') ?? null) !== null) return;
       const items = [...box.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
         (el) => el.offsetParent !== null || el === document.activeElement,
       );

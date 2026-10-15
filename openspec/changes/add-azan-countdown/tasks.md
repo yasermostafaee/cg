@@ -286,3 +286,9 @@ or H.
       `zone-css` subpath), `docs/engines/overview.md`.
 - [x] 9.13 `pnpm gate` green before the push; `openspec validate --strict` green. (the pre-push gate for
       `15be0821`: 99 / 99, 0 cached; OpenSpec 89 / 89, `--strict`)
+- [x] 9.14 The owner's two (2026-10-15, after H — FAST lane, no schema): `B-347`, the colour picker drew UNDER
+      the Steps dialog and Escape closed the dialog — popovers above dialogs, the Modal stands aside while one is
+      open (e2e red at the old z-index, dom red with the rule removed); and the steps' DEFAULT colours — the
+      Default row (the schema's Before) is always offered first in the dialog, and Add change with no filter starts
+      on the countdown's own text colour. (`steps-dialog.dom.test.ts`, e2e `steps-dialog.spec.ts`; local Windows:
+      7 passed)

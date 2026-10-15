@@ -42,7 +42,8 @@ import {
   stepIssues,
   stepName,
   STEPS_PRESET_LABEL,
-  stepTokens,
+  dialogTokens,
+  DEFAULT_STEP_NAME,
   thresholdLabel,
   thresholdParts,
   withChanges,
@@ -130,12 +131,12 @@ export function StepsDialog({
 
   const [filter, setFilter] = useState(initialFilter ?? '');
   const [selected, setSelected] = useState<StepToken | null>(() => {
-    const tokens = stepTokens(draft);
+    const tokens = dialogTokens(draft);
     const mine =
       initialFilter === undefined
         ? undefined
         : tokens.find((t) => changesAt(draft, t).some((c) => c.elementId === initialFilter));
-    return mine ?? tokens[0] ?? null;
+    return mine ?? (draft.steps.length > 0 ? 0 : 'before');
   });
   const [notice, setNotice] = useState<string | null>(null);
   const [focusHandle, setFocusHandle] = useState<number | null>(null);
@@ -151,8 +152,13 @@ export function StepsDialog({
   if (scene === null || found === undefined) return null;
   const { clock, doc } = found;
   const targets = governedElements(scene, doc);
-  const tokens = stepTokens(draft);
-  const current = selected !== null && tokens.includes(selected) ? selected : (tokens[0] ?? null);
+  const tokens = dialogTokens(draft);
+  const current: StepToken =
+    selected !== null && tokens.includes(selected)
+      ? selected
+      : draft.steps.length > 0
+        ? 0
+        : 'before';
   const issues = stepIssues(draft);
   const afterZero = afterZeroOf(clock.afterZero);
 
@@ -280,7 +286,10 @@ export function StepsDialog({
                 }}
                 onDelete={() => {
                   const name = stepName(draft, token);
-                  edit(deleteStep(draft, token), `Deleted step “${name}”.`);
+                  edit(
+                    deleteStep(draft, token),
+                    token === 'before' ? 'Cleared the default.' : `Deleted step “${name}”.`,
+                  );
                 }}
               />
             ))}
@@ -298,19 +307,6 @@ export function StepsDialog({
             >
               <Icon icon={Plus} size={14} /> Add step
             </Button>
-            {draft.before === undefined && (
-              <Button
-                variant="ghost"
-                size="sm"
-                data-testid="steps-add-before"
-                onClick={() => {
-                  edit({ ...draft, before: { name: 'Before', changes: [] } });
-                  setSelected('before');
-                }}
-              >
-                <Icon icon={Plus} size={14} /> Before
-              </Button>
-            )}
             {!draft.steps.some((st) => st.atMs === 0) && (
               <Button
                 variant="ghost"
@@ -390,7 +386,7 @@ function StepRow({
   const group = stepGroup(steps, token);
   const index = token === 'before' ? -1 : token;
   const atMs = token === 'before' ? null : (steps.steps[token]?.atMs ?? null);
-  const threshold = atMs === null ? null : thresholdLabel(atMs);
+  const threshold = atMs === null ? 'before the first step' : thresholdLabel(atMs);
   const meta = [
     ...(threshold !== null && threshold !== name ? [threshold] : []),
     changeCountLabel(changesAt(steps, token).length),
@@ -455,22 +451,37 @@ function StepRow({
         <bdi>{name}</bdi>
         <span className={s.meta}>{meta}</span>
       </Button>
-      <ActionMenu
-        label={`Actions for step “${name}”`}
-        testId={`steps-row-menu-${tokenKey(token)}`}
-        items={[
-          ...(group !== null
-            ? [
-                {
-                  label: 'Duplicate step',
-                  ariaLabel: `Duplicate step “${name}”`,
-                  onSelect: onDuplicate,
-                },
-              ]
-            : []),
-          { label: 'Delete step', ariaLabel: `Delete step “${name}”`, onSelect: onDelete },
-        ]}
-      />
+      {token === 'before' && steps.before === undefined ? (
+        // The default changes nothing yet: there is nothing to clear.
+        <span className={s.pin} aria-hidden />
+      ) : (
+        <ActionMenu
+          label={`Actions for step “${name}”`}
+          testId={`steps-row-menu-${tokenKey(token)}`}
+          items={
+            token === 'before'
+              ? [
+                  {
+                    label: 'Clear default',
+                    ariaLabel: `Clear default “${name}”`,
+                    onSelect: onDelete,
+                  },
+                ]
+              : [
+                  ...(group !== null
+                    ? [
+                        {
+                          label: 'Duplicate step',
+                          ariaLabel: `Duplicate step “${name}”`,
+                          onSelect: onDuplicate,
+                        },
+                      ]
+                    : []),
+                  { label: 'Delete step', ariaLabel: `Delete step “${name}”`, onSelect: onDelete },
+                ]
+          }
+        />
+      )}
     </li>
   );
 }
@@ -506,7 +517,10 @@ function StepEditor({
 
   const patch = (p: { name?: string; atMs?: number; transition?: typeof transition }): void => {
     if (token === 'before') {
-      onEdit({ ...steps, before: { ...(steps.before ?? { name: 'Before', changes: [] }), ...p } });
+      onEdit({
+        ...steps,
+        before: { ...(steps.before ?? { name: DEFAULT_STEP_NAME, changes: [] }), ...p },
+      });
       return;
     }
     onEdit({ ...steps, steps: steps.steps.map((st, j) => (j === token ? { ...st, ...p } : st)) });
@@ -514,12 +528,17 @@ function StepEditor({
   const setChanges = (next: ElementChange[], message?: string): void =>
     onEdit(withChanges(steps, token, next), message);
 
+  // With no filter a new change starts on the COUNTDOWN ITSELF, its text colour first — the change a
+  // step is most often for (the preset's), and how the default colours are chosen.
   const addTarget =
-    filter === '' ? targets[0]?.element : targets.find((g) => g.element.id === filter)?.element;
+    filter === ''
+      ? (targets.find((g) => g.element.id === clockId) ?? targets[0])?.element
+      : targets.find((g) => g.element.id === filter)?.element;
   const freeProperty = (el: Element | undefined): ElementChangeProperty | undefined => {
     if (el === undefined) return undefined;
     const used = new Set(changes.filter((c) => c.elementId === el.id).map((c) => c.property));
-    return changePropertiesOf(el).find((p) => p !== 'image' && !used.has(p));
+    const free = changePropertiesOf(el).filter((p) => p !== 'image' && !used.has(p));
+    return free.includes('textColor') ? 'textColor' : free[0];
   };
   const addProperty = freeProperty(addTarget);
   const parts = step === undefined ? null : thresholdParts(step.atMs);
@@ -528,7 +547,7 @@ function StepEditor({
     <>
       <TextField
         label="name"
-        value={token === 'before' ? (steps.before?.name ?? 'Before') : (step?.name ?? '')}
+        value={token === 'before' ? (steps.before?.name ?? DEFAULT_STEP_NAME) : (step?.name ?? '')}
         resetKey={`${clockId}-${key}`}
         onCommit={(name) => patch({ name })}
       />

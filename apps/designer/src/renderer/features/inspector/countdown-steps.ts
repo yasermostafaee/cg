@@ -237,7 +237,7 @@ export function withChanges(
   changes: ElementChange[],
 ): CountdownSteps {
   if (token === 'before') {
-    return { ...steps, before: { ...(steps.before ?? { name: 'Before' }), changes } };
+    return { ...steps, before: { ...(steps.before ?? { name: DEFAULT_STEP_NAME }), changes } };
   }
   return {
     ...steps,
@@ -304,6 +304,20 @@ export function clockAnywhere(
 /** A step's place: `before`, or an index into `steps`. */
 export type StepToken = 'before' | number;
 
+/**
+ * The owner's word for the look BEFORE the first step (the schema's `before`): the countdown's default
+ * colours. A new one is named so; a migrated zone keeps its base zone's name.
+ */
+export const DEFAULT_STEP_NAME = 'Default';
+
+/**
+ * The Steps dialog's rows: the DEFAULT always first — whether or not it changes anything yet, so the
+ * author can always choose the default colours — then the list.
+ */
+export function dialogTokens(steps: CountdownSteps): StepToken[] {
+  return ['before', ...steps.steps.map((_, i) => i)];
+}
+
 /** Every step in order — Before first, then the list (thresholds, At zero, after zero). */
 export function stepTokens(steps: CountdownSteps): StepToken[] {
   return [
@@ -314,7 +328,9 @@ export function stepTokens(steps: CountdownSteps): StepToken[] {
 
 /** A step's name, by token. */
 export function stepName(steps: CountdownSteps, token: StepToken): string {
-  return token === 'before' ? (steps.before?.name ?? 'Before') : (steps.steps[token]?.name ?? '');
+  return token === 'before'
+    ? (steps.before?.name ?? DEFAULT_STEP_NAME)
+    : (steps.steps[token]?.name ?? '');
 }
 
 /** `1 change`, `3 changes`, `no changes`. */

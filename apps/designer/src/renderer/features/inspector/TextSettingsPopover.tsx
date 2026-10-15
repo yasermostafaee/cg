@@ -112,6 +112,7 @@ function TextSettingsPopover({
       ref={rootRef}
       role="dialog"
       aria-label="Text settings"
+      data-cg-popover=""
       className={s.popover}
       style={{
         top: pos?.top ?? -9999,

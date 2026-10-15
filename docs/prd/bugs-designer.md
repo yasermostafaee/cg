@@ -4282,3 +4282,16 @@ inside the gesture (`window.cgResumeSound`); the shared `Sound on` / `Sound off`
 default) sits in the transport and drives the Preview too. A sound longer than its composition plays to its end in
 the Preview, as on air; the timeline stops it with the playhead. **Acceptance:** `tests/e2e/timeline-sound.spec.ts`
 — red with the audition removed (a positive control proving the audio element exists), green with it.
+
+## [~] B-347 — A colour picker opened in a dialog draws UNDER it ⟨priority: high — the Steps dialog's colour cells cannot be used⟩ — FILED 2026-10-15 by the owner (screenshot, the Steps dialog) · `openspec/changes/add-azan-countdown/`
+
+**Repro / Actual:** Edit steps… → a change whose property is a colour → click its swatch. The picker opens BEHIND
+the dialog: only its lower edge shows below the card, and pressing Escape to close it closes the whole dialog.
+**Cause:** the inspector's popovers (`ColorPopover`, `FillPopover`, `TextSettingsPopover`) sat at `zIndex: 4000`,
+under the Modal's `5000`; they were only ever opened from the Inspector until the Steps dialog put colour cells in a
+dialog. And a popover is portaled to the body, so its Escape reached the Modal's capture listener first.
+**Fix:** the three popovers sit at `6000` (above dialogs, below the tooltip layer's `10000`) and carry
+`data-cg-popover`; the Modal stands aside on Escape (and on Tab) while one is open, as it does for a menu inside it.
+**Acceptance:** e2e `steps-dialog.spec.ts` measures the picker on top where it is drawn (`elementFromPoint`) — red at
+`4000`, green at `6000` — and Escape closes only the picker; a dom test pins the Modal standing aside (red with the
+rule removed).
