@@ -25,6 +25,8 @@ import {
   addMonths,
   dayInWords,
   draftsOfValue,
+  lunarAdjustWords,
+  lunarCalculationName,
   monthGrid,
   normalizeDrafts,
   pasteDrafts,
@@ -304,16 +306,8 @@ export function DateTimeInput({
 
 /** The long form of the Lunar Hijri fact: which calculation, and the station's adjustment. */
 function lunarTitle(adjust: number): string {
-  const calc = lunarHijriCalculation();
-  const name =
-    calc === 'islamic-umalqura'
-      ? 'Umm al-Qura calculation'
-      : calc === 'islamic-civil'
-        ? 'Civil (tabular) calculation'
-        : 'Tabular calculation';
-  if (adjust === 0) return name;
-  const days = Math.abs(adjust) === 1 ? 'day' : 'days';
-  return `${name}, station adjustment ${adjust > 0 ? '+' : '−'}${String(Math.abs(adjust))} ${days}`;
+  const name = `${lunarCalculationName(lunarHijriCalculation())} calculation`;
+  return adjust === 0 ? name : `${name}, station adjustment ${lunarAdjustWords(adjust)}`;
 }
 
 /**

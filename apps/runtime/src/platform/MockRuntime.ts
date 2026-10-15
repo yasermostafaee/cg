@@ -74,6 +74,9 @@ import {
   DEFAULT_FIXED_BANK_START,
   SUGGESTED_LIVE_SOURCE_LAYER_RANGE,
   DelimiterOptionSchema,
+  CalendarSettingsSchema,
+  DEFAULT_CALENDAR_SETTINGS,
+  type CalendarSettings,
   fixedBankSlots,
   inAnyLayerBand,
   isFixedBankLayer,
@@ -120,6 +123,8 @@ type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
 type FieldValues = StackItemState['fields'];
 
 const DELIMITERS_KEY = 'cg-runtime:delimiters';
+/** `DELTA-RUN-NEXT-VERSION-01-C` — the station's calendar settings, test mode's `calendar.json`. */
+const CALENDAR_KEY = 'cg-runtime:calendar';
 const SOURCE_CATALOG_KEY = 'cg-runtime:source-catalog';
 const SOURCE_ASSIGNMENTS_KEY = 'cg-runtime:source-assignments';
 const CHANNEL_SETTINGS_KEY = 'cg-runtime:channel-settings';
@@ -384,6 +389,8 @@ export class MockRuntime {
   readonly #mediaTransport = new Map<string, MockClipTransport>();
   // R-034 parity — the shared delimiter list.
   readonly delimitersChanged = new Emitter<DelimiterOption[]>();
+  // `DELTA-RUN-NEXT-VERSION-01-C` parity — the station's Lunar Hijri day adjustment.
+  readonly calendarChanged = new Emitter<CalendarSettings>();
   // D-137 / C-015 parity — the installation's Live Source mapping.
   readonly sourceCatalogChanged = new Emitter<SourceCatalog>();
   readonly sourceAssignmentsChanged = new Emitter<SourceAssignments>();
@@ -2823,6 +2830,41 @@ export class MockRuntime {
       // Persistence lost, the session's list is not.
     }
     this.delimitersChanged.emit([...delimiters]);
+    return { ok: true };
+  }
+
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-C` parity — the station's calendar settings. The bridge persists them to
+   * `calendar.json`; test mode keeps them in `localStorage`, as it keeps the delimiters.
+   */
+  calendarGet(): CalendarSettings {
+    try {
+      const raw = localStorage.getItem(CALENDAR_KEY);
+      if (raw !== null) {
+        const parsed = CalendarSettingsSchema.safeParse(JSON.parse(raw));
+        if (parsed.success) return parsed.data;
+      }
+    } catch {
+      // Unusable storage: the calculation, unadjusted.
+    }
+    return { ...DEFAULT_CALENDAR_SETTINGS };
+  }
+
+  /** Mirrors the bridge's refusal, so the UI meets one behaviour. */
+  calendarSet(settings: CalendarSettings): { ok: boolean; message?: string } {
+    const parsed = CalendarSettingsSchema.safeParse(settings);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        message: 'The Lunar Hijri adjustment is a whole number of days, −2 to +2.',
+      };
+    }
+    try {
+      localStorage.setItem(CALENDAR_KEY, JSON.stringify(parsed.data));
+    } catch {
+      // Persistence lost, the session's setting is not.
+    }
+    this.calendarChanged.emit({ ...parsed.data });
     return { ok: true };
   }
 

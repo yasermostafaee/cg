@@ -262,6 +262,8 @@ export const PUBLISH_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   // `CONSOLE-POLISH-01` (`B-300`) — who changed it: as wide as the catalogue it names.
   'templates.acted': STATION_WIDE,
   'delimiters.changed': STATION_WIDE,
+  // `DELTA-RUN-NEXT-VERSION-01-C` — one Lunar Hijri adjustment per station, as one delimiter list.
+  'calendar.changed': STATION_WIDE,
   'channelSettings.changed': STATION_WIDE,
   'sources.config-changed': STATION_WIDE,
   'sources.assignments-changed': STATION_WIDE,
@@ -310,6 +312,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'connections.health': STATION_WIDE,
   'connections.template-serve': STATION_WIDE,
   'delimiters.list': STATION_WIDE,
+  'calendar.get': STATION_WIDE,
   'fixedLayers.banks': STATION_WIDE,
   'fixedLayers.config': STATION_WIDE,
   'lock.state': STATION_WIDE,
@@ -341,6 +344,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'connections.failover': INTENT,
   'connections.set-config': INTENT,
   'delimiters.set': INTENT,
+  'calendar.set': INTENT,
   'fixedLayers.clear-layer': INTENT,
   'fixedLayers.load': INTENT,
   'fixedLayers.set-banks': INTENT,

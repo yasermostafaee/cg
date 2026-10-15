@@ -159,6 +159,10 @@ import {
   DelimitersChangedChannel,
   DelimitersListChannel,
   DelimitersSetChannel,
+  CalendarChangedChannel,
+  CalendarGetChannel,
+  CalendarSetChannel,
+  type CalendarSettings,
   ChannelSettingsChangedChannel,
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
@@ -4202,6 +4206,8 @@ export function wirePublishes(
     ),
     // R-034 — the shared delimiter list.
     backing.delimitersChanged.subscribe((d) => push(DelimitersChangedChannel, d)),
+    // `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri day adjustment.
+    backing.calendarChanged.subscribe((c) => push(CalendarChangedChannel, c)),
     // R-030 — the per-channel raster + the configured-vs-real mode reading.
     backing.channelSettingsChanged.subscribe((s) => push(ChannelSettingsChangedChannel, s)),
     // D-137 / C-015 — the installation's Live Source mapping, so a second
@@ -5128,6 +5134,13 @@ export function buildRoutes(
     route(DelimitersListChannel, 'read', 'read', () => b.delimitersList()),
     route(DelimitersSetChannel, 'operator', 'station-admin', (r: { delimiters: never[] }) =>
       b.delimitersSet(r.delimiters),
+    ),
+
+    // `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri day adjustment, the delimiter list's
+    // shape: a read for every console, a `station-admin` write.
+    route(CalendarGetChannel, 'read', 'read', () => b.calendarGet()),
+    route(CalendarSetChannel, 'operator', 'station-admin', (r: CalendarSettings) =>
+      b.calendarSet(r),
     ),
 
     /*

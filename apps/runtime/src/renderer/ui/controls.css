@@ -6938,7 +6938,8 @@ input[type='checkbox']:disabled:checked {
 }
 .cg-tpl-filter .cg-btn,
 .cg-timing-choice .cg-btn,
-.cg-datetime__choices .cg-btn {
+.cg-datetime__choices .cg-btn,
+.cg-lunar-adjust .cg-btn {
   min-height: var(--r-tpl-chip-h);
   height: var(--r-tpl-chip-h);
   padding: var(--r-tpl-chip-pad);
@@ -6995,13 +6996,14 @@ input[type='checkbox']:disabled:checked {
  * same kind of thing, a chosen setting that is not air, and is named here for the same reason.
  *
  * ⭐ `DELTA-RUN-NEXT-VERSION-01-C` — the date and time control's calendar choice and its month
- * grid's picked day: chosen settings, not air.
+ * grid's picked day, and Station setup's Lunar Hijri day adjustment: chosen settings, not air.
  */
 .cg-tpl-filter .cg-btn[aria-pressed='true'],
 .cg-timing-choice .cg-btn[aria-pressed='true'],
 .cg-playback__choices .cg-btn[aria-pressed='true'],
 .cg-datetime__calendars .cg-btn[aria-pressed='true'],
-.cg-datetime-grid__days .cg-btn[aria-pressed='true'] {
+.cg-datetime-grid__days .cg-btn[aria-pressed='true'],
+.cg-lunar-adjust .cg-btn[aria-pressed='true'] {
   background: var(--r-look-btn-sel-bg);
   border-color: var(--r-look-btn-sel-line);
   box-shadow: inset 0 0 0 1px var(--r-look-btn-sel-ring);
@@ -7012,7 +7014,8 @@ input[type='checkbox']:disabled:checked {
 .cg-timing-choice .cg-btn[aria-pressed='true']:hover:not(:disabled),
 .cg-playback__choices .cg-btn[aria-pressed='true']:hover:not(:disabled),
 .cg-datetime__calendars .cg-btn[aria-pressed='true']:hover:not(:disabled),
-.cg-datetime-grid__days .cg-btn[aria-pressed='true']:hover:not(:disabled) {
+.cg-datetime-grid__days .cg-btn[aria-pressed='true']:hover:not(:disabled),
+.cg-lunar-adjust .cg-btn[aria-pressed='true']:hover:not(:disabled) {
   /* LIFT, never swap to the neutral hover — an engaged chip must not read as switched off
      under the pointer. Same direction the `.is-on` family uses. */
   background: var(--r-look-btn-sel-line);
@@ -8295,4 +8298,18 @@ input[type='checkbox']:disabled:checked {
   padding-inline: 0;
   justify-content: center;
   font-variant-numeric: tabular-nums;
+}
+
+/* `DELTA-RUN-NEXT-VERSION-01-C` — Station setup · Calendar: the adjustment chips, then two facts. */
+.cg-calendar-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-3);
+}
+.cg-lunar-adjust,
+.cg-calendar-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--r-tpl-chip-gap);
 }

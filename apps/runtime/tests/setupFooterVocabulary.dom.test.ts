@@ -71,7 +71,14 @@ describe('B-240 — one job, one control, one name', () => {
   it('🔴 DISCARD is never called Cancel, on any tab — the two-names half, unchanged', async () => {
     stationSetupStub({ slots: boundSlots, bank: SETUP_BANK });
     const dialog = await renderStationSetup({ section: 'channel' });
-    for (const id of ['channel', 'servers', 'sources', 'delimiters', 'candidate-layers'] as const) {
+    for (const id of [
+      'channel',
+      'servers',
+      'sources',
+      'delimiters',
+      'calendar',
+      'candidate-layers',
+    ] as const) {
       await selectSetupTab(dialog, id);
       expect(footerButtons(dialog), `${id}'s footer calls discard "Cancel"`).not.toContain(
         'Cancel',

@@ -74,6 +74,7 @@ import {
   type PlayoutLayerState,
   type LiveLayerState,
   type DelimiterOption,
+  type CalendarSettings,
   type ChannelResponse,
   type ConnectionConfig,
   type ConnectionHealth,
@@ -290,6 +291,7 @@ import {
 } from './live-plate-release.js';
 import { TemplateRegistry, type AppliedRebuild } from './template-registry.js';
 import { DelimiterStore } from './delimiter-store.js';
+import { CalendarStore } from './calendar-store.js';
 import {
   TemplateHttpServer,
   deriveServeOptions,
@@ -1380,6 +1382,8 @@ export class CasparRuntime {
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
   /** R-034 — emitted with the full delimiter list whenever a browser changes it. */
   readonly delimitersChanged = new Emitter<DelimiterOption[]>();
+  /** `DELTA-RUN-NEXT-VERSION-01-C` — emitted with the full calendar settings whenever they change. */
+  readonly calendarChanged = new Emitter<CalendarSettings>();
   /**
    * D-137 / C-015 — emitted with the FULL source catalog whenever a browser
    * changes it, so every connected console converges without polling.
@@ -1902,6 +1906,8 @@ export class CasparRuntime {
   readonly #templateProvenance: { loaded: number; skipped: number; dir: string | null };
   /** R-034 — the station's delimiter list, persisted beside the templates. */
   readonly #delimiters: DelimiterStore;
+  /** `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri day adjustment, persisted beside them. */
+  readonly #calendar: CalendarStore;
   /** R-030 — the per-channel output raster + what `INFO` reports, persisted. */
   readonly #channelSettings: ChannelSettingsStore;
   /**
@@ -2410,6 +2416,10 @@ export class CasparRuntime {
     // never hands a browser the defaults over the operator's own list.
     this.#delimiters = new DelimiterStore(options.templatesDir);
     this.#delimiters.hydrate();
+    // `DELTA-RUN-NEXT-VERSION-01-C` — the same shape for the same reason: a restart never answers
+    // `calendar.get` with the default over the station's own adjustment.
+    this.#calendar = new CalendarStore(options.templatesDir);
+    this.#calendar.hydrate();
     // R-030 — same shape, same reason: the channel raster is read from disk
     // before the WebSocket can answer a `channelSettings.get`, and before the
     // first `CG ADD` can append a geometry query. Hydrating late would mean the
@@ -15136,6 +15146,19 @@ export class CasparRuntime {
     if (refusal !== null) return { ok: false, reason: refusal.reason, message: refusal.message };
     // Every connected browser converges, the `templates.changed` precedent.
     this.delimitersChanged.emit(this.#delimiters.list());
+    return { ok: true };
+  }
+
+  /** `DELTA-RUN-NEXT-VERSION-01-C` — the station's calendar settings (disk-persisted, shared). */
+  calendarGet(): CalendarSettings {
+    return this.#calendar.get();
+  }
+
+  /** Replace the calendar settings; every console converges on the push. */
+  calendarSet(settings: CalendarSettings): { ok: boolean; message?: string } {
+    const refusal = this.#calendar.set(settings);
+    if (refusal !== null) return { ok: false, message: refusal };
+    this.calendarChanged.emit(this.#calendar.get());
     return { ok: true };
   }
 

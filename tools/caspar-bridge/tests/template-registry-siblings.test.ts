@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { ChannelSettingsStore } from '../src/channel-settings-store.js';
+import { CalendarStore } from '../src/calendar-store.js';
 import { DelimiterStore } from '../src/delimiter-store.js';
 import { TemplateRegistry, isRegistryRecordName } from '../src/template-registry.js';
 
@@ -72,6 +73,9 @@ describe('B-116 — sibling config files beside the templates are not templates'
     expect(delimiters.set([{ id: 'pipe', label: 'pipe', value: '|' }])).toBeNull();
     expect(fs.existsSync(path.join(dir, 'channel-settings.json'))).toBe(true);
     expect(fs.existsSync(path.join(dir, 'delimiters.json'))).toBe(true);
+    // `DELTA-RUN-NEXT-VERSION-01-C` — the third sibling, written by its real store too.
+    expect(new CalendarStore(dir).set({ lunarAdjustDays: -1 })).toBeNull();
+    expect(fs.existsSync(path.join(dir, 'calendar.json'))).toBe(true);
 
     const result = new TemplateRegistry(dir).loadPersisted();
 
@@ -110,6 +114,7 @@ describe('B-116 — sibling config files beside the templates are not templates'
     expect(isRegistryRecordName('lower-third-0123456789ab.json')).toBe(true);
     expect(isRegistryRecordName('delimiters.json')).toBe(false);
     expect(isRegistryRecordName('channel-settings.json')).toBe(false);
+    expect(isRegistryRecordName('calendar.json')).toBe(false);
     expect(isRegistryRecordName('template-channels.json')).toBe(false);
     expect(isRegistryRecordName('bridge-source-catalog.json')).toBe(false);
     // A record name with the wrong hash width, or a tmp file mid-rename, is not a record.

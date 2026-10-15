@@ -41,7 +41,14 @@ const dismiss = (dialog: Locator): Locator =>
   dialog.getByRole('button', { name: 'Close', exact: true });
 
 /** The rail, in the owner's order. */
-const TABS = ['Channel', 'Connection', 'Live sources', 'Text file delimiters', 'Layers'];
+const TABS = [
+  'Channel',
+  'Connection',
+  'Live sources',
+  'Text file delimiters',
+  'Calendar',
+  'Layers',
+];
 
 test('the rail: Settings opens on Channel, and every section is one press away', async ({
   app,

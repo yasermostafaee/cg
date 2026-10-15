@@ -88,7 +88,8 @@ test('§7 — the frame, the rail, the pane and the footer measure to the token 
   expect(Math.round(await tab.evaluate((el) => el.getBoundingClientRect().height))).toBe(
     px(tokens.tabMinH),
   );
-  await expect(rail.locator('.cg-rail-tab > svg')).toHaveCount(5);
+  // `DELTA-RUN-NEXT-VERSION-01-C` — six sections since Calendar, each with its glyph.
+  await expect(rail.locator('.cg-rail-tab > svg')).toHaveCount(6);
 
   // THE PANE — inset `29px 32px 32px`.
   const pane = dialog.locator('[data-station-pane]');

@@ -160,6 +160,8 @@ const BRIDGE_SURFACE: {
       missing capability — but the guard could not have told anyone that, which is the point.
     */
     delimiters: ['list', 'set', 'onChanged'],
+    // `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri adjustment, the delimiters' shape.
+    calendar: ['get', 'set', 'onChanged'],
     sources: [
       'config',
       'setConfig',

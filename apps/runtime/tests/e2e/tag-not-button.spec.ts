@@ -69,7 +69,14 @@ test('every visible tag on every Station setup tab is inert', async ({ app, page
   // The rail's own titles, verbatim from `sections.ts` — "Text file delimiters", not
   // "Text delimiters". A near-miss here selects nothing and the sweep silently covers one
   // tab fewer, which is the failure mode this whole prompt is about.
-  const tabs = ['Channel', 'Connection', 'Live sources', 'Text file delimiters', 'Layers'];
+  const tabs = [
+    'Channel',
+    'Connection',
+    'Live sources',
+    'Text file delimiters',
+    'Calendar',
+    'Layers',
+  ];
   let seen = 0;
 
   for (const name of tabs) {

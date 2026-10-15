@@ -151,6 +151,8 @@ describe('Station setup', () => {
     ['servers', 1],
     ['sources', 1],
     ['delimiters', 1],
+    // `DELTA-RUN-NEXT-VERSION-01-C` — Calendar's two facts (the calculation and today's lunar date).
+    ['calendar', 2],
     ['candidate-layers', 1],
   ] as const)('renders no pressable tag on the %s tab', async (section, atLeast) => {
     const dialog = await renderStationSetup({ section: 'channel' });

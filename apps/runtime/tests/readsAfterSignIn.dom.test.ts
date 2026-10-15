@@ -239,6 +239,8 @@ describe('`DELTA-MULTI-CHANNEL-01-A` A4 / A6 — a sign-in brings the rows, with
       'sources.config',
       'sources.assignments',
       'delimiters.list',
+      // `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri adjustment, the delimiters' way.
+      'calendar.get',
     ]) {
       expect(answered, `${read} was not asked after the sign-in`).toContain(read);
     }

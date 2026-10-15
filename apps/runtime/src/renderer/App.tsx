@@ -55,6 +55,7 @@ import { useConnections } from './hooks/useConnections.js';
 import { useEngineSessions } from './hooks/useEngineSessions.js';
 import { useBackupChannels } from './hooks/useBackupChannels.js';
 import { initDelimiters } from './features/inspector/delimiterStore.js';
+import { initCalendar } from './features/calendar/calendarStore.js';
 import { initSources } from './features/sources/sourceStore.js';
 import { useStackHousekeeping } from './hooks/useStackHousekeeping.js';
 import { useTemplateRebuild } from './features/library/useTemplateRebuild.js';
@@ -253,6 +254,8 @@ export function App(): JSX.Element {
   // bridge pushes nothing to a socket nobody has signed in on, and a sign-in pushes nothing).
   const readable = useBridgeReadable();
   useEffect(() => (readable ? initDelimiters(window.cg) : undefined), [readable]);
+  // `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri adjustment, the delimiters' way and reason.
+  useEffect(() => (readable ? initCalendar(window.cg) : undefined), [readable]);
 
   // D-137 / C-015 — the installation's source CATALOG and the per-plate
   // ASSIGNMENTS, pulled once and kept subscribed for the same reason: both are

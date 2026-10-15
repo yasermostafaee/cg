@@ -548,6 +548,13 @@ export function createMockBridge(): RuntimeBridge {
       onChanged: (handler) => mock.delimitersChanged.subscribe(handler),
     },
 
+    // `DELTA-RUN-NEXT-VERSION-01-C` — offline parity for the station's calendar settings.
+    calendar: {
+      get: () => Promise.resolve(mock.calendarGet()),
+      set: (req) => Promise.resolve(mock.calendarSet(req)),
+      onChanged: (handler) => mock.calendarChanged.subscribe(handler),
+    },
+
     // R-022 — offline parity for REHEARSE. The mock holds the same interlock:
     // `take` refuses a rehearsing item, so the guard is exercised in test mode
     // rather than only against the real bridge.

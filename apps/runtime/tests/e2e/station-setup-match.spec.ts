@@ -23,7 +23,14 @@ import { test, expect } from './fixtures/runtime.js';
  * it adds to those two is the RAIL's height — which is what defect 4 turned out to be.
  */
 
-const TABS = ['Channel', 'Connection', 'Live sources', 'Text file delimiters', 'Layers'] as const;
+const TABS = [
+  'Channel',
+  'Connection',
+  'Live sources',
+  'Text file delimiters',
+  'Calendar',
+  'Layers',
+] as const;
 
 /** `rgb(r, g, b)` → its relative luminance, for "is this lighter than that". */
 function luminance(rgb: string): number {
@@ -278,7 +285,8 @@ test('§3 — every rail item paints its whole box, in every mark state, and the
       'true',
     );
     const items = await measure();
-    expect(items, `${tab}: the rail lists five sections`).toHaveLength(5);
+    // `DELTA-RUN-NEXT-VERSION-01-C` — six since Calendar joined Content.
+    expect(items, `${tab}: the rail lists six sections`).toHaveLength(6);
     for (const item of items) {
       expect(item.h, `${tab} · ${item.label}: the item is the rail's one height`).toBe(44);
       expect(item.w, `${tab} · ${item.label}: the item is the rail's one width`).toBe(197);

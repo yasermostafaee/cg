@@ -23,6 +23,7 @@ import {
   Server,
   Settings,
   Type,
+  CalendarDays,
   type LucideIcon,
 } from 'lucide-react';
 import { DEFAULT_OSC_PORT, type ConnectionConfig, type TemplateServeInfo } from '@cg/shared-ipc';
@@ -48,6 +49,7 @@ import {
   CandidateLayersSummary,
 } from '../fixedLayers/CandidateLayersSection.js';
 import { DelimitersSection } from '../inspector/DelimitersSection.js';
+import { CalendarSection } from '../calendar/CalendarSection.js';
 import { SourcesSection } from '../sources/SourcesSection.js';
 import { BackupServerDialog } from './BackupServerDialog.js';
 import { BackupChannelsCard } from './BackupChannelsCard.js';
@@ -148,6 +150,7 @@ const SECTION_ICONS: Record<StationSetupSection, LucideIcon> = {
   servers: Server,
   sources: Radio,
   delimiters: Type,
+  calendar: CalendarDays,
   'candidate-layers': Layers,
 };
 
@@ -646,6 +649,7 @@ export function StationSetupDialog({
     return {
       sources: make('sources'),
       delimiters: make('delimiters'),
+      calendar: make('calendar'),
       candidateLayers: make('candidate-layers'),
     };
   }, []);
@@ -2028,6 +2032,12 @@ export function StationSetupDialog({
           {active === 'delimiters' && (
             <SetupSection id="delimiters">
               <DelimitersSection report={reporters.delimiters} />
+            </SetupSection>
+          )}
+
+          {active === 'calendar' && (
+            <SetupSection id="calendar">
+              <CalendarSection report={reporters.calendar} />
             </SetupSection>
           )}
 

@@ -166,6 +166,12 @@ const BEFORE_AND_AFTER = {
       plate band only (P-031: a hand-made entry still in it is ignored, never deleted).
     */
     'cg-runtime:bound-media',
+    /*
+      `DELTA-RUN-NEXT-VERSION-01-C` — NEW, and mock-only (the offline console): the station's Lunar
+      Hijri day adjustment, as CG Bridge keeps `calendar.json`. No migration is owed: ABSENT means 0,
+      the calculation itself.
+    */
+    'cg-runtime:calendar',
     'cg-runtime:channel-settings',
     'cg-runtime:delimiters',
     'cg-runtime:source-assignments',

@@ -38,6 +38,7 @@ export type StationSetupSection =
   | 'servers'
   | 'sources'
   | 'delimiters'
+  | 'calendar'
   | 'candidate-layers';
 
 /**
@@ -225,6 +226,20 @@ export const STATION_SETUP_SECTIONS: readonly StationSetupSectionSpec[] = [
   },
   {
     /*
+      `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri day adjustment. The delimiter list's
+      contract exactly: a `station-admin` setting that commits as it is pressed (`calendar.set`).
+    */
+    id: 'calendar',
+    title: 'Calendar',
+    commit: 'immediate',
+    group: 'Content',
+    legend: 'Saves as you go.',
+    footerRest: 'Saved as you go — there is nothing waiting to be applied.',
+    commits: false,
+    footerIcon: 'saved',
+  },
+  {
+    /*
      * RENAMED from "Candidate layers" at the owner's direction. The id is unchanged
      * because it is the deep link the Layers panel's Configure sends, and an id is not
      * an operator-facing name (golden rule 11).
@@ -278,7 +293,7 @@ const CHANNEL_FOR_STATION_ADMIN: Partial<StationSetupSectionSpec> = {
  * 🔴 `MULTI-CHANNEL-01` §2 I — **EVERY COMMIT IN STATION SETUP IS A `station-admin` ROUTE**, walked
  * against the route classes rather than a list: `connections.set-config` (Servers),
  * `sources.set-config` (Live sources — the band; `PLAYOUT-SOURCES-01`), `delimiters.set` (Text file
- * delimiters), `fixedLayers.set-config` / `set-banks` (Layers, and the Channel pane's Change
+ * delimiters), `calendar.set` (Calendar), `fixedLayers.set-config` / `set-banks` (Layers, and the Channel pane's Change
  * channel…). So for any other principal every pane that commits shows its values as VALUES — no
  * Apply, no Revert, no inputs (golden rule 13: absent, never offered-then-refused) — and its head
  * and footer say that, in place of a contract that is not theirs.

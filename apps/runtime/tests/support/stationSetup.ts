@@ -124,6 +124,8 @@ export interface StationSetupStubOptions {
   assignments?: SourceAssignments;
   templates?: readonly TemplateInfo[];
   delimitersSetResult?: { ok: boolean; message?: string };
+  /** `DELTA-RUN-NEXT-VERSION-01-C` — what `calendar.set` answers. */
+  calendarSetResult?: { ok: boolean; message?: string };
   /**
    * `B-238` — what `stack.remove` RESOLVES with. It resolves a refusal rather than throwing
    * (`{ accepted: false, errorCode: 'on-air' }`, measured against the real mock), and a
@@ -144,6 +146,7 @@ export interface StationSetupStub {
   sourcesSetConfig: Mock;
   sourcesSetAssignments: Mock;
   delimitersSet: Mock;
+  calendarSet: Mock;
   remove: Mock;
   takeOffAir: Mock;
 }
@@ -158,6 +161,7 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
   const sourcesSetConfig = vi.fn(options.sourcesSetConfig ?? (() => Promise.resolve({ ok: true })));
   const sourcesSetAssignments = vi.fn(() => Promise.resolve({ ok: true }));
   const delimitersSet = vi.fn(() => Promise.resolve(options.delimitersSetResult ?? { ok: true }));
+  const calendarSet = vi.fn(() => Promise.resolve(options.calendarSetResult ?? { ok: true }));
   const remove = vi.fn(() => Promise.resolve(options.removeResult ?? { accepted: true }));
   const takeOffAir = vi.fn(() => Promise.resolve(options.takeOffAirResult ?? { ok: true }));
   const stub = {
@@ -229,6 +233,12 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
       onChanged: () => () => undefined,
       set: delimitersSet,
     },
+    // `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri adjustment (the calculation, unadjusted).
+    calendar: {
+      get: () => Promise.resolve({ lunarAdjustDays: 0 }),
+      onChanged: () => () => undefined,
+      set: calendarSet,
+    },
     templates: {
       list: () => Promise.resolve(options.templates ?? []),
       get: () => Promise.resolve(null),
@@ -270,6 +280,7 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
     sourcesSetConfig,
     sourcesSetAssignments,
     delimitersSet,
+    calendarSet,
     remove,
     takeOffAir,
   };

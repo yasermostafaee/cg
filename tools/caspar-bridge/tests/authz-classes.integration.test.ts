@@ -135,7 +135,7 @@ describe('C-038 — the census: every route, classified', () => {
    * seventh route quietly joining this class is a privilege change that should have to be
    * argued for — so it reddens here, and the argument happens in review.
    */
-  it('exactly fourteen routes are station-admin: the configuration verbs, the unjoined catalogue, the two channel-scope doors, the bridge’s own sign-in on each engine, the backup channel entries, and its logs', () => {
+  it('exactly fifteen routes are station-admin: the configuration verbs, the unjoined catalogue, the two channel-scope doors, the bridge’s own sign-in on each engine, the backup channel entries, its logs, and the station’s Lunar Hijri adjustment', () => {
     const admin = [...routes().entries()]
       .filter(([, r]) => r.perm === 'station-admin')
       .map(([name]) => name)
@@ -165,6 +165,11 @@ describe('C-038 — the census: every route, classified', () => {
         station's configuration, not an operator's press.
       */
       'bridgeSession.sign-in',
+      /*
+        `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri day adjustment: a station's
+        configuration, on `delimiters.set`'s rung for its reason (one answer for every console).
+      */
+      'calendar.set',
       'channelSettings.set',
       /*
         `DESKTOP-APPS-01` §2E — the Playout's channels UNJOINED, host and all. A read, on the
@@ -245,6 +250,8 @@ describe('C-038 — the census: every route, classified', () => {
       'bridgeSession.engines',
       // `CENTRAL-BRIDGE-01` (D7) — whether CG Bridge holds its own Playout session. Every console says it.
       'bridgeSession.state',
+      // `DELTA-RUN-NEXT-VERSION-01-C` — the Lunar Hijri adjustment in force: every console reads a lunar date.
+      'calendar.get',
       'channelSettings.get',
       // `R-062` gap 2 — the channel-discovery call. A read: it NAMES channels and decides nothing.
       'channels.list',

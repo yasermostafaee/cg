@@ -285,7 +285,14 @@ test('§6 — every tag in the dialog is inert, and reads quieter than a button 
   const rail = dialog.getByRole('tablist', { name: 'Station setup sections' });
 
   const seen: string[] = [];
-  for (const tab of ['Channel', 'Connection', 'Live sources', 'Text file delimiters', 'Layers']) {
+  for (const tab of [
+    'Channel',
+    'Connection',
+    'Live sources',
+    'Text file delimiters',
+    'Calendar',
+    'Layers',
+  ]) {
     await rail.getByRole('tab', { name: new RegExp(`^${tab}`) }).click();
     await expect(dialog.locator('[data-station-section]')).toBeVisible();
 

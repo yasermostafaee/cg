@@ -311,6 +311,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'bridgeSession.engines',
         // `CENTRAL-BRIDGE-01` (D7) — the bridge's own session, a READ (its sign-in is refused locked).
         'bridgeSession.state',
+        // `DELTA-RUN-NEXT-VERSION-01-C` — a read: the Lunar Hijri adjustment; its set is refused locked.
+        'calendar.get',
         // `PLAYOUT-FEATURES-01` D — the CG license, as last read.
         'license.state',
         'channelSettings.get',

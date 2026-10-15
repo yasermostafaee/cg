@@ -54,7 +54,16 @@ function inventory(): { inTemplatesDir: string[]; inCgRuntime: string[] } {
 const BEFORE_AND_AFTER = {
   // `B-116`: both still live beside the templates. Not moved — that is a data migration —
   // and no longer mistaken for templates, because the registry reads only its own records.
-  inTemplatesDir: ['channel-settings.json', 'delimiters.json'],
+  inTemplatesDir: [
+    /*
+      `DELTA-RUN-NEXT-VERSION-01-C` — NEW: the station's Lunar Hijri day adjustment
+      (`calendar-store.ts`), the delimiter list's shape and home. No migration is owed: absent means
+      the calculation, unadjusted.
+    */
+    'calendar.json',
+    'channel-settings.json',
+    'delimiters.json',
+  ],
   inCgRuntime: [
     'bridge-audit.ndjson',
     /*

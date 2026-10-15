@@ -108,6 +108,9 @@ import type {
   DelimitersListChannel,
   DelimitersSetChannel,
   DelimiterOption,
+  CalendarGetChannel,
+  CalendarSetChannel,
+  CalendarSettings,
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
   ChannelSettingsState,
@@ -1300,5 +1303,18 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof DelimitersSetChannel>,
     ): Promise<ChannelResponse<typeof DelimitersSetChannel>>;
     onChanged(handler: (delimiters: DelimiterOption[]) => void): Unsubscribe;
+  };
+
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-C` — the station's calendar settings: the Lunar Hijri day adjustment
+   * (−2 … +2) applied to the display and entry of Lunar Hijri dates. On the BRIDGE for the
+   * `delimiters` reason — every console must read the same lunar day — and a `station-admin` write.
+   */
+  calendar: {
+    get(): Promise<ChannelResponse<typeof CalendarGetChannel>>;
+    set(
+      req: ChannelRequest<typeof CalendarSetChannel>,
+    ): Promise<ChannelResponse<typeof CalendarSetChannel>>;
+    onChanged(handler: (settings: CalendarSettings) => void): Unsubscribe;
   };
 }

@@ -76,6 +76,10 @@ import {
   DelimitersListChannel,
   DelimitersSetChannel,
   type DelimiterOption,
+  CalendarChangedChannel,
+  CalendarGetChannel,
+  CalendarSetChannel,
+  type CalendarSettings,
   ChannelSettingsChangedChannel,
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
@@ -513,6 +517,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #updateSubs = new Subs<PendingUpdate | null>();
   /** R-034 — the bridge-owned delimiter list, pushed on every change. */
   readonly #delimiterSubs = new Subs<DelimiterOption[]>();
+  /** `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri day adjustment, pushed on every change. */
+  readonly #calendarSubs = new Subs<CalendarSettings>();
   /** R-030 — the bridge-owned channel raster + video-mode reading. */
   readonly #channelSettingsSubs = new Subs<ChannelSettingsState>();
   readonly #stationChannelsSubs = new Subs<StationChannels>();
@@ -1477,6 +1483,11 @@ export class WebSocketRuntime implements RuntimeBridge {
       case DelimitersChangedChannel.name: {
         const p = DelimitersChangedChannel.payload.safeParse(payload);
         if (p.success) this.#delimiterSubs.emit(p.data);
+        break;
+      }
+      case CalendarChangedChannel.name: {
+        const p = CalendarChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#calendarSubs.emit(p.data);
         break;
       }
       case ChannelSettingsChangedChannel.name: {
@@ -2461,6 +2472,13 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(DelimitersSetChannel, req),
     onChanged: (handler: (delimiters: DelimiterOption[]) => void) =>
       this.#delimiterSubs.add(handler),
+  };
+
+  /** `DELTA-RUN-NEXT-VERSION-01-C` — the station's calendar settings, owned and persisted by the bridge. */
+  readonly calendar = {
+    get: () => this.#invoke(CalendarGetChannel, undefined),
+    set: (req: ChannelRequest<typeof CalendarSetChannel>) => this.#invoke(CalendarSetChannel, req),
+    onChanged: (handler: (settings: CalendarSettings) => void) => this.#calendarSubs.add(handler),
   };
 }
 

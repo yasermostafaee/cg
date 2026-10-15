@@ -60,6 +60,8 @@ describe('§2 — the rail: nothing is hidden, and no refusal stands in front of
       'Connection',
       'Live sources',
       'Text file delimiters',
+      // `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri day adjustment.
+      'Calendar',
       'Layers',
     ]);
     // …and the ids behind them are the deep-link ids, unchanged.

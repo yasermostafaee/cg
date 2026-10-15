@@ -27,6 +27,7 @@ import {
   type DateTimeSegment,
   type DigitSet,
   type FieldDigits,
+  type LunarHijriCalculation,
 } from '@cg/text-shaping';
 
 /**
@@ -322,6 +323,25 @@ export function dayInWords(day: CalendarDay, system: CalendarSystem, digits: Dig
   const month = MONTH_NAMES[system][day.month - 1] ?? '';
   const n = (v: number): string => writeFieldDigits(String(v), digits);
   return `${n(day.day)} ${month} ${n(day.year)}`;
+}
+
+/** The operator's words for the Lunar Hijri calculation this engine provides. */
+export function lunarCalculationName(calc: LunarHijriCalculation): string {
+  switch (calc) {
+    case 'islamic-umalqura':
+      return 'Umm al-Qura';
+    case 'islamic-civil':
+      return 'Civil (tabular)';
+    case 'tabular':
+      return 'Tabular';
+  }
+}
+
+/** A Lunar Hijri adjustment in words: `+1 day`, `−2 days`, `As calculated`. */
+export function lunarAdjustWords(days: number): string {
+  if (days === 0) return 'As calculated';
+  const n = Math.abs(days);
+  return `${days > 0 ? '+' : '−'}${String(n)} ${n === 1 ? 'day' : 'days'}`;
 }
 
 /** The same Gregorian day in each of `systems`. */

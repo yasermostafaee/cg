@@ -87,6 +87,8 @@ export * from './channels/emptiedAir.js';
 // console's own origin, never over the control socket.
 export * from './channels/pgmReturn.js';
 export * from './channels/delimiters.js';
+// `DELTA-RUN-NEXT-VERSION-01-C` — the station's calendar settings (the Lunar Hijri day adjustment).
+export * from './channels/calendar.js';
 // R-030 — the per-channel output raster (bridge-owned) + the configured-vs-real
 // video-mode verdict.
 export * from './channels/channelSettings.js';
