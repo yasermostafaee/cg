@@ -3457,3 +3457,13 @@ Measured free before use: `git grep -q -e "## \[.\] B-347"` on all 10 local and 
 returned nothing; control: the same sweep found `B-346` on 2 refs; no stash.
 
 ⇒ **Next free after this entry is `B-348`**, **`D-166`**, **`P-068`**, **`R-102`** and **`C-049`**.
+
+### 2026-10-15 — `DELTA-RUN-NEXT-VERSION-01-I` takes `B-348`
+
+- `B-348` — pictures named by far-apart numbers took the tab down, or left it busy with nothing shown —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: `git grep -q -e "## \[.\] B-348"` on all 10 local and remote-tracking refs after `git fetch`
+returned nothing; control: the same sweep found `B-347` on 2 refs; no stash.
+
+⇒ **Next free after this entry is `B-349`**, **`D-166`**, **`P-068`**, **`R-102`** and **`C-049`**.

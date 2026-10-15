@@ -81,3 +81,23 @@
 - [x] 7.4 `B-345` filed in `docs/prd/bugs-designer.md`; registry updated.
 - [x] 7.5 Linux `e2e` RAN green on the pushed commit — https://github.com/yasermostafaee/cg/actions/runs/38701929266 (`39bbb5d4`, which carries it): `completed` / `success`; both heavy jobs RAN — Designer 333 passed / 13 skipped, CG Control 346 passed / 2 skipped, read from the run log; `picker-held-input.spec.ts` (3) and
       `image-sequence-import.spec.ts` (3) among the passed.
+
+## 8. `DELTA-RUN-NEXT-VERSION-01-I` — `B-348`: far-apart pictures took the tab down (FULL lane)
+
+- [x] 8.1 Reproduced RED in a real Chrome through both menu items: 38 PNGs named by 13-digit far-apart numbers — no
+      answer in 15 s on either door (the owner's tab died of "Out of Memory"; the folder door showed nothing).
+      (`image-sequence-scattered.spec.ts`)
+- [x] 8.2 Located and measured: `image-sequence.ts`'s hole list (`findImageSequences`) and `framesToConvert` grew with
+      the SPAN — the real code at 38 pictures: +4 MB at 10⁵, +13 MB at 10⁶, +247 MB / 310 ms at 10⁷; the owner's span
+      ~5×10¹⁰.
+- [x] 8.3 Fix: the span judged by arithmetic first (≤ 4 holes per picture to be one sequence; ≤ 30,000 frames to be
+      listed); a pick with no sequence says why in one sentence; numbers too long to count are not frame numbers.
+      (unit tests red with the refusal ablated — 7 s to list two million holes)
+- [x] 8.4 The convert budget in pixels (3,000 frames of 1080p), refused in the sequence step before it starts —
+      measured in Chrome's own processes: idle 65 MB; the 38 far-apart pictures 67 MB (+2); 300 frames of 1080p
+      RGBA (172 MB of PNGs) peak 459 MB in 54 s; 900 frames (542 MB) peak 589 MB in 2.6 min.
+- [x] 8.5 Already bounded, confirmed rather than changed: frame sizes from the PNG/TGA header (24 bytes, never
+      decoded); frames mounted zero-copy into the converter (WORKERFS); the dedupe hash streamed chunk by chunk in a
+      worker; progress in frames; Cancel leaves the project unchanged.
+- [x] 8.6 `B-348` filed; registry updated.
+- [ ] 8.7 Linux `e2e` RAN green on the pushed commit — run URL here.

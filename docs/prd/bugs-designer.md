@@ -4295,3 +4295,21 @@ dialog. And a popover is portaled to the body, so its Escape reached the Modal's
 **Acceptance:** e2e `steps-dialog.spec.ts` measures the picker on top where it is drawn (`elementFromPoint`) — red at
 `4000`, green at `6000` — and Escape closes only the picker; a dom test pins the Modal standing aside (red with the
 rule removed).
+
+## [~] B-348 — Pictures named by far-apart numbers took the tab down ("Out of Memory"), or left it busy with nothing shown ⟨priority: high — a crashed tab loses unsaved work⟩ — FILED 2026-10-15 by `DELTA-RUN-NEXT-VERSION-01-I` (the owner's folder of ~38 pictures) · `openspec/changes/add-image-sequence-import/`
+
+**Repro / Actual:** a folder of about 38 separate pictures named by large, unrelated numbers (time stamps). `Image
+sequence…` with all of them selected → Chrome "Aw, Snap! Out of Memory"; `Image sequence folder…` → nothing for as
+long as the owner waited. A folder of consecutive frames imported fine. **Cause (measured):**
+`image-sequence.ts` took every numbered picture with the same name pattern as ONE sequence and then listed its holes
+by counting from the first number to the last (`findImageSequences`, the `missing` loop) — and `framesToConvert`
+filled the same span — so the work grew with the SPAN, not with the pictures: +4 MB at a span of 10⁵, +13 MB at 10⁶,
++247 MB at 10⁷ (the real code, measured); the owner's 38 time stamps span ~5×10¹⁰. **Fix:** a run's span is judged
+by arithmetic BEFORE anything is listed — at most 4 missing numbers per picture to be one sequence, at most 30,000
+frames to be listed — and a pick holding no sequence says why in one sentence ("These 38 pictures are numbered far
+apart (… … …), so they are not an image sequence. To use them as pictures, import them with Image…."); numbers too
+long to count exactly are not frame numbers. And what one import may CONVERT is now budgeted in pixels (3,000 frames
+of 1920×1080, measured: 300 frames peaked at 459 MB, 900 at 589 MB), refused in the sequence step before it starts.
+**Acceptance:** e2e `image-sequence-scattered.spec.ts` — both menu items, 38 far-apart pictures: a sentence, no
+crash — red on the old code (no answer in 15 s), green now; unit tests in `image-sequence.test.ts` (red with the
+refusal ablated); the modal's budget refusal in `image-sequence-import-modal.dom.test.ts`.

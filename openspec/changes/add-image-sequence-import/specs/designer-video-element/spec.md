@@ -49,6 +49,34 @@ show the same fact with Continue disabled.
 - **WHEN** the author picks one PNG through `Image sequence…`
 - **THEN** a notice says one picture is not a sequence and names `Image…`, and nothing is imported
 
+### Requirement: Pictures named by far-apart numbers SHALL NOT be a sequence, and no pick SHALL exhaust the tab
+
+A run of numbered pictures SHALL be ONE sequence only when its numbers are mostly one after another — at most four
+missing numbers for every picture — and its first-to-last span is at most 30,000 frames; the span SHALL be judged by
+arithmetic before anything is listed, so the work never grows with it (`B-348`, `DELTA-RUN-NEXT-VERSION-01-I`). A
+pick holding no sequence SHALL say why in one sentence: pictures numbered far apart are named as pictures (and
+`Image…` as their door), a run too long is named with its length and the limit. A number too long to be counted
+exactly SHALL NOT be a frame number. What one import may convert SHALL be budgeted in pixels (frames × width ×
+height, 3,000 frames of 1920×1080), judged in the sequence step from the frames' headers, and a sequence over it SHALL
+be refused there with one sentence and no Continue — before anything is converted.
+
+#### Scenario: The owner's folder is answered, not crashed on
+
+- **WHEN** the author picks 38 pictures named by 13-digit time stamps, through `Image sequence…` or `Image sequence
+folder…`
+- **THEN** the tab stays alive, a sentence says these 38 pictures are numbered far apart and are not an image
+  sequence, and nothing is imported
+
+#### Scenario: A held gap is still one sequence
+
+- **WHEN** a folder holds frames 1–100 and 500–600 of one render
+- **THEN** they are ONE sequence of 600 frames, the gap held
+
+#### Scenario: A sequence over the budget is refused before it starts
+
+- **WHEN** the frames' headers make the job more than the budget
+- **THEN** the step says how many frames of what size, and what fits at that size, and Continue is disabled
+
 ### Requirement: Sequence frames SHALL be ordered by the number in their names, in any digit set
 
 A frame's number SHALL be the LAST run of digits in its name, read in Latin, Persian or Arabic-Indic
