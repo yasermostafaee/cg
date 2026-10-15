@@ -293,5 +293,6 @@ or H.
       the Steps dialog and Escape closed the dialog — popovers above dialogs, the Modal stands aside while one is
       open (e2e red at the old z-index, dom red with the rule removed); and the steps' DEFAULT colours — the
       Default row (the schema's Before) is always offered first in the dialog, and Add change with no filter starts
-      on the countdown's own text colour. (`steps-dialog.dom.test.ts`, e2e `steps-dialog.spec.ts`; local Windows:
-      7 passed)
+      on the countdown's own text colour. (`6bfe2e88`; `steps-dialog.dom.test.ts`, e2e `steps-dialog.spec.ts`;
+      Linux e2e RAN on `f286f086`: https://github.com/yasermostafaee/cg/actions/runs/38706012278 — `success`,
+      Designer 334 passed / 13 skipped, CG Control 346 / 2, the owner's-two test among the passed)
