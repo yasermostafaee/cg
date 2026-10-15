@@ -21,7 +21,7 @@ import { PlayoutSection } from './PlayoutSection.js';
 import { selectedElements } from './shared-properties.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
-import { ZoneOverridesSection } from './ZoneOverridesSection.js';
+import { ElementStepsSection } from './CountdownStepsSection.js';
 import * as s from './InspectorPanel.css.js';
 
 interface Props {
@@ -134,8 +134,8 @@ function ElementInspector({
         element.type === 'ticker' ||
         element.type === 'sequence' ||
         element.type === 'repeater') && <DynamicDataSection element={element} scene={scene} />}
-      {/* `D-141` 5.5 — this element's colours per zone, only when a zoned countdown encloses it. */}
-      <ZoneOverridesSection element={element} />
+      {/* DELTA-RUN-NEXT-VERSION-01-B — this element's door to the steps that change it. */}
+      <ElementStepsSection element={element} />
       {bindings.length > 0 && (
         <CollapseSection title="Bindings" defaultExpanded>
           <ElementBindings bindings={bindings} nameOf={elementNameResolver(scene)} />

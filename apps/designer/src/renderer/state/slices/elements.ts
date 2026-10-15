@@ -278,6 +278,46 @@ export const elementsSlice = {
   },
 
   /**
+   * `DELTA-RUN-NEXT-VERSION-01-B` — patch an element in WHICHEVER composition holds it (the root, or
+   * any composition), not only the one open: an element's Inspector edits the steps of a countdown
+   * that lives in the composition enclosing the one being edited. Top-level layer children, like
+   * {@link updateElement}; a no-op when nothing holds `elementId`.
+   */
+  updateElementAnywhere(elementId: string, patch: Partial<Element>): void {
+    const scene = current.scene;
+    if (scene === null) return;
+    const patched = (layers: readonly Layer[]): Layer[] | null => {
+      let hit = false;
+      const next = layers.map((layer) => {
+        const i = layer.children.findIndex((c) => c.id === elementId);
+        const existing = layer.children[i];
+        if (existing === undefined) return layer;
+        hit = true;
+        const children = [...layer.children];
+        children[i] = { ...existing, ...patch } as Element;
+        return { ...layer, children };
+      });
+      return hit ? next : null;
+    };
+    const root = patched(scene.layers);
+    if (root !== null) {
+      set({ scene: { ...scene, layers: root } });
+      return;
+    }
+    const compositions = scene.compositions ?? [];
+    for (let k = 0; k < compositions.length; k++) {
+      const comp = compositions[k];
+      if (comp === undefined) continue;
+      const layers = patched(comp.layers);
+      if (layers === null) continue;
+      const next = [...compositions];
+      next[k] = { ...comp, layers };
+      set({ scene: { ...scene, compositions: next } });
+      return;
+    }
+  },
+
+  /**
    * D-107 — toggle whether a content element (ticker / sequence / countdown clock)
    * DRIVES the composition's content-driven hold. Recurses containers so a grouped
    * content element is reachable too (unlike the shallow `updateElement`). Excluded

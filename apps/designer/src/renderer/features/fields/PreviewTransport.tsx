@@ -49,11 +49,11 @@ export function PreviewTransport({
   hasSound = false,
   soundMuted = false,
   onToggleSound,
-  zoneKeys = [],
+  stepChoices = [],
   clockRate = 1,
   onClockRate,
-  forcedZone = null,
-  onForceZone,
+  forcedStep = '',
+  onForceStep,
 }: {
   paused: boolean;
   canStep: boolean;
@@ -68,14 +68,17 @@ export function PreviewTransport({
   hasSound?: boolean;
   soundMuted?: boolean;
   onToggleSound?: () => void;
-  /** `D-141` — the keys a countdown's zones define; empty hides the two zone knobs. */
-  zoneKeys?: readonly string[];
+  /**
+   * DELTA-RUN-NEXT-VERSION-01-A — every step of every countdown with steps, as `{value, label}`
+   * (`value` = `<clockId>|<token>`); empty hides the two rehearsal knobs.
+   */
+  stepChoices?: readonly { value: string; label: string }[];
   /** `D-141` — the rehearsal rate (1 = real time). */
   clockRate?: number;
   onClockRate?: (rate: number) => void;
-  /** `D-141` — a zone painted with no countdown running; `null` = the countdown decides. */
-  forcedZone?: string | null;
-  onForceZone?: (zone: string | null) => void;
+  /** The step shown whatever the time; `''` = the countdowns decide (live). */
+  forcedStep?: string;
+  onForceStep?: (value: string) => void;
 }): JSX.Element {
   return (
     <div className={s.bar}>
@@ -142,14 +145,15 @@ export function PreviewTransport({
           </Button>
         )}
         {/*
-          `D-141` (design §7.4) — rehearse the zones without waiting an hour: the page's clock runs
-          N× faster through the real countdown, or one zone is painted with nothing running.
+          `D-141` / DELTA-RUN-NEXT-VERSION-01-A — rehearse the steps without waiting an hour: the
+          page's clock runs N× faster through the real countdown, or one step is shown — Before, each
+          step, At zero — with everything it changes, an instance's own entrance included.
         */}
-        {zoneKeys.length > 0 && (
+        {stepChoices.length > 0 && (
           <>
             <Select
-              aria-label="Rehearse zones"
-              data-testid="preview-zone-rate"
+              aria-label="Rehearse steps"
+              data-testid="preview-step-rate"
               value={String(clockRate)}
               onChange={(e) => onClockRate?.(Number(e.target.value))}
             >
@@ -159,15 +163,15 @@ export function PreviewTransport({
               <option value="600">Rehearse ×600</option>
             </Select>
             <Select
-              aria-label="Show zone"
-              data-testid="preview-zone-force"
-              value={forcedZone ?? ''}
-              onChange={(e) => onForceZone?.(e.target.value === '' ? null : e.target.value)}
+              aria-label="Show step"
+              data-testid="preview-step-force"
+              value={forcedStep}
+              onChange={(e) => onForceStep?.(e.target.value)}
             >
-              <option value="">Zone: live</option>
-              {zoneKeys.map((key) => (
-                <option key={key} value={key}>
-                  Zone: {key}
+              <option value="">Step: live</option>
+              {stepChoices.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
                 </option>
               ))}
             </Select>

@@ -34,6 +34,7 @@ import { activeFieldData } from '../../state/scene-doc.js';
 import { cx } from '../../cx.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
+import { Tag } from '../../ui/Tag.js';
 import * as s from './ElementRow.css.js';
 
 export { ELEMENT_ROW_HEIGHT } from './metrics.js';
@@ -210,6 +211,12 @@ function ElementRowLabel(props: Props): JSX.Element {
       </span>
       <span className={s.name}>
         <span className={cx(s.nameText, isSelected && s.nameSelected)}>{element.name}</span>
+        {/* DELTA-RUN-NEXT-VERSION-01-F — a fact, not a toggle: it waits hidden for a step's cue. */}
+        {element.type === 'composition' && element.startsHidden === true && (
+          <Tag data-testid="layer-starts-hidden" title="Shown only when a countdown step shows it">
+            starts hidden
+          </Tag>
+        )}
         {bound && (
           <span className={s.boundKey} title="Bound to data" aria-label="bound to data">
             <Icon icon={Key} size={11} style={{ display: 'block' }} />

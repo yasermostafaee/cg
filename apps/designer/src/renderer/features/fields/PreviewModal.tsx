@@ -21,7 +21,7 @@ import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { PreviewFieldForm, type PreviewDispatch } from './PreviewFieldForm.js';
 import { columnsForFields, type ListItemColumn } from './repeater-columns.js';
 import { PreviewTransport } from './PreviewTransport.js';
-import { definedZoneKeys } from '../inspector/zone-scope.js';
+import { parseRehearsalChoice, stepRehearsalChoices } from '../inspector/countdown-steps.js';
 import { PreviewScopeTiming } from './PreviewScopeTiming.js';
 import { type TimingOverride } from './PreviewTimingControls.js';
 import * as s from './PreviewModal.css.js';
@@ -364,12 +364,13 @@ export function PreviewModal({
     designerStore.setSoundMuted(!soundMutedRef.current);
   }, []);
   /*
-    `D-141` (design §7.4) — the two zone rehearsal knobs, shown only when a countdown carries zones:
-    a clock RATE (the page's one clock runs N× faster, so an hour of zones replays in a minute) and a
-    FORCED zone (paint one zone's colours without running anything). Session-only, like Sound, and
-    re-sent when the page boots.
+    `D-141` (design §7.4) / DELTA-RUN-NEXT-VERSION-01-A — the two STEP rehearsal knobs, shown only
+    when a countdown has steps: a clock RATE (the page's one clock runs N× faster, so an hour of
+    steps replays in a minute) and a SHOWN step (Before, each step, At zero — with everything it
+    changes, through the runtime's own `rehearseStep`). Session-only, like Sound, and re-sent when
+    the page boots.
   */
-  const zoneKeys = useMemo(() => [...definedZoneKeys(scene)], [scene]);
+  const stepChoices = useMemo(() => stepRehearsalChoices(scene), [scene]);
   const [clockRate, setClockRate] = useState(1);
   const clockRateRef = useRef(1);
   const onClockRate = useCallback(
@@ -380,13 +381,18 @@ export function PreviewModal({
     },
     [post],
   );
-  const [forcedZone, setForcedZone] = useState<string | null>(null);
-  const forcedZoneRef = useRef<string | null>(null);
-  const onForceZone = useCallback(
-    (zone: string | null) => {
-      forcedZoneRef.current = zone;
-      setForcedZone(zone);
-      post({ action: 'force-zone', zone });
+  const [forcedStep, setForcedStep] = useState('');
+  const forcedStepRef = useRef('');
+  const onForceStep = useCallback(
+    (value: string) => {
+      // Release the countdown shown before (it returns to its live step), then show the new one.
+      const previous = parseRehearsalChoice(forcedStepRef.current);
+      if (previous !== null)
+        post({ action: 'rehearse-step', clockId: previous.clockId, live: true });
+      forcedStepRef.current = value;
+      setForcedStep(value);
+      const next = parseRehearsalChoice(value);
+      if (next !== null) post({ action: 'rehearse-step', clockId: next.clockId, step: next.step });
     },
     [post],
   );
@@ -434,8 +440,11 @@ export function PreviewModal({
       post({ action: 'sound-muted', muted: soundMutedRef.current });
       // `D-141` — and the zone rehearsal knobs, which a fresh page has forgotten too.
       if (clockRateRef.current > 1) post({ action: 'clock-rate', rate: clockRateRef.current });
-      if (forcedZoneRef.current !== null)
-        post({ action: 'force-zone', zone: forcedZoneRef.current });
+      {
+        const shown = parseRehearsalChoice(forcedStepRef.current);
+        if (shown !== null)
+          post({ action: 'rehearse-step', clockId: shown.clockId, step: shown.step });
+      }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -503,11 +512,11 @@ export function PreviewModal({
               hasSound={hasSound}
               soundMuted={soundMuted}
               onToggleSound={onToggleSound}
-              zoneKeys={zoneKeys}
+              stepChoices={stepChoices}
               clockRate={clockRate}
               onClockRate={onClockRate}
-              forcedZone={forcedZone}
-              onForceZone={onForceZone}
+              forcedStep={forcedStep}
+              onForceStep={onForceStep}
             />
             <div className={s.timingScroll}>
               <PreviewScopeTiming

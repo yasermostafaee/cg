@@ -329,13 +329,14 @@ export class Preview {
         // in phase 1 nothing posts 'look' yet (said so the seam is not taken for dead).
         let activeLookId = undefined;
         // D-141 (design 7.4a) — the session-only REHEARSAL RATE. Above 1, the runtime's ONE clock
-        // runs that many times faster, so an hour of countdown zones replays in a minute through
+        // runs that many times faster, so an hour of countdown steps replays in a minute through
         // the REAL driver, thresholds and transitions. Never stored, never exported. It also
         // speeds the lifecycle timing of this preview run, which is honest: it is a rehearsal.
         let clockRate = 1;
-        // D-141 (design 7.4b) — a zone FORCED on every zoned scope root with no driver involved,
-        // so an author can check each zone's colours while styling. null = the driver decides.
-        let forcedZone = null;
+        // DELTA-RUN-NEXT-VERSION-01-A — the steps SHOWN for rehearsal, by countdown id, through the
+        // runtime's own rehearseStep (the same latch, stylesheet and effects the live steps use).
+        // A countdown not in the map follows its own remaining time.
+        const rehearsedSteps = new Map();
         function rehearsalClock(rate) {
           if (!(rate > 1)) return undefined;
           const t0 = Date.now();
@@ -345,12 +346,9 @@ export class Preview {
             clearTimeout: (handle) => window.clearTimeout(handle),
           };
         }
-        function applyForcedZone() {
-          const roots = document.querySelectorAll('[data-cg-zone-root]');
-          for (const root of roots) {
-            if (forcedZone === null) root.removeAttribute('data-cg-zone');
-            else root.setAttribute('data-cg-zone', forcedZone);
-          }
+        function applyRehearsedSteps() {
+          if (!runtime || typeof runtime.rehearseStep !== 'function') return;
+          for (const [clockId, step] of rehearsedSteps) runtime.rehearseStep(clockId, step);
         }
         // Families we've already loaded into this iframe's
         // document.fonts. Keyed by family name; the value is the
@@ -723,8 +721,8 @@ export class Preview {
             // playhead, not the pooled node's stale frame.
             runtime.tick(currentFrame);
             applyEditingHide();
-            // D-141 — a forced zone survives the rebuild (the new roots are stamped again).
-            if (forcedZone !== null) applyForcedZone();
+            // A shown step survives the rebuild: the new drivers are told again.
+            applyRehearsedSteps();
           } finally {
             busy = false;
           }
@@ -1138,11 +1136,19 @@ export class Preview {
                   playing = false;
                   if (currentScene) await applyScene(currentScene);
                 }
-              } else if (msg.action === 'force-zone') {
-                // D-141 — force (or release) a zone on every zoned scope root. Releasing clears
-                // the attribute; the countdown re-establishes its own zone on its next run.
-                forcedZone = typeof msg.zone === 'string' && msg.zone !== '' ? msg.zone : null;
-                applyForcedZone();
+              } else if (msg.action === 'rehearse-step' && typeof msg.clockId === 'string') {
+                // DELTA-RUN-NEXT-VERSION-01-A — show one step of one countdown (or return it to its
+                // live step), with everything that step changes — an instance's own entrance too.
+                if (msg.live === true) {
+                  rehearsedSteps.delete(msg.clockId);
+                  if (runtime && typeof runtime.rehearseStep === 'function') {
+                    runtime.rehearseStep(msg.clockId, undefined);
+                  }
+                } else {
+                  const step = msg.step === 'before' || typeof msg.step === 'number' ? msg.step : null;
+                  rehearsedSteps.set(msg.clockId, step);
+                  applyRehearsedSteps();
+                }
               } else if (msg.action === 'pause') {
                 // D-020 — freeze the lifecycle (intro / hold countdown / outro).
                 if (runtime && typeof runtime.pause === 'function') runtime.pause();

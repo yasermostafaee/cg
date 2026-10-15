@@ -6,6 +6,11 @@ import * as s from './CollapseSection.css.js';
 
 interface Props {
   title: string;
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-B` — what the header SHOWS, when it holds operator data that needs
+   * its own `<bdi>` (a countdown's name). `title` stays the plain text for labels and lookups.
+   */
+  titleNode?: ReactNode;
   defaultExpanded?: boolean;
   /** Optional trailing element shown right of the chevron (e.g. a star). */
   trailing?: ReactNode;
@@ -31,6 +36,7 @@ interface Props {
  */
 export function CollapseSection({
   title,
+  titleNode,
   defaultExpanded = false,
   trailing,
   pinned = false,
@@ -54,7 +60,7 @@ export function CollapseSection({
     <div className={s.section}>
       {pinned ? (
         <div className={s.header} style={{ cursor: 'default' }}>
-          <span>{title}</span>
+          <span>{titleNode ?? title}</span>
           {trailing !== undefined && <span className={s.trailing}>{trailing}</span>}
         </div>
       ) : (
@@ -72,7 +78,7 @@ export function CollapseSection({
               <Icon icon={ChevronRight} size={14} flipRtl />
             )}
           </span>
-          <span>{title}</span>
+          <span>{titleNode ?? title}</span>
           {trailing !== undefined && <span className={s.trailing}>{trailing}</span>}
         </Button>
       )}

@@ -48,7 +48,7 @@ import { LiveSourceIdSchema } from '@cg/shared-schema';
 import { AUDIO_VOLUME_DB_MAX, AUDIO_VOLUME_DB_MIN } from '@cg/shared-schema';
 import { parseTimeOfDay } from '@cg/text-shaping';
 import { ClockTargetDataKey } from './ClockTargetDataKey.js';
-import { ClockZonesSection } from './ClockZonesSection.js';
+import { CountdownStepsSection } from './CountdownStepsSection.js';
 import { formatPeak, formatSeconds } from '../assets/wav-stats.js';
 import {
   ASPECT_CUSTOM,
@@ -110,6 +110,7 @@ import * as padCss from './TextPaddingSection.css.js';
 import { FillField } from './FillPopover.js';
 import { FontFamilySelect } from './FontFamilySelect.js';
 import { TextStyleSection, TogglePair } from './TextStyleSection.js';
+import * as tss from './TextStyleSection.css.js';
 import { AlignButtonGroup, H_ALIGN_OPTIONS, V_ALIGN_OPTIONS } from './AlignButtonGroup.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
@@ -255,6 +256,35 @@ export function StyleSection({ element, selectedKeyframe }: Props): JSX.Element 
   if (element.type === 'video-placeholder') return <LiveSourceSections element={element} />;
   // `D-165` — a sound: its settings and facts, and NO filter section (it paints nothing).
   if (element.type === 'audio') return <AudioSections element={element} />;
+  // DELTA-RUN-NEXT-VERSION-01-F — a composition instance may wait hidden for a countdown step.
+  if (element.type === 'composition') {
+    return (
+      <>
+        <CollapseSection title="Instance" defaultExpanded>
+          <div className={tss.labeledRow} data-testid="instance-starts-hidden">
+            <span className={tss.label}>Starts hidden</span>
+            <TogglePair
+              value={element.startsHidden === true ? 'yes' : 'no'}
+              options={[
+                { value: 'yes', label: 'Yes' },
+                { value: 'no', label: 'No' },
+              ]}
+              onChange={(v) =>
+                designerStore.updateElement(element.id, {
+                  startsHidden: v === 'yes' ? true : undefined,
+                } as Partial<Element>)
+              }
+            />
+          </div>
+        </CollapseSection>
+        <FilterSection
+          element={element}
+          currentFrame={currentFrame}
+          selectedKeyframe={selectedKeyframe}
+        />
+      </>
+    );
+  }
   // composition / container have no kind-specific style section, but the universal
   // CSS Filter is animatable on every kind — render it so the right inspector's
   // keyframe-able set matches the timeline-left (D-051 parity). Transform comes from
@@ -2583,14 +2613,17 @@ function ClockSections({
           onCommit={(mode) =>
             // Switching to countdown must keep the element schema-valid:
             // countdown REQUIRES a target, so seed one if none is stored yet.
-            // `D-141` 5.9 — and switching AWAY drops its zones: the schema refuses
-            // zones on `wall` / `countup` (the runtime would ignore them anyway).
+            // `D-141` 5.9 / DELTA-RUN-NEXT-VERSION-01-A — and switching AWAY drops its steps and its
+            // after-zero choice: the schema refuses both on `wall` / `countup`.
             designerStore.updateElement(id, {
               mode,
               ...(mode === 'countdown' && target === undefined
                 ? { target: DEFAULT_CLOCK_TARGET }
                 : {}),
-              ...(mode !== 'countdown' && element.zones !== undefined ? { zones: undefined } : {}),
+              ...(mode !== 'countdown' && element.steps !== undefined ? { steps: undefined } : {}),
+              ...(mode !== 'countdown' && element.afterZero !== undefined
+                ? { afterZero: undefined }
+                : {}),
             } as Partial<Element>)
           }
         />
@@ -2745,7 +2778,7 @@ function ClockSections({
       </CollapseSection>
 
       {/* `D-141` 5.2 — zones, under the target, for a countdown only. */}
-      {element.mode === 'countdown' && <ClockZonesSection element={element} />}
+      {element.mode === 'countdown' && <CountdownStepsSection element={element} />}
 
       {/* Style parity with the ticker text section: family/weight/size, colour
           (solid or gradient fill), align, box background (default transparent).
