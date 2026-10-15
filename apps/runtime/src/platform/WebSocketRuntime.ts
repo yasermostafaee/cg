@@ -123,6 +123,9 @@ import {
   FixedLayersStateChannel,
   parseWsFrame,
   serializeWsFrame,
+  fitsWsFrame,
+  wsFrameBytes,
+  WS_MAX_FRAME_BYTES,
   type AnyChannel,
   type ChannelRequest,
   type ChannelResponse,
@@ -274,6 +277,25 @@ export class BridgeTimeoutError extends Error {
   constructor(readonly channel: string) {
     super('The bridge did not answer in time.');
     this.name = 'BridgeTimeoutError';
+  }
+}
+
+/**
+ * 🔴 `BOOK-EXPORT-01` (`B-351`) — **A FRAME CG BRIDGE WOULD NOT ACCEPT IS NEVER SENT.** Past
+ * `WS_MAX_FRAME_BYTES` the bridge closes the socket, and every command in flight then read "Bridge
+ * disconnected" about a bridge that was fine (measured: a 141 MB book's import). Refused here, before
+ * the write, with the size; the socket stays up. `bytes` and `limit` are for the caller's sentence.
+ */
+export class BridgeFrameTooLargeError extends Error {
+  constructor(
+    readonly channel: string,
+    readonly bytes: number,
+    readonly limit: number,
+  ) {
+    super(
+      `The request is too large for CG Bridge (${String(bytes)} bytes; at most ${String(limit)}).`,
+    );
+    this.name = 'BridgeFrameTooLargeError';
   }
 }
 
@@ -1605,6 +1627,24 @@ export class WebSocketRuntime implements RuntimeBridge {
     const validatedReq = channel.request.parse(request) as unknown;
     const id = String(++this.#nextId);
     const ws = this.#ws;
+    /*
+      B-141 follow-up — ONE site puts this console's name on the wire, for the same
+      reason the bridge has one site that reads it: every control request goes
+      through `#invoke`, so attribution cannot be forgotten on a new channel.
+
+      Read at SEND time, not at construction: the operator may rename the console
+      mid-session, and the next request must carry the new name.
+    */
+    const frame = serializeWsFrame({
+      type: 'request',
+      id,
+      channel: channel.name,
+      payload: validatedReq,
+    });
+    // `B-351` — a frame past the bridge's cap would close the socket: refused, never written.
+    if (!fitsWsFrame(frame)) {
+      throw new BridgeFrameTooLargeError(channel.name, wsFrameBytes(frame), WS_MAX_FRAME_BYTES);
+    }
     return new Promise<ChannelResponse<C>>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
@@ -1639,22 +1679,7 @@ export class WebSocketRuntime implements RuntimeBridge {
         reject,
         timer,
       });
-      /*
-        B-141 follow-up — ONE site puts this console's name on the wire, for the same
-        reason the bridge has one site that reads it: every control request goes
-        through `#invoke`, so attribution cannot be forgotten on a new channel.
-
-        Read at SEND time, not at construction: the operator may rename the console
-        mid-session, and the next request must carry the new name.
-      */
-      ws.send(
-        serializeWsFrame({
-          type: 'request',
-          id,
-          channel: channel.name,
-          payload: validatedReq,
-        }),
-      );
+      ws.send(frame);
     });
   }
 

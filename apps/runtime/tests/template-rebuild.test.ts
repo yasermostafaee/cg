@@ -258,8 +258,9 @@ describe('PAGE-REBUILD-01 — a console with another runtime builds the page aga
 
     expect(bridge.sent).toHaveLength(1);
     expect(bridge.sent[0]?.result).toMatchObject({ ok: false });
+    // `B-350` — bytes changed since export read as damaged, in the operator's words.
     expect(bridge.sent[0]?.result.ok === false && bridge.sent[0].result.reason).toMatch(
-      /failed verification/i,
+      /is damaged or not a CG template/,
     );
     expect(result.rebuilt).toBe(0);
     expect(result.failed.map((f) => f.template.templateId)).toEqual(['tpl-rebuild']);

@@ -527,7 +527,8 @@ red-first matrix (§15.5), guard item 27 discharged (§15.6), and what was not d
       `templateDelivery.ts`, `fixedSlotLoad.ts` and `@cg/vcg-format` untouched by diff; the
       existing import suites byte for byte unchanged and green (16 + 4 + 2 + 7 + 1 + 5 unit,
       2 + 8 + 1 e2e — `design.md` §15.0); a DROPPED non-package reaches the row's error channel as
-      `“garbage.vcg” failed verification…`, the sentence only the chain's own `verify` produces.
+      `“garbage.vcg” is damaged or not a CG template.` (`B-350` worded it; it read `failed verification…`
+      before), the sentence only the chain's own `verify` verdict produces.
       ~~The one-press load contract and `Import a .vcg…` unchanged~~ — REVERSED
       2026-09-09, see §22 (twenty
       specs drive them). The reference's select-then-`Load into` flow, detail aside, `Into` select,

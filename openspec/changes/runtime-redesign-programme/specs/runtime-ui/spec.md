@@ -680,8 +680,8 @@ chain's `verify` is the one gate.
 #### Scenario: A dropped package meets the chain's own verify
 
 - **WHEN** bytes that are not a package are dropped on the picker opened from a row **THEN** the
-  picker's own message region reports `“<file>” failed verification…`, exactly as the OS chooser's
-  path would, and nothing is registered
+  picker's own message region reports `“<file>” is damaged or not a CG template.` (`B-350`), exactly
+  as the OS chooser's path would, and nothing is registered
 
 ### Requirement: A template is selected, then committed
 

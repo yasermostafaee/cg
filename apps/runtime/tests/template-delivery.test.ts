@@ -4,9 +4,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { pack, sha256Hex } from '@cg/vcg-format';
 import { CG_RUNTIME_VERSION } from '@cg/shared-schema';
 import type { AssetEntry, FontReference, Manifest, Scene } from '@cg/shared-schema';
+import { WS_MAX_FRAME_BYTES } from '@cg/shared-ipc';
 import {
   importTemplateFromBytes,
   produceTemplateDelivery,
+  TEMPLATE_DAMAGED,
+  templateTooLargeSentence,
   type TemplateImportBridge,
 } from '../src/renderer/features/library/templateDelivery.js';
 
@@ -140,16 +143,17 @@ async function buildVcgWithImage(
   templateId = 'tpl-delivery-1',
   manifestName = 'delivery-lower-third',
   minRuntimeVersion = '0.0.0',
+  image: Uint8Array = PNG_1X1,
 ): Promise<Uint8Array> {
   const scene = fixtureScene();
-  const assetPath = `assets/image/${sha256Hex(PNG_1X1)}.png`;
+  const assetPath = `assets/image/${sha256Hex(image)}.png`;
   const assetIndex: readonly AssetEntry[] = [
     {
       id: 'img-logo',
       path: assetPath,
       kind: 'image',
-      bytes: PNG_1X1.byteLength,
-      sha256: sha256Hex(PNG_1X1),
+      bytes: image.byteLength,
+      sha256: sha256Hex(image),
       mime: 'image/png',
     },
   ];
@@ -175,7 +179,7 @@ async function buildVcgWithImage(
     indexHtml: '<!doctype html><html><body>placeholder</body></html>',
     cgJs: '/* placeholder template runtime */',
     cgCss: '/* placeholder template styles */',
-    assets: new Map([[assetPath, PNG_1X1]]),
+    assets: new Map([[assetPath, image]]),
   });
 }
 
@@ -210,7 +214,37 @@ describe('produceTemplateDelivery', () => {
 
   it('throws (registers nothing) for bytes that fail verification', async () => {
     const notAVcg = new TextEncoder().encode('this is not a .vcg archive');
-    await expect(produceTemplateDelivery(notAVcg)).rejects.toThrow(/failed verification/i);
+    await expect(produceTemplateDelivery(notAVcg)).rejects.toThrow(TEMPLATE_DAMAGED);
+  });
+
+  /*
+    🔴 `BOOK-EXPORT-01` (`B-350`) — THE OWNER'S FILE: a `.vcg` of 0 bytes, left by an export that
+    never finished. It used to read "Unpack failed: End of data reached (data length = 0, asked
+    index = 4). Corrupted zip ?"; now it says what happened and what to do. The zip library's text is
+    kept, in the log only.
+  */
+  it('🔴 an EMPTY file says it is empty and that the export did not finish', async () => {
+    await expect(produceTemplateDelivery(new Uint8Array(0))).rejects.toThrow(
+      'is empty (0 bytes); the export did not finish. Export it again from the Designer.',
+    );
+  });
+
+  it('🔴 a file that is not a zip, or a cut-short one, is "damaged or not a CG template"; the technical text goes to the log', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const whole = await buildVcgWithImage();
+      for (const bytes of [
+        new TextEncoder().encode('this is not a .vcg archive'),
+        whole.slice(0, Math.floor(whole.byteLength / 2)),
+      ]) {
+        await expect(produceTemplateDelivery(bytes)).rejects.toThrow(
+          /^is damaged or not a CG template\.$/,
+        );
+      }
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^\[import\] .*Unpack failed/));
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   // R-004 — `ManifestSchema.name` is `z.string()` with no `.min(1)`, so a blank name is a
@@ -343,6 +377,34 @@ describe('importTemplateFromBytes', () => {
 
     await expect(importTemplateFromBytes(bridge, notAVcg)).rejects.toThrow();
     expect(importSpy).not.toHaveBeenCalled();
+  });
+
+  /*
+    🔴 `BOOK-EXPORT-01` (`B-351`) — measured on a real CG Bridge: a 141 MB book's page crossed the
+    bridge's frame cap, the socket closed, and the operator read "Bridge disconnected — command
+    rejected" about a bridge that was fine. The page is measured first and refused with its size,
+    and nothing is sent.
+  */
+  it('🔴 a page too large for CG Bridge is refused with its size, and nothing is sent', async () => {
+    // 49 MiB of picture: its base64 alone (65.3 MiB) is past the 64 MiB frame.
+    const big = new Uint8Array(PNG_1X1.byteLength + 49 * 1024 * 1024);
+    big.set(PNG_1X1);
+    const importSpy = vi.fn();
+    const bridge: TemplateImportBridge = { templates: { import: importSpy } };
+
+    await expect(
+      importTemplateFromBytes(bridge, await buildVcgWithImage('tpl-big', 'big', '0.0.0', big), {
+        consoleVersion: '0.12.0',
+      }),
+    ).rejects.toThrow(
+      /^is too large for CG Bridge: its page is \d+ MB, and one template can be at most 64 MB\. Export it again from the Designer with fewer or smaller pictures\.$/,
+    );
+    expect(importSpy).not.toHaveBeenCalled();
+  }, 60_000);
+
+  it('the sentence rounds the page UP and names the cap as the bridge counts it', () => {
+    expect(templateTooLargeSentence(WS_MAX_FRAME_BYTES + 1)).toContain('its page is 65 MB');
+    expect(templateTooLargeSentence(WS_MAX_FRAME_BYTES + 1)).toContain('at most 64 MB');
   });
 });
 

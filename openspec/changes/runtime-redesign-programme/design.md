@@ -2019,7 +2019,8 @@ proof is the existing suites, byte for byte as they were, green:
 
 The only NEW import-facing behaviour is `02`'s drop zone, and it is proved to be the same path by
 the sentence the path's own `verify` produces: bytes that are not a package, dropped on the picker
-opened from a row, reach the row's error channel as `“garbage.vcg” failed verification…`
+opened from a row, reach the row's error channel as `“garbage.vcg” is damaged or not a CG template.`
+(`B-350`; `failed verification…` before `BOOK-EXPORT-01`)
 (`templatePicker.library.dom.test.ts`, the last case). No test was rewritten to fit the surface.
 
 ### 15.1 What contradicted the prompt — and what did not
@@ -2178,13 +2179,13 @@ paint at 1280 × 800; the `@media` ones are the ≤ 1000 / ≤ 720 / ≤ 390 px 
 
 ### 15.5 🔴 The red-first proofs
 
-| proof                                           | file                                                    | RED against                                                                                                                                                                                                 | GREEN          |
-| ----------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| guard item 27 — the actor column                | `apps/runtime/tests/auditPanel.actorColumn.dom.test.ts` | a PLANT removing the header cell and the row cell (the reference's table, with no WHO): the three column cases red; the two strip cases and the caveat's three older suites GREEN — the hole the item named | 5 / 5          |
-| the search reads the list                       | `apps/runtime/tests/templatePicker.library.dom.test.ts` | a PLANT making the query match everything: the search case red, the other five green                                                                                                                        | 6 / 6          |
-| A16 — the panic label names its scope           | `apps/runtime/tests/liveSourcesPanel.dom.test.ts`       | the label reverted to the bare verb: the A16 case red, the one-press-one-call case green                                                                                                                    | 68 / 68        |
-| the dropped file meets the chain's own `verify` | `templatePicker.library.dom.test.ts` (last case)        | not a plant — the proof is the SENTENCE `verify` produces (`“garbage.vcg” failed verification…`) reaching the row's error channel; a picker checking the bytes itself could not print it                    | green          |
-| the geometry                                    | `apps/runtime/tests/e2e/library-audit-geometry.spec.ts` | written to the tokens; its positive controls (the picker wider than the old `prose` 460, the log wider than the old `wide` 720) fail against the previous frames                                            | Chromium, 15.9 |
+| proof                                           | file                                                    | RED against                                                                                                                                                                                                   | GREEN          |
+| ----------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| guard item 27 — the actor column                | `apps/runtime/tests/auditPanel.actorColumn.dom.test.ts` | a PLANT removing the header cell and the row cell (the reference's table, with no WHO): the three column cases red; the two strip cases and the caveat's three older suites GREEN — the hole the item named   | 5 / 5          |
+| the search reads the list                       | `apps/runtime/tests/templatePicker.library.dom.test.ts` | a PLANT making the query match everything: the search case red, the other five green                                                                                                                          | 6 / 6          |
+| A16 — the panic label names its scope           | `apps/runtime/tests/liveSourcesPanel.dom.test.ts`       | the label reverted to the bare verb: the A16 case red, the one-press-one-call case green                                                                                                                      | 68 / 68        |
+| the dropped file meets the chain's own `verify` | `templatePicker.library.dom.test.ts` (last case)        | not a plant — the proof is the SENTENCE `verify` produces (`“garbage.vcg” is damaged or not a CG template.`, `B-350`) reaching the row's error channel; a picker checking the bytes itself could not print it | green          |
+| the geometry                                    | `apps/runtime/tests/e2e/library-audit-geometry.spec.ts` | written to the tokens; its positive controls (the picker wider than the old `prose` 460, the log wider than the old `wide` 720) fail against the previous frames                                              | Chromium, 15.9 |
 
 No plant is in the tree.
 

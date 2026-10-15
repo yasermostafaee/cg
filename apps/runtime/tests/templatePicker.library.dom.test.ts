@@ -324,7 +324,7 @@ describe('§8 — a dropped package feeds the SAME import chain', () => {
         await new Promise((resolve) => setTimeout(resolve, 5));
       });
     }
-    expect(refusal()).toMatch(/“dropped\.vcg” failed verification/);
+    expect(refusal()).toMatch(/“dropped\.vcg” is damaged or not a CG template\./);
     // …and the picker has NOT resolved: no row has been asked to load anything.
     let settled = false;
     void choice.then(() => (settled = true));
@@ -380,7 +380,7 @@ describe('§8 — a dropped package feeds the SAME import chain', () => {
         pinned region. It used to go to the command toast, which is `zIndex: 50`
         under a modal backdrop at 1000: the A9 defect, one surface over.
       */
-      expect(refusal()).toMatch(/“garbage\.vcg” failed verification/);
+      expect(refusal()).toMatch(/“garbage\.vcg” is damaged or not a CG template\./);
       expect(errors, 'no refusal was routed under the backdrop').toEqual([]);
       // …and nothing was registered: the picker's registry is the row's stub, untouched.
       expect(rendered.stubs.list).not.toHaveBeenCalledWith(

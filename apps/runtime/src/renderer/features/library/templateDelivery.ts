@@ -1,5 +1,7 @@
 import {
   TEMPLATE_SOURCE_MAX_BYTES,
+  WS_MAX_FRAME_BYTES,
+  wsFrameBytes,
   type AssetMeta,
   type ChannelRequest,
   type ChannelResponse,
@@ -33,6 +35,39 @@ import { pickTemplateName, templateDisplayName } from './templateName.js';
 import { bytesToBase64 } from './packageBytes.js';
 import { collectListFieldTargets, type ListFieldTargets } from '../inspector/listFieldTargets.js';
 import { countdownTargetFieldsOf } from './countdownTargetFields.js';
+
+/**
+ * 🔴 `BOOK-EXPORT-01` (`B-350`) — **A FILE THAT IS NOT A TEMPLATE, IN THE OPERATOR'S WORDS.** Each
+ * follows the file's name (`importVcgFile` puts it first).
+ */
+export const TEMPLATE_EMPTY =
+  'is empty (0 bytes); the export did not finish. Export it again from the Designer.';
+export const TEMPLATE_DAMAGED = 'is damaged or not a CG template.';
+
+/** What a `templates.import` frame carries besides the page and its record: ids, the build stamp. */
+const IMPORT_ENVELOPE_BYTES = 4096;
+
+/**
+ * `B-351` — the size of the `templates.import` frame this page makes: the page and its record as
+ * they are serialized onto the socket, and the envelope.
+ */
+export function templateImportFrameBytes(template: TemplateInfo, html: string): number {
+  return (
+    wsFrameBytes(JSON.stringify(html)) +
+    wsFrameBytes(JSON.stringify(template)) +
+    IMPORT_ENVELOPE_BYTES
+  );
+}
+
+/** `B-351` — the refusal, after the file's name. Sizes in MB as Windows counts them (1024²). */
+export function templateTooLargeSentence(frameBytes: number): string {
+  const mb = (n: number): string => String(Math.ceil(n / (1024 * 1024)));
+  return (
+    `is too large for CG Bridge: its page is ${mb(frameBytes)} MB, and one template can be at ` +
+    `most ${mb(WS_MAX_FRAME_BYTES)} MB. Export it again from the Designer with fewer or smaller ` +
+    `pictures.`
+  );
+}
 
 /**
  * B-038 Phase 2 — produce the rendered template HTML in the browser and deliver
@@ -209,8 +244,23 @@ export async function produceTemplateDelivery(
   bytes: Uint8Array,
   opts: ProduceOptions = {},
 ): Promise<TemplateDelivery> {
+  // `B-350` — an export that never finished leaves a file of 0 bytes: say that, and the remedy.
+  if (bytes.byteLength === 0) throw new Error(TEMPLATE_EMPTY);
   const result = await verify(bytes);
   if (!result.ok) {
+    /*
+      `B-350` — a file that is not a readable template is named as such; the zip library's own text
+      ("Unpack failed: End of data reached … Corrupted zip ?") goes to the log. A template that
+      parses wrong keeps its technical sentence: it may be a newer build's, not a damaged one.
+    */
+    if (
+      result.failure === 'unreadable' ||
+      result.failure === 'not-a-template' ||
+      result.failure === 'integrity'
+    ) {
+      console.warn(`[import] not a readable template: ${result.errors.join('; ')}`);
+      throw new Error(TEMPLATE_DAMAGED);
+    }
     throw new Error(`failed verification: ${result.errors.join('; ')}`);
   }
 
@@ -385,6 +435,14 @@ export async function importTemplateFromBytes(
 }> {
   const { template, html, warnings, defaultPosition, listFieldTargets } =
     await produceTemplateDelivery(bytes, opts);
+  /*
+    🔴 `BOOK-EXPORT-01` (`B-351`) — **THE PAGE GOES TO CG BRIDGE IN ONE FRAME**, and past the
+    bridge's cap the socket closed: a 141 MB book read "Bridge disconnected — command rejected" about
+    a bridge that was fine. Measured here and refused with its size, BEFORE the package is kept, so
+    a refused import leaves nothing behind on CG Bridge.
+  */
+  const frameBytes = templateImportFrameBytes(template, html);
+  if (frameBytes > WS_MAX_FRAME_BYTES) throw new Error(templateTooLargeSentence(frameBytes));
   /*
     🔴 `PAGE-REBUILD-01` (`C-034`) — the bytes just VERIFIED are the ones kept, and the page names
     the runtime that built it. Kept BEFORE the import, in a frame of its own (the page fills most of

@@ -237,7 +237,7 @@ test.describe('D — importing is one step: the OS chooser, or a drop on the lis
       buffer: Buffer.from(buildInvalidVcg()),
     });
     const line = picker.locator('[data-modal-message]');
-    await expect(line).toContainText('“broken.vcg” failed verification');
+    await expect(line).toContainText('“broken.vcg” is damaged or not a CG template.');
     await expect(line).toHaveCount(1);
     /*
       ONE LINE — counted from the TEXT's own line boxes. A range over the element also returns

@@ -1,10 +1,11 @@
 import { afterEach, expect, it } from 'vitest';
 import { WebSocket as WsWebSocket } from 'ws';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
-import type { ConnectionConfig } from '@cg/shared-ipc';
+import { WS_MAX_FRAME_BYTES, type ConnectionConfig } from '@cg/shared-ipc';
 import type { BridgeLinkStatus } from '../src/shared/runtime-bridge.js';
 import {
   BridgeDisconnectedError,
+  BridgeFrameTooLargeError,
   WebSocketRuntime,
   type WebSocketLike,
 } from '../src/platform/WebSocketRuntime.js';
@@ -141,3 +142,36 @@ it('on reconnect: re-pulls a full snapshot (stack/health/lock) to resync', async
   expect(healthResyncs).toBeGreaterThan(0);
   expect(lockResyncs).toBeGreaterThan(0);
 });
+
+/*
+  🔴 `BOOK-EXPORT-01` (`B-351`) — measured with a 141 MB book: its page went to CG Bridge in one frame,
+  past the bridge's cap, the bridge closed the socket, and the operator read "Bridge disconnected —
+  command rejected" about a bridge that was fine. A frame past the cap is now refused BEFORE it is
+  written, with its size; the link never drops, and the next command is answered.
+*/
+it('🔴 a frame past CG Bridge’s cap is refused before it is written: the link stays up', async () => {
+  handle = await createBridge({ port: 0, connection: ephemeralConnection() });
+  runtime = new WebSocketRuntime(handle.url, { createWebSocket: wsFactory });
+  await runtime.whenReady();
+  const statuses: BridgeLinkStatus[] = [];
+  runtime.link.onStatusChanged((s) => statuses.push(s));
+
+  const err = await runtime.templates
+    .import({
+      template: { templateId: 'book', templateType: 'lower-third', fields: [] },
+      html: 'x'.repeat(WS_MAX_FRAME_BYTES),
+    })
+    .catch((e: unknown) => e);
+  expect(err).toBeInstanceOf(BridgeFrameTooLargeError);
+  expect((err as BridgeFrameTooLargeError).bytes).toBeGreaterThan(WS_MAX_FRAME_BYTES);
+  expect((err as BridgeFrameTooLargeError).limit).toBe(WS_MAX_FRAME_BYTES);
+
+  await new Promise((r) => setTimeout(r, 300));
+  expect(statuses).toEqual([]);
+  expect(runtime.link.status()).toBe('live');
+  const answered = await runtime.templates.import({
+    template: { templateId: 'small', templateType: 'lower-third', fields: [] },
+    html: '<!doctype html><html><body>small</body></html>',
+  });
+  expect(answered.registered).toBe(true);
+}, 30_000);

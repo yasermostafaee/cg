@@ -29,7 +29,7 @@ test('🔴 a broken .vcg import fails in the picker with its reason, and the bad
   });
   // Said ONCE, where it happened, with its reason.
   await expect(app.templatePicker.locator('[data-modal-message]')).toContainText(
-    '“broken.vcg” failed verification',
+    '“broken.vcg” is damaged or not a CG template.',
   );
   await app.closeTemplatePicker();
   // …and never counted as a row error.

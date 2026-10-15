@@ -62,6 +62,20 @@ test('a verified .vcg is registered, loads onto a layer, and shows its fields', 
   await expect(app.inspector.getByText('Anchor name')).toBeVisible();
 });
 
+/*
+  🔴 `BOOK-EXPORT-01` (`B-350`) — THE OWNER'S FILE: an export that never finished left
+  `telavat.vcg` at 0 bytes, and the import read "Unpack failed: End of data reached (data length = 0,
+  asked index = 4). Corrupted zip ?". It now says what happened and what to do, and registers nothing.
+*/
+test('🔴 an EMPTY .vcg says it is empty and that the export did not finish', async ({ app }) => {
+  const before = await app.templateCount();
+  await app.importVcg('telavat.vcg', new Uint8Array(0), 84);
+  await expect(app.page.locator('[data-modal-message]')).toHaveText(
+    '“telavat.vcg” is empty (0 bytes); the export did not finish. Export it again from the Designer.',
+  );
+  expect(await app.templateCount()).toBe(before);
+});
+
 test('a .vcg that fails verification shows a clear error and registers nothing', async ({
   app,
 }) => {
@@ -79,8 +93,8 @@ test('a .vcg that fails verification shows a clear error and registers nothing',
   */
   const refusal = app.page.locator('[data-modal-message]');
   await expect(refusal).toBeVisible();
-  await expect(refusal).toContainText(/failed verification|could not be unpacked/i);
-  await expect(refusal).toContainText('broken.vcg');
+  // `BOOK-EXPORT-01` (`B-350`) — in the operator's words: the zip library's text is in the log only.
+  await expect(refusal).toHaveText('“broken.vcg” is damaged or not a CG template.');
 
   // …nothing new is registered…
   expect(await app.templateCount()).toBe(before);
