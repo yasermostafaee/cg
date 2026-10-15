@@ -263,9 +263,17 @@ or H.
       (`a81b694c`; tests `date-time-input.dom.test.ts`, `countdown-steps.dom.test.ts` — 4 red under
       ablation of the exposure and the sync —, e2e `date-time-input.spec.ts`)
 - [x] 9.7 The page re-targets from a time OR an ISO instant, any digit set (-C). (`8bede2c2`)
-- [ ] 9.8 CG Control half (-C): the shared control per row, the station-wide Lunar adjustment, the
-      bridge host's clock; on air only the row's `CG UPDATE`, off air state only; a passed target
-      stated, Take not refused.
+- [x] 9.8 CG Control half (-C): the import marks the target field (`b4d785c7`); the shared control
+      (`f7a10a9f`); the station's Lunar day adjustment in Station setup · Calendar (`19092af5`); the
+      bridge host's clock in `bridge.capabilities` (`5e9a5641`); the Inspector's control, the
+      passed-target fact and the two clocks (`b81e94f7`); the wire pinned on an amcp-mock trace —
+      on air ONE `CG 1-<layer> UPDATE 0 "{\"targetTime\":\"2026-10-15T21:50:00+03:30\"}"`, nothing
+      else; after OUT nothing until the take re-ADDs with the new value; a loaded, never-taken row
+      gets the same one `CG UPDATE` (its page is on the layer) and no playout command
+      (`d52b95b5`, `countdown-target-update.integration.test.ts`); e2e in three calendars
+      (`8e2ee28d`) and at 200 % zoom / RTL with a positive control (`4b90ce42`). Built by a
+      background agent in a worktree, reviewed and cherry-picked; its two red-alone commits folded
+      into their fixes so every commit is green.
 - [x] 9.9 The Steps dialog (-H): the Inspector keeps a summary; one dialog from both doors, held in
       the store so an undo cannot close it (measured red in Chrome first); list with drag handle and
       ↑ / ↓; `⋯` menus of words; the changes table; the rehearse strip on the canvas.

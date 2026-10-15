@@ -56,7 +56,8 @@ records those decisions; the text below describes the change as it now stands.
   Both apps type it through ONE shared date and time control — typed segments, three calendars
   (Solar Hijri by default, Gregorian, Lunar Hijri with a −2 … +2 day adjustment), the stored value
   always ISO or `HH:mm[:ss]`. CG Control sets it per row; on air that is the row's existing
-  `CG UPDATE`, off air it is state only, and a passed target is stated, never refused.
+  `CG UPDATE` and nothing else, with no page on the layer it is state only, and a passed target is
+  stated, never refused.
 
 - **Steps are compiled by the RUNTIME from the scene** — one attribute per step crossing on the
   scope root and one stylesheet of inherited custom properties (`step-css.ts`), plus JS cues for a
@@ -86,7 +87,8 @@ records those decisions; the text below describes the change as it now stands.
 - **Affected specs:** `designer-clock-element` (MODIFIED × 3 + ADDED × 3),
   `designer-countdown-steps` (NEW capability; it replaces the `designer-zone-styling` capability
   this change first proposed, which never reached `openspec/specs/`), and CG Control's
-  `runtime-template-library` for the operator's target field.
+  `runtime-template-library` (the operator's target field) and `runtime-ui` (the date and time
+  control; Station setup · Calendar).
 - **Affected code:** `@cg/shared-schema` (`elements.ts`, `element-changes.ts`, `countdown.ts`,
   `fields.ts`, `bindings.ts`, `scene-migrations.ts`), `@cg/text-shaping` (`calendar.ts`,
   `date-segments.ts`, `numerals.ts`), `@cg/template-runtime` (`clock-driver.ts`, `step-css.ts`,

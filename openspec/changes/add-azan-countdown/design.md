@@ -842,14 +842,14 @@ the zones fought over one attribute. The migration is written for the CEF floor 
 
 ### 10.3 After zero (deltas D and E)
 
-`afterZero` ∈ `hold` (default, stored as nothing) / `count-past` / `hide` / `close`, designer-owned
+`afterZero` ∈ `hold` (default, stored as nothing) / `count-past` / `hide-digits` / `close`, designer-owned
 (ADR 0009). `count-past` never signals completion, so it never ends a content-driven hold (the
 graphic would otherwise leave air while still counting). `close` publishes the At-zero step and then
 signals completion through the EXISTING content-driven path: the page reports completion and the
 bridge sends its existing `CG <channel>-<layer> STOP 0` (pinned by
 `template-completion-stop.integration.test.ts`) — no new wire line, no `CLEAR` the operator did not
 cause. A composition whose hold this countdown cannot end shows that as a FACT in the Inspector.
-⚠ **Choice made, owner question open:** `hold` and `hide` still signal completion at zero, as every
+⚠ **Choice made, owner question open:** `hold` and `hide-digits` still signal completion at zero, as every
 countdown did before the delta, so under a content-driven hold THIS countdown drives they close the
 graphic too. Delta D said completion is unchanged; whether Hold / Hide should stop signalling is
 asked in the report.
@@ -878,7 +878,9 @@ and follows every edit; the field's pattern follows the value (`Time (HH:MM[:SS]
 an author's own pattern is kept. CG Control marks the field at import (`countdown` on the field,
 DERIVED from the binding, never authored) and offers the shared date and time control for it, per
 row. On air a target change is the row's existing `CG <channel>-<layer> UPDATE 0 "<json>"` and
-nothing else; off air it is state only; a passed target is stated (`Target passed 12 min ago`, and
+nothing else; with no page on the layer it is state only, and the next take carries it; a row
+loaded and not yet taken has its page on the layer, so it gets the same one `CG UPDATE` (its later
+take is a bare `CG PLAY` that carries no fields — skipping the update would air the old target); a passed target is stated (`Target passed 12 min ago`, and
 `· will close at once` under Close the graphic) and the Take is not refused.
 
 ### 10.6 The date and time control and the calendars (deltas B and C)
