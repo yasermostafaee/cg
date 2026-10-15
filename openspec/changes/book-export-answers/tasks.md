@@ -49,7 +49,10 @@ Lane: **FULL** — the export path, the import path, a shared frame cap (`@cg/sh
 
 - [x] 5.1 e2e `book-from-designer.spec.ts`: the Designer's built app exports a book (Add folder…, a Data key); CG
       Control imports those bytes, loads, PLAY, Next, Previous, page box + Go, STOP. (`cd4108a8`)
-- [ ] 5.2 The Linux e2e discharge on CI — run URL here once it has RUN green.
+- [x] 5.2 The Linux e2e discharge on CI: run
+      [38760662866](https://github.com/yasermostafaee/cg/actions/runs/38760662866) on `9870f5b3` — **success**, read
+      from the log: Designer 338 passed / 13 skipped, CG Control 348 passed / 2 skipped; `book-export.spec.ts` (both),
+      `book-from-designer.spec.ts` and the empty-file case in `import-vcg-template.spec.ts` RAN and passed.
 
 ## 6. Housekeeping
 
