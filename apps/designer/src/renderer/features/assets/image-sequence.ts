@@ -77,12 +77,76 @@ export function sequenceAssetName<F extends PickedFile>(seq: FoundSequence<F>): 
 }
 
 /**
- * Every sequence in `files`, largest first, plus the files that are not a frame of one (no number in
- * the name, or not a PNG / TGA).
+ * 🔴 `DELTA-RUN-NEXT-VERSION-01-I` — **THE MOST FRAMES A RUN MAY SPAN AND STILL BE LISTED**, counted
+ * from its first number to its last (every hole is a frame that is held). It bounds the lists that
+ * grow with the run (the holes, the frames handed on) whatever the frames' size — ten minutes at
+ * 50 fps. What a run may CONVERT is the tighter {@link MAX_SEQUENCE_PIXELS}, judged once the frames'
+ * size is read.
+ */
+export const MAX_SEQUENCE_FRAMES = 30_000;
+
+/**
+ * 🔴 `DELTA-RUN-NEXT-VERSION-01-I` — **WHAT ONE IMPORT MAY CONVERT, in pixels (frames × width ×
+ * height)**: 3,000 frames of 1920×1080 — a minute at 50 fps. MEASURED in Chrome through the real
+ * import (the largest renderer's private memory): 300 frames of 1080p RGBA peaked at 459 MB, 900 at
+ * 589 MB — about 394 MB plus 0.22 MB a frame — so this budget is ~1.05 GB, with room left for
+ * heavier pictures than the test frames. Over it, the step says so and offers no Continue: a job too
+ * large is refused before it starts, never by the tab running out of memory.
+ */
+export const MAX_SEQUENCE_PIXELS = 3_000 * 1920 * 1080;
+
+/** Whether converting `frames` frames of `width` × `height` is over {@link MAX_SEQUENCE_PIXELS}. */
+export function overConvertBudget(frames: number, width: number, height: number): boolean {
+  return frames * width * height > MAX_SEQUENCE_PIXELS;
+}
+
+/** The one sentence for a sequence over the convert budget: its size, and what fits at that size. */
+export function overBudgetSentence(
+  frames: number,
+  width: number,
+  height: number,
+  fps: number,
+): string {
+  const fit = Math.max(1, Math.floor(MAX_SEQUENCE_PIXELS / Math.max(1, width * height)));
+  const seconds = Math.round((fit / Math.max(1, fps)) * 10) / 10;
+  return `${String(frames)} frames of ${String(width)}×${String(height)} are more than one import can convert in this browser: at most ${String(fit)} at this size (${String(seconds)} s at ${String(fps)} fps). Pick fewer frames.`;
+}
+
+/**
+ * How sparse a run of numbers may be and still be ONE sequence: at most this many missing numbers
+ * for every picture there is. A render with a held gap (two renders in one folder, a dropped frame)
+ * is well inside it; pictures named by far-apart numbers (a camera's or a phone's time stamps) are
+ * not.
+ */
+export const MAX_HOLES_PER_FRAME = 4;
+
+/**
+ * A run of numbered pictures that is NOT imported, and why — said to the author in one sentence:
+ * `apart` — named by numbers far apart, so not one sequence at all; `too-long` — one after another,
+ * but longer than {@link MAX_SEQUENCE_FRAMES}.
+ */
+export interface RefusedRun<F extends PickedFile> {
+  readonly reason: 'apart' | 'too-long';
+  readonly files: readonly F[];
+  /** The first and the last number, and how many frames the run would make. */
+  readonly first: number;
+  readonly last: number;
+  readonly span: number;
+}
+
+/**
+ * Every sequence in `files`, largest first; the runs that are not imported (`refused`, with why);
+ * and the files that are not a frame of one (no number in the name, or not a PNG / TGA).
+ *
+ * 🔴 `DELTA-RUN-NEXT-VERSION-01-I` — the span is judged by ARITHMETIC before anything is listed: the
+ * hole list used to be built by counting from the first number to the last, and 38 pictures named
+ * by time stamps (a span of ~10¹⁰) took the tab down — measured +247 MB at a span of only 10⁷.
+ * Nothing here grows with a run's span unless the run is accepted, and an accepted run's span is at
+ * most {@link MAX_SEQUENCE_FRAMES}.
  */
 export function findImageSequences<F extends PickedFile>(
   files: readonly F[],
-): { sequences: FoundSequence<F>[]; ignored: F[] } {
+): { sequences: FoundSequence<F>[]; refused: RefusedRun<F>[]; ignored: F[] } {
   const groups = new Map<
     string,
     {
@@ -103,7 +167,8 @@ export function findImageSequences<F extends PickedFile>(
     }
     const base = stem(file.name);
     const run = digitRun(base);
-    if (run === null) {
+    // A number too long to be counted exactly is not a frame number.
+    if (run === null || !Number.isSafeInteger(run.number)) {
       ignored.push(file);
       continue;
     }
@@ -125,16 +190,29 @@ export function findImageSequences<F extends PickedFile>(
     else g.byNumber.set(run.number, file);
   }
   const sequences: FoundSequence<F>[] = [];
+  const refused: RefusedRun<F>[] = [];
   for (const g of groups.values()) {
     const numbers = [...g.byNumber.keys()].sort((a, b) => a - b);
     const frames = numbers.map((number) => ({ number, file: g.byNumber.get(number) as F }));
-    const missing: number[] = [];
     const lo = numbers[0];
     const hi = numbers[numbers.length - 1];
-    if (lo !== undefined && hi !== undefined) {
-      const have = new Set(numbers);
-      for (let n = lo; n <= hi; n++) if (!have.has(n)) missing.push(n);
+    if (lo === undefined || hi === undefined) continue;
+    // Judged BEFORE anything is counted out, so a far-apart run costs nothing.
+    const span = hi - lo + 1;
+    const holes = span - numbers.length;
+    if (holes > MAX_HOLES_PER_FRAME * numbers.length || span > MAX_SEQUENCE_FRAMES) {
+      refused.push({
+        reason: holes > MAX_HOLES_PER_FRAME * numbers.length ? 'apart' : 'too-long',
+        files: [...frames.map((f) => f.file), ...g.dup],
+        first: lo,
+        last: hi,
+        span,
+      });
+      continue;
     }
+    const missing: number[] = [];
+    const have = new Set(numbers);
+    for (let n = lo; n <= hi; n++) if (!have.has(n)) missing.push(n);
     sequences.push({
       prefix: g.prefix,
       suffix: g.suffix,
@@ -151,7 +229,27 @@ export function findImageSequences<F extends PickedFile>(
       a.folder.localeCompare(b.folder) ||
       a.prefix.localeCompare(b.prefix),
   );
-  return { sequences, ignored };
+  refused.sort((a, b) => b.files.length - a.files.length);
+  return { sequences, refused, ignored };
+}
+
+/**
+ * The one sentence for a pick that holds no sequence to import (`DELTA-RUN-NEXT-VERSION-01-I`): far-apart
+ * pictures are named as pictures, a run too long is named with its length and the limit, and a pick
+ * with no numbered frame says that. Never a crash, never silence.
+ */
+export function noSequenceSentence<F extends PickedFile>(
+  refused: readonly RefusedRun<F>[],
+  fps: number,
+): string {
+  const top = refused[0];
+  if (top === undefined) return 'No numbered PNG or TGA frames in the selection.';
+  const n = top.files.length;
+  if (top.reason === 'apart') {
+    return `These ${String(n)} pictures are numbered far apart (${String(top.first)} … ${String(top.last)}), so they are not an image sequence. To use them as pictures, import them with Image….`;
+  }
+  const minutes = Math.round((MAX_SEQUENCE_FRAMES / Math.max(1, fps) / 60) * 10) / 10;
+  return `This image sequence runs ${String(top.span)} frames (${String(top.first)} … ${String(top.last)}); one import can make at most ${String(MAX_SEQUENCE_FRAMES)} (${String(minutes)} min at ${String(fps)} fps). Pick fewer frames.`;
 }
 
 /**

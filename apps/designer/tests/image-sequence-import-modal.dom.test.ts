@@ -237,6 +237,33 @@ describe('D-164 — the image-sequence step', () => {
     expect(onContinue).not.toHaveBeenCalled();
   });
 
+  it('🔴 DELTA-I — a sequence over the convert budget is refused BEFORE it starts: one sentence, no Continue', async () => {
+    // Three frames whose headers say 50000×50000: 7.5 Gpx, over the 3,000-frames-of-1080p budget.
+    await open([
+      png('big_1.png', 50_000, 50_000),
+      png('big_2.png', 50_000, 50_000),
+      png('big_3.png', 50_000, 50_000),
+    ]);
+    expect(text('sequence-too-large')).toMatch(
+      /^3 frames of 50000×50000 are more than one import can convert in this browser: at most 2 at this size/,
+    );
+    expect(button('Continue').disabled).toBe(true);
+    await act(async () => {
+      button('Continue').click();
+    });
+    expect(onContinue).not.toHaveBeenCalled();
+  });
+
+  it('the control: the same three frames at 1920×1080 are well inside the budget', async () => {
+    await open([
+      png('ok_1.png', 1920, 1080),
+      png('ok_2.png', 1920, 1080),
+      png('ok_3.png', 1920, 1080),
+    ]);
+    expect(document.querySelector('[data-testid="sequence-too-large"]')).toBeNull();
+    expect(button('Continue').disabled).toBe(false);
+  });
+
   it('a sequence none of whose headers can be read cannot continue', async () => {
     const junk = (name: string): File => new File([new Uint8Array(40)], name);
     await open([junk('f1.png'), junk('f2.png')]);

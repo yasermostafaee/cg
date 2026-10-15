@@ -18,6 +18,8 @@ import {
   findImageSequences,
   framesToConvert,
   missingFrameName,
+  overBudgetSentence,
+  overConvertBudget,
   readFrameSize,
   sequenceAssetName,
   sequenceLabel,
@@ -75,7 +77,12 @@ export function ImageSequenceImportModal(props: {
   const otherSize = check?.mismatches.filter((m) => m.width !== 0) ?? [];
   // DELTA-RUN-NEXT-VERSION-01-G — a sequence is two frames or more; one is a picture.
   const single = seq !== undefined && seq.frames.length < 2;
-  const ready = plan !== null && plan.frames.length > 0 && fps > 0 && !single;
+  // DELTA-RUN-NEXT-VERSION-01-I — a job too large is refused here, before it starts.
+  const tooLarge =
+    plan !== null &&
+    size !== null &&
+    overConvertBudget(plan.frames.length, size.width, size.height);
+  const ready = plan !== null && plan.frames.length > 0 && fps > 0 && !single && !tooLarge;
 
   function continueImport(): void {
     if (seq === undefined || plan === null || !ready) return;
@@ -186,6 +193,14 @@ export function ImageSequenceImportModal(props: {
 
             {plan !== null && plan.frames.length === 0 && (
               <Callout variant="danger">No frame of this sequence can be read.</Callout>
+            )}
+
+            {tooLarge && size !== null && plan !== null && (
+              <Callout variant="danger">
+                <span data-testid="sequence-too-large">
+                  {overBudgetSentence(plan.frames.length, size.width, size.height, fps)}
+                </span>
+              </Callout>
             )}
 
             {single && (

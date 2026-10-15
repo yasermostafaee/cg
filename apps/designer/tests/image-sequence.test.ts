@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   findImageSequences,
+  MAX_SEQUENCE_FRAMES,
+  MAX_SEQUENCE_PIXELS,
+  noSequenceSentence,
+  overBudgetSentence,
+  overConvertBudget,
   frameSizeFromHeader,
   framesToConvert,
   missingFrameName,
@@ -193,5 +198,88 @@ describe('D-164 — framesToConvert: one frame per number, a hole HELD', () => {
   it('a whole sequence is passed through untouched', () => {
     const seq = only([f('f3.png'), f('f1.png'), f('f2.png')]);
     expect(names(framesToConvert(seq).frames)).toEqual(['f1.png', 'f2.png', 'f3.png']);
+  });
+});
+
+describe('🔴 DELTA-RUN-NEXT-VERSION-01-I — pictures named by far-apart numbers are NOT a sequence, and cost nothing', () => {
+  /** 38 pictures named by 13-digit numbers about 10⁹ apart — the owner's folder, a span of ~5×10¹⁰. */
+  const scattered = (): ReturnType<typeof f>[] => {
+    let n = 1_696_830_000_000;
+    return Array.from({ length: 38 }, (_, i) => {
+      n += 1_000_000_000 + ((i * 7_919_993) % 900_000_000);
+      return f(`${String(n)}.png`);
+    });
+  };
+
+  it('🔴 the owner’s folder: no sequence, refused as far apart — at once, at a span of 5×10¹⁰', () => {
+    const t0 = performance.now();
+    const { sequences, refused } = findImageSequences(scattered());
+    expect(performance.now() - t0).toBeLessThan(200);
+    expect(sequences).toEqual([]);
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toMatchObject({ reason: 'apart' });
+    expect(refused[0]?.files).toHaveLength(38);
+    expect(refused[0]?.span).toBeGreaterThan(1e10);
+    expect(noSequenceSentence(refused, 50)).toMatch(
+      /^These 38 pictures are numbered far apart \(\d+ … \d+\), so they are not an image sequence\. To use them as pictures, import them with Image….$/,
+    );
+  });
+
+  it('🔴 at a span the old code could still finish (2×10⁶), it is refused — not one "sequence" with two million holes', () => {
+    const files = Array.from({ length: 38 }, (_, i) =>
+      f(`shot_${String(Math.round((i * 2_000_000) / 37))}.png`),
+    );
+    const { sequences, refused } = findImageSequences(files);
+    expect(sequences).toEqual([]);
+    expect(refused[0]?.reason).toBe('apart');
+  });
+
+  it('a held gap is still ONE sequence: two renders in one folder (1–100 and 500–600)', () => {
+    const names = [
+      ...Array.from({ length: 100 }, (_, i) => `f_${String(i + 1).padStart(4, '0')}.png`),
+      ...Array.from({ length: 101 }, (_, i) => `f_${String(i + 500).padStart(4, '0')}.png`),
+    ];
+    const { sequences, refused } = findImageSequences(names.map((n) => f(n)));
+    expect(refused).toEqual([]);
+    expect(sequences[0]?.frames).toHaveLength(201);
+    expect(sequences[0]?.missing).toHaveLength(399);
+    expect(framesToConvert(sequences[0] as NonNullable<(typeof sequences)[0]>).frames).toHaveLength(
+      600,
+    );
+  });
+
+  it('a run one after another but longer than the limit is refused with its length and the limit', () => {
+    const files = Array.from({ length: MAX_SEQUENCE_FRAMES + 1 }, (_, i) =>
+      f(`c_${String(i + 1)}.png`),
+    );
+    const { sequences, refused } = findImageSequences(files);
+    expect(sequences).toEqual([]);
+    expect(refused[0]).toMatchObject({ reason: 'too-long', span: MAX_SEQUENCE_FRAMES + 1 });
+    expect(noSequenceSentence(refused, 50)).toContain(`at most ${String(MAX_SEQUENCE_FRAMES)}`);
+  });
+
+  it('a number too long to count exactly (17 digits) is not a frame number', () => {
+    const { sequences, ignored } = findImageSequences([
+      f('12345678901234567.png'),
+      f('12345678901234568.png'),
+    ]);
+    expect(sequences).toEqual([]);
+    expect(ignored).toHaveLength(2);
+  });
+});
+
+describe('🔴 DELTA-RUN-NEXT-VERSION-01-I — the convert budget, in pixels', () => {
+  it('3,000 frames of 1920×1080 fit; one more does not; a quarter of the size fits four times as many', () => {
+    expect(MAX_SEQUENCE_PIXELS).toBe(3_000 * 1920 * 1080);
+    expect(overConvertBudget(3_000, 1920, 1080)).toBe(false);
+    expect(overConvertBudget(3_001, 1920, 1080)).toBe(true);
+    expect(overConvertBudget(12_000, 960, 540)).toBe(false);
+    expect(overConvertBudget(1_000, 3840, 2160)).toBe(true);
+  });
+
+  it('the sentence names the frames, their size and what fits at that size', () => {
+    expect(overBudgetSentence(4_000, 1920, 1080, 50)).toBe(
+      '4000 frames of 1920×1080 are more than one import can convert in this browser: at most 3000 at this size (60 s at 50 fps). Pick fewer frames.',
+    );
   });
 });

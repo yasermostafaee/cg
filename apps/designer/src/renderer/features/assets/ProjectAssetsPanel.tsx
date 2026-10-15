@@ -15,7 +15,7 @@ import { Modal, ModalButton } from '../shell/Modal.js';
 import { VideoImportModal, loadConverter } from './VideoImportModal.js';
 import { wavStats } from './wav-stats.js';
 import { ImageSequenceImportModal } from './ImageSequenceImportModal.js';
-import { findImageSequences, SEQUENCE_ACCEPT } from './image-sequence.js';
+import { findImageSequences, noSequenceSentence, SEQUENCE_ACCEPT } from './image-sequence.js';
 import type { VideoSource } from './video-convert-args.js';
 import { fitVideoElement } from '../../state/element-defaults.js';
 import { guardedAddVideo } from '../addGuard/duration-guard.js';
@@ -291,9 +291,10 @@ export function ProjectAssetsPanel(): JSX.Element {
       folder ? { folder: true } : { accept: SEQUENCE_ACCEPT },
     );
     if (files.length === 0) return; // cancelled
-    const { sequences } = findImageSequences(files);
+    const { sequences, refused } = findImageSequences(files);
     if (sequences.length === 0) {
-      designerStore.showNotice('No numbered PNG or TGA frames in the selection.');
+      // DELTA-RUN-NEXT-VERSION-01-I — far-apart pictures, or a run too long: one sentence, never a crash.
+      designerStore.showNotice(noSequenceSentence(refused, scene?.frameRate ?? 50));
       return;
     }
     // DELTA-RUN-NEXT-VERSION-01-G — one frame is a picture, never a one-frame video made silently.
