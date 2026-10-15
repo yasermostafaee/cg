@@ -55,17 +55,25 @@ export function computeIntegrityRoot(files: readonly IntegrityFile[]): string {
 }
 
 /** Build the full integrity block for a file map. */
-export function computeIntegrity(files: ReadonlyMap<string, Uint8Array>): {
+export function computeIntegrity(
+  files: ReadonlyMap<string, Uint8Array>,
+  onProgress?: (share: number) => void,
+): {
   files: IntegrityFile[];
   root: string;
 } {
   const entries: IntegrityFile[] = [];
+  let total = 0;
+  for (const content of files.values()) total += content.byteLength;
+  let hashed = 0;
   for (const [path, content] of files) {
     entries.push({
       path,
       sha256: sha256Hex(content),
       bytes: content.byteLength,
     });
+    hashed += content.byteLength;
+    onProgress?.(total === 0 ? 1 : hashed / total);
   }
   entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return { files: entries, root: computeIntegrityRoot(entries) };

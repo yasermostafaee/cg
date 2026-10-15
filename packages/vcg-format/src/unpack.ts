@@ -8,6 +8,26 @@ export interface UnpackResult {
   files: Map<string, Uint8Array>;
 }
 
+/**
+ * 🔴 `BOOK-EXPORT-01` (`B-350`) — **THE BYTES ARE NOT A READABLE ZIP**: empty, cut short, or not a
+ * zip at all. Told apart from a template that parses wrong, which may be one from a newer build, so
+ * a console can say "damaged" only about a file that is.
+ */
+export class VcgUnreadableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'VcgUnreadableError';
+  }
+}
+
+/** `B-350` — a readable zip that is not a CG template: no manifest or template, or not JSON. */
+export class VcgNotATemplateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'VcgNotATemplateError';
+  }
+}
+
 const decoder = new TextDecoder();
 function decodeUtf8(bytes: Uint8Array): string {
   return decoder.decode(bytes);
@@ -20,19 +40,34 @@ function decodeUtf8(bytes: Uint8Array): string {
  * verification is a separate step — see `verify()`.
  */
 export async function unpack(buf: Uint8Array): Promise<UnpackResult> {
-  const files = await readZip(buf);
+  let files: Map<string, Uint8Array>;
+  try {
+    files = await readZip(buf);
+  } catch (e) {
+    throw new VcgUnreadableError(e instanceof Error ? e.message : String(e));
+  }
 
   const manifestBuf = files.get('manifest.json');
   if (!manifestBuf) {
-    throw new Error('Missing manifest.json in .vcg');
+    throw new VcgNotATemplateError('Missing manifest.json in .vcg');
   }
-  const manifest = ManifestSchema.parse(JSON.parse(decodeUtf8(manifestBuf)) as unknown);
+  const manifest = ManifestSchema.parse(jsonOf(manifestBuf, 'manifest.json'));
 
   const sceneBuf = files.get('template.json');
   if (!sceneBuf) {
-    throw new Error('Missing template.json in .vcg');
+    throw new VcgNotATemplateError('Missing template.json in .vcg');
   }
-  const scene = SceneSchema.parse(JSON.parse(decodeUtf8(sceneBuf)) as unknown);
+  const scene = SceneSchema.parse(jsonOf(sceneBuf, 'template.json'));
 
   return { scene, manifest, files };
+}
+
+function jsonOf(bytes: Uint8Array, name: string): unknown {
+  try {
+    return JSON.parse(decodeUtf8(bytes)) as unknown;
+  } catch (e) {
+    throw new VcgNotATemplateError(
+      `${name} is not JSON: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }

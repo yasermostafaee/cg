@@ -46,6 +46,11 @@ export interface PackInput {
     privateKey: Ed25519KeyInput;
     publicKeyId: string;
   };
+  /**
+   * `BOOK-EXPORT-01` — the share of the packing done (0..1): hashing every file, then zipping.
+   * A 671 MB book spends ~15 s here, which the caller's progress has to show.
+   */
+  onProgress?: (share: number) => void;
 }
 
 /**
@@ -88,7 +93,7 @@ export async function pack(input: PackInput): Promise<Uint8Array> {
 
   // Integrity is computed over the file map *excluding* manifest.json
   // (which contains the integrity block itself).
-  const integrity = computeIntegrity(files);
+  const integrity = computeIntegrity(files, (share) => input.onProgress?.(HASH_SHARE * share));
 
   const manifest: Manifest = {
     schemaVersion: 1,
@@ -124,8 +129,11 @@ export async function pack(input: PackInput): Promise<Uint8Array> {
 
   files.set('manifest.json', utf8ToBytes(JSON.stringify(manifest, null, 2)));
 
-  return writeZip(files);
+  return writeZip(files, (share) => input.onProgress?.(HASH_SHARE + (1 - HASH_SHARE) * share));
 }
+
+/** Roughly how much of the packing time hashing takes (an estimate); the zip reports the rest. */
+const HASH_SHARE = 0.3;
 
 function copyInto(
   dest: Map<string, Uint8Array>,

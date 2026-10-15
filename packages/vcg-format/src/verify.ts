@@ -1,10 +1,22 @@
 import { computeIntegrityRoot, sha256Hex } from './integrity.js';
-import { unpack } from './unpack.js';
+import { unpack, VcgNotATemplateError, VcgUnreadableError } from './unpack.js';
 import { verifyEd25519, type Ed25519KeyInput } from './sign.js';
+
+/**
+ * `BOOK-EXPORT-01` (`B-350`) — WHY a package failed, for the sentence a console shows:
+ * - `unreadable` — not a readable zip (empty, cut short, not a zip);
+ * - `not-a-template` — a zip with no CG template in it;
+ * - `invalid` — a template whose manifest or scene does not parse (a newer build's, perhaps);
+ * - `integrity` — a file missing, or its bytes changed since export;
+ * - `trust` — the signature or the signing policy.
+ */
+export type VerifyFailure = 'unreadable' | 'not-a-template' | 'invalid' | 'integrity' | 'trust';
 
 export interface VerifyResult {
   ok: boolean;
   errors: string[];
+  /** The first failure's kind; `null` when `ok`. */
+  failure: VerifyFailure | null;
   /** True iff the manifest carried a signing block. */
   signed: boolean;
   /**
@@ -54,6 +66,12 @@ export async function verify(buf: Uint8Array, options: VerifyOptions = {}): Prom
     return {
       ok: false,
       errors: [`Unpack failed: ${e instanceof Error ? e.message : String(e)}`],
+      failure:
+        e instanceof VcgUnreadableError
+          ? 'unreadable'
+          : e instanceof VcgNotATemplateError
+            ? 'not-a-template'
+            : 'invalid',
       signed: false,
       signatureVerified: false,
     };
@@ -86,6 +104,8 @@ export async function verify(buf: Uint8Array, options: VerifyOptions = {}): Prom
     );
   }
 
+  // Every error so far is a file or the root not matching what the manifest declares.
+  const failedIntegrity = errors.length > 0;
   let signatureVerified = false;
   if (manifest.signing) {
     const { algorithm, publicKeyId, signature } = manifest.signing;
@@ -109,5 +129,11 @@ export async function verify(buf: Uint8Array, options: VerifyOptions = {}): Prom
     errors.push('Package is not signed but signing is required by deployment policy');
   }
 
-  return { ok: errors.length === 0, errors, signed, signatureVerified };
+  return {
+    ok: errors.length === 0,
+    errors,
+    failure: errors.length === 0 ? null : failedIntegrity ? 'integrity' : 'trust',
+    signed,
+    signatureVerified,
+  };
 }

@@ -25,7 +25,10 @@ function shouldStore(path: string): boolean {
  * Returns a `Uint8Array` so the same code path works in Node and the
  * browser. Callers that need a Node `Buffer` can wrap with `Buffer.from`.
  */
-export async function writeZip(files: ReadonlyMap<string, Uint8Array>): Promise<Uint8Array> {
+export async function writeZip(
+  files: ReadonlyMap<string, Uint8Array>,
+  onProgress?: (share: number) => void,
+): Promise<Uint8Array> {
   const zip = new JSZip();
   const sortedPaths = [...files.keys()].sort();
   for (const path of sortedPaths) {
@@ -52,11 +55,14 @@ export async function writeZip(files: ReadonlyMap<string, Uint8Array>): Promise<
     written, including the ones nobody asked for.
   */
   for (const entry of Object.values(zip.files)) entry.date = FIXED_DATE;
-  const out = await zip.generateAsync({
-    type: 'uint8array',
-    platform: 'UNIX',
-    streamFiles: false,
-  });
+  const out = await zip.generateAsync(
+    {
+      type: 'uint8array',
+      platform: 'UNIX',
+      streamFiles: false,
+    },
+    (meta) => onProgress?.(meta.percent / 100),
+  );
   return out;
 }
 

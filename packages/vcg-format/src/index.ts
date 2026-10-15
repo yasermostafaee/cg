@@ -3,11 +3,11 @@
 export { pack } from './pack.js';
 export type { PackInput } from './pack.js';
 
-export { unpack } from './unpack.js';
+export { unpack, VcgNotATemplateError, VcgUnreadableError } from './unpack.js';
 export type { UnpackResult } from './unpack.js';
 
 export { verify } from './verify.js';
-export type { VerifyOptions, VerifyResult } from './verify.js';
+export type { VerifyFailure, VerifyOptions, VerifyResult } from './verify.js';
 
 export {
   sha256Hex,
