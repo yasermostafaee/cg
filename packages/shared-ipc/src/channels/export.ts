@@ -24,8 +24,8 @@ const ExportIssueSchema = z.object({
 export type ExportIssue = z.infer<typeof ExportIssueSchema>;
 
 const ExportProgressSchema = z.object({
-  /** Pipeline step (manifest / assets / template / pack / sign). */
-  step: z.enum(['validate', 'manifest', 'assets', 'template', 'pack', 'sign', 'done']),
+  /** Pipeline step (manifest / assets / template / pack / sign; `write` = into the chosen file). */
+  step: z.enum(['validate', 'manifest', 'assets', 'template', 'pack', 'sign', 'write', 'done']),
   /** 0..1, monotonic per run. */
   progress: z.number().min(0).max(1),
   /** Optional human label (e.g. file being processed). */

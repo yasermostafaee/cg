@@ -16,6 +16,7 @@ import type {
   SharedImagesImportChannel,
   SharedImagesListChannel,
   SharedImagesRemoveChannel,
+  ExportIssue,
   ExportPreflightChannel,
   ExportProgress,
   ExportRunChannel,
@@ -30,6 +31,43 @@ import type {
   ProjectsStartersChannel,
 } from '@cg/shared-ipc';
 import type { Scene } from '@cg/shared-schema';
+
+/**
+ * `B-351` — the code of the preflight error for a template too large for CG Control. `Export .vcg`
+ * refuses on it; the single-file HTML, which never goes through CG Bridge, does not.
+ */
+export const CG_CONTROL_TOO_LARGE = 'too-large-for-cg-control';
+
+/**
+ * 🔴 `BOOK-EXPORT-01` (`B-349`) — **WHAT BECAME OF THE FILE THE SAVE DIALOG MADE**, after an export
+ * that failed. Chrome creates the file, EMPTY, the moment a name is chosen — before a single byte is
+ * produced — so a failure used to leave a 0-byte `.vcg` behind, in silence.
+ * - `removed` — it was empty and is gone (read back: not found);
+ * - `left-empty` — it is still there, empty, and the browser would not remove it;
+ * - `unchanged` — it still holds what it held before (never deleted: it is the author's file);
+ * - `none` — no file was made (no save dialog, or it failed before choosing).
+ */
+export type ExportFileFate = 'removed' | 'left-empty' | 'unchanged' | 'none';
+
+/**
+ * 🔴 `B-349` — **EVERY EXPORT ENDS IN AN ANSWER**, never in silence:
+ * - `written` — the file's name and size;
+ * - `cancelled` — the author closed the save dialog;
+ * - `blocked` — the template has an error, found BEFORE the save dialog, so no file was made;
+ * - `failed` — the export broke: the cause in the author's words, the element at fault when there
+ *   is one, and what became of the file.
+ */
+export type ExportResult =
+  | { outcome: 'written'; filename: string; bytes: number }
+  | { outcome: 'cancelled' }
+  | { outcome: 'blocked'; issues: ExportIssue[] }
+  | {
+      outcome: 'failed';
+      filename: string | null;
+      cause: string;
+      elementId?: string;
+      file: ExportFileFate;
+    };
 
 export interface AppInfo {
   name: string;
@@ -260,20 +298,23 @@ export interface DesignerBridge {
       req: ChannelRequest<typeof ExportRunChannel>,
     ): Promise<ChannelResponse<typeof ExportRunChannel>>;
     /**
-     * Run the export pipeline and write the resulting `.vcg` directly
-     * to a file the operator picks via the native save dialog (Windows
-     * Explorer / macOS Finder). Returns `{ ok: false }` when the
-     * operator cancels.
+     * Run the export pipeline and write the resulting `.vcg` directly to a file the author picks
+     * in the save dialog (a download where the browser has none). `B-349` — never throws: every
+     * outcome, a failure included, is an {@link ExportResult}.
      */
-    runDisk(req: { scene: Scene }): Promise<{ ok: boolean; filename: string | null }>;
+    runDisk(req: { scene: Scene }): Promise<ExportResult>;
     /**
      * D-019 — produce a single self-contained, `file://`-safe CasparCG `.html`
      * (scene/CSS/fonts/runtime inlined + an embedded GDD) and download it.
-     * Returns the filename, byte size, and any non-blocking preflight warnings.
+     * `B-349` — never throws: a failure is answered with its cause; a written file carries its
+     * non-blocking preflight warnings.
      */
     runSingleFileHtml(req: {
       scene: Scene;
-    }): Promise<{ filename: string; bytes: number; warnings: string[] }>;
+    }): Promise<
+      | { outcome: 'written'; filename: string; bytes: number; warnings: string[] }
+      | { outcome: 'failed'; cause: string; elementId?: string }
+    >;
     onProgress(handler: (progress: ExportProgress) => void): Unsubscribe;
   };
 

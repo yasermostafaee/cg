@@ -11,7 +11,7 @@ import {
   type Element,
   type Scene,
 } from '@cg/shared-schema';
-import type { ExportIssue, ExportProgress } from '@cg/shared-ipc';
+import { TEMPLATE_MEDIA_MAX_BYTES, type ExportIssue, type ExportProgress } from '@cg/shared-ipc';
 import type { AssetStore } from './AssetStore.js';
 import {
   collectImageElements,
@@ -27,6 +27,7 @@ import {
   type ImageAssetLibrary,
 } from '@cg/single-file-export';
 import { Emitter } from './emitter.js';
+import { CG_CONTROL_TOO_LARGE } from '../shared/designer-bridge.js';
 // D-137 — the Live Source preflight, kept beside `off-frame.ts` because the two must
 // agree on what "off-frame" means and share ONE copy of the AABB flattening. The
 // import crosses platform → renderer/state, which is unusual here and deliberate:
@@ -55,6 +56,38 @@ export interface ExporterOptions {
   cgJsLottie?: string;
   /** Runtime baseline stylesheet injected as cg.css. */
   cgCss: string;
+}
+
+/**
+ * 🔴 `BOOK-EXPORT-01` (`B-349`) — **PRODUCE REFUSED BY VALIDATION**, carrying the first error so
+ * the author is told what and where (the element is selected and the Issues panel opened). The
+ * message keeps its old shape: tests and logs read `export blocked by validation: <code> — …`.
+ */
+export class ExportBlockedError extends Error {
+  constructor(readonly issue: ExportIssue) {
+    super(`export blocked by validation: ${issue.code} — ${issue.message}`);
+    this.name = 'ExportBlockedError';
+  }
+}
+
+/**
+ * 🔴 `B-349` — **A PICTURE, CLIP OR SOUND THE TEMPLATE SHOWS COULD NOT BE READ FROM THE PROJECT.**
+ * It used to be skipped in silence, so a book went to air with a page missing; now the export fails
+ * and says which one.
+ */
+export class ExportUnreadableError extends Error {
+  constructor(
+    message: string,
+    readonly elementId: string,
+  ) {
+    super(message);
+    this.name = 'ExportUnreadableError';
+  }
+}
+
+/** A short human handle for an element in a message: its name, else its id. */
+function labelOf(el: Element): string {
+  return el.name.trim() === '' ? el.id : el.name;
 }
 
 /**
@@ -127,6 +160,20 @@ export class Exporter {
           code: 'missing-asset',
           message: `Image element references unknown asset ${el.assetId}.`,
           elementId: el.id,
+        });
+      }
+      // `B-349` — a book's PAGE follows the image element: a missing picture is a hole on air, and
+      // the export used to drop it in silence. Only an authored page names a project asset.
+      if (el.type === 'sequence') {
+        el.items.forEach((item, i) => {
+          if (item.kind !== 'image' || item.assetId === undefined) return;
+          if (knownAssetIds.has(item.assetId)) return;
+          issues.push({
+            severity: 'error',
+            code: 'missing-asset',
+            message: `Page ${String(i + 1)} of "${labelOf(el)}" references unknown asset ${item.assetId}.`,
+            elementId: el.id,
+          });
         });
       }
       // D-128 Phase 5 — a video follows the IMAGE pattern (an ERROR, decision (c)):
@@ -260,6 +307,30 @@ export class Exporter {
         totalInline += inlineBytes;
         parts.push({ name: meta.filename, inlineBytes });
       }
+      /*
+        🔴 `BOOK-EXPORT-01` (`B-351`) — **TOO LARGE FOR CG CONTROL, SAID BEFORE THE SAVE DIALOG.**
+        CG Control renders an imported `.vcg` into ONE page with this same media inlined, and sends
+        it to CG Bridge in one frame: past `TEMPLATE_MEDIA_MAX_BYTES` that frame cannot pass, and a
+        141 MB book's import ended in "Bridge disconnected". An ERROR, so `Export .vcg` refuses it
+        before any file is made; the single-file HTML, which never goes through CG Bridge, is not
+        refused by it (`CompositionActionBar`).
+      */
+      const mediaBytes = parts.reduce((sum, p) => sum + Math.ceil((p.inlineBytes * 3) / 4), 0);
+      if (mediaBytes > TEMPLATE_MEDIA_MAX_BYTES) {
+        const mbOf = (n: number): string => String(Math.ceil(n / 1024 / 1024));
+        const pictures = new Set(collectImageElements(scene).map((r) => r.assetId)).size;
+        const heaviest = heaviestElement(scene, metaById);
+        issues.push({
+          severity: 'error',
+          code: CG_CONTROL_TOO_LARGE,
+          message:
+            `"${heaviest === null ? scene.name : labelOf(heaviest)}" makes this template too large ` +
+            `for CG Control: ${String(pictures)} ${pictures === 1 ? 'picture' : 'pictures'}, ` +
+            `${mbOf(mediaBytes)} MB of pictures and media; one template can carry at most ` +
+            `${mbOf(TEMPLATE_MEDIA_MAX_BYTES)} MB. Use fewer or smaller pictures.`,
+          ...(heaviest !== null && { elementId: heaviest.id }),
+        });
+      }
       if (totalInline > SINGLE_FILE_INLINE_WARN_BYTES) {
         const mb = (n: number): string => (n / 1024 / 1024).toFixed(1);
         const dominant = parts
@@ -273,9 +344,9 @@ export class Exporter {
           message:
             `A single-file HTML export of this template would inline ~${mb(totalInline)} MB ` +
             `of asset data (largest: ${dominant}) — past ~${mb(SINGLE_FILE_INLINE_WARN_BYTES)} MB ` +
-            `CasparCG's CEF gets slow to boot the file from file://. The .vcg package has no ` +
-            `such limit (its assets ship as separate binary files) — prefer it for heavy ` +
-            `templates, or trim/shorten the clips.`,
+            `CasparCG's CEF gets slow to boot the page. A .vcg is rendered into the same kind ` +
+            `of page when CG Control imports it, so this applies to both — trim or shorten ` +
+            `the clips, or use smaller pictures.`,
         });
       }
     }
@@ -378,21 +449,20 @@ export class Exporter {
    * (native save dialog → file handle write). Throws when preflight
    * surfaces an error-severity issue.
    */
-  async produce(
-    scene: Scene,
-  ): Promise<{ vcg: Uint8Array; sha256: string; defaultFilename: string }> {
-    this.progress.emit({ step: 'validate', progress: 0.05 });
-    const fatal = (await this.preflight(scene)).filter((i) => i.severity === 'error');
-    if (fatal.length > 0) {
-      const first = fatal[0];
-      throw new Error(
-        `export blocked by validation: ${first?.code ?? 'unknown'} — ${first?.message ?? ''}`,
-      );
-    }
+  async produce(scene: Scene): Promise<{ vcg: Uint8Array; defaultFilename: string }> {
+    this.progress.emit({ step: 'validate', progress: 0.02 });
+    const first = (await this.preflight(scene)).find((i) => i.severity === 'error');
+    if (first !== undefined) throw new ExportBlockedError(first);
 
-    this.progress.emit({ step: 'manifest', progress: 0.2 });
-    this.progress.emit({ step: 'assets', progress: 0.4 });
-    const { assetsMap, assetIndex } = await this.#gatherBinaries(scene);
+    /*
+      `BOOK-EXPORT-01` — the progress follows the WORK, not the step count: reading the media is
+      5–30 %, packing it 30–90 % (a 671 MB book spends ~15 s there), and the write the rest
+      (`runDisk`). The steps used to jump 40 → 60 → 80 % in the first second and then sit at 95 %.
+    */
+    this.progress.emit({ step: 'manifest', progress: 0.04 });
+    const { assetsMap, assetIndex } = await this.#gatherBinaries(scene, (share) =>
+      this.progress.emit({ step: 'assets', progress: 0.05 + 0.25 * share }),
+    );
     // D-121 — the fonts ride the same content-addressed shape as the images, but in
     // `fonts/` via the packer's dedicated `fonts` seam.
     const { fontsMap, fontIndex } = await this.#gatherFonts(scene);
@@ -406,12 +476,13 @@ export class Exporter {
       assetsMap.set('cg-lottie.js', new TextEncoder().encode(this.#cgJsLottie as string));
     }
 
-    this.progress.emit({ step: 'template', progress: 0.6 });
+    this.progress.emit({ step: 'template', progress: 0.3 });
     const indexHtml = buildIndexHtml(scene, assetIndex, fontIndex, includePlayer);
 
     const nowIso = new Date().toISOString();
-    this.progress.emit({ step: 'pack', progress: 0.8 });
+    this.progress.emit({ step: 'pack', progress: 0.3 });
     const vcg = await pack({
+      onProgress: (share) => this.progress.emit({ step: 'pack', progress: 0.3 + 0.6 * share }),
       scene,
       manifestExtras: {
         id: scene.id,
@@ -444,8 +515,8 @@ export class Exporter {
       fonts: fontsMap,
     });
 
-    this.progress.emit({ step: 'sign', progress: 0.95 });
-    return { vcg, sha256: sha256Hex(vcg), defaultFilename: downloadName('', scene.name) };
+    this.progress.emit({ step: 'pack', progress: 0.9 });
+    return { vcg, defaultFilename: downloadName('', scene.name) };
   }
 
   /**
@@ -456,7 +527,9 @@ export class Exporter {
     scene: Scene,
     outputPath: string,
   ): Promise<{ path: string; sha256: string; bytes: number }> {
-    const { vcg, sha256 } = await this.produce(scene);
+    const { vcg } = await this.produce(scene);
+    this.progress.emit({ step: 'sign', progress: 0.95 });
+    const sha256 = sha256Hex(vcg);
     const filename = downloadName(outputPath, scene.name);
     triggerDownload(vcg, filename);
     this.progress.emit({ step: 'done', progress: 1 });
@@ -465,20 +538,46 @@ export class Exporter {
 
   async #gatherBinaries(
     scene: Scene,
+    onShare: (share: number) => void,
   ): Promise<{ assetsMap: Map<string, Uint8Array>; assetIndex: AssetEntry[] }> {
     const assetsMap = new Map<string, Uint8Array>();
     const assetIndex: AssetEntry[] = [];
     const seen = new Set<string>();
+    const images = collectImageElements(scene);
+    const videos = collectVideoElements(scene);
+    const audios = collectAudioElements(scene);
+    const total = Math.max(1, images.length + videos.length + audios.length);
+    let done = 0;
+    const tick = (): void => {
+      done += 1;
+      onShare(done / total);
+    };
+    /*
+      `B-349` — a reference preflight accepted but whose bytes cannot be read fails the export,
+      naming the element and the file. It used to be `continue`: the package went out without
+      it, and a book reached air with a page missing.
+    */
+    const unreadable = (elementId: string, filename: string | undefined): ExportUnreadableError => {
+      const el = findElementById(scene, elementId);
+      return new ExportUnreadableError(
+        `${filename ?? 'A file'} in "${el === null ? elementId : labelOf(el)}" could not be ` +
+          `read from the project`,
+        elementId,
+      );
+    };
     // D-062 — every image element, recursing compositions/containers (was
     // top-level layers only), resolved through the shared source-aware seam.
     // D-040 — each image resolves from its source-indicated store first (shared
     // library for a logo) and the other store as a fallback.
-    for (const { assetId, source } of collectImageElements(scene)) {
+    for (const { elementId, assetId, source } of images) {
+      tick();
       if (seen.has(assetId)) continue;
       seen.add(assetId);
       const imageSource = compositeImageSource(source, this.#sharedImages, this.#assets);
       const resolved = await resolveImageAsset(imageSource, assetId);
-      if (resolved === null) continue;
+      if (resolved === null) {
+        throw unreadable(elementId, (await imageSource.get(assetId))?.filename);
+      }
       const { meta, bytes } = resolved;
       const ext = meta.filename.slice(meta.filename.lastIndexOf('.'));
       const relativePath = `assets/${meta.kind}/${meta.sha256}${ext}`;
@@ -500,11 +599,14 @@ export class Exporter {
     // widened asset-src walk sets `<video src>` — a package-relative reference,
     // zero external requests. A missing asset is a PREFLIGHT ERROR (produce()
     // blocks before reaching here); the guard below is belt-and-braces.
-    for (const { assetId } of collectVideoElements(scene)) {
+    for (const { elementId, assetId } of videos) {
+      tick();
       if (seen.has(assetId)) continue;
       seen.add(assetId);
       const resolved = await resolveVideoAsset(this.#assets, assetId);
-      if (resolved === null) continue;
+      if (resolved === null) {
+        throw unreadable(elementId, (await this.#assets.get(assetId))?.filename);
+      }
       const { meta, bytes } = resolved;
       const dot = meta.filename.lastIndexOf('.');
       const ext = dot === -1 ? '.webm' : meta.filename.slice(dot);
@@ -522,11 +624,14 @@ export class Exporter {
     // `D-165` — each sound's stored WAV as `assets/audio/<sha>.wav` + a `kind: 'audio'` index
     // entry, exactly as a video packs; the boot's `assetUrls` wiring covers it (all non-lottie
     // entries), and the runtime's asset-src walk sets `<audio src>`.
-    for (const { assetId } of collectAudioElements(scene)) {
+    for (const { elementId, assetId } of audios) {
+      tick();
       if (seen.has(assetId)) continue;
       seen.add(assetId);
       const resolved = await resolveAudioAsset(this.#assets, assetId);
-      if (resolved === null) continue;
+      if (resolved === null) {
+        throw unreadable(elementId, (await this.#assets.get(assetId))?.filename);
+      }
       const { meta, bytes } = resolved;
       const relativePath = `assets/audio/${meta.sha256}.wav`;
       assetsMap.set(relativePath, bytes);
@@ -606,6 +711,53 @@ export class Exporter {
     }
     return { fontsMap, fontIndex };
   }
+}
+
+/** The element of the scene, anywhere (compositions, containers), or `null`. */
+function findElementById(scene: Scene, id: string): Element | null {
+  const walk = (children: readonly Element[]): Element | null => {
+    for (const el of children) {
+      if (el.id === id) return el;
+      if (el.type === 'container') {
+        const inner = walk(el.children);
+        if (inner !== null) return inner;
+      }
+    }
+    return null;
+  };
+  for (const layer of scene.layers) {
+    const found = walk(layer.children);
+    if (found !== null) return found;
+  }
+  for (const comp of scene.compositions ?? []) {
+    for (const layer of comp.layers) {
+      const found = walk(layer.children);
+      if (found !== null) return found;
+    }
+  }
+  return null;
+}
+
+/** `B-351` — the element whose pictures, clips and sounds weigh the most: the one to point at. */
+function heaviestElement(
+  scene: Scene,
+  metaById: ReadonlyMap<string, { byteSize: number }>,
+): Element | null {
+  const weight = new Map<string, number>();
+  const counted = new Set<string>();
+  const refs = [
+    ...collectImageElements(scene),
+    ...collectVideoElements(scene),
+    ...collectAudioElements(scene),
+  ];
+  for (const { elementId, assetId } of refs) {
+    if (counted.has(assetId)) continue;
+    counted.add(assetId);
+    weight.set(elementId, (weight.get(elementId) ?? 0) + (metaById.get(assetId)?.byteSize ?? 0));
+  }
+  let best: string | null = null;
+  for (const [id, w] of weight) if (best === null || w > (weight.get(best) ?? 0)) best = id;
+  return best === null ? null : findElementById(scene, best);
 }
 
 /**

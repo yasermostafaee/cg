@@ -133,11 +133,19 @@ export const documentSlice = {
     documentSlice.setScene(null, null);
   },
 
-  /** Show a transient toast notice (auto-clears). Replaces any current one. */
-  showNotice(message: string): void {
+  /**
+   * Show a toast notice. Replaces any current one. It clears itself after 5 s, unless `hold`:
+   * `BOOK-EXPORT-01` — a failure the author must act on (an export that did not happen) stays until
+   * it is dismissed, because a sentence that vanishes while it is being read is one more silence.
+   */
+  showNotice(message: string, opts: { hold?: boolean } = {}): void {
     const t = getNoticeTimer();
     if (t !== null) clearTimeout(t);
     set({ notice: message });
+    if (opts.hold === true) {
+      setNoticeTimer(null);
+      return;
+    }
     setNoticeTimer(
       setTimeout(() => {
         setNoticeTimer(null);

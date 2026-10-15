@@ -36,6 +36,7 @@ import { SharedImageStore } from './SharedImageStore.js';
 import { Exporter } from './Exporter.js';
 import { Preview } from './preview.js';
 import { pickFiles } from './pickFiles.js';
+import { exportFailureOf, settleFailedFile, writeInChunks } from './export-file.js';
 
 const APP_INFO: AppInfo = { name: 'cg Designer', version: '0.0.0', platform: 'browser' };
 
@@ -512,13 +513,31 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     export: {
       preflight: async (req) => ({ issues: await exporter.preflight(req.scene) }),
       run: (req) => exporter.run(req.scene, req.outputPath),
+      /*
+        🔴 `BOOK-EXPORT-01` (`B-349`) — **EVERY EXPORT ENDS IN AN ANSWER, AND NO EMPTY FILE IS LEFT
+        BEHIND.** Measured on the owner's dev server: the save dialog made `telavat.vcg` (EMPTY — Chrome
+        creates the file when the name is chosen), `produce` then threw, and the rejection reached no
+        one: no word to the author, a 0-byte file on disk, and CG Control's "Corrupted zip ?" later.
+
+        - The template is VALIDATED BEFORE THE DIALOG: an error is answered as `blocked` and no file
+          is made (it used to be found after the file existed).
+        - After the dialog, every throw is caught and answered as `failed`, with what became of the
+          file: removed only when it is empty and the browser can, checked by reading it back.
+      */
       runDisk: async (req) => {
         const { scene } = req;
+        const blocking = (await exporter.preflight(scene)).filter((i) => i.severity === 'error');
+        if (blocking.length > 0) return { outcome: 'blocked', issues: blocking };
         const sfp = window.showSaveFilePicker;
         if (sfp === undefined) {
-          const filename = `${slugifyName(scene.name) || 'template'}.vcg`;
-          const result = await exporter.run(scene, filename);
-          return { ok: true, filename: result.path };
+          // No save dialog: a download, which makes no file until the bytes are complete.
+          try {
+            const filename = `${slugifyName(scene.name) || 'template'}.vcg`;
+            const result = await exporter.run(scene, filename);
+            return { outcome: 'written', filename: result.path, bytes: result.bytes };
+          } catch (err) {
+            return { outcome: 'failed', filename: null, ...exportFailureOf(err), file: 'none' };
+          }
         }
         let handle = exportHandles.get(scene.id) ?? null;
         try {
@@ -533,25 +552,42 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
           });
         } catch (err) {
           if (err instanceof DOMException && err.name === 'AbortError') {
-            return { ok: false, filename: null };
+            return { outcome: 'cancelled' };
           }
-          throw err;
+          return { outcome: 'failed', filename: null, ...exportFailureOf(err), file: 'none' };
         }
         exportHandles.set(scene.id, handle);
-        const { vcg } = await exporter.produce(scene);
-        const writable = await handle.createWritable();
-        await writable.write(new Blob([vcg.slice()], { type: 'application/octet-stream' }));
-        await writable.close();
-        exporter.progress.emit({ step: 'done', progress: 1 });
-        return { ok: true, filename: handle.name };
+        const chosen = handle;
+        try {
+          const { vcg } = await exporter.produce(scene);
+          // The write is the last tenth: a chunk at a time, so it shows (and holds no second copy).
+          await writeInChunks(chosen, vcg, (share) =>
+            exporter.progress.emit({ step: 'write', progress: 0.9 + 0.1 * share }),
+          );
+          exporter.progress.emit({ step: 'done', progress: 1 });
+          return { outcome: 'written', filename: chosen.name, bytes: vcg.byteLength };
+        } catch (err) {
+          return {
+            outcome: 'failed',
+            filename: chosen.name,
+            ...exportFailureOf(err),
+            file: await settleFailedFile(chosen),
+          };
+        }
       },
+      // `B-349` — the HTML export answers too: a download makes no file until it is complete.
       runSingleFileHtml: async (req) => {
-        const result = await singleFile.run(req.scene);
-        return {
-          filename: result.filename,
-          bytes: result.bytes,
-          warnings: result.issues.map((i) => i.message),
-        };
+        try {
+          const result = await singleFile.run(req.scene);
+          return {
+            outcome: 'written',
+            filename: result.filename,
+            bytes: result.bytes,
+            warnings: result.issues.map((i) => i.message),
+          };
+        } catch (err) {
+          return { outcome: 'failed', ...exportFailureOf(err) };
+        }
       },
       onProgress: (handler) => exporter.progress.subscribe(handler),
     },

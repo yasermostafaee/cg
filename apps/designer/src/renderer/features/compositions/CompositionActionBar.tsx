@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import type { ExportIssue } from '@cg/shared-ipc';
 import type { Scene } from '@cg/shared-schema';
+import { CG_CONTROL_TOO_LARGE, type ExportResult } from '../../../shared/designer-bridge.js';
 import {
   designerStore,
   scopeSceneToComposition,
@@ -7,6 +9,7 @@ import {
   useDesignerSelector,
 } from '../../state/store.js';
 import { Button } from '../../ui/Button.js';
+import { exportFailedLine, exportWrittenLine } from './export-answer.js';
 import * as s from './CompositionActionBar.css.js';
 
 interface Props {
@@ -38,7 +41,16 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
   }, shallowEqual);
 
   const errors = issues.filter((i) => i.severity === 'error');
-  const errorCount = errors.length;
+  /*
+    `BOOK-EXPORT-01` (`B-351`) — a template too large for CG Control refuses `Export .vcg` only:
+    the single-file HTML never goes through CG Bridge, so that limit is not its own.
+  */
+  const htmlErrors = errors.filter((i) => i.code !== CG_CONTROL_TOO_LARGE);
+  /**
+   * `B-349` — an export in flight: which one, and the share done (`null` until the pipeline
+   * reports, e.g. while the save dialog is open). Both buttons wait for it.
+   */
+  const [busy, setBusy] = useState<{ kind: 'vcg' | 'html'; share: number | null } | null>(null);
   /*
     ⭐ `D-157` — TWO DIFFERENT REFUSALS, and collapsing them into one boolean is what made this
     control mute.
@@ -64,20 +76,8 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
     title, and the "blocked" appearance in `data-export-blocked`.
   */
   const noComposition = !hasComp;
-  const blockedByErrors = hasComp && errorCount > 0;
-
-  /**
-   * `D-157` — the FIRST offender, named. The preflight's own `label()` already put the
-   * element's name (else its id) into every message, so the name is lifted from the message
-   * rather than re-derived here: two spellings of "which box" is how a tooltip comes to name a
-   * different element from the panel it points at.
-   */
-  const firstOffender = errors[0]?.message.match(/"([^"]+)"/)?.[1];
-  /** What the control says when it will not export. Names the count AND the box. */
-  const blockedTitle =
-    firstOffender === undefined
-      ? `Export blocked — ${String(errorCount)} validation error${errorCount === 1 ? '' : 's'}. Press to see them.`
-      : `Export blocked — ${String(errorCount)} error${errorCount === 1 ? '' : 's'}, starting with “${firstOffender}”. Press to see them and select the box.`;
+  const vcgBlocked = hasComp && errors.length > 0;
+  const htmlBlocked = hasComp && htmlErrors.length > 0;
   /*
     🔴 The refusal reaches assistive technology through `title`, and that only works BECAUSE the
     button is no longer disabled.
@@ -118,36 +118,95 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
    * gives them. The panel holds the full text for as long as the author wants it; the toast
    * only has to say what just happened.
    */
-  function refuse(): void {
-    const ids = [...new Set(errors.map((i) => i.elementId).filter((id) => id !== undefined))];
+  function refuse(blocking: readonly ExportIssue[]): void {
+    const ids = [...new Set(blocking.map((i) => i.elementId).filter((id) => id !== undefined))];
     if (ids.length > 0) designerStore.setSelection(ids);
     designerStore.setIssuesOpen(true);
     designerStore.showNotice(
-      `Export blocked — ${String(errorCount)} error${errorCount === 1 ? '' : 's'}. ` +
-        `${firstOffender ?? 'See the Issues panel'}.`,
+      `Export blocked — ${String(blocking.length)} error${blocking.length === 1 ? '' : 's'}. ` +
+        `${firstOffenderOf(blocking) ?? 'See the Issues panel'}.`,
     );
   }
 
+  /**
+   * 🔴 `BOOK-EXPORT-01` (`B-349`) — **THE ANSWER TO AN EXPORT, WHATEVER IT WAS.** A written file is
+   * named with its size; a refusal found by the bridge (its own preflight, run before the save
+   * dialog) is answered as the button's own refusal; a failure is a sentence that STAYS until it is
+   * dismissed, with the element at fault selected — and the Issues panel opened when the panel
+   * holds the cause.
+   */
+  function answer(result: ExportResult): void {
+    switch (result.outcome) {
+      case 'written':
+        designerStore.showNotice(exportWrittenLine(result.filename, result.bytes));
+        return;
+      case 'cancelled':
+        return;
+      case 'blocked':
+        refuse(result.issues);
+        return;
+      case 'failed':
+        if (result.elementId !== undefined) designerStore.setSelection([result.elementId]);
+        designerStore.showNotice(exportFailedLine(result), { hold: true });
+    }
+  }
+
   async function exportVcg(): Promise<void> {
-    if (blockedByErrors) {
-      refuse();
+    if (busy !== null) return;
+    if (vcgBlocked) {
+      refuse(errors);
       return;
     }
     const target = scoped();
     if (target === null) return;
-    await window.cg.export.runDisk({ scene: target });
+    setBusy({ kind: 'vcg', share: null });
+    const off = window.cg.export.onProgress((p) => setBusy({ kind: 'vcg', share: p.progress }));
+    try {
+      answer(await window.cg.export.runDisk({ scene: target }));
+    } catch (err) {
+      // The bridge answers every outcome; this is a fault in answering, and still not a silence.
+      answerFault(err);
+    } finally {
+      off();
+      setBusy(null);
+    }
   }
 
   async function exportHtml(): Promise<void> {
-    if (blockedByErrors) {
-      refuse();
+    if (busy !== null) return;
+    if (htmlBlocked) {
+      refuse(htmlErrors);
       return;
     }
     const target = scoped();
     if (target === null) return;
-    const { warnings } = await window.cg.export.runSingleFileHtml({ scene: target });
-    if (warnings.length > 0) designerStore.showNotice(warnings.join('\n'));
+    setBusy({ kind: 'html', share: null });
+    try {
+      const result = await window.cg.export.runSingleFileHtml({ scene: target });
+      if (result.outcome === 'failed') {
+        if (result.elementId !== undefined) designerStore.setSelection([result.elementId]);
+        designerStore.showNotice(
+          exportFailedLine({ cause: result.cause, filename: null, file: 'none' }),
+          { hold: true },
+        );
+        return;
+      }
+      designerStore.showNotice(
+        [exportWrittenLine(result.filename, result.bytes), ...result.warnings].join('\n'),
+      );
+    } catch (err) {
+      answerFault(err);
+    } finally {
+      setBusy(null);
+    }
   }
+
+  const exportLabel = (kind: 'vcg' | 'html', idle: string): string => {
+    if (busy?.kind !== kind) return idle;
+    return busy.share === null
+      ? 'Exporting…'
+      : `Exporting… ${String(Math.min(99, Math.floor(busy.share * 100)))} %`;
+  };
 
   return (
     <div className={s.bar} aria-label="Composition actions" data-testid="composition-action-bar">
@@ -174,35 +233,68 @@ export function CompositionActionBar({ issues }: Props): JSX.Element {
           size="sm"
           className={s.action}
           aria-label="Export .vcg"
-          disabled={noComposition}
-          data-export-blocked={blockedByErrors ? 'errors' : undefined}
+          disabled={noComposition || busy !== null}
+          aria-busy={busy?.kind === 'vcg' ? true : undefined}
+          data-export-blocked={vcgBlocked ? 'errors' : undefined}
           onClick={() => void exportVcg()}
-          title={blockedByErrors ? blockedTitle : 'Export this composition to .vcg'}
+          title={vcgBlocked ? blockedTitleOf(errors) : 'Export this composition to .vcg'}
         >
           {/* <span className={s.glyph} aria-hidden>
             ⤓
           </span> */}
-          Export (.vcg)
+          {exportLabel('vcg', 'Export (.vcg)')}
         </Button>
         <Button
           size="sm"
           className={s.action}
           aria-label="Export HTML"
-          disabled={noComposition}
-          data-export-blocked={blockedByErrors ? 'errors' : undefined}
+          disabled={noComposition || busy !== null}
+          aria-busy={busy?.kind === 'html' ? true : undefined}
+          data-export-blocked={htmlBlocked ? 'errors' : undefined}
           onClick={() => void exportHtml()}
           title={
-            blockedByErrors
-              ? blockedTitle
+            htmlBlocked
+              ? blockedTitleOf(htmlErrors)
               : 'Download a single self-contained CasparCG .html for this composition'
           }
         >
           {/* <span className={s.glyph} aria-hidden>
             ⤓
           </span> */}
-          HTML
+          {exportLabel('html', 'HTML')}
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * `D-157` — the FIRST offender, named. The preflight's own `label()` already put the
+ * element's name (else its id) into every message, so the name is lifted from the message
+ * rather than re-derived here: two spellings of "which box" is how a tooltip comes to name a
+ * different element from the panel it points at.
+ */
+function firstOffenderOf(blocking: readonly ExportIssue[]): string | undefined {
+  return blocking[0]?.message.match(/"([^"]+)"/)?.[1];
+}
+
+/** What the control says when it will not export. Names the count AND the box. */
+function blockedTitleOf(blocking: readonly ExportIssue[]): string {
+  const count = blocking.length;
+  const first = firstOffenderOf(blocking);
+  return first === undefined
+    ? `Export blocked — ${String(count)} validation error${count === 1 ? '' : 's'}. Press to see them.`
+    : `Export blocked — ${String(count)} error${count === 1 ? '' : 's'}, starting with “${first}”. Press to see them and select the box.`;
+}
+
+/** `B-349` — a throw the bridge did not answer for: said, and held until dismissed. */
+function answerFault(err: unknown): void {
+  designerStore.showNotice(
+    exportFailedLine({
+      cause: `the Designer hit an error (${err instanceof Error ? err.message : String(err)})`,
+      filename: null,
+      file: 'none',
+    }),
+    { hold: true },
   );
 }

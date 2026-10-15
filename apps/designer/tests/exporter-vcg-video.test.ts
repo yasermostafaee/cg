@@ -194,11 +194,13 @@ describe('Exporter (.vcg) — D-128 Phase 5 video packaging', () => {
     const issues = await makeExporter(assets).preflight(scene);
     const size = issues.find((i) => i.code === 'single-file-size');
     expect(size?.severity).toBe('warning'); // decision (d): a warning, never a block
-    // Actionable: the projected total, the dominating clips BY NAME, and the
-    // ".vcg has no such limit" alternative.
+    // Actionable: the projected total, the dominating clips BY NAME — and, since BOOK-EXPORT-01
+    // measured CG Control rendering a .vcg into the same kind of page, that it applies to both
+    // (it used to offer the .vcg as having "no such limit", which was false).
     expect(size?.message).toMatch(/inline ~\d+(\.\d+)? MB/);
     expect(size?.message).toContain('vid-b.webm');
-    expect(size?.message).toContain('.vcg package has no such limit');
+    expect(size?.message).toContain('applies to both');
+    expect(size?.message).not.toContain('no such limit');
     // A warning must not block the export.
     const { vcg } = await makeExporter(assets).produce(scene);
     expect(vcg.byteLength).toBeGreaterThan(0);
