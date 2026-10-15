@@ -215,6 +215,13 @@
       "cache": false,
       "passThroughEnv": ["CG_E2E_WORKERS"]
     },
+    "@cg/runtime#test:e2e": {
+      "dependsOn": ["build", "@cg/amcp-mock#build", "@cg/designer#build"],
+      "outputs": ["playwright-report/**", "test-results/**"],
+      "inputs": ["src/**", "tests/e2e/**", "playwright.config.*"],
+      "cache": false,
+      "passThroughEnv": ["CG_E2E_WORKERS"]
+    },
     "package": {
       "dependsOn": ["build"],
       "outputs": ["release/**"],
