@@ -125,7 +125,13 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
 
   async function save(): Promise<void> {
     if (scene === null) return;
-    const res = await window.cg.projects.saveDisk({ scene, askPath: false });
+    let res: Awaited<ReturnType<typeof window.cg.projects.saveDisk>>;
+    try {
+      res = await window.cg.projects.saveDisk({ scene, askPath: false });
+    } catch (err) {
+      saveFailed(err);
+      return;
+    }
     if (res.ok) {
       designerStore.markSaved();
       return;
@@ -140,8 +146,24 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
 
   async function saveAs(): Promise<void> {
     if (scene === null) return;
-    const res = await window.cg.projects.saveDisk({ scene, askPath: true });
-    if (res.ok) designerStore.markSaved();
+    try {
+      const res = await window.cg.projects.saveDisk({ scene, askPath: true });
+      if (res.ok) designerStore.markSaved();
+    } catch (err) {
+      saveFailed(err);
+    }
+  }
+
+  /**
+   * `BOOK-EXPORT-01` (`B-349`) sweep — Save and Save As had the export's defect: a throw (building
+   * the package, or writing it) was an unhandled rejection, and the author saw nothing. Now said,
+   * and held until dismissed. The two save dialogs already caught it.
+   */
+  function saveFailed(err: unknown): void {
+    designerStore.showNotice(
+      `Save failed: ${err instanceof Error ? err.message : String(err)}. The project was not saved.`,
+      { hold: true },
+    );
   }
 
   function newProject(): void {
