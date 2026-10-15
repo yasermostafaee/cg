@@ -1816,6 +1816,17 @@
   line-height: 1.4;
   color: var(--r-danger-text);
 }
+/*
+ * `DELTA-RUN-NEXT-VERSION-01-C` — a FACT about a field's value that refuses nothing: a countdown
+ * target already passed (`Target passed 12 min ago · holds at 00:00`). One line under the control,
+ * in the caution ink — the Take still goes, so it is never the danger red of a refusal above.
+ */
+.cg-field-fact {
+  margin: 0;
+  font-size: var(--r-text-xs);
+  line-height: 1.4;
+  color: var(--r-caution-text);
+}
 
 /*
  * THE ONE CONTROL ON A FULL-WINDOW GATE — `SignInOverlay`'s submit.

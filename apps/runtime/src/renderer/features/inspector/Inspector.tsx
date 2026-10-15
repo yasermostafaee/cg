@@ -49,6 +49,7 @@ import { grantedFileSourcePaths } from './fileSourceGrants.js';
 import { detachUngrantedSources } from './fromFileStore.js';
 import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
+import { CountdownTargetField } from './CountdownTargetField.js';
 import { PageListEditor } from './PageListEditor.js';
 import { BookBar } from './BookBar.js';
 import { bookOf, type RowBook } from '../layers/bookOf.js';
@@ -1299,6 +1300,21 @@ function FieldControl({
         value={value}
         onStage={onStage}
         footer={fromFile}
+      />
+    );
+  }
+  if (kind === 'text' && field?.type === 'text' && field.countdown !== undefined) {
+    // `DELTA-RUN-NEXT-VERSION-01-C` — a field that sets a countdown's target (marked at import from
+    // the template's own `clock-target` binding): the shared date and time control, staged through
+    // the same `onStage` as the text box below, so Update sends the row's ordinary `CG UPDATE`.
+    return (
+      <CountdownTargetField
+        field={field}
+        countdown={field.countdown}
+        value={value}
+        fieldId={fieldId}
+        dirty={dirty}
+        onStage={onStage}
       />
     );
   }
