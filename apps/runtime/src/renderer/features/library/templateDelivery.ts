@@ -32,6 +32,7 @@ import {
 import { pickTemplateName, templateDisplayName } from './templateName.js';
 import { bytesToBase64 } from './packageBytes.js';
 import { collectListFieldTargets, type ListFieldTargets } from '../inspector/listFieldTargets.js';
+import { countdownTargetFieldsOf } from './countdownTargetFields.js';
 
 /**
  * B-038 Phase 2 — produce the rendered template HTML in the browser and deliver
@@ -252,7 +253,11 @@ export async function produceTemplateDelivery(
   // `[]` and the Inspector rendered "No fields." This is the same collector the GDD
   // exporter already uses (`gdd.ts`), so `TemplateInfo` and the package's own GDD manifest
   // finally agree on which fields exist and how they are addressed.
-  const aggregate = aggregateCompositionFields(scene, scene);
+  //
+  // `DELTA-RUN-NEXT-VERSION-01-C` — and each text field that sets a countdown's target is marked
+  // `countdown` HERE, from its own doc's `clock-target` binding, so CG Control offers the date and
+  // time control for it. The binding is the one source of truth (`countdownTargetFieldsOf`).
+  const aggregate = countdownTargetFieldsOf(scene, scene, aggregateCompositionFields(scene, scene));
   // R-004 — carry BOTH labels the package can offer, and let the display rule choose.
   //
   // `name` is the manifest's (the Designer's exporter writes `scene.name` into it). It is
