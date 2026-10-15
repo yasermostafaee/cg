@@ -222,6 +222,7 @@ import {
   type TemplateInfo,
   type WsPublishFrame,
   type WsResponseFrame,
+  WS_MAX_FRAME_BYTES,
 } from '@cg/shared-ipc';
 import { DEFAULT_LAYER_POLICY, type LayerPolicy, type LayerSlot } from '@cg/caspar-client';
 import {
@@ -1829,11 +1830,14 @@ export function authzRefusal(
 /**
  * B-038 Phase 2 — generous inbound WS frame cap. A `templates.import` frame
  * carries the rendered self-contained HTML (inlined runtime + scene + base64
- * images) — hundreds of KB to a couple of MB, once per import (not a hot path).
- * Set well above that so a large import is never silently dropped; gzip remains a
- * later tuning, not a contract change (design §4).
+ * images), once per import (not a hot path). Gzip remains a later tuning, not a
+ * contract change (design §4).
+ *
+ * 🔴 `BOOK-EXPORT-01` (`B-351`) — the number is `@cg/shared-ipc`'s `WS_MAX_FRAME_BYTES`, the
+ * one a console measures a frame against before sending it: past it this socket closes, so a
+ * console that sent one would read "Bridge disconnected" about a bridge that is fine.
  */
-const WS_MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
+const WS_MAX_PAYLOAD_BYTES = WS_MAX_FRAME_BYTES;
 
 /**
  * Default connection — a SINGLE loopback CasparCG on the standard AMCP/OSC

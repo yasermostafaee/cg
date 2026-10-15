@@ -219,6 +219,43 @@ export function serializeWsFrame(frame: WsFrame): string {
   return JSON.stringify(frame);
 }
 
+/**
+ * 🔴 `BOOK-EXPORT-01` (`B-351`) — **THE LARGEST FRAME CG BRIDGE ACCEPTS**, in bytes. ONE number for
+ * both ends: the bridge builds its socket with it, and a console never sends a frame past it. Past
+ * it the bridge closes the socket, and the operator read "Bridge disconnected" about a bridge that
+ * was fine (measured: a 141 MB book). Moved here from `caspar-bridge`'s own constant (`B-038`) so
+ * the two ends cannot disagree.
+ */
+export const WS_MAX_FRAME_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Does a serialized frame fit {@link WS_MAX_FRAME_BYTES}? A string whose every code unit could take
+ * three bytes and still fit is answered without counting, so an ordinary request costs nothing.
+ */
+export function fitsWsFrame(serialized: string): boolean {
+  if (serialized.length * 3 <= WS_MAX_FRAME_BYTES) return true;
+  if (serialized.length > WS_MAX_FRAME_BYTES) return false;
+  return wsFrameBytes(serialized) <= WS_MAX_FRAME_BYTES;
+}
+
+/** The UTF-8 length of a serialized frame: what the socket counts against the cap. */
+export function wsFrameBytes(s: string): number {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x80) n += 1;
+    else if (c < 0x800) n += 2;
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) {
+      const d = s.charCodeAt(i + 1);
+      if (d >= 0xdc00 && d <= 0xdfff) {
+        n += 4;
+        i++;
+      } else n += 3;
+    } else n += 3;
+  }
+  return n;
+}
+
 // ── Bridge endpoint defaults ──────────────────────────────────────────────
 //
 // Loopback-only by default (enforced at the bridge's socket bind). The port is

@@ -14,6 +14,7 @@ import {
 import type { LiveFitMode, LiveSourceRect } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
+import { WS_MAX_FRAME_BYTES } from '../ws-frame.js';
 import {
   bankInSet,
   bankSetSize,
@@ -582,6 +583,23 @@ export const TemplatesImportChannel = defineChannel(
  * is listed for re-import when the runtime changes — the import itself is unaffected.
  */
 export const TEMPLATE_SOURCE_MAX_BYTES = 44 * 1024 * 1024;
+
+/**
+ * 🔴 `BOOK-EXPORT-01` (`B-351`) — **HOW MUCH PICTURE AND MEDIA DATA ONE TEMPLATE CAN CARRY INTO CG
+ * CONTROL.** An import renders the package into ONE self-contained page, every picture, video, sound
+ * and font inlined as base64 (4/3 of its size), and sends that page to CG Bridge in ONE frame, so it
+ * must fit {@link WS_MAX_FRAME_BYTES}. What the page carries besides its media (the runtime, its
+ * styles, the scene) measured 0.92 MiB for a 30-picture book (2026-10-15); 4 MiB is kept for it.
+ *
+ * The Designer refuses a `.vcg` past this before the save dialog. CG Control measures the real
+ * frame and refuses past the frame cap itself, so a package that slips under this estimate is still
+ * answered with a sentence, never with a closed socket.
+ */
+export const TEMPLATE_PAGE_ALLOWANCE_BYTES = 4 * 1024 * 1024;
+/** The media, counted as stored (before base64): 45 MiB. */
+export const TEMPLATE_MEDIA_MAX_BYTES = Math.floor(
+  ((WS_MAX_FRAME_BYTES - TEMPLATE_PAGE_ALLOWANCE_BYTES) * 3) / 4,
+);
 
 /**
  * 🔴 `PAGE-REBUILD-01` — **KEEP THE VERIFIED PACKAGE**, before the `templates.import` that names it.
