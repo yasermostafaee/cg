@@ -17,7 +17,9 @@ import {
 import {
   clockTargetDataKey,
   setClockTargetDataKey,
+  TARGET_FIELD_LABEL,
 } from '../src/renderer/features/inspector/clock-data-key.js';
+import { PATTERN_PRESETS } from '../src/renderer/features/inspector/pattern-presets.js';
 
 /**
  * 🔴 `DELTA-RUN-NEXT-VERSION-01-A` / `-B` / `-D` / `-E` / `-F` (and `D-141`'s surviving half,
@@ -132,13 +134,16 @@ describe('B-344 — a timeofday target survives the Inspector', () => {
     seedCountdown();
     const host = renderClock();
     expect(q<HTMLSelectElement>(host, 'select[aria-label="target"]').value).toBe('timeofday');
+    // The clock's own Digits (Persian by default), one typed segment per unit (delta B §2).
     expect(
-      q<HTMLInputElement>(host, 'input[aria-label="Countdown target time of day"]').value,
-    ).toBe(
-      '۲۰:۳۲', // the clock's own Digits (Persian by default)
-    );
+      q<HTMLInputElement>(host, 'input[aria-label="Countdown target time of day hour"]').value,
+    ).toBe('۲۰');
+    expect(
+      q<HTMLInputElement>(host, 'input[aria-label="Countdown target time of day minute"]').value,
+    ).toBe('۳۲');
     // No date-time input is offered for it — the branch that rewrote it.
     expect(host.querySelector('input[type="datetime-local"]')).toBeNull();
+    expect(host.querySelector('[aria-label^="Countdown target date and time"]')).toBeNull();
 
     choose(q<HTMLSelectElement>(host, 'select[aria-label="blink colon"]'), 'on');
     expect(elementById<ClockElement>('c1').blinkColon).toBe(true);
@@ -148,12 +153,24 @@ describe('B-344 — a timeofday target survives the Inspector', () => {
   it('a time typed in Persian digits is stored canonical Latin; a value that is not a time stores nothing', () => {
     seedCountdown();
     const host = renderClock();
-    type(q<HTMLInputElement>(host, 'input[aria-label="Countdown target time of day"]'), '۲۱:۰۵');
-    expect(elementById<ClockElement>('c1').target).toEqual({ kind: 'timeofday', time: '21:05' });
+    type(q<HTMLInputElement>(host, 'input[aria-label="Countdown target time of day hour"]'), '۲۱');
     renderClock();
     type(
-      q<HTMLInputElement>(container ?? host, 'input[aria-label="Countdown target time of day"]'),
-      '25:00',
+      q<HTMLInputElement>(
+        container ?? host,
+        'input[aria-label="Countdown target time of day minute"]',
+      ),
+      '۰۵',
+    );
+    expect(elementById<ClockElement>('c1').target).toEqual({ kind: 'timeofday', time: '21:05' });
+    renderClock();
+    // An hour out of range is REFUSED — never clamped into a different time.
+    type(
+      q<HTMLInputElement>(
+        container ?? host,
+        'input[aria-label="Countdown target time of day hour"]',
+      ),
+      '25',
     );
     expect(elementById<ClockElement>('c1').target).toEqual({ kind: 'timeofday', time: '21:05' });
   });
@@ -382,8 +399,8 @@ describe('-F — an instance that starts hidden', () => {
   });
 });
 
-describe('D-141 5.4 — the clock’s data key', () => {
-  it('creates ONE text field with the Time (HH:MM) pattern and a clock-target binding, as one undo entry', () => {
+describe('D-141 5.4 / -C §2 — the clock’s data key', () => {
+  it('creates ONE text field — the time pattern with optional seconds, labelled “Target time” — and a clock-target binding, as one undo entry', () => {
     seedCountdown();
     expect(setClockTargetDataKey('c1', 'targetTime', '20:32')).toBe(true);
     const scene = projected();
@@ -391,8 +408,11 @@ describe('D-141 5.4 — the clock’s data key', () => {
       expect.objectContaining({
         id: 'targetTime',
         type: 'text',
+        label: TARGET_FIELD_LABEL,
         default: '20:32',
-        pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$',
+        // -C §2 widened the D-141 pattern: the countdown's own time of day takes seconds, so the
+        // field that sets it does too (`20:32` still matches; `20:32:15` no longer refused).
+        pattern: '^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$',
       }),
     );
     expect(scene.bindings).toContainEqual({
@@ -422,5 +442,92 @@ describe('D-141 5.4 — the clock’s data key', () => {
     expect(setClockTargetDataKey('c1', 'targetTime', '20:32')).toBe(true);
     expect(setClockTargetDataKey('c1', '', '20:32')).toBe(true);
     expect(projected().bindings.some((b) => b.target.kind === 'clock-target')).toBe(false);
+  });
+});
+
+describe('-C §2 — the target is the operator’s by default, and the author’s target is its default', () => {
+  const fieldOf = (id: string): { default?: unknown; pattern?: string } | undefined =>
+    projected().fields.find((f) => f.id === id) as
+      | { default?: unknown; pattern?: string }
+      | undefined;
+
+  it('🔴 switching the target to a time of day exposes `targetTime` (“Target time”) — the switch and the field ONE undo entry', () => {
+    freshScene();
+    designerStore.addElement(defaultClock('c1', 0, 0));
+    designerStore.updateElement('c1', { mode: 'countdown' } as Partial<Element>);
+    designerStore.markHistoryBoundary();
+    const host = renderClock();
+    choose(q<HTMLSelectElement>(host, 'select[aria-label="target"]'), 'timeofday');
+    const target = elementById<ClockElement>('c1').target;
+    if (target?.kind !== 'timeofday') throw new Error('not a time of day');
+    expect(fieldOf('targetTime')).toEqual(
+      expect.objectContaining({ label: TARGET_FIELD_LABEL, default: target.time }),
+    );
+    expect(projected().bindings).toContainEqual({
+      fieldId: 'targetTime',
+      target: { kind: 'clock-target', elementId: 'c1' },
+    });
+    const shown = renderClock();
+    expect(q<HTMLElement>(shown, '[data-testid="clock-target-field"]').textContent).toContain(
+      'targetTime',
+    );
+    designerStore.undo();
+    expect(elementById<ClockElement>('c1').target?.kind ?? 'duration').toBe('duration');
+    expect(fieldOf('targetTime')).toBeUndefined();
+  });
+
+  it('a taken `targetTime` gives the next free key; a duration exposes nothing', () => {
+    freshScene();
+    designerStore.addField({
+      id: 'targetTime',
+      type: 'text',
+      label: 'x',
+      required: false,
+      default: '',
+    });
+    designerStore.addElement(defaultClock('c1', 0, 0));
+    designerStore.updateElement('c1', { mode: 'countdown' } as Partial<Element>);
+    const host = renderClock();
+    choose(q<HTMLSelectElement>(host, 'select[aria-label="target"]'), 'timeofday');
+    expect(clockTargetDataKey(designerStore.get().scene as Scene, 'c1')).toBe('targetTime2');
+    renderClock();
+    choose(q<HTMLSelectElement>(container ?? host, 'select[aria-label="target"]'), 'duration');
+    // Back to a duration: the field stays (the author may clear the key) and nothing new appears.
+    expect(projected().fields.filter((f) => f.id.startsWith('targetTime'))).toHaveLength(2);
+  });
+
+  it('🔴 every edit of the target becomes the field’s default — ONE undo entry — and a date and time re-shapes the field to ISO', () => {
+    seedCountdown();
+    expect(setClockTargetDataKey('c1', 'targetTime', '20:32')).toBe(true);
+    designerStore.markHistoryBoundary();
+    const host = renderClock();
+    type(q<HTMLInputElement>(host, 'input[aria-label="Countdown target time of day hour"]'), '۲۲');
+    expect(elementById<ClockElement>('c1').target).toEqual({ kind: 'timeofday', time: '22:32' });
+    expect(fieldOf('targetTime')?.default).toBe('22:32');
+    designerStore.undo();
+    expect(elementById<ClockElement>('c1').target).toEqual({ kind: 'timeofday', time: '20:32' });
+    expect(fieldOf('targetTime')?.default).toBe('20:32');
+
+    renderClock();
+    choose(q<HTMLSelectElement>(container ?? host, 'select[aria-label="target"]'), 'datetime');
+    const target = elementById<ClockElement>('c1').target;
+    if (target?.kind !== 'datetime') throw new Error('not a date and time');
+    const field = fieldOf('targetTime');
+    expect(field?.default).toBe(target.iso);
+    expect(field).toEqual(
+      expect.objectContaining({ pattern: PATTERN_PRESETS['datetime']?.pattern }),
+    );
+    expect(new RegExp((field as { pattern: string }).pattern).test(target.iso)).toBe(true);
+  });
+
+  it('an author’s own pattern is kept — only the default follows', () => {
+    seedCountdown();
+    expect(setClockTargetDataKey('c1', 'targetTime', '20:32')).toBe(true);
+    designerStore.updateField('targetTime', { pattern: '^2[0-3]:[0-5][0-9]$' });
+    const host = renderClock();
+    type(q<HTMLInputElement>(host, 'input[aria-label="Countdown target time of day hour"]'), '21');
+    expect(fieldOf('targetTime')).toEqual(
+      expect.objectContaining({ default: '21:32', pattern: '^2[0-3]:[0-5][0-9]$' }),
+    );
   });
 });

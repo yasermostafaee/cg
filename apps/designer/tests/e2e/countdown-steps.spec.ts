@@ -1,4 +1,4 @@
-import type { Frame, Page } from '@playwright/test';
+import type { Frame, Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures/designer.js';
 
 /**
@@ -10,8 +10,8 @@ import { expect, test } from './fixtures/designer.js';
  *     turn red at the 10-minute step through the ELEMENT's own door; a composition instance that
  *     STARTS HIDDEN and is shown by that step — rehearsed at ×600: the step attribute is written once
  *     per crossing, both rectangles and the digits turn red, and the instance plays its own entrance.
- *   - The target bound to a data key: updating the field live re-targets the running countdown
- *     without rebuilding it.
+ *   - The target exposed as `targetTime` by default, its default following the typed target:
+ *     updating the field live re-targets the running countdown without rebuilding it.
  *   - A step SHOWN in the preview with nothing running: its changes appear at once.
  */
 
@@ -22,6 +22,25 @@ async function timeIn(page: Page, minutes: number): Promise<string> {
     const p = (n: number): string => String(n).padStart(2, '0');
     return `${p(d.getHours())}:${p(d.getMinutes())}`;
   }, minutes);
+}
+
+/**
+ * Type a time of day into the countdown's target — `DELTA-RUN-NEXT-VERSION-01-B` §2's typed
+ * segments, one per unit, each committed with Enter as an operator would.
+ */
+async function setTargetTime(inspector: Locator, hhmm: string): Promise<void> {
+  const [hour = '', minute = ''] = hhmm.split(':');
+  for (const [unit, value] of [
+    ['hour', hour],
+    ['minute', minute],
+  ] as const) {
+    const box = inspector.getByRole('textbox', {
+      name: `Countdown target time of day ${unit}`,
+      exact: true,
+    });
+    await box.fill(value);
+    await box.press('Enter');
+  }
 }
 
 const PERSIAN = '۰۱۲۳۴۵۶۷۸۹';
@@ -75,9 +94,7 @@ test.describe('-A / -B / -F — a countdown’s steps in the Designer', () => {
     const inspector = app.inspector;
     await inspector.getByRole('combobox', { name: 'mode' }).selectOption('countdown');
     await inspector.getByRole('combobox', { name: 'target' }).selectOption('timeofday');
-    const time = inspector.getByRole('textbox', { name: 'Countdown target time of day' });
-    await time.fill(await timeIn(app.page, 62));
-    await time.press('Enter');
+    await setTargetTime(inspector, await timeIn(app.page, 62));
     await inspector.getByTestId('steps-preset').click();
     await expect(inspector.locator('[data-step]')).toHaveCount(3);
 
@@ -204,13 +221,13 @@ test.describe('-A / -B / -F — a countdown’s steps in the Designer', () => {
     const inspector = app.inspector;
     await inspector.getByRole('combobox', { name: 'mode' }).selectOption('countdown');
     await inspector.getByRole('combobox', { name: 'target' }).selectOption('timeofday');
-    const time = inspector.getByRole('textbox', { name: 'Countdown target time of day' });
-    await time.fill(await timeIn(app.page, 62));
-    await time.press('Enter');
-    const key = inspector.getByRole('textbox', { name: 'Countdown target data key' });
-    await key.fill('targetTime');
-    await key.press('Enter');
-    await expect(inspector.getByTestId('clock-target-data-key')).toContainText('targetTime');
+    await setTargetTime(inspector, await timeIn(app.page, 62));
+    // 🔴 -C §2 — a time-of-day target is the operator's by default: `targetTime`, and the field's
+    // default follows the author's target (the preview below starts from that default).
+    await expect(inspector.getByTestId('clock-target-field')).toContainText('targetTime');
+    await expect(inspector.getByRole('textbox', { name: 'Countdown target data key' })).toHaveValue(
+      'targetTime',
+    );
 
     await app.openPreviewModal();
     await app.play();
@@ -225,8 +242,9 @@ test.describe('-A / -B / -F — a countdown’s steps in the Designer', () => {
       document.querySelector('[data-cg-clock-time]')?.setAttribute('data-e2e-live', 'yes'),
     );
 
-    await app.setPreviewField('targetTime', await timeIn(app.page, 5));
-    await app.updatePreviewField('targetTime');
+    // The field's label is "Target time" (-C §2); its key stays `targetTime`.
+    await app.setPreviewField('Target time', await timeIn(app.page, 5));
+    await app.updatePreviewField('Target time');
 
     // Re-targeted: under five minutes now…
     await expect
@@ -247,9 +265,7 @@ test.describe('-A / -B / -F — a countdown’s steps in the Designer', () => {
     const inspector = app.inspector;
     await inspector.getByRole('combobox', { name: 'mode' }).selectOption('countdown');
     await inspector.getByRole('combobox', { name: 'target' }).selectOption('timeofday');
-    const time = inspector.getByRole('textbox', { name: 'Countdown target time of day' });
-    await time.fill(await timeIn(app.page, 62));
-    await time.press('Enter');
+    await setTargetTime(inspector, await timeIn(app.page, 62));
     await inspector.getByTestId('steps-preset').click();
 
     await app.openPreviewModal();

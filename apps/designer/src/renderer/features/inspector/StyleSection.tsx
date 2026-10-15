@@ -46,8 +46,10 @@ import type {
 } from '@cg/shared-schema';
 import { LiveSourceIdSchema } from '@cg/shared-schema';
 import { AUDIO_VOLUME_DB_MAX, AUDIO_VOLUME_DB_MIN } from '@cg/shared-schema';
-import { parseTimeOfDay } from '@cg/text-shaping';
+import { isoOfInstant, nowPlus } from '@cg/text-shaping';
 import { ClockTargetDataKey } from './ClockTargetDataKey.js';
+import { clockTargetValue, commitClockTarget, exposeClockTarget } from './clock-data-key.js';
+import { DateTimeInput } from '../../ui/DateTimeInput.js';
 import { CountdownStepsSection } from './CountdownStepsSection.js';
 import { formatPeak, formatSeconds } from '../assets/wav-stats.js';
 import {
@@ -2558,14 +2560,6 @@ function seedTimeOfDay(nowMs: number): string {
   return `${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-/** Stored ISO → `<input type="datetime-local">` value (local components). */
-function isoToLocalInput(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const p = (n: number): string => String(n).padStart(2, '0');
-  return `${String(d.getFullYear())}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-}
-
 /**
  * D-027 — the clock config. The clock is time-driven like the ticker (a
  * runtime driver repaints it once per second; scrubbing never moves it) and
@@ -2703,42 +2697,38 @@ function ClockSections({
               labels={CLOCK_TARGET_LABELS}
               onCommit={(kind) => {
                 if (kind === (target ?? DEFAULT_CLOCK_TARGET).kind) return;
-                designerStore.updateElement(id, {
-                  target:
-                    kind === 'duration'
-                      ? DEFAULT_CLOCK_TARGET
-                      : kind === 'timeofday'
-                        ? { kind: 'timeofday', time: seedTimeOfDay(Date.now()) }
-                        : { kind: 'datetime', iso: new Date().toISOString() },
-                } as Partial<Element>);
+                const next: ClockTarget =
+                  kind === 'duration'
+                    ? DEFAULT_CLOCK_TARGET
+                    : kind === 'timeofday'
+                      ? { kind: 'timeofday', time: seedTimeOfDay(Date.now()) }
+                      : { kind: 'datetime', iso: isoOfInstant(nowPlus(Date.now(), 3_600_000)) };
+                designerStore.runAsSingleHistoryEntry(() => {
+                  designerStore.updateElement(id, { target: next } as Partial<Element>);
+                  // DELTA-RUN-NEXT-VERSION-01-C §2 — a countdown's target is the operator's to set,
+                  // by default: a time of day or a date and time becomes a "Target time" field.
+                  if (next.kind !== 'duration') exposeClockTarget(id, clockTargetValue(next));
+                });
               }}
             />
             {target?.kind === 'timeofday' ? (
               <>
                 {/*
-                  `D-141` — the azan time, in the clock's own Digits (typed in any digit set,
-                  stored as canonical Latin `HH:mm[:ss]` by the same reader the page uses).
-                  A value that is not a time is not stored.
+                  `D-141` / DELTA-RUN-NEXT-VERSION-01-B §2 — the time of day as typed segments, in the
+                  clock's own Digits (any digit set typed, canonical Latin `HH:mm[:ss]` stored).
+                  A value out of a segment's range is refused, never stored.
                 */}
-                <TextField
-                  label="time"
+                <DateTimeInput
+                  mode="timeofday"
                   ariaLabel="Countdown target time of day"
                   value={target.time}
-                  resetKey={id}
                   digits={element.digits}
-                  onCommit={(raw) => {
-                    const time = parseTimeOfDay(raw);
-                    if (time === undefined || time === target.time) return;
-                    designerStore.updateElement(id, {
-                      target: { kind: 'timeofday', time },
-                    } as Partial<Element>);
-                  }}
+                  onCommit={(time) => commitClockTarget(id, { kind: 'timeofday', time })}
                 />
-                <p className={dds.hint}>
-                  Counts down to the next {target.time} on the playout machine’s own clock — today,
-                  or tomorrow once today’s has passed.
-                </p>
-                <ClockTargetDataKey elementId={id} time={target.time} />
+                <Tag title="The next occurrence on the playout machine's own clock — today, or tomorrow once today's has passed">
+                  next occurrence · playout clock
+                </Tag>
+                <ClockTargetDataKey elementId={id} value={target.time} />
               </>
             ) : (target ?? DEFAULT_CLOCK_TARGET).kind === 'duration' ? (
               <NumberField
@@ -2754,21 +2744,20 @@ function ClockSections({
                 }
               />
             ) : (
-              <div className={dds.hint}>
-                <input
-                  type="datetime-local"
-                  step={1}
-                  aria-label="Countdown target date-time"
-                  value={target?.kind === 'datetime' ? isoToLocalInput(target.iso) : ''}
-                  onChange={(e) => {
-                    const d = new Date(e.target.value);
-                    if (Number.isNaN(d.getTime())) return;
-                    designerStore.updateElement(id, {
-                      target: { kind: 'datetime', iso: d.toISOString() },
-                    } as Partial<Element>);
-                  }}
+              <>
+                {/* DELTA-RUN-NEXT-VERSION-01-B §2 — typed segments, three calendars, ISO stored. */}
+                <DateTimeInput
+                  mode="datetime"
+                  ariaLabel="Countdown target date and time"
+                  value={target?.kind === 'datetime' ? target.iso : isoOfInstant(Date.now())}
+                  digits={element.digits}
+                  onCommit={(iso) => commitClockTarget(id, { kind: 'datetime', iso })}
                 />
-              </div>
+                <ClockTargetDataKey
+                  elementId={id}
+                  value={target?.kind === 'datetime' ? target.iso : isoOfInstant(Date.now())}
+                />
+              </>
             )}
           </>
         )}
