@@ -88,6 +88,13 @@ function inventory(): {
 const BEFORE_AND_AFTER = {
   realLocalStorage: [
     /*
+      `DELTA-RUN-NEXT-VERSION-01-C` — NEW: the calendar THIS viewer reads dates in (`calendarChoice.ts`):
+      `solar-hijri` · `gregorian` · `lunar-hijri`. A per-viewer convenience, like the shell layout:
+      every stored date is ISO whatever calendar is shown. No migration is owed: ABSENT means Solar
+      Hijri, the default, and an unreadable value reads as absent.
+    */
+    'cg.runtime.calendar.v1',
+    /*
       🔴 `OPERATOR-NAME-SWEEP-01` — **`cg.runtime.operatorName` IS GONE, and its absence is
       recorded here rather than silently dropped.**
 

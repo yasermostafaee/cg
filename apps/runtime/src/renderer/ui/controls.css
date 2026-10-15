@@ -6937,7 +6937,8 @@ input[type='checkbox']:disabled:checked {
   border-bottom: 1px solid var(--r-border);
 }
 .cg-tpl-filter .cg-btn,
-.cg-timing-choice .cg-btn {
+.cg-timing-choice .cg-btn,
+.cg-datetime__choices .cg-btn {
   min-height: var(--r-tpl-chip-h);
   height: var(--r-tpl-chip-h);
   padding: var(--r-tpl-chip-pad);
@@ -6992,10 +6993,15 @@ input[type='checkbox']:disabled:checked {
  *
  * ⭐ `MEDIA-PLATES-01` — a clip's `When hidden` choice (`Pause` · `Restart` · `Keep playing`) is the
  * same kind of thing, a chosen setting that is not air, and is named here for the same reason.
+ *
+ * ⭐ `DELTA-RUN-NEXT-VERSION-01-C` — the date and time control's calendar choice and its month
+ * grid's picked day: chosen settings, not air.
  */
 .cg-tpl-filter .cg-btn[aria-pressed='true'],
 .cg-timing-choice .cg-btn[aria-pressed='true'],
-.cg-playback__choices .cg-btn[aria-pressed='true'] {
+.cg-playback__choices .cg-btn[aria-pressed='true'],
+.cg-datetime__calendars .cg-btn[aria-pressed='true'],
+.cg-datetime-grid__days .cg-btn[aria-pressed='true'] {
   background: var(--r-look-btn-sel-bg);
   border-color: var(--r-look-btn-sel-line);
   box-shadow: inset 0 0 0 1px var(--r-look-btn-sel-ring);
@@ -7004,7 +7010,9 @@ input[type='checkbox']:disabled:checked {
 }
 .cg-tpl-filter .cg-btn[aria-pressed='true']:hover:not(:disabled),
 .cg-timing-choice .cg-btn[aria-pressed='true']:hover:not(:disabled),
-.cg-playback__choices .cg-btn[aria-pressed='true']:hover:not(:disabled) {
+.cg-playback__choices .cg-btn[aria-pressed='true']:hover:not(:disabled),
+.cg-datetime__calendars .cg-btn[aria-pressed='true']:hover:not(:disabled),
+.cg-datetime-grid__days .cg-btn[aria-pressed='true']:hover:not(:disabled) {
   /* LIFT, never swap to the neutral hover — an engaged chip must not read as switched off
      under the pointer. Same direction the `.is-on` family uses. */
   background: var(--r-look-btn-sel-line);
@@ -8203,4 +8211,88 @@ input[type='checkbox']:disabled:checked {
   border-color: transparent;
   box-shadow: none;
   color: var(--r-text);
+}
+
+/*
+ * `DELTA-RUN-NEXT-VERSION-01-B` / `-C` — THE DATE AND TIME CONTROL (`DateTimeInput`).
+ *
+ * Six typed segments in two LTR runs, the calendar button at the row's end (after the seconds, so
+ * Tab walks the segments first), then the calendar choice and the `+1 min` shortcuts as the shared
+ * chips, then the same day in the other two calendars as facts. Every length is in `em` so the
+ * control grows with the text at 200 %; the segments keep `.cg-field`'s whole skin and only narrow.
+ */
+.cg-datetime {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-2);
+  min-width: 0;
+}
+.cg-datetime__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--r-space-2);
+}
+.cg-datetime__run {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-space-1);
+}
+.cg-datetime .cg-datetime__seg {
+  flex: none;
+  width: 2.75em;
+  padding-inline: var(--r-space-1);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.cg-datetime .cg-datetime__seg--year {
+  width: 4em;
+}
+.cg-datetime__gap {
+  color: var(--r-text-muted);
+}
+.cg-datetime__choices,
+.cg-datetime__calendars,
+.cg-datetime__shortcuts,
+.cg-datetime__facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--r-tpl-chip-gap);
+}
+.cg-datetime__choices {
+  gap: var(--r-space-2);
+}
+
+/* The month grid, inside the shared anchored panel. A Hijri grid reads right to left. */
+.cg-datetime-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-2);
+  padding: var(--r-space-2);
+}
+.cg-datetime-grid__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--r-space-2);
+}
+.cg-datetime-grid__title {
+  font-weight: var(--r-weight-semibold);
+}
+.cg-datetime-grid__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--r-space-1);
+}
+.cg-datetime-grid__weekday {
+  text-align: center;
+  font-size: var(--r-text-xs);
+  color: var(--r-text-muted);
+}
+.cg-datetime-grid__days .cg-btn {
+  min-width: 0;
+  padding-inline: 0;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
 }
