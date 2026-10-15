@@ -903,6 +903,90 @@ export async function buildBookVcg(templateId = 'tpl-e2e-book'): Promise<Uint8Ar
 }
 
 /**
+ * `DELTA-RUN-NEXT-VERSION-01-C` — a verifiable `.vcg` carrying a COUNTDOWN whose date-and-time target
+ * the operator sets: a `clock` (countdown, `datetime` target, After zero `count-past`) aimed by a
+ * `clock-target` binding at a text field `targetTime`, whose default — the author's target — is
+ * `authorTarget`. CG Control's import marks the field `countdown` from that binding.
+ */
+export async function buildCountdownVcg(
+  templateId = 'tpl-e2e-countdown',
+  authorTarget = '2020-01-01T12:00:00+03:30',
+): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  const layer = scene.layers[0];
+  if (layer === undefined) throw new Error('fixture scene has no layer');
+  layer.children = [
+    ...layer.children,
+    {
+      id: 'el-countdown',
+      name: 'countdown',
+      type: 'clock',
+      transform: {
+        position: { x: 100, y: 100 },
+        size: { w: 400, h: 80 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 1,
+      font: {
+        family: 'Vazirmatn',
+        weight: 700,
+        style: 'normal',
+        size: 48,
+        lineHeight: 1.2,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      align: 'center',
+      verticalAlign: 'middle',
+      mode: 'countdown',
+      format: 'HH:mm:ss',
+      digits: 'persian',
+      target: { kind: 'datetime', iso: authorTarget },
+      afterZero: 'count-past',
+    },
+  ];
+  scene.fields = [
+    ...scene.fields,
+    {
+      id: 'targetTime',
+      label: 'Target time',
+      required: false,
+      type: 'text',
+      default: authorTarget,
+    },
+  ];
+  scene.bindings = [
+    ...scene.bindings,
+    { fieldId: 'targetTime', target: { kind: 'clock-target', elementId: 'el-countdown' } },
+  ];
+  const fontDeps: readonly FontReference[] = scene.fonts;
+  const assetIndex: readonly AssetEntry[] = [];
+  return pack({
+    scene,
+    manifestExtras: {
+      id: templateId,
+      name: 'e2e-countdown',
+      authoring: {
+        designerVersion: '0.0.0',
+        createdAt: '2026-10-15T00:00:00.000Z',
+        exportedAt: '2026-10-15T00:01:00.000Z',
+      },
+      compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+      fontDeps,
+      assetIndex,
+    },
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
+/**
  * R-003 — a verifiable `.vcg` that adds a `number` dynamic field (`fontSize`)
  * alongside the text `anchor`, so the number control's staged multi-digit typing
  * can be exercised (a remount-on-keystroke would drop focus and lose digits).
