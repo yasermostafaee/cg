@@ -2358,6 +2358,14 @@ may overflow its box." — no toggle, no disabled control; a saved `autoSqueeze`
 comments that claimed auto-squeeze handles fit (`bindings.ts`, `slices/fields.ts`) now say it is not
 built. Test: `auto-squeeze-unavailable.dom.test.ts` (the absence pinned). **Still open:** real
 shrink-to-fit — `TEXT-FIT-01`.
+— **Built (`TEXT-FIT-01`, 2026-10-15, `openspec/changes/add-text-fit/`):** one spelling, `fitMode:
+'shrink-to-fit'`, with a REGISTERED migration (`migrateTextFit`) that rewrites `autoSqueeze` and
+`overflow: 'shrink'` on every load and leaves a text that asked for none of it untouched; real
+shrink-to-fit on the page, measured on the shaped, laid-out run, down to half size, then clip or
+ellipsis, re-fitted with no jump frame; the Inspector's `Shrink to Fit` control is back
+(`ba494463`, `c6df4c2f`, `9e83ffe6`, `851a0bad`). Measured on CasparCG 2.5.0: a long Persian name that
+spilled 320 px past its 900 px box now fits at 47 px. `auto-squeeze-unavailable.dom.test.ts` became
+`text-fit-inspector.dom.test.ts`. `[x]` at archive.
 
 **What:** the schema offers **three** ways to say "shrink the text so it fits its box". The runtime
 honours **none** of them.

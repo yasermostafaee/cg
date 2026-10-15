@@ -14,7 +14,7 @@ those decisions out.
    repaired on open (dropped, the author told once).
 3. **`B-106`** — repeater `maxItems` is enforced in the Designer's row editor and at play.
 4. **`B-249`** — a per-composition export never writes an `entryCompositionId` the package does not contain.
-5. **`B-147` interim** — Auto Squeeze shows as unavailable with one short reason (a fact, not a disabled control);
+5. **`B-147` interim** (⚠ SUPERSEDED by `add-text-fit`: the real Shrink to Fit replaced it) — Auto Squeeze shows as unavailable with one short reason (a fact, not a disabled control);
    saved values are kept.
 6. **`B-099`** — probed: a nested clock or sequence during the intro; fixed if frozen.
 7. **`B-030`** — a timed auto-out child under a content-driven parent no longer strands the parent on air.

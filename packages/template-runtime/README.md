@@ -205,6 +205,19 @@ synchronous + CEF/`file://`-safe (no JS measurement) and identical in preview /
 `.vcg` / single-file HTML. Size keyframes are ignored for an auto text box
 (`animation-applier` skips the `size.w`/`size.h` write); `fixed` is unchanged.
 
+**Shrink to fit (`B-147`, `TEXT-FIT-01`).** A `text` with `fitMode: 'shrink-to-fit'` keeps its
+authored box and is marked by `markTextFit`; `fitText` (`text-fit.ts`) then searches the font scale
+between `TEXT_FIT_MIN_SCALE` (½) and 1 for the largest size whose LAID-OUT run fits —
+`scrollWidth/Height` against `clientWidth/Height`, one pixel for sub-pixel rounding, so shaping is
+measured as drawn — and past the minimum leaves the author's overflow (clip, or a one-line
+ellipsis). It re-fits in the same task a binding writes text (no jump frame), from a `ResizeObserver`
+when the box gets or changes a size, and when a font loads; a keyframed font size keeps the fit's
+scale. The legacy spellings (`autoSqueeze`, `overflow: 'shrink'`) never reach here:
+`@cg/shared-schema`'s `SCENE_MIGRATIONS` — paths, then `migrateTextFit`, then
+`migrateCountdownZones` — runs inside `createRuntime` (and at the Designer's load) and rewrites them.
+**Extension point:** a new load-time rewrite is ONE entry in that registry, written for the CEF floor
+(`cef-compat.test.ts` scans the bundle), and it returns an untouched scene as the same object.
+
 An `image` element builds as `<img data-cg-asset-id>` with **no `src`** — the
 runtime doesn't own asset bytes; the **host** wires `src` (D-062). `createRuntime`
 takes a `RuntimeBootOptions.assetUrls` map (`assetId → url`) and, after build, sets
