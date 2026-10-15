@@ -284,4 +284,5 @@ or H.
 - [ ] 9.11 The Linux `e2e` job RAN green on the pushed commit — run URL here.
 - [x] 9.12 Engine doc-sync: `packages/template-runtime/README.md` "Countdown STEPS" (and the gone
       `zone-css` subpath), `docs/engines/overview.md`.
-- [ ] 9.13 `pnpm gate` green before the push; `openspec validate --strict` green.
+- [x] 9.13 `pnpm gate` green before the push; `openspec validate --strict` green. (the pre-push gate for
+      `15be0821`: 99 / 99, 0 cached; OpenSpec 89 / 89, `--strict`)
