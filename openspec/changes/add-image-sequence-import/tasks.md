@@ -100,4 +100,6 @@
       decoded); frames mounted zero-copy into the converter (WORKERFS); the dedupe hash streamed chunk by chunk in a
       worker; progress in frames; Cancel leaves the project unchanged.
 - [x] 8.6 `B-348` filed; registry updated.
-- [ ] 8.7 Linux `e2e` RAN green on the pushed commit — run URL here.
+- [x] 8.7 Linux `e2e` RAN green on the pushed commit — https://github.com/yasermostafaee/cg/actions/runs/38713867315 (`15fc3c7b`): `completed` / `success`; both
+      heavy jobs RAN — Designer 336 passed / 13 skipped, CG Control 346 / 2; both `image-sequence-scattered.spec.ts`
+      tests among the passed, read from the run log.
