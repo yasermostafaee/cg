@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, describe, expect, it } from 'vitest';
-import { act, createElement } from 'react';
+import { act, createElement, Fragment } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { ClockElement, Element, Scene } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
@@ -9,6 +9,7 @@ import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import { defaultClock, defaultShape } from '../src/renderer/state/element-defaults.js';
 import { StyleSection } from '../src/renderer/features/inspector/StyleSection.js';
 import { ElementStepsSection } from '../src/renderer/features/inspector/CountdownStepsSection.js';
+import { StepsDialogHost } from '../src/renderer/features/inspector/StepsDialog.js';
 import {
   governedElements,
   presetSteps,
@@ -96,7 +97,8 @@ function render(node: ReturnType<typeof createElement>): HTMLDivElement {
     document.body.appendChild(container);
     root = createRoot(container);
   }
-  act(() => root?.render(node));
+  // The Steps dialog lives at the app root (`-H`): mount its host beside the section.
+  act(() => root?.render(createElement(Fragment, null, node, createElement(StepsDialogHost))));
   return container;
 }
 
@@ -121,6 +123,12 @@ function type(input: HTMLInputElement, value: string): void {
 
 function click(el: HTMLElement): void {
   act(() => el.click());
+}
+
+/** Open the Steps dialog from a door (`steps-edit` / `element-steps-edit`); it portals to body. */
+function openSteps(host: ParentNode, testId = 'steps-edit'): HTMLElement {
+  click(q<HTMLButtonElement>(host, `[data-testid="${testId}"]`));
+  return q<HTMLElement>(document.body, '[role="dialog"]');
 }
 
 function q<T extends HTMLElement>(host: ParentNode, selector: string): T {
@@ -180,9 +188,11 @@ describe('-A — the preset, validation and the mode gate', () => {
   it('🔴 the preset writes three steps — each turning the countdown’s own digits — as ONE undo entry, and names no event', () => {
     seedCountdown();
     const host = renderClock();
-    const preset = q<HTMLButtonElement>(host, '[data-testid="steps-preset"]');
+    const dialog = openSteps(host);
+    const preset = q<HTMLButtonElement>(dialog, '[data-testid="steps-preset"]');
     expect(preset.textContent).toBe(STEPS_PRESET_LABEL);
     expect(host.textContent?.toLowerCase()).not.toContain('azan');
+    expect(dialog.textContent?.toLowerCase()).not.toContain('azan');
     click(preset);
     expect(elementById<ClockElement>('c1').steps).toEqual(presetSteps('c1'));
     designerStore.undo();
@@ -192,12 +202,13 @@ describe('-A — the preset, validation and the mode gate', () => {
   it('🔴 a threshold that is not below the step above marks THAT row only, and nothing invalid is stored', () => {
     seedCountdown();
     designerStore.updateElement('c1', { steps: presetSteps('c1') } as Partial<Element>);
-    const host = renderClock();
-    const row1 = q<HTMLElement>(host, '[data-step="1"]');
-    type(q<HTMLInputElement>(row1, 'input[aria-label="when"]'), '90');
-    expect(q<HTMLElement>(host, '[data-step="1"]').dataset['stepInvalid']).toBe('true');
-    expect(q<HTMLElement>(host, '[data-step="0"]').dataset['stepInvalid']).toBe('false');
-    expect(host.querySelector('[data-step-issue="1"]')).not.toBeNull();
+    const dialog = openSteps(renderClock());
+    click(q<HTMLButtonElement>(dialog, '[data-testid="steps-row-1"]'));
+    const editor = q<HTMLElement>(dialog, '[data-testid="step-editor"]');
+    type(q<HTMLInputElement>(editor, 'input[aria-label="when"]'), '90');
+    expect(q<HTMLElement>(dialog, '[data-step="1"]').dataset['stepInvalid']).toBe('true');
+    expect(q<HTMLElement>(dialog, '[data-step="0"]').dataset['stepInvalid']).toBe('false');
+    expect(dialog.querySelector('[data-step-issue="1"]')).not.toBeNull();
     // The stored steps are still the preset's.
     expect(elementById<ClockElement>('c1').steps).toEqual(presetSteps('c1'));
   });
@@ -308,8 +319,8 @@ describe('-A — what a step can reach, and what a kind owns', () => {
         ],
       },
     } as Partial<Element>);
-    const host = renderClock();
-    const row = q<HTMLElement>(host, '[data-change="0:0"]');
+    const dialog = openSteps(renderClock());
+    const row = q<HTMLElement>(dialog, '[data-change="0:0"]');
     const options = [...q<HTMLSelectElement>(row, 'select[aria-label="property"]').options].map(
       (o) => o.value,
     );
@@ -317,8 +328,8 @@ describe('-A — what a step can reach, and what a kind owns', () => {
   });
 });
 
-describe('-B — the element’s door to the SAME change records', () => {
-  it('🔴 lists every step of the countdown in order, dims the ones that change nothing here, and a change added here lands on the countdown', () => {
+describe('-B / -H — the element’s door to the SAME change records', () => {
+  it('🔴 lists only the steps that change it; “Edit in steps…” opens the dialog filtered to it, and a change added there lands on the countdown', () => {
     seedCountdown();
     designerStore.updateElement('c1', { steps: presetSteps('c1') } as Partial<Element>);
     let host = render(createElement(ElementStepsSection, { element: elementById('s1') }));
@@ -328,20 +339,23 @@ describe('-B — the element’s door to the SAME change records', () => {
     expect(q<HTMLElement>(host, '[data-testid="element-steps-title"] bdi').textContent).toBe(
       'Clock',
     );
-    const rows = [...host.querySelectorAll<HTMLElement>('[data-element-step]')];
-    expect(rows.map((r) => r.dataset['elementStep'])).toEqual(['0', '1', '2']);
-    expect(rows.every((r) => r.dataset['elementStepEmpty'] === 'true')).toBe(true);
-    expect(rows[1]?.textContent).toContain('30 min · ≤ 30 min');
+    // The preset changes only the countdown's digits: no line for the rectangle yet.
+    expect(host.querySelectorAll('[data-element-step]')).toHaveLength(0);
 
-    click(q<HTMLButtonElement>(host, '[data-testid="element-steps-add-1"]'));
+    const dialog = openSteps(host, 'element-steps-edit');
+    expect(q<HTMLSelectElement>(dialog, 'select[aria-label="element filter"]').value).toBe('s1');
+    click(q<HTMLButtonElement>(dialog, '[data-testid="steps-row-1"]'));
+    click(q<HTMLButtonElement>(dialog, '[data-testid="steps-add-change"]'));
     // The SAME record: the countdown's step 1 now carries the change.
     const step1 = elementById<ClockElement>('c1').steps?.steps[1];
     expect(step1?.changes).toContainEqual({ elementId: 's1', property: 'visible', value: false });
+    // The filtered table shows the rectangle's change only — not the digits' colour.
+    expect(dialog.querySelectorAll('[data-change]')).toHaveLength(1);
     host = render(createElement(ElementStepsSection, { element: elementById('s1') }));
-    expect(q<HTMLElement>(host, '[data-element-step="1"]').dataset['elementStepEmpty']).toBe(
-      'false',
-    );
-    expect(q<HTMLElement>(host, '[data-element-step="1"]').textContent).toContain('hidden');
+    const rows = [...host.querySelectorAll<HTMLElement>('[data-element-step]')];
+    expect(rows.map((r) => r.dataset['elementStep'])).toEqual(['1']);
+    expect(rows[0]?.textContent).toContain('≤ 30 min');
+    expect(rows[0]?.textContent).toContain('hidden');
   });
 
   it('an element no countdown can reach shows no steps section at all', () => {

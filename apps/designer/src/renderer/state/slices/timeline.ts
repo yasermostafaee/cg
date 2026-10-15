@@ -239,6 +239,24 @@ export const timelineSlice = {
     set({ soundMuted: muted });
   },
 
+  /** `DELTA-RUN-NEXT-VERSION-01-H` — show a countdown's step on the canvas (`null` — live). */
+  setStepRehearsal(rehearsal: { clockId: string; step: 'before' | number } | null): void {
+    const was = current.stepRehearsal;
+    if (was?.clockId === rehearsal?.clockId && was?.step === rehearsal?.step) return;
+    set({ stepRehearsal: rehearsal });
+  },
+
+  /** `DELTA-RUN-NEXT-VERSION-01-H` — open the Steps dialog on a countdown (filtered to an element). */
+  openStepsDialog(clockId: string, filter: string | null = null): void {
+    set({ stepsDialog: { clockId, filter } });
+  },
+
+  /** Close the Steps dialog; the canvas goes back to live. */
+  closeStepsDialog(): void {
+    if (current.stepsDialog === null && current.stepRehearsal === null) return;
+    set({ stepsDialog: null, stepRehearsal: null });
+  },
+
   /** Move the authoring cursor frame, clamped to the scene's frame range. */
   setCurrentFrame(frame: number): void {
     if (current.scene === null) return;

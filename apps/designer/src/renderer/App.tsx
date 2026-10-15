@@ -30,6 +30,7 @@ import { cx } from './cx.js';
 import { Button } from './ui/Button.js';
 import { Control } from './ui/Control.js';
 import { Icon } from './ui/Icon.js';
+import { StepsDialogHost } from './features/inspector/StepsDialog.js';
 import * as s from './App.css.js';
 
 declare global {
@@ -624,6 +625,8 @@ export function App(): JSX.Element {
           while a guarded add is pending. */}
       <DurationGuardDialog />
       {notice !== null && <Toast message={notice} />}
+      {/* DELTA-RUN-NEXT-VERSION-01-H — the one Steps dialog; outlives the Inspector's swaps. */}
+      <StepsDialogHost />
       <InputTooltip />
     </main>
   );

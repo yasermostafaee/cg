@@ -176,6 +176,11 @@ export function fieldScrub(opts: ScrubOpts): {
 
 interface NumberFieldProps {
   label: string;
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-H` — no visible label column: the control alone, for a TABLE cell
+   * whose column header already says what it is. The label stays its accessible name.
+   */
+  bare?: boolean | undefined;
   value: number;
   onCommit: (n: number) => void;
   step?: number | undefined;
@@ -227,16 +232,19 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
   const labelScrub = scrubHandle(opts);
   const field = fieldScrub(opts);
   const hasUnit = props.suffix !== undefined;
+  const bare = props.bare === true;
   return (
-    <div className={cx(s.row, withheld && s.rowWithheld)} title={props.withheld}>
-      <span
-        className={s.label}
-        style={withheld ? undefined : labelScrub.style}
-        onPointerDown={withheld ? undefined : labelScrub.onPointerDown}
-        title={withheld ? props.withheld : 'Drag to adjust'}
-      >
-        {props.label}
-      </span>
+    <div className={cx(bare ? s.rowBare : s.row, withheld && s.rowWithheld)} title={props.withheld}>
+      {!bare && (
+        <span
+          className={s.label}
+          style={withheld ? undefined : labelScrub.style}
+          onPointerDown={withheld ? undefined : labelScrub.onPointerDown}
+          title={withheld ? props.withheld : 'Drag to adjust'}
+        >
+          {props.label}
+        </span>
+      )}
       {/* The whole field scrubs the value (Loopic); click focuses to type.
           With a unit the input sizes to its content so the value+unit cluster
           on the left, and the diamond is pushed to the right edge. The multi
@@ -656,6 +664,11 @@ export function TextField(props: TextFieldProps): JSX.Element {
 
 interface SelectFieldProps<T extends string> {
   label: string;
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-H` — no visible label column: the control alone, for a TABLE cell
+   * whose column header already says what it is. The label stays its accessible name.
+   */
+  bare?: boolean | undefined;
   value: T;
   options: readonly T[];
   /** Optional display text per option (same order); falls back to the value. */
@@ -669,9 +682,10 @@ interface SelectFieldProps<T extends string> {
 
 export function SelectField<T extends string>(props: SelectFieldProps<T>): JSX.Element {
   const withheld = props.withheld !== undefined;
+  const bare = props.bare === true;
   return (
-    <div className={cx(s.row, withheld && s.rowWithheld)} title={props.withheld}>
-      <span className={s.label}>{props.label}</span>
+    <div className={cx(bare ? s.rowBare : s.row, withheld && s.rowWithheld)} title={props.withheld}>
+      {!bare && <span className={s.label}>{props.label}</span>}
       <div className="cg-field">
         <Select
           className={s.inputInner}
@@ -695,6 +709,11 @@ export function SelectField<T extends string>(props: SelectFieldProps<T>): JSX.E
 
 interface ColorFieldProps {
   label: string;
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-H` — no visible label column: the control alone, for a TABLE cell
+   * whose column header already says what it is. The label stays its accessible name.
+   */
+  bare?: boolean | undefined;
   value: string;
   onCommit: (hex: string) => void;
   /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
@@ -716,9 +735,10 @@ export function ColorField(props: ColorFieldProps): JSX.Element {
   const mixed = props.mixed === true;
   const withheld = props.withheld !== undefined;
   const hex = mixed ? '' : props.value.replace(/^#/, '').toUpperCase();
+  const bare = props.bare === true;
   return (
-    <div className={cx(s.row, withheld && s.rowWithheld)} title={props.withheld}>
-      <span className={s.label}>{props.label}</span>
+    <div className={cx(bare ? s.rowBare : s.row, withheld && s.rowWithheld)} title={props.withheld}>
+      {!bare && <span className={s.label}>{props.label}</span>}
       <div className="cg-field">
         <ColorPicker
           value={props.value}

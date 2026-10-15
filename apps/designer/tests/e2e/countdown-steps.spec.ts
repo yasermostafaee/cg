@@ -57,14 +57,39 @@ async function previewFrame(page: Page): Promise<Frame> {
   return frame;
 }
 
+/** `-H` — the Steps dialog (the shared Modal), whichever door opened it. */
+function stepsDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: /^Steps of / });
+}
+
+/**
+ * Through the ELEMENT's door (`Edit in steps…`, the dialog filtered to it): in step `token`, add a
+ * change for this element; answers its table row. The dialog stays open.
+ */
+async function addChangeAt(page: Page, token: string): Promise<Locator> {
+  const inspector = page.getByRole('complementary', { name: 'Inspector' });
+  await expect(inspector.getByTestId('element-steps')).toBeVisible();
+  await inspector.getByTestId('element-steps-edit').click();
+  const dialog = stepsDialog(page);
+  await dialog.getByTestId(`steps-row-${token}`).click();
+  await dialog.getByTestId('steps-add-change').click();
+  return dialog.locator('[data-testid="step-changes"] [data-change]').last();
+}
+
 /** Through the ELEMENT's door: in step `token`, turn this element's fill to the default red. */
 async function redFillAt(page: Page, token: string): Promise<void> {
-  const inspector = page.getByRole('complementary', { name: 'Inspector' });
-  const section = inspector.getByTestId('element-steps');
-  await expect(section).toBeVisible();
-  await section.getByTestId(`element-steps-add-${token}`).click();
-  const change = section.locator(`[data-element-step="${token}"] [data-change]`).last();
+  const change = await addChangeAt(page, token);
   await change.getByRole('combobox', { name: 'property' }).selectOption('fill');
+  await stepsDialog(page).getByRole('button', { name: 'Done' }).click();
+}
+
+/** The countdown's preset, from its own door. */
+async function applyPreset(page: Page): Promise<void> {
+  await page.getByRole('complementary', { name: 'Inspector' }).getByTestId('steps-edit').click();
+  const dialog = stepsDialog(page);
+  await dialog.getByTestId('steps-preset').click();
+  await expect(dialog.locator('[data-step]')).toHaveCount(3);
+  await dialog.getByRole('button', { name: 'Done' }).click();
 }
 
 test.describe('-A / -B / -F — a countdown’s steps in the Designer', () => {
@@ -95,8 +120,8 @@ test.describe('-A / -B / -F — a countdown’s steps in the Designer', () => {
     await inspector.getByRole('combobox', { name: 'mode' }).selectOption('countdown');
     await inspector.getByRole('combobox', { name: 'target' }).selectOption('timeofday');
     await setTargetTime(inspector, await timeIn(app.page, 62));
-    await inspector.getByTestId('steps-preset').click();
-    await expect(inspector.locator('[data-step]')).toHaveCount(3);
+    await applyPreset(app.page);
+    await expect(inspector.locator('[data-step-line]')).toHaveCount(3);
 
     // The top-level rectangle turns red at the 10-minute step — from ITS own Inspector.
     await app.selectElementById(hostRect);
@@ -114,11 +139,10 @@ test.describe('-A / -B / -F — a countdown’s steps in the Designer', () => {
     const warnId = (await app.timelineRowIds()).find((id) => id !== hostRect);
     if (warnId === undefined) throw new Error('no Warn instance');
     // …shown by the 10-minute step, from ITS own Inspector: a new change starts as show / hide.
-    const warnSteps = inspector.getByTestId('element-steps');
-    await warnSteps.getByTestId('element-steps-add-2').click();
-    const warnChange = warnSteps.locator('[data-element-step="2"] [data-change]').last();
+    const warnChange = await addChangeAt(app.page, '2');
     await expect(warnChange.getByRole('combobox', { name: 'property' })).toHaveValue('visible');
     await warnChange.getByRole('combobox', { name: 'value' }).selectOption('show');
+    await stepsDialog(app.page).getByRole('button', { name: 'Done' }).click();
 
     // The child composition, instanced here; its rectangle turns red too — from ITS own Inspector.
     await app.nestCompositionInstance('Badge');
@@ -266,7 +290,7 @@ test.describe('-A / -B / -F — a countdown’s steps in the Designer', () => {
     await inspector.getByRole('combobox', { name: 'mode' }).selectOption('countdown');
     await inspector.getByRole('combobox', { name: 'target' }).selectOption('timeofday');
     await setTargetTime(inspector, await timeIn(app.page, 62));
-    await inspector.getByTestId('steps-preset').click();
+    await applyPreset(app.page);
 
     await app.openPreviewModal();
     const frame = await previewFrame(app.page);

@@ -1,6 +1,7 @@
 import {
   changePropertiesOf,
   CountdownStepsSchema,
+  playoutOf,
   type ClockElement,
   type CountdownSteps,
   type Element,
@@ -286,4 +287,143 @@ export function changeChipText(change: ElementChange): string {
     default:
       return `${PROPERTY_LABELS[change.property]} ${change.value.replace('#', '').toUpperCase()}`;
   }
+}
+
+/** A clock anywhere in the scene — the root or any composition — with the doc it lives in. */
+export function clockAnywhere(
+  scene: Scene,
+  clockId: string,
+): { clock: ClockElement; doc: DocId } | undefined {
+  for (const doc of docsOf(scene)) {
+    const el = docElements(layersOf(scene, doc)).find((e) => e.id === clockId);
+    if (el?.type === 'clock') return { clock: el, doc };
+  }
+  return undefined;
+}
+
+/** A step's place: `before`, or an index into `steps`. */
+export type StepToken = 'before' | number;
+
+/** Every step in order — Before first, then the list (thresholds, At zero, after zero). */
+export function stepTokens(steps: CountdownSteps): StepToken[] {
+  return [
+    ...(steps.before !== undefined ? (['before'] as const) : []),
+    ...steps.steps.map((_, i) => i),
+  ];
+}
+
+/** A step's name, by token. */
+export function stepName(steps: CountdownSteps, token: StepToken): string {
+  return token === 'before' ? (steps.before?.name ?? 'Before') : (steps.steps[token]?.name ?? '');
+}
+
+/** `1 change`, `3 changes`, `no changes`. */
+export function changeCountLabel(n: number): string {
+  return n === 0 ? 'no changes' : n === 1 ? '1 change' : `${String(n)} changes`;
+}
+
+/**
+ * Which run of the list a step can be dragged within: the thresholds before zero, or the steps
+ * after zero. `null` — Before and At zero are pinned.
+ */
+export function stepGroup(
+  steps: CountdownSteps,
+  token: StepToken,
+): 'before-zero' | 'after-zero' | null {
+  if (token === 'before') return null;
+  const at = steps.steps[token]?.atMs;
+  if (at === undefined || at === 0) return null;
+  return at > 0 ? 'before-zero' : 'after-zero';
+}
+
+/**
+ * `DELTA-RUN-NEXT-VERSION-01-H` — reorder: the step at `from` moves to `to` WITH its name, changes
+ * and transition, and the THRESHOLDS STAY WHERE THEY ARE — the ladder is strictly ordered across
+ * zero (the schema's own rule), so a reorder can only re-assign which step sits at which threshold.
+ * Only inside one group; anything else answers `steps` unchanged.
+ */
+export function moveStep(steps: CountdownSteps, from: number, to: number): CountdownSteps {
+  const group = stepGroup(steps, from);
+  if (group === null || from === to || stepGroup(steps, to) !== group) return steps;
+  const list = [...steps.steps];
+  const [moved] = list.splice(from, 1);
+  if (moved === undefined) return steps;
+  list.splice(to, 0, moved);
+  return {
+    ...steps,
+    steps: list.map((step, k) => ({ ...step, atMs: steps.steps[k]?.atMs ?? step.atMs })),
+  };
+}
+
+/** Round to the whole second a threshold is written in. */
+const wholeSecond = (ms: number): number => Math.round(ms / 1000) * 1000;
+
+/**
+ * A copy of the step at `index`, placed just after it at a threshold between it and the next one
+ * (half-way, to the second; past the last one: half-way to zero before zero, a minute later after
+ * zero). `null` when there is no whole second free there — or for At zero, which is one of a kind.
+ */
+export function duplicateStep(steps: CountdownSteps, index: number): CountdownSteps | null {
+  const step = steps.steps[index];
+  if (step === undefined || step.atMs === 0) return null;
+  const next = steps.steps[index + 1]?.atMs;
+  const atMs =
+    next !== undefined
+      ? wholeSecond((step.atMs + next) / 2)
+      : step.atMs > 0
+        ? Math.floor(step.atMs / 2 / 1000) * 1000
+        : step.atMs - 60_000;
+  const below = next ?? (step.atMs > 0 ? 0 : -Infinity);
+  if (atMs >= step.atMs || atMs <= below || atMs === 0) return null;
+  const list = [...steps.steps];
+  list.splice(index + 1, 0, {
+    ...step,
+    name: `${step.name} copy`,
+    atMs,
+    changes: step.changes.map((c) => ({ ...c })),
+  });
+  return { ...steps, steps: list };
+}
+
+/** A new step before zero, after the last threshold above zero (half of it; 10 min when none). */
+export function addStep(steps: CountdownSteps): { steps: CountdownSteps; index: number } {
+  const positive = steps.steps.filter((s) => s.atMs > 0);
+  const last = positive[positive.length - 1]?.atMs;
+  const atMs = last === undefined ? 600_000 : Math.max(1000, Math.floor(last / 2 / 1000) * 1000);
+  const list = [...steps.steps];
+  const at = list.findIndex((s) => s.atMs < atMs);
+  const step = { name: nextStepName(steps), atMs, changes: [] };
+  const index = at === -1 ? list.length : at;
+  list.splice(index, 0, step);
+  return { steps: { ...steps, steps: list }, index };
+}
+
+/** The At-zero step, placed between the last threshold before zero and the first after it. */
+export function addAtZero(steps: CountdownSteps): { steps: CountdownSteps; index: number } {
+  const list = [...steps.steps];
+  const at = list.findIndex((s) => s.atMs < 0);
+  const index = at === -1 ? list.length : at;
+  list.splice(index, 0, { name: 'At zero', atMs: 0, changes: [] });
+  return { steps: { ...steps, steps: list }, index };
+}
+
+/** `steps` without the step at `token` (Before removed entirely). */
+export function deleteStep(steps: CountdownSteps, token: StepToken): CountdownSteps {
+  if (token === 'before') return { steps: steps.steps };
+  return { ...steps, steps: steps.steps.filter((_, i) => i !== token) };
+}
+
+/**
+ * `DELTA-RUN-NEXT-VERSION-01-E` — whether "Close the graphic" can close it: only a content-driven
+ * hold that this countdown drives can be ended by it.
+ */
+export function closeCanEnd(scene: Scene, doc: DocId, clock: ClockElement): boolean {
+  const source = doc === null ? scene : (scene.compositions?.find((c) => c.id === doc) ?? scene);
+  const playout = playoutOf(source as Scene);
+  return (
+    playout.holdSource === 'content-driven' &&
+    playout.mode !== 'manual' &&
+    playout.mode !== 'static' &&
+    clock.drivesHold !== false
+  );
 }

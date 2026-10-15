@@ -242,19 +242,27 @@ export function CanvasArea({
     clientX: number;
     clientY: number;
   } | null>(null);
-  const { rulerVisible, guides, snapGuides, currentFrame, timelinePlaying, soundMuted } =
-    useDesignerSelector(
-      (s) => ({
-        rulerVisible: s.rulerVisible,
-        guides: s.guides,
-        snapGuides: s.snapGuides,
-        currentFrame: s.currentFrame,
-        // DELTA-RUN-NEXT-VERSION-01-G — the timeline's Play sounds the page; one shared switch.
-        timelinePlaying: s.timelinePlaying,
-        soundMuted: s.soundMuted,
-      }),
-      shallowEqual,
-    );
+  const {
+    rulerVisible,
+    guides,
+    snapGuides,
+    currentFrame,
+    timelinePlaying,
+    soundMuted,
+    stepRehearsal,
+  } = useDesignerSelector(
+    (s) => ({
+      rulerVisible: s.rulerVisible,
+      guides: s.guides,
+      snapGuides: s.snapGuides,
+      currentFrame: s.currentFrame,
+      // DELTA-RUN-NEXT-VERSION-01-G — the timeline's Play sounds the page; one shared switch.
+      timelinePlaying: s.timelinePlaying,
+      soundMuted: s.soundMuted,
+      stepRehearsal: s.stepRehearsal,
+    }),
+    shallowEqual,
+  );
   // Screen offset (within the scroll viewport) of the scene's (0,0), so the
   // pinned rulers and the guide lines stay aligned with the canvas as it
   // zooms / scrolls / resizes.
@@ -548,6 +556,10 @@ export function CanvasArea({
         );
         // A rebuilt page starts unmuted: give it the shared sound switch again.
         cw.postMessage({ kind: 'cg-preview', action: 'sound-muted', muted: soundMuted }, '*');
+        // DELTA-RUN-NEXT-VERSION-01-H — and the step the Steps dialog is showing, if any.
+        if (stepRehearsal !== null) {
+          cw.postMessage({ kind: 'cg-preview', action: 'rehearse-step', ...stepRehearsal }, '*');
+        }
         cw.postMessage(
           { kind: 'cg-preview', action: 'editing-text', elementId: editingTextId },
           '*',
@@ -581,7 +593,7 @@ export function CanvasArea({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [currentFrame, editingTextId, timelinePlaying, soundMuted]);
+  }, [currentFrame, editingTextId, timelinePlaying, soundMuted, stepRehearsal]);
 
   // D-060 — expose the live preview document so the selection gizmo (and the
   // auto→fixed one-shot size commit) can measure an auto-sized text box's rendered
@@ -616,6 +628,26 @@ export function CanvasArea({
       '*',
     );
   }, [soundMuted]);
+
+  // DELTA-RUN-NEXT-VERSION-01-H — the Steps dialog's rehearse strip shows a step on the canvas
+  // through the page's own rehearsal (the Preview's path); `null` hands the countdown back to live.
+  const rehearsedClockRef = useRef<string | null>(null);
+  useEffect(() => {
+    const cw = iframeRef.current?.contentWindow;
+    if (stepRehearsal !== null) {
+      rehearsedClockRef.current = stepRehearsal.clockId;
+      cw?.postMessage({ kind: 'cg-preview', action: 'rehearse-step', ...stepRehearsal }, '*');
+      return;
+    }
+    const was = rehearsedClockRef.current;
+    rehearsedClockRef.current = null;
+    if (was !== null) {
+      cw?.postMessage(
+        { kind: 'cg-preview', action: 'rehearse-step', clockId: was, live: true },
+        '*',
+      );
+    }
+  }, [stepRehearsal]);
 
   // Zoom by `factor`, keeping the scene point under (clientX, clientY) pinned there —
   // so Ctrl+wheel zooms toward the CURSOR and the +/−/1× buttons toward the viewport

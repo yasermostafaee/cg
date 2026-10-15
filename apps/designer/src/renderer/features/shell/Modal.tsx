@@ -54,6 +54,9 @@ export function Modal({
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (e.key === 'Escape') {
+        // `DELTA-RUN-NEXT-VERSION-01-H` — a menu open INSIDE the dialog owns this Escape: it closes
+        // itself (its own handler, after this capture listener), and the dialog stays.
+        if ((boxRef.current?.querySelector('[role="menu"]') ?? null) !== null) return;
         onClose();
         return;
       }

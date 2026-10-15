@@ -125,6 +125,17 @@ export interface DesignerStoreState {
    */
   soundMuted: boolean;
   /**
+   * `DELTA-RUN-NEXT-VERSION-01-H` — the step the Steps dialog's rehearse strip shows on the canvas
+   * (`null` — live). Session-only, never saved; the dialog clears it when it closes.
+   */
+  stepRehearsal: { clockId: string; step: 'before' | number } | null;
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-H` — the open Steps dialog: its countdown, and the element its table
+   * is filtered to (`null` — all). Held HERE, not in the Inspector, because an undo clears the
+   * selection and so swaps the Inspector — the dialog must outlive that. Session-only.
+   */
+  stepsDialog: { clockId: string; filter: string | null } | null;
+  /**
    * Currently-selected keyframe in the timeline. Drives the yellow
    * highlight on the diamond glyph (in the timeline lane, the track
    * row's left label, and the Inspector's per-row indicator). A bare
@@ -249,6 +260,8 @@ export const initialState: DesignerStoreState = {
   currentFrame: 0,
   timelinePlaying: false,
   soundMuted: false,
+  stepRehearsal: null,
+  stepsDialog: null,
   selectedKeyframe: null,
   selectedKeyframes: [],
   keyframeInspectorOpen: false,
@@ -625,6 +638,8 @@ export function _resetCore(): void {
     currentFrame: 0,
     timelinePlaying: false,
     soundMuted: false,
+    stepRehearsal: null,
+    stepsDialog: null,
     selectedKeyframe: null,
     selectedKeyframes: [],
     keyframeInspectorOpen: false,

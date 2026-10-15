@@ -10,6 +10,16 @@ export const row = style({
   fontSize: '0.74rem',
 });
 
+/** `DELTA-RUN-NEXT-VERSION-01-H` — a `bare` field: the control alone (a table cell's). */
+export const rowBare = style({
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr)',
+  alignItems: 'center',
+  padding: '0.1rem 0',
+  fontSize: '0.74rem',
+  minWidth: 0,
+});
+
 export const rowMulti = style({
   display: 'grid',
   gridTemplateColumns: `74px 1fr 1fr`,
