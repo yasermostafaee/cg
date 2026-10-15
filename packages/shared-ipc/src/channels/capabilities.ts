@@ -140,7 +140,9 @@ export function machineClock(now: Date = new Date()): BridgeClock {
   } catch {
     // An engine without Intl time zones: the offset still says which clock it is.
   }
-  return { timeZone, offsetMinutes: -now.getTimezoneOffset() };
+  // `0 - x`, never `-x`: at UTC `-0` would come back from the wire's JSON as `0`, and a reading
+  // that changes on the wire is not "the one reading both sides make" (measured on CI's UTC host).
+  return { timeZone, offsetMinutes: 0 - now.getTimezoneOffset() };
 }
 
 /** Do two machines keep the same clock — the same zone and the same offset right now? */

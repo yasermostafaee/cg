@@ -28,7 +28,9 @@ describe('bridge.capabilities — the bridge host’s clock', () => {
     expect(caps.error).toBeUndefined();
     const parsed = BridgeCapabilitiesChannel.response.parse(caps.payload);
     expect(parsed.clock).toEqual(machineClock());
-    expect(parsed.clock?.offsetMinutes).toBe(-new Date().getTimezoneOffset());
+    // `0 - x`, not `-x`: at UTC `-x` is `-0`, which no wire carries (JSON writes `0`), and `toBe` is
+    // `Object.is`. CI's UTC host found both this line and `machineClock` spelling it so.
+    expect(parsed.clock?.offsetMinutes).toBe(0 - new Date().getTimezoneOffset());
   });
 
   it('is read when the answer is made — an injected clock is what the route answers', async () => {
