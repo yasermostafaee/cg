@@ -151,3 +151,65 @@ test('a countdown target: typed in Solar Hijri, read in three calendars, +5 min,
   await expect(past).toHaveText(/^Target passed .+ ago · counts past zero$/);
   await expect(app.inspector.getByRole('button', { name: 'Apply staged edits' })).toBeEnabled();
 });
+
+/**
+ * 🔴 `DELTA-RUN-NEXT-VERSION-01-B` §2 — the control at 200 % and in a right-to-left page, measured in
+ * the engine (golden rule 12c). CG Control's type is px tokens, so a root font size would scale
+ * nothing: 200 % is the operator's browser zoom (Ctrl +), applied as `zoom: 2` on the root.
+ */
+test('the date and time control fits at 200 % zoom and keeps year first in a right-to-left page', async ({
+  app,
+}) => {
+  const page = app.page;
+  await app.importVcg('countdown.vcg', await buildCountdownVcg(TEMPLATE_ID));
+  await app.selectStackRow(TEMPLATE_ID);
+  const c = control(app.inspector);
+  await expect(c).toBeVisible();
+
+  const units = ['year', 'month', 'day', 'hour', 'minute', 'second'];
+  const yearHeight = async (): Promise<number> =>
+    (await segment(c, 'year').boundingBox())?.height ?? 0;
+  const atRest = await yearHeight();
+  for (const [label, apply] of [
+    ['100 %', (): void => undefined],
+    [
+      '200 % zoom',
+      (): void => {
+        (document.documentElement.style as unknown as { zoom: string }).zoom = '2';
+      },
+    ],
+    [
+      'RTL at 200 %',
+      (): void => {
+        document.documentElement.dir = 'rtl';
+      },
+    ],
+  ] as const) {
+    await page.evaluate(apply);
+    await c.scrollIntoViewIfNeeded();
+    const panel = await app.inspector.boundingBox();
+    if (panel === null) throw new Error('the Inspector is not laid out');
+    const xs: number[] = [];
+    for (const unit of units) {
+      const seg = segment(c, unit);
+      const clipped = await seg.evaluate(
+        (el) => (el as HTMLInputElement).scrollWidth > (el as HTMLInputElement).clientWidth + 1,
+      );
+      expect(clipped, `${label}: ${unit} clips its digits`).toBe(false);
+      const box = await seg.boundingBox();
+      if (box === null) throw new Error(`${label}: ${unit} is not laid out`);
+      expect(box.x, `${label}: ${unit} leaves the Inspector`).toBeGreaterThanOrEqual(panel.x - 1);
+      expect(box.x + box.width, `${label}: ${unit} leaves the Inspector`).toBeLessThanOrEqual(
+        panel.x + panel.width + 1,
+      );
+      xs.push(box.x);
+    }
+    // The positive control: the zoom really applied — the year segment is twice as tall.
+    if (label !== '100 %') {
+      expect(await yearHeight(), `${label}: the zoom did not apply`).toBeGreaterThan(atRest * 1.8);
+    }
+    // The date reads year / month / day, left to right, whatever the page's direction.
+    expect(xs[0], `${label}: year before month`).toBeLessThan(xs[1] ?? 0);
+    expect(xs[1], `${label}: month before day`).toBeLessThan(xs[2] ?? 0);
+  }
+});
