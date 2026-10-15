@@ -3975,7 +3975,7 @@ is the NEED, not the UI. **Naming:** the live element is user-facing "Live Sourc
 schema type stays `video-placeholder`. **RECON-FIRST for the type-conversion semantics; needs its
 own design.md.**
 
-## [~] D-141 — Azan countdown: time-of-day target + color zones (composition-deep) ⟨priority: high⟩ — implemented, not yet archived: `openspec/changes/add-azan-countdown/` (engine `edf8dcba`; the Designer half `AZAN-DESIGNER-01`, 2026-10-15 — `b57602ff`, `414c1377`, `94dee038`; `B-344` fixed on the way; the operator's pattern check filed as [[R-101]])
+## [~] D-141 — Azan countdown: time-of-day target + color zones (composition-deep) ⟨priority: high⟩ — implemented, not yet archived; reshaped by `DELTA-RUN-NEXT-VERSION-01-A` … `-H` (zones → steps, the target the operator sets, after zero, the Steps dialog — 2026-10-15, see "Deltas" below): `openspec/changes/add-azan-countdown/` (engine `edf8dcba`; the Designer half `AZAN-DESIGNER-01`, 2026-10-15 — `b57602ff`, `414c1377`, `94dee038`; `B-344` fixed on the way; the operator's pattern check filed as [[R-101]])
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q24): **needed for the next version.** Its Designer half (the 21 open tasks of `add-azan-countdown`) is in scope.
 
@@ -4057,6 +4057,26 @@ operator enters the OFFICIAL announced time; computed prayer times must never be
 default for broadcast. Design-shaped: implementation starts with an openspec change
 (design-only first) since it widens ClockElementSchema, binding targets, and runtime
 behavior.
+
+**Deltas (`RUN-NEXT-VERSION-01`, 2026-10-15 — they SUPERSEDE parts 2 and 3 above and the zone bullets of the
+Acceptance):**
+
+- **A — steps replace zones.** A countdown's ordered STEPS (Before, thresholds, At zero, steps after zero) each list
+  changes: _element → property (show / hide, opacity, text colour, background, fill, stroke, blink, picture) → value_,
+  with a cut or a fade (300 ms). Revert on leave. Zones migrate to steps on load with the same on-air result
+  (`migrateCountdownZones`; two stated deviations). No user-visible "Azan": the preset is
+  `3 steps · 60 / 30 / 10 min`.
+- **B / C — the target is the operator's.** One typed date and time control in both apps, three calendars (Solar
+  Hijri by default), a station-wide Lunar day adjustment in CG Control. A time-of-day or date-and-time countdown
+  exposes its target by default as `Target time`; CG Control sets it per row — on air only the row's `CG UPDATE`,
+  a passed target stated, never refused.
+- **D / E — after zero:** hold (default) / count past zero / hide the digits / close the graphic (the existing
+  content-driven completion). A per-row override is a question, not built.
+- **F — composition instances** show and hide with their own entrance and exit; an instance can start hidden.
+  🔴 **Owner decision: a step never changes an element's geometry directly** (position, size, rotation) — movement
+  stays an animation the author builds into a composition, shown or hidden by a step.
+- **H — the Steps dialog.** The Inspector keeps a summary; every editor lives in one dialog reached from the
+  countdown and from any element a step changes.
 
 ## [!] D-142 — Brand Pack Factory ⟨priority: unrated⟩
 

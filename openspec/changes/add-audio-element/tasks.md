@@ -53,3 +53,21 @@
 
 - [x] 5.1 `D-165` filed `[~]` in `docs/prd/designer.md`; registry updated
 - [x] 5.2 Engine doc: `packages/template-runtime/README.md` names the audio driver beside the video's
+
+## 6. `DELTA-RUN-NEXT-VERSION-01-G` — `B-346`: the timeline's Play was silent (FULL lane)
+
+- [x] 6.1 Located, not guessed: the owner's update corrected the report — the Preview plays; only the
+      timeline's Play is silent. The canvas page is only ever SEEKED (`scrub`), so its sounds never
+      start, and a frame message is no user gesture.
+- [x] 6.2 `runtime.auditionSounds({ playing, frame })` plays each sound at its place while the
+      transport PLAYS, through the page's own audio graph (`createAudioHandle`'s audition), and stops
+      it with the playhead; the Play click resumes the output inside the gesture
+      (`window.cgResumeSound`). Scrubbing stays silent. (`3f6fb431`; `audition-sounds.test.ts`)
+- [x] 6.3 ONE Sound switch (`transport-sound`, `Sound on` / `Sound off`, ON by default) in the
+      transport, shared with the Preview through the store. (`3f6fb431`)
+- [x] 6.4 A sound longer than its composition plays to its end in the Preview (as on air: an entrance
+      sound is cut only when the graphic settles); the timeline stops it with the playhead.
+- [x] 6.5 Red first, green after: `tests/e2e/timeline-sound.spec.ts` — red with the audition call
+      removed while its positive control (the audio element exists, paused) passed; green with it.
+- [x] 6.6 `B-346` filed in `docs/prd/bugs-designer.md`; registry updated.
+- [ ] 6.7 Linux `e2e` RAN green on the pushed commit — run URL here.

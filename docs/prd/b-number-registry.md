@@ -3437,3 +3437,14 @@ returned nothing, and `git grep --untracked` over the tree likewise; control: th
 no stash.
 
 ⇒ **Next free after this entry is `B-345`**, **`D-166`**, **`P-068`**, **`R-102`** and **`C-049`**.
+
+### 2026-10-15 — `DELTA-RUN-NEXT-VERSION-01-G` takes `B-345` and `B-346`
+
+- `B-345` — Image sequence… does nothing: a multi-select or a folder never reaches the import —
+  [bugs-designer.md](bugs-designer.md).
+- `B-346` — the timeline's Play is silent; only the Preview plays sound — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: `git grep -q -e "## \[.\] B-345"` (and `B-346`) on all 10 local and remote-tracking refs
+after `git fetch` returned nothing; control: the same sweep found `B-344` on 3 refs; no stash.
+
+⇒ **Next free after this entry is `B-347`**, **`D-166`**, **`P-068`**, **`R-102`** and **`C-049`**.

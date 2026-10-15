@@ -4244,3 +4244,33 @@ and nothing says so. On air, a countdown to the next 20:32 has become a countdow
 loads as `timeofday`, with its time intact, and is never rewritten by opening the Inspector. **Acceptance:** a dom
 test loads a `timeofday` clock, sees `timeofday` selected and `20:32` in its input, and after editing an unrelated
 field the stored target is still `{ kind: 'timeofday', time: '20:32' }`. The test is red on the old select.
+
+## [~] B-345 — Image sequence… does nothing: a multi-select or a folder never reaches the import ⟨priority: high — the import is the feature, and the failure is silent⟩ — FILED 2026-10-15 by `DELTA-RUN-NEXT-VERSION-01-G` (the owner's browser test) · `openspec/changes/add-image-sequence-import/`
+
+**Repro / Actual:** Project assets → Image sequence…; pick ten numbered PNGs (or their folder) and confirm. Nothing
+happens: no modal, no notice, no error. A one-picture pick is just as silent. **Cause:** `pickFiles` creates a
+DETACHED `<input type="file">` and waits for its `change`. While the operating system's file dialog is open, nothing
+references that input, so the garbage collector may free it — with its listener and the promise the import is
+awaiting. A long pick (a folder of frames) gives it time to. Proven, not guessed: in Chrome over CDP,
+`Page.setInterceptFileChooserDialog` held the dialog open and `HeapProfiler.collectGarbage` ran; setting the files
+then failed with "No node found for given backend id" — the input was gone. **Expected:** a pick reaches the import
+however long it takes; a multi-select or a folder imports ONE sequence or says why not; one picture is never silently
+something else. **Fix:** `apps/designer/src/platform/pickFiles.ts:32` — a module `PENDING` set holds each input until
+its pick settles. A single picture through Image sequence… is refused with a sentence ("One picture is not a
+sequence…", `ProjectAssetsPanel.tsx:302`) and the modal's `sequence-single` callout disables Continue.
+**Acceptance:** `tests/e2e/picker-held-input.spec.ts` collects garbage while the dialog is open and still imports —
+red 3 / 3 before the fix, green after.
+
+## [~] B-346 — The timeline's Play is silent; only the Preview plays sound ⟨priority: medium — an author cannot hear a sound where they place it⟩ — FILED 2026-10-15 by `DELTA-RUN-NEXT-VERSION-01-G` (the owner's browser test, corrected: the Preview plays) · `openspec/changes/add-audio-element/`
+
+**Repro / Actual:** add a sound element; press the timeline's Play. The playhead runs, nothing is heard. The Preview
+plays the same sound. **Cause:** the canvas page is only ever SEEKED, one frame at a time — it never plays, so its
+sounds never start; and a browser starts audio only inside a user gesture, which a frame message is not.
+**Expected:** the timeline's Play is heard, from where the playhead is; scrubbing and stepping stay silent; one sound
+switch serves the timeline and the Preview, its state always visible. **Fix:** `runtime.auditionSounds({ playing,
+frame })` (`packages/template-runtime/src/runtime.ts:3016`) plays each sound at its place through the page's own
+audio graph while the transport PLAYS, and stops it with the playhead; the Play click resumes the page's audio output
+inside the gesture (`window.cgResumeSound`); the shared `Sound on` / `Sound off` switch (`transport-sound`, ON by
+default) sits in the transport and drives the Preview too. A sound longer than its composition plays to its end in
+the Preview, as on air; the timeline stops it with the playhead. **Acceptance:** `tests/e2e/timeline-sound.spec.ts`
+— red with the audition removed (a positive control proving the audio element exists), green with it.

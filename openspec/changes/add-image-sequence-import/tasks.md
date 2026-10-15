@@ -66,3 +66,17 @@
 - [x] 6.1 `D-164` filed `[~]` in `docs/prd/designer.md`; `B-342`, `B-343` filed; registry updated
 - [x] 6.2 No engine doc changes: no engine's structure, contract or extension point moved (the
       template runtime, canvas, timeline and state are untouched)
+
+## 7. `DELTA-RUN-NEXT-VERSION-01-G` — `B-345`: a pick never reached the import (FULL lane)
+
+- [x] 7.1 Reproduced RED in a real Chrome before any fix: over CDP, `Page.setInterceptFileChooserDialog`
+      held the dialog open and `HeapProfiler.collectGarbage` ran; setting the files then failed —
+      "No node found for given backend id": the detached input was gone. (`tests/e2e/picker-held-input.spec.ts`, red 3 / 3)
+- [x] 7.2 Fix: `apps/designer/src/platform/pickFiles.ts:32` — the `PENDING` set holds each input until
+      its pick settles; the same spec green. (`25193ed0`)
+- [x] 7.3 One picture through `Image sequence…` is refused with a sentence naming `Image…`; the modal's
+      `sequence-single` callout disables Continue. (`25193ed0`; e2e `picker-held-input.spec.ts:136`
+      for the sentence; `image-sequence-import-modal.dom.test.ts` for the callout — red with the
+      guard ablated)
+- [x] 7.4 `B-345` filed in `docs/prd/bugs-designer.md`; registry updated.
+- [ ] 7.5 Linux `e2e` RAN green on the pushed commit — run URL here.

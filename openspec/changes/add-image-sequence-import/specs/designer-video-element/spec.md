@@ -29,6 +29,26 @@ open nothing.
 - **WHEN** the picked files hold no PNG or TGA whose name carries a number
 - **THEN** a notice says so and no import step opens
 
+### Requirement: A pick SHALL reach the import however long it takes, and one picture SHALL never silently become a sequence
+
+A file pick SHALL reach the import whatever its size and however long the file dialog stays open:
+the picker's input SHALL be held until its pick settles, so it cannot be garbage-collected while the
+dialog is open (`B-345`, `DELTA-RUN-NEXT-VERSION-01-G`). A multi-select or a folder SHALL import
+ONE sequence or say why not — never nothing. A single picture picked through `Image sequence…`
+SHALL be refused with a sentence that names the right door (`Image…`), and the import step SHALL
+show the same fact with Continue disabled.
+
+#### Scenario: A long pick still imports
+
+- **WHEN** the author picks a folder of frames and the browser collects garbage while the dialog is
+  open
+- **THEN** the import step opens with every frame
+
+#### Scenario: One picture is not a sequence
+
+- **WHEN** the author picks one PNG through `Image sequence…`
+- **THEN** a notice says one picture is not a sequence and names `Image…`, and nothing is imported
+
 ### Requirement: Sequence frames SHALL be ordered by the number in their names, in any digit set
 
 A frame's number SHALL be the LAST run of digits in its name, read in Latin, Persian or Arabic-Indic

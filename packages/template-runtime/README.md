@@ -51,15 +51,14 @@ bundle inlined into every exported `.vcg`. Adding a name there costs bytes in ev
 for a symbol no page calls. Two symbols are therefore reachable **only** through subpaths declared
 in `package.json`, and are deliberately absent from the entry:
 
-| Subpath                              | Export                                | Consumer                                                                       |
-| ------------------------------------ | ------------------------------------- | ------------------------------------------------------------------------------ |
-| `@cg/template-runtime/scene-builder` | `SMPTE_BARS`, `smpteBarsGradient()`   | The Runtime's PVW live-plate placeholders (R-049) — ONE bar table, reused.     |
-| `@cg/template-runtime/position`      | the pure `position.ts` geometry half  | The same overlay's scene-px → raster-px chain — ONE arithmetic, not a copy.    |
-| `@cg/template-runtime/zone-css`      | `zoneColorTargets()` and the compiler | The Designer's zone-colour section (`D-141`) — the slots a kind owns, ONE map. |
+| Subpath                              | Export                               | Consumer                                                                    |
+| ------------------------------------ | ------------------------------------ | --------------------------------------------------------------------------- |
+| `@cg/template-runtime/scene-builder` | `SMPTE_BARS`, `smpteBarsGradient()`  | The Runtime's PVW live-plate placeholders (R-049) — ONE bar table, reused.  |
+| `@cg/template-runtime/position`      | the pure `position.ts` geometry half | The same overlay's scene-px → raster-px chain — ONE arithmetic, not a copy. |
 
-(`zone-css` is also re-exported from the entry for the page's own use; the subpath exists because the
-Designer renderer must not load the entry — it pulls `lottie_light`, which touches a 2D canvas at module
-init and breaks the Designer's jsdom suites. `zone-css.ts` imports types only.)
+(D-141 v1's `zone-css` subpath is gone with the zones — `DELTA-RUN-NEXT-VERSION-01-A`. The Designer
+reads what a kind can change from `@cg/shared-schema`'s `changePropertiesOf`, so it needs no runtime
+subpath at all.)
 
 Two rules govern adding to either, both learned by measurement rather than argued:
 
@@ -680,24 +679,51 @@ modes need a real epoch; the ticker's clock is performance-style).
   `retarget()` re-pins it from a bound field (`clock-target`, applied by `reapplyClockTargets` on
   play and update) without touching the run; an unparseable value applies nothing.
 
-### Countdown ZONES — one attribute, compiled custom properties (`D-141`)
+### Countdown STEPS — one attribute, compiled custom properties, a few cues in JS (`DELTA-RUN-NEXT-VERSION-01-A` … `-F`)
 
-A countdown with `zones` publishes the active zone key as `data-cg-zone` on its SCOPE ROOT (the
-scope's container, stamped `data-cg-zone-root` by the scene-builder), written by the ClockDriver
-behind a latch — once per boundary, not per paint — and evaluated on the same one-second quantum the
-digits paint. The tightest covering step wins; at and after zero the lowest step stays.
+A countdown's `steps` (Before, thresholds on REMAINING time, At zero, steps after zero) are records
+of CHANGES: _this element → this property → this value_. D-141 v1's zones are migrated into them on
+load (`migrateCountdownZones`, the third entry of `@cg/shared-schema`'s `SCENE_MIGRATIONS`).
 
-`zone-css.ts` compiles the scene into ONE stylesheet (`<style id="cg-zones">`, injected beside the
-baseline by `ensureZoneCss`): a RESET of every slot on every zoned root, a PUBLICATION rule per zone
-key, and a CONSUMPTION rule per opted-in element (`data-cg-zone-el="<index>"`) reading
-`var(--cgz-<index>-<slot>, <authored value>)`. Custom properties inherit, so the NEAREST zoned root
-governs a nested element — nearest-wins in the cascade, on Chromium 71. A key no root publishes is
-inert: the element keeps its authored colour.
+**Publication.** The ClockDriver publishes the active step as ONE attribute on its scope root —
+`data-cg-cd<c>="b" | <index>` (`stepAttribute(c)`; the root is stamped `data-cg-step-root`) — behind
+a latch, once per crossing, selected on the SIGNED displayed quantum (`displayedRemainingMs`), so a
+step changes on exactly the frame the digits reach it, before or after zero. `reset()` clears it.
 
-**Extension point.** A new colourable slot is a row in `zoneColorTargets` (the kind → CSS property
-map, shared with D-139's colour effect) — nothing else. The compiler is pure, and both exporters embed
+**Stylesheet.** `step-css.ts` compiles the scene into ONE `<style id="cg-steps">` (`ensureStepCss`,
+beside the baseline): a RESET of every slot on every step root (`[data-cg-step-root]{--cgs-…:initial}`),
+a PUBLICATION rule per countdown and step token, and a CONSUMPTION rule per changed element
+(`data-cg-step-el`) reading `var(--cgs-<n>-<slot>, <authored value>) !important`. Custom properties
+inherit, so the NEAREST step root governs a nested element — nearest-wins in the cascade, on Chromium
+71 — and a nested composition with a step countdown of its own resets the variables for its subtree.
+`--cgs-dur` carries the step's transition (`cut`, or a fade of N ms; 300 ms by default).
+
+- **Colours** (text, background, fill, stroke) are those variables directly.
+- **Opacity, show / hide and blink** live on a layout-transparent WRAPPER (`data-cg-step-wrap`,
+  absolutely placed at 0 / 0 / 100 % / 100 %, `pointer-events: none`), so a step's opacity MULTIPLIES
+  the element's animated opacity instead of fighting it; blink is `@keyframes cg-step-blink`. An
+  element authored hidden that a step shows is built visible and rests at opacity 0.
+- **A picture swap and a composition instance are cues in JS** (`step-effects.ts`): the swap is a
+  cut; an instance shown by a step plays its OWN entrance and one hidden plays its own exit, through
+  the existing nested lifecycle (`InstanceCue`, the cascade skipping a cued-out node) — never a second
+  lifecycle, never a fade. At Take the current step is primed before the cascade
+  (`primeStepsForTake`) and published after it (`publishStepsForTake`).
+
+**After zero** (`afterZero`): hold at zero (the default), count past zero (`−00:12`, never completes),
+hide the digits, or close the graphic (the At-zero step, then the existing content-driven completion
+— no new wire line). `runsPastZero` keeps the frame loop alive while a step after zero can still be
+reached.
+
+**Rehearsal.** `runtime.rehearseStep(clockId, step | undefined)` forces a step (or hands the
+countdown back to live) through the same publication — the Designer's Preview and its Steps dialog's
+canvas strip both use it. Nothing of it is saved or exported.
+
+**Extension point.** A new property a step can change is a row in `@cg/shared-schema`'s
+`ELEMENT_CHANGE_PROPERTIES` and `changePropertiesOf` (who owns it), plus its slot here — a colour in
+`colorChangeTargets`, anything that cannot be a variable in `step-effects.ts`. Both exporters embed
 the scene and boot this runtime, so preview and air compile the same text and neither exporter knows
-zones exist (`single-file-export/tests/zone-export-parity.test.ts`).
+steps exist (`single-file-export/tests/step-export-parity.test.ts`); the one exporter-side fact is
+that a step's picture is collected as an asset (`image-export.ts`).
 
 ### SequenceDriver — the now/next rotation + next() dispatch (D-029)
 

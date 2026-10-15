@@ -1,5 +1,10 @@
 # Design — azan countdown: time-of-day target + composition-deep colour zones (D-141)
 
+> ⚠ **§10 (2026-10-15, `RUN-NEXT-VERSION-01` deltas A–H) SUPERSEDES every part of §§2.2–2.4,
+> 5, 6, 7 and 8 that speaks of ZONES, zone keys, the picker, the unmatched-key warning or "no change"
+> to `apps/runtime`, the exporters or the migration registry.** Those sections are kept as the record
+> of D-141 v1's design; read §10 for what is built.
+
 Design-only. Every claim below is anchored to disk at `file:line` as read on 2026-07-28 at
 `78dbcc7`. Requirements source: `docs/prd/designer.md:3707-3786` (D-141), with
 `docs/prd/designer.md:3641-3670` (D-139) read first per §1.
@@ -795,3 +800,120 @@ later reader can see they were decided rather than assumed:
    stays exactly as it was (§5.5) — never fail on air — but the Designer stops being silent about
    a typo that is free to fix now and an invisible no-op at 2 a.m. otherwise. No schema field, no
    runtime branch, no exporter change.
+
+---
+
+## 10. `RUN-NEXT-VERSION-01` deltas A–H (2026-10-15) — what is built now
+
+### 10.1 Steps replace zones (delta A)
+
+A zone said "this countdown is in zone `warning`" and each element listed its colour per zone name:
+one intent stored at two ends and joined by a string. A **step** stores it at one end — the
+countdown's step lists _element → property → value_ — so a rename cannot orphan anything and the
+author-time key warning (§7.3) has nothing left to warn about. The record is independent of its
+source, so D-139 can produce the same records later.
+
+The mechanism of §5 survives in shape: one attribute per crossing on the scope root
+(`data-cg-cd<c>`), one compiled stylesheet of inheriting custom properties (`--cgs-<n>-<slot>`),
+nearest-wins by inheritance, Chromium 71. What is new:
+
+- **Selection on the SIGNED displayed quantum** (`displayedRemainingMs`), so steps after zero are
+  ordinary steps with a negative threshold, and a step changes on the frame the digits reach it.
+- **Opacity, show / hide and blink act on a WRAPPER** (`data-cg-step-wrap`, layout-transparent), so
+  a step's opacity multiplies the element's animated opacity rather than replacing it, and an
+  element authored hidden that a step shows is built visible, resting at opacity 0.
+- **What a variable cannot carry is a JS cue** (`step-effects.ts`): a picture swap (a cut) and a
+  composition instance (§10.4).
+- **Revert on leave** falls out of the stylesheet: the publication rule for the entered step sets
+  only its own properties, and every other slot falls back to the authored value.
+
+### 10.2 The migration (delta A)
+
+`migrateCountdownZones` (the third entry of `SCENE_MIGRATIONS`, after paths and text-fit) rewrites a
+zoned scene with the same on-air result: the base zone becomes Before, each zone a step at its
+threshold named by its key, keeping the zones' 400 ms morph as a fade; each override becomes the
+change it stood for, through the reach and the scene-wide palette the zone stylesheet compiled, and
+what that stylesheet dropped is dropped. The legacy keys stay parseable — a template exported before
+the delta still loads and is migrated by the runtime that loads it. **Two stated deviations:** a loop
+restart returns an element to its authored colours by a cut where zones morphed (between runs, never
+on a threshold), and two zoned countdowns in one composition each get their own keys' changes where
+the zones fought over one attribute. The migration is written for the CEF floor (no
+`Object.fromEntries`), pinned by `single-file-export/tests/cef-compat.test.ts`.
+
+### 10.3 After zero (deltas D and E)
+
+`afterZero` ∈ `hold` (default, stored as nothing) / `count-past` / `hide` / `close`, designer-owned
+(ADR 0009). `count-past` never signals completion, so it never ends a content-driven hold (the
+graphic would otherwise leave air while still counting). `close` publishes the At-zero step and then
+signals completion through the EXISTING content-driven path: the page reports completion and the
+bridge sends its existing `CG <channel>-<layer> STOP 0` (pinned by
+`template-completion-stop.integration.test.ts`) — no new wire line, no `CLEAR` the operator did not
+cause. A composition whose hold this countdown cannot end shows that as a FACT in the Inspector.
+⚠ **Choice made, owner question open:** `hold` and `hide` still signal completion at zero, as every
+countdown did before the delta, so under a content-driven hold THIS countdown drives they close the
+graphic too. Delta D said completion is unchanged; whether Hold / Hide should stop signalling is
+asked in the report.
+
+### 10.4 Composition instances (delta F)
+
+A show / hide on an instance cues its OWN entrance or exit through the existing nested lifecycle —
+an `InstanceCue` per instance scope, with the cascade skipping a node cued out — never a second
+lifecycle and never the step's fade. `startsHidden` is authored on the instance (shown as a fact on
+its layer row and in the Inspector). At Take the current step is PRIMED before the cascade
+(`primeStepsForTake`), so an instance the step shows enters with the graphic, and PUBLISHED after it
+(`publishStepsForTake`). A fast step change takes the engine's own behaviour: a hide mid-entrance
+jump-cuts to the out-point, a show mid-exit restarts the entrance. No step changes geometry
+directly — the owner's decision, recorded in the PRD.
+
+### 10.5 The target the operator sets (deltas B and C)
+
+The `clock-target` binding lets the VALUE decide: `HH:mm[:ss]` re-aims at the next occurrence, an ISO
+instant at that instant, any digit set (`parseIsoInstant` beside `parseTimeOfDay`). This retires
+§4.1's "HH:mm only" and the proposal's "a datetime-valued binding is a later widening".
+
+A time-of-day or date-and-time countdown exposes its target BY DEFAULT as `targetTime` / `Target
+time`, created in the same undo entry as the kind switch; the author's target is the field's default
+and follows every edit; the field's pattern follows the value (`Time (HH:MM[:SS])` — widened from
+§4.1's `Time (HH:MM)` because the countdown's own time takes seconds — or `Date & time (ISO)`), and
+an author's own pattern is kept. CG Control marks the field at import (`countdown` on the field,
+DERIVED from the binding, never authored) and offers the shared date and time control for it, per
+row. On air a target change is the row's existing `CG <channel>-<layer> UPDATE 0 "<json>"` and
+nothing else; off air it is state only; a passed target is stated (`Target passed 12 min ago`, and
+`· will close at once` under Close the graphic) and the Take is not refused.
+
+### 10.6 The date and time control and the calendars (deltas B and C)
+
+ONE control in each app's `ui/` (a primitive, so its raw inputs are allowed there), the rules in
+`@cg/text-shaping` (`date-segments.ts`, `calendar.ts`) so the two apps cannot drift: typed segments,
+any digit set, ↑ / ↓, Tab, paste, a refused out-of-range value, a month grid, `+1 min` / `+5 min` /
+`+1 h`. Stored values never depend on the calendar shown: ISO with the machine's offset
+(`isoOfInstant`) or `HH:mm[:ss]`.
+
+- **Solar Hijri** (the default) uses the arithmetic conversion (Pournader & Toossi) — the same
+  algorithm the app's Persian dates already use (`gregorianToJalali`), so the control and every
+  other Persian date agree; no table to ship or update.
+- **Lunar Hijri** uses the platform's `Intl` `islamic-umalqura` calendar, falling back to
+  `islamic-civil`, then to the tabular calculation; because the announced month start can differ
+  from any calculation by a day or two, it takes a day adjustment of −2 … +2: per browser in the
+  Designer, station-wide in CG Control (kept by the bridge).
+- In the Designer a box is a `.cg-field`: measured in Chrome, the global input rule otherwise pads
+  each segment 0.55 rem a side and the date ran past the Inspector at 200 % text.
+
+### 10.7 The Steps dialog (delta H)
+
+The Inspector keeps a summary; every editor is in one dialog (the shared Modal). The dialog's open
+state lives in the STORE and its host is mounted once at the app root — measured in Chrome before
+that: `Ctrl+Z` with the dialog open CLOSED it, because an undo clears the selection and the
+Inspector that owned the dialog was swapped out. A reorder moves a step's name, changes and
+transition while the thresholds stay in order (the schema's strictly-decreasing rule makes any other
+reading a refusal); a duplicate takes the free whole second half-way to the next step, or says there
+is none. A `⋯` menu open inside the dialog owns its Escape (`Modal` stands aside). The rehearse strip
+drives the canvas page through the Preview's own `rehearse-step` message; closing hands it back to
+live.
+
+### 10.8 What §8 said would not change, and did
+
+- `apps/runtime` and the bridge: the operator's target control, the station's Lunar day adjustment
+  (`calendar.get` / `set` / `changed`) and the bridge host's clock in `bridge.capabilities`.
+- The single-file exporter collects a step's picture as an asset (`image-export.ts`).
+- The scene migration registry gained `migrateCountdownZones` (schema version still `1`).

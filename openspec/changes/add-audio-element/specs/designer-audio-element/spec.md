@@ -99,16 +99,33 @@ starts, volume, fade in, fade out) instead of a Transform section.
 - **THEN** one `audio` element is added and selected, and the Inspector shows its Sound section and no
   Transform section
 
-### Requirement: The Designer's Preview SHALL play sounds with a Sound switch; the canvas SHALL be silent
+### Requirement: The Preview and the timeline's Play SHALL be heard under ONE Sound switch; scrubbing SHALL be silent
 
-The Preview SHALL play a template's sounds, with a Sound switch shown only when the template makes
-sound, on by default; switching it off SHALL mute the page at once. The canvas SHALL never play a
-sound.
+The Preview SHALL play a template's sounds. The timeline's Play SHALL play them too (`B-346`,
+`DELTA-RUN-NEXT-VERSION-01-G`): each sound starts at its place from wherever the playhead is,
+through the page's own audio graph, and stops with the playhead; the Play click itself SHALL resume
+the page's audio output, since a browser starts audio only inside a user gesture. Scrubbing and
+stepping SHALL stay silent. ONE Sound switch SHALL serve both — in the timeline's transport and in the
+Preview, shown when the composition makes sound, ON by default, its state always visible
+(`Sound on` / `Sound off`); switching it off SHALL mute both at once. A sound longer than its
+composition SHALL play to its end in the Preview, as on air; the timeline's Play SHALL stop it with
+the playhead.
 
-#### Scenario: The Sound switch
+#### Scenario: The timeline's Play is heard
 
-- **WHEN** the Preview of a template with sound is opened and its Sound switch pressed
-- **THEN** the switch reads `Sound off` and the page is muted
+- **WHEN** a composition with a sound is played from the timeline's transport
+- **THEN** the sound starts at its place, and stops when the playhead stops
+
+#### Scenario: Scrubbing is silent
+
+- **WHEN** the author drags the playhead across a sound
+- **THEN** nothing is heard
+
+#### Scenario: One switch for both
+
+- **WHEN** the author presses the transport's `Sound on`
+- **THEN** it reads `Sound off`, the timeline is muted, and the Preview opens muted with its switch
+  reading the same
 
 ### Requirement: Both exports SHALL carry a sound's WAV
 

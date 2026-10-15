@@ -210,6 +210,33 @@ describe('D-164 — the image-sequence step', () => {
     expect(onContinue).not.toHaveBeenCalled();
   });
 
+  it('🔴 B-345 — a ONE-frame sequence chosen from a pick is stated, and cannot continue into a one-frame video', async () => {
+    await open([
+      png('a_1.png', 64, 64, 'shot/a_1.png'),
+      png('a_2.png', 64, 64, 'shot/a_2.png'),
+      png('b_1.png', 64, 64, 'shot/b_1.png'),
+    ]);
+    // The two-frame sequence first: no fact, Continue open (the control).
+    expect(document.querySelector('[data-testid="sequence-single"]')).toBeNull();
+    expect(button('Continue').disabled).toBe(false);
+    const select = document.querySelector<HTMLSelectElement>('[data-testid="sequence-choice"]');
+    await act(async () => {
+      select!.value = '1';
+      select!.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    }
+    expect(text('sequence-single')).not.toBe('');
+    expect(button('Continue').disabled).toBe(true);
+    await act(async () => {
+      button('Continue').click();
+    });
+    expect(onContinue).not.toHaveBeenCalled();
+  });
+
   it('a sequence none of whose headers can be read cannot continue', async () => {
     const junk = (name: string): File => new File([new Uint8Array(40)], name);
     await open([junk('f1.png'), junk('f2.png')]);

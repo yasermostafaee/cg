@@ -2552,7 +2552,7 @@ const CLOCK_TARGET_LABELS = ['duration', 'time of day', 'date & time'] as const;
 
 /**
  * `D-141` 5.1 — the time a switch to `timeofday` starts from: an hour from now, to the minute, on
- * this machine's clock. A starting value only; the author types the real azan time over it.
+ * this machine's clock. A starting value only; the author types the real target time over it.
  */
 function seedTimeOfDay(nowMs: number): string {
   const d = new Date(nowMs + 60 * 60_000);

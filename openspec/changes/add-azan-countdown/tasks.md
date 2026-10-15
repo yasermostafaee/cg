@@ -158,46 +158,46 @@ sentence described Phase 0 alone.
 - [x] 5.1 `StyleSection.tsx`: `timeofday` as a third target kind with its `HH:mm[:ss]` input,
       beside the existing duration / datetime inputs. (`b57602ff`; `B-344` fixed with it — `azan-zones.dom.test.ts`, red on the old select)
 - [x] 5.2 Zones editor (countdown-only): reorderable step list, live validation marking the
-      offending row, optional base row. (`ClockZonesSection.tsx`; a draft with an issue is never stored)
+      offending row, optional base row. (`ClockZonesSection.tsx`; a draft with an issue is never stored) ⚠ **SUPERSEDED by §9** — delta A replaced zones with steps; the editor and its file are gone (9.4, 9.9).
 - [x] 5.3 The 4-zone preset — one action, ONE undo entry, seeding both `zones` and the clock's own
-      `zoneOverrides`. (`applyAzanPreset`, `runAsSingleHistoryEntry`)
+      `zoneOverrides`. (`applyAzanPreset`, `runAsSingleHistoryEntry`) ⚠ **SUPERSEDED by §9** — the preset is now three STEPS turning the digits yellow / orange / red, named by no event (9.4).
 - [x] 5.4 The clock's Dynamic / Data affordance for its target (field + `clock-target` binding),
-      defaulting the field's `pattern` to the existing `Time (HH:MM)` preset. (`clock-data-key.ts` / `ClockTargetDataKey.tsx`; one undo entry)
+      defaulting the field's `pattern` to the existing `Time (HH:MM)` preset. (`clock-data-key.ts` / `ClockTargetDataKey.tsx`; one undo entry) ⚠ **SUPERSEDED by §9** — the pattern now follows the value (`Time (HH:MM[:SS])` / ISO) and the field is exposed by default as `Target time` (9.6).
 - [x] 5.5 Per-element zone-override section, shown ONLY when the open composition has a zoned
-      countdown; only the slots the element's kind owns; `'zone'` default with a resolved swatch. (`ZoneOverridesSection.tsx`; enclosing = the open composition and every one instancing it; slots through `@cg/template-runtime/zone-css`)
+      countdown; only the slots the element's kind owns; `'zone'` default with a resolved swatch. (`ZoneOverridesSection.tsx`; enclosing = the open composition and every one instancing it; slots through `@cg/template-runtime/zone-css`) ⚠ **SUPERSEDED by §9** — the element's door is now the steps summary and `Edit in steps…` (9.4, 9.9).
 - [x] 5.6 The zone-key PICKER (design.md §6, owner-closed): `normal` / `caution` / `warning` /
       `critical` plus a "Custom…" escape, on both the zones editor and the override section.
       Custom is a DISPLAY state, not a stored value — a stored key that is not one of the four
       loads as Custom with its string intact. The picker does NOT narrow the schema: a custom key
-      stays valid, parses and renders. (`ZoneKeyPicker`)
+      stays valid, parses and renders. (`ZoneKeyPicker`) ⚠ **SUPERSEDED by §9** — steps have no keys to pick (9.1).
 - [x] 5.7 The unmatched-zone-key authoring warning (design.md §7.3): non-blocking, PER KEY (not
       per element / not empty-intersection), shown at the override that declared it, naming the
       unmatched key and listing the keys the enclosing countdown defines. Also raised on the
       zones editor when RENAMING a zone key would orphan existing overrides. Never blocks save,
       export or play; never becomes a schema error; NOT raised for a composition previewed
       standalone (no enclosing countdown at all is a supported authoring state, not a mistake).
-      Designer-only — no schema field, no runtime branch, no exporter change. (per key at the override; on the zones editor as the orphaned keys a rename leaves)
+      Designer-only — no schema field, no runtime branch, no exporter change. (per key at the override; on the zones editor as the orphaned keys a rename leaves) ⚠ **SUPERSEDED by §9** — a step names its element directly, so no key can be unmatched (9.1).
 - [x] 5.8 Preview: the time-compression rehearsal control (session-only, through the injectable
-      clock) and the static zone selector. (`clock-rate` ×10 / ×60 / ×600 and `force-zone` in `preview.ts`; session-only)
+      clock) and the static zone selector. (`clock-rate` ×10 / ×60 / ×600 and `force-zone` in `preview.ts`; session-only) ⚠ **SUPERSEDED by §9** — the static selector forces a STEP (`rehearse-step`), and the Steps dialog drives the canvas too (9.4, 9.9).
 - [x] 5.9 **Tests** (`pnpm --filter @cg/designer test`): the preset writes steps + clock overrides
       as one undo entry; validation marks the offending row only; the override section is hidden
-      with no zoned countdown; switching a clock away from `countdown` clears/refuses zones. (`apps/designer/tests/azan-zones.dom.test.ts`, 13 tests)
+      with no zoned countdown; switching a clock away from `countdown` clears/refuses zones. (`apps/designer/tests/azan-zones.dom.test.ts`, 13 tests) ⚠ **SUPERSEDED by §9** — renamed `countdown-steps.dom.test.ts` and rewritten for steps (9.4).
 - [x] 5.10 **Tests for the picker**: each canonical key round-trips; a stored custom key displays
       as Custom with its string intact and is not rewritten on load; the picker never rejects or
-      normalises a custom key (schema unchanged). (same file)
+      normalises a custom key (schema unchanged). (same file) ⚠ **SUPERSEDED by §9** — removed with the picker (9.1).
 - [x] 5.11 **Tests for the warning**: overrides `{warning, dangre}` under a countdown defining
       `{warning, danger}` raise EXACTLY ONE warning, naming `dangre` — the per-key case an
       empty-intersection check would miss; a fully matched element raises none; renaming a
       countdown's zone key raises the warning on the now-orphaned overrides; a standalone-previewed
       composition raises none; the warning blocks nothing (save, export and play still succeed)
-      and the RUNTIME still renders the unmatched element with its authored style (inert, §5.5). (same file; the runtime half — an unmatched key renders authored — is `zone-css.test.ts`)
+      and the RUNTIME still renders the unmatched element with its authored style (inert, §5.5). (same file; the runtime half — an unmatched key renders authored — is `zone-css.test.ts`) ⚠ **SUPERSEDED by §9** — removed with the keys; `zone-css.test.ts` became `step-css.test.ts` (9.2).
 
 ## 6. Export parity
 
 - [x] 6.1 **Tests** (`@cg/single-file-export`, `@cg/vcg-format`): a bound target field appears in
       the GDD as a `single-line` string carrying its `pattern`, with NO new `gddType` and NO
       preflight warning; an UNBOUND clock still leaves the GDD unchanged; the exported HTML
-      contains the compiled zone stylesheet and it matches the preview's byte-for-byte. (`packages/single-file-export/tests/zone-export-parity.test.ts`, `414c1377`)
+      contains the compiled zone stylesheet and it matches the preview's byte-for-byte. (`packages/single-file-export/tests/zone-export-parity.test.ts`, `414c1377`) ⚠ **SUPERSEDED by §9** — now `step-export-parity.test.ts`, run on steps AND on a migrated zoned scene (9.2).
 - [x] 6.2 Confirm by test that NEITHER exporter needed a zone-specific code path. (same file: a zoned and an unzoned scene export to the same page bar the embedded scene; the GDD is identical)
 
 ## 7. E2E + gate
@@ -205,7 +205,7 @@ sentence described Phase 0 alone.
 - [x] 7.1 Extend `apps/designer/tests/e2e/clock.spec.ts` (or a sibling `azan-countdown.spec.ts`):
       author a `timeofday` countdown, apply the 4-zone preset, add an opted-in shape and a nested
       composition containing another opted-in element, then rehearse — assert the zone flips once
-      per boundary and that BOTH the top-level and the nested element restyle. (`apps/designer/tests/e2e/azan-countdown.spec.ts`, `94dee038`; local Windows: passed)
+      per boundary and that BOTH the top-level and the nested element restyle. (`apps/designer/tests/e2e/azan-countdown.spec.ts`, `94dee038`; local Windows: passed) ⚠ **SUPERSEDED by §9** — now `countdown-steps.spec.ts`, through the Steps dialog (9.4, 9.9).
 - [x] 7.2 A second E2E for the operator path: bind the target to a field, update it live, assert
       the countdown re-targets without replaying. (same spec; local Windows: passed)
 - [x] 7.3 `pnpm test:e2e` green (turbo builds first — never against a stale `dist/`). (CI `pnpm test:e2e` on `5c5422ff`, https://github.com/yasermostafaee/cg/actions/runs/38645221172 — the E2E step RAN: designer 321 passed / 13 skipped, runtime 344 passed / 2 skipped; both `azan-countdown.spec.ts` tests among them)
@@ -215,10 +215,65 @@ sentence described Phase 0 alone.
       so **a Linux `gate:e2e` is OWED**; a green Windows run does not discharge it. (UI, layout AND rendering changed, so a Linux `gate:e2e` was OWED; DISCHARGED by https://github.com/yasermostafaee/cg/actions/runs/38645221172, `completed` / `success`, the E2E step RAN — not a Windows pass)
 - [x] 7.6 Engine doc-sync: `packages/template-runtime/README.md` gains the zone mechanism (a new
       extension point + the scope-root contract); `docs/engines/overview.md` updated if the
-      compiler counts as a new engine surface. (`packages/template-runtime/README.md` "Countdown ZONES" + the `zone-css` subpath; `docs/engines/overview.md`)
+      compiler counts as a new engine surface. (`packages/template-runtime/README.md` "Countdown ZONES" + the `zone-css` subpath; `docs/engines/overview.md`) ⚠ **SUPERSEDED by §9** — both now describe STEPS; the subpath is gone (9.12).
 
 ## 8. Before archive
 
 - [x] 8.1 The owed Linux `gate:e2e` (7.5) run and reported. (https://github.com/yasermostafaee/cg/actions/runs/38645221172)
 - [x] 8.2 `docs/prd/designer.md` D-141 flipped (`[~]`; `[x]` at archive), and the D-139 item cross-referenced with the
       helpers it should reuse (design.md §1) so the boundary survives into D-139's own design.
+
+## 9. `RUN-NEXT-VERSION-01` deltas A–H (2026-10-15)
+
+Lanes: A, C, D, E, F and G **FULL** (schema, a predicate, the path to air); B and H **FAST** for
+their layout, FULL where they touch the store or the canvas page (the target field's exposure, the
+rehearse strip's `rehearse-step` message). No wire line, schema version or persisted key changed in B
+or H.
+
+- [x] 9.1 Schema (-A, -D, -F): `CountdownStepsSchema` (Before, thresholds strictly decreasing across
+      zero, the row named by its path), `ElementChangeSchema` (eight properties, one per property per
+      element per step), `ChangeTransitionSchema` (cut / fade, 300 ms default), `afterZero`,
+      `startsHidden`, the derived `countdown` marker on a text field. (`af99d0c2`; tests
+      `countdown-steps.test.ts`)
+- [x] 9.2 Runtime (-A, -D, -E, -F): `step-css.ts` (one attribute per crossing, inheriting custom
+      properties, the wrapper), `step-effects.ts` (picture swap, instance cues), `afterZero` in the
+      driver, `rehearseStep`; the single-file exporter collects a step's picture. (`bf44b535`; tests
+      `step-css.test.ts`, `countdown-after-zero.test.ts`, `countdown-steps-runtime.test.ts` — its
+      cascade-skip ablation goes red twice —, `step-export-parity.test.ts`,
+      `step-image-export.test.ts`)
+- [x] 9.3 Migration (-A): `migrateCountdownZones`, registered third in `SCENE_MIGRATIONS`; same
+      on-air result bar the two stated deviations (design.md §10.2); CEF-safe (`c6df4c2f`).
+- [x] 9.4 Designer, both doors (-A, -B, -D, -E, -F): steps from the countdown and from the element,
+      After zero with the Close fact, Starts hidden, the Preview's forced step. (`67101c3d`; tests
+      `countdown-steps.dom.test.ts`, e2e `countdown-steps.spec.ts`)
+- [x] 9.5 No user-visible "Azan" (-A §1). Sweep, two axes, every pathspec proved to match:
+      STRING (`azan`, `Azan`, `AZAN`, `adhan`, `اذان`, `أذان`, case-insensitive; files per pathspec
+      267 / 259 / 551 / 701 / 295 / 385) and COMPONENT (`ClockZonesSection`, `ZoneOverridesSection`,
+      `ZoneKeyPicker`, `applyAzanPreset`, `AZAN_PRESET`, `zones-azan-preset`, `zone-css`).
+      Before (`2bdd5ffa`): 16 hits in the Designer's source, ONE user-visible (the button
+      "Azan preset (60 / 30 / 10)"); 24 component hits. After: 0 user-visible; source keeps one
+      comment naming this change's directory; component hits 0 in code (two prose mentions in the
+      runtime README and a test header, both historical). Test fixtures keep an author's template
+      name `ساعت اذان` and a data key `azan` as DATA, not product copy; a test pins the absence in
+      the steps UI.
+- [x] 9.6 The target the operator sets, Designer half (-B, -C): the typed date and time control
+      (`ui/DateTimeInput.tsx`, three calendars, the Lunar adjustment per browser), `Target time` by
+      default, the default following the target, the pattern following the value. Measured in
+      Chrome: the date overflowed the Inspector at 200 % text until each box became a `.cg-field`.
+      (`a81b694c`; tests `date-time-input.dom.test.ts`, `countdown-steps.dom.test.ts` — 4 red under
+      ablation of the exposure and the sync —, e2e `date-time-input.spec.ts`)
+- [x] 9.7 The page re-targets from a time OR an ISO instant, any digit set (-C). (`8bede2c2`)
+- [ ] 9.8 CG Control half (-C): the shared control per row, the station-wide Lunar adjustment, the
+      bridge host's clock; on air only the row's `CG UPDATE`, off air state only; a passed target
+      stated, Take not refused.
+- [x] 9.9 The Steps dialog (-H): the Inspector keeps a summary; one dialog from both doors, held in
+      the store so an undo cannot close it (measured red in Chrome first); list with drag handle and
+      ↑ / ↓; `⋯` menus of words; the changes table; the rehearse strip on the canvas.
+      (`344184f4`; tests `steps-dialog.dom.test.ts`, e2e `steps-dialog.spec.ts` incl. 1280 × 720,
+      200 % text and RTL)
+- [x] 9.10 Local Windows e2e (non-authoritative): `countdown-steps.spec.ts`, `date-time-input.spec.ts`,
+      `steps-dialog.spec.ts` — 8 passed in system Chrome.
+- [ ] 9.11 The Linux `e2e` job RAN green on the pushed commit — run URL here.
+- [x] 9.12 Engine doc-sync: `packages/template-runtime/README.md` "Countdown STEPS" (and the gone
+      `zone-css` subpath), `docs/engines/overview.md`.
+- [ ] 9.13 `pnpm gate` green before the push; `openspec validate --strict` green.
