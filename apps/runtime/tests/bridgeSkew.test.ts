@@ -203,6 +203,35 @@ describe('B-153 — the bridge is asked what it can do, at connect', () => {
     // `CENTRAL-BRIDGE-01` — …and a real bridge of this build is this console's release.
     expect(runtime.link.versionMismatch(), 'a matched pair read as two releases').toBeNull();
   });
+
+  it('`DELTA-RUN-NEXT-VERSION-01-C` — a REAL bridge’s answer carries its machine clock to the console', async () => {
+    handle = await createBridge({
+      port: 0,
+      connection: {
+        servers: { A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 } },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: false,
+      },
+    });
+    runtime = new WebSocketRuntime(`ws://127.0.0.1:${String(handle.port)}`, {
+      createWebSocket: wsFactory,
+    });
+    await waitFor(() => runtime?.auth.capabilities() !== null);
+    // Same process, same machine: the bridge's reading is this one's.
+    expect(runtime.auth.capabilities()?.bridgeClock).toEqual(ipc.machineClock());
+  });
+
+  it('`DELTA-RUN-NEXT-VERSION-01-C` — a bridge that predates the clock says nothing, read as null', async () => {
+    const all = ipc.runtimeRequestChannelNames(ipc);
+    runtime = new WebSocketRuntime('ws://fake', {
+      createWebSocket: () =>
+        fakeBridge((channel) =>
+          channel === ipc.BridgeCapabilitiesChannel.name ? { channels: all } : 'unknown-channel',
+        ),
+    });
+    await waitFor(() => runtime?.auth.capabilities() !== null);
+    expect(runtime.auth.capabilities()?.bridgeClock).toBeNull();
+  });
 });
 
 // ── `CENTRAL-BRIDGE-01` (`R-068`) — another release than CG Bridge sends nothing ─────────────

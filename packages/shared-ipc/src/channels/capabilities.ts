@@ -106,8 +106,57 @@ export const BridgeCapabilitiesChannel = defineChannel(
      * — which it is (it predates `0.10`).
      */
     bridgeVersion: z.string().optional(),
+    /**
+     * `DELTA-RUN-NEXT-VERSION-01-C` §2 — **THE CLOCK OF THE MACHINE CG BRIDGE RUNS ON**, read when this
+     * answer is made: its IANA zone and its offset from UTC in minutes EAST (`+210` for Tehran).
+     *
+     * A countdown's time-of-day target is resolved on the playout side's clock, and a date and time
+     * is entered on the console's; when the two machines' zones differ, CG Control states both beside
+     * a countdown target field so nobody reads one for the other. OPTIONAL: a bridge that predates
+     * it cannot say, and the console then states nothing — never a guess.
+     */
+    clock: z
+      .object({
+        timeZone: z.string(),
+        offsetMinutes: z.number().int(),
+      })
+      .optional(),
   }),
 );
+
+/** The `clock` a capabilities answer may carry. */
+export type BridgeClock = NonNullable<z.infer<typeof BridgeCapabilitiesChannel.response>['clock']>;
+
+/**
+ * `DELTA-RUN-NEXT-VERSION-01-C` — THIS machine's clock, as `bridge.capabilities` carries it: the
+ * engine's IANA zone (`''` when the engine cannot name one) and the offset at `now`, minutes EAST.
+ * The ONE reading both sides make — CG Bridge for its answer, CG Control for its own side of the
+ * comparison — so the two can only differ when the machines do.
+ */
+export function machineClock(now: Date = new Date()): BridgeClock {
+  let timeZone = '';
+  try {
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    // An engine without Intl time zones: the offset still says which clock it is.
+  }
+  return { timeZone, offsetMinutes: -now.getTimezoneOffset() };
+}
+
+/** Do two machines keep the same clock — the same zone and the same offset right now? */
+export function sameClock(a: BridgeClock, b: BridgeClock): boolean {
+  return a.timeZone === b.timeZone && a.offsetMinutes === b.offsetMinutes;
+}
+
+/**
+ * A clock in the operator's words: `Asia/Tehran +03:30` (the zone left out when unnamed) — the
+ * offset spelled as an ISO offset is, so it reads the same as the stored values beside it.
+ */
+export function clockWords(clock: BridgeClock): string {
+  const m = Math.abs(clock.offsetMinutes);
+  const offset = `${clock.offsetMinutes < 0 ? '-' : '+'}${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  return clock.timeZone === '' ? offset : `${clock.timeZone} ${offset}`;
+}
 
 /** `0.10.0` → `0.10`; anything that is not `<major>.<minor>.<patch>` → `null`. */
 export function releaseLine(version: string | null | undefined): string | null {

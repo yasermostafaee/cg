@@ -1011,6 +1011,8 @@ export class WebSocketRuntime implements RuntimeBridge {
         setupPhase: caps.setup ?? null,
         // `R-081` — CG Bridge's release, for the connection check's Versions line.
         bridgeVersion: caps.bridgeVersion ?? null,
+        // `DELTA-RUN-NEXT-VERSION-01-C` — CG Bridge's machine clock; an older bridge says nothing.
+        bridgeClock: caps.clock ?? null,
       });
       const routed = new Set(channels);
       const missing = ipcChannels

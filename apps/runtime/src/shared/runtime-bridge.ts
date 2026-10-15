@@ -111,6 +111,7 @@ import type {
   CalendarGetChannel,
   CalendarSetChannel,
   CalendarSettings,
+  BridgeClock,
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
   ChannelSettingsState,
@@ -176,6 +177,12 @@ export interface AuthCapabilities {
    * check's Versions line. `null` — a bridge too old to say; absent — not read yet.
    */
   readonly bridgeVersion?: string | null;
+  /**
+   * `DELTA-RUN-NEXT-VERSION-01-C` — the clock of the machine CG Bridge runs on, as it told this
+   * console at connect. `null` — a bridge too old to say (the console then states no zone at all);
+   * absent — not read yet.
+   */
+  readonly bridgeClock?: BridgeClock | null;
 }
 
 /**

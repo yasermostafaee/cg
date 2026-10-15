@@ -655,6 +655,8 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       setupPhase: null,
       // `R-081` — CG Bridge's release, from the same answer, for the check's Versions line.
       bridgeVersion: caps.bridgeVersion ?? null,
+      // `DELTA-RUN-NEXT-VERSION-01-C` — this fake names no machine clock: read as null.
+      bridgeClock: caps.clock ?? null,
     });
     expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
   });
@@ -680,6 +682,8 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       setupPhase: null,
       // `R-081` — CG Bridge's release, as this fake (a current bridge) tells it.
       bridgeVersion: __CG_BUILD__.version,
+      // `DELTA-RUN-NEXT-VERSION-01-C` — no clock in the answer: the console states no zone.
+      bridgeClock: null,
     });
     expect(runtime.auth.state()).toEqual({ kind: 'off' });
   });

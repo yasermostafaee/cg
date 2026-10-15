@@ -163,6 +163,8 @@ import {
   CalendarGetChannel,
   CalendarSetChannel,
   type CalendarSettings,
+  machineClock,
+  type BridgeClock,
   ChannelSettingsChangedChannel,
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
@@ -4260,6 +4262,11 @@ export function buildRoutes(
     /** `CENTRAL-BRIDGE-01` — the release this bridge is, for `bridge.capabilities` (`0.10.0`). */
     bridgeVersion?: string;
     /**
+     * `DELTA-RUN-NEXT-VERSION-01-C` — this machine's clock for `bridge.capabilities`. Absent: read
+     * from the engine (`machineClock`); a test injects one to prove the field rides the answer.
+     */
+    clock?: () => BridgeClock;
+    /**
      * `CENTRAL-BRIDGE-01` (D4) — the ACTING principal's channels (`null`: every channel), read
      * inside a handler through the actor context. A dismissal reaches only what its console was
      * told. Absent — auth OFF, and the route-coverage guard — is every channel.
@@ -5381,6 +5388,12 @@ export function buildRoutes(
     })(),
     // `CENTRAL-BRIDGE-01` — the release a console compares by release line (`sameReleaseLine`).
     ...(paths.bridgeVersion !== undefined ? { bridgeVersion: paths.bridgeVersion } : {}),
+    /*
+      `DELTA-RUN-NEXT-VERSION-01-C` — THIS machine's clock, read as the answer is made (a zone's
+      offset moves at a daylight-saving change), so a console whose own zone differs states both
+      beside a countdown target field. The one reading both sides make (`machineClock`).
+    */
+    clock: (paths.clock ?? machineClock)(),
   }));
   routes.set(capabilities.channel.name, capabilities);
   return routes;
