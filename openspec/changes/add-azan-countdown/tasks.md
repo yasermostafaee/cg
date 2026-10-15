@@ -281,7 +281,10 @@ or H.
       200 % text and RTL)
 - [x] 9.10 Local Windows e2e (non-authoritative): `countdown-steps.spec.ts`, `date-time-input.spec.ts`,
       `steps-dialog.spec.ts` — 8 passed in system Chrome.
-- [ ] 9.11 The Linux `e2e` job RAN green on the pushed commit — run URL here.
+- [x] 9.11 The Linux `e2e` job RAN green on the pushed commit — https://github.com/yasermostafaee/cg/actions/runs/38701929266 (`39bbb5d4`, which carries it): `completed` / `success`; both heavy jobs RAN — Designer 333 passed / 13 skipped, CG Control 346 passed / 2 skipped, read from the run log; `countdown-steps`, `date-time-input`,
+      `steps-dialog` and CG Control's `countdown-target` (both tests) among the passed. The first run on `15be0821`
+      ([38668193061](https://github.com/yasermostafaee/cg/actions/runs/38668193061)) was red — a real `-0` clock defect
+      (`065a880d`) and the Designer suite past its 8 min budget (`e5df2a0f`).
 - [x] 9.12 Engine doc-sync: `packages/template-runtime/README.md` "Countdown STEPS" (and the gone
       `zone-css` subpath), `docs/engines/overview.md`.
 - [x] 9.13 `pnpm gate` green before the push; `openspec validate --strict` green. (the pre-push gate for

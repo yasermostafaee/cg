@@ -70,4 +70,4 @@
 - [x] 6.5 Red first, green after: `tests/e2e/timeline-sound.spec.ts` — red with the audition call
       removed while its positive control (the audio element exists, paused) passed; green with it.
 - [x] 6.6 `B-346` filed in `docs/prd/bugs-designer.md`; registry updated.
-- [ ] 6.7 Linux `e2e` RAN green on the pushed commit — run URL here.
+- [x] 6.7 Linux `e2e` RAN green on the pushed commit — https://github.com/yasermostafaee/cg/actions/runs/38701929266 (`39bbb5d4`, which carries it): `completed` / `success`; both heavy jobs RAN — Designer 333 passed / 13 skipped, CG Control 346 passed / 2 skipped, read from the run log; `timeline-sound.spec.ts` (2) among the passed.

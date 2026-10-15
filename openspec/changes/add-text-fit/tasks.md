@@ -35,8 +35,8 @@ Lane: **FULL** — a registered scene migration (schema), the on-air page's text
 - [x] 4.2 Measured on local CasparCG 2.5.0: before 1220 px of text in a 900 px box (spills); after
       47.28 px, 901 / 900; short name 59.97 px; long again 47.28 px; taken off air after
       (`201 INFO OK`, 0 layers). Screenshots: `Claude outputs/TEXT-FIT-01-casparcg-*.png`.
-- [ ] 4.3 Linux `e2e` RAN on a commit carrying the change — the A–H push `15be0821` carries
-      `ba494463` / `9e83ffe6` / `851a0bad`: run URL here once read.
+- [x] 4.3 Linux `e2e` RAN on a commit carrying the change — https://github.com/yasermostafaee/cg/actions/runs/38701929266 (`39bbb5d4`, which carries it): `completed` / `success`; both heavy jobs RAN — Designer 333 passed / 13 skipped, CG Control 346 passed / 2 skipped, read from the run log; `text-fit.spec.ts` among the
+      passed.
 
 ## 5. Docs
 

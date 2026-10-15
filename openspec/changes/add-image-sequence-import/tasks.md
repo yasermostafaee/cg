@@ -79,4 +79,5 @@
       for the sentence; `image-sequence-import-modal.dom.test.ts` for the callout — red with the
       guard ablated)
 - [x] 7.4 `B-345` filed in `docs/prd/bugs-designer.md`; registry updated.
-- [ ] 7.5 Linux `e2e` RAN green on the pushed commit — run URL here.
+- [x] 7.5 Linux `e2e` RAN green on the pushed commit — https://github.com/yasermostafaee/cg/actions/runs/38701929266 (`39bbb5d4`, which carries it): `completed` / `success`; both heavy jobs RAN — Designer 333 passed / 13 skipped, CG Control 346 passed / 2 skipped, read from the run log; `picker-held-input.spec.ts` (3) and
+      `image-sequence-import.spec.ts` (3) among the passed.
