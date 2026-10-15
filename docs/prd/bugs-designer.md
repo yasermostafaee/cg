@@ -4313,3 +4313,23 @@ of 1920×1080, measured: 300 frames peaked at 459 MB, 900 at 589 MB), refused in
 **Acceptance:** e2e `image-sequence-scattered.spec.ts` — both menu items, 38 far-apart pictures: a sentence, no
 crash — red on the old code (no answer in 15 s), green now; unit tests in `image-sequence.test.ts` (red with the
 refusal ablated); the modal's budget refusal in `image-sequence-import-modal.dom.test.ts`.
+
+## [~] B-349 — An export that failed said nothing and left an EMPTY `.vcg` behind ⟨priority: high — the author believes a file was written; CG Control later calls it a "Corrupted zip"⟩ — FILED 2026-10-15 by `BOOK-EXPORT-01` (the owner's `telavat.vcg`, 0 bytes) · `openspec/changes/book-export-answers/`
+
+**Repro / Actual:** a Sequence filled by `Add folder…`, `Export (.vcg)`, a name in the save dialog → no message;
+the file is 0 bytes. **Cause (measured, two):** (1) the owner's Designer dev server (port 4000, running since
+2026-10-14 13:36) served an `Exporter.ts` whose import list predated its body, so `preflight` threw
+`ReferenceError: collectAudioElements is not defined` — on EVERY export, a book or not (an empty composition did the
+same); a fresh dev server and the built app export the same book (29 MB, 1.5 s). That is the server, not the code.
+(2) The product's own defect: Chrome's save dialog creates the chosen file EMPTY when the name is chosen, `runDisk`
+then ran `produce`, and `CompositionActionBar.exportVcg` had no catch — an unhandled rejection: no word, and the empty
+file left on disk. Also silent: a book page whose bytes could not be read was skipped (`continue`), so a book went to
+air with a page missing; and the toolbar's Save / Save As had the same missing catch. **Fix:** the template is
+validated BEFORE the save dialog (an error makes no file); after it, every throw is answered with the cause in the
+author's words, the element at fault selected, and what became of the file — removed only when it is EMPTY and the
+browser can, checked by reading it back; else "<file> was left empty; delete it" or "was not changed". The button
+reads `Exporting… 60 %` while it works and both buttons wait; a written file is named with its size; a failure is held
+until dismissed; a page that cannot be read fails the export naming it. No Cancel: the pack is one call with no point
+to stop at. **Acceptance:** e2e `book-export.spec.ts` (the real folder pick, a real OPFS file handle made empty at
+the pick as Chrome's is) — red at HEAD (no answer at all), green now; `book-export.test.ts`,
+`export-answer.dom.test.ts`.

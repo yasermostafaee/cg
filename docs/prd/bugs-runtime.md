@@ -13784,3 +13784,34 @@ memory. Corrective resend (on by default, `redundancy-adapter.ts:142`) replays e
 divergences pile up within 30 s (`:535-559`); the journal keeps up to 500 lines from the last 5 minutes
 (`journal.ts:84-85`). No AMCP line-length guard exists (`amcp-guard.ts`, `caspar-client`). **Acceptance (when fixed):**
 a replay sends no line over a stated size, or the sizes of B-333 to B-339 are bounded first.
+
+## [~] B-350 — Importing an empty or broken `.vcg` read the zip library's text: "Unpack failed: End of data reached … Corrupted zip ?" ⟨priority: medium — the operator could not tell what was wrong or what to do⟩ — FILED 2026-10-15 by `BOOK-EXPORT-01` · `openspec/changes/book-export-answers/`
+
+**Repro / Actual:** `Import a .vcg` → the owner's 0-byte `telavat.vcg` → `"telavat.vcg" failed verification: Unpack
+failed: End of data reached (data length = 0, asked index = 4). Corrupted zip ?`. **Cause:** `produceTemplateDelivery`
+printed `verify`'s errors verbatim, and `verify` could not say WHY a package failed. **Fix:** `unpack` throws
+`VcgUnreadableError` / `VcgNotATemplateError`; `verify` reports `failure` (unreadable, not-a-template, invalid,
+integrity, trust). An empty file reads `"<file>" is empty (0 bytes); the export did not finish. Export it again from the
+Designer.`; an unreadable or changed one `"<file>" is damaged or not a CG template.`, the technical text in the log
+(`console.warn`). A template that parses wrong keeps its technical sentence: it may be a newer build's.
+**Acceptance:** `template-delivery.test.ts` (red with the checks taken out), `verify.test.ts`, the e2e
+`import-vcg-template.spec.ts` (empty) and the three specs that import `broken.vcg`.
+
+## [~] B-351 — A template larger than CG Bridge's frame imported as "Bridge disconnected — command rejected" ⟨priority: high — a book of more than ~45 MB of pictures can never reach air, and the sentence blames the bridge⟩ — FILED 2026-10-15 by `BOOK-EXPORT-01` · `openspec/changes/book-export-answers/`
+
+**Repro / Actual (measured on a CG Control and a real CG Bridge of its own):** a book of 30 PNG pages (141 MB)
+exported by the Designer → `Import a .vcg` → the page socket closed → `"png30.vcg" Bridge disconnected — command
+rejected. Not sent to CasparCG.` A 29 MB book imported. **Cause:** CG Control renders a `.vcg` into ONE page with
+every picture inlined as base64 (the page for 29 MB of pictures was 39.7 MB: their base64 plus 0.92 MiB) and sends it
+in ONE `templates.import` frame; CG Bridge closes the socket on a frame past 64 MiB (`B-038`). And the Designer's
+single-file size warning told the author the opposite: "the .vcg package has no such limit". **Fix:** one frame cap
+for both ends (`WS_MAX_FRAME_BYTES` in `@cg/shared-ipc`); CG Control never writes a frame past it
+(`BridgeFrameTooLargeError`, the link stays up) and refuses the import with its size: `"<file>" is too large for CG
+Bridge: its page is 180 MB, and one template can be at most 64 MB. Export it again from the Designer with fewer or
+smaller pictures.`; the Designer refuses `Export .vcg` before the save dialog past `TEMPLATE_MEDIA_MAX_BYTES` (45 MB:
+64 MiB less 4 MiB for the page, before base64): `"<element>" makes this template too large for CG Control: 150
+pictures, 672 MB of pictures and media; one template can carry at most 45 MB. Use fewer or smaller pictures.` The
+size warning now says it applies to both. **Not changed:** the cap itself (a larger book needs its pages delivered as
+files or loaded by the operator — an owner question). **Acceptance:** `WebSocketRuntime.test.ts` against a real bridge
+(red with the guard removed: `BridgeDisconnectedError`), `template-delivery.test.ts`, `book-export.test.ts`,
+`ws-frame-size.test.ts`.

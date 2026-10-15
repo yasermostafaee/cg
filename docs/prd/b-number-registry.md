@@ -3467,3 +3467,15 @@ Measured free before use: `git grep -q -e "## \[.\] B-348"` on all 10 local and 
 returned nothing; control: the same sweep found `B-347` on 2 refs; no stash.
 
 ⇒ **Next free after this entry is `B-349`**, **`D-166`**, **`P-068`**, **`R-102`** and **`C-049`**.
+
+### 2026-10-15 — `BOOK-EXPORT-01` takes `B-349`, `B-350` and `B-351`
+
+- `B-349` — an export that failed said nothing and left an empty `.vcg` behind — [bugs-designer.md](bugs-designer.md).
+- `B-350` — importing an empty or broken `.vcg` read the zip library's text — [bugs-runtime.md](bugs-runtime.md).
+- `B-351` — a template larger than CG Bridge's frame imported as "Bridge disconnected" —
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: `git grep -q -e "## \[.\] B-349"` (and `B-350`, `B-351`) on all 10 local and
+remote-tracking refs after `git fetch` returned nothing; control: the same sweep found `B-348` on 2 refs; no stash.
+
+⇒ **Next free after this entry is `B-352`**, **`D-166`**, **`P-068`**, **`R-102`** and **`C-049`**.
