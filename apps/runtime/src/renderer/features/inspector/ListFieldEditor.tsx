@@ -112,7 +112,20 @@ const styles = {
    * must be allowed to take its own line then.
    */
   addWrap: { marginTop: 'var(--r-space-1)' },
+  pictures: { margin: 0, paddingInlineStart: 'var(--r-space-4)', fontSize: 'var(--r-text-sm)' },
 } as const;
+
+/**
+ * 🔴 `B-353` — the sentence a list of PICTURES gets when it reaches this editor instead of the book's
+ * (`PageListEditor`): a template imported before CG Control read such a list as a book. A refusal
+ * with its remedy, in the operator's words.
+ */
+export const PICTURE_LIST_SENTENCE = 'These are pictures. Import the template again to turn them.';
+
+/** A picture item (`{ kind: 'image', … }`): a page of a book, never text to type. */
+function isPictureItem(item: ListItem): boolean {
+  return item['kind'] === 'image';
+}
 
 export function ListFieldEditor({
   fieldId,
@@ -164,6 +177,29 @@ export function ListFieldEditor({
     if (to !== dragIndex) onStage(moveItem(items, dragIndex, to));
     endDrag();
   };
+
+  /*
+    🔴 `B-353` — **NEVER A BLANK TEXT BOX FOR A PICTURE.** The owner's book reached this editor (its
+    page list unread at an earlier import) and showed six EMPTY boxes: a picture has no `text`, and an
+    Update from them would have replaced his pages with empty text on air. Pictures are named, read
+    only, and nothing is staged.
+  */
+  if (items.some(isPictureItem)) {
+    return (
+      <div style={styles.list} aria-label={`${fieldId} items`}>
+        <p style={styles.empty} data-testid="list-pictures">
+          {PICTURE_LIST_SENTENCE}
+        </p>
+        <ol style={styles.pictures} aria-label={`${fieldId} pictures`}>
+          {items.map((item) => (
+            <li key={item.id}>
+              <bdi>{typeof item['name'] === 'string' ? item['name'] : item.id}</bdi>
+            </li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.list} aria-label={`${fieldId} items`}>

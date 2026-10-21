@@ -8,6 +8,7 @@ import type {
 } from './elements.js';
 import type { Composition, Layer, Scene } from './scene.js';
 import { migrateScenePaths } from './path-migration.js';
+import { migratePageListMarks } from './page-lists.js';
 import { colorPropertiesOf, type ElementChange } from './element-changes.js';
 
 /**
@@ -28,6 +29,8 @@ export const SCENE_MIGRATIONS: readonly ((scene: Scene) => Scene)[] = [
   migrateTextFit,
   // `DELTA-RUN-NEXT-VERSION-01-A` — a countdown's colour zones become steps that change elements.
   migrateCountdownZones,
+  // `B-353` — a list field bound to a picture sequence is a page list, whatever its stored mark says.
+  migratePageListMarks,
 ];
 
 /** Run every registered migration over `scene`. Identity-preserving (see above). */

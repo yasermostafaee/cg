@@ -218,17 +218,30 @@ function FieldMeta({
           checked={field.required}
           onChange={(v) => patch({ required: v })}
         />
-        {/* TEXT-DIGITS-01 — a list's items are typed text: the one Digits control. */}
-        <DigitsField
-          value={fieldDigitsOf(field)}
-          options={FieldDigitsSchema.options}
-          onCommit={(v) => patch({ digits: v })}
-        />
-        <FileSourceRow field={field} onChange={(v) => patch({ allowFileSource: v })} />
-        <p className={s.hint}>
-          The field’s items are the {element.type}’s Items section; operators edit them live in the
-          preview’s data form.
-        </p>
+        {/* 🔴 `B-353` — a PAGE LIST's items are pictures: there is no text to give digits to and no
+            text file to fill it from. "Allow file source" — a grant for TEXT — is what the owner
+            ticked on his book, hoping for CG Control's Load folder…, and the rebuild it ran dropped
+            the book's mark. A book says where its pages come from instead. */}
+        {field.pages === true ? (
+          <p className={s.hint} data-testid="page-list-hint">
+            A book: operators turn its pages in CG Control, and load new ones there with Load
+            folder….
+          </p>
+        ) : (
+          <>
+            {/* TEXT-DIGITS-01 — a list's items are typed text: the one Digits control. */}
+            <DigitsField
+              value={fieldDigitsOf(field)}
+              options={FieldDigitsSchema.options}
+              onCommit={(v) => patch({ digits: v })}
+            />
+            <FileSourceRow field={field} onChange={(v) => patch({ allowFileSource: v })} />
+            <p className={s.hint}>
+              The field’s items are the {element.type}’s Items section; operators edit them live in
+              the preview’s data form.
+            </p>
+          </>
+        )}
       </>
     );
   }

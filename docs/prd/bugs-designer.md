@@ -4333,3 +4333,24 @@ until dismissed; a page that cannot be read fails the export naming it. No Cance
 to stop at. **Acceptance:** e2e `book-export.spec.ts` (the real folder pick, a real OPFS file handle made empty at
 the pick as Chrome's is) — red at HEAD (no answer at all), green now; `book-export.test.ts`,
 `export-answer.dom.test.ts`.
+
+## [~] B-353 — A book lost its page-list mark in the Designer, and CG Control showed six EMPTY text boxes instead of its pages ⟨priority: high — the owner's book could not be turned on air, and an Update from the boxes would have replaced the pages with empty text⟩ — FILED 2026-10-16 by `RUN-NEXT-VERSION-02` (the owner's `telavat2.vcg`, row 98) · `openspec/changes/book-page-lists/`
+
+**Repro / Actual:** a Sequence, `Add folder…` (87 JPGs), a Data key `a1`, "Allow file source" ticked, `Export (.vcg)`;
+in CG Control the row's Inspector reads `FIELDS · a1` with empty text boxes — no book bar, no `Load folder…`.
+**Cause (read from the file, then reproduced):** `a1` is a `list` bound by `sequence-items` to the 87 pictures with no
+`pages` mark, and `pageListsOf` required the mark. `a1`'s keys come in `rebuildField`'s order, so `rebuildField` wrote
+it last: it rebuilds a list field from scratch and did not carry `pages` — any meta edit (Allow file source, Title,
+Description, Required, Digits) dropped it. A second silent path beside it: `setSequenceItems` DROPPED the key when the
+items changed text ↔ pictures, so a key set before `Add folder…` (which replaces the three text samples) vanished.
+A re-adopted orphan list and a list bound from the canvas never took the mark at all. The file's `advance: 'auto'` was
+set by the owner after `Add folder…` (its page ids are `addSequencePictures`', which sets `manual`). **Fix:** one rule
+in `@cg/shared-schema` — a list bound to a sequence's items is a page list exactly when every item is a picture
+(`isPageListField`) — kept by every Designer door and by a registered scene migration; a key survives a text ↔
+pictures change; a stepped picture sequence with no key exports with a page list of its own (BOOK-EXPORT Q2); CG
+Control applies the same at import (the owner's file needs only a re-import); a list of pictures in the generic editor
+is named read only and stages nothing; a book on advance auto is said in the Designer's Inspector (CG Bridge owns the
+page number and sends absolute pages, so CG Control's count cannot follow a page that turns itself). **Acceptance:**
+e2e `telavat2-book.spec.ts` (the file's exact shape, 87 pages, through Import a .vcg) — red on a CG Control built from
+HEAD's import, green now; `page-lists.test.ts`, `sequence-pages.test.ts`, `book-inspector.dom.test.ts`,
+`telavat2-book.test.ts`, `listFieldPictures.test.ts`.

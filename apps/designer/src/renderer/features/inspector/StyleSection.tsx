@@ -14,6 +14,7 @@ import {
   NumberFieldDigitsSchema,
   repeaterRowLimit,
   SequenceEdgeSchema,
+  sequenceItemsBinding,
   sequenceStepsByOperator,
 } from '@cg/shared-schema';
 import type {
@@ -2921,6 +2922,11 @@ function SequenceSections({
   const dataBound = scene !== null && elementDataField(scene, id) !== undefined;
   // D-163 — the book's pages: how many, and the ONE fit they are drawn at.
   const pageCount = element.items.filter((it) => it.kind === 'image').length;
+  // `B-353` — a BOOK: all pictures, stepped by the operator — what CG Control shows a book bar for.
+  const isBook =
+    pageCount > 0 &&
+    sequenceItemsBinding(element.items) === 'pages' &&
+    sequenceStepsByOperator(element);
   const itemsEditor = (
     <ListItemsEditor
       items={element.items}
@@ -3029,6 +3035,17 @@ function SequenceSections({
           options={['auto', 'manual'] as const}
           onCommit={(advance) => designerStore.updateElement(id, { advance } as Partial<Element>)}
         />
+        {/* 🔴 `B-353` (RUN-NEXT-VERSION-02 1.1.4) — A BOOK ON AUTO DOES NOT HOLD TOGETHER, so it is
+            said here rather than shipped quietly. The page turns itself every dwell, but CG Bridge
+            owns the page NUMBER and sends an ABSOLUTE page on each press (`__cg.page`), and nothing
+            tells it about the turns the page made alone: CG Control's `1 / 87` falls behind and its
+            next Next sends the page after the last one IT sent — back from where the air is. CG
+            Control still shows the book bar (the owner's decision); the author is told here. */}
+        {isBook && element.advance === 'auto' && (
+          <p className={dds.hint} data-testid="book-auto-advance">
+            {`Auto turns this book by itself every ${String(element.defaultDwellMs / 1000)} s, but CG Control counts only the operator's turns: its page number falls behind, and its Next goes to the page after the last one it sent. Set advance to manual for a book the operator turns.`}
+          </p>
+        )}
         <NumberField
           label="default dwell"
           value={element.defaultDwellMs / 1000}

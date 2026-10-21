@@ -4,6 +4,7 @@ import {
   CG_RUNTIME_VERSION,
   aggregateCompositionFields,
   isPathKeyframeValue,
+  withPageLists,
   type AnchorPoint,
   type AssetEntry,
   type BindingTransform,
@@ -449,10 +450,16 @@ export class Exporter {
    * (native save dialog → file handle write). Throws when preflight
    * surfaces an error-severity issue.
    */
-  async produce(scene: Scene): Promise<{ vcg: Uint8Array; defaultFilename: string }> {
+  async produce(authored: Scene): Promise<{ vcg: Uint8Array; defaultFilename: string }> {
     this.progress.emit({ step: 'validate', progress: 0.02 });
-    const first = (await this.preflight(scene)).find((i) => i.severity === 'error');
+    const first = (await this.preflight(authored)).find((i) => i.severity === 'error');
     if (first !== undefined) throw new ExportBlockedError(first);
+    /*
+      🔴 `B-353` — **THE PACKAGE CARRIES ITS BOOKS AS BOOKS.** Every page-list mark agrees with the one
+      rule, and a picture sequence the operator steps is a page list even when the author gave it no
+      Data key (BOOK-EXPORT Q2). The package only: the author's project is never given a field.
+    */
+    const scene = withPageLists(authored);
 
     /*
       `BOOK-EXPORT-01` — the progress follows the WORK, not the step count: reading the media is

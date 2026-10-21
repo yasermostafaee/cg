@@ -82,10 +82,16 @@ describe('D-163 — hasNextStep reads it', () => {
   });
 });
 
+/** A book's pages: `B-353` — a page list is one whose sequence holds pictures (`isPageListField`). */
+const PICTURES = [
+  { kind: 'image', id: 'p1', assetId: 'asset-1', name: 'page1.jpg' },
+  { kind: 'image', id: 'p2', assetId: 'asset-2', name: 'page2.jpg' },
+];
+
 describe('D-163 — a page list says when the operator does not step it', () => {
   it('🔴 the list is still the operator’s to load, marked step: false', () => {
     const book = (over: Record<string, unknown>) =>
-      scene([sequence('book', { repeat: 1, ...over })], {
+      scene([sequence('book', { repeat: 1, items: PICTURES, ...over })], {
         fields: [
           { id: 'pages', label: 'Pages', required: false, type: 'list', default: [], pages: true },
         ],
@@ -114,7 +120,7 @@ describe('🔴 B-249 — pageListsOf resolves the ENTRY by id, and a miss is NOT
               visible: true,
               locked: false,
               blendMode: 'normal',
-              children: [sequence('book', { repeat: 1 })],
+              children: [sequence('book', { repeat: 1, items: PICTURES })],
             },
           ],
           fields: [

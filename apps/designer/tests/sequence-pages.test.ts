@@ -110,6 +110,145 @@ describe('D-163 — adding pictures to a sequence', () => {
   });
 });
 
+/**
+ * 🔴 `B-353` — **EVERY ORDER OF CLICKS ENDS IN A PAGE LIST.** The owner's `telavat2.vcg` reached CG
+ * Control with a Data key and no `pages` mark. Each case below is one order an author can work in; the
+ * rule is the one in `@cg/shared-schema` (`isPageListField`): a list bound to a sequence's items is a
+ * page list exactly when every item is a picture.
+ */
+describe('🔴 B-353 — a picture sequence’s Data key is a page list, whatever the order', () => {
+  function keyField(id: string) {
+    const st = designerStore.get();
+    return editSceneOf(st.scene, st.activeCompositionId)!.fields.find((f) => f.id === id);
+  }
+  function book(): void {
+    freshScene();
+    designerStore.addElement(defaultSequence('sq', 0, 0));
+  }
+
+  it('key set BEFORE `Add folder…`: the samples are replaced and the key is KEPT, as a page list', () => {
+    book();
+    expect(designerStore.setElementDataKey('sq', 'a1')).toBe(true);
+    expect(keyField('a1')).not.toHaveProperty('pages'); // three text samples: a text list
+    designerStore.addSequencePictures('sq', pages(3));
+    expect(keyField('a1')).toMatchObject({ pages: true, default: sequenceOf('sq').items });
+  });
+
+  it('key set AFTER the pictures, then "Allow file source" ticked: still a page list', () => {
+    book();
+    designerStore.addSequencePictures('sq', pages(3));
+    designerStore.setElementDataKey('sq', 'a1');
+    designerStore.setElementFieldMeta('sq', { allowFileSource: true });
+    // telavat2's `a1`, exactly — and now with its mark.
+    expect(keyField('a1')).toMatchObject({ allowFileSource: true, pages: true });
+  });
+
+  it('Title, Description, Required and Digits edits keep the mark', () => {
+    book();
+    designerStore.addSequencePictures('sq', pages(2));
+    designerStore.setElementDataKey('sq', 'a1');
+    designerStore.setElementFieldMeta('sq', { title: 'کتاب' });
+    designerStore.setElementFieldMeta('sq', { description: 'صفحات' });
+    designerStore.setElementFieldMeta('sq', { required: true });
+    designerStore.setElementFieldMeta('sq', { digits: 'latin' });
+    expect(keyField('a1')).toMatchObject({ label: 'کتاب', required: true, pages: true });
+  });
+
+  it('`Manage pages…` edits after the key (remove, reorder) keep the mark and the pages in step', () => {
+    book();
+    designerStore.addSequencePictures('sq', pages(3));
+    designerStore.setElementDataKey('sq', 'a1');
+    const [p1, p2, p3] = sequenceOf('sq').items;
+    designerStore.setSequenceItems('sq', [p3!, p1!] as never);
+    expect(keyField('a1')).toMatchObject({ pages: true });
+    expect((keyField('a1') as { default: { id: string }[] }).default.map((i) => i.id)).toEqual([
+      p3!.id,
+      p1!.id,
+    ]);
+    expect(p2).toBeDefined();
+  });
+
+  it('changing Advance changes nothing about the key', () => {
+    book();
+    designerStore.addSequencePictures('sq', pages(2));
+    designerStore.setElementDataKey('sq', 'a1');
+    designerStore.updateElement('sq', { advance: 'auto' } as never);
+    expect(keyField('a1')).toMatchObject({ pages: true });
+  });
+
+  it('an ORPHANED list re-adopted by a picture sequence becomes its page list, with its pages', () => {
+    book();
+    designerStore.addField({
+      id: 'a1',
+      label: 'a1',
+      required: false,
+      type: 'list',
+      default: [{ id: 'old', text: 'متن' }],
+    });
+    designerStore.addSequencePictures('sq', pages(2));
+    expect(designerStore.setElementDataKey('sq', 'a1')).toBe(true);
+    expect(keyField('a1')).toMatchObject({ pages: true, default: sequenceOf('sq').items });
+  });
+
+  it('a list bound FROM THE CANVAS to a picture sequence becomes its page list, with its pages', () => {
+    book();
+    designerStore.addSequencePictures('sq', pages(2));
+    designerStore.addField({ id: 'a1', label: 'a1', required: false, type: 'list', default: [] });
+    designerStore.addBinding({
+      fieldId: 'a1',
+      target: { kind: 'sequence-items', elementId: 'sq' },
+    });
+    expect(keyField('a1')).toMatchObject({ pages: true, default: sequenceOf('sq').items });
+  });
+
+  it('pictures replaced by text: the key is kept and is a text list again', () => {
+    book();
+    designerStore.addSequencePictures('sq', pages(2));
+    designerStore.setElementDataKey('sq', 'a1');
+    designerStore.setSequenceItems('sq', [{ id: 't', text: 'خبر' }]);
+    expect(keyField('a1')).toEqual(
+      expect.objectContaining({ type: 'list', default: [{ id: 't', text: 'خبر' }] }),
+    );
+    expect(keyField('a1')).not.toHaveProperty('pages');
+  });
+
+  it('an old project re-opened with telavat2’s field gets its mark back, and opens clean', () => {
+    freshScene();
+    const st = designerStore.get();
+    const compId = st.activeCompositionId!;
+    const seq = {
+      ...defaultSequence('sq', 0, 0),
+      items: [{ kind: 'image', id: 'p1', assetId: 'a' }],
+    };
+    const broken = {
+      ...st.scene!,
+      compositions: st.scene!.compositions!.map((c) =>
+        c.id !== compId
+          ? c
+          : {
+              ...c,
+              layers: [{ ...c.layers[0]!, children: [seq] }],
+              fields: [
+                {
+                  id: 'a1',
+                  label: 'a1',
+                  required: false,
+                  type: 'list',
+                  default: seq.items,
+                  digits: 'persian',
+                  allowFileSource: true,
+                },
+              ],
+              bindings: [{ fieldId: 'a1', target: { kind: 'sequence-items', elementId: 'sq' } }],
+            },
+      ),
+    } as unknown as Scene;
+    designerStore.setScene(broken, null);
+    expect(keyField('a1')).toMatchObject({ pages: true });
+    expect(designerStore.get().dirty).toBe(false);
+  });
+});
+
 describe('D-163 — the pages travel in the .vcg', () => {
   const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
   const meta = (i: number): AssetMeta => ({
@@ -172,5 +311,85 @@ describe('D-163 — the pages travel in the .vcg', () => {
     expect(backSeq.items).toEqual(seq.items);
     expect(backSeq.imageFit).toBe('cover');
     expect(manifest.assetIndex.map((e) => e.id).sort()).toEqual(['asset-1', 'asset-2']);
+  });
+
+  /** The package `produce` writes for `scene`, unpacked. */
+  async function exported(scene: Scene): Promise<Scene> {
+    const exporter = new Exporter({
+      assets,
+      cgJs: 'export const createRuntime = () => ({ ready: Promise.resolve() }); export const installCasparGlobals = () => {};',
+      cgCss: 'html{background:transparent}',
+    });
+    return (await unpack((await exporter.produce(scene)).vcg)).scene;
+  }
+
+  function bookScene(fields: unknown[], bindings: unknown[]): Scene {
+    const seq = {
+      ...defaultSequence('sq', 0, 0),
+      items: [
+        { kind: 'image', id: 'p1', assetId: 'asset-1', name: 'page1.png' },
+        { kind: 'image', id: 'p2', assetId: 'asset-2', name: 'page2.png' },
+      ],
+    };
+    return {
+      schemaVersion: 1,
+      id: 's-book',
+      name: 'Book',
+      templateType: 'custom',
+      resolution: { width: 1920, height: 1080 },
+      frameRate: 50,
+      safeAreas: { title: 10, action: 5 },
+      frameRange: { in: 0, out: 50 },
+      editorBackdrop: 'transparent',
+      layers: [
+        {
+          id: 'L1',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [seq],
+        },
+      ],
+      compositions: [],
+      fields,
+      bindings,
+      fonts: [],
+      metadata: { createdAt: '2026-10-14T00:00:00.000Z', updatedAt: '2026-10-14T00:00:00.000Z' },
+    } as unknown as Scene;
+  }
+
+  it('🔴 B-353 (BOOK-EXPORT Q2) — a book with NO Data key exports with a page list of its own', async () => {
+    const back = await exported(bookScene([], []));
+    expect(back.fields).toEqual([
+      expect.objectContaining({
+        id: 'pages-sq',
+        label: 'Sequence',
+        type: 'list',
+        pages: true,
+      }),
+    ]);
+    expect(back.bindings).toEqual([
+      { fieldId: 'pages-sq', target: { kind: 'sequence-items', elementId: 'sq' } },
+    ]);
+  });
+
+  it('🔴 B-353 — a key that lost its mark (telavat2’s `a1`) is exported marked', async () => {
+    const a1 = {
+      id: 'a1',
+      label: 'a1',
+      required: false,
+      type: 'list',
+      default: [
+        { kind: 'image', id: 'p1', assetId: 'asset-1', name: 'page1.png' },
+        { kind: 'image', id: 'p2', assetId: 'asset-2', name: 'page2.png' },
+      ],
+      digits: 'persian',
+      allowFileSource: true,
+    };
+    const back = await exported(
+      bookScene([a1], [{ fieldId: 'a1', target: { kind: 'sequence-items', elementId: 'sq' } }]),
+    );
+    expect(back.fields).toEqual([{ ...a1, pages: true }]);
   });
 });

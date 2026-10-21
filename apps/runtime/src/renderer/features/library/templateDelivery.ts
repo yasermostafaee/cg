@@ -19,6 +19,7 @@ import {
   templateTimingOf,
   runtimeShortfall,
   runtimeShortfallMessage,
+  withPageLists,
   type Manifest,
   type Position,
 } from '@cg/shared-schema';
@@ -264,12 +265,20 @@ export async function produceTemplateDelivery(
     throw new Error(`failed verification: ${result.errors.join('; ')}`);
   }
 
-  let scene, manifest, files;
+  let unpacked, manifest, files;
   try {
-    ({ scene, manifest, files } = await unpack(bytes));
+    ({ scene: unpacked, manifest, files } = await unpack(bytes));
   } catch (err) {
     throw new Error(`could not be unpacked: ${err instanceof Error ? err.message : String(err)}`);
   }
+  /*
+    🔴 `B-353` — **A PACKAGE'S BOOKS ARE READ AS BOOKS, WITHOUT A RE-EXPORT.** The owner's
+    `telavat2.vcg` carries a Data key bound to 87 pictures without its `pages` mark (the Designer
+    dropped it), and a book with no Data key at all carries no field to turn. The one call the
+    Designer's export makes is made again here, before anything is derived — the field form, the
+    page lists the bridge turns, and the page itself — so every one of them agrees.
+  */
+  const scene = withPageLists(unpacked);
 
   /*
     🔴 `B-196` — THE ONE PLACE A PACKAGE FROM A NEWER BUILD IS REFUSED, WITH A SENTENCE.

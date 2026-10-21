@@ -3,12 +3,14 @@ import {
   fieldDigitsOf,
   fieldTakesFileSource,
   sequenceItemsBinding,
+  withPageListMark,
   type DynamicField,
   type Element,
   type FieldBinding,
   type FieldDigits,
   type ListItem,
   type Scene,
+  type SequenceElement,
 } from '@cg/shared-schema';
 import { parseLocalizedNumber } from '@cg/text-shaping';
 import { current, set } from '../store-core.js';
@@ -151,7 +153,17 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
   // through the items editor (`setTickerItems`), not this meta patch.
   if (field.type === 'list') {
     // `TEXT-DIGITS-01` — a list's items are typed text: its Digits choice is carried like a text's.
-    return { ...base, type: 'list', default: field.default, ...textDigits, ...grant };
+    // 🔴 `B-353` — and a PAGE LIST stays one. This line rebuilt it without its `pages` mark, so the
+    // owner's book lost it the moment "Allow file source" was ticked (`telavat2.vcg`: its `a1` has
+    // exactly this function's key order), and CG Control drew six empty text boxes.
+    return {
+      ...base,
+      type: 'list',
+      default: field.default,
+      ...textDigits,
+      ...grant,
+      ...(field.pages === true ? { pages: true as const } : {}),
+    };
   }
 
   const fieldType = patch.fieldType ?? (field.type === 'number' ? 'number' : 'text');
@@ -250,6 +262,38 @@ function isConvBinding(b: FieldBinding): boolean {
 /** The element id a convenience binding drives ('' when not a conv binding). */
 function convElementId(b: FieldBinding): string {
   return isConvBinding(b) && 'elementId' in b.target ? b.target.elementId : '';
+}
+
+/** A sequence's items as a list value: a copy of each (stable ids, every open key kept). */
+function listItemsOf(items: SequenceElement['items']): ListItem[] {
+  return items.map((i) => ({ ...i }) as ListItem);
+}
+
+/**
+ * 🔴 `B-353` — the active document's fields once `binding` is added: a list field bound (from the
+ * canvas) to a sequence's items takes the page-list mark those items call for, and a book given an
+ * EMPTY list takes its pages as the default — an empty default would empty the book on air. Any
+ * other binding leaves the fields as they are (the same array).
+ */
+function fieldsMarkedFor(
+  scene: Scene,
+  fields: readonly DynamicField[],
+  binding: FieldBinding,
+): DynamicField[] {
+  const target = binding.target;
+  if (target.kind !== 'sequence-items') return [...fields];
+  const found = locate(scene, target.elementId);
+  const el = found === null ? undefined : found.layer.children[found.elIdx];
+  const field = fields.find((f) => f.id === binding.fieldId);
+  if (el === undefined || el.type !== 'sequence' || field === undefined || field.type !== 'list') {
+    return [...fields];
+  }
+  const seeded =
+    field.default.length === 0 && sequenceItemsBinding(el.items) === 'pages'
+      ? { ...field, default: listItemsOf(el.items) }
+      : field;
+  const marked = withPageListMark(seeded, el);
+  return fields.map((f) => (f.id === field.id ? marked : f));
 }
 
 /**
@@ -354,7 +398,12 @@ export const fieldsSlice = {
     );
     if (duplicate) return;
     const bindings = [...doc.bindings, binding];
-    set({ scene: withActiveFieldData(current.scene, { bindings }) });
+    set({
+      scene: withActiveFieldData(current.scene, {
+        fields: fieldsMarkedFor(current.scene, doc.fields, binding),
+        bindings,
+      }),
+    });
   },
 
   /**
@@ -446,7 +495,25 @@ export const fieldsSlice = {
       // Re-adopt an orphaned field (keep its config); otherwise create a fresh
       // one seeded from the element's current content.
       if (existing !== undefined) {
-        set({ scene: withActiveFieldData(current.scene, { bindings: [...bindings, binding] }) });
+        // 🔴 `B-353` — an adopted list takes the page-list mark its sequence's items call for (a
+        // book's default IS its pages, so a picture sequence's are taken too).
+        const adopted =
+          existing.type === 'list' && el !== undefined && el.type === 'sequence'
+            ? withPageListMark(
+                seqBinding === 'pages' ? { ...existing, default: listItemsOf(el.items) } : existing,
+                el,
+              )
+            : existing;
+        const fields =
+          adopted === existing
+            ? doc.fields
+            : doc.fields.map((f) => (f.id === trimmed ? adopted : f));
+        set({
+          scene: withActiveFieldData(current.scene, {
+            fields: [...fields],
+            bindings: [...bindings, binding],
+          }),
+        });
         return true;
       }
       const field: DynamicField = isListElement
@@ -715,13 +782,22 @@ export const fieldsSlice = {
       const field = listDoc.fields.find((f) => f.id === conv.fieldId);
       const binding = sequenceItemsBinding(authored as { kind?: string }[]);
       // D-083 / D-163 — the binding is dropped (with its field) when the list stops being
-      // bindable, AND when it changes SURFACE — text ↔ pictures: a page list and a text list are
-      // two different operator controls, so the author binds the new one on purpose.
-      const wasPages = field !== undefined && field.type === 'list' && field.pages === true;
-      if (binding === null || (binding === 'pages') !== wasPages) {
+      // bindable: a composition item, or text and pictures mixed.
+      //
+      // 🔴 `B-353` — a change of SURFACE (text ↔ pictures) KEEPS the key and flips its page-list
+      // mark. It used to drop the key in silence: an author who keyed the new sequence and then
+      // pressed `Add folder…` (the pictures replace the untouched samples) watched the key vanish.
+      // The flip is safe because a template's surface is read at import, never stored by CG Control:
+      // the next import of the package is a book, and nothing older is reinterpreted.
+      if (binding === null) {
         designerStore.removeField(conv.fieldId);
       } else if (field !== undefined && field.type === 'list') {
-        designerStore.updateField(field.id, { default: items.map((i) => ({ ...i })) });
+        const next = withPageListMark(
+          { ...field, default: items.map((i) => ({ ...i })) },
+          { items: authored as SequenceElement['items'] },
+        );
+        const fields = listDoc.fields.map((f) => (f.id === field.id ? next : f));
+        set({ scene: withActiveFieldData(current.scene, { fields }) });
       }
     }
 

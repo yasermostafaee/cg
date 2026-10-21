@@ -3479,3 +3479,17 @@ Measured free before use: `git grep -q -e "## \[.\] B-349"` (and `B-350`, `B-351
 remote-tracking refs after `git fetch` returned nothing; control: the same sweep found `B-348` on 2 refs; no stash.
 
 ⇒ **Next free after this entry is `B-352`**, **`D-166`**, **`P-068`**, **`R-102`** and **`C-049`**.
+
+### 2026-10-16 — `RUN-NEXT-VERSION-02` takes `B-352` and `B-353`
+
+- `B-352` — every composition exported from one project carried the project's id, so their imports replaced each other
+  in CG Control — [bugs-designer.md](bugs-designer.md). The owner calls it old; no entry existed (swept by string —
+  "replace", "same id", "manifest.id", "scene.id", "collid" — over `docs/prd/` and the untracked reports).
+- `B-353` — a book lost its page-list mark in the Designer and CG Control showed empty text boxes —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: `git grep -q -e "## \[.\] B-352"` (and `B-353`) on all 10 local and remote-tracking refs
+after `git fetch` returned nothing, and `git grep --untracked` over the tree likewise; control: the same sweep found
+`B-351` on 2 refs; no stash.
+
+⇒ **Next free after this entry is `B-354`**, **`D-166`**, **`P-068`**, **`R-102`** and **`C-049`**.

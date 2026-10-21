@@ -160,8 +160,10 @@ const ListFieldSchema = DynamicFieldBaseSchema.extend({
   /**
    * `D-163` — this list is a PAGE LIST: its items are picture items (`{ kind: 'image', … }`) of the
    * sequence it is bound to, and the operator loads its pages as pictures in CG Control rather than
-   * typing items. Set by the Designer when a picture-only sequence takes a Data key; absent on every
-   * other list, so an old template reads exactly as before.
+   * typing items. Absent on every other list, so an old template reads exactly as before.
+   *
+   * ⚠ `B-353` — the mark RECORDS an answer, it does not make one: `isPageListField` (`page-lists.ts`)
+   * is the rule, and `migratePageListMarks` / the Designer's store keep this mark equal to it.
    */
   pages: z.literal(true).optional(),
 });

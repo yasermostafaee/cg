@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SCENE_MIGRATIONS,
   migrateCountdownZones,
+  migratePageListMarks,
   migrateScene,
   migrateScenePaths,
   migrateTextFit,
@@ -161,7 +162,13 @@ describe('TEXT-FIT-01 — the one spelling, and intent preserved', () => {
   });
 
   it('the registry runs the path migration FIRST, the text-fit migration after it, and appends', () => {
-    // Append-only: DELTA-RUN-NEXT-VERSION-01-A appended the zone migration after this one.
-    expect(SCENE_MIGRATIONS).toEqual([migrateScenePaths, migrateTextFit, migrateCountdownZones]);
+    // Append-only: DELTA-RUN-NEXT-VERSION-01-A appended the zone migration after this one, and
+    // `B-353` the page-list marks after that.
+    expect(SCENE_MIGRATIONS).toEqual([
+      migrateScenePaths,
+      migrateTextFit,
+      migrateCountdownZones,
+      migratePageListMarks,
+    ]);
   });
 });

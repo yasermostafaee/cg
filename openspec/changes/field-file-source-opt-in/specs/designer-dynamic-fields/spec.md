@@ -25,7 +25,9 @@ and `.vcg` pack/unpack — by riding the field itself, with no second copy in th
 
 - **WHEN** the author selects a text, multiline or list field's element and opens **Dynamic /
   Data** **THEN** an "Allow file source" control is shown beside the field's other authored
-  properties, and setting it records the grant on that field alone
+  properties, and setting it records the grant on that field alone — except a PAGE LIST (a list
+  of pictures, `book-page-lists`): a text file cannot fill it, so it offers no grant and says
+  where its pages are loaded instead
 
 #### Scenario: A new field is not granted
 
