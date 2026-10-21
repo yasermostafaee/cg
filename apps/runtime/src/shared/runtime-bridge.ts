@@ -80,6 +80,7 @@ import type {
   StackSetPositionChannel,
   StackSetActiveLookChannel,
   StackSetPassTimingChannel,
+  StackSetSoundMutedChannel,
   StackSwapLiveSourceChannel,
   StackRestoreReportDismissChannel,
   StackSnapshotChannel,
@@ -475,6 +476,14 @@ export interface RuntimeBridge {
     setPassTiming(
       req: ChannelRequest<typeof StackSetPassTimingChannel>,
     ): Promise<ChannelResponse<typeof StackSetPassTimingChannel>>;
+    /**
+     * `RUN-NEXT-VERSION-02` Q9 — mute or unmute this row's TEMPLATE sound (the toggle beside its
+     * speaker mark). A configuration verb, as above: off air it records the choice for the next take;
+     * a row that owns live seats also tells its page now. A refused set records nothing.
+     */
+    setSoundMuted(
+      req: ChannelRequest<typeof StackSetSoundMutedChannel>,
+    ): Promise<ChannelResponse<typeof StackSetSoundMutedChannel>>;
     /**
      * C-015 phase 6 (6.5f) — raise or mute ONE plate's audio. The EXPLICIT
      * RECORDED INTENT the mute rule defers to, and the only thing that may make a

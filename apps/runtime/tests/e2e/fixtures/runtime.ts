@@ -10,7 +10,7 @@ import {
 } from '@cg/shared-schema';
 import { requiredBankFor, type TemplateInfo } from '@cg/shared-ipc';
 import { STARTER_TEMPLATES } from '@cg/starter-templates';
-import { pack } from '@cg/vcg-format';
+import { pack, sha256Hex } from '@cg/vcg-format';
 
 /**
  * Runtime E2E fixtures (R-001) — the Runtime's first Playwright harness.
@@ -820,6 +820,91 @@ export async function buildListFieldVcg(templateId = 'tpl-e2e-list'): Promise<Ui
     indexHtml: '<!doctype html><html><body>placeholder</body></html>',
     cgJs: '/* placeholder template runtime */',
     cgCss: '/* placeholder template styles */',
+  });
+}
+
+/** A real, tiny WAV: 0.1 s of 8 kHz mono 16-bit silence. */
+function silentWav(): Uint8Array {
+  const samples = 800;
+  const data = samples * 2;
+  const buf = Buffer.alloc(44 + data);
+  buf.write('RIFF', 0, 'ascii');
+  buf.writeUInt32LE(36 + data, 4);
+  buf.write('WAVE', 8, 'ascii');
+  buf.write('fmt ', 12, 'ascii');
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20); // PCM
+  buf.writeUInt16LE(1, 22); // mono
+  buf.writeUInt32LE(8000, 24);
+  buf.writeUInt32LE(16000, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write('data', 36, 'ascii');
+  buf.writeUInt32LE(data, 40);
+  return new Uint8Array(buf);
+}
+
+/**
+ * `RUN-NEXT-VERSION-02` Q9 — a verifiable `.vcg` whose template MAKES SOUND: an audio element that
+ * plays at the entrance, its WAV in the package — so CG Control's import marks it `hasSound`.
+ */
+export async function buildSoundVcg(templateId = 'tpl-e2e-sound'): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  const layer = scene.layers[0];
+  if (layer === undefined) throw new Error('fixture scene has no layer');
+  const wav = silentWav();
+  const sha256 = sha256Hex(wav);
+  const assetPath = `assets/audio/${sha256}.wav`;
+  layer.children = [
+    ...layer.children,
+    {
+      id: 'el-sound',
+      name: 'Chime',
+      type: 'audio',
+      transform: {
+        position: { x: 0, y: 0 },
+        size: { w: 10, h: 10 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 3,
+      assetId: 'snd-1',
+      durationMs: 100,
+      start: { at: 'entrance' },
+      volumeDb: 0,
+    },
+  ];
+  return pack({
+    scene,
+    manifestExtras: {
+      id: templateId,
+      name: 'e2e-sound',
+      authoring: {
+        designerVersion: '0.0.0',
+        createdAt: '2026-10-16T00:00:00.000Z',
+        exportedAt: '2026-10-16T00:01:00.000Z',
+      },
+      compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+      fontDeps: scene.fonts,
+      assetIndex: [
+        {
+          id: 'snd-1',
+          path: assetPath,
+          kind: 'audio',
+          bytes: wav.byteLength,
+          sha256,
+          mime: 'audio/wav',
+        },
+      ],
+    },
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+    assets: new Map([[assetPath, wav]]),
   });
 }
 

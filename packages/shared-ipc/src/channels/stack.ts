@@ -367,6 +367,28 @@ export const StackSetPassTimingChannel = defineChannel(
   }),
 );
 
+/**
+ * 🔴 `RUN-NEXT-VERSION-02` Q9 — **MUTE OR UNMUTE ONE ROW'S TEMPLATE SOUND** (the toggle beside the
+ * row's speaker mark).
+ *
+ * A CONFIGURATION verb (golden rule 10), the `set-pass-timing` shape exactly: an off-air row records
+ * the choice and every take carries it to the page (`__cg.sound`); a row that owns live seats also
+ * tells its page now, in one `CG UPDATE` that carries only the mute. It plays nothing and seats
+ * nothing. A REFUSED set records nothing.
+ */
+export const StackSetSoundMutedChannel = defineChannel(
+  'stack.set-sound-muted',
+  z.object({
+    itemId: IdSchema,
+    muted: z.boolean(),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.string().optional(),
+    message: z.string().optional(),
+  }),
+);
+
 export const StackSetActiveLookChannel = defineChannel(
   'stack.set-active-look',
   z.object({

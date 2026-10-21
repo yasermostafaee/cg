@@ -64,6 +64,7 @@ import {
   StackSetPositionChannel,
   StackSetActiveLookChannel,
   StackSetPassTimingChannel,
+  StackSetSoundMutedChannel,
   StackSwapLiveSourceChannel,
   StackSnapshotChannel,
   StackStateChangedChannel,
@@ -1857,6 +1858,9 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(StackSetActiveLookChannel, req),
     setPassTiming: (req: ChannelRequest<typeof StackSetPassTimingChannel>) =>
       this.#invoke(StackSetPassTimingChannel, req),
+    // `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute.
+    setSoundMuted: (req: ChannelRequest<typeof StackSetSoundMutedChannel>) =>
+      this.#invoke(StackSetSoundMutedChannel, req),
     setPlateVolume: (req: ChannelRequest<typeof StackSetPlateVolumeChannel>) =>
       this.#invoke(StackSetPlateVolumeChannel, req),
     // `add-multibox-audio` — the MAP door: FADER, ON/OFF and SOLO all arrive here.

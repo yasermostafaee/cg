@@ -871,6 +871,12 @@ function Row({
             {timing}
           </span>
         ) : null}
+        {/* `RUN-NEXT-VERSION-02` Q9 — a `set-sound-muted` row's VALUE, in the timing value's treatment. */}
+        {entry.sound !== undefined ? (
+          <span className="cg-audit-timing" data-audit-sound="">
+            {entry.sound.muted ? 'muted' : 'unmuted'}
+          </span>
+        ) : null}
         {/*
           `PAGE-REBUILD-01` (`C-034`) — a rebuild row's VALUE: the releases its page moved between.
           The runtime fingerprints and a failure's reason are technical facts, so they ride the title.

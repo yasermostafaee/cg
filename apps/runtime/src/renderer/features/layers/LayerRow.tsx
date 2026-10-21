@@ -5,7 +5,7 @@ import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
-import { Volume2 } from 'lucide-react';
+import { Volume2, VolumeX } from 'lucide-react';
 import { Icon } from '../../ui/Icon.js';
 import { directionOf } from '../../ui/OperatorNames.js';
 import { Tag } from '../../ui/Tag.js';
@@ -491,6 +491,19 @@ export function LayerRow({
   const openPlateAudio = (): Promise<{ accepted: true }> => {
     setAudioOpen(true);
     return Promise.resolve({ accepted: true });
+  };
+
+  // `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute, as the bridge last published it.
+  const soundMuted = item?.soundMuted === true;
+  const toggleTemplateSound = async (itemId: string, muted: boolean): Promise<void> => {
+    try {
+      const res = await window.cg.stack.setSoundMuted({ itemId, muted });
+      if (!res.ok) reportCommandError(res.message ?? 'The template sound could not be changed.');
+    } catch (err) {
+      reportCommandError(
+        err instanceof Error ? err.message : 'The template sound could not be changed.',
+      );
+    }
   };
 
   const actions = layerRowActions({
@@ -1055,17 +1068,41 @@ export function LayerRow({
         )}
         {/*
           `D-165` — THE TEMPLATE MAKES SOUND (`TemplateInfo.hasSound`, derived once at import by
-          the one predicate). A fact in the alias cell beside the others — no column, no control:
-          what the operator can do about it (a mute per row) is the owner's decision, not built.
+          the one predicate). A fact in the alias cell beside the others — no column; the control
+          that acts on it is the toggle just below (`RUN-NEXT-VERSION-02` Q9).
         */}
         {template?.hasSound === true && (
           <Tag
-            data-template-sound=""
-            title="Template sound"
-            aria-label={`${rowName} plays a sound`}
+            data-template-sound={soundMuted ? 'muted' : 'on'}
+            title={soundMuted ? 'Template sound muted' : 'Template sound'}
+            aria-label={soundMuted ? `${rowName}'s sound is muted` : `${rowName} plays a sound`}
           >
-            <Icon icon={Volume2} size={12} />
+            <Icon icon={soundMuted ? VolumeX : Volume2} size={12} />
           </Tag>
+        )}
+        {/*
+          🔴 `RUN-NEXT-VERSION-02` Q9 (the owner) — THE ROW'S MUTE FOR ITS TEMPLATE'S SOUND, beside the
+          mark. The button names the ACTION (the mark beside it states the fact). A configuration verb:
+          off air it is recorded and the next take carries it; on air the page is told at once.
+        */}
+        {template?.hasSound === true && item !== null && (
+          <Button
+            variant="icon"
+            className="cg-row-audio-btn"
+            data-template-sound-toggle={soundMuted ? 'unmute' : 'mute'}
+            aria-pressed={soundMuted}
+            // `C-038` — the one console-side permission answer, as every row verb reads it.
+            disabled={!canOperate}
+            title={soundMuted ? 'Unmute template sound' : 'Mute template sound'}
+            aria-label={`${soundMuted ? 'Unmute' : 'Mute'} ${rowName}'s template sound`}
+            onClick={(e) => {
+              // The row itself selects on click; this button is a different act.
+              e.stopPropagation();
+              void toggleTemplateSound(item.itemId, !soundMuted);
+            }}
+          >
+            <Icon icon={soundMuted ? Volume2 : VolumeX} size={16} />
+          </Button>
         )}
         {/* `R-100` — where the row's book is: the page and how many. A fact, not a control. */}
         {rowBook !== null && rowBook.count > 0 && (

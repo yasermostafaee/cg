@@ -748,6 +748,8 @@ it('🔴 every OPEN-AXIS field a published row carries survives retainedFromStac
     timingOverride: { repeat: 2, delayMs: 1500 },
     // `R-100` — the page a row's book is on, added the day the field was, for the reason above.
     pages: { book: 11 },
+    // `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute, for the same reason.
+    soundMuted: true,
   } as unknown as StackItemState;
 
   /*

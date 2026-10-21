@@ -198,6 +198,8 @@ const BRIDGE_SURFACE: {
       'setActiveLook',
       // `TIMING-WIRE-22` (c) — the per-row pass-timing configuration verb.
       'setPassTiming',
+      // `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute, the same configuration shape.
+      'setSoundMuted',
       // C-015 (6.5f) — the per-plate audio intent. The mock has no producers, so it
       // models the INTENT half only (record + publish) and answers the same
       // contract; the wire assertion is integration-tested bridge-side.

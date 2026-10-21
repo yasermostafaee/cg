@@ -374,6 +374,8 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'stack.remove-all': INTENT,
   'stack.set-active-look': INTENT,
   'stack.set-pass-timing': INTENT,
+  // `RUN-NEXT-VERSION-02` Q9 — a row's template-sound mute: a configuration verb on its own row.
+  'stack.set-sound-muted': INTENT,
   'stack.set-plate-volume': INTENT,
   'stack.set-plate-volumes': INTENT,
   'stack.set-position': INTENT,

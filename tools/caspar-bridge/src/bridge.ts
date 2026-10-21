@@ -146,6 +146,7 @@ import {
   StackDismissErrorChannel,
   StackSetActiveLookChannel,
   StackSetPassTimingChannel,
+  StackSetSoundMutedChannel,
   StackSetPlateVolumeChannel,
   StackSetPlateVolumesChannel,
   StackSilenceAllLivePlatesChannel,
@@ -4701,6 +4702,13 @@ export function buildRoutes(
       'operator',
       (r: { itemId: string; passes?: number | 'infinite'; delayMs?: number }) =>
         b.setPassTiming(r.itemId, { passes: r.passes, delayMs: r.delayMs }),
+    ),
+    // `RUN-NEXT-VERSION-02` Q9 — a row's template-sound mute; the same configuration shape.
+    route(
+      StackSetSoundMutedChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; muted: boolean }) => b.setSoundMuted(r.itemId, r.muted),
     ),
     // C-015 (6.5f) — the explicit recorded intent that raises a plate's audio.
     route(

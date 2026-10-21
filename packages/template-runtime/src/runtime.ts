@@ -114,7 +114,7 @@ import { ClockDriver, parseClockTarget } from './clock-driver.js';
 import { LottieDriver } from './lottie-driver.js';
 import { VideoDriver, type VideoHandle, type ElementOutroDriver } from './video-driver.js';
 import { AudioDriver, gainOfDb } from './audio-driver.js';
-import { createAudioHandle, type SoundAudition } from './audio-graph.js';
+import { createAudioHandle, setSoundMuted, type SoundAudition } from './audio-graph.js';
 import {
   RepeaterDriver,
   registerRepeaterDriver,
@@ -2951,6 +2951,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         already told keeps the token it has.
       */
       if (control?.take !== undefined) takeToken = control.take;
+      /*
+        🔴 `RUN-NEXT-VERSION-02` Q9 — THE ROW'S SOUND MUTE, seated BEFORE the cascade starts the
+        entrance sounds, so a muted row's take is silent from its first frame. Through the page's
+        host mute (the master gain), the one switch PVW and the Designer's preview use. Absent:
+        unchanged.
+      */
+      if (control?.sound !== undefined) setSoundMuted(control.sound.muted, doc);
       // DELTA-RUN-NEXT-VERSION-01-A / -F — the step current at Take is in force from the first
       // frame of the entrance: instances primed before the cascade, the step published after it.
       primeStepsForTake();
@@ -3101,6 +3108,8 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         `CG UPDATE` — the same seam `B-191` already uses to tell a resident page its look.
       */
       if (control?.take !== undefined) takeToken = control.take;
+      // `RUN-NEXT-VERSION-02` Q9 — the row's sound mute, on a sound already playing too. Absent: unchanged.
+      if (control?.sound !== undefined) setSoundMuted(control.sound.muted, doc);
       /*
         `D-163` — A PAGE TURN, after the fields: when the same payload carries a new book and its
         page, the book is in place before the page is looked up in it.

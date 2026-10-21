@@ -130,6 +130,11 @@ export function pageMediaPath(sha256: string, ext: 'png' | 'jpg' | 'webp'): stri
   return `/page/${sha256}.${ext}`;
 }
 
+/** `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute, as it crosses to the page. */
+export interface CgSound {
+  muted: boolean;
+}
+
 /** Bridge→page control data. Every member optional: a payload may carry any subset. */
 export interface CgControl {
   /**
@@ -191,6 +196,15 @@ export interface CgControl {
    * Absent means "this payload says nothing about the take", never "forget the one you have".
    */
   take?: string;
+  /**
+   * 🔴 `RUN-NEXT-VERSION-02` Q9 — **THE ROW'S MUTE OF ITS TEMPLATE'S OWN SOUND.** The page hands it to
+   * its host mute (`setSoundMuted`, the master gain PVW and the Designer's preview already use), so
+   * every sound the page makes is silenced — or let through — at once, including one already playing.
+   *
+   * ⚠ Absent means "this payload says nothing about sound", never "unmute": a row nobody muted carries
+   * no member, and its wire is what it was.
+   */
+  sound?: CgSound;
   /*
     🔴 **`single-clock-look-switch` — `from` AND `plates` ARE GONE, and each for its own reason.**
 
@@ -258,7 +272,15 @@ export function readCgControl(payload: unknown): CgControl | undefined {
     ...(typeof take === 'string' && take !== '' ? { take } : {}),
     ...readPassTiming((raw as Record<string, unknown>)['timing']),
     ...readPage((raw as Record<string, unknown>)['page']),
+    ...readSound((raw as Record<string, unknown>)['sound']),
   };
+}
+
+/** `RUN-NEXT-VERSION-02` Q9 — the sound member, defensively: anything but a boolean `muted` is dropped. */
+function readSound(raw: unknown): { sound?: CgSound } {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const muted = (raw as Record<string, unknown>)['muted'];
+  return typeof muted === 'boolean' ? { sound: { muted } } : {};
 }
 
 /**

@@ -43,6 +43,9 @@ export const AuditEntrySchema = z.object({
       was the hole.
     */
     'set-pass-timing',
+    // `RUN-NEXT-VERSION-02` Q9 — the operator muted or unmuted a row's template sound (a
+    // configuration verb, like the timing above: it puts a value in force and seats nothing).
+    'set-sound-muted',
     'update-deferred',
     'update-installed',
     /*
@@ -221,6 +224,11 @@ export const AuditEntrySchema = z.object({
       delayMs: z.number().min(0).optional(),
     })
     .optional(),
+  /**
+   * `RUN-NEXT-VERSION-02` Q9 — WHAT a `set-sound-muted` row asked: muted, or not. Absent on every
+   * other action.
+   */
+  sound: z.object({ muted: z.boolean() }).optional(),
   /**
    * `MEDIA-PLATES-01` — WHAT a `set-media-playback` or `media-transport` row carried: the clip's
    * name, and what was ASKED — the settings as set, or the transport action and its plate. Absent on

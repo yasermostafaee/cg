@@ -5,6 +5,7 @@ import {
   type CgControl,
   type CgPage,
   type CgPassTiming,
+  type CgSound,
   type FieldValues,
 } from '@cg/shared-schema';
 import type { NormalizedRect } from './live-layers.js';
@@ -27,6 +28,8 @@ export interface TakeControl {
   readonly timing?: CgPassTiming;
   /** `R-100` — the page a row's page list is on, naming that page's picture by address when it needs one. */
   readonly page?: CgPage;
+  /** `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute, when the row has ever set it. */
+  readonly sound?: CgSound;
 }
 
 /**
@@ -239,6 +242,8 @@ export class CommandBuilder {
       ...(control.timing !== undefined && { timing: control.timing }),
       // `R-100` — LAST, so a row with no page list puts exactly the bytes it always did.
       ...(control.page !== undefined && { page: control.page }),
+      // `RUN-NEXT-VERSION-02` Q9 — after it, for the same reason: a row nobody muted is unchanged.
+      ...(control.sound !== undefined && { sound: control.sound }),
     };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
       serialize(withCgControl(fields, ordered)),
@@ -256,6 +261,19 @@ export class CommandBuilder {
    */
   updatePage(slot: CommandSlot, page: CgPage, fields: FieldValues = {}): string {
     const control: CgControl = { page };
+    return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
+      serialize(withCgControl(fields, control)),
+    )}`;
+  }
+
+  /**
+   * `RUN-NEXT-VERSION-02` Q9 — **MUTE OR UNMUTE A PAGE'S OWN SOUND**: the same `CG UPDATE` verb and
+   * reserved key as {@link updatePassTiming}, carrying only `__cg.sound`. A configuration verb (golden
+   * rule 10): it plays nothing and seats nothing; the page's host mute silences or lets through every
+   * sound it makes, one already playing included.
+   */
+  updateSound(slot: CommandSlot, sound: CgSound, fields: FieldValues = {}): string {
+    const control: CgControl = { sound };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
       serialize(withCgControl(fields, control)),
     )}`;

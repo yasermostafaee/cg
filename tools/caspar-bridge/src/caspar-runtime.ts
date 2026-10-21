@@ -1029,6 +1029,8 @@ interface AuditDetail {
    * was asked (the settings, or the transport action and its plate), through the same one mapping.
    */
   media?: AuditEntry['media'];
+  /** `RUN-NEXT-VERSION-02` Q9 — `set-sound-muted` ONLY: muted, or not, as asked. */
+  sound?: AuditEntry['sound'];
 }
 
 /**
@@ -1736,6 +1738,12 @@ export class CasparRuntime {
    * by a failed send is not inert, it is what the next reconcile and the next take would read.
    */
   readonly #passTimings = new Map<string, StackItemTimingOverride>();
+  /**
+   * `RUN-NEXT-VERSION-02` Q9 — each row's mute of its TEMPLATE's own sound, once the operator has set
+   * it (muted or not). Beside `#passTimings` and with the same contract: the INTENT, written only by a
+   * set that succeeded, carried by every take (`#takeControl`), published and retained.
+   */
+  readonly #soundMutes = new Map<string, boolean>();
   /**
    * `R-100` — the page each of a row's page lists is on (field id → 0-based index). Written only
    * by a turn that succeeded (or a state-only one); published and retained like `#passTimings`.
@@ -3101,6 +3109,8 @@ export class CasparRuntime {
       const timingOverride = this.#passTimings.get(item.itemId);
       // `R-100` — the page each page list is on: the console's `12 / 300` reads it.
       const pages = this.#pageIndexes.get(item.itemId);
+      // `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute: the toggle beside its speaker reads it.
+      const soundMuted = this.#soundMutes.get(item.itemId);
       /*
         🔴 `B-228` — THE BRIDGE'S OWN ANSWER TO "may this be removed", SAID OUT LOUD.
 
@@ -3152,6 +3162,8 @@ export class CasparRuntime {
         timingOverride === undefined &&
         // `R-100` — and the page number, for `timingOverride`'s reason, on the day it was added.
         pages === undefined &&
+        // `RUN-NEXT-VERSION-02` Q9 — and the sound mute, for the same reason, on the day it was added.
+        soundMuted === undefined &&
         !removeExempt &&
         takeRefusal === undefined &&
         !backupUnmirrored &&
@@ -3168,6 +3180,7 @@ export class CasparRuntime {
         ...(activeLookId !== undefined && { activeLookId }),
         ...(timingOverride !== undefined && { timingOverride }),
         ...(pages !== undefined && { pages }),
+        ...(soundMuted !== undefined && { soundMuted }),
         ...(removeExempt && { removeExempt: true }),
         ...(backupUnmirrored && { backupUnmirrored: true }),
         ...(backupNoCopy.length > 0 && { backupNoCopy }),
@@ -3912,6 +3925,8 @@ export class CasparRuntime {
       if (item.timingOverride !== undefined) {
         this.#passTimings.set(item.itemId, { ...item.timingOverride });
       }
+      // `RUN-NEXT-VERSION-02` Q9 — a muted row stays muted across a restart; the next take tells it.
+      if (item.soundMuted !== undefined) this.#soundMutes.set(item.itemId, item.soundMuted);
       // `R-100` — a book reopens on the page it was on, not page 1. A direct re-apply, like the
       // two above: no page turn is sent mid-restore.
       if (item.pages !== undefined) this.#pageIndexes.set(item.itemId, { ...item.pages });
@@ -4089,6 +4104,7 @@ export class CasparRuntime {
     this.#plateVolumes.delete(itemId);
     this.#activeLooks.delete(itemId);
     this.#passTimings.delete(itemId);
+    this.#soundMutes.delete(itemId);
     this.#pendingRestore.delete(itemId);
     this.#restoreBlocked.delete(itemId);
     this.#takeRefusals.delete(itemId);
@@ -8633,6 +8649,60 @@ export class CasparRuntime {
     this.#passTimings.set(itemId, next);
     this.#markDirty(itemId);
     this.#recordOutcome('set-pass-timing', detail, { outcome: 'ok' });
+    return { ok: true };
+  }
+
+  /**
+   * 🔴 `RUN-NEXT-VERSION-02` Q9 — **MUTE OR UNMUTE ONE ROW'S TEMPLATE SOUND.** `setPassTiming`'s shape
+   * exactly, and for its reasons: a CONFIGURATION verb (golden rule 10) gated by `#ownsLiveSeats`,
+   * the one predicate. A row that owns no live seats records the choice and sends NOTHING — the next
+   * take carries it on either route (`#takeControl`). A row that does also tells its page now, in one
+   * `CG UPDATE` carrying only `__cg.sound`; it plays nothing and seats nothing. A REFUSED set records
+   * nothing. Every outcome is audited (`set-sound-muted`).
+   */
+  async setSoundMuted(
+    itemId: string,
+    muted: boolean,
+  ): Promise<{ ok: boolean; reason?: string; message?: string }> {
+    const item = this.#reconciler.get(itemId);
+    const slot = this.#slots.get(itemId);
+    if (item === null || slot === undefined) {
+      this.#recordOutcome(
+        'set-sound-muted',
+        { itemId, sound: { muted } },
+        { outcome: 'failed', errorCode: 'unknown-item' },
+      );
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    const detail: AuditDetail = { ...this.#itemDetail(itemId), sound: { muted } };
+    if (!this.#ownsLiveSeats(itemId)) {
+      this.#soundMutes.set(itemId, muted);
+      this.#markDirty(itemId);
+      this.#recordOutcome('set-sound-muted', detail, { outcome: 'ok' });
+      return { ok: true };
+    }
+    const { ok, errorCode, command } = await this.#send(
+      this.#builder.updateSound(slot, { muted }),
+      this.#nextSeq(),
+      'normal',
+    );
+    if (!ok) {
+      this.#recordOutcome('set-sound-muted', detail, {
+        outcome: errorCode === AMCP_TIMEOUT_CODE ? 'timeout' : 'failed',
+        errorCode: errorCode ?? 'amcp-error',
+        ...(command !== undefined ? { command } : {}),
+      });
+      return {
+        ok: false,
+        reason: errorCode ?? 'amcp-error',
+        message: muted
+          ? 'CasparCG did not accept the mute. The template sound is still on air.'
+          : 'CasparCG did not accept the unmute. The template sound is still muted.',
+      };
+    }
+    this.#soundMutes.set(itemId, muted);
+    this.#markDirty(itemId);
+    this.#recordOutcome('set-sound-muted', detail, { outcome: 'ok' });
     return { ok: true };
   }
 
@@ -14892,6 +14962,8 @@ export class CasparRuntime {
       ...(detail.timing !== undefined ? { timing: detail.timing } : {}),
       // `MEDIA-PLATES-01` — the clip a playback setting or a transport press was about.
       ...(detail.media !== undefined ? { media: detail.media } : {}),
+      // `RUN-NEXT-VERSION-02` Q9 — what a `set-sound-muted` press asked for.
+      ...(detail.sound !== undefined ? { sound: detail.sound } : {}),
     });
   }
 
@@ -16862,9 +16934,13 @@ export class CasparRuntime {
     const passTiming = this.#admitsPassTiming(itemId, templateId)
       ? this.#passTimings.get(itemId)
       : undefined;
+    // `RUN-NEXT-VERSION-02` Q9 — the row's sound mute, once it has been set: a take that rebuilds the
+    // page, or tells a resident one, leaves it muted (or unmuted) as the operator last asked.
+    const soundMuted = this.#soundMutes.get(itemId);
     return {
       ...(activeLook !== undefined && { look: activeLook.id }),
       ...(passTiming !== undefined && { timing: CasparRuntime.#wireTiming(passTiming) }),
+      ...(soundMuted !== undefined && { sound: { muted: soundMuted } }),
       take: this.#mintTakeToken(itemId),
     };
   }

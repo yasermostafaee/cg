@@ -1233,6 +1233,23 @@ export class MockRuntime {
     return { ok: true };
   }
 
+  /**
+   * `RUN-NEXT-VERSION-02` Q9 — the offline mock's half of a row's template-sound mute: recording the
+   * choice IS the whole action here, as for the pass timing above (no wire, no page to tell).
+   */
+  setSoundMuted(
+    itemId: string,
+    muted: boolean,
+  ): { ok: boolean; reason?: string; message?: string } {
+    const item = this.#find(itemId);
+    if (item === null) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    item.soundMuted = muted;
+    this.#emitStack();
+    return { ok: true };
+  }
+
   setActiveLook(
     itemId: string,
     lookId: string,

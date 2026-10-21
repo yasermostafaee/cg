@@ -54,7 +54,11 @@ const PLAYOUT_VERBS = ['load', 'take', 'update', 'stop', 'next', 'out', 'remove'
  * something it does not mean, and the suite above asserts things — a `slot` on every row, one
  * row per verb after a TAKE — that are properties of playout verbs specifically.
  */
-const CONFIG_VERBS = ['set-pass-timing'] as const;
+const CONFIG_VERBS = [
+  'set-pass-timing',
+  // `RUN-NEXT-VERSION-02` Q9 — a row's template-sound mute, the same shape; driven at the foot too.
+  'set-sound-muted',
+] as const;
 
 /**
  * `R-100` — a PAGE TURN on a row's book: a playout verb (it changes what is on air), but one that
@@ -772,4 +776,65 @@ describe('DELTA B · R3 — set-pass-timing is recorded, at its real outcome', (
       ).toHaveLength(0);
     },
   );
+});
+
+/**
+ * `RUN-NEXT-VERSION-02` Q9 — a row's template-sound mute is in the Log, at its real outcome: on air
+ * (it reached the wire), off air (it reached nothing, and the next take carries it), refused.
+ */
+describe('Q9 — set-sound-muted is recorded, at its real outcome', () => {
+  it(
+    'an ON-AIR mute writes ONE ok row naming the item, layer and the value',
+    { timeout: 60_000 },
+    async () => {
+      const { r, file } = await onAir();
+
+      expect((await r.setSoundMuted('item1', true)).ok).toBe(true);
+
+      // import + load + take + this.
+      const rows = await entriesOnDisk(file, 4);
+      const mine = forAction(rows, 'set-sound-muted');
+      expect(mine, 'one set-sound-muted row').toHaveLength(1);
+      expect(mine[0]).toMatchObject({
+        outcome: 'ok',
+        itemId: 'item1',
+        templateId: 'lower-third',
+        sound: { muted: true },
+      });
+      expect(mine[0]?.slot).toMatchObject({ channel: 1, layer: 10 });
+    },
+  );
+
+  it('an OFF-AIR unmute is recorded too — it reaches no wire', { timeout: 60_000 }, async () => {
+    const { r, file } = await boot({ reachable: true });
+    r.templateImport(TEMPLATE, HTML);
+    expect((await r.load('item1', 'lower-third', {})).accepted).toBe(true);
+
+    expect((await r.setSoundMuted('item1', false)).ok).toBe(true);
+
+    const rows = await entriesOnDisk(file, 3);
+    const mine = forAction(rows, 'set-sound-muted');
+    expect(mine, 'the off-air set was not recorded').toHaveLength(1);
+    expect(mine[0]).toMatchObject({ outcome: 'ok', itemId: 'item1', sound: { muted: false } });
+  });
+
+  it('a REFUSED mute records the refusal and its reason code', { timeout: 60_000 }, async () => {
+    const { r, file } = await boot({ reachable: true });
+    r.templateImport(TEMPLATE, HTML);
+
+    const res = await r.setSoundMuted('nope', true);
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('unknown-item');
+
+    const rows = await entriesOnDisk(file, 2);
+    const mine = forAction(rows, 'set-sound-muted');
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({
+      outcome: 'failed',
+      errorCode: 'unknown-item',
+      itemId: 'nope',
+      sound: { muted: true },
+    });
+    expect(mine[0]?.slot).toBeUndefined();
+  });
 });

@@ -247,6 +247,8 @@ export function createMockBridge(): RuntimeBridge {
         Promise.resolve(
           mock.setPassTiming(req.itemId, { passes: req.passes, delayMs: req.delayMs }),
         ),
+      // `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute.
+      setSoundMuted: (req) => Promise.resolve(mock.setSoundMuted(req.itemId, req.muted)),
       // `MULTI-CHANNEL-01` §2 B — the optional channel, modelled by the mock's own scope.
       removeAll: (req) => Promise.resolve(mock.removeAll(req?.channel)),
       clearAll: (req) => Promise.resolve(mock.clearAll(req?.channel)),

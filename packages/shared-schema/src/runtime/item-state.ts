@@ -252,6 +252,12 @@ export const StackItemStateSchema = z.object({
    */
   pages: StackItemPagesSchema.optional(),
   /**
+   * 🔴 `RUN-NEXT-VERSION-02` Q9 — the row's mute of its TEMPLATE's own sound, the published half of the
+   * pair whose retained half is {@link RetainedStackItemSchema.soundMuted}: the toggle beside the
+   * row's speaker mark reads it. ABSENT means the row never set it — the sound plays.
+   */
+  soundMuted: z.boolean().optional(),
+  /**
    * `FIELD-FIXES-01` B — why this row's last take was refused (see {@link TakeRefusalSchema}).
    * ABSENT on every row whose last take landed, or that has been cleared since.
    *
@@ -640,6 +646,11 @@ export const RetainedStackItemSchema = z.object({
    * at page 1 after every bridge restart while the reader is on page 140.
    */
   pages: StackItemPagesSchema.optional(),
+  /**
+   * `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute, RETAINED for `timingOverride`'s reason:
+   * dropped, a row the operator muted comes back after a bridge restart and plays its sound on air.
+   */
+  soundMuted: z.boolean().optional(),
 });
 export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;
 
@@ -690,5 +701,6 @@ export function retainedFromStackItem(item: StackItemState): RetainedStackItem {
     ...(item.timingOverride !== undefined && { timingOverride: item.timingOverride }),
     ...(item.activeLookId !== undefined && { activeLookId: item.activeLookId }),
     ...(item.pages !== undefined && { pages: item.pages }),
+    ...(item.soundMuted !== undefined && { soundMuted: item.soundMuted }),
   };
 }
