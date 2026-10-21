@@ -233,12 +233,32 @@ nodes it FEEDS during the live crawl (which the one-time walk cannot reach). The
 inline an image separator's bytes exactly like an image element (the same collector + two-source
 resolver), and export preflight SHALL report a missing separator image. The Designer ticker
 inspector SHALL let the operator choose a Text or Image separator; for Image, pick from the
-project's assets OR the shared library, with an adjustable size.
+project's PICTURES (assets of kind `image` — never a font, a video or an animation) OR the shared
+library, with an adjustable size. `B-128`: a separator that points at a font, a video or an
+animation is drawn as a broken-image icon with a grey border between every pair of items (measured
+in Chrome 155), so when a project OPENS, every such separator SHALL be removed — outside the undo
+history, leaving the project unsaved so Save writes the repair — and the author SHALL be told once,
+naming each ticker and what its separator pointed at.
 
 #### Scenario: Pick an image separator from either source
 
 - **WHEN** the operator sets the ticker separator to Image in the inspector
-- **THEN** they can pick the image from the project's assets OR the shared library, and set its size
+- **THEN** they can pick the image from the project's pictures OR the shared library, and set its
+  size
+
+#### Scenario: The picker offers pictures only
+
+- **WHEN** the project holds a picture, a font, a video and an animation
+- **THEN** the separator picker offers the picture and the shared library's pictures, and nothing
+  else
+
+#### Scenario: A saved non-image separator is repaired on open
+
+- **WHEN** a project opens whose ticker "Headlines" has a separator pointing at a font
+- **THEN** the separator is removed and the author is told once: Removed the separator from ticker
+  "Headlines": it pointed at a font, and a separator can only be an image. Choose an image for it.
+- **AND** the project reads unsaved, and Undo does not bring the separator back
+- **AND** a separator that is a picture is kept, and nothing is said
 
 #### Scenario: Image separator renders between items, never trailing
 

@@ -3975,7 +3975,7 @@ is the NEED, not the UI. **Naming:** the live element is user-facing "Live Sourc
 schema type stays `video-placeholder`. **RECON-FIRST for the type-conversion semantics; needs its
 own design.md.**
 
-## [~] D-141 — Azan countdown: time-of-day target + color zones (composition-deep) ⟨priority: high⟩ — implemented, not yet archived; reshaped by `DELTA-RUN-NEXT-VERSION-01-A` … `-H` (zones → steps, the target the operator sets, after zero, the Steps dialog — 2026-10-15, see "Deltas" below): `openspec/changes/add-azan-countdown/` (engine `edf8dcba`; the Designer half `AZAN-DESIGNER-01`, 2026-10-15 — `b57602ff`, `414c1377`, `94dee038`; `B-344` fixed on the way; the operator's pattern check filed as [[R-101]])
+## [x] D-141 — Azan countdown: time-of-day target + color zones (composition-deep) ⟨priority: high⟩ — implemented, archived 2026-10-21 by `RUN-NEXT-VERSION-02` Part 3; reshaped by `DELTA-RUN-NEXT-VERSION-01-A` … `-H` (zones → steps, the target the operator sets, after zero, the Steps dialog — 2026-10-15, see "Deltas" below): `openspec/changes/archive/2026-10-21-add-azan-countdown/` (engine `edf8dcba`; the Designer half `AZAN-DESIGNER-01`, 2026-10-15 — `b57602ff`, `414c1377`, `94dee038`; `B-344` fixed on the way; the operator's pattern check filed as [[R-101]])
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q24): **needed for the next version.** Its Designer half (the 21 open tasks of `add-azan-countdown`) is in scope.
 
@@ -5087,7 +5087,7 @@ plate is still deformed by a mis-shaped cell, because `preScale` is per-axis —
 cell preserves is the COMPOSITION'S RESOLUTION ASPECT**. That is written up as a requirement in the
 change's `designer-multibox-arrangements` delta rather than only here.
 
-## [~] D-156 — `Shift` and `Alt` are two spellings of ONE job — bypass snapping — and which one works depends on which gesture you are in ⟨priority: low⟩ — `openspec/changes/designer-fix-02/`
+## [x] D-156 — `Shift` and `Alt` are two spellings of ONE job — bypass snapping — and which one works depends on which gesture you are in ⟨priority: low⟩ — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q5): **(a)** — Alt bypasses snapping in every gesture.
 — **Closed in code (DESIGNER-FIX-02):** the resize and rotate gestures (`Gizmo.tsx`) read `altKey`;
@@ -5712,7 +5712,7 @@ window closes at once. The browser's warning stays, and both read ONE dirty pred
 desktop smoke (UIA): a change, a close, the dialog with the window kept, `Cancel` keeps it, `Don't save` closes;
 no change closes at once; Playwright: the leave prompt with unsaved changes and none without.
 
-## [~] D-163 — pages of pictures turned with Next / Previous / Go to: a book read on air, loaded as a whole folder ⟨priority: high — the owner: "a very important feature"⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · `openspec/changes/add-image-pages/` · the operator half is [[R-100]]
+## [x] D-163 — pages of pictures turned with Next / Previous / Go to: a book read on air, loaded as a whole folder ⟨priority: high — the owner: "a very important feature"⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · `openspec/changes/archive/2026-10-21-add-image-pages/` · the operator half is [[R-100]]
 
 **What:** a sequence can hold PICTURE items, one fit for all of them, and `Add pictures…` / `Add folder…` turn
 many files into pages at once, in natural file-name order (`page2` before `page10`; Persian and Arabic-Indic
@@ -5729,7 +5729,7 @@ Next arrives (or its first and Previous) THEN it stays; WHEN `goTo` arrives mid-
 when the transition ends; WHEN a page turn's picture is missing or undecodable THEN the previous page stays; WHEN an
 old sequence is parsed THEN it is unchanged; WHEN a picture sequence is exported and unpacked THEN it round-trips.
 
-## [~] D-164 — import a numbered image sequence (PNG, TGA) as ONE video layer ⟨priority: high — the owner, 2026-10-14⟩ — FILED 2026-10-14 by `PNG-SEQUENCE-IMPORT-01` · `openspec/changes/add-image-sequence-import/`
+## [x] D-164 — import a numbered image sequence (PNG, TGA) as ONE video layer ⟨priority: high — the owner, 2026-10-14⟩ — FILED 2026-10-14 by `PNG-SEQUENCE-IMPORT-01` · `openspec/changes/archive/2026-10-21-add-image-sequence-import/`
 
 **What:** in the place a video is imported (the Assets panel's `+`), the author picks a FOLDER or MANY FILES of a
 numbered image sequence, and it comes in as one `video` asset and one `video` element — the same as any imported clip
@@ -5753,7 +5753,7 @@ the same folder is imported twice with the same rate and crop THEN the second sk
 THEN the project is unchanged; WHEN the imported element is on the timeline THEN it behaves as any video (phases, hold,
 scrub); WHEN its alpha ramp is shown over black and over white THEN no fringe.
 
-## [~] D-165 — sound effects that play with a template's entrance and exit ⟨priority: high — the owner, 2026-10-14⟩ — FILED 2026-10-14 by `AUDIO-ELEMENT-01` · `openspec/changes/add-audio-element/`
+## [x] D-165 — sound effects that play with a template's entrance and exit ⟨priority: high — the owner, 2026-10-14⟩ — FILED 2026-10-14 by `AUDIO-ELEMENT-01` · `openspec/changes/archive/2026-10-21-add-audio-element/`
 
 **What:** the author imports SOUNDS (WAV, MP3, OGG, M4A …) into the project — each becomes one 48 kHz stereo 16-bit WAV,
 its length and peak (dBFS) measured and shown, never normalised at import (`RUN-NEXT-VERSION-02` Q10 added its loudness

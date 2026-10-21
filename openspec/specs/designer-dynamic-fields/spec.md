@@ -110,8 +110,8 @@ values. `update()` SHALL accept a JSON string, an already-parsed object, or the
 CasparCG legacy XML payload
 (`<templateData><componentData id="KEY"><data id="text" value="V"/></componentData>…`),
 SHALL ignore unknown keys, and SHALL truncate a text value to its field's
-`maxLength` before applying (after which the element's existing auto-size /
-auto-squeeze behavior applies).
+`maxLength` before applying (after which the element's fit applies: an auto-size box hugs the new
+text, and a shrink-to-fit box re-fits it in the same task, so no frame shows the overflowing size).
 
 #### Scenario: update before play is retained
 
@@ -129,10 +129,14 @@ auto-squeeze behavior applies).
 #### Scenario: maxLength truncation
 
 - **WHEN** a field with `maxLength = 5` receives the value "Hello World"
-- **THEN** the element's text is set to "Hello" and its auto-size / auto-squeeze
-  behavior applies
+- **THEN** the element's text is set to "Hello" and its fit applies
 
-  #### Scenario: Preview opens in a modal and tears down on close
+#### Scenario: A field's new text re-fits with no jump frame
+
+- **WHEN** a shrink-to-fit text's field is updated with a longer name
+- **THEN** the text is re-fitted in the same task the value is written, before the next paint
+
+#### Scenario: Preview opens in a modal and tears down on close
 
 - **WHEN** the operator clicks the Preview button
 - **THEN** a modal opens showing the composition's simulated output at its own

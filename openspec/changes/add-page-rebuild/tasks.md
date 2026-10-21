@@ -63,6 +63,8 @@
       Runtime 344 passed / 2 skipped, `page-rebuild.spec.ts` among them; Designer 318 passed / 13
       skipped / 1 flaky (`clock.spec.ts:14`, a wall-clock tick, passed on retry; not touched by
       this change). Read from the run log
+- [ ] 5.8 Linux `e2e` RAN on the commit carrying `RUN-NEXT-VERSION-02` Q11 (`d3c07ca4`: a stopped row lets the
+      rebuild through; the confirmation's wording) — run URL: _(pending: the run's final push)_
 
 ## 6. Docs
 

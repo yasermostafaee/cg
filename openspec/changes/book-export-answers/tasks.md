@@ -53,6 +53,8 @@ Lane: **FULL** — the export path, the import path, a shared frame cap (`@cg/sh
       [38760662866](https://github.com/yasermostafaee/cg/actions/runs/38760662866) on `9870f5b3` — **success**, read
       from the log: Designer 338 passed / 13 skipped, CG Control 348 passed / 2 skipped; `book-export.spec.ts` (both),
       `book-from-designer.spec.ts` and the empty-file case in `import-vcg-template.spec.ts` RAN and passed.
+- [ ] 5.3 The Linux e2e on the commit carrying `RUN-NEXT-VERSION-02` BOOK-EXPORT Q1 (`9b07a7ed`: the refusal adds
+      "or load the pages in CG Control instead (Load folder…)") — run URL: _(pending: the run's final push)_
 
 ## 6. Housekeeping
 

@@ -507,3 +507,96 @@ on-air channels stay refused while the link is down, as before.
 
 - **WHEN** CG Bridge restarts on its own files **THEN** every template is back before any console
   connects — control: a bridge on an empty store gets nothing from a reconnecting console
+
+### Requirement: The operator SHALL set a countdown's target per row with the date and time control
+
+CG Control's import SHALL mark a `text` field that drives a countdown's target — its own composition
+binds it as `clock-target` to a countdown aimed at a time of day or a date and time — as that
+countdown's target (`countdown`: the target kind and the author's After zero). The marker SHALL be
+DERIVED from the template's bindings at import, never authored, and a marker the bindings do not
+justify SHALL be removed. The Inspector SHALL offer the shared date and time control for a marked
+field, per row, in place of a text box, staging its value through the Inspector's ordinary path: the
+stored value is ISO with the console's offset, or `HH:mm[:ss]`, in every calendar.
+
+On air, a target change SHALL be the row's existing `CG <channel>-<layer> UPDATE 0 "<json>"` and
+nothing else — never a `PLAY`, a re-take, a `MIXER`, a `CLEAR` or any command the operator did not
+cause. A row with no page on its layer SHALL send nothing: the change is state, and the next take
+carries it in its `CG ADD` payload. A row that is loaded and not yet taken holds its page on the
+layer already, so the same one `CG UPDATE` reaches that page and no playout command is sent.
+
+A target already in the past SHALL be stated, never refused: `Target passed 12 min ago` followed by
+the author's After zero in the operator's words (`holds at 00:00`, `counts past zero`, `digits
+hidden`, `will close at once`), re-read every 15 s; the Take SHALL stay available. When the machine
+CG Bridge runs on keeps another time zone than this console (`bridge.capabilities` reports its
+clock; an older bridge reports none), both clocks SHALL be stated as facts.
+
+#### Scenario: A marked field gets the control
+
+- **WHEN** a template whose countdown target is bound to `targetTime` is imported and its row selected
+- **THEN** `targetTime` is the date and time control, and its neighbouring text field stays a text box
+
+#### Scenario: On air, a target change is the row's update and nothing else
+
+- **WHEN** the operator changes the target of an on-air row and updates it
+- **THEN** the only line on the layer is `CG 1-<layer> UPDATE 0 "{\"targetTime\":\"…\"}"`, and the row
+  stays on air
+
+#### Scenario: Off air, nothing is sent until the take
+
+- **WHEN** the operator changes the target of a row whose page left the layer
+- **THEN** nothing is sent, and the next take's `CG ADD` payload carries the new target
+
+#### Scenario: A passed target is stated, not refused
+
+- **WHEN** a row's target is twelve minutes past and the author chose Close the graphic
+- **THEN** the Inspector reads `Target passed 12 min ago · will close at once` and Update stays enabled
+
+### Requirement: An imported book is read as a book without a re-export
+
+CG Control's import SHALL derive the template's field form, its page lists and its page from the package's scene after
+`withPageLists`: every `list` field bound by `sequence-items` to a sequence whose items and whose default are all
+pictures SHALL be a page list (marked `pages`, recorded in `TemplateInfo.pageLists`) even without a stored mark, and a
+stepped picture sequence no field drives SHALL be given its page list (`pages-<elementId>`, the sequence's name). CG
+Bridge reads the same record. A package already exported SHALL need only a re-import.
+
+#### Scenario: telavat2.vcg imported as it is
+
+- **WHEN** a package of `telavat2.vcg`'s shape (a key `a1` bound to 87 pictures, no `pages` mark, advance auto) is
+  imported
+- **THEN** `a1` is the template's page list, a book that stops at its ends, and the row reads `1 / 87`
+
+#### Scenario: A book with no Data key
+
+- **WHEN** the same book without a Data key is imported
+- **THEN** the template has the page list `pages-<elementId>` labelled with the sequence's name
+
+### Requirement: An import whose id the channel already lists asks Update or Add as a new template
+
+When a `.vcg` is imported and the channel already lists a template with its package id, CG Control SHALL ask in the
+Templates dialog's own message region — `“<name>” is already on this channel.` — with two answers: `Update “<name>”`
+(the default, first and primary: the same template, its rows and Source defaults kept) and `Add as a new template` (a
+new library id; the name takes ` (2)`, ` (3)`… when it would clash). Closing the dialog SHALL answer neither and
+import nothing. The success line SHALL say which happened: `Updated · <name>` or `Imported · <name>`. A row already on
+air SHALL keep the version its page was served from until its next `CG ADD` (CG Bridge's holds; unchanged). A
+template added as new SHALL be rebuilt under its own library id when the console's runtime changes.
+
+#### Scenario: Two compositions of one project side by side
+
+- **WHEN** two packages with different ids are imported on one channel
+- **THEN** both are listed and nothing is asked
+
+#### Scenario: Add as a new template
+
+- **WHEN** a package whose id the channel lists is imported and the operator answers Add as a new template
+- **THEN** a second template is listed, named with ` (2)`, under its own id, and the line reads `Imported · <name> (2)`
+
+#### Scenario: Update
+
+- **WHEN** the operator answers Update
+- **THEN** the channel still lists one template under that id, at the new version, and the line reads
+  `Updated · <name>`
+
+#### Scenario: Declined
+
+- **WHEN** the dialog is closed while the question is open
+- **THEN** nothing is imported

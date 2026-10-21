@@ -1818,7 +1818,7 @@ recorded; the design is authored when the work starts.
 **Notes:** do NOT ship a bare `schemaVersion` and call this done — that is the 10% that would not
 have caught the reported incident. Source: `DEBT.md:195`.
 
-## [~] R-037 — the sequence item heading is technical, and the fix is a schema decision rather than a restyle ⟨priority: medium⟩ — `openspec/changes/designer-fix-02/`
+## [x] R-037 — the sequence item heading is technical, and the fix is a schema decision rather than a restyle ⟨priority: medium⟩ — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q22): **(a)** — sequence-item field headings read "`<composition> — item N`", with a short stub only when two still collide; done together with R-040.
 — **Closed in code (DESIGNER-FIX-02, FULL lane — a `@cg/shared-schema` + GDD + `TemplateInfo` change, so
@@ -1911,7 +1911,7 @@ shell or overlay change disturbs silently.
 **Notes:** identified as worth adding at the time and not written. Source: `DEBT.md:1383`, inside
 the owner UI review batch at `DEBT.md:1360`.
 
-## [~] R-040 — two same-named sequences produce IDENTICAL Inspector headings ⟨priority: low⟩ — `openspec/changes/designer-fix-02/`
+## [x] R-040 — two same-named sequences produce IDENTICAL Inspector headings ⟨priority: low⟩ — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q22): **(a)** — sequence-item field headings read "`<composition> — item N`", with a short stub only when two still collide; done together with R-037.
 — **Closed in code (DESIGNER-FIX-02):** a de-dup pass over each level's item headings adds
@@ -4662,7 +4662,7 @@ open question this line settles on the next outage (`DONGLE-RECOVER-01` H5).
 **Acceptance:** `license-change-lines.test.ts` — one line per change for both readers, none across many unchanged
 reads (control: every read happened), none for an unreachable Playout.
 
-## [~] R-100 — the operator loads a book of pictures on a row and turns its pages: `12 / 300`, Previous, Next, Go to ⟨priority: high — confirmed by the owner 2026-10-14: the OPERATOR changes the book⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · `openspec/changes/add-image-pages/` · the Designer half is [[D-163]]
+## [x] R-100 — the operator loads a book of pictures on a row and turns its pages: `12 / 300`, Previous, Next, Go to ⟨priority: high — confirmed by the owner 2026-10-14: the OPERATOR changes the book⟩ — FILED 2026-10-14 by `IMAGE-PAGES-01` · `openspec/changes/archive/2026-10-21-add-image-pages/` · the Designer half is [[D-163]]
 
 **What:** on a row whose template has a page list, the Inspector offers `Load pictures…` and `Load folder…`;
 the files are sorted naturally, checked against the limits (4 MB and 3840 × 2160 pixels a picture, 500 pages a

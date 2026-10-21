@@ -322,15 +322,17 @@ during the intro, the hold, or the outro.
 ### Requirement: Preview transport is separate, momentary playout commands
 
 The preview modal SHALL present the playout commands as **separate, momentary**
-buttons — **Play**, **Pause**, **Out**, **Stop**, **Next** — each issuing a single
-command, mirroring on-air control. **Play** SHALL call `play()`, or `resume()`
+buttons — **Play**, **Pause**, **Out**, **Stop**, **Previous**, **Next** — each issuing a
+single command, mirroring on-air control. **Play** SHALL call `play()`, or `resume()`
 when the composition is paused; it SHALL NOT be a toggle and SHALL NOT remain
 visually "pressed"/active after a click. **Pause** SHALL call `pause()`. **Out**
 SHALL call `out()` (the coordinated animated exit) and **Stop** SHALL call
 `stop()` (the immediate clear); both are momentary and visually distinct, each
-with its own icon and a short tooltip making the difference clear. **Next** SHALL
-call `next()` and SHALL be **disabled when the template has a single step**
-(nothing to advance to). Preview-only utilities (e.g. **Reset**) SHALL be grouped
+with its own icon and a short tooltip making the difference clear. **Previous** SHALL
+call `previous()` and **Next** SHALL call `next()`; both SHALL be **disabled when the
+template has a single step** (nothing to step to). Every command SHALL sit wholly inside
+the preview's panel: Play, Pause, Out and Stop share one row and Previous and Next share
+the row below, half each. Preview-only utilities (e.g. **Reset**) SHALL be grouped
 visually apart from the playout commands. All interactive controls SHALL expose
 hover / active / focus-visible / disabled states.
 
@@ -350,8 +352,15 @@ hover / active / focus-visible / disabled states.
 #### Scenario: Next is disabled for a single-step template
 
 - **WHEN** the composition has a single step
-- **THEN** the Next command is disabled; it becomes available only when the template
-  exposes more than one step
+- **THEN** the Next and Previous commands are disabled; they become available only when
+  the template exposes more than one step
+
+#### Scenario: Every command is inside the panel
+
+- **WHEN** the preview opens on a template with more than one step
+- **THEN** Play, Pause, Out, Stop, Previous and Next are each wholly inside the Playout
+  commands group, and the group is inside the preview dialog — no command is pushed past
+  the panel's edge
 
 ### Requirement: Preview surfaces important problems prominently
 
@@ -1261,20 +1270,27 @@ out-point SHALL NOT auto-restore the prior mode.
 
 ### Requirement: A finite sequence plays its first-item IN and last-item OUT before completion
 
-A FINITE sequence SHALL play its first item's `transitionIn` on entry (not an abrupt cut-in) and its
-last item's `transitionOut` when the last item's dwell ends, and SHALL signal completion ONLY AFTER
-that last-item exit finishes. Because a sequence's completion feeds the content-driven hold, the
-composition's outro therefore fires AFTER the content has left — content exits first, background last
-(D-105). An INFINITE sequence SHALL be unchanged: no first-item entrance, no last-item exit, and it
-never completes (it holds until `stop()`). A `transitionIn` / `transitionOut` of `none` (or a zero
-duration) SHALL be a no-op at that boundary (cut-in / immediate completion). The behavior SHALL be
-identical in the canvas preview and the export (one driver).
+EVERY sequence SHALL play its first item's `transitionIn` on entry (not an abrupt cut-in) — a finite
+one AND an infinite one (`B-103`, the owner's decision 2026-10-14, Q6 (a): "slides in, always"). A
+FINITE sequence SHALL also play its last item's `transitionOut` when the last item's dwell ends, and
+SHALL signal completion ONLY AFTER that last-item exit finishes. Because a sequence's completion feeds
+the content-driven hold, the composition's outro therefore fires AFTER the content has left — content
+exits first, background last (D-105). An INFINITE sequence SHALL play no last-item exit and never
+complete (it holds until `stop()`). A `transitionIn` / `transitionOut` of `none` (or a zero duration)
+SHALL be a no-op at that boundary (cut-in / immediate completion). A `next()` that arrives during the
+first item's entrance SHALL be kept, once, and applied as the entrance ends — never lost. The behavior
+SHALL be identical in the canvas preview and the export (one driver).
 
 #### Scenario: The first item enters with transitionIn
 
-- **WHEN** a finite sequence starts
-- **THEN** its first item enters with `transitionIn` (sliding in from the configured edge) before its
-  first dwell, rather than appearing abruptly
+- **WHEN** a sequence — finite or infinite — starts
+- **THEN** its first item enters with `transitionIn` (sliding in from the configured edge, or fading
+  in) before its first dwell, rather than appearing abruptly
+
+#### Scenario: A NEXT during the entrance is kept
+
+- **WHEN** the operator presses NEXT while the first item is still entering
+- **THEN** the sequence advances to the second item as soon as the entrance ends, once
 
 #### Scenario: The last item exits, then the sequence completes
 
@@ -1289,11 +1305,11 @@ identical in the canvas preview and the export (one driver).
   outro — the background does NOT close while content is still on screen (content-first /
   background-last)
 
-#### Scenario: An infinite sequence is unchanged
+#### Scenario: An infinite sequence enters but never exits
 
 - **WHEN** a sequence is infinite (`repeat: 'infinite'`)
-- **THEN** it plays no first-item entrance and no last-item exit, never completes, and holds until
-  `stop()` — exactly as before
+- **THEN** its first item enters with `transitionIn`, it plays no last-item exit, never completes, and
+  holds until `stop()`
 
 ### Requirement: Per-element sequence and countdown timing overrides in preview
 
@@ -1528,3 +1544,49 @@ defaults to `timed` even when drivers are present), and it has no defined durati
 - **WHEN** a loop range is authored on a composition whose hold resolves to `timed`
 - **THEN** the surface states that the range has no playback effect
 - **AND** it states what would make it active — a content-driven hold with an effective driver
+
+### Requirement: A content host is hidden until its own scope's content start, nested ones included
+
+A clock, sequence or ticker HOST SHALL be hidden (`display: none`) until the content-start frame of
+the scope that holds it — its composition's marker, or the entrance-settle heuristic without one —
+and revealed from that frame, so it never shows its frozen static content during an intro. This
+SHALL hold for a host inside a NESTED composition exactly as for one at the root: each scope SHALL
+collect its content hosts through its OWN element map (`B-099`), never the root's, through which a
+nested host is never found and the gate silently applies to nothing.
+
+#### Scenario: A nested clock and sequence wait for their scope's marker
+
+- **WHEN** a composition nested in a template holds a wall clock and a sequence, under a
+  content-start marker at frame 60 of that composition, and the template plays
+- **THEN** both hosts are hidden at frame ~30, and revealed (their natural display) after frame 60
+
+#### Scenario: The root is unchanged
+
+- **WHEN** the clock and sequence sit directly in the template, under a marker at frame 60
+- **THEN** they are hidden before it and revealed after it, as before
+
+### Requirement: A nested composition that plays out on its own never strands a content-driven parent
+
+A content-driven parent's wait on a nested (non-coordinator) composition's content SHALL end when
+that composition SETTLES on its own (a timed `auto-out` whose hold is shorter than its content),
+because its settle halts its content and that content can then never complete (`B-030`). The parent
+SHALL therefore reach a terminal state — play out — instead of holding on air until `stop()`. A
+nested composition that has not settled (a manual one, or one still holding) SHALL still hold the
+parent for its content, exactly as before.
+
+#### Scenario: A timed child shorter than its content
+
+- **WHEN** a content-driven parent nests a composition set to timed `auto-out` with a 300 ms hold
+  over a 10 s countdown, and plays
+- **THEN** the parent is on air while the child holds, and plays out after the child has played
+  out — long before the countdown would end
+
+#### Scenario: Content that ends first still holds the parent
+
+- **WHEN** the child's countdown (200 ms) ends inside its 300 ms hold
+- **THEN** the parent holds for that content and then plays out, as before
+
+#### Scenario: A manual child is unchanged
+
+- **WHEN** the nested composition is manual with a 1.5 s countdown
+- **THEN** the parent is still on air at 1 s, and plays out after the countdown ends

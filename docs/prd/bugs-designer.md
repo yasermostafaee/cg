@@ -632,7 +632,7 @@ appears at/after its in-point and plays, and lifespan is honored during play (no
 `packages/template-runtime/tests/runtime.test.ts` (B-029) +
 `apps/designer/tests/e2e/trimmed-content-start.spec.ts`. Capability: `designer-playout-lifecycle`.
 
-## [~] B-030 — a nested TIMED-auto-out content-holder under a content-driven parent strands the parent on-air until stop() ⟨priority: low⟩ — D-104 follow-up — `openspec/changes/designer-fix-02/`
+## [x] B-030 — a nested TIMED-auto-out content-holder under a content-driven parent strands the parent on-air until stop() ⟨priority: low⟩ — D-104 follow-up — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — **Reproduced red and closed in code (DESIGNER-FIX-02, 2026-10-14), fix option (a):** a covered
 child that SETTLES on its own ends its share of the parent's wait (`nestedContentWait` races the
@@ -1228,7 +1228,7 @@ the assertion is that a row is ABSENT. Note there is no consolidated Linux-E2E b
 repo; P-009's spec (`docs/prd/platform.md`) establishes the owed-run rule, and each entry carries its
 own debt, which is why it is written out here.
 
-## [~] B-099 — UNVERIFIED: `wireScope`'s content-start gate resolves a nested scope's hosts through the ROOT `elementMap`, so the D-104 visibility gate is likely inert for nested compositions ⟨priority: medium⟩ — `openspec/changes/designer-fix-02/`
+## [x] B-099 — UNVERIFIED: `wireScope`'s content-start gate resolves a nested scope's hosts through the ROOT `elementMap`, so the D-104 visibility gate is likely inert for nested compositions ⟨priority: medium⟩ — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — **PROBED, CONFIRMED and closed in code (DESIGNER-FIX-02, 2026-10-14).** The probe this item asks
 for: a nested composition holding a wall clock and a sequence under a content-start marker at frame
@@ -1358,7 +1358,7 @@ the repro is the truth, the suspicion is not.
 both `.vcg` and single-file output, PLUS the preview/hardware parity scenario (the render path,
 not just collection).
 
-## [~] B-103 — first sequence item enters WITHOUT its transition when `repeat: 'infinite'` ⟨priority: medium⟩ — `openspec/changes/designer-fix-02/`
+## [x] B-103 — first sequence item enters WITHOUT its transition when `repeat: 'infinite'` ⟨priority: medium⟩ — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q6): **(a)** — a looping sequence's first item slides in, always (no exit).
 — **Closed in code `0ea672fa` (2026-10-14):** every sequence's first item enters with its `transitionIn`; a `next()` during that entrance is kept once. Tests: `sequence-driver.test.ts` › "🔴 an INFINITE sequence fades its first item in…", "🔴 a NEXT pressed during that entrance is kept…". Reaches existing templates on re-import (or with `PAGE-REBUILD-01`).
@@ -1432,7 +1432,7 @@ project; same or different browser session; whether the remembered-directory per
 MUST be pinned before a fix is credible. What the report does add is that the loss is reproducible
 on demand for the owner, so those conditions can now actually be captured rather than guessed.
 
-## [~] B-105 — the sequence "Hide-show" transition produces no perceptible change ⟨priority: medium⟩ — `openspec/changes/designer-fix-02/`
+## [x] B-105 — the sequence "Hide-show" transition produces no perceptible change ⟨priority: medium⟩ — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q7): **(a)** — rename "Hide-show" to "Cut" and pin it with a test.
 — **Closed in code (DESIGNER-FIX-02):** the preset reads **Cut** (key `cut`); pinned by `sequence-presets.test.ts` › "🔴 B-105 — the none/none preset is called "Cut"; no label says "Hide-show" again". The smooth alternative the owner asked for separately is `Crossfade` (`D-163`).
@@ -1459,7 +1459,7 @@ observed behavior is filed as reported either way.
 **Regression test:** sequence transition test asserting item advance is OBSERVABLE under the
 Hide-show values (the item content actually changes at the boundary).
 
-## [~] B-106 — repeater `maxItems` is not enforced end-to-end ⟨priority: medium⟩ — `openspec/changes/designer-fix-02/`
+## [x] B-106 — repeater `maxItems` is not enforced end-to-end ⟨priority: medium⟩ — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — **LOCATED (DESIGNER-FIX-02, 2026-10-14): no render path stamps past `maxItems`.** Every row is
 built by `buildRepeaterRows` (`scene-builder.ts`), and both of its callers clamp — the build-time
@@ -1588,7 +1588,7 @@ makes it a candidate to **stabilise or quarantine deliberately** (a fixture whos
 fragile should not be able to redden a shared gate), rather than to "fix". Decide which before
 touching it. Source: `DEBT.md:1343`.
 
-## [~] B-128 — the ticker separator picker lists EVERY asset, and selecting a font or a video records it as `kind: 'image'` ⟨priority: medium⟩ — `openspec/changes/designer-fix-02/`
+## [x] B-128 — the ticker separator picker lists EVERY asset, and selecting a font or a video records it as `kind: 'image'` ⟨priority: medium⟩ — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — **On-air behaviour MEASURED before the fix (DESIGNER-FIX-02, 2026-10-14):** the page draws the
 separator as `<img alt="">` at its authored box (`ticker-driver.ts` `applyImageSeparator`), and the
@@ -2282,7 +2282,7 @@ advancing `currentTime`. The existing coverage misses exactly this: `video-impor
 pins the transplant, but against the **canvas** iframe, which never plays, and it asserts node
 identity and `currentTime` — never `!paused` after a rebuild.
 
-## [~] B-138 — an unresolved VIDEO asset in the preview is SILENTLY invisible: no placeholder, no marker, no console line ⟨priority: medium — it makes a whole class of asset failure undiagnosable⟩ — `openspec/changes/designer-fix-02/`
+## [x] B-138 — an unresolved VIDEO asset in the preview is SILENTLY invisible: no placeholder, no marker, no console line ⟨priority: medium — it makes a whole class of asset failure undiagnosable⟩ — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q3): **(a)** — a video whose file is missing shows the image "missing" picture as its still frame.
 — **Closed in code (DESIGNER-FIX-02, FAST lane):** the unresolved leg of `applyAssetUrls` is no
@@ -2349,7 +2349,7 @@ mutations). An E2E asserting the marker appears on a video whose assetId resolve
 **Related:** [[B-136]] (the identical symptom from a different cause, and the item that surfaced
 this), [[B-137]] (the once-per-element logging precedent).
 
-## [~] B-147 — three schema spellings of "make the text fit" and the runtime implements NONE; the Designer ships an `autoSqueeze` control that writes a field nothing reads ⟨priority: high — it is a control that silently does nothing, and the failure lands on air with the next long name⟩
+## [x] B-147 — three schema spellings of "make the text fit" and the runtime implements NONE; the Designer ships an `autoSqueeze` control that writes a field nothing reads ⟨priority: high — it is a control that silently does nothing, and the failure lands on air with the next long name⟩ · archived 2026-10-21 (`openspec/changes/archive/2026-10-21-designer-fix-02/`, `openspec/changes/archive/2026-10-21-add-text-fit/`)
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q8): **(a) now** — the toggle shows as unavailable with one short reason (the D-159 pattern); **then real shrink-to-fit** (bundle 4) as soon as possible.
 — **Interim closed in code (DESIGNER-FIX-02, `openspec/changes/designer-fix-02/`):** the Auto Squeeze
@@ -2426,7 +2426,7 @@ beside a working one is how the next author picks the dead one.
   [[R-057]] (the operator half), [[B-146]] (the same class — a control that silently does nothing),
   [[D-060]] (`fitMode: 'autosize'`, the one that IS implemented).
 
-## [~] B-148 — instancing ONE box composition twice exports TWO declarations with the SAME `elementId` and `sourceId`: the boxes fight over one live layer, and nothing refuses it ⟨priority: high — a template that exports clean and cannot work⟩ — `openspec/changes/designer-fix-02/`
+## [x] B-148 — instancing ONE box composition twice exports TWO declarations with the SAME `elementId` and `sourceId`: the boxes fight over one live layer, and nothing refuses it ⟨priority: high — a template that exports clean and cannot work⟩ — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — **Closed in code (DESIGNER-FIX-02), shape 1 (REFUSE):** in a template without a look group, more
 than one rendered plate on one source id is refused at export as `live-source-repeated` (not the
@@ -3404,7 +3404,7 @@ found it only looked at `apps/designer`.
 
 ---
 
-## [~] B-187 — a new Live Source plate starts UNASSIGNED even where a default could not be wrong, so a six-plate layout is six manual assignments ⟨priority: medium — the TWO-HALF rule COLLAPSED to one by [[B-188]]; still unimplemented⟩ — `openspec/changes/designer-fix-02/`
+## [x] B-187 — a new Live Source plate starts UNASSIGNED even where a default could not be wrong, so a six-plate layout is six manual assignments ⟨priority: medium — the TWO-HALF rule COLLAPSED to one by [[B-188]]; still unimplemented⟩ — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q2): **(c)** — a newly drawn Live Source box gets the next free automatic name in its look (`live-1`, `live-2` …), marked "auto" in the Inspector until the author confirms or renames it. Nothing reaches air differently: the operator still maps it.
 — **Closed in code (DESIGNER-FIX-02).** Schema first: `routeKeyAuto?: true` on the plate. The canvas
@@ -4137,7 +4137,7 @@ runtime's, and the runtime is untouched by this fix (the authorisation boundary)
 - **Number:** taken immediately after `B-219` in the same sweep; `git grep -n "B-220"` returned
   nothing anywhere before this heading was written.
 
-## [~] B-249 — a per-composition export writes an `entryCompositionId` the package does not contain ⟨priority: low — nothing reads it today, which is exactly why it will be trusted by whatever reads it next⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B1.5` — `openspec/changes/designer-fix-02/`
+## [x] B-249 — a per-composition export writes an `entryCompositionId` the package does not contain ⟨priority: low — nothing reads it today, which is exactly why it will be trusted by whatever reads it next⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B1.5` — `openspec/changes/archive/2026-10-21-designer-fix-02/`
 
 — **Closed in code (DESIGNER-FIX-02):** `scopeSceneToComposition` OMITS the field (not rewritten);
 the project keeps its own. ⚠ The "nothing reads it" premise no longer held: `D-163`'s
@@ -4214,7 +4214,7 @@ label may be shortened with its long form in a `title`. **Acceptance:** measured
 lies inside the dialog's box, at the smallest supported window and at a large text scale, for every dialog of
 three or more buttons in both apps.
 
-## [~] B-342 — An imported clip is placed with its top-left corner at the scene centre ⟨priority: medium — a full-frame clip or image sequence lands three quarters off the frame⟩ — FILED 2026-10-14 by `PNG-SEQUENCE-IMPORT-01` §0.4 · `openspec/changes/add-image-sequence-import/`
+## [x] B-342 — An imported clip is placed with its top-left corner at the scene centre ⟨priority: medium — a full-frame clip or image sequence lands three quarters off the frame⟩ — FILED 2026-10-14 by `PNG-SEQUENCE-IMPORT-01` §0.4 · `openspec/changes/archive/2026-10-21-add-image-sequence-import/`
 
 **Repro / Actual:** import any clip (or, since `D-164`, an image sequence) through the Assets panel and press
 `Place element`. `placeVideoElement` documents "place … at the scene centre" and hands the scene centre to the
@@ -4240,7 +4240,7 @@ wraps), so this belongs to the hold loop's wrap (pause at the end, then seek to 
 measurement reads 0 skipped frames at the loop point over ≥ 10 wraps, on CasparCG 2.5.0. Nothing is changed by this
 filing.
 
-## [~] B-344 — The clock Inspector shows a `timeofday` countdown as a date-time and rewrites it to one ⟨priority: medium — the Azan countdown's own target, and the first edit loses it silently⟩ — FILED 2026-10-15 by `AZAN-DESIGNER-01` (found by `DESIGNER-TRIAGE-01` row 7) · `openspec/changes/add-azan-countdown/`
+## [x] B-344 — The clock Inspector shows a `timeofday` countdown as a date-time and rewrites it to one ⟨priority: medium — the Azan countdown's own target, and the first edit loses it silently⟩ — FILED 2026-10-15 by `AZAN-DESIGNER-01` (found by `DESIGNER-TRIAGE-01` row 7) · `openspec/changes/archive/2026-10-21-add-azan-countdown/`
 
 **Repro / Actual:** a clock in `countdown` mode whose target is `{ kind: 'timeofday', time: '20:32' }`. This comes
 from a `.vcg` or a hand-edited project, because no Designer screen could author one. The Inspector's `target` select
@@ -4253,7 +4253,7 @@ loads as `timeofday`, with its time intact, and is never rewritten by opening th
 test loads a `timeofday` clock, sees `timeofday` selected and `20:32` in its input, and after editing an unrelated
 field the stored target is still `{ kind: 'timeofday', time: '20:32' }`. The test is red on the old select.
 
-## [~] B-345 — Image sequence… does nothing: a multi-select or a folder never reaches the import ⟨priority: high — the import is the feature, and the failure is silent⟩ — FILED 2026-10-15 by `DELTA-RUN-NEXT-VERSION-01-G` (the owner's browser test) · `openspec/changes/add-image-sequence-import/`
+## [x] B-345 — Image sequence… does nothing: a multi-select or a folder never reaches the import ⟨priority: high — the import is the feature, and the failure is silent⟩ — FILED 2026-10-15 by `DELTA-RUN-NEXT-VERSION-01-G` (the owner's browser test) · `openspec/changes/archive/2026-10-21-add-image-sequence-import/`
 
 **Repro / Actual:** Project assets → Image sequence…; pick ten numbered PNGs (or their folder) and confirm. Nothing
 happens: no modal, no notice, no error. A one-picture pick is just as silent. **Cause:** `pickFiles` creates a
@@ -4269,7 +4269,7 @@ sequence…", `ProjectAssetsPanel.tsx:302`) and the modal's `sequence-single` ca
 **Acceptance:** `tests/e2e/picker-held-input.spec.ts` collects garbage while the dialog is open and still imports —
 red 3 / 3 before the fix, green after.
 
-## [~] B-346 — The timeline's Play is silent; only the Preview plays sound ⟨priority: medium — an author cannot hear a sound where they place it⟩ — FILED 2026-10-15 by `DELTA-RUN-NEXT-VERSION-01-G` (the owner's browser test, corrected: the Preview plays) · `openspec/changes/add-audio-element/`
+## [x] B-346 — The timeline's Play is silent; only the Preview plays sound ⟨priority: medium — an author cannot hear a sound where they place it⟩ — FILED 2026-10-15 by `DELTA-RUN-NEXT-VERSION-01-G` (the owner's browser test, corrected: the Preview plays) · `openspec/changes/archive/2026-10-21-add-audio-element/`
 
 **Repro / Actual:** add a sound element; press the timeline's Play. The playhead runs, nothing is heard. The Preview
 plays the same sound. **Cause:** the canvas page is only ever SEEKED, one frame at a time — it never plays, so its
@@ -4283,7 +4283,7 @@ default) sits in the transport and drives the Preview too. A sound longer than i
 the Preview, as on air; the timeline stops it with the playhead. **Acceptance:** `tests/e2e/timeline-sound.spec.ts`
 — red with the audition removed (a positive control proving the audio element exists), green with it.
 
-## [~] B-347 — A colour picker opened in a dialog draws UNDER it ⟨priority: high — the Steps dialog's colour cells cannot be used⟩ — FILED 2026-10-15 by the owner (screenshot, the Steps dialog) · `openspec/changes/add-azan-countdown/`
+## [x] B-347 — A colour picker opened in a dialog draws UNDER it ⟨priority: high — the Steps dialog's colour cells cannot be used⟩ — FILED 2026-10-15 by the owner (screenshot, the Steps dialog) · `openspec/changes/archive/2026-10-21-add-azan-countdown/`
 
 **Repro / Actual:** Edit steps… → a change whose property is a colour → click its swatch. The picker opens BEHIND
 the dialog: only its lower edge shows below the card, and pressing Escape to close it closes the whole dialog.
@@ -4296,7 +4296,7 @@ dialog. And a popover is portaled to the body, so its Escape reached the Modal's
 `4000`, green at `6000` — and Escape closes only the picker; a dom test pins the Modal standing aside (red with the
 rule removed).
 
-## [~] B-348 — Pictures named by far-apart numbers took the tab down ("Out of Memory"), or left it busy with nothing shown ⟨priority: high — a crashed tab loses unsaved work⟩ — FILED 2026-10-15 by `DELTA-RUN-NEXT-VERSION-01-I` (the owner's folder of ~38 pictures) · `openspec/changes/add-image-sequence-import/`
+## [x] B-348 — Pictures named by far-apart numbers took the tab down ("Out of Memory"), or left it busy with nothing shown ⟨priority: high — a crashed tab loses unsaved work⟩ — FILED 2026-10-15 by `DELTA-RUN-NEXT-VERSION-01-I` (the owner's folder of ~38 pictures) · `openspec/changes/archive/2026-10-21-add-image-sequence-import/`
 
 **Repro / Actual:** a folder of about 38 separate pictures named by large, unrelated numbers (time stamps). `Image
 sequence…` with all of them selected → Chrome "Aw, Snap! Out of Memory"; `Image sequence folder…` → nothing for as
@@ -4334,7 +4334,7 @@ to stop at. **Acceptance:** e2e `book-export.spec.ts` (the real folder pick, a r
 the pick as Chrome's is) — red at HEAD (no answer at all), green now; `book-export.test.ts`,
 `export-answer.dom.test.ts`.
 
-## [~] B-352 — Every composition exported from one project carried the PROJECT's id, so their imports replaced each other in CG Control ⟨priority: high — the owner could not have two outputs of one project side by side, and nothing said a template had been replaced⟩ — FILED 2026-10-16 by `RUN-NEXT-VERSION-02` (the owner: "each one takes the place of the previous one") · `openspec/changes/composition-package-ids/`
+## [x] B-352 — Every composition exported from one project carried the PROJECT's id, so their imports replaced each other in CG Control ⟨priority: high — the owner could not have two outputs of one project side by side, and nothing said a template had been replaced⟩ — FILED 2026-10-16 by `RUN-NEXT-VERSION-02` (the owner: "each one takes the place of the previous one") · `openspec/changes/archive/2026-10-21-composition-package-ids/`
 
 **Repro / Actual:** two compositions of one project (or one composition saved as two files), exported and imported
 into CG Control: the second replaces the first, and the line reads `Imported · …` both times. **Cause (read in the
@@ -4352,7 +4352,7 @@ the first import of a re-exported composition arrives beside it. **Acceptance:**
 `save-as-copy.spec.ts`; `package-id.test.ts`, `per-composition-export.test.ts`, `package-ids.test.ts`,
 `importClash.test.ts`, `template-rebuild.test.ts`.
 
-## [~] B-353 — A book lost its page-list mark in the Designer, and CG Control showed six EMPTY text boxes instead of its pages ⟨priority: high — the owner's book could not be turned on air, and an Update from the boxes would have replaced the pages with empty text⟩ — FILED 2026-10-16 by `RUN-NEXT-VERSION-02` (the owner's `telavat2.vcg`, row 98) · `openspec/changes/book-page-lists/`
+## [x] B-353 — A book lost its page-list mark in the Designer, and CG Control showed six EMPTY text boxes instead of its pages ⟨priority: high — the owner's book could not be turned on air, and an Update from the boxes would have replaced the pages with empty text⟩ — FILED 2026-10-16 by `RUN-NEXT-VERSION-02` (the owner's `telavat2.vcg`, row 98) · `openspec/changes/archive/2026-10-21-book-page-lists/`
 
 **Repro / Actual:** a Sequence, `Add folder…` (87 JPGs), a Data key `a1`, "Allow file source" ticked, `Export (.vcg)`;
 in CG Control the row's Inspector reads `FIELDS · a1` with empty text boxes — no book bar, no `Load folder…`.

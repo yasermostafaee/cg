@@ -2706,3 +2706,115 @@ predicate, which offers STOP to a row that may be showing something.
 
 - **WHEN** CasparCG cannot be reached and one row is believed on air **THEN** `(1 on air)` is
   shown greyed with the unverifiable marker, as before
+
+### Requirement: The operator loads a book of pictures on a row and turns its pages
+
+For a template field that is a page list, the CG Control Inspector SHALL offer `Load pictures…` and
+`Load folder…` in place of the list editor, sort the picked files in natural file-name order, refuse
+a file over the limits with a sentence naming the file and the limit, send each picture to CG Bridge
+showing progress, and stage the resulting page list like any field value. The Inspector SHALL show
+the current page (`12 / 300`) with Previous, Next and a page box that takes the operator's page
+number in Latin, Persian or Arabic-Indic digits, with Go beside it on the same line. The row SHALL
+show the same `12 / 300`; its NEXT SHALL turn the page, and its PREV SHALL be in the row's menu, so
+a book row keeps the same buttons, in the same columns, as every other row.
+
+#### Scenario: A folder becomes the row's book
+
+- **WHEN** the operator loads a folder of 300 pictures on a row and applies it
+- **THEN** the row's page list holds 300 pages in natural order and the row reads `300 pages`
+
+#### Scenario: Previous, Next and Go to move the counter
+
+- **WHEN** the operator presses Next, then Previous, then types `۱۲` in the page box
+- **THEN** the counter reads `2 / 300`, then `1 / 300`, then `12 / 300`
+
+#### Scenario: A book row keeps the table's shape
+
+- **WHEN** a row carries a book
+- **THEN** its buttons are the same as any loaded row's, on one line under their column headers, and
+  PREV is offered in the row's menu
+
+### Requirement: A row whose template makes sound SHALL show a speaker mark
+
+A layer row SHALL show a speaker mark in its alias cell when its template makes sound
+(`TemplateInfo.hasSound`, derived once at import by the one predicate `hasSoundEffects`). The mark
+SHALL be a fact, not a control: it SHALL add no column and no verb. A template without sound, or one
+imported before this field existed, SHALL show none.
+
+#### Scenario: The mark
+
+- **WHEN** a row is bound to a template that carries a sound
+- **THEN** the row shows the speaker mark, outside the verb block, and the verb count is unchanged
+
+#### Scenario: No sound, no mark
+
+- **WHEN** a row is bound to a template without sound
+- **THEN** no speaker mark is shown
+
+### Requirement: PVW SHALL be silent
+
+The rehearsal frame SHALL mute the template page's sound through the page's own runtime when the page
+loads, before the frame reports ready, so no PLAY reaches a page that can make a sound. A page built
+before sound existed SHALL be rendered unchanged.
+
+#### Scenario: A rehearsal makes no sound
+
+- **WHEN** a row whose template has an entrance sound is rehearsed and played in PVW
+- **THEN** the page's sound switch is muted before the play
+
+### Requirement: CG Control SHALL type a date and time in segments, in three calendars
+
+CG Control's date and time control SHALL be the same contract as the Designer's (rules in
+`@cg/text-shaping`): typed segments `YYYY / MM / DD` and `HH : MM : SS`, 24-hour, in any digit set,
+↑ / ↓, Tab, paste, a refused impossible date, a month grid and `+1 min` / `+5 min` / `+1 h`; Solar
+Hijri by default, Gregorian and Lunar Hijri on request, the choice remembered in this browser
+(`cg.runtime.calendar.v1`), the other two calendars' dates shown as facts. The Lunar Hijri reading
+SHALL take the station's day adjustment. It SHALL work keyboard-only and at 200 % zoom, and in a
+right-to-left page the date SHALL still read year / month / day left to right.
+
+#### Scenario: One instant in three calendars
+
+- **WHEN** the operator types `1405/12/29 21:45:00` in Solar Hijri and switches to Gregorian, then
+  Lunar Hijri
+- **THEN** the segments read 2027/03/20 and 1448/10/12 — the same instant, nothing re-stored
+
+#### Scenario: The control fits at 200 %
+
+- **WHEN** the console is zoomed to 200 %, and then turned right-to-left
+- **THEN** no segment clips its digits, none leaves the Inspector, and the year stays first
+
+### Requirement: Station setup's Calendar SHALL set the station's Lunar Hijri day adjustment
+
+Station setup SHALL offer a **Calendar** pane (Content group) holding the station's Lunar Hijri day
+adjustment, −2 … +2 days, kept by CG Bridge (`calendar.get` / `calendar.set` / `calendar.changed`,
+`calendar.json` beside the templates) and applied to the reading and entry of Lunar Hijri dates
+only. It SHALL save as it is pressed (`calendar.set`, a `station-admin` route) with no Apply. A
+principal who is not a station-admin SHALL see the value in force as a fact with no control, under
+the read-only legend every station-admin pane shows such a principal. The pane SHALL state which
+calculation this engine uses and today's Lunar Hijri date as the adjustment reads it.
+
+#### Scenario: A station-admin adjusts; an operator reads
+
+- **WHEN** a station-admin presses `+1 day` in Calendar
+- **THEN** it is saved at once, today's Lunar Hijri fact moves by a day, and every console's Lunar
+  Hijri reading follows
+- **WHEN** an operator opens Calendar
+- **THEN** the adjustment is a fact, with no chips and no Apply
+
+### Requirement: A list of pictures is never shown as empty text boxes
+
+When a `list` field whose items are pictures reaches the Inspector's generic list editor, the editor SHALL show each
+picture's name, read only, and one sentence — "These are pictures. Import the template again to turn them." — and
+SHALL stage nothing: no text box, no Add item, no From file. A page list SHALL still be edited by the book's own
+editor (the book bar and Load folder…).
+
+#### Scenario: Pictures in the generic editor
+
+- **WHEN** a row's list field holds picture items and is not read as a page list
+- **THEN** the Inspector names the pictures and says to import the template again, and Update cannot replace them
+
+#### Scenario: The owner's book through the real import
+
+- **WHEN** a package of `telavat2.vcg`'s shape is imported through Import a .vcg and loaded on a row
+- **THEN** the Inspector shows no text box for `a1`, shows Load folder…, the book bar reads `1 / 87`, and Next,
+  Previous and the page box with Go move it

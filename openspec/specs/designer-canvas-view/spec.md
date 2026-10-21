@@ -56,6 +56,13 @@ governs the pixel-grid snapping at high zoom (see "Pixel-snap moves to the grid
 at high zoom"), and holding **Alt** during a drag momentarily bypasses ALL
 snapping (free placement) regardless of the preference or the zoom.
 
+**`D-156` (the owner's decision 2026-10-14, Q5 (a)) — `Alt` SHALL be the ONE key that bypasses
+snapping, in EVERY canvas gesture:** a single-element move, a group move, an arrow-key nudge, a
+resize and a rotation (whose 15° snap it frees). **`Shift` SHALL NOT bypass snapping in any
+gesture** — it was the resize and rotate bypass, and two keys for one job is what this ends, so the
+losing spelling is removed rather than kept as an alias. `Shift` keeps its other meanings (the 10 px
+nudge stride).
+
 **`B-181` — a RESIZE gesture SHALL decide its snap on the rect it is about to commit, never on the
 pointer.** The candidate rect SHALL be solved from the raw pointer with any aspect lock already
 applied; the coordinates tested against the snap targets SHALL be the MOVING EDGE(S) of that
@@ -77,8 +84,8 @@ refused. A snap that the `MIN_SIZE` clamp or the lock prevents SHALL therefore p
 axes, the NEARER target SHALL win**, with a deterministic tie to the horizontal axis. The axis the
 lock then FORCES SHALL NOT be given a guide merely for landing near a target; it SHALL be given one
 only if it lands on one. Snapping SHALL remain gated on an unrotated element, the threshold SHALL
-remain a constant screen-space distance, and **Shift** SHALL remain this gesture's bypass for both
-the snap and the whole-pixel quantise.
+remain a constant screen-space distance, and **Alt** SHALL be this gesture's bypass for both the
+snap and the whole-pixel quantise.
 
 #### Scenario: Element snaps to canvas center with a guide
 
@@ -136,11 +143,21 @@ the snap and the whole-pixel quantise.
 - **THEN** the grabbed edge lands on the target exactly as it did before, because the
   solver places that edge at the pointer and the two are identically equal
 
-#### Scenario: Shift bypasses the resize snap entirely
+#### Scenario: Alt bypasses the resize snap entirely
 
-- **WHEN** the operator holds Shift while dragging a resize handle
+- **WHEN** the operator holds Alt while dragging a resize handle
 - **THEN** nothing snaps, no guide line is drawn, and the placement keeps its
   fractional part
+
+#### Scenario: Shift no longer bypasses the resize snap
+
+- **WHEN** the operator holds Shift while dragging a resize handle within the threshold of a target
+- **THEN** the edge still snaps onto the target and the guide is drawn
+
+#### Scenario: Alt frees a rotation
+
+- **WHEN** the operator holds Alt while rotating an element
+- **THEN** the committed angle is the raw swept angle, not snapped to 15°
 
 ### Requirement: Ruler guides
 
@@ -240,9 +257,9 @@ resize COMMIT: the arrow NUDGE below the threshold SHALL remain a relative ±ste
 fractional part. Below the threshold the quantise SHALL run AFTER smart-guide snapping and SHALL apply
 only to the axes NO guide claimed — a guide has landed the box on a real target, which inside a scaled
 composition instance is very often legitimately fractional, and rounding after it would pull the box
-back off that target. Holding **Alt** SHALL bypass the quantise on both axes at every zoom, making it
-the only way to place sub-pixel by drag; the resize gesture's existing **Shift** modifier SHALL be its
-bypass. The Snapping preference SHALL NOT gate the quantise — turning smart guides off is a request
+back off that target. Holding **Alt** SHALL bypass the quantise on both axes at every zoom, in a drag
+AND in a resize (`D-156` — the resize's bypass was **Shift**; it is Alt, the one key in every
+gesture). The Snapping preference SHALL NOT gate the quantise — turning smart guides off is a request
 about being pulled toward other things, not a request for a coordinate the author cannot read.
 
 #### Scenario: A drag lands on whole pixels at grid zoom
@@ -287,9 +304,9 @@ about being pulled toward other things, not a request for a coordinate the autho
 #### Scenario: A resize below the grid threshold commits whole pixels
 
 - **WHEN** the operator drags a resize handle of an UNROTATED element below the
-  grid threshold without holding Shift
+  grid threshold without holding Alt
 - **THEN** the committed position and size are whole scene pixels, and holding
-  Shift bypasses it
+  Alt bypasses it
 
 #### Scenario: A resize never moves the fixed corner to achieve the quantise
 
