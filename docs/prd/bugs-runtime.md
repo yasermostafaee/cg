@@ -13810,8 +13810,9 @@ for both ends (`WS_MAX_FRAME_BYTES` in `@cg/shared-ipc`); CG Control never write
 Bridge: its page is 180 MB, and one template can be at most 64 MB. Export it again from the Designer with fewer or
 smaller pictures.`; the Designer refuses `Export .vcg` before the save dialog past `TEMPLATE_MEDIA_MAX_BYTES` (45 MB:
 64 MiB less 4 MiB for the page, before base64): `"<element>" makes this template too large for CG Control: 150
-pictures, 672 MB of pictures and media; one template can carry at most 45 MB. Use fewer or smaller pictures.` The
-size warning now says it applies to both. **Not changed:** the cap itself (a larger book needs its pages delivered as
-files or loaded by the operator — an owner question). **Acceptance:** `WebSocketRuntime.test.ts` against a real bridge
+pictures, 672 MB of pictures and media; one template can carry at most 45 MB. Use fewer or smaller pictures, or load
+the pages in CG Control instead (Load folder…).` (its last clause added by `RUN-NEXT-VERSION-02`, BOOK-EXPORT Q1). The
+size warning now says it applies to both. **Not changed:** the cap itself — the owner kept it (BOOK-EXPORT Q1 (a)): a
+larger book's pages are loaded by the operator. **Acceptance:** `WebSocketRuntime.test.ts` against a real bridge
 (red with the guard removed: `BridgeDisconnectedError`), `template-delivery.test.ts`, `book-export.test.ts`,
 `ws-frame-size.test.ts`.

@@ -153,7 +153,8 @@ describe('B-351 — a template too large for CG Control is refused before the sa
     expect(big?.elementId).toBe('sq');
     expect(big?.message).toBe(
       '"Book pages" makes this template too large for CG Control: 150 pictures, 671 MB of ' +
-        'pictures and media; one template can carry at most 45 MB. Use fewer or smaller pictures.',
+        'pictures and media; one template can carry at most 45 MB. Use fewer or smaller pictures, ' +
+        'or load the pages in CG Control instead (Load folder…).',
     );
   });
 
