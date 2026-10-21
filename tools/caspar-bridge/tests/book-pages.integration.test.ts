@@ -242,10 +242,14 @@ it('🔴 a new book applied during a page turn waits for it: the page and the bo
 
   expect(turn).toMatchObject({ accepted: true, page: 6 });
   expect(update.accepted).toBe(true);
-  // The new book has three pages, so the row is on page 1 — and the LAST thing the page was told
-  // says so too.
-  expect(pagesOf(r, 'item1')).toEqual({ pages: 0 });
-  expect((await toldIndexes(before)).at(-1)).toBe(0);
+  /*
+    The new book is the old one's first three pages, so page 6 — on screen — was removed:
+    `RUN-NEXT-VERSION-03` 1.5's rule puts the page that stands in its place there, the new last page
+    (3), where `R-100` went to page 1. The subject is unchanged: the LAST thing the page was told
+    agrees with the row.
+  */
+  expect(pagesOf(r, 'item1')).toEqual({ pages: 2 });
+  expect((await toldIndexes(before)).at(-1)).toBe(2);
 }, 40_000);
 
 it('🔴 golden rule 10 — a row with nothing on its layer changes state only: nothing is sent', async () => {
@@ -311,7 +315,9 @@ it('🔴 a new, shorter book on air goes to page 1, told in the same command as 
   await r.pageItem('item1', 'pages', 5);
   const before = await lineCount();
 
-  expect((await r.update('item1', { pages: book.slice(0, 3) }, 'merge')).accepted).toBe(true);
+  // A NEW book — no page shared with the old one (`RUN-NEXT-VERSION-03` 1.5's rule 3): `R-100`'s rule.
+  const fresh = book.slice(0, 3).map((p, i) => ({ ...p, id: `new-${String(i)}` }));
+  expect((await r.update('item1', { pages: fresh }, 'merge')).accepted).toBe(true);
 
   const sent = await linesSince(before);
   expect(sent).toHaveLength(1);
@@ -392,4 +398,33 @@ it('🔴 1.6 — a text page in a book is accepted, and a turn onto it carries n
   const again = await lineCount();
   expect(await r.pageItem('item1', 'pages', 'next')).toEqual({ accepted: true, page: 3, count: 3 });
   expect((await linesSince(again))[0]).toContain(`"${p2!.media}":"/page/${p2!.media}.png"`);
+}, 30_000);
+
+/*
+  🔴 `RUN-NEXT-VERSION-03` 1.5 — `Manage pages…` edits a book that may be ON AIR. The page on screen stays
+  on screen, wherever the edit moved it; removed, the page that followed it takes its place — told to the
+  page in the same `CG UPDATE` as the new book (`pageAfterBookChange`).
+*/
+it('🔴 1.5 — on air, a reordered book keeps its page on screen; removing it puts the next one there', async () => {
+  const r = await boot();
+  const book = await storeBook(r, 5);
+  expect((await r.load('item1', 'book', { pages: book })).accepted).toBe(true);
+  await expect(mock!.waitForCgAddResolution(slotOf(r, 'item1'))).resolves.toBe('resolved');
+  expect((await r.take('item1')).accepted).toBe(true);
+  expect((await r.pageItem('item1', 'pages', 3)).accepted).toBe(true); // page 3 (index 2) on screen
+
+  // Page 3 moved to the front: still on screen, now page 1.
+  const before = await lineCount();
+  const reordered = [book[2]!, book[0]!, book[1]!, book[3]!, book[4]!];
+  expect((await r.update('item1', { pages: reordered }, 'merge')).accepted).toBe(true);
+  expect(pagesOf(r, 'item1')).toEqual({ pages: 0 });
+  const sent = await linesSince(before);
+  expect(sent.some((l) => l.includes('"page":{"field":"pages","index":0'))).toBe(true);
+  expect(sent.some((l) => l.includes(`"${book[2]!.media}":"/page/`))).toBe(true);
+
+  // …and removed: the page that followed it (old page 1) stands in its place.
+  const removed = reordered.slice(1);
+  expect((await r.update('item1', { pages: removed }, 'merge')).accepted).toBe(true);
+  expect(pagesOf(r, 'item1')).toEqual({ pages: 0 });
+  expect(r.stackSnapshot().find((i) => i.itemId === 'item1')?.fields['pages']).toEqual(removed);
 }, 30_000);

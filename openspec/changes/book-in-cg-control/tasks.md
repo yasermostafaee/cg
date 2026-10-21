@@ -60,6 +60,31 @@
       `Sequence`, never `a1` / `pages-el-…`; schema `pageListsOf` assertions carry the name.
 - [ ] 1.4.5 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
 
+## 1.5 — `Manage pages…` in CG Control (FULL lane: the book on the row; the bridge's page rule)
+
+- [x] 1.5.1 `ManagePagesModal` in the shared Modal (`wide`, fixed frame): numbered grid, `On air` / `PVW` marks; drag
+      to reorder + `Move earlier` / `Move later`; `Remove` per page + selected; `Sort by name` (natural, text pages keep
+      places — the Designer's rule); `Add pictures…`, `Add folder…` (appended, `withUniqueIds`), `Replace with folder…`
+      (pictures only); `Add text page` and in-place text editing; `Done` stages, `Cancel` drops. The sentence when the
+      edit removes the page on air (`pageAfterBookChange`).
+- [x] 1.5.2 The page on screen through an edit: `pageAfterBookChange` / `pageIdsOf` (`@cg/shared-ipc` `page-book.ts`),
+      read by CG Bridge (`#pageIdsBefore`, `#keepPagesAfterUpdate`) and the mock (`#pagesAfterUpdate`) — one rule.
+      `R-100`'s "else page 1" kept for a wholly new book; for an EDIT that removed the page on screen, the page that
+      now stands in its place. The living requirement ("Next, Previous and Go to on a page list move one absolute
+      page") is MODIFIED in `specs/runtime-caspar-bridge`, its old sentence replaced.
+- [x] 1.5.3 Superseded assertions rewritten: bridge `book-pages.integration.test.ts` (the concurrent turn now ends on
+      the new last page — its subject, "the page and the book agree", unchanged; "a new, shorter book goes to page 1"
+      now uses a wholly new book), mock `bookPages.test.ts` (the same book's first two pages → its last page).
+- [x] 1.5.4 Tests: e2e `manage-pages.spec.ts` (the owner's check: reorder, remove, sort, text page, Replace with folder,
+      Discard, Update; the on-air mark, a drag, the removal sentence, the bridge's rule after Update; fit at 1280×720,
+      200 % text, RTL, and 200 % zoom on a large screen — footer inside); `page-book.test.ts` (the rule);
+      `book-pages.integration.test.ts` (reordered and removed on air); `bookPages.model.test.ts` (sort, ids, move).
+- [x] 1.5.5 Found, not fixed (the shared Modal, every framed dialog): under CSS `zoom: 2` on the root the modal heights
+      (`88vh`, `--r-modal-h-frame`'s `100vh`) are zoomed with the page and overflow the window. Real browser zoom at
+      200 % on a 1280×720 window is a 640×360 page, below the console's 1100×700 floor (the Inspector is folded away);
+      on a screen that keeps the Inspector, the dialog fits (measured, DPR 2).
+- [ ] 1.5.6 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+
 ## 1.6 — A book with text pages stays a book (FULL lane: the schema's rule, the bridge, the page)
 
 - [x] 1.6.1 Cause: `sequenceItemsBinding` (`@cg/shared-schema` `elements.ts`) answered `null` for pictures mixed

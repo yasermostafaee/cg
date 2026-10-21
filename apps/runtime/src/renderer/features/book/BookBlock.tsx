@@ -14,6 +14,8 @@ import { bookPagesOf, isPicturePage, withPicturesReplaced, type BookPage } from 
 import { bookSent, bookSource, bookSourceText, bookSourceWords, pictureName } from './bookFacts.js';
 import { loadPictures } from './loadPictures.js';
 import { useAuthoredPictures } from './authoredPictures.js';
+import { ManagePagesModal } from './ManagePagesModal.js';
+import { useRehearse } from '../../hooks/useRehearse.js';
 import {
   ensurePicture,
   MISSING_PICTURE_URL,
@@ -55,8 +57,10 @@ export interface BookBlockProps {
   /** The row's turning state (`bookOf`); `null` for a book the author's sequence turns by itself. */
   book: RowBook | null;
   onStage: (value: FieldValue) => void;
-  /** `RUN-NEXT-VERSION-03` 1.5 — open `Manage pages…`; absent while it is not offered. */
-  onManage?: (() => void) | undefined;
+  /** `RUN-NEXT-VERSION-03` 1.5 — the book ON the row (applied), for the page on air in `Manage pages…`. */
+  applied: FieldValue | undefined;
+  /** The row is on air (`isOnAirStatus`). */
+  onAir: boolean;
 }
 
 export function BookBlock({
@@ -70,10 +74,15 @@ export function BookBlock({
   templateId,
   book,
   onStage,
-  onManage,
+  applied,
+  onAir,
 }: BookBlockProps): JSX.Element {
   const loaded = Array.isArray(value);
   const pages = bookPagesOf(loaded ? value : defaults);
+  const appliedPages = bookPagesOf(Array.isArray(applied) ? applied : defaults);
+  const inPvw = useRehearse().some((r) => r.itemId === itemId);
+  const authored = useAuthoredPictures(templateId, channel);
+  const [managing, setManaging] = useState(false);
   const source = bookSource(pages, loaded);
   const words = bookSourceWords(source);
   const current = Math.min(Math.max(0, (book?.page ?? 1) - 1), Math.max(0, pages.length - 1));
@@ -115,14 +124,7 @@ export function BookBlock({
           {pages.length === 1 ? '1 page' : `${String(pages.length)} pages`}
         </span>
       </div>
-      <BookStrip
-        title={title}
-        pages={pages}
-        current={current}
-        book={book}
-        templateId={templateId}
-        channel={channel}
-      />
+      <BookStrip title={title} pages={pages} current={current} book={book} authored={authored} />
       {book !== null && <BookTurn itemId={itemId} title={title} book={book} />}
       <div className="cg-book__row" data-book-load="">
         <Button
@@ -145,17 +147,15 @@ export function BookBlock({
           <Icon icon={FolderOpen} size={13} />
           Load folder…
         </Button>
-        {onManage !== undefined && (
-          <Button
-            variant="neutral"
-            aria-label={`Manage pages of ${title}`}
-            disabled={busy !== null}
-            onClick={onManage}
-          >
-            <Icon icon={ListOrdered} size={13} />
-            Manage pages…
-          </Button>
-        )}
+        <Button
+          variant="neutral"
+          aria-label={`Manage pages of ${title}`}
+          disabled={busy !== null}
+          onClick={() => setManaging(true)}
+        >
+          <Icon icon={ListOrdered} size={13} />
+          Manage pages…
+        </Button>
       </div>
       {fitted !== null && (
         <span className="cg-book-count" data-testid="page-fit-line">
@@ -163,6 +163,24 @@ export function BookBlock({
         </span>
       )}
       {refusal !== null && <Notice noticeRole="refusal" text={refusal} />}
+      {managing && (
+        <ManagePagesModal
+          title={title}
+          pages={pages}
+          appliedPages={appliedPages}
+          current={current}
+          onAir={onAir}
+          inPvw={inPvw}
+          raster={raster}
+          authored={authored}
+          onDone={(next) => {
+            // `RUN-NEXT-VERSION-03` 1.5 — STAGED, like every Inspector edit: Update sends it.
+            onStage(next as unknown as FieldValue);
+            setManaging(false);
+          }}
+          onClose={() => setManaging(false)}
+        />
+      )}
     </div>
   );
 }
@@ -173,17 +191,14 @@ function BookStrip({
   pages,
   current,
   book,
-  templateId,
-  channel,
+  authored,
 }: {
   title: string;
   pages: readonly BookPage[];
   current: number;
   book: RowBook | null;
-  templateId: string;
-  channel: number | undefined;
+  authored: Readonly<Record<string, string>>;
 }): JSX.Element {
-  const authored = useAuthoredPictures(templateId, channel);
   const at = [current - 1, current, current + 1];
   return (
     <div

@@ -2358,6 +2358,86 @@ textarea.cg-field--autogrow {
   font-variant-numeric: tabular-nums;
   color: var(--r-text-muted);
 }
+/*
+ * `RUN-NEXT-VERSION-03` 1.5 — `Manage pages…` (`ManagePagesModal`): the tools on one wrapping line, then
+ * a grid of numbered tiles that fills the dialog's width (the dialog's own frame scrolls it), then a
+ * text page's editor. A tile is a face (the strip's `.cg-book-thumb__frame`), its name, and one line of
+ * icon controls. The selected tile and the tile being dragged are marked on its edge, never by colour
+ * alone: the selected one also carries its pressed toggle.
+ */
+.cg-pages {
+  display: grid;
+  gap: var(--r-space-3);
+  min-width: 0;
+}
+.cg-pages__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--r-space-2);
+}
+.cg-pages__tools .cg-btn,
+.cg-pages__editor .cg-btn {
+  height: 28px;
+  min-height: 28px;
+  padding-block: 0;
+}
+.cg-pages__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: var(--r-space-2);
+}
+.cg-page-tile {
+  display: grid;
+  gap: var(--r-space-1);
+  padding: var(--r-space-1);
+  border: 1px solid var(--r-border-soft);
+  border-radius: var(--r-radius-sm);
+  min-width: 0;
+  cursor: grab;
+}
+.cg-page-tile[data-selected] {
+  border-color: var(--r-accent-strong);
+}
+.cg-page-tile[data-dragging] {
+  opacity: 0.5;
+}
+.cg-page-tile__head {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-1);
+  min-height: 20px;
+}
+.cg-page-tile__num {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--r-text-sm);
+  color: var(--r-text-muted);
+}
+.cg-page-tile__name {
+  font-size: var(--r-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.cg-page-tile__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.cg-pages__end {
+  min-height: 40px;
+}
+.cg-pages__editor {
+  display: grid;
+  gap: var(--r-space-2);
+}
+.cg-pages__editor-label {
+  font-size: var(--r-text-sm);
+  color: var(--r-text-muted);
+}
 /* The page box holds a page number — three digits at most, in any digit set — so it is sized to
    that and stays on the line, not stretched across the panel by `.cg-field`'s 100 %. */
 input.cg-field.cg-book-page {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   PAGE_MAX_BYTES,
+  pageAfterBookChange,
+  pageIdsOf,
   pageRefsOf,
   pageRefusalMessage,
   pageTarget,
@@ -211,5 +213,32 @@ describe('R-100 — the refusal words, one per code', () => {
     expect(pageRefusalMessage('page-too-large', {})).toMatch(/^This picture is 0\.0 MB/);
     expect(pageRefusalMessage('page-too-many-pixels', {})).toMatch(/^This picture is 0 × 0 pixels/);
     expect(pageRefusalMessage('page-too-many', {})).toMatch(/^0 pages/);
+  });
+});
+
+/*
+  🔴 `RUN-NEXT-VERSION-03` 1.5 — the page on screen after a book is edited: the bridge's and the mock's one
+  rule. Reordered or with pages around it removed, the page on screen STAYS; removed itself, the page that
+  stands in its place; a wholly new book keeps `R-100`'s rule.
+*/
+describe('1.5 — pageAfterBookChange', () => {
+  const ids = (...xs: string[]): string[] => xs;
+  it('🔴 the page on screen stays on screen, wherever it moved', () => {
+    expect(pageAfterBookChange(ids('a', 'b', 'c', 'd'), 2, ids('c', 'a', 'b', 'd'))).toBe(0);
+    // A page BEFORE it removed: still the same page, one place earlier.
+    expect(pageAfterBookChange(ids('a', 'b', 'c', 'd'), 2, ids('a', 'c', 'd'))).toBe(1);
+  });
+  it('🔴 removed itself: the page that followed it; the new last page when it was the last', () => {
+    expect(pageAfterBookChange(ids('a', 'b', 'c', 'd'), 2, ids('a', 'b', 'd'))).toBe(2);
+    expect(pageAfterBookChange(ids('a', 'b', 'c', 'd'), 3, ids('a', 'b', 'c'))).toBe(2);
+  });
+  it('a wholly new book: the same page number when it has it, else page 1', () => {
+    expect(pageAfterBookChange(ids('a', 'b', 'c'), 1, ids('x', 'y', 'z'))).toBe(1);
+    expect(pageAfterBookChange(ids('a', 'b', 'c'), 2, ids('x', 'y'))).toBe(0);
+    expect(pageAfterBookChange(ids('a'), 0, [])).toBe(0);
+  });
+  it('a value’s ids, defensively', () => {
+    expect(pageIdsOf([{ id: 'a' }, { text: 'no id' }, 3])).toEqual(['a', undefined, undefined]);
+    expect(pageIdsOf('nope')).toEqual([]);
   });
 });

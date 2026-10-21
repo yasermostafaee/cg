@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   bookPagesOf,
   freshTextPageId,
+  movePage,
   withPicturesReplaced,
+  withPicturesSortedByName,
+  withUniqueIds,
   type BookPage,
   type PicturePage,
 } from '../src/renderer/features/book/bookPages.js';
@@ -50,6 +53,26 @@ describe('1.6 — replace the pictures, keep the text pages in place', () => {
       'p6',
       'p7',
     ]);
+  });
+
+  it('🔴 1.5 — Sort by name: natural order (MRN (2) before MRN (10)); text pages keep their places', () => {
+    const named = (n: number, name: string): PicturePage => ({ ...pic(n), name });
+    const sorted = withPicturesSortedByName([
+      named(1, 'IN/MRN (10).jpg'),
+      txt('note'),
+      named(2, 'IN/MRN (2).jpg'),
+      named(3, 'IN/MRN (1).jpg'),
+    ]);
+    expect(ids(sorted)).toEqual(['p3', 't-note', 'p2', 'p1']);
+  });
+
+  it('1.5 — appended pictures never share an id with a page already there; a move lands where it is dropped', () => {
+    const added = withUniqueIds([pic(1), pic(2)], [pic(2), pic(3)]);
+    expect(added.map((p) => p.id)).toEqual(['p2~2', 'p3']);
+    const pages = [pic(1), pic(2), pic(3), pic(4)];
+    expect(ids(movePage(pages, 3, 0))).toEqual(['p4', 'p1', 'p2', 'p3']);
+    expect(ids(movePage(pages, 0, 2))).toEqual(['p2', 'p1', 'p3', 'p4']);
+    expect(ids(movePage(pages, 1, 4))).toEqual(['p1', 'p3', 'p4', 'p2']);
   });
 
   it('a value is read defensively; a fresh text page id is unique', () => {

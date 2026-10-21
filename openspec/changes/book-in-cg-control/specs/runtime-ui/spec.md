@@ -110,6 +110,36 @@ the Inspector at 1280×720.
 - **WHEN** a template's book has its own pictures and its row is selected
 - **THEN** the current and next faces are those pictures, read from the page CG Bridge stores
 
+### Requirement: `Manage pages…` SHALL be the operator's tool for a book, and its edits SHALL stage
+
+The book block's `Manage pages…` SHALL open the app's shared Modal holding a numbered grid of the book's pages, the
+page on air and the page in PVW marked (`On air`, `PVW`); drag to reorder, and `Move earlier` / `Move later` on every
+page as the keyboard path; `Remove` per page and the selected pages removed together; `Sort by name` (natural order —
+`MRN (2)` before `MRN (10)` — text pages keeping their places); `Add pictures…` and `Add folder…` (appended, ids made
+unique) and `Replace with folder…` (the pictures only, each text page keeping its place), all through the console's
+fitting; `Add text page`, and a text page's words edited in place. `Done` SHALL stage the edited book like every
+Inspector edit — `Discard` and `Update` keep their meaning and nothing reaches air before Update. When the edit
+removes the page on air, the dialog SHALL say which page takes its place at Update. The dialog SHALL fit at 1280×720,
+at 200 % text and at 200 % browser zoom on a screen that shows the Inspector, in RTL, its footer inside it.
+
+#### Scenario: The owner's check
+
+- **WHEN** the operator moves page 3 earlier, removes page 1, sorts by name, adds a text page, moves it after the
+  first picture, replaces the pictures with a folder, presses Done, then Discard
+- **THEN** each step shows in the grid, Replace keeps the text page after the first picture, Done shows
+  `Not sent — press Update`, and Discard puts the row's book back
+
+#### Scenario: Update sends it
+
+- **WHEN** the operator adds a text page, presses Done, then Update
+- **THEN** the block reads `On the row` and the row's book has four pages
+
+#### Scenario: The page on air
+
+- **WHEN** a book on air on page 2 is opened, page 4 is dragged to the front, and the page on air is removed
+- **THEN** page 2 is marked `On air`, still marked after the drag, and its removal reads `Page 2 is on air and is
+removed; at Update, page 2 takes its place.`; after Update the row reads `2 / 3`
+
 ### Requirement: A book with text pages SHALL stay a book, and a load SHALL replace its pictures only
 
 A row whose template's book holds pictures and TEXT pages SHALL be a book in CG Control (the book bar, Load

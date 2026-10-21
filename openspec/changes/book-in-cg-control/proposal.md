@@ -24,6 +24,10 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
 - **1.4 — The book block.** One block on one grid: headed by the book's name (never its field id — and no
   Inspector heading prints a field id any more), always saying where its pages come from and whether they are
   on the row, a strip of the pages around the current one, a turning row and a loading row.
+- **1.5 — `Manage pages…`.** The operator's tool for a book, in the shared Modal: a numbered grid with the page on
+  air and in PVW marked; drag and keyboard reorder; remove one or many; sort by name; add pictures / a folder,
+  replace with a folder; add and edit text pages. Its edits stage. CG Bridge keeps the page on screen through an
+  edit (one rule, `pageAfterBookChange`, shared with the mock).
 - **1.6 — A book with text pages stays a book** (the owner's decision). The one rule
   (`sequenceItemsBinding`): at least one picture, every other item a text page; only a composition item
   makes a sequence unbindable, and the Designer says so in one sentence. CG Control's loads replace the
@@ -33,8 +37,8 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
 
 ## Impact
 
-- **Specs:** `runtime-ui` (MODIFIED, ADDED), `runtime-caspar-bridge` (ADDED), `designer-sequence-element`
-  (MODIFIED).
+- **Specs:** `runtime-ui` (MODIFIED, ADDED), `runtime-caspar-bridge` (MODIFIED — a book keeps the page on screen
+  through an edit, superseding "else page 1" for an edit; ADDED), `designer-sequence-element` (MODIFIED).
 - **Code:** `@cg/shared-ipc` (`pages.get`), CG Bridge (`getPage`, route, scope), `@cg/template-runtime`
   (`page-pictures-host`, the fill, `alt`), CG Control (`pagePictures`, `bookPageOf`, PVW's frame, the mock).
 - **Wire:** one new read channel; `__cg` unchanged.

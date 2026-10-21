@@ -1156,6 +1156,8 @@ function FieldEditor({
             templateId={item.templateId}
             book={book}
             onStage={stage}
+            applied={applied}
+            onAir={isOnAirStatus(item)}
           />
         ) : (
           <FieldControl

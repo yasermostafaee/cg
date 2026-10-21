@@ -1,3 +1,5 @@
+import { naturalCompare } from '@cg/text-shaping';
+
 /**
  * 🔴 `RUN-NEXT-VERSION-03` 1.6 — **A BOOK'S PAGES, as CG Control edits them: pictures and TEXT pages.**
  *
@@ -69,6 +71,54 @@ export function withPicturesReplaced(
   for (const [n, pages] of [...after].sort(([a], [b]) => a - b)) {
     if (n > pictures.length) out.push(...pages);
   }
+  return out;
+}
+
+/**
+ * `RUN-NEXT-VERSION-03` 1.5 — **Sort by name**: the pictures in natural order of their file names
+ * (`MRN (2)` before `MRN (10)`), each text page keeping its PLACE — the Designer's own rule for a mixed
+ * sequence (`sortPicturesByName`), so the two apps sort one book the same way.
+ */
+export function withPicturesSortedByName(pages: readonly BookPage[]): BookPage[] {
+  const sorted = pages
+    .filter(isPicturePage)
+    .sort((a, b) => naturalCompare(pictureFileName(a.name), pictureFileName(b.name)));
+  let next = 0;
+  return pages.map((p) => (isPicturePage(p) ? (sorted[next++] ?? p) : p));
+}
+
+function pictureFileName(name: string | undefined): string {
+  if (name === undefined) return '';
+  const slash = name.lastIndexOf('/');
+  return slash < 0 ? name : name.slice(slash + 1);
+}
+
+/**
+ * `RUN-NEXT-VERSION-03` 1.5 — pictures APPENDED to a book (`Add pictures…`, `Add folder…`), their ids made
+ * unique among the pages already there: an id is how the bridge follows the page on screen through an
+ * edit (`pageAfterBookChange`), so two pages may never share one.
+ */
+export function withUniqueIds(
+  existing: readonly BookPage[],
+  added: readonly PicturePage[],
+): PicturePage[] {
+  const taken = new Set(existing.map((p) => p.id));
+  return added.map((p) => {
+    let id = p.id;
+    for (let n = 2; taken.has(id); n += 1) id = `${p.id}~${String(n)}`;
+    taken.add(id);
+    return id === p.id ? p : { ...p, id };
+  });
+}
+
+/** Move the page `from` to just before the page now at `to` (both 0-based); `to === length` appends. */
+export function movePage(pages: readonly BookPage[], from: number, to: number): BookPage[] {
+  if (from < 0 || from >= pages.length) return [...pages];
+  const out = [...pages];
+  const [moved] = out.splice(from, 1);
+  if (moved === undefined) return [...pages];
+  const at = Math.max(0, Math.min(out.length, to > from ? to - 1 : to));
+  out.splice(at, 0, moved);
   return out;
 }
 

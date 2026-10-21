@@ -57,6 +57,8 @@ import {
   PAGE_MAX_PIXELS,
   PAGE_MAX_SIDE,
   PAGES_MAX_PER_ROW,
+  pageAfterBookChange,
+  pageIdsOf,
   pageRefusalMessage,
   pageRefsOf,
   pageTarget,
@@ -958,12 +960,24 @@ export class MockRuntime {
     return null;
   }
 
+  /**
+   * `RUN-NEXT-VERSION-03` 1.5 parity — the page on screen stays on screen after the book is edited
+   * (`pageAfterBookChange`, the bridge's one rule). `item` is the row BEFORE the update.
+   */
   #pagesAfterUpdate(item: StackItemState, fields: FieldValues): Record<string, number> | undefined {
     let pages = item.pages;
-    for (const { fieldId } of this.#templateOfItem(item.itemId, item.templateId)?.pageLists ?? []) {
+    const info = this.#templateOfItem(item.itemId, item.templateId);
+    for (const { fieldId } of info?.pageLists ?? []) {
       const value: unknown = fields[fieldId];
       if (!Array.isArray(value)) continue;
-      if ((pages?.[fieldId] ?? 0) >= value.length) pages = { ...pages, [fieldId]: 0 };
+      const before: unknown = item.fields[fieldId];
+      const field = info?.fields.find((f) => f.id === fieldId);
+      const oldIds = pageIdsOf(
+        Array.isArray(before) ? before : field?.type === 'list' ? field.default : [],
+      );
+      const current = pages?.[fieldId] ?? 0;
+      const next = pageAfterBookChange(oldIds, current, pageIdsOf(value));
+      if (next !== current) pages = { ...pages, [fieldId]: next };
     }
     return pages;
   }

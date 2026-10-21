@@ -172,6 +172,8 @@ import {
   templateAdmitsPassTiming,
   unlicensedTakeRefusal,
   PAGES_MAX_PER_ROW,
+  pageAfterBookChange,
+  pageIdsOf,
   pageRefusalMessage,
   pageRefsOf,
   pageTarget,
@@ -6005,9 +6007,11 @@ export class CasparRuntime {
     }
 
     const seq = this.#nextSeq();
+    // `RUN-NEXT-VERSION-03` 1.5 — the page on screen, read before the new book replaces the old.
+    const pagesBefore = this.#pageIdsBefore(itemId);
     this.#reconciler.applyIntent({ kind: 'update', itemId, fields, mergeMode }, seq);
-    // `R-100` — a new book keeps the page number when it still has that page, else page 1.
-    const touchedPages = this.#keepPagesAfterUpdate(itemId, fields);
+    // `R-100` — the page on screen stays on screen (`pageAfterBookChange`).
+    const touchedPages = this.#keepPagesAfterUpdate(itemId, fields, pagesBefore);
 
     // B-070 — PRESCRIPTIVE, the rule `update` never had (take has it since
     // B-039; setPosition checks the same set). `CG UPDATE` needs a live
@@ -6437,11 +6441,38 @@ export class CasparRuntime {
   }
 
   /**
-   * `R-100` — after an update that carried a page list: the row keeps its page number when the new
-   * book still has that page, else it goes to page 1. Returns the page-list field the update
-   * touched (the first), so an on-air page can be told in the same command.
+   * `RUN-NEXT-VERSION-03` 1.5 — each page list's page IDS as the row holds them NOW: its own value, else
+   * the template's default. Read before an update replaces the book, so the page on screen can be
+   * followed into the new one (`pageAfterBookChange`).
    */
-  #keepPagesAfterUpdate(itemId: string, fields: FieldValues): string | undefined {
+  #pageIdsBefore(itemId: string): Map<string, (string | undefined)[]> {
+    const out = new Map<string, (string | undefined)[]>();
+    const item = this.#reconciler.get(itemId);
+    if (item === null) return out;
+    const info = this.#templateOfItem(itemId, item.templateId);
+    for (const { fieldId } of info?.pageLists ?? []) {
+      const value: unknown = item.fields[fieldId];
+      const field = info?.fields.find((f) => f.id === fieldId);
+      out.set(
+        fieldId,
+        pageIdsOf(Array.isArray(value) ? value : field?.type === 'list' ? field.default : []),
+      );
+    }
+    return out;
+  }
+
+  /**
+   * `R-100` / `RUN-NEXT-VERSION-03` 1.5 — after an update that carried a page list: the page on screen
+   * STAYS on screen wherever it moved; removed, the page that stands in its place; a new book, the
+   * same page number when it has it, else page 1 — `pageAfterBookChange`, the bridge's and the
+   * mock's one rule. Returns the page-list field the update touched (the first), so an on-air page
+   * can be told in the same command.
+   */
+  #keepPagesAfterUpdate(
+    itemId: string,
+    fields: FieldValues,
+    before: ReadonlyMap<string, (string | undefined)[]>,
+  ): string | undefined {
     const templateId = this.#reconciler.get(itemId)?.templateId;
     if (templateId === undefined) return undefined;
     const info = this.#templateOfItem(itemId, templateId);
@@ -6451,7 +6482,8 @@ export class CasparRuntime {
       if (!Array.isArray(value)) continue;
       touched ??= fieldId;
       const current = this.#pageIndexes.get(itemId)?.[fieldId] ?? 0;
-      if (current >= value.length) this.#setPageIndex(itemId, fieldId, 0);
+      const next = pageAfterBookChange(before.get(fieldId) ?? [], current, pageIdsOf(value));
+      if (next !== current) this.#setPageIndex(itemId, fieldId, next);
     }
     return touched;
   }

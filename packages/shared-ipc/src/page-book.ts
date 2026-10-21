@@ -139,6 +139,44 @@ export function pageRefsOf(raw: unknown): PageRef[] {
   });
 }
 
+/** `RUN-NEXT-VERSION-03` 1.5 — each page's id in a page-list VALUE (`undefined` where an item has none). */
+export function pageIdsOf(raw: unknown): (string | undefined)[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((v) =>
+    v !== null && typeof v === 'object' && typeof (v as { id?: unknown }).id === 'string'
+      ? (v as { id: string }).id
+      : undefined,
+  );
+}
+
+/**
+ * 🔴 `RUN-NEXT-VERSION-03` 1.5 — **WHICH PAGE A ROW IS ON AFTER ITS BOOK IS EDITED** (`Manage pages…`,
+ * a load, any update carrying a new page list). 0-based in and out. The one rule the bridge and the
+ * offline mock share (golden rule 6):
+ *
+ * 1. the page on screen is still in the book → it STAYS on screen, wherever it moved to;
+ * 2. it was removed, and the book still shares pages with the old one (an edit) → the page that now
+ *    stands in its place — the one that followed it, or the new last page when it was the last;
+ * 3. the book shares no page with the old one (a new book) → the same page number when the new book
+ *    has it, else page 1 (`R-100`'s rule, unchanged).
+ */
+export function pageAfterBookChange(
+  oldIds: readonly (string | undefined)[],
+  oldIndex: number,
+  newIds: readonly (string | undefined)[],
+): number {
+  if (newIds.length === 0) return 0;
+  const onScreen = oldIds[oldIndex];
+  if (onScreen !== undefined) {
+    const at = newIds.indexOf(onScreen);
+    if (at >= 0) return at;
+  }
+  const kept = new Set(oldIds.filter((id): id is string => id !== undefined));
+  const shared = newIds.some((id) => id !== undefined && kept.has(id));
+  if (shared) return Math.min(Math.max(0, oldIndex), newIds.length - 1);
+  return oldIndex < newIds.length ? Math.max(0, oldIndex) : 0;
+}
+
 export function pageTarget(current: number, count: number, wrap: boolean, to: PageTurn): number {
   if (count <= 0) return 0;
   const at = Math.max(0, Math.min(count - 1, current));

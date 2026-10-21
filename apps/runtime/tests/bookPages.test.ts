@@ -135,7 +135,7 @@ describe('R-100 — test mode turns a book with the bridge’s rules', () => {
     });
   });
 
-  it('🔴 a page list naming a picture never stored is refused; a shorter book goes to page 1', async () => {
+  it('🔴 a page list naming a picture never stored is refused; a shorter book stays on its last page', async () => {
     const { mock, shas } = await mockWithBook(4);
     mock.page('item-1', 'pages', 4);
     expect(
@@ -158,7 +158,10 @@ describe('R-100 — test mode turns a book with the bridge’s rules', () => {
         'merge',
       ).accepted,
     ).toBe(true);
-    expect(mock.stackSnapshot().find((i) => i.itemId === 'item-1')?.pages).toEqual({ pages: 0 });
+    // `RUN-NEXT-VERSION-03` 1.5 — the same book's first two pages: page 4, on screen, was removed, so the
+    // page standing in its place — the new last page — is on screen (`pageAfterBookChange`, the bridge's
+    // rule); `R-100` went to page 1.
+    expect(mock.stackSnapshot().find((i) => i.itemId === 'item-1')?.pages).toEqual({ pages: 1 });
   });
 });
 
