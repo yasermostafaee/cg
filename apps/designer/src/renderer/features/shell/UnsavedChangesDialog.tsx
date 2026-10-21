@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { exportFailedLine } from '../compositions/export-answer.js';
 import { Modal, ModalButton } from './Modal.js';
 // The same two text treatments the save-before-switch question already declares — named, not copied.
 import * as s from './SaveBeforeSwitchModal.css.js';
@@ -43,7 +44,11 @@ export function UnsavedChangesDialog({ onCancel }: { onCancel: () => void }): JS
         res = await window.cg.projects.saveDisk({ scene, askPath: true });
       }
       if (!res.ok) {
-        // Nothing was saved (the picker was cancelled): the window stays open.
+        // Nothing was saved (the picker was cancelled): the window stays open. BOOK-EXPORT Q4 — or
+        // the write into the picked file failed: said, with what became of the file.
+        if (res.failure !== undefined) {
+          setReason(exportFailedLine({ ...res.failure, filename: res.filename }, 'Save'));
+        }
         setBusy(false);
         return;
       }

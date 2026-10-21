@@ -11,6 +11,7 @@ import { cx } from '../../cx.js';
 import { comboKey } from '../../keyboard.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { exportFailedLine } from '../compositions/export-answer.js';
 import { AboutModal } from './AboutModal.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
@@ -136,6 +137,11 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
       designerStore.markSaved();
       return;
     }
+    // BOOK-EXPORT Q4 — a first Save goes through the save dialog too; its failed write is said.
+    if (res.failure !== undefined) {
+      saveWriteFailed(res.filename, res.failure);
+      return;
+    }
     // D-088 — the write to the saved file threw (permission/disk/invalid handle):
     // notice + retry as Save As — the SAME project in a new place, not a copy (`B-352`).
     if (res.reason === 'write-failed') {
@@ -153,7 +159,10 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
     if (scene === null) return;
     try {
       const res = await window.cg.projects.saveDisk({ scene, askPath: true, asCopy });
-      if (!res.ok) return;
+      if (!res.ok) {
+        if (res.failure !== undefined) saveWriteFailed(res.filename, res.failure);
+        return;
+      }
       if (res.projectId !== undefined) designerStore.adoptProjectId(res.projectId);
       designerStore.markSaved();
     } catch (err) {
@@ -171,6 +180,14 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
       `Save failed: ${err instanceof Error ? err.message : String(err)}. The project was not saved.`,
       { hold: true },
     );
+  }
+
+  /** BOOK-EXPORT Q4 — the write into the dialog's file failed: why, and what became of the file. */
+  function saveWriteFailed(
+    filename: string | null,
+    failure: NonNullable<Awaited<ReturnType<typeof window.cg.projects.saveDisk>>['failure']>,
+  ): void {
+    designerStore.showNotice(exportFailedLine({ ...failure, filename }, 'Save'), { hold: true });
   }
 
   function newProject(): void {

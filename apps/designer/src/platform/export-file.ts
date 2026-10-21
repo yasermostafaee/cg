@@ -66,6 +66,24 @@ export async function settleFailedFile(handle: FileSystemFileHandle): Promise<Ex
   }
 }
 
+/**
+ * 🔴 BOOK-EXPORT Q4 — **A PACKAGE WRITTEN INTO THE FILE A SAVE DIALOG JUST MADE**, answered whatever
+ * happens: `null` when it was written; otherwise the cause in the author's words and what became of
+ * the file ({@link settleFailedFile} — an empty one is removed). Save As used to write with no catch,
+ * so a failed write left an empty `.cgproj` behind, as the export once left an empty `.vcg`.
+ */
+export async function writeIntoPicked(
+  handle: FileSystemFileHandle,
+  bytes: Uint8Array,
+): Promise<{ cause: string; file: ExportFileFate } | null> {
+  try {
+    await writeInChunks(handle, bytes, () => undefined);
+    return null;
+  } catch (err) {
+    return { cause: exportFailureOf(err).cause, file: await settleFailedFile(handle) };
+  }
+}
+
 function isNotFound(err: unknown): boolean {
   return err instanceof DOMException && err.name === 'NotFoundError';
 }

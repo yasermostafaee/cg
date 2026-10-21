@@ -19,12 +19,14 @@ export function exportWrittenLine(filename: string, bytes: number): string {
 
 /**
  * Failure: the cause, then what became of the file the save dialog made — removed, left empty (the
- * author is asked to delete it), or not changed.
+ * author is asked to delete it), or not changed. BOOK-EXPORT Q4 — a Save into a file the save dialog
+ * made is answered in the same sentences, with its own verb.
  */
 export function exportFailedLine(
   result: Pick<Extract<ExportResult, { outcome: 'failed' }>, 'cause' | 'filename' | 'file'>,
+  verb: 'Export' | 'Save' = 'Export',
 ): string {
-  const what = `Export failed: ${result.cause.replace(/[.\s]+$/, '')}.`;
+  const what = `${verb} failed: ${result.cause.replace(/[.\s]+$/, '')}.`;
   const name = result.filename ?? 'The file';
   switch (result.file) {
     case 'removed':

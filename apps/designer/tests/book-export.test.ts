@@ -8,6 +8,7 @@ import {
   exportFailureOf,
   settleFailedFile,
   writeInChunks,
+  writeIntoPicked,
   WRITE_CHUNK_BYTES,
 } from '../src/platform/export-file.js';
 import {
@@ -242,6 +243,61 @@ describe('B-349 — the file the save dialog made, after a failure', () => {
     expect(shares.length).toBe(2);
     expect(aborted).toBe(true);
     expect(closed).toBe(false);
+  });
+});
+
+describe('BOOK-EXPORT Q4 — Save As writes into the picked file the way the export does', () => {
+  /** A handle whose file the dialog made EMPTY, and whose every write fails. */
+  function failingEmpty(): FileSystemFileHandle & { removed: boolean; aborted: boolean } {
+    const h = Object.assign(handle({ size: 0, remove: 'works' }), {
+      aborted: false,
+      createWritable: async () => ({
+        write: async () => {
+          throw new DOMException('full', 'QuotaExceededError');
+        },
+        close: async () => undefined,
+        abort: async () => {
+          h.aborted = true;
+        },
+      }),
+    });
+    return h as FileSystemFileHandle & { removed: boolean; aborted: boolean };
+  }
+
+  it('🔴 a failed write is answered with its cause, and the EMPTY file the dialog made is removed', async () => {
+    const h = failingEmpty();
+    expect(await writeIntoPicked(h, new Uint8Array(10))).toEqual({
+      cause: 'there is not enough space on the disk for the file',
+      file: 'removed',
+    });
+    expect(h.aborted).toBe(true);
+    expect(h.removed).toBe(true);
+  });
+
+  it('a write that succeeds answers nothing', async () => {
+    const h = {
+      createWritable: async () => ({
+        write: async () => undefined,
+        close: async () => undefined,
+        abort: async () => undefined,
+      }),
+    } as unknown as FileSystemFileHandle;
+    expect(await writeIntoPicked(h, new Uint8Array(10))).toBeNull();
+  });
+
+  it('the sentence is the export’s, with its own verb', () => {
+    expect(
+      exportFailedLine(
+        {
+          cause: 'there is not enough space on the disk for the file',
+          filename: 'telavat.cgproj',
+          file: 'removed',
+        },
+        'Save',
+      ),
+    ).toBe(
+      'Save failed: there is not enough space on the disk for the file. telavat.cgproj was removed; nothing was saved.',
+    );
   });
 });
 

@@ -37,7 +37,12 @@ import { SharedImageStore } from './SharedImageStore.js';
 import { Exporter } from './Exporter.js';
 import { Preview } from './preview.js';
 import { pickFiles } from './pickFiles.js';
-import { exportFailureOf, settleFailedFile, writeInChunks } from './export-file.js';
+import {
+  exportFailureOf,
+  settleFailedFile,
+  writeInChunks,
+  writeIntoPicked,
+} from './export-file.js';
 
 const APP_INFO: AppInfo = { name: 'cg Designer', version: '0.0.0', platform: 'browser' };
 
@@ -314,7 +319,10 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
             }
             throw err;
           }
-          await writeBytesToHandle(handle, bytes);
+          // BOOK-EXPORT Q4 — the dialog made the file EMPTY; a write that fails is answered, and an
+          // empty file it leaves is removed — the export's own handling (`B-349`).
+          const failure = await writeIntoPicked(handle, bytes);
+          if (failure !== null) return { ok: false, filename: handle.name, failure };
           if (asCopy) await adoptDocument({ scene, index, files }, null);
           sceneSaveHandles.set(scene.id, handle);
           await saveFileHandle(scene.id, handle);

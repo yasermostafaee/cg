@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Scene } from '@cg/shared-schema';
 import { designerStore } from '../../state/store.js';
+import { exportFailedLine } from '../compositions/export-answer.js';
 import { Modal, ModalButton } from './Modal.js';
 import * as s from './SaveBeforeSwitchModal.css.js';
 
@@ -52,7 +53,11 @@ export function SaveBeforeSwitchModal({
       }
       if (!res.ok) {
         // Operator cancelled the file picker — keep the modal open so
-        // they can pick again or hit Discard.
+        // they can pick again or hit Discard. BOOK-EXPORT Q4 — or the write into the picked file
+        // FAILED: said here, never read as a cancel.
+        if (res.failure !== undefined) {
+          setError(exportFailedLine({ ...res.failure, filename: res.filename }, 'Save'));
+        }
         setBusy(false);
         return;
       }

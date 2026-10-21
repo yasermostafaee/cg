@@ -175,6 +175,11 @@ export interface DesignerBridge {
       /** `B-352` — set when an `asCopy` save wrote a copy: the open project's id is this now. */
       projectId?: string;
       /**
+       * BOOK-EXPORT Q4 — the write into the file the save dialog made FAILED: the cause in the
+       * author's words, and what became of that file (an empty one is removed). Nothing was saved.
+       */
+      failure?: { cause: string; file: ExportFileFate };
+      /**
        * D-088 — set when the write to the cached handle THREW (permission revoked, disk
        * error, invalid handle): the caller should notice "Couldn't write to the file —
        * choose where to save." and retry as Save As. (A merely deleted file does not throw
