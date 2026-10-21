@@ -1,3 +1,53 @@
+## MODIFIED Requirements
+
+### Requirement: The operator loads a book of pictures on a row and turns its pages
+
+For a template field that is a page list, the CG Control Inspector SHALL offer `Load pictures…` and
+`Load folder…` in place of the list editor, sort the picked files in natural file-name order, FIT each
+picture before it is sent — a picture larger than the row's channel frame on either side SHALL be
+scaled to fit inside it (never upscaled, the aspect kept) and re-encoded, and one within the frame
+but over the 4 MB page cap SHALL be re-encoded at its own size; a re-encoded picture SHALL be a PNG
+when it is transparent and otherwise a JPEG at quality 0.92 (0.85 when that is still over the cap);
+any other picture SHALL be sent exactly as picked — say in one line what fitting did
+(`12 pictures were resized to fit 1920×1080`), refuse BY NAME only a picture still over the cap after
+fitting or a file that is not a picture while the others load, send each picture to CG Bridge showing
+progress, and stage the resulting page list like any field value. CG Bridge's own check SHALL remain
+the guard. The Inspector SHALL show the current page (`12 / 300`) with Previous, Next and a page box
+that takes the operator's page number in Latin, Persian or Arabic-Indic digits, with Go beside it on
+the same line. The row SHALL show the same `12 / 300`; its NEXT SHALL turn the page, and its PREV
+SHALL be in the row's menu, so a book row keeps the same buttons, in the same columns, as every other
+row.
+
+#### Scenario: A folder becomes the row's book
+
+- **WHEN** the operator loads a folder of 300 pictures on a row and applies it
+- **THEN** the row's page list holds 300 pages in natural order and the row reads `300 pages`
+
+#### Scenario: Camera pictures are fitted, not refused
+
+- **WHEN** the operator loads a 6000 × 4000 picture, a transparent 3000 × 2000 one, a 1600 × 900 one of
+  4.3 MB and a small one, on a 1920 × 1080 channel
+- **THEN** all four load; the first two are stored at 1620 × 1080 (a JPEG, and a PNG that keeps its
+  alpha), the third as a JPEG at 1600 × 900, the fourth unchanged, and the line reads
+  `2 pictures were resized to fit 1920×1080 · 1 picture was made smaller than 4 MB`
+
+#### Scenario: Only what cannot be fitted is refused, by name
+
+- **WHEN** one of the pictures is transparent noise that no PNG of fits in 4 MB
+- **THEN** it is named — `scan.png could not be made smaller than 4 MB and was not loaded.` — and the
+  others load
+
+#### Scenario: Previous, Next and Go to move the counter
+
+- **WHEN** the operator presses Next, then Previous, then types `۱۲` in the page box
+- **THEN** the counter reads `2 / 300`, then `1 / 300`, then `12 / 300`
+
+#### Scenario: A book row keeps the table's shape
+
+- **WHEN** a row carries a book
+- **THEN** its buttons are the same as any loaded row's, on one line under their column headers, and
+  PREV is offered in the row's menu
+
 ## ADDED Requirements
 
 ### Requirement: PVW SHALL draw a book's loaded pictures, never their names

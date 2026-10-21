@@ -1151,6 +1151,7 @@ function FieldEditor({
           dirty={dirty}
           onStage={stage}
           onUnstage={unstage}
+          channel={item.slot?.channel}
           {...(fromFileKind !== undefined ? { fromFile } : {})}
         />
         {/* A LIST field's from-file control is rendered INSIDE the editor, beside
@@ -1183,6 +1184,7 @@ function FieldControl({
   onStage,
   onUnstage,
   fromFile,
+  channel,
 }: {
   kind: DynamicField['type'] | 'unknown';
   field: DynamicField | null;
@@ -1196,6 +1198,8 @@ function FieldControl({
   onUnstage: () => void;
   /** Only a LIST consumes this — it shares its footer row with "Add item". */
   fromFile?: ReactNode;
+  /** `RUN-NEXT-VERSION-03` 1.2 — the row's channel: a book's pictures are fitted to its frame. */
+  channel?: number | undefined;
 }): JSX.Element {
   if (kind === 'boolean') {
     const v = typeof value === 'boolean' ? value : false;
@@ -1296,6 +1300,7 @@ function FieldControl({
         fieldId={fieldId}
         value={value}
         defaultCount={field.default.length}
+        channel={channel}
         onStage={onStage}
       />
     );

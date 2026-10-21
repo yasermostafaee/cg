@@ -104,20 +104,27 @@ test('🔴 a folder’s pictures load in natural order; Next, Previous and Go to
   await expect(app.inspector.getByRole('button', { name: 'Next page' })).toBeDisabled();
 });
 
-test('a picture over the limit is refused with a sentence naming it, and nothing is staged', async ({
+/*
+  `RUN-NEXT-VERSION-03` 1.2 SUPERSEDED this test's old subject — "a picture over the limit is refused".
+  The owner's decision is FIT, NOT REFUSE (`book-fit.spec.ts` proves a real 6000 × 4000 picture loads,
+  fitted). What is still refused, by name, is a file that cannot be read as a picture: this one has a
+  PNG header saying 5000 × 2000 and nothing a decoder can draw, so it cannot be fitted either.
+*/
+test('a file that cannot be read as a picture is refused with a sentence naming it, and nothing is staged', async ({
   app,
 }) => {
   const templateId = 'tpl-e2e-book-big';
   await app.importVcg('book-big.vcg', await buildBookVcg(templateId));
   await app.selectStackRow(templateId);
-  // 5000 × 2000 pixels: over the 3840 × 2160 limit.
   const wide = Buffer.from([
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0x13,
     0x88, 0, 0, 0x07, 0xd0, 8, 2, 0, 0, 0, 1, 2, 3,
   ]);
   const chooser = app.page.waitForEvent('filechooser');
-  await app.inspector.getByRole('button', { name: 'Load pictures for pages' }).click();
+  await app.inspector.getByRole('button', { name: /^Load pictures/ }).click();
   await (await chooser).setFiles({ name: 'panorama.png', mimeType: 'image/png', buffer: wide });
-  await expect(app.inspector.getByText(/panorama\.png is 5000 × 2000 pixels/)).toBeVisible();
+  await expect(
+    app.inspector.getByText(/panorama\.png is not a PNG, JPEG or WebP picture/),
+  ).toBeVisible();
   await expect(app.inspector.getByTestId('page-count-pages')).toHaveText('0 pages');
 });
