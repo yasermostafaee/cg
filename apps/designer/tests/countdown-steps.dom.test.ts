@@ -125,6 +125,22 @@ function click(el: HTMLElement): void {
   act(() => el.click());
 }
 
+/** `RUN-NEXT-VERSION-03` 2.1 — the time of day is ONE masked input: keys typed at a caret. */
+const TIME_OF_DAY = 'input[aria-label="Countdown target time of day time"]';
+function typeAt(input: HTMLInputElement, keys: string, caret: number): void {
+  act(() => {
+    input.focus();
+    input.setSelectionRange(caret, caret);
+  });
+  for (const k of keys) {
+    act(() => {
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }),
+      );
+    });
+  }
+}
+
 /** Open the Steps dialog from a door (`steps-edit` / `element-steps-edit`); it portals to body. */
 function openSteps(host: ParentNode, testId = 'steps-edit'): HTMLElement {
   click(q<HTMLButtonElement>(host, `[data-testid="${testId}"]`));
@@ -142,13 +158,8 @@ describe('B-344 — a timeofday target survives the Inspector', () => {
     seedCountdown();
     const host = renderClock();
     expect(q<HTMLSelectElement>(host, 'select[aria-label="target"]').value).toBe('timeofday');
-    // The clock's own Digits (Persian by default), one typed segment per unit (delta B §2).
-    expect(
-      q<HTMLInputElement>(host, 'input[aria-label="Countdown target time of day hour"]').value,
-    ).toBe('۲۰');
-    expect(
-      q<HTMLInputElement>(host, 'input[aria-label="Countdown target time of day minute"]').value,
-    ).toBe('۳۲');
+    // The clock's own Digits (Persian by default), in ONE masked time input (`RUN-NEXT-VERSION-03` 2.1).
+    expect(q<HTMLInputElement>(host, TIME_OF_DAY).value).toBe('۲۰:۳۲:۰۰');
     // No date-time input is offered for it — the branch that rewrote it.
     expect(host.querySelector('input[type="datetime-local"]')).toBeNull();
     expect(host.querySelector('[aria-label^="Countdown target date and time"]')).toBeNull();
@@ -161,25 +172,13 @@ describe('B-344 — a timeofday target survives the Inspector', () => {
   it('a time typed in Persian digits is stored canonical Latin; a value that is not a time stores nothing', () => {
     seedCountdown();
     const host = renderClock();
-    type(q<HTMLInputElement>(host, 'input[aria-label="Countdown target time of day hour"]'), '۲۱');
+    typeAt(q<HTMLInputElement>(host, TIME_OF_DAY), '۲۱', 0);
     renderClock();
-    type(
-      q<HTMLInputElement>(
-        container ?? host,
-        'input[aria-label="Countdown target time of day minute"]',
-      ),
-      '۰۵',
-    );
+    typeAt(q<HTMLInputElement>(container ?? host, TIME_OF_DAY), '۰۵', 3);
     expect(elementById<ClockElement>('c1').target).toEqual({ kind: 'timeofday', time: '21:05' });
     renderClock();
     // An hour out of range is REFUSED — never clamped into a different time.
-    type(
-      q<HTMLInputElement>(
-        container ?? host,
-        'input[aria-label="Countdown target time of day hour"]',
-      ),
-      '25',
-    );
+    typeAt(q<HTMLInputElement>(container ?? host, TIME_OF_DAY), '25', 0);
     expect(elementById<ClockElement>('c1').target).toEqual({ kind: 'timeofday', time: '21:05' });
   });
 });
@@ -515,7 +514,7 @@ describe('-C §2 — the target is the operator’s by default, and the author�
     expect(setClockTargetDataKey('c1', 'targetTime', '20:32')).toBe(true);
     designerStore.markHistoryBoundary();
     const host = renderClock();
-    type(q<HTMLInputElement>(host, 'input[aria-label="Countdown target time of day hour"]'), '۲۲');
+    typeAt(q<HTMLInputElement>(host, TIME_OF_DAY), '۲۲', 0);
     expect(elementById<ClockElement>('c1').target).toEqual({ kind: 'timeofday', time: '22:32' });
     expect(fieldOf('targetTime')?.default).toBe('22:32');
     designerStore.undo();
@@ -539,7 +538,7 @@ describe('-C §2 — the target is the operator’s by default, and the author�
     expect(setClockTargetDataKey('c1', 'targetTime', '20:32')).toBe(true);
     designerStore.updateField('targetTime', { pattern: '^2[0-3]:[0-5][0-9]$' });
     const host = renderClock();
-    type(q<HTMLInputElement>(host, 'input[aria-label="Countdown target time of day hour"]'), '21');
+    typeAt(q<HTMLInputElement>(host, TIME_OF_DAY), '21', 0);
     expect(fieldOf('targetTime')).toEqual(
       expect.objectContaining({ default: '21:32', pattern: '^2[0-3]:[0-5][0-9]$' }),
     );

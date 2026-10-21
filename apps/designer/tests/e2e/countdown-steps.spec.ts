@@ -25,22 +25,17 @@ async function timeIn(page: Page, minutes: number): Promise<string> {
 }
 
 /**
- * Type a time of day into the countdown's target — `DELTA-RUN-NEXT-VERSION-01-B` §2's typed
- * segments, one per unit, each committed with Enter as an operator would.
+ * Type a time of day into the countdown's target — ONE masked time input (`RUN-NEXT-VERSION-03` 2.1):
+ * select it all and type the hour and minute digits, as an operator would; the seconds stay `00`.
  */
 async function setTargetTime(inspector: Locator, hhmm: string): Promise<void> {
-  const [hour = '', minute = ''] = hhmm.split(':');
-  for (const [unit, value] of [
-    ['hour', hour],
-    ['minute', minute],
-  ] as const) {
-    const box = inspector.getByRole('textbox', {
-      name: `Countdown target time of day ${unit}`,
-      exact: true,
-    });
-    await box.fill(value);
-    await box.press('Enter');
-  }
+  const box = inspector.getByRole('textbox', {
+    name: 'Countdown target time of day time',
+    exact: true,
+  });
+  await box.focus();
+  await box.press('Control+a');
+  await box.pressSequentially(`${hhmm.replace(':', '')}00`);
 }
 
 const PERSIAN = '۰۱۲۳۴۵۶۷۸۹';

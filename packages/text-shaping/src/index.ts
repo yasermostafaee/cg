@@ -9,5 +9,6 @@ export * from './keyboard-digits.js';
 export * from './date.js';
 export * from './calendar.js';
 export * from './date-segments.js';
+export * from './date-time-mask.js';
 export * from './truncate.js';
 export * from './natural-order.js';

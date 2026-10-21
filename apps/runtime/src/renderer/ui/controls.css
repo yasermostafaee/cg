@@ -7165,6 +7165,7 @@ input[type='checkbox']:disabled:checked {
 .cg-playback__choices .cg-btn[aria-pressed='true'],
 .cg-datetime__calendars .cg-btn[aria-pressed='true'],
 .cg-datetime-grid__days .cg-btn[aria-pressed='true'],
+.cg-datetime-clock__col .cg-btn[aria-pressed='true'],
 .cg-lunar-adjust .cg-btn[aria-pressed='true'] {
   background: var(--r-look-btn-sel-bg);
   border-color: var(--r-look-btn-sel-line);
@@ -7177,6 +7178,7 @@ input[type='checkbox']:disabled:checked {
 .cg-playback__choices .cg-btn[aria-pressed='true']:hover:not(:disabled),
 .cg-datetime__calendars .cg-btn[aria-pressed='true']:hover:not(:disabled),
 .cg-datetime-grid__days .cg-btn[aria-pressed='true']:hover:not(:disabled),
+.cg-datetime-clock__col .cg-btn[aria-pressed='true']:hover:not(:disabled),
 .cg-lunar-adjust .cg-btn[aria-pressed='true']:hover:not(:disabled) {
   /* LIFT, never swap to the neutral hover — an engaged chip must not read as switched off
      under the pointer. Same direction the `.is-on` family uses. */
@@ -8381,10 +8383,10 @@ input[type='checkbox']:disabled:checked {
 /*
  * `DELTA-RUN-NEXT-VERSION-01-B` / `-C` — THE DATE AND TIME CONTROL (`DateTimeInput`).
  *
- * Six typed segments in two LTR runs, the calendar button at the row's end (after the seconds, so
- * Tab walks the segments first), then the calendar choice and the `+1 min` shortcuts as the shared
+ * `RUN-NEXT-VERSION-03` 2.1 — one masked date input and one masked time input, each followed by its
+ * picker icon (calendar, clock), then the calendar choice and the `+1 min` shortcuts as the shared
  * chips, then the same day in the other two calendars as facts. Every length is in `em` so the
- * control grows with the text at 200 %; the segments keep `.cg-field`'s whole skin and only narrow.
+ * control grows with the text at 200 %; the inputs keep `.cg-field`'s whole skin and only narrow.
  */
 .cg-datetime {
   display: flex;
@@ -8398,23 +8400,21 @@ input[type='checkbox']:disabled:checked {
   align-items: center;
   gap: var(--r-space-2);
 }
-.cg-datetime__run {
+.cg-datetime__entry {
   display: inline-flex;
   align-items: center;
   gap: var(--r-space-1);
+  min-width: 0;
 }
-.cg-datetime .cg-datetime__seg {
+.cg-datetime .cg-datetime__mask {
   flex: none;
-  width: 2.75em;
-  padding-inline: var(--r-space-1);
+  width: 7.5em;
+  padding-inline: var(--r-space-2);
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-.cg-datetime .cg-datetime__seg--year {
-  width: 4em;
-}
-.cg-datetime__gap {
-  color: var(--r-text-muted);
+.cg-datetime .cg-datetime__mask--time {
+  width: 6.25em;
 }
 .cg-datetime__choices,
 .cg-datetime__calendars,
@@ -8456,6 +8456,44 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-text-muted);
 }
 .cg-datetime-grid__days .cg-btn {
+  min-width: 0;
+  padding-inline: 0;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* `RUN-NEXT-VERSION-03` 2.1 — the time picker, inside the shared anchored panel: three columns
+   (hours, minutes, seconds), each scrolling on its own, then `Now`. Digits run left to right. */
+.cg-datetime-clock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-2);
+  padding: var(--r-space-2);
+}
+.cg-datetime-clock__cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--r-space-2);
+  direction: ltr;
+}
+.cg-datetime-clock__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-1);
+  max-height: 14em;
+  overflow-y: auto;
+  min-width: 0;
+}
+.cg-datetime-clock__head {
+  position: sticky;
+  top: 0;
+  text-align: center;
+  font-size: var(--r-text-xs);
+  color: var(--r-text-muted);
+  /* The panel's own fill, so a scrolled column's buttons pass under the head, not through it. */
+  background: var(--r-surface);
+}
+.cg-datetime-clock__col .cg-btn {
   min-width: 0;
   padding-inline: 0;
   justify-content: center;

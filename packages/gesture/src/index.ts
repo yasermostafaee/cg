@@ -29,6 +29,16 @@ export {
   type Extent,
   type ItemFit,
 } from './actionRowFit.js';
+// `RUN-NEXT-VERSION-03` 2.1 — the masked date and time inputs' behaviour, shared by both apps' control.
+export {
+  masksOfValue,
+  useMaskedDateTime,
+  valueOfMasks,
+  type MaskedDateTime,
+  type MaskedDateTimeOptions,
+  type MaskedInput,
+  type MaskedMode,
+} from './useMaskedDateTime.js';
 // `D-162` / `R-094` — the window's close, held by a desktop shell for the page to answer.
 export {
   CLOSE_REQUESTED_EVENT,

@@ -1,18 +1,18 @@
-import { useId, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { CalendarDays, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { useMaskedDateTime, type MaskedInput } from '@cg/gesture';
 import {
   CALENDAR_LABELS,
   CALENDAR_SYSTEMS,
   MONTH_NAMES,
   NOW_PLUS_SHORTCUTS,
-  SEGMENT_WIDTH,
   lunarHijriCalculation,
   nowPlus,
   partsOfInstant,
-  readSegment,
   writeFieldDigits,
   type CalendarSystem,
-  type DateTimeSegment,
+  type DateTimeParts,
+  type DigitSet,
   type FieldDigits,
 } from '@cg/text-shaping';
 import { Button } from './Button.js';
@@ -24,32 +24,27 @@ import { useCalendarChoice } from './calendarChoice.js';
 import {
   addMonths,
   dayInWords,
-  draftsOfValue,
   lunarAdjustWords,
   lunarCalculationName,
   monthGrid,
-  normalizeDrafts,
-  pasteDrafts,
-  readDrafts,
   sameDayIn,
   segmentDigits,
-  segmentsOf,
-  stepDrafts,
   valueAt,
-  writeDraft,
   type DateTimeMode,
-  type Drafts,
 } from './dateTimeInputModel.js';
 
 /**
- * 🔴 `DELTA-RUN-NEXT-VERSION-01-B` §2 / `-C` §1–2 — **THE DATE AND TIME CONTROL**, the one CG Control
- * uses wherever an operator sets a countdown's target.
+ * 🔴 `DELTA-RUN-NEXT-VERSION-01-B` §2 / `-C` §1–2, `RUN-NEXT-VERSION-03` 2.1 — **THE DATE AND TIME
+ * CONTROL**, the one CG Control uses wherever an operator sets a countdown's target.
  *
- * - **Typed segments**, `YYYY / MM / DD` and `HH : MM : SS`, 24-hour. Each takes digits in any set
- *   and is written in the field's own (`segmentDigits`); Up / Down step the focused segment by one,
- *   wrapping; Tab moves to the next; a paste of a whole date and/or time fills every segment it
- *   names. A focused segment selects its text, so typing replaces it.
- * - **A month grid** behind the calendar button, for whoever prefers to click — never the only way.
+ * - **One date input and one time input, masked** (the owner: six boxes were not good) —
+ *   `YYYY/MM/DD` in the calendar shown and `HH:MM:SS`, 24-hour. The mask is `@cg/text-shaping`'s and
+ *   the behaviour `@cg/gesture`'s `useMaskedDateTime`, shared with the Designer: digits in any set,
+ *   written in the field's own (`segmentDigits`); separators the mask's; an impossible value REFUSED
+ *   with its reason (month 13, the 31st of a 30-day month, 25 o'clock); typing in the middle; Up /
+ *   Down step the part under the caret; a pasted date and/or time fills what it names.
+ * - **A picker beside each**: the calendar icon opens the month in the calendar shown (right to left
+ *   for Jalali and Lunar Hijri); the clock icon opens hours, minutes, seconds and `Now`.
  * - **Three calendars** — Jalali (the default), Gregorian, Lunar Hijri — chosen per browser
  *   (`calendarChoice`), and the same day in the OTHER two beside the field as facts.
  * - **`+1 min` · `+5 min` · `+1 h`** from now.
@@ -58,16 +53,16 @@ import {
  *   day adjustment (`lunarAdjust`), and nothing else does.
  *
  * Built only from the console's primitives (`NumericInput`, `Button`, `Popover`, `Icon`, `Tag`):
- * no raw `<input>`, no `style`. The segment rows are LTR — a date is a run of numbers in a fixed
- * order — inside a surface whose own direction is inherited, so the control sits correctly in an
- * RTL layout. No sentence explains it (the operator-surface rule): labels, values and facts.
+ * no raw `<input>`, no `style`. The inputs are LTR — a date is a run of numbers in a fixed order —
+ * inside a surface whose own direction is inherited. No sentence explains it (the operator-surface
+ * rule): labels, values, facts and a refusal.
  */
 export interface DateTimeInputProps {
-  /** `datetime` — date and time; `timeofday` — the time segments only. */
+  /** `datetime` — date and time; `timeofday` — the time input only. */
   mode: DateTimeMode;
-  /** The stored value: ISO, or `HH:mm[:ss]`; `''` shows empty segments. */
+  /** The stored value: ISO, or `HH:mm[:ss]`; `''` shows empty inputs. */
   value: string;
-  /** Receives every COMPLETE, valid value the operator makes — never a half-typed one. */
+  /** Receives every WHOLE, possible value the operator makes — never a half-typed one. */
   onChange: (value: string) => void;
   /** The field's own digits (`fieldDigitsOf`). */
   digits: FieldDigits;
@@ -75,32 +70,11 @@ export interface DateTimeInputProps {
   lunarAdjust: number;
   /** The group's accessible name — the field's. */
   'aria-label': string;
-  /** The value is staged and not yet applied: the segments wear the dirty edge. */
+  /** The value is staged and not yet applied: the inputs wear the dirty edge. */
   dirty?: boolean | undefined;
-  /** Test seam — the clock the shortcuts and an empty segment's arrows read. */
+  /** Test seam — the clock the shortcuts, `Now` and an empty part's arrows read. */
   now?: (() => number) | undefined;
 }
-
-const SEGMENT_LABEL: Readonly<Record<DateTimeSegment, string>> = {
-  year: 'Year',
-  month: 'Month',
-  day: 'Day',
-  hour: 'Hours',
-  minute: 'Minutes',
-  second: 'Seconds',
-};
-
-const SEGMENT_PLACEHOLDER: Readonly<Record<DateTimeSegment, string>> = {
-  year: 'YYYY',
-  month: 'MM',
-  day: 'DD',
-  hour: 'HH',
-  minute: 'MM',
-  second: 'SS',
-};
-
-const TIME_GAP = ':';
-const DATE_GAP = '/';
 
 export function DateTimeInput({
   mode,
@@ -114,106 +88,42 @@ export function DateTimeInput({
 }: DateTimeInputProps): JSX.Element {
   const [calendar, setCalendar] = useCalendarChoice();
   const shown = segmentDigits(digits, calendar);
-  const segments = segmentsOf(mode);
+  const m = useMaskedDateTime({
+    mode,
+    value,
+    onChange,
+    calendar,
+    adjust: lunarAdjust,
+    digits: shown,
+    now,
+  });
+  const refusalId = useId();
 
-  /*
-    The drafts are the operator's TEXT; the value is what is staged. They re-seed from the value
-    when it changes from OUTSIDE (a Discard, an apply, another row) or when the calendar, the
-    adjustment or the digits change what the same instant looks like — never on the echo of the
-    operator's own edit, which would throw away a segment still being typed.
-  */
-  const seedKey = `${calendar}|${String(lunarAdjust)}|${shown}|${mode}`;
-  const [drafts, setDrafts] = useState<Drafts>(() =>
-    draftsOfValue(value, mode, calendar, lunarAdjust, shown),
-  );
-  const [seen, setSeen] = useState({ value, seedKey });
-  const [emitted, setEmitted] = useState<string | null>(null);
-  if (seen.value !== value || seen.seedKey !== seedKey) {
-    const ownEcho = seen.seedKey === seedKey && value === emitted;
-    setSeen({ value, seedKey });
-    if (!ownEcho) setDrafts(draftsOfValue(value, mode, calendar, lunarAdjust, shown));
-  }
-
-  const reading = readDrafts(drafts, mode, calendar, lunarAdjust);
-
-  const commit = (next: Drafts): void => {
-    setDrafts(next);
-    const r = readDrafts(next, mode, calendar, lunarAdjust);
-    if (r.value !== null && r.value !== value) {
-      setEmitted(r.value);
-      onChange(r.value);
-    }
-  };
-
-  const setValue = (next: string): void => {
-    setDrafts(draftsOfValue(next, mode, calendar, lunarAdjust, shown));
-    if (next !== value) {
-      setEmitted(next);
-      onChange(next);
-    }
-  };
-
-  const onSegmentKey = (seg: DateTimeSegment, e: KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-    e.preventDefault();
-    const delta = e.key === 'ArrowUp' ? 1 : -1;
-    commit(stepDrafts(drafts, seg, delta, mode, calendar, lunarAdjust, shown, now()));
-  };
-
-  const onSegmentPaste = (e: ClipboardEvent<HTMLInputElement>): void => {
-    const next = pasteDrafts(
-      e.clipboardData.getData('text'),
-      drafts,
-      mode,
-      calendar,
-      lunarAdjust,
-      shown,
-    );
-    if (next === null) return;
-    e.preventDefault();
-    commit(next);
-  };
-
-  const segmentInput = (seg: DateTimeSegment): JSX.Element => (
+  const field = (kind: 'date' | 'time', label: string, input: MaskedInput): JSX.Element => (
     <NumericInput
-      key={seg}
       className={[
         'cg-field',
-        'cg-datetime__seg',
-        SEGMENT_WIDTH[seg] === 4 ? 'cg-datetime__seg--year' : '',
+        'cg-datetime__mask',
+        `cg-datetime__mask--${kind}`,
         dirty ? 'is-dirty' : '',
       ]
         .filter(Boolean)
         .join(' ')}
       digits="as-typed"
-      value={drafts[seg]}
-      onValueChange={(raw) => commit({ ...drafts, [seg]: writeDraft(raw, seg, shown) })}
-      onFocus={(e) => e.currentTarget.select()}
-      onBlur={() => commit(normalizeDrafts(drafts, mode, calendar, lunarAdjust, shown))}
-      onKeyDown={(e) => onSegmentKey(seg, e)}
-      onPaste={onSegmentPaste}
-      maxLength={SEGMENT_WIDTH[seg]}
-      placeholder={SEGMENT_PLACEHOLDER[seg]}
-      aria-label={SEGMENT_LABEL[seg]}
-      aria-invalid={reading.invalid.has(seg) ? true : undefined}
-      data-datetime-segment={seg}
+      dir="ltr"
+      value={input.value}
+      onValueChange={input.onText}
+      onKeyDown={input.onKeyDown}
+      onPaste={input.onPaste}
+      placeholder={input.placeholder}
+      maxLength={input.maxLength}
+      spellCheck={false}
+      autoComplete="off"
+      aria-label={label}
+      aria-describedby={m.refusal !== null ? refusalId : undefined}
+      data-datetime-mask={kind}
     />
   );
-
-  const run = (segs: readonly DateTimeSegment[], gap: string): JSX.Element[] =>
-    segs.flatMap((seg, i) =>
-      i === 0
-        ? [segmentInput(seg)]
-        : [
-            <span key={`${seg}-gap`} className="cg-datetime__gap" aria-hidden="true">
-              {gap}
-            </span>,
-            segmentInput(seg),
-          ],
-    );
-
-  const dateSegs = segments.filter((s) => s === 'year' || s === 'month' || s === 'day');
-  const timeSegs = segments.filter((s) => s === 'hour' || s === 'minute' || s === 'second');
 
   return (
     <div
@@ -225,31 +135,35 @@ export function DateTimeInput({
     >
       <div className="cg-datetime__row">
         {mode === 'datetime' && (
-          <div className="cg-datetime__run" dir="ltr" data-datetime-date="">
-            {run(dateSegs, DATE_GAP)}
+          <div className="cg-datetime__entry" data-datetime-date="">
+            {field('date', 'Date', m.date)}
+            <DatePickerButton
+              calendar={calendar}
+              parts={m.parts}
+              lunarAdjust={lunarAdjust}
+              shown={shown}
+              now={now}
+              onPick={m.setDate}
+            />
           </div>
         )}
-        <div className="cg-datetime__run" dir="ltr" data-datetime-time="">
-          {run(timeSegs, TIME_GAP)}
-        </div>
-        {mode === 'datetime' && (
-          <MonthGridButton
-            calendar={calendar}
-            drafts={drafts}
-            lunarAdjust={lunarAdjust}
+        <div className="cg-datetime__entry" data-datetime-time="">
+          {field('time', 'Time', m.time)}
+          <TimePickerButton
+            parts={m.parts}
             shown={shown}
             now={now}
-            onPick={(day) =>
-              commit({
-                ...drafts,
-                year: writeDraft(String(day.year), 'year', shown),
-                month: writeDraft(String(day.month).padStart(2, '0'), 'month', shown),
-                day: writeDraft(String(day.day).padStart(2, '0'), 'day', shown),
-              })
-            }
+            calendar={calendar}
+            lunarAdjust={lunarAdjust}
+            onPick={m.setTime}
           />
-        )}
+        </div>
       </div>
+      {m.refusal !== null && (
+        <p className="cg-field-fact" id={refusalId} role="status" data-datetime-refusal="">
+          {m.refusal}
+        </p>
+      )}
       <div className="cg-datetime__choices">
         {mode === 'datetime' && (
           <div className="cg-datetime__calendars" role="group" aria-label="Calendar">
@@ -272,17 +186,17 @@ export function DateTimeInput({
               key={s.label}
               variant="neutral"
               data-now-plus={s.label}
-              onClick={() => setValue(valueAt(nowPlus(now(), s.ms), mode))}
+              onClick={() => m.setValue(valueAt(nowPlus(now(), s.ms), mode))}
             >
               {s.label}
             </Button>
           ))}
         </div>
       </div>
-      {mode === 'datetime' && reading.gregorian !== null && (
+      {mode === 'datetime' && m.gregorian !== null && (
         <div className="cg-datetime__facts" data-datetime-facts="">
           {sameDayIn(
-            reading.gregorian,
+            m.gregorian,
             CALENDAR_SYSTEMS.filter((s) => s !== calendar),
             lunarAdjust,
           ).map(({ system, day }) => (
@@ -311,21 +225,21 @@ function lunarTitle(adjust: number): string {
 }
 
 /**
- * The calendar button and its month grid: the month the drafts hold (or this one), in the chosen
+ * The calendar icon and its month grid: the month the date input holds (or this one), in the chosen
  * calendar, the week starting where that calendar's does. A Hijri grid reads right to left.
  */
-function MonthGridButton({
+function DatePickerButton({
   calendar,
-  drafts,
+  parts,
   lunarAdjust,
   shown,
   now,
   onPick,
 }: {
   calendar: CalendarSystem;
-  drafts: Drafts;
+  parts: Partial<DateTimeParts>;
   lunarAdjust: number;
-  shown: ReturnType<typeof segmentDigits>;
+  shown: DigitSet;
   now: () => number;
   onPick: (day: { year: number; month: number; day: number }) => void;
 }): JSX.Element {
@@ -334,20 +248,12 @@ function MonthGridButton({
   const [view, setView] = useState<{ year: number; month: number } | null>(null);
 
   const open = (): void => {
-    const year = readSegment(drafts.year);
-    const month = readSegment(drafts.month);
-    if (year !== null && month !== null && month >= 1 && month <= 12) {
-      setView({ year, month });
+    if (parts.year !== undefined && parts.month !== undefined) {
+      setView({ year: parts.year, month: parts.month });
       return;
     }
     const today = partsOfInstant(now(), calendar, lunarAdjust);
     setView({ year: today.year, month: today.month });
-  };
-
-  const picked = {
-    year: readSegment(drafts.year),
-    month: readSegment(drafts.month),
-    day: readSegment(drafts.day),
   };
 
   return (
@@ -379,7 +285,7 @@ function MonthGridButton({
             view={view}
             lunarAdjust={lunarAdjust}
             shown={shown}
-            picked={picked}
+            picked={parts}
             onView={setView}
             onPick={(day) => {
               onPick(day);
@@ -404,15 +310,15 @@ function MonthGridPanel({
   calendar: CalendarSystem;
   view: { year: number; month: number };
   lunarAdjust: number;
-  shown: ReturnType<typeof segmentDigits>;
-  picked: { year: number | null; month: number | null; day: number | null };
+  shown: DigitSet;
+  picked: Partial<DateTimeParts>;
   onView: (view: { year: number; month: number }) => void;
   onPick: (day: { year: number; month: number; day: number }) => void;
 }): JSX.Element {
   const grid = monthGrid(calendar, view.year, view.month, lunarAdjust);
   const rtl = calendar !== 'gregorian';
   const inMonth = picked.year === view.year && picked.month === view.month;
-  const focusDay = inMonth && picked.day !== null && picked.day <= grid.days ? picked.day : 1;
+  const focusDay = inMonth && picked.day !== undefined && picked.day <= grid.days ? picked.day : 1;
   const n = (v: number): string => writeFieldDigits(String(v), shown);
   return (
     <div className="cg-datetime-grid" dir={rtl ? 'rtl' : 'ltr'} data-datetime-grid={calendar}>
@@ -458,6 +364,145 @@ function MonthGridPanel({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const SIXTY = Array.from({ length: 60 }, (_, i) => i);
+
+/**
+ * `RUN-NEXT-VERSION-03` 2.1 — the clock icon and its time picker: hours, minutes and seconds as three
+ * columns (the time the input holds pressed), and `Now`. A press sets that part at once.
+ */
+function TimePickerButton({
+  parts,
+  shown,
+  now,
+  calendar,
+  lunarAdjust,
+  onPick,
+}: {
+  parts: Partial<DateTimeParts>;
+  shown: DigitSet;
+  now: () => number;
+  calendar: CalendarSystem;
+  lunarAdjust: number;
+  onPick: (time: { hour: number; minute: number; second: number }) => void;
+}): JSX.Element {
+  const anchor = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
+  const [open, setOpen] = useState(false);
+  const time = { hour: parts.hour ?? 0, minute: parts.minute ?? 0, second: parts.second ?? 0 };
+  return (
+    <>
+      <Button
+        ref={anchor}
+        variant="icon"
+        aria-label="Pick a time"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        data-datetime-clock-button=""
+        onClick={() => setOpen(true)}
+      >
+        <Icon icon={Clock} />
+      </Button>
+      {open && (
+        <Popover
+          anchor={anchor}
+          onClose={() => setOpen(false)}
+          id={panelId}
+          aria-label="Pick a time"
+          minWidth={240}
+          maxHeight={340}
+          initialFocusSelector="[data-clock-focus]"
+        >
+          <div className="cg-datetime-clock" data-datetime-clock="">
+            <div className="cg-datetime-clock__cols">
+              <TimeColumn
+                label="Hours"
+                values={HOURS}
+                picked={parts.hour}
+                shown={shown}
+                focus
+                onPick={(hour) => onPick({ ...time, hour })}
+              />
+              <TimeColumn
+                label="Minutes"
+                values={SIXTY}
+                picked={parts.minute}
+                shown={shown}
+                onPick={(minute) => onPick({ ...time, minute })}
+              />
+              <TimeColumn
+                label="Seconds"
+                values={SIXTY}
+                picked={parts.second}
+                shown={shown}
+                onPick={(second) => onPick({ ...time, second })}
+              />
+            </div>
+            <Button
+              variant="neutral"
+              data-datetime-clock-now=""
+              onClick={() => {
+                const p = partsOfInstant(now(), calendar, lunarAdjust);
+                onPick({ hour: p.hour, minute: p.minute, second: p.second });
+                setOpen(false);
+              }}
+            >
+              Now
+            </Button>
+          </div>
+        </Popover>
+      )}
+    </>
+  );
+}
+
+function TimeColumn({
+  label,
+  values,
+  picked,
+  shown,
+  focus = false,
+  onPick,
+}: {
+  label: string;
+  values: readonly number[];
+  picked: number | undefined;
+  shown: DigitSet;
+  focus?: boolean;
+  onPick: (value: number) => void;
+}): JSX.Element {
+  const column = useRef<HTMLDivElement>(null);
+  // The picked value is in view when the panel opens.
+  useEffect(() => {
+    const el = column.current?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (el !== null && el !== undefined && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ block: 'center' });
+    }
+  }, []);
+  const target = picked ?? 0;
+  return (
+    <div className="cg-datetime-clock__col" role="group" aria-label={label} ref={column}>
+      <span className="cg-datetime-clock__head" aria-hidden="true">
+        {label}
+      </span>
+      {values.map((v) => (
+        <Button
+          key={v}
+          variant="neutral"
+          aria-pressed={picked === v}
+          aria-label={`${label} ${String(v).padStart(2, '0')}`}
+          data-datetime-clock-value={String(v)}
+          {...(focus && v === target ? { 'data-clock-focus': '' } : {})}
+          onClick={() => onPick(v)}
+        >
+          {writeFieldDigits(String(v).padStart(2, '0'), shown)}
+        </Button>
+      ))}
     </div>
   );
 }

@@ -6,10 +6,12 @@ import { isoOfParts, partsOfIso } from '@cg/text-shaping';
 import { DateTimeInput } from '../src/renderer/ui/DateTimeInput.js';
 
 /**
- * 🔴 `DELTA-RUN-NEXT-VERSION-01-B` §2 / `-C` §1 — the shared date and time control: typed segments
- * in any digit set, ↑ / ↓, a refused out-of-range value, a pasted date, three calendars that change
- * what is SHOWN and never what is STORED, the other calendars as facts, and the Now + shortcuts.
- * (Layout, 200 % text and RTL are measured in a real browser — `tests/e2e/date-time-input.spec.ts`.)
+ * 🔴 `DELTA-RUN-NEXT-VERSION-01-B` §2 / `-C` §1, `RUN-NEXT-VERSION-03` 2.1 — the shared date and time
+ * control: ONE masked date input and ONE masked time input, typed in any digit set, an impossible value
+ * REFUSED with its reason, ↑ / ↓ on the part under the caret, a pasted date, three calendars that change
+ * what is SHOWN and never what is STORED, the other calendars as facts, the pickers and the Now +
+ * shortcuts. (Layout, 200 % text and RTL are measured in a real browser —
+ * `tests/e2e/date-time-input.spec.ts`.)
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -36,6 +38,7 @@ afterEach(() => {
   container?.remove();
   container = null;
   vi.useRealTimers();
+  document.body.innerHTML = '';
 });
 
 /** 2026-10-15 21:30:00 on THIS machine's clock, as the control stores it. */
@@ -55,33 +58,31 @@ function mount(props: Parameters<typeof DateTimeInput>[0]): HTMLDivElement {
   return container;
 }
 
-const seg = (host: ParentNode, name: string): HTMLInputElement => {
-  const el = host.querySelector<HTMLInputElement>(`input[aria-label="Target ${name}"]`);
-  if (el === null) throw new Error(`no ${name}`);
+const mask = (host: ParentNode, kind: 'date' | 'time'): HTMLInputElement => {
+  const el = host.querySelector<HTMLInputElement>(`input[aria-label="Target ${kind}"]`);
+  if (el === null) throw new Error(`no ${kind}`);
   return el;
 };
 
-function type(input: HTMLInputElement, value: string): void {
+/** Focus, put the caret at `from`, then press each key. */
+function type(input: HTMLInputElement, keys: string, from = 0): void {
   act(() => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-    setter?.call(input, value);
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    input.focus();
+    input.setSelectionRange(from, from);
   });
+  for (const k of keys) {
+    act(() => {
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }),
+      );
+    });
+  }
 }
 
-function key(input: HTMLInputElement, k: string): void {
-  act(() => {
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
-  });
-}
+const refusal = (host: ParentNode): string =>
+  host.querySelector('[data-datetime-refusal]')?.textContent ?? '';
 
-const segments = (host: ParentNode): string[] =>
-  [...host.querySelectorAll<HTMLInputElement>('[data-testid="datetime-input"] input')].map(
-    (i) => i.value,
-  );
-
-describe('-B §2 — typed segments', () => {
+describe('🔴 2.1 — one masked date input and one masked time input', () => {
   it('🔴 shows Jalali by default, in the digits asked for, with the two other calendars as facts', () => {
     const host = mount({
       mode: 'datetime',
@@ -100,7 +101,12 @@ describe('-B §2 — typed segments', () => {
       ['gregorian', 'Gregorian'],
       ['lunar-hijri', 'Lunar Hijri'],
     ]);
-    expect(segments(host)).toEqual(['1405', '07', '23', '21', '30', '00']);
+    // Two inputs — not six boxes.
+    expect(host.querySelectorAll('input')).toHaveLength(2);
+    expect([mask(host, 'date').value, mask(host, 'time').value]).toEqual([
+      '1405/07/23',
+      '21:30:00',
+    ]);
     expect(host.querySelector('[data-testid="datetime-fact-gregorian"]')?.textContent).toContain(
       '2026/10/15',
     );
@@ -112,45 +118,56 @@ describe('-B §2 — typed segments', () => {
       ariaLabel: 'Target',
       digits: 'persian',
     });
-    expect(segments(host)).toEqual(['۱۴۰۵', '۰۷', '۲۳', '۲۱', '۳۰', '۰۰']);
+    expect(mask(host, 'date').value).toBe('۱۴۰۵/۰۷/۲۳');
   });
 
-  it('🔴 a segment typed in Persian digits commits the ISO instant; a value out of range is REFUSED, not clamped', () => {
+  it('🔴 a digit typed in Persian commits the ISO instant; an impossible one is REFUSED with its reason', () => {
     const onCommit = vi.fn();
     const host = mount({ mode: 'datetime', value: VALUE, onCommit, ariaLabel: 'Target' });
-    type(seg(host, 'day'), '۲۴');
+    type(mask(host, 'date'), '۴', 9);
     expect(onCommit).toHaveBeenCalledTimes(1);
     expect(partsOfIso(onCommit.mock.calls[0]?.[0] as string, 'gregorian')).toEqual(
       expect.objectContaining({ year: 2026, month: 10, day: 16, hour: 21, minute: 30 }),
     );
-    type(seg(host, 'month'), '13');
-    type(seg(host, 'hour'), '24');
+    type(mask(host, 'date'), '13', 5);
+    expect(refusal(host)).toBe('There is no month 13.');
+    type(mask(host, 'time'), '24', 0);
+    expect(refusal(host)).toBe('Hours run from 00 to 23.');
     expect(onCommit).toHaveBeenCalledTimes(1);
-    // The refused segment shows the stored value again.
-    expect(seg(host, 'month').value).toBe('07');
   });
 
-  it('↑ / ↓ step a segment inside its own range', () => {
+  it('↑ / ↓ step the part under the caret inside its own range', () => {
     const onCommit = vi.fn();
     const host = mount({ mode: 'datetime', value: VALUE, onCommit, ariaLabel: 'Target' });
-    key(seg(host, 'minute'), 'ArrowUp');
+    const time = mask(host, 'time');
+    type(time, '', 4);
+    act(() => {
+      time.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }),
+      );
+    });
     expect(partsOfIso(onCommit.mock.calls[0]?.[0] as string, 'gregorian')).toEqual(
       expect.objectContaining({ hour: 21, minute: 31 }),
     );
-    key(seg(host, 'hour'), 'ArrowDown');
+    type(time, '', 1);
+    act(() => {
+      time.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+      );
+    });
+    // This host does not take the value back (a bare spy): the hour steps from the STORED 21:30.
     expect(partsOfIso(onCommit.mock.calls[1]?.[0] as string, 'gregorian')).toEqual(
       expect.objectContaining({ hour: 20, minute: 30 }),
     );
   });
 
-  it('a pasted date and time fills every segment it names', () => {
+  it('a pasted date and time fills both inputs', () => {
     const onCommit = vi.fn();
     const host = mount({ mode: 'datetime', value: VALUE, onCommit, ariaLabel: 'Target' });
-    const year = seg(host, 'year');
     act(() => {
       const ev = new Event('paste', { bubbles: true, cancelable: true });
       Object.defineProperty(ev, 'clipboardData', { value: { getData: () => '۱۴۰۵/۰۸/۰۱ ۰۸:۱۵' } });
-      year.dispatchEvent(ev);
+      mask(host, 'date').dispatchEvent(ev);
     });
     // 1 Aban 1405 = 23 October 2026.
     expect(partsOfIso(onCommit.mock.calls[0]?.[0] as string, 'gregorian')).toEqual(
@@ -160,7 +177,7 @@ describe('-B §2 — typed segments', () => {
 });
 
 describe('-C §1 — three calendars: what is shown, never what is stored', () => {
-  it('🔴 switching the calendar re-reads the segments, commits NOTHING, and is remembered', () => {
+  it('🔴 switching the calendar re-reads the date, commits NOTHING, and is remembered', () => {
     const onCommit = vi.fn();
     const host = mount({ mode: 'datetime', value: VALUE, onCommit, ariaLabel: 'Target' });
     const calendar = host.querySelector<HTMLSelectElement>('[data-testid="datetime-calendar"]');
@@ -169,11 +186,11 @@ describe('-C §1 — three calendars: what is shown, never what is stored', () =
       calendar.value = 'gregorian';
       calendar.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    expect(segments(host)).toEqual(['2026', '10', '15', '21', '30', '00']);
+    expect(mask(host, 'date').value).toBe('2026/10/15');
     expect(onCommit).not.toHaveBeenCalled();
     expect(window.localStorage.getItem('cg.designer.calendar.v1')).toBe('gregorian');
     // A day typed now is a GREGORIAN day.
-    type(seg(host, 'day'), '20');
+    type(mask(host, 'date'), '20', 8);
     expect(partsOfIso(onCommit.mock.calls[0]?.[0] as string, 'gregorian')).toEqual(
       expect.objectContaining({ year: 2026, month: 10, day: 20 }),
     );
@@ -189,14 +206,59 @@ describe('-C §1 — three calendars: what is shown, never what is stored', () =
     });
     const adjust = host.querySelector<HTMLSelectElement>('[data-testid="datetime-lunar-adjust"]');
     expect([...(adjust?.options ?? [])].map((o) => o.value)).toEqual(['-2', '-1', '0', '1', '2']);
-    const before = segments(host)[2];
+    const before = mask(host, 'date').value;
     act(() => {
       if (adjust === null) return;
       adjust.value = '1';
       adjust.dispatchEvent(new Event('change', { bubbles: true }));
     });
     // The same instant reads one Lunar day later.
-    expect(Number(segments(host)[2])).not.toBe(Number(before));
+    expect(mask(host, 'date').value).not.toBe(before);
+  });
+});
+
+describe('🔴 2.1 — the pickers', () => {
+  it('the calendar icon opens the month the date holds, right to left in Jalali; a day keeps the time', () => {
+    const onCommit = vi.fn();
+    const host = mount({ mode: 'datetime', value: VALUE, onCommit, ariaLabel: 'Target' });
+    act(() => host.querySelector<HTMLButtonElement>('[aria-label="Pick a date"]')?.click());
+    const panel = document.querySelector('[data-cg-popover]');
+    expect(panel?.getAttribute('dir')).toBe('rtl');
+    expect(panel?.querySelectorAll('[data-datetime-day]')).toHaveLength(30);
+    expect(panel?.querySelector('[data-datetime-day="23"]')?.getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    act(() => panel?.querySelector<HTMLButtonElement>('[data-datetime-day="25"]')?.click());
+    expect(partsOfIso(onCommit.mock.calls[0]?.[0] as string, 'gregorian')).toEqual(
+      expect.objectContaining({ year: 2026, month: 10, day: 17, hour: 21, minute: 30 }),
+    );
+    expect(document.querySelector('[data-cg-popover]')).toBeNull();
+  });
+
+  it('the clock icon opens hours, minutes, seconds — the time held pressed — and Now', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 15, 8, 9, 10));
+    const onCommit = vi.fn();
+    const host = mount({ mode: 'datetime', value: VALUE, onCommit, ariaLabel: 'Target' });
+    act(() => host.querySelector<HTMLButtonElement>('[aria-label="Pick a time"]')?.click());
+    const panel = document.querySelector('[data-cg-popover]');
+    expect(
+      [...(panel?.querySelectorAll('[role="group"]') ?? [])].map((g) =>
+        g.getAttribute('aria-label'),
+      ),
+    ).toEqual(['Hours', 'Minutes', 'Seconds']);
+    expect(panel?.querySelector('[aria-label="Hours 21"]')?.getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    act(() => panel?.querySelector<HTMLButtonElement>('[aria-label="Minutes 05"]')?.click());
+    expect(partsOfIso(onCommit.mock.calls[0]?.[0] as string, 'gregorian')).toEqual(
+      expect.objectContaining({ hour: 21, minute: 5 }),
+    );
+    act(() => panel?.querySelector<HTMLButtonElement>('[data-datetime-clock-now]')?.click());
+    expect(partsOfIso(onCommit.mock.calls[1]?.[0] as string, 'gregorian')).toEqual(
+      expect.objectContaining({ day: 15, hour: 8, minute: 9, second: 10 }),
+    );
+    expect(document.querySelector('[data-cg-popover]')).toBeNull();
   });
 });
 
@@ -213,12 +275,13 @@ describe('-B §2 — the Now + shortcuts and the time of day', () => {
     );
   });
 
-  it('a time of day shows hour and minute only, offers no calendar, and stores HH:mm', () => {
+  it('a time of day shows the time input only, offers no calendar, and stores HH:mm', () => {
     const onCommit = vi.fn();
     const host = mount({ mode: 'timeofday', value: '20:32', onCommit, ariaLabel: 'Target' });
-    expect(segments(host)).toEqual(['20', '32']);
+    expect(host.querySelectorAll('input')).toHaveLength(1);
+    expect(mask(host, 'time').value).toBe('20:32:00');
     expect(host.querySelector('[data-testid="datetime-calendar"]')).toBeNull();
-    type(seg(host, 'minute'), '45');
+    type(mask(host, 'time'), '45', 3);
     expect(onCommit).toHaveBeenCalledWith('20:45');
   });
 });

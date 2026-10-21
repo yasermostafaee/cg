@@ -138,20 +138,26 @@ const inspector = (): HTMLElement => {
 };
 const group = (): HTMLElement | null =>
   inspector().querySelector<HTMLElement>('[role="group"][aria-label="targetTime"]');
-const seg = (name: string): HTMLInputElement => {
-  const el = group()?.querySelector<HTMLInputElement>(`[data-datetime-segment="${name}"]`);
-  if (el === null || el === undefined) throw new Error(`no ${name} segment`);
+/** `RUN-NEXT-VERSION-03` 2.1 — the date is ONE masked input. */
+const dateInput = (): HTMLInputElement => {
+  const el = group()?.querySelector<HTMLInputElement>('[data-datetime-mask="date"]');
+  if (el === null || el === undefined) throw new Error('no date input');
   return el;
 };
 
-async function type(el: HTMLInputElement, text: string): Promise<void> {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+/** Keys typed into a masked input from `caret`, as an operator types them. */
+async function typeAt(el: HTMLInputElement, keys: string, caret: number): Promise<void> {
   await act(async () => {
     el.focus();
-    setter?.call(el, text);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.setSelectionRange(caret, caret);
     await flush();
   });
+  for (const k of keys) {
+    await act(async () => {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+      await flush();
+    });
+  }
 }
 
 describe('the Inspector renders the date and time control for a countdown target field', () => {
@@ -168,7 +174,7 @@ describe('the Inspector renders the date and time control for a countdown target
   it('an edit STAGES the ISO through the ordinary path, and Update sends it as the row’s value update', async () => {
     await boot();
     const update = vi.spyOn(cg.stack, 'update');
-    await type(seg('year'), '1499');
+    await typeAt(dateInput(), '1499', 0);
     const staged = effectiveValue(ITEM, ['targetTime'], PAST);
     expect(typeof staged).toBe('string');
     expect(staged).not.toBe(PAST);
@@ -198,7 +204,7 @@ describe('the passed-target fact', () => {
     expect(document.querySelector<HTMLButtonElement>('[data-inspector-commit]')?.disabled).toBe(
       false,
     );
-    await type(seg('year'), '1499');
+    await typeAt(dateInput(), '1499', 0);
     expect(fact()).toBeNull();
   });
 
