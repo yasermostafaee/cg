@@ -120,6 +120,18 @@ describe('🔴 B-353 — a book set to advance auto is told what CG Control can 
   });
 });
 
+describe('BOOK-EXPORT §11 — no button inside a button in the Sequence Inspector', () => {
+  it('the Items section’s `i` sits beside its toggle, never inside it (validateDOMNesting)', () => {
+    seedBook();
+    let host = render(createElement(StyleSection, { element: sequence(), selectedKeyframe: null }));
+    expect(host.querySelectorAll('button button')).toHaveLength(0);
+    designerStore.setSequenceItems('sq', [{ id: 't', text: 'خبر' }]);
+    host = render(createElement(StyleSection, { element: sequence(), selectedKeyframe: null }));
+    expect(host.querySelectorAll('button')).not.toHaveLength(0);
+    expect(host.querySelectorAll('button button')).toHaveLength(0);
+  });
+});
+
 describe('🔴 B-353 — a page list offers no text-file grant', () => {
   it('a book’s Data key shows where its pages come from, and no "Allow file source"', () => {
     seedBook();

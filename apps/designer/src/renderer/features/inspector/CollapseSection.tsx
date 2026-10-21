@@ -56,6 +56,24 @@ export function CollapseSection({
       </div>
     );
   }
+  const toggle = (
+    <Button
+      variant="bare"
+      className={s.header}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={open}
+      aria-label={`Toggle ${title}`}
+    >
+      <span className={s.chevron}>
+        {open ? (
+          <Icon icon={ChevronDown} size={14} />
+        ) : (
+          <Icon icon={ChevronRight} size={14} flipRtl />
+        )}
+      </span>
+      <span>{titleNode ?? title}</span>
+    </Button>
+  );
   return (
     <div className={s.section}>
       {pinned ? (
@@ -63,24 +81,16 @@ export function CollapseSection({
           <span>{titleNode ?? title}</span>
           {trailing !== undefined && <span className={s.trailing}>{trailing}</span>}
         </div>
+      ) : trailing === undefined ? (
+        toggle
       ) : (
-        <Button
-          variant="bare"
-          className={s.header}
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-label={`Toggle ${title}`}
-        >
-          <span className={s.chevron}>
-            {open ? (
-              <Icon icon={ChevronDown} size={14} />
-            ) : (
-              <Icon icon={ChevronRight} size={14} flipRtl />
-            )}
-          </span>
-          <span>{titleNode ?? title}</span>
-          {trailing !== undefined && <span className={s.trailing}>{trailing}</span>}
-        </Button>
+        /* The trailing item sits BESIDE the toggle, never inside it: it is often a control of
+           its own (the Items section's `i`, a keyframe dot), and a button inside a button is
+           invalid — React warned `validateDOMNesting` in every Sequence Inspector. */
+        <div className={s.headerRow}>
+          {toggle}
+          <span className={s.trailing}>{trailing}</span>
+        </div>
       )}
       {expanded && <div className={s.body}>{children}</div>}
     </div>

@@ -66,6 +66,19 @@ export const trailing = style({
   color: colors.textMuted,
 });
 
+/**
+ * A collapsible header WITH a trailing item: the toggle and the item side by side, so the item is
+ * never inside the toggle `<button>`. The toggle keeps every metric of `header` and takes the room
+ * the item leaves; the row supplies the inline-end padding the toggle's own padding used to give it.
+ */
+export const headerRow = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.35rem',
+  paddingRight: '0.1rem',
+  minWidth: 0,
+});
+
 export const body = style({
   display: 'flex',
   flexDirection: 'column',
