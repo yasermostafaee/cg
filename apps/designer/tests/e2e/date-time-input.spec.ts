@@ -48,9 +48,11 @@ test.describe('-B / -C — the date and time control', () => {
       await expect(segment(inspector, unit)).toBeFocused();
     }
 
-    // The calendar shown is Solar Hijri by default; switch to Gregorian by keyboard.
+    // The calendar shown is Jalali by default (`RUN-NEXT-VERSION-03` 2.3 — the owner's word; the
+    // stored choice stays `solar-hijri`); switch to Gregorian by keyboard.
     const calendar = inspector.getByTestId('datetime-calendar');
     await expect(calendar).toHaveValue('solar-hijri');
+    await expect(calendar.locator('option:checked')).toHaveText('Jalali');
     await calendar.focus();
     await calendar.selectOption('gregorian');
     await expect(calendar).toHaveValue('gregorian');

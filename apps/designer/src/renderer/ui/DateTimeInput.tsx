@@ -55,7 +55,7 @@ import * as s from './DateTimeInput.css.js';
  * - each segment takes digits in Persian, Latin or Arabic-Indic; ↑ / ↓ step it (wrapping inside its
  *   own range); Tab moves on; pasting a whole date or time fills every segment it names;
  * - a value out of a segment's range is refused, never clamped into a different time;
- * - the calendar — Solar Hijri (the default), Gregorian or Lunar Hijri — is a per-person choice kept
+ * - the calendar — Jalali (the default), Gregorian or Lunar Hijri — is a per-person choice kept
  *   in this browser, and the other two calendars' dates are shown as facts so the day is never in
  *   doubt; the Lunar Hijri reading takes this browser's day adjustment (−2 … +2);
  * - a month grid behind the calendar button, for anyone who prefers to click;

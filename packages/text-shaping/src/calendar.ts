@@ -2,12 +2,16 @@ import { gregorianToJalali } from './date.js';
 
 /**
  * `DELTA-RUN-NEXT-VERSION-01-C` §1 — **THREE CALENDARS, ONE INSTANT.** A date an operator types or
- * reads may be written in the Gregorian, the Solar Hijri (Jalali, شمسی) or the Lunar Hijri (قمری)
+ * reads may be written in the Gregorian, the Jalali (Solar Hijri, شمسی) or the Lunar Hijri (قمری)
  * calendar; what is STORED is always the ISO instant, so no template or row file changes format.
  * These are the pure conversions every surface shares (the Designer's and CG Control's date and
  * time control, and the facts beside it).
  *
- * - **Solar Hijri** — arithmetic (Pournader & Toossi, the same algorithm {@link gregorianToJalali}
+ * `RUN-NEXT-VERSION-03` 2.3 — the solar calendar is called **Jalali** wherever a person reads it (the
+ * owner's word). Its id stays `solar-hijri`: a browser's remembered choice and every stored value
+ * keep their spelling; only {@link CALENDAR_LABELS} changed.
+ *
+ * - **Jalali** — arithmetic (Pournader & Toossi, the same algorithm {@link gregorianToJalali}
  *   already uses), both directions; accurate for every broadcast date.
  * - **Lunar Hijri** — `Intl`'s `islamic-umalqura` calendar: an astronomical calculation every
  *   engine we run ships (Chrome, CasparCG's CEF, Node), nearer to sighting-based dates than the
@@ -20,7 +24,7 @@ import { gregorianToJalali } from './date.js';
 
 export type CalendarSystem = 'solar-hijri' | 'gregorian' | 'lunar-hijri';
 
-/** The order a calendar choice is offered in — Solar Hijri first, the default for this product. */
+/** The order a calendar choice is offered in — Jalali first, the default for this product. */
 export const CALENDAR_SYSTEMS: readonly CalendarSystem[] = [
   'solar-hijri',
   'gregorian',
@@ -29,9 +33,9 @@ export const CALENDAR_SYSTEMS: readonly CalendarSystem[] = [
 
 export const DEFAULT_CALENDAR: CalendarSystem = 'solar-hijri';
 
-/** The operator's words for each calendar. */
+/** The operator's words for each calendar (`RUN-NEXT-VERSION-03` 2.3 — `Jalali`, the owner's word). */
 export const CALENDAR_LABELS: Readonly<Record<CalendarSystem, string>> = {
-  'solar-hijri': 'Solar Hijri',
+  'solar-hijri': 'Jalali',
   gregorian: 'Gregorian',
   'lunar-hijri': 'Lunar Hijri',
 };
@@ -82,7 +86,7 @@ export function addGregorianDays(g: CalendarDay, days: number): CalendarDay {
   return fromEpochDay(epochDay(g) + days);
 }
 
-// — Solar Hijri ——————————————————————————————————————————————————————————————————————
+// — Jalali (Solar Hijri) —————————————————————————————————————————————————————————————
 
 /**
  * Jalali → Gregorian, the inverse of {@link gregorianToJalali} (Pournader & Toossi, public domain).

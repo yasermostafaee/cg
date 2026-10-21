@@ -90,8 +90,8 @@ const BEFORE_AND_AFTER = {
     /*
       `DELTA-RUN-NEXT-VERSION-01-C` — NEW: the calendar THIS viewer reads dates in (`calendarChoice.ts`):
       `solar-hijri` · `gregorian` · `lunar-hijri`. A per-viewer convenience, like the shell layout:
-      every stored date is ISO whatever calendar is shown. No migration is owed: ABSENT means Solar
-      Hijri, the default, and an unreadable value reads as absent.
+      every stored date is ISO whatever calendar is shown. No migration is owed: ABSENT means Jalali
+      (`solar-hijri`), the default, and an unreadable value reads as absent.
     */
     'cg.runtime.calendar.v1',
     /*

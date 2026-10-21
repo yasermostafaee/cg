@@ -23,7 +23,7 @@ import {
  * `isoOfInstant`, exactly as the control stores it, so the file passes in any time zone: what is
  * pinned is that three calendars and three digit sets name ONE stored value.
  *
- * Reference day: 2026-10-15 (Gregorian) = 1405/07/23 (Solar Hijri) = 1448/05/04 (Lunar Hijri,
+ * Reference day: 2026-10-15 (Gregorian) = 1405/07/23 (Jalali) =1448/05/04 (Lunar Hijri,
  * Umm al-Qura) — read off `@cg/text-shaping`'s own conversions.
  */
 
@@ -52,7 +52,7 @@ describe('segmentDigits — the field decides, as typed follows the calendar', (
 });
 
 describe('three calendars, one stored value', () => {
-  it('Solar Hijri, Gregorian and Lunar Hijri drafts of one day round-trip to the SAME ISO', () => {
+  it('Jalali, Gregorian and Lunar Hijri drafts of one day round-trip to the SAME ISO', () => {
     const time = { hour: '21', minute: '45', second: '00' };
     const solar = readDrafts(
       drafts({ year: '1405', month: '07', day: '23', ...time }),
@@ -138,7 +138,7 @@ describe('the Lunar Hijri day adjustment — display and entry, nothing else', (
       second: '00',
     });
     expect(readDrafts(entered, 'datetime', 'lunar-hijri', 1).value).toBe(EVENT);
-    // …and it moves only the Lunar reading: the Solar Hijri entry is untouched by it.
+    // …and it moves only the Lunar reading: the Jalali entry is untouched by it.
     const solar = drafts({
       year: '1405',
       month: '07',

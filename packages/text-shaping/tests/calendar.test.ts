@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CALENDAR_LABELS,
+  CALENDAR_SYSTEMS,
+  DEFAULT_CALENDAR,
   addGregorianDays,
   clampLunarAdjust,
   daysInJalaliMonth,
@@ -46,7 +49,20 @@ function* everyDay(from: CalendarDay, to: CalendarDay): Generator<CalendarDay> {
   }
 }
 
-describe('Solar Hijri', () => {
+describe('`RUN-NEXT-VERSION-03` 2.3 — the operator’s words for the calendars', () => {
+  it('🔴 the solar calendar is called Jalali (the owner’s word); its stored id stays `solar-hijri`', () => {
+    expect(CALENDAR_SYSTEMS.map((c) => CALENDAR_LABELS[c])).toEqual([
+      'Jalali',
+      'Gregorian',
+      'Lunar Hijri',
+    ]);
+    // What a browser remembers and a package stores is unchanged: only the label moved.
+    expect(CALENDAR_SYSTEMS).toEqual(['solar-hijri', 'gregorian', 'lunar-hijri']);
+    expect(DEFAULT_CALENDAR).toBe('solar-hijri');
+  });
+});
+
+describe('Jalali (Solar Hijri)', () => {
   it('pins Nowruz and the leap day: 1 Farvardin 1405 = 2026-03-21; 30 Esfand 1403 = 2025-03-20', () => {
     expect(jalaliToGregorian(1405, 1, 1)).toEqual([2026, 3, 21]);
     expect(jalaliToGregorian(1403, 12, 30)).toEqual([2025, 3, 20]);

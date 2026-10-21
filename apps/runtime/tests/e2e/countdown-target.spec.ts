@@ -10,7 +10,7 @@ import type { Locator, Page } from '@playwright/test';
  * control instead of a text box. Driven as the owner described it:
  *
  *  1. the author's target is in the past, so the row says so — `Target passed … · counts past zero`;
- *  2. a date and time typed with the KEYBOARD ONLY in Solar Hijri (the default) — focus, digits, Tab,
+ *  2. a date and time typed with the KEYBOARD ONLY in Jalali (the default) — focus, digits, Tab,
  *     Up / Down — stores one instant, and the passed fact goes;
  *  3. Gregorian and Lunar Hijri show the SAME day — 1405/12/29 = 20 March 2027 = 12 Shawwal 1448 —
  *     in the segments and in the facts beside them;
@@ -56,7 +56,7 @@ const updates = (page: Page): Promise<{ fields?: Record<string, unknown> }[]> =>
     () => (window as unknown as { __updates: { fields?: Record<string, unknown> }[] }).__updates,
   );
 
-test('a countdown target: typed in Solar Hijri, read in three calendars, +5 min, and a passed target stated', async ({
+test('a countdown target: typed in Jalali, read in three calendars, +5 min, and a passed target stated', async ({
   app,
 }) => {
   const page = app.page;
@@ -70,12 +70,18 @@ test('a countdown target: typed in Solar Hijri, read in three calendars, +5 min,
     'aria-pressed',
     'true',
   );
+  // `RUN-NEXT-VERSION-03` 2.3 — the owner's word: Jalali (the stored choice stays `solar-hijri`).
+  await expect(c.locator('[data-calendar-choice]')).toHaveText([
+    'Jalali',
+    'Gregorian',
+    'Lunar Hijri',
+  ]);
 
   // ── 1. The author's target is in the past: the row says so, in the author's After zero. ──
   const past = app.inspector.locator('[data-countdown-past]');
   await expect(past).toHaveText(/^Target passed .+ ago · counts past zero$/);
 
-  // ── 2. KEYBOARD ONLY, in Solar Hijri: focus the first segment, then digits and Tab. ──
+  // ── 2. KEYBOARD ONLY, in Jalali: focus the first segment, then digits and Tab. ──
   await segment(c, 'year').focus();
   await page.keyboard.type('1405');
   await page.keyboard.press('Tab');
@@ -93,7 +99,7 @@ test('a countdown target: typed in Solar Hijri, read in three calendars, +5 min,
   await page.keyboard.press('Shift+Tab');
   await page.keyboard.press('ArrowUp');
   await expect(segment(c, 'hour')).toHaveValue('۲۱');
-  // Persian digits in Solar Hijri, written whole.
+  // Persian digits in Jalali, written whole.
   expect(await segments(c)).toEqual(['۱۴۰۵', '۱۲', '۲۹', '۲۱', '۴۵', '۰۰']);
   await expect(past, 'a target ahead is not passed').toHaveCount(0);
 

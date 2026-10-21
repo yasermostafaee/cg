@@ -82,13 +82,24 @@ const segments = (host: ParentNode): string[] =>
   );
 
 describe('-B §2 — typed segments', () => {
-  it('🔴 shows Solar Hijri by default, in the digits asked for, with the two other calendars as facts', () => {
+  it('🔴 shows Jalali by default, in the digits asked for, with the two other calendars as facts', () => {
     const host = mount({
       mode: 'datetime',
       value: VALUE,
       onCommit: () => undefined,
       ariaLabel: 'Target',
     });
+    // 🔴 `RUN-NEXT-VERSION-03` 2.3 — the owner's word: Jalali (the stored choice stays `solar-hijri`).
+    expect(
+      [...host.querySelectorAll('[data-testid="datetime-calendar"] option')].map((o) => [
+        o.getAttribute('value'),
+        o.textContent,
+      ]),
+    ).toEqual([
+      ['solar-hijri', 'Jalali'],
+      ['gregorian', 'Gregorian'],
+      ['lunar-hijri', 'Lunar Hijri'],
+    ]);
     expect(segments(host)).toEqual(['1405', '07', '23', '21', '30', '00']);
     expect(host.querySelector('[data-testid="datetime-fact-gregorian"]')?.textContent).toContain(
       '2026/10/15',

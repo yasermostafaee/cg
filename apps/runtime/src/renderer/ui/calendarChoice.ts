@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { DEFAULT_CALENDAR, isCalendarSystem, type CalendarSystem } from '@cg/text-shaping';
 
 /**
- * `DELTA-RUN-NEXT-VERSION-01-C` §1 — **WHICH CALENDAR THIS VIEWER READS DATES IN**: Solar Hijri by
+ * `DELTA-RUN-NEXT-VERSION-01-C` §1 — **WHICH CALENDAR THIS VIEWER READS DATES IN**: Jalali by
  * default, Gregorian or Lunar Hijri by choice, remembered per browser.
  *
  * A per-viewer CONVENIENCE and nothing more, which is why browser storage is the right home: the

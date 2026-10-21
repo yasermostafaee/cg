@@ -114,7 +114,7 @@ const button = (selector: string): HTMLButtonElement => {
 };
 
 describe('typed segments', () => {
-  it('six segments typed in Solar Hijri (Latin keys) store ONE ISO, shown in Persian digits', async () => {
+  it('six segments typed in Jalali (Latin keys) store ONE ISO, shown in Persian digits', async () => {
     const onChange = vi.fn();
     await render(createElement(Host, { mode: 'datetime', initial: '', onChange }));
     await type(seg('year'), '1405');
@@ -181,7 +181,7 @@ describe('typed segments', () => {
 });
 
 describe('three calendars', () => {
-  it('Solar Hijri by default; the other two calendars stand beside the field as facts', async () => {
+  it('Jalali by default; the other two calendars stand beside the field as facts', async () => {
     await render(
       createElement(Host, {
         mode: 'datetime',
@@ -192,12 +192,16 @@ describe('three calendars', () => {
     expect(button('[data-calendar-choice="solar-hijri"]').getAttribute('aria-pressed')).toBe(
       'true',
     );
+    // 🔴 `RUN-NEXT-VERSION-03` 2.3 — the owner's word: Jalali (the stored choice stays `solar-hijri`).
+    expect(
+      [...document.querySelectorAll('[data-calendar-choice]')].map((b) => b.textContent),
+    ).toEqual(['Jalali', 'Gregorian', 'Lunar Hijri']);
     const facts = container?.querySelector('[data-datetime-facts]')?.textContent ?? '';
     expect(facts).toContain('Gregorian');
     expect(facts).toContain('15 October 2026');
     expect(facts).toContain('Lunar Hijri');
     expect(facts).toContain('۱۴۴۸');
-    expect(facts).not.toContain('Solar Hijri');
+    expect(facts).not.toContain('Jalali');
   });
 
   it('switching to Gregorian re-reads the SAME instant and is remembered in this browser', async () => {
@@ -210,6 +214,7 @@ describe('three calendars', () => {
     expect(window.localStorage.getItem(CALENDAR_CHOICE_KEY)).toBe('gregorian');
     const facts = container?.querySelector('[data-datetime-facts]')?.textContent ?? '';
     expect(facts).toContain('۲۳ مهر ۱۴۰۵');
+    expect(facts).toContain('Jalali');
     // Reading in another calendar stores nothing.
     expect(onChange).not.toHaveBeenCalled();
   });

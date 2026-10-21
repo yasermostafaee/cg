@@ -50,7 +50,7 @@ import {
  *   wrapping; Tab moves to the next; a paste of a whole date and/or time fills every segment it
  *   names. A focused segment selects its text, so typing replaces it.
  * - **A month grid** behind the calendar button, for whoever prefers to click — never the only way.
- * - **Three calendars** — Solar Hijri (the default), Gregorian, Lunar Hijri — chosen per browser
+ * - **Three calendars** — Jalali (the default), Gregorian, Lunar Hijri — chosen per browser
  *   (`calendarChoice`), and the same day in the OTHER two beside the field as facts.
  * - **`+1 min` · `+5 min` · `+1 h`** from now.
  * - **The stored value** is ISO with this console's offset for a date and time, `HH:mm[:ss]` for a
