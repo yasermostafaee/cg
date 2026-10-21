@@ -600,3 +600,136 @@ template added as new SHALL be rebuilt under its own library id when the console
 
 - **WHEN** the dialog is closed while the question is open
 - **THEN** nothing is imported
+
+### Requirement: An import SHALL keep the verified package and the runtime that built its page
+
+When CG Control imports a `.vcg`, it SHALL send the exact bytes it has just verified to CG Bridge before
+the import. CG Bridge SHALL keep them by its own SHA-256 of the bytes received. The import SHALL name
+that package only when CG Bridge answered the same hash, and SHALL name the template runtime that built
+the page (`PageBuild`: CG Control's release and the page runtime fingerprint). A package CG Bridge
+cannot keep (too large for one frame, refused, or answered with another hash) SHALL NOT fail the
+import; the page is then simply not rebuildable.
+
+#### Scenario: The verified bytes are kept
+
+- **WHEN** an operator imports a `.vcg`
+- **THEN** CG Bridge holds those exact bytes under their SHA-256, and the stored page names that hash and the runtime that built it, across a bridge restart
+
+#### Scenario: A package that cannot be kept does not stop the import
+
+- **WHEN** CG Bridge refuses the package or answers another hash
+- **THEN** the template is imported as before and its page names no package
+
+### Requirement: A console SHALL rebuild every page another runtime built, from the verified package only
+
+When a console that may operate connects, it SHALL ask CG Bridge which listed pages were built by
+another template runtime and have a kept package. Pages built by a newer CG Control release, pages
+already waiting to be swapped in, and pages whose rebuild by this runtime failed SHALL NOT be
+offered. For each page offered, the console SHALL read the kept package back, refuse it unless it
+hashes to the package verified at import, and build the page through the import's own verify →
+unpack → bake, keeping the operator's file name. A package that fails verification SHALL be reported,
+never built.
+
+#### Scenario: A runtime change rebuilds a page on connect
+
+- **WHEN** a console whose runtime differs from the one that built a kept page connects
+- **THEN** it rebuilds that page and CG Bridge lists the rebuilt page in its place
+
+#### Scenario: The signature check still runs
+
+- **WHEN** a kept package no longer passes `verify`
+- **THEN** no page is built from it, the old page stays listed, and the failure is reported
+
+### Requirement: A rebuilt page SHALL never land under a page on a layer
+
+A rebuilt page SHALL be stored as a new version at a new serve path (`<templateId>~<version>`). While
+an ADD of the old page is in flight, or any row holding it may have it live (on air, playing, updating,
+exiting, unconfirmed, unverified, in error, disconnected, or not known), CG Bridge SHALL hold the
+rebuilt page back and change nothing any channel's list names. A row that is `idle`, or `loaded` —
+stopped with its page still on the layer, or cued — SHALL NOT hold it back (`RUN-NEXT-VERSION-02` Q11,
+the owner). The first row change that frees the old page SHALL swap every list that names it over to
+the rebuilt page. The old page SHALL stay stored and served while any row holds it, and a stopped row
+keeps playing its resident page until its next ADD.
+
+#### Scenario: An on-air page is not rebuilt until it is stopped
+
+- **WHEN** a rebuilt page arrives for a template whose row is on air
+- **THEN** the channel's list, the served path and the page on air are unchanged
+- **AND WHEN** the row is stopped, its page still on the layer
+- **THEN** the list names the rebuilt page at a new path, the stopped page is untouched and still served, and after a Clear the next take loads the rebuilt page
+
+#### Scenario: A page on no layer is swapped at once
+
+- **WHEN** a rebuilt page arrives for a template no row has on a layer
+- **THEN** every list naming the old page names the rebuilt page at a new path
+
+### Requirement: A failed rebuild SHALL keep the old page and tell the operator once
+
+When a console cannot build a page, it SHALL report why. CG Bridge SHALL keep the old page listed,
+record the failure on it, and SHALL NOT offer it again to the same runtime. The console SHALL tell the
+operator once per pass, in one sentence naming each template, that it plays as before and must be
+imported again.
+
+#### Scenario: A failure is said once and not retried
+
+- **WHEN** a rebuild fails
+- **THEN** the old page stays listed, a failed `template-rebuild` audit row is written, the operator reads one sentence naming the template, and the same runtime does not try it again
+
+### Requirement: The Library SHALL name, once, the templates that cannot be rebuilt
+
+The template picker SHALL show one line, "Re-import these N templates" (or "Re-import 1 template"),
+for the templates on its channel's list that this runtime cannot rebuild — imported before packages
+were kept, or whose rebuild failed — each name isolated and its id only on hover. Nothing else about
+those templates SHALL change: they stay listed and selectable, with no chip.
+
+#### Scenario: An old template is listed once
+
+- **WHEN** the picker opens on a channel that lists a template imported before packages were kept
+- **THEN** one line names it, once, and the template is still listed
+
+#### Scenario: Nothing to re-import, no line
+
+- **WHEN** every page on the channel's list is current or rebuildable
+- **THEN** no re-import line is shown
+
+### Requirement: Every rebuild SHALL write one audit row
+
+CG Bridge SHALL write one `template-rebuild` audit row per rebuild that takes effect, naming the
+template and the old and new runtime, as the console that built it even when the swap lands during
+another request. A failure SHALL write one `failed` row with the reason. The Log SHALL show the
+releases (`0.11.6 → 0.12.0`) and carry the runtime fingerprints on hover.
+
+#### Scenario: One row per rebuild
+
+- **WHEN** a held-back rebuild is swapped in after its row is stopped
+- **THEN** exactly one `template-rebuild` row records it, naming the template and both runtimes
+
+### Requirement: An import refusal names the file and what is wrong, in the operator's words
+
+An import of a `.vcg` that cannot be used SHALL be refused, registering nothing, with a sentence naming the file and
+what is wrong in the operator's words, never the zip library's text. An empty file SHALL read
+`"<file>" is empty (0 bytes); the export did not finish. Export it again from the Designer.`
+A file that is not a readable package, holds no
+CG template, or whose bytes changed since export SHALL read `"<file>" is damaged or not a CG template.`, with the
+technical text written to the log only. A template whose page would not fit CG Bridge's frame SHALL be refused BEFORE
+anything is kept or sent, with its size:
+`"<file>" is too large for CG Bridge: its page is <N> MB, and one template can be at most 64 MB. Export it again from the Designer with fewer or smaller pictures.`
+A template that parses wrong (it may be a newer build's) keeps its technical sentence.
+
+#### Scenario: The owner's empty file
+
+- **WHEN** the operator imports a `.vcg` of 0 bytes
+- **THEN** nothing is registered, and the picker reads:
+  `"telavat.vcg" is empty (0 bytes); the export did not finish. Export it again from the Designer.`
+
+#### Scenario: A damaged file
+
+- **WHEN** the operator imports a file that is not a zip, or a package cut short
+- **THEN** the picker reads `"<file>" is damaged or not a CG template.`, the zip library's text is in the log, and
+  nothing is registered
+
+#### Scenario: A book too large for CG Bridge is refused with its size, and the bridge stays connected
+
+- **WHEN** the operator imports a book whose page would be 180 MB
+- **THEN** nothing is sent, the console stays connected to CG Bridge, and the picker reads:
+  `"<file>" is too large for CG Bridge: its page is 180 MB, and one template can be at most 64 MB. …`

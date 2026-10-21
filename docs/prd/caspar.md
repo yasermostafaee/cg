@@ -2263,7 +2263,7 @@ real run will print the notice for `decklink@301`.
 - **Number:** taken from the headings (highest `C-032`) and cross-checked against the registry's
   dated pointer — they agree; see the registry entry.
 
-## [~] C-034 — after an upgrade the station RE-DERIVES every template's page and metadata from what it retained, and says so in one line ⟨priority: high — every page-runtime fix so far has carried an unannounced manual step, and until it is done an old page silently ignores the new controls⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B · R4`
+## [x] C-034 — after an upgrade the station RE-DERIVES every template's page and metadata from what it retained, and says so in one line ⟨priority: high — every page-runtime fix so far has carried an unannounced manual step, and until it is done an old page silently ignores the new controls⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B · R4` · archived 2026-10-21 (`openspec/changes/archive/2026-10-21-add-page-rebuild/`)
 
 — owner decision 2026-10-14 (DESIGNER-DECISIONS Q23): **(a)** — keep each template's manifest beside its page and rebuild the page from it.
 

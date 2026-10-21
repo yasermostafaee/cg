@@ -2818,3 +2818,51 @@ editor (the book bar and Load folder…).
 - **WHEN** a package of `telavat2.vcg`'s shape is imported through Import a .vcg and loaded on a row
 - **THEN** the Inspector shows no text box for `a1`, shows Load folder…, the book bar reads `1 / 87`, and Next,
   Previous and the page box with Go move it
+
+### Requirement: A staged value its field's pattern refuses is said under the field and never sent
+
+CG Control SHALL check every STAGED text or multiline value against its field's `pattern` with the one rule
+`valueMatchesPattern` — as typed, or read with Latin digits; an empty value and an unreadable pattern pass — before an
+Update is sent, on the path the Inspector's Update and the row's UPDATE share. While a refused draft stands the field
+SHALL show one line under it naming the form in the operator's words: a known preset's name and example
+(`Not a Time (HH:MM), e.g. 21:30.`), else `Not in the form this field takes.` — never the regex. An Update with a refused
+draft SHALL send nothing (the field, its siblings, a position, a timing or a plate) and SHALL say
+`Not sent: <label> — <line>`. A field with no pattern SHALL be unaffected.
+
+#### Scenario: A mistyped azan time
+
+- **WHEN** an operator types `25:00` into a field whose pattern is the `Time (HH:MM)` preset and presses Update
+- **THEN** the field reads `Not a Time (HH:MM), e.g. 21:30.`, the refusal reads
+  `Not sent: Azan time — Not a Time (HH:MM), e.g. 21:30.`, and no update reaches the bridge
+
+#### Scenario: A time typed in Persian digits
+
+- **WHEN** the operator types `۲۰:۳۲` (or `20:32`) and presses Update
+- **THEN** the line is gone and the update is sent
+
+#### Scenario: No pattern
+
+- **WHEN** a field has no pattern
+- **THEN** any value is sent as before
+
+### Requirement: CG Control stops the operator at a repeater's max items
+
+CG Control's import SHALL stamp each `list` field that drives a repeater with its row limit (`maxItems`, by
+`listFieldMaxItems`; dropped when nothing justifies it), and the GDD SHALL carry the same `maxItems` on the field's
+array property. The Inspector's list editor SHALL state the count against the limit (`2 / 2`) and SHALL withhold Add
+item at the limit; below it Add item SHALL work as before. A list with no limit SHALL be unchanged.
+
+#### Scenario: At the limit
+
+- **WHEN** a template whose repeater takes at most 2 rows is loaded on a row with 2 rows
+- **THEN** the Inspector reads `2 / 2` and Add item is withheld
+
+#### Scenario: Below the limit
+
+- **WHEN** the operator removes a row
+- **THEN** the Inspector reads `1 / 2`, and Add item adds one, back to `2 / 2`
+
+#### Scenario: The GDD
+
+- **WHEN** a template whose repeater takes at most 6 rows is exported
+- **THEN** its GDD's array property for the list carries `maxItems: 6`

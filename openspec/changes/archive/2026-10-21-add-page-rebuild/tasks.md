@@ -63,8 +63,9 @@
       Runtime 344 passed / 2 skipped, `page-rebuild.spec.ts` among them; Designer 318 passed / 13
       skipped / 1 flaky (`clock.spec.ts:14`, a wall-clock tick, passed on retry; not touched by
       this change). Read from the run log
-- [ ] 5.8 Linux `e2e` RAN on the commit carrying `RUN-NEXT-VERSION-02` Q11 (`d3c07ca4`: a stopped row lets the
-      rebuild through; the confirmation's wording) — run URL: _(pending: the run's final push)_
+- [x] 5.8 Linux `e2e` RAN on the commit carrying `RUN-NEXT-VERSION-02` Q11 (`d3c07ca4`: a stopped row lets the
+      rebuild through; the confirmation's wording)
+      — run [39588699000](https://github.com/yasermostafaee/cg/actions/runs/39588699000) on `c23b1cea` (which carries `d3c07ca4`): success, read from the log: `ci` and the `E2E` step RAN — Designer 340 passed / 13 skipped; CG Control 353 passed / 2 skipped / 2 flaky (`pvw-live-plate-placeholder.spec.ts:381`, `rehearse-layout.spec.ts:81`: layout timing, passed on retry, not touched by this change); the whole suites, `page-rebuild.spec.ts` among them.
 
 ## 6. Docs
 

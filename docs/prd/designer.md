@@ -5757,7 +5757,7 @@ scrub); WHEN its alpha ramp is shown over black and over white THEN no fringe.
 
 **What:** the author imports SOUNDS (WAV, MP3, OGG, M4A …) into the project — each becomes one 48 kHz stereo 16-bit WAV,
 its length and peak (dBFS) measured and shown, never normalised at import (`RUN-NEXT-VERSION-02` Q10 added its loudness
-and true peak, and normalisation to −23 LUFS offered per sound: `openspec/changes/sound-normalise/`) — and places one as
+and true peak, and normalisation to −23 LUFS offered per sound: `openspec/changes/archive/2026-10-21-sound-normalise/`) — and places one as
 an `audio` element: no box on the
 canvas, its own Inspector section, starting at the graphic's ENTRANCE, a TIME after it, or its EXIT, with a volume
 (−60…+6 dB) and optional fades. The template page plays it on air; CG Bridge sends nothing new. It plays once per

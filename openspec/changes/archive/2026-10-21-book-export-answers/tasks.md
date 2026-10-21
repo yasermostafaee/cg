@@ -53,8 +53,9 @@ Lane: **FULL** — the export path, the import path, a shared frame cap (`@cg/sh
       [38760662866](https://github.com/yasermostafaee/cg/actions/runs/38760662866) on `9870f5b3` — **success**, read
       from the log: Designer 338 passed / 13 skipped, CG Control 348 passed / 2 skipped; `book-export.spec.ts` (both),
       `book-from-designer.spec.ts` and the empty-file case in `import-vcg-template.spec.ts` RAN and passed.
-- [ ] 5.3 The Linux e2e on the commit carrying `RUN-NEXT-VERSION-02` BOOK-EXPORT Q1 (`9b07a7ed`: the refusal adds
-      "or load the pages in CG Control instead (Load folder…)") — run URL: _(pending: the run's final push)_
+- [x] 5.3 The Linux e2e on the commit carrying `RUN-NEXT-VERSION-02` BOOK-EXPORT Q1 (`9b07a7ed`: the refusal adds
+      "or load the pages in CG Control instead (Load folder…)")
+      — run [39588699000](https://github.com/yasermostafaee/cg/actions/runs/39588699000) on `c23b1cea` (which carries `9b07a7ed`): success, read from the log: `ci` and the `E2E` step RAN — Designer 340 passed / 13 skipped; CG Control 353 passed / 2 skipped / 2 flaky (`pvw-live-plate-placeholder.spec.ts:381`, `rehearse-layout.spec.ts:81`: layout timing, passed on retry, not touched by this change); `book-export.spec.ts` and `book-from-designer.spec.ts` among them.
 
 ## 6. Housekeeping
 

@@ -4314,7 +4314,7 @@ of 1920×1080, measured: 300 frames peaked at 459 MB, 900 at 589 MB), refused in
 crash — red on the old code (no answer in 15 s), green now; unit tests in `image-sequence.test.ts` (red with the
 refusal ablated); the modal's budget refusal in `image-sequence-import-modal.dom.test.ts`.
 
-## [~] B-349 — An export that failed said nothing and left an EMPTY `.vcg` behind ⟨priority: high — the author believes a file was written; CG Control later calls it a "Corrupted zip"⟩ — FILED 2026-10-15 by `BOOK-EXPORT-01` (the owner's `telavat.vcg`, 0 bytes) · `openspec/changes/book-export-answers/`
+## [x] B-349 — An export that failed said nothing and left an EMPTY `.vcg` behind ⟨priority: high — the author believes a file was written; CG Control later calls it a "Corrupted zip"⟩ — FILED 2026-10-15 by `BOOK-EXPORT-01` (the owner's `telavat.vcg`, 0 bytes) · `openspec/changes/archive/2026-10-21-book-export-answers/`
 
 **Repro / Actual:** a Sequence filled by `Add folder…`, `Export (.vcg)`, a name in the save dialog → no message;
 the file is 0 bytes. **Cause (measured, two):** (1) the owner's Designer dev server (port 4000, running since

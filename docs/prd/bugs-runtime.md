@@ -13785,7 +13785,7 @@ divergences pile up within 30 s (`:535-559`); the journal keeps up to 500 lines 
 (`journal.ts:84-85`). No AMCP line-length guard exists (`amcp-guard.ts`, `caspar-client`). **Acceptance (when fixed):**
 a replay sends no line over a stated size, or the sizes of B-333 to B-339 are bounded first.
 
-## [~] B-350 — Importing an empty or broken `.vcg` read the zip library's text: "Unpack failed: End of data reached … Corrupted zip ?" ⟨priority: medium — the operator could not tell what was wrong or what to do⟩ — FILED 2026-10-15 by `BOOK-EXPORT-01` · `openspec/changes/book-export-answers/`
+## [x] B-350 — Importing an empty or broken `.vcg` read the zip library's text: "Unpack failed: End of data reached … Corrupted zip ?" ⟨priority: medium — the operator could not tell what was wrong or what to do⟩ — FILED 2026-10-15 by `BOOK-EXPORT-01` · `openspec/changes/archive/2026-10-21-book-export-answers/`
 
 **Repro / Actual:** `Import a .vcg` → the owner's 0-byte `telavat.vcg` → `"telavat.vcg" failed verification: Unpack
 failed: End of data reached (data length = 0, asked index = 4). Corrupted zip ?`. **Cause:** `produceTemplateDelivery`
@@ -13797,7 +13797,7 @@ Designer.`; an unreadable or changed one `"<file>" is damaged or not a CG templa
 **Acceptance:** `template-delivery.test.ts` (red with the checks taken out), `verify.test.ts`, the e2e
 `import-vcg-template.spec.ts` (empty) and the three specs that import `broken.vcg`.
 
-## [~] B-351 — A template larger than CG Bridge's frame imported as "Bridge disconnected — command rejected" ⟨priority: high — a book of more than ~45 MB of pictures can never reach air, and the sentence blames the bridge⟩ — FILED 2026-10-15 by `BOOK-EXPORT-01` · `openspec/changes/book-export-answers/`
+## [x] B-351 — A template larger than CG Bridge's frame imported as "Bridge disconnected — command rejected" ⟨priority: high — a book of more than ~45 MB of pictures can never reach air, and the sentence blames the bridge⟩ — FILED 2026-10-15 by `BOOK-EXPORT-01` · `openspec/changes/archive/2026-10-21-book-export-answers/`
 
 **Repro / Actual (measured on a CG Control and a real CG Bridge of its own):** a book of 30 PNG pages (141 MB)
 exported by the Designer → `Import a .vcg` → the page socket closed → `"png30.vcg" Bridge disconnected — command
