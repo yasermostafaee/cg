@@ -1299,7 +1299,7 @@ function FieldControl({
       <PageListEditor
         fieldId={fieldId}
         value={value}
-        defaultCount={field.default.length}
+        defaults={field.default}
         channel={channel}
         onStage={onStage}
       />

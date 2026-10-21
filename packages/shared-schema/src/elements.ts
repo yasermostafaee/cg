@@ -768,19 +768,19 @@ export type SequenceImageItem = z.infer<typeof SequenceImageItemSchema>;
  * 🔴 `D-163` — THE ONE ANSWER to "how may this sequence's item LIST be data-bound?" (golden rule 6):
  *
  * - `'text'` — every item is text (or there are none): a bound `list` of text items, as D-029/D-083;
- * - `'pages'` — every item is a picture: a PAGE LIST the operator loads in CG Control;
- * - `null` — anything mixed, or any composition item: not bindable (a bound list value cannot carry
- *   a composition, and a list that is half text and half pictures is neither surface).
+ * - `'pages'` — at least one picture, and every other item a TEXT page: a BOOK, its PAGE LIST loaded
+ *   and turned in CG Control (`RUN-NEXT-VERSION-03` 1.6, the owner's decision: a book with text pages
+ *   is still a book — a text page travels as text, never as a picture);
+ * - `null` — any composition item: not bindable (a bound list value cannot carry a composition).
  *
- * The Designer's bind resolver, its Data-key lock and its store all read this; none re-derives it.
+ * The Designer's bind resolver, its Data-key lock and its store all read this; none re-derives it, and
+ * neither do `isPageListField`, `pageListsOf`, the import's repair or the automatic page list.
  */
 export function sequenceItemsBinding(
   items: readonly { kind?: string | undefined }[],
 ): 'text' | 'pages' | null {
   if (items.some((i) => i.kind === 'composition')) return null;
-  const pictures = items.filter((i) => i.kind === 'image').length;
-  if (pictures === 0) return 'text';
-  return pictures === items.length ? 'pages' : null;
+  return items.some((i) => i.kind === 'image') ? 'pages' : 'text';
 }
 
 /**

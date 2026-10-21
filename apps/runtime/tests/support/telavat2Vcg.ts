@@ -11,18 +11,19 @@ import type { AssetEntry, DynamicField, FieldBinding, Scene } from '@cg/shared-s
  * every export carried before `B-352`. The pictures are 8×8 PNGs, each a different colour (the real
  * ones are 80–120 KB JPGs: the shape is the subject, not the bytes).
  *
- * `keyed: false` builds the same book with no Data key at all (BOOK-EXPORT Q2).
+ * `keyed: false` builds the same book with no Data key at all (BOOK-EXPORT Q2). `textPageAfter: n`
+ * (`RUN-NEXT-VERSION-03` 1.6) puts a TEXT page after picture n, in the sequence and the default alike.
  */
 export const TELAVAT2_ID = '5c3c6424-3208-44e9-b235-2e9b4a23ef1b';
 export const TELAVAT2_SEQUENCE = 'el-1792090411157';
 
 export async function buildTelavat2Vcg(
-  opts: { templateId?: string; pages?: number; keyed?: boolean } = {},
+  opts: { templateId?: string; pages?: number; keyed?: boolean; textPageAfter?: number } = {},
 ): Promise<Uint8Array> {
   const count = opts.pages ?? 87;
   const assets = new Map<string, Uint8Array>();
   const assetIndex: AssetEntry[] = [];
-  const items = Array.from({ length: count }, (_, i) => {
+  const pictures = Array.from({ length: count }, (_, i) => {
     const n = i + 1;
     const png = pagePng(n);
     const sha256 = sha256Hex(png);
@@ -44,6 +45,10 @@ export async function buildTelavat2Vcg(
       name: `MRN (${String(n)}).jpg`,
     };
   });
+  const items: ((typeof pictures)[number] | { id: string; text: string })[] = [...pictures];
+  if (opts.textPageAfter !== undefined) {
+    items.splice(opts.textPageAfter, 0, { id: 'note-1', text: 'یادداشت سردبیر' });
+  }
   const keyed = opts.keyed ?? true;
   const fields: DynamicField[] = keyed
     ? [

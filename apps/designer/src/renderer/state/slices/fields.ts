@@ -482,7 +482,8 @@ export const fieldsSlice = {
     // only a text-shaped one) — a kind mismatch would wire an uneditable
     // value.
     if (existing !== undefined && (existing.type === 'list') !== isListElement) return false;
-    // D-083 / D-163 — a sequence binds only an all-text list or an all-picture PAGE LIST.
+    // D-083 / D-163 — a sequence binds an all-text list or a BOOK's page list (pictures, with or
+    // without text pages — `RUN-NEXT-VERSION-03` 1.6); never one with a composition item.
     const seqBinding =
       el !== undefined && el.type === 'sequence' ? sequenceItemsBinding(el.items) : undefined;
     if (seqBinding === null) return false;
@@ -782,7 +783,8 @@ export const fieldsSlice = {
       const field = listDoc.fields.find((f) => f.id === conv.fieldId);
       const binding = sequenceItemsBinding(authored as { kind?: string }[]);
       // D-083 / D-163 — the binding is dropped (with its field) when the list stops being
-      // bindable: a composition item, or text and pictures mixed.
+      // bindable: a composition item. A text page added to a book KEEPS it (`RUN-NEXT-VERSION-03`
+      // 1.6 — the owner's decision: a book with text pages is still a book).
       //
       // 🔴 `B-353` — a change of SURFACE (text ↔ pictures) KEEPS the key and flips its page-list
       // mark. It used to drop the key in silence: an author who keyed the new sequence and then

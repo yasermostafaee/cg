@@ -77,6 +77,19 @@ be filled when it arrives.
 - **WHEN** the console is reloaded and the row is played on PVW again
 - **THEN** PVW draws the page from CG Bridge's stored copy
 
+### Requirement: A book with text pages SHALL stay a book, and a load SHALL replace its pictures only
+
+A row whose template's book holds pictures and TEXT pages SHALL be a book in CG Control (the book bar, Load
+pictures…, Load folder…), and the operator SHALL turn every page, text pages included. `Load pictures…` and
+`Load folder…` SHALL replace the PICTURE pages only: each text page SHALL keep its place after the picture it followed
+(those before the first picture stay first), and when the new pictures are fewer, the text pages that followed a
+picture past their end SHALL move to the end, in their order.
+
+#### Scenario: A load keeps the text page in place
+
+- **WHEN** a book of picture 1, a text page, pictures 2 and 3 is loaded with two new pictures and applied
+- **THEN** its pages are the first new picture, the text page, the second new picture, and the counter reads `1 / 3`
+
 ### Requirement: PVW's NEXT SHALL turn a book row exactly as the row's Next does
 
 On a rehearsing row whose template has a book the operator turns, the preview bar's NEXT SHALL send

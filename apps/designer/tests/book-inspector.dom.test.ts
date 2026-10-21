@@ -145,6 +145,24 @@ describe('🔴 B-353 — a page list offers no text-file grant', () => {
     );
   });
 
+  it('🔴 1.6 — a composition item is the one thing that removes the key, and the section says so', () => {
+    seedBook();
+    designerStore.setSequenceItems('sq', [
+      ...sequence().items,
+      { id: 'c', kind: 'composition', compositionId: 'comp-x' },
+    ] as never);
+    const host = render(
+      createElement(DynamicDataSection, { element: sequence(), scene: projected() }),
+    );
+    // With no key the section opens folded, as the author finds it.
+    act(() => {
+      host.querySelector<HTMLButtonElement>('[aria-label="Toggle Dynamic / Data"]')?.click();
+    });
+    expect(host.querySelector('[data-testid="sequence-composition-lock"]')?.textContent).toBe(
+      'A sequence with a composition item has no Data key and is not a book in CG Control.',
+    );
+  });
+
   it('a TEXT list keeps its grant', () => {
     seedBook();
     designerStore.setSequenceItems('sq', [{ id: 't', text: 'خبر' }]);

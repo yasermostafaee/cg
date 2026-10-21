@@ -40,6 +40,30 @@
       transfer of each ~1 MB page is not in this figure.
 - [ ] 1.2.7 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
 
+## 1.6 — A book with text pages stays a book (FULL lane: the schema's rule, the bridge, the page)
+
+- [x] 1.6.1 Cause: `sequenceItemsBinding` (`@cg/shared-schema` `elements.ts`) answered `null` for pictures mixed
+      with text, so the Designer dropped the binding (`setSequenceItems`) and CG Control lost Load folder and the
+      page tools; `isPageListField` also required every default item to be a picture.
+- [x] 1.6.2 The ONE rule changed in the ONE place: `pages` = at least one picture, every other item a text page;
+      `null` only for a composition item. `isPageListField` (via `isBookValue`), `pageListsOf`, the import's
+      repair and the automatic page list all read it — they cannot disagree.
+- [x] 1.6.3 The Designer: the key stays when a text page is added; the one sentence where a key disappears
+      (a composition item): `A sequence with a composition item has no Data key and is not a book in CG Control.`
+- [x] 1.6.4 CG Control: `bookPages.ts` — `withPicturesReplaced`: a load replaces the PICTURE pages only; each text
+      page keeps its place after its picture; past a shorter folder's end, at the end. The Inspector's load uses it.
+- [x] 1.6.5 CG Bridge and the page: already carried a text page as text (`pageRefsOf` → no `media`; the page's
+      text item) — pinned now, no change needed. No migration: `migratePageListMarks` (registered) re-marks a
+      bound mixed list at open, and an older package's keyless mixed book gets its page list at import.
+- [x] 1.6.6 Superseded tests rewritten: `page-lists.test.ts` ("a mixed sequence is never one"),
+      `sequence-pages.test.ts` (Designer: "MIXING text and pictures cannot take a Data key", "a bound TEXT list
+      that gains pictures loses its binding").
+- [x] 1.6.7 Tests: e2e `telavat2-book.spec.ts` › 1.6 (a book with a text page is a book; a load keeps it in place)
+      — RED on `HEAD`'s rule (no book bar), green; `page-lists.test.ts`, Designer `sequence-pages.test.ts`,
+      `book-inspector.dom.test.ts`, `bookPages.model.test.ts`, page `sequence-pages.test.ts` (a turn onto a text
+      page), bridge `book-pages.integration.test.ts` (accepted; no `media`).
+- [ ] 1.6.8 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+
 ## 1.3 — PVW's NEXT turns the loaded pages (FULL lane: a verb that reaches the bridge)
 
 - [x] 1.3.1 Cause, proved: PVW's NEXT called the page's local `next()` (`RehearsalFrame.tsx`, the frame

@@ -435,6 +435,36 @@ describe('R-100 — a bridge page turn (`__cg.page`) on an operator book', () =>
     expect(document.querySelectorAll('[data-cg-sequence-page]')).toHaveLength(1);
   });
 
+  /*
+    🔴 `RUN-NEXT-VERSION-03` 1.6 — a book with TEXT pages is still a book: a text page travels as text
+    (no `media`, no picture), and a turn onto it shows its words.
+  */
+  it('🔴 1.6 — a turn onto a TEXT page of a book shows its text; the next turn shows the picture again', async () => {
+    const clock = makeClock();
+    const rt = createRuntime(book([], {}, { fields: [pagesField], bindings: [binding] }), {
+      skipFontLoad: true,
+      clock,
+      decodeImage: () => Promise.resolve(true),
+    });
+    const [p1, p2] = operatorBook(2);
+    await rt.play({
+      pages: [p1, { id: 'note', text: 'یادداشت سردبیر' }, p2],
+      __cg: { page: { field: 'pages', index: 0, media: { [SHA(1)]: DATA(1) } } },
+    });
+    await flush(clock);
+    expect(onStage()).toEqual([DATA(1)]);
+    await rt.update({ __cg: { page: { field: 'pages', index: 1 } } });
+    await flush(clock, 100);
+    const items = [...document.querySelectorAll('[data-cg-sequence-item]')];
+    expect(items.at(-1)?.textContent).toBe('یادداشت سردبیر');
+    expect(onStage()).toEqual([]);
+    await rt.update({
+      __cg: { page: { field: 'pages', index: 2, media: { [SHA(2)]: DATA(2) } } },
+    });
+    await flush(clock, 100);
+    expect(onStage()).toEqual([DATA(2)]);
+  });
+
   it('🔴 1.1 — a picture the HOST gave for a hash is what the page draws (PVW: no page route)', async () => {
     const { providePagePicture } = await import('../src/page-pictures-host.js');
     const picture = 'data:image/png;base64,iVBORw0KGgo=';

@@ -68,8 +68,9 @@ export function DynamicDataSection({
   const field = conv === undefined ? undefined : scene.fields.find((f) => f.id === conv.fieldId);
   const currentKey = field?.id ?? '';
   const [warn, setWarn] = useState<string | null>(null);
-  // D-083 / D-163 — a sequence's item list is bindable when it is all text or all pictures
-  // (a page list); a composition item, or a mix, locks it. The one predicate decides.
+  // D-083 / D-163 — a sequence's item list is bindable when it is all text, or a BOOK — pictures
+  // with or without text pages (`RUN-NEXT-VERSION-03` 1.6); only a composition item locks it. The
+  // one predicate decides.
   const compositionLocked =
     element.type === 'sequence' && sequenceItemsBinding(element.items) === null;
 
@@ -163,11 +164,9 @@ export function DynamicDataSection({
       {warn !== null && <p className={s.warn}>{warn}</p>}
 
       {compositionLocked ? (
-        <p className={s.hint}>
-          The item list can’t be data-bound while this sequence has a composition item (list binding
-          is text-only). You can still edit each item’s text, bind an individual text item to a
-          field via its data key in the Items list above, and bind fields inside composition items
-          from the data form.
+        /* `RUN-NEXT-VERSION-03` 1.6 — the one place the binding disappears, said in one sentence. */
+        <p className={s.hint} data-testid="sequence-composition-lock">
+          A sequence with a composition item has no Data key and is not a book in CG Control.
         </p>
       ) : field === undefined ? (
         <p className={s.hint}>

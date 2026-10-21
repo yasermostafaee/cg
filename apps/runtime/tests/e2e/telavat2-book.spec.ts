@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures/runtime.js';
 import { buildTelavat2Vcg, TELAVAT2_ID, TELAVAT2_SEQUENCE } from '../support/telavat2Vcg.js';
+import { solidPng } from './fixtures/pictures.js';
 
 /**
  * 🔴 `B-353` — **THE OWNER'S BOOK, IMPORTED AS IT IS, IS A BOOK.** `telavat2.vcg` (2026-10-15): 87
@@ -45,4 +46,51 @@ test('BOOK-EXPORT Q2 — the same book with no Data key is a book too', async ({
   await expect(
     app.inspector.getByRole('button', { name: `Load a folder for pages-${TELAVAT2_SEQUENCE}` }),
   ).toBeVisible();
+});
+
+/*
+  🔴 `RUN-NEXT-VERSION-03` 1.6 — A BOOK WITH A TEXT PAGE IS STILL A BOOK (the owner's decision). It used to
+  lose its binding in the Designer, and CG Control its Load folder… and page tools. And a load replaces
+  the PICTURE pages only: the text page keeps its place after the picture it followed.
+*/
+test('🔴 1.6 — a book with a text page is a book, and a load keeps the text page in place', async ({
+  app,
+}) => {
+  const templateId = 'tpl-e2e-telavat2-text-page';
+  await app.importVcg(
+    'text-page.vcg',
+    // Picture 1, the text page, pictures 2 and 3.
+    await buildTelavat2Vcg({ templateId, pages: 3, textPageAfter: 1 }),
+  );
+  await app.selectStackRow(templateId);
+  await expect(app.inspector.getByTestId('book-counter')).toHaveText('1 / 4');
+  await expect(app.inspector.getByRole('button', { name: /^Load a folder/ })).toBeVisible();
+
+  // Two new pictures for three: picture 1, the text page after it, picture 2 — three pages.
+  const chooser = app.page.waitForEvent('filechooser');
+  await app.inspector.getByRole('button', { name: /^Load pictures/ }).click();
+  await (
+    await chooser
+  ).setFiles(
+    ['new1.png', 'new2.png'].map((name, i) => ({
+      name,
+      mimeType: 'image/png',
+      buffer: solidPng(64, 36, [40 * (i + 1), 90, 160]),
+    })),
+  );
+  await expect(app.inspector.getByTestId('page-count-a1')).toHaveText('3 pages');
+  await app.applyEdits();
+  const pages = await app.page.evaluate(async () => {
+    const w = window as unknown as {
+      cg: { stack: { snapshot: () => Promise<{ fields: Record<string, unknown> }[]> } };
+    };
+    const item = (await w.cg.stack.snapshot()).find((i) => Array.isArray(i.fields['a1']));
+    return ((item?.fields['a1'] ?? []) as { kind?: string; name?: string; text?: string }[]).map(
+      (p) => (p.kind === 'image' ? `picture ${p.name ?? ''}` : `text ${p.text ?? ''}`),
+    );
+  });
+  expect(pages).toEqual(['picture new1.png', 'text یادداشت سردبیر', 'picture new2.png']);
+  await expect(app.inspector.getByTestId('book-counter')).toHaveText('1 / 3');
+  await app.inspector.getByRole('button', { name: /^Next page/ }).click();
+  await expect(app.inspector.getByTestId('book-counter')).toHaveText('2 / 3');
 });

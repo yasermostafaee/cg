@@ -90,15 +90,46 @@ describe('D-163 — adding pictures to a sequence', () => {
     });
   });
 
-  it('a sequence MIXING text and pictures cannot take a Data key', () => {
+  /*
+    🔴 `RUN-NEXT-VERSION-03` 1.6 — the owner's decision SUPERSEDES the two tests that stood here ("a
+    sequence MIXING text and pictures cannot take a Data key" and "a bound TEXT list that gains pictures
+    loses its binding"): a sequence of pictures AND text pages is still a book.
+  */
+  it('🔴 1.6 — pictures and a text page take a Data key: a book whose default carries the text page', () => {
     freshScene();
     designerStore.addElement(defaultSequence('sq', 0, 0));
     designerStore.setSequenceItems('sq', [{ id: 'cover', text: 'جلد' }]);
     designerStore.addSequencePictures('sq', pages(1));
-    expect(designerStore.setElementDataKey('sq', 'book')).toBe(false);
+    expect(designerStore.setElementDataKey('sq', 'book')).toBe(true);
+    const st = designerStore.get();
+    const field = editSceneOf(st.scene, st.activeCompositionId)!.fields.find(
+      (f) => f.id === 'book',
+    );
+    expect(field).toMatchObject({ type: 'list', pages: true });
+    expect(field?.type === 'list' ? field.default.map((i) => i.id) : []).toContain('cover');
   });
 
-  it('a bound TEXT list that gains pictures loses its binding (it is no longer either surface)', () => {
+  it('🔴 1.6 — a book that gains a text page KEEPS its Data key and stays a book', () => {
+    freshScene();
+    designerStore.addElement(defaultSequence('sq', 0, 0));
+    designerStore.addSequencePictures('sq', pages(2));
+    expect(designerStore.setElementDataKey('sq', 'book')).toBe(true);
+    designerStore.setSequenceItems('sq', [
+      ...sequenceOf('sq').items,
+      { id: 'note', text: 'یادداشت' },
+    ] as never);
+    const st = designerStore.get();
+    const doc = editSceneOf(st.scene, st.activeCompositionId)!;
+    const field = doc.fields.find((f) => f.id === 'book');
+    expect(field).toMatchObject({ type: 'list', pages: true });
+    expect(field?.type === 'list' ? field.default : []).toHaveLength(3);
+    expect(doc.bindings).toContainEqual({
+      fieldId: 'book',
+      target: { kind: 'sequence-items', elementId: 'sq' },
+    });
+  });
+
+  it('1.6 — a bound TEXT list that gains a picture becomes a book under the same key', () => {
     freshScene();
     designerStore.addElement(defaultSequence('sq', 0, 0));
     designerStore.setSequenceItems('sq', [{ id: 'a', text: 'متن' }]);
@@ -106,7 +137,21 @@ describe('D-163 — adding pictures to a sequence', () => {
     designerStore.addSequencePictures('sq', pages(1));
     const st = designerStore.get();
     const doc = editSceneOf(st.scene, st.activeCompositionId)!;
-    expect(doc.fields.some((f) => f.id === 'rundown')).toBe(false);
+    expect(doc.fields.find((f) => f.id === 'rundown')).toMatchObject({ pages: true });
+  });
+
+  it('a composition item still drops the binding — compositions keep today’s rule', () => {
+    freshScene();
+    designerStore.addElement(defaultSequence('sq', 0, 0));
+    designerStore.addSequencePictures('sq', pages(1));
+    expect(designerStore.setElementDataKey('sq', 'book')).toBe(true);
+    designerStore.setSequenceItems('sq', [
+      ...sequenceOf('sq').items,
+      { id: 'c', kind: 'composition', compositionId: 'comp-x' },
+    ] as never);
+    const st = designerStore.get();
+    const doc = editSceneOf(st.scene, st.activeCompositionId)!;
+    expect(doc.fields.some((f) => f.id === 'book')).toBe(false);
   });
 });
 

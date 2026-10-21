@@ -21,12 +21,17 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
   (never up); over 4 MB → re-encoded; PNG when transparent, else JPEG 0.92. One line says it
   (`12 pictures were resized to fit 1920×1080`); only what is still over the cap is refused, by name.
   The bridge's own check stays the guard.
+- **1.6 — A book with text pages stays a book** (the owner's decision). The one rule
+  (`sequenceItemsBinding`): at least one picture, every other item a text page; only a composition item
+  makes a sequence unbindable, and the Designer says so in one sentence. CG Control's loads replace the
+  picture pages only, each text page keeping its place; a text page travels as text.
 - **1.3 — PVW's NEXT turns the book.** On a book row it is the row's own page turn (`stack.page`), and
   PVW follows the bridge's page; on any other row it is the template's step, as before.
 
 ## Impact
 
-- **Specs:** `runtime-ui`, `runtime-caspar-bridge` (ADDED).
+- **Specs:** `runtime-ui` (MODIFIED, ADDED), `runtime-caspar-bridge` (ADDED), `designer-sequence-element`
+  (MODIFIED).
 - **Code:** `@cg/shared-ipc` (`pages.get`), CG Bridge (`getPage`, route, scope), `@cg/template-runtime`
   (`page-pictures-host`, the fill, `alt`), CG Control (`pagePictures`, `bookPageOf`, PVW's frame, the mock).
 - **Wire:** one new read channel; `__cg` unchanged.

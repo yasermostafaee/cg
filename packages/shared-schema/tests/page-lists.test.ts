@@ -5,6 +5,7 @@ import {
   migratePageListMarks,
   migrateScene,
   pageListsOf,
+  sequenceItemsBinding,
   withAutoPageLists,
   withPageLists,
   type DynamicField,
@@ -106,17 +107,40 @@ describe('🔴 B-353 — isPageListField, the one answer', () => {
     expect(isPageListField(A1 as DynamicField, { items: PAGES as never })).toBe(true);
   });
 
-  it('a list of TEXT is never one, marked or not; a mixed sequence is never one', () => {
+  it('a list of TEXT is never one, marked or not', () => {
     const text = [{ id: 'a', text: 'متن' }];
     const marked = { ...A1, default: text, pages: true } as DynamicField;
     expect(isPageListField(marked, { items: text as never })).toBe(false);
-    expect(isPageListField(A1 as DynamicField, { items: [...PAGES, ...text] as never })).toBe(
-      false,
-    );
-    // Pictures in the sequence, but text in the field's own default: not a book either.
+    // Pictures in the sequence, but only text in the field's own default: not a book either.
     expect(
       isPageListField({ ...A1, default: text } as DynamicField, { items: PAGES as never }),
     ).toBe(false);
+  });
+
+  /*
+    🔴 `RUN-NEXT-VERSION-03` 1.6 — the owner's decision SUPERSEDES "a mixed sequence is never one": a
+    sequence of pictures AND text pages is still a book (a text page travels as text).
+  */
+  it('🔴 1.6 — pictures with text pages ARE a book; a composition item never is', () => {
+    const text = { id: 't1', text: 'متن' };
+    const mixed = [page(1), text, page(2)];
+    expect(sequenceItemsBinding(mixed)).toBe('pages');
+    expect(
+      isPageListField({ ...A1, default: mixed } as DynamicField, { items: mixed as never }),
+    ).toBe(true);
+    const withComposition = [...mixed, { id: 'c', kind: 'composition', compositionId: 'comp-1' }];
+    expect(sequenceItemsBinding(withComposition)).toBeNull();
+    expect(
+      isPageListField({ ...A1, default: mixed } as DynamicField, {
+        items: withComposition as never,
+      }),
+    ).toBe(false);
+  });
+
+  it('🔴 1.6 — a stepped book with a text page and no Data key gets its page list at export', () => {
+    const mixed = [page(1), { id: 't1', text: 'متن' }, page(2)];
+    const s = withPageLists(scene([sequence(SEQ, { items: mixed })], [], []));
+    expect(pageListsOf(s).map((l) => l.fieldId)).toEqual([autoPageListFieldId(SEQ)]);
   });
 
   it('an EMPTY sequence keeps the author’s mark — a book the operator fills', () => {

@@ -368,3 +368,28 @@ it('🔴 1.1 — pages.get answers the stored bytes for a hash, and no-page for 
   expect(await linesSince(before)).toEqual([]);
   expect(await r.getPage('f'.repeat(64))).toEqual({ ok: false, reason: 'no-page' });
 }, 30_000);
+
+/*
+  🔴 `RUN-NEXT-VERSION-03` 1.6 — A BOOK WITH TEXT PAGES IS STILL A BOOK. A text page travels as TEXT: the
+  update that carries it is accepted (no picture to hold), and a turn onto it names no picture at all.
+*/
+it('🔴 1.6 — a text page in a book is accepted, and a turn onto it carries no picture', async () => {
+  const r = await boot();
+  const [p1, p2] = await storeBook(r, 2);
+  const pages = [p1!, { id: 'note', text: 'یادداشت سردبیر' }, p2!];
+  expect((await r.load('item1', 'book', { pages })).accepted).toBe(true);
+  await expect(mock!.waitForCgAddResolution(slotOf(r, 'item1'))).resolves.toBe('resolved');
+  expect((await r.take('item1')).accepted).toBe(true);
+  const before = await lineCount();
+
+  expect(await r.pageItem('item1', 'pages', 'next')).toEqual({ accepted: true, page: 2, count: 3 });
+  const sent = await linesSince(before);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toContain('"page":{"field":"pages","index":1}');
+  expect(sent[0]).not.toContain('"media"');
+
+  // …and the next turn names the picture after it, as any page does.
+  const again = await lineCount();
+  expect(await r.pageItem('item1', 'pages', 'next')).toEqual({ accepted: true, page: 3, count: 3 });
+  expect((await linesSince(again))[0]).toContain(`"${p2!.media}":"/page/${p2!.media}.png"`);
+}, 30_000);

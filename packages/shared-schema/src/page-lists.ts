@@ -27,12 +27,29 @@ function isPicture(item: unknown): boolean {
   return typeof item === 'object' && item !== null && (item as { kind?: unknown }).kind === 'image';
 }
 
+/** `RUN-NEXT-VERSION-03` 1.6 — a TEXT page of a book: `{ id, text }`, `kind` absent or `'text'`. */
+function isTextPage(item: unknown): boolean {
+  if (typeof item !== 'object' || item === null) return false;
+  const o = item as { kind?: unknown; text?: unknown };
+  return (o.kind === undefined || o.kind === 'text') && typeof o.text === 'string';
+}
+
+/**
+ * `RUN-NEXT-VERSION-03` 1.6 — whether a list VALUE reads as a book: every item a picture or a text
+ * page, and at least one picture (an empty list has nothing to judge by, and passes).
+ */
+export function isBookValue(items: readonly unknown[]): boolean {
+  if (items.length === 0) return true;
+  return items.every((i) => isPicture(i) || isTextPage(i)) && items.some(isPicture);
+}
+
 /**
  * 🔴 `B-353` — **THE ONE ANSWER to "is this list field, bound to this sequence's items, a PAGE LIST?"**
- * (golden rule 6): exactly when every item of the sequence is a picture — and every item of the
- * field's own default too, so a list of text can never be read as pages. Whatever order the author
- * worked in, and whatever the stored `pages` mark says: the mark is this answer written down, and
- * {@link withPageListMark} keeps the two equal.
+ * (golden rule 6): exactly when the sequence's items make a BOOK (`sequenceItemsBinding` → `pages`:
+ * at least one picture, every other item a text page — `RUN-NEXT-VERSION-03` 1.6) — and the field's
+ * own default reads as one too ({@link isBookValue}), so a list of text can never be read as pages.
+ * Whatever order the author worked in, and whatever the stored `pages` mark says: the mark is this
+ * answer written down, and {@link withPageListMark} keeps the two equal.
  *
  * An EMPTY sequence has nothing to judge by, so the author's mark stands — a book whose every page
  * the operator loads in CG Control.
@@ -47,7 +64,7 @@ export function isPageListField(
 ): boolean {
   if (field.type !== 'list') return false;
   if (sequence.items.length === 0) return field.pages === true;
-  return sequenceItemsBinding(sequence.items) === 'pages' && field.default.every(isPicture);
+  return sequenceItemsBinding(sequence.items) === 'pages' && isBookValue(field.default);
 }
 
 /**

@@ -12,6 +12,7 @@ import { Notice } from '../../ui/Notice.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
 import { rememberPicture } from '../book/pagePictures.js';
 import { fitLine, fitPicture, type Raster } from '../book/fitPicture.js';
+import { bookPagesOf, withPicturesReplaced } from '../book/bookPages.js';
 
 /**
  * `R-100` — **A ROW'S BOOK: the operator loads its pages as pictures.**
@@ -33,8 +34,8 @@ const styles = {
 };
 
 /** A page list value's length; with no value yet, the template's own pages. */
-function countOf(value: FieldValue | undefined, defaultCount: number): number {
-  return Array.isArray(value) ? value.length : defaultCount;
+function countOf(value: FieldValue | undefined, defaults: readonly unknown[]): number {
+  return Array.isArray(value) ? value.length : defaults.length;
 }
 
 function orderName(file: File): string {
@@ -99,14 +100,17 @@ export function notLoadedLine(
 export function PageListEditor({
   fieldId,
   value,
-  defaultCount,
+  defaults,
   channel,
   onStage,
 }: {
   fieldId: string;
   value: FieldValue | undefined;
-  /** How many pages the template itself carries — shown until the operator loads a book. */
-  defaultCount: number;
+  /**
+   * The pages the template itself carries — the book until the operator loads one, and the text
+   * pages a load keeps in place (`RUN-NEXT-VERSION-03` 1.6).
+   */
+  defaults: readonly unknown[];
   /** `RUN-NEXT-VERSION-03` 1.2 — the row's channel, whose frame a page is fitted to. */
   channel?: number | undefined;
   onStage: (value: FieldValue) => void;
@@ -114,7 +118,7 @@ export function PageListEditor({
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [fitted, setFitted] = useState<string | null>(null);
-  const count = countOf(value, defaultCount);
+  const count = countOf(value, defaults);
   const settings = useChannelSettings().settings;
   const raster: Raster = settings.find((s) => s.channel === channel)?.raster ?? REFERENCE_RASTER;
 
@@ -167,7 +171,15 @@ export function PageListEditor({
     }
     setFitted(fitLine(resized, reencoded, raster));
     setRefusal(notLoadedLine(tooLarge, notPictures));
-    if (pages.length > 0) onStage(pages);
+    // `RUN-NEXT-VERSION-03` 1.6 — the PICTURE pages are replaced; each text page keeps its place.
+    if (pages.length > 0) {
+      onStage(
+        withPicturesReplaced(
+          bookPagesOf(Array.isArray(value) ? value : defaults),
+          pages,
+        ) as FieldValue,
+      );
+    }
   }
 
   return (
