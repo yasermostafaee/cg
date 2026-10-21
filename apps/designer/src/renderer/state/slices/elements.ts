@@ -14,6 +14,7 @@ import {
 import { designerStore } from '../store.js';
 import { collectGroupMoveTargets } from '../../features/canvas/group-move.js';
 import { renderedTransformAt } from './arrangements.js';
+import { nextAutoSourceId } from '../auto-source-id.js';
 import {
   clampDeltaToPasteboard,
   pasteboardSceneBounds,
@@ -33,7 +34,31 @@ function cloneElementWithNewIds(el: Element): Element {
   if (base.type === 'container') {
     base.children = base.children.map(reassignIdsDeep);
   }
-  return base;
+  return withFreshPlateKeys(base);
+}
+
+/**
+ * 🔴 `RUN-NEXT-VERSION-02` Q5 (the owner) — **A COPIED PLATE GETS THE NEXT FREE `live-N`, MARKED AUTO.**
+ * A duplicate or a paste kept the original's id, so two plates named one source in the same look —
+ * the export's `live-source-repeated` refusal, or two holes fed one input. Each plate in the copy
+ * (a container's too) takes the next id free where it lands (`nextAutoSourceId`: the active
+ * composition's look), labelled as the tool's (`routeKeyAuto`) until the author confirms it, as a
+ * drawn plate is (`B-187`). A plate with no id stays without one.
+ */
+function withFreshPlateKeys(el: Element): Element {
+  const scene = current.scene;
+  if (scene === null) return el;
+  const taken = new Set<string>();
+  const fresh = (e: Element): Element => {
+    if (e.type === 'video-placeholder' && e.routeKey !== undefined) {
+      const routeKey = nextAutoSourceId(scene, current.activeCompositionId, taken);
+      taken.add(routeKey);
+      return { ...e, routeKey, routeKeyAuto: true };
+    }
+    if (e.type === 'container') return { ...e, children: e.children.map(fresh) };
+    return e;
+  };
+  return fresh(el);
 }
 
 /**

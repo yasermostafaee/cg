@@ -1475,7 +1475,9 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    * drawn with the canvas tool now gets the next free `live-N` IN ITS LOOK — but marked
    * {@link routeKeyAuto} until the author confirms or replaces it, so the surface says the tool
    * chose it. That is what keeps "nothing lands unconfirmed": the name lands, labelled as not yet
-   * the author's. A plate made any other way (the factory, a paste) is still unassigned.
+   * the author's. A plate made by the factory is still unassigned. `RUN-NEXT-VERSION-02` Q5 (the
+   * owner): a DUPLICATED or PASTED plate takes the next free `live-N` where it lands, marked
+   * {@link routeKeyAuto} the same way — it no longer repeats its original's id.
    */
   routeKey: LiveSourceIdSchema.optional(),
   /**

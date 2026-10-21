@@ -21,11 +21,16 @@ import { editSceneOf } from './scene-doc.js';
  * warning). The look membership here is the shared one — `flattenElements` + `lookContaining` —
  * never a second spelling of "which look holds this plate".
  */
-export function nextAutoSourceId(scene: Scene, activeCompositionId: string | null): string {
+export function nextAutoSourceId(
+  scene: Scene,
+  activeCompositionId: string | null,
+  /** Keys already given in the same act and not yet in `scene` (several plates in one paste). */
+  alsoTaken: ReadonlySet<string> = new Set(),
+): string {
   const used = usedKeysFor(scene, activeCompositionId);
   for (let n = 1; ; n += 1) {
     const key = `live-${String(n)}`;
-    if (!used.has(key)) return key;
+    if (!used.has(key) && !alsoTaken.has(key)) return key;
   }
 }
 
