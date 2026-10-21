@@ -1,6 +1,7 @@
 import {
   activeRangeOf,
   aggregateCompositionFields,
+  listFieldMaxItems,
   type AggregatedFields,
   type DynamicField,
   type Scene,
@@ -54,6 +55,11 @@ export interface GddProperty {
   required?: string[];
   /** D-028 — for `type: 'array'` (a list field): the item schema. */
   items?: GddProperty;
+  /**
+   * `RUN-NEXT-VERSION-02` Q4 — for `type: 'array'`: the most items it takes (JSON Schema's own
+   * keyword) — a repeater's row limit, since the page shows only that many.
+   */
+  maxItems?: number;
 }
 
 /**
@@ -233,9 +239,12 @@ function gddPropertyFor(field: DynamicField, ctx?: GddDocCtx): GddProperty {
           itemProps[childField.id] = gddPropertyFor(childField);
           if (childField.required) itemRequired.push(childField.id);
         }
+        // Q4 — the repeater's row limit, by the one derivation CG Control's import also uses.
+        const maxItems = ctx === undefined ? undefined : listFieldMaxItems(ctx.doc, field.id);
         return {
           ...base,
           type: 'array',
+          ...(maxItems !== undefined ? { maxItems } : {}),
           items: {
             type: 'object',
             label: field.label,

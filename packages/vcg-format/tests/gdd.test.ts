@@ -219,6 +219,21 @@ describe('buildGddSchema', () => {
       expect(g.properties['rows']?.items?.properties?.['text']).toBeUndefined();
     });
 
+    it('🔴 RUN-NEXT-VERSION-02 Q4 — the array carries the repeater’s max items; none, no key', () => {
+      expect(buildGddSchema(repeaterScene).properties['rows']).not.toHaveProperty('maxItems');
+      const [layer] = repeaterScene.layers;
+      const [rep] = layer?.children ?? [];
+      const limited = {
+        ...repeaterScene,
+        layers: [{ ...layer, children: [{ ...rep, maxItems: 6 }] }],
+      } as unknown as Scene;
+      expect(buildGddSchema(limited).properties['rows']).toMatchObject({
+        type: 'array',
+        maxItems: 6,
+      });
+      expect(buildGddSchema(limited).properties['plain']).not.toHaveProperty('maxItems');
+    });
+
     it('non-repeater lists keep the generic open item shape', () => {
       const g = buildGddSchema(repeaterScene);
       expect(g.properties['plain']).toMatchObject({

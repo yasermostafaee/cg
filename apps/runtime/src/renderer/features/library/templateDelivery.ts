@@ -19,6 +19,7 @@ import {
   templateTimingOf,
   runtimeShortfall,
   runtimeShortfallMessage,
+  withListLimits,
   withPageLists,
   type Manifest,
   type Position,
@@ -316,7 +317,13 @@ export async function produceTemplateDelivery(
   // `DELTA-RUN-NEXT-VERSION-01-C` — and each text field that sets a countdown's target is marked
   // `countdown` HERE, from its own doc's `clock-target` binding, so CG Control offers the date and
   // time control for it. The binding is the one source of truth (`countdownTargetFieldsOf`).
-  const aggregate = countdownTargetFieldsOf(scene, scene, aggregateCompositionFields(scene, scene));
+  // `RUN-NEXT-VERSION-02` Q4 — and each list driving a repeater carries its row limit (`maxItems`), so
+  // the Inspector stops the operator there: the page shows only that many rows.
+  const aggregate = withListLimits(
+    scene,
+    scene,
+    countdownTargetFieldsOf(scene, scene, aggregateCompositionFields(scene, scene)),
+  );
   // R-004 — carry BOTH labels the package can offer, and let the display rule choose.
   //
   // `name` is the manifest's (the Designer's exporter writes `scene.name` into it). It is

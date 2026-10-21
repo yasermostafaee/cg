@@ -153,6 +153,9 @@ export function ListFieldEditor({
   footer?: ReactNode;
 }): JSX.Element {
   const items = toListItems(value);
+  // `RUN-NEXT-VERSION-02` Q4 — the most items the list takes (a repeater's row limit, from import).
+  const maxItems = field?.type === 'list' ? field.maxItems : undefined;
+  const atLimit = maxItems !== undefined && items.length >= maxItems;
   // Drag state is PURELY presentational (which row is lifted, where it would land).
   // The value still changes only through `onStage`, on drop.
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -328,6 +331,9 @@ export function ListFieldEditor({
         <Button
           variant="accent"
           aria-label={`Add ${fieldId} item`}
+          // `RUN-NEXT-VERSION-02` Q4 — a repeater's list stops at its row limit: the page shows no more.
+          disabled={atLimit}
+          {...(atLimit && maxItems !== undefined ? { title: `At most ${String(maxItems)}` } : {})}
           onClick={() => onStage(addItem(items, `item-${uuid()}`))}
         >
           {/* lucide, not the mock's `＋` glyph — the design system routes every icon
@@ -335,6 +341,11 @@ export function ListFieldEditor({
           <Icon icon={Plus} />
           Add item
         </Button>
+        {maxItems !== undefined && (
+          <span style={styles.empty} data-list-count={fieldId}>
+            {`${String(items.length)} / ${String(maxItems)}`}
+          </span>
+        )}
         {footer}
       </div>
     </div>

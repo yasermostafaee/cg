@@ -824,6 +824,101 @@ export async function buildListFieldVcg(templateId = 'tpl-e2e-list'): Promise<Ui
 }
 
 /**
+ * `RUN-NEXT-VERSION-02` Q4 — a verifiable `.vcg` with a REPEATER of at most `maxItems` rows, driven by
+ * the list field `rows` (two rows by default), each row a child composition with a `name` text.
+ */
+export async function buildRepeaterVcg(
+  templateId = 'tpl-e2e-repeater',
+  maxItems = 2,
+): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  const layer = scene.layers[0];
+  if (layer === undefined) throw new Error('fixture scene has no layer');
+  const box = {
+    position: { x: 0, y: 0 },
+    size: { w: 600, h: 300 },
+    scale: { x: 1, y: 1 },
+    rotation: 0,
+    anchor: { x: 0, y: 0 },
+  };
+  layer.children = [
+    ...layer.children,
+    {
+      id: 'rep',
+      name: 'Rows',
+      type: 'repeater',
+      transform: box,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 2,
+      compositionId: 'row',
+      direction: 'column',
+      flow: 'rtl',
+      gap: 8,
+      items: [],
+      maxItems,
+    },
+  ];
+  scene.fields = [
+    ...scene.fields,
+    {
+      id: 'rows',
+      label: 'Rows',
+      required: false,
+      type: 'list',
+      default: [
+        { id: 'r1', name: 'یک' },
+        { id: 'r2', name: 'دو' },
+      ],
+    },
+  ];
+  scene.bindings = [
+    ...scene.bindings,
+    { fieldId: 'rows', target: { kind: 'repeater-items', elementId: 'rep' } },
+  ];
+  scene.compositions = [
+    {
+      id: 'row',
+      name: 'Row',
+      resolution: { width: 600, height: 60 },
+      frameRange: { in: 0, out: 50 },
+      editorBackdrop: 'transparent',
+      layers: [
+        {
+          id: 'row-l',
+          name: 'row',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [],
+        },
+      ],
+      fields: [{ id: 'name', label: 'Name', required: false, type: 'text', default: '' }],
+      bindings: [],
+    },
+  ] as Scene['compositions'];
+  return pack({
+    scene,
+    manifestExtras: {
+      id: templateId,
+      name: 'e2e-repeater',
+      authoring: {
+        designerVersion: '0.0.0',
+        createdAt: '2026-10-16T00:00:00.000Z',
+        exportedAt: '2026-10-16T00:01:00.000Z',
+      },
+      compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+      fontDeps: scene.fonts,
+      assetIndex: [],
+    },
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
+/**
  * `R-101` — a verifiable `.vcg` whose text field `azanTime` ("Azan time") carries the Designer's
  * `Time (HH:MM)` preset as its `pattern`, bound into the fixture's text, as an azan template's is.
  */
