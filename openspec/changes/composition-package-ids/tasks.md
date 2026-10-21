@@ -25,4 +25,7 @@ Lane: **FULL** — the package id CG Control keys its library by, the import pat
 - [x] 3.2 The rebuild sends the library's id.
 - [x] 3.3 Tests: `importClash.test.ts`, `fixedSlotLoad.test.ts` (one more channel-scoped read), `template-rebuild.test.ts`;
       e2e `import-clash.spec.ts`; `channel-templates.spec.ts`'s re-import answers Update.
-- [ ] 3.4 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] 3.4 Linux `e2e` discharged on `4034dfea` — run
+      https://github.com/yasermostafaee/cg/actions/runs/39576924935 : `E2E (Playwright)` RAN and passed
+      (`import-clash.spec.ts` both cases, `channel-templates.spec.ts`; the Designer's `save-as-copy.spec.ts`
+      among its 337 passed).

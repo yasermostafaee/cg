@@ -34,7 +34,10 @@ and a scene migration that runs in the on-air page.
 - [x] 4.3 Tests `telavat2-book.test.ts`, `listFieldPictures.test.ts` — 3 red at HEAD, green now.
 - [x] 4.4 e2e `telavat2-book.spec.ts` (87 pages through Import a .vcg: no text box, Load folder…, `1 / 87`, Next,
       Previous, Go; a keyless book) — red on a CG Control built from HEAD's import, green now (Windows, non-authoritative).
-- [ ] 4.5 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] 4.5 Linux `e2e` discharged on `4034dfea` (carries `47c0ade8`) — run
+      https://github.com/yasermostafaee/cg/actions/runs/39576924935 : `E2E (Playwright)` RAN and passed
+      (CG Control 352 passed, `telavat2-book.spec.ts` both cases; Designer 337 passed, 2 flaky on retry —
+      `anchor-context-menu.spec.ts:25`, `live-source.spec.ts:781`, neither touched by this change).
 
 ## 5. Docs
 
