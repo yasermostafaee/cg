@@ -166,6 +166,13 @@ const ListFieldSchema = DynamicFieldBaseSchema.extend({
    * is the rule, and `migratePageListMarks` / the Designer's store keep this mark equal to it.
    */
   pages: z.literal(true).optional(),
+  /**
+   * `RUN-NEXT-VERSION-02` Q4 — the most items this list takes: the row limit (`maxItems`) of the
+   * repeater it drives, so CG Control stops the operator there and the GDD says so. ⚠ DERIVED at import
+   * from the `repeater-items` binding (`listFieldMaxItems`), never authored on the field — one source
+   * of truth, the repeater. Absent: no limit (or a template imported before this).
+   */
+  maxItems: z.number().int().positive().optional(),
 });
 
 /** Discriminated union of declared dynamic-field types. */

@@ -538,6 +538,8 @@ function renderInput(
           multiline={showDwell}
           columns={columns}
           digits={fieldDigitsOf(field)}
+          // `RUN-NEXT-VERSION-02` Q3 — a repeater's list stops at its row limit, as the Rows section does.
+          maxItems={field.maxItems}
           onChange={(items) => onChange(items)}
           appliedItems={appliedItems}
           onUpdateItem={onUpdateItem}

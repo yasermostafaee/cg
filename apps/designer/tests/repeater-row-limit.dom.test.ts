@@ -8,6 +8,7 @@ import {
   rowLimitReason,
   rowOverLimitReason,
 } from '../src/renderer/features/fields/ListItemsEditor.js';
+import { PreviewFieldForm } from '../src/renderer/features/fields/PreviewFieldForm.js';
 
 /**
  * 🔴 `B-106` — the repeater's row editor knows the row LIMIT. The page stamps at most `maxItems`
@@ -63,6 +64,34 @@ describe('B-106 — Add item at the limit', () => {
   it('with no limit it always adds — ticker and sequence lists are unchanged', () => {
     const { add } = mount(rows(12), undefined);
     expect(add?.disabled).toBe(false);
+  });
+});
+
+describe('🔴 RUN-NEXT-VERSION-02 Q3 — the Preview form’s list stops at the repeater’s max items', () => {
+  it('a repeater-bound list field carrying maxItems withholds Add item at the limit', () => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const field = {
+      id: 'rows',
+      label: 'Rows',
+      required: false,
+      type: 'list' as const,
+      default: rows(2),
+      maxItems: 2,
+    };
+    act(() =>
+      root?.render(
+        createElement(PreviewFieldForm, {
+          aggregate: { fields: [field], groups: [] },
+          values: {},
+          onChange: vi.fn(),
+        }),
+      ),
+    );
+    const add = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Add item');
+    expect(add?.disabled).toBe(true);
+    expect(add?.parentElement?.getAttribute('title')).toBe(rowLimitReason(2));
   });
 });
 

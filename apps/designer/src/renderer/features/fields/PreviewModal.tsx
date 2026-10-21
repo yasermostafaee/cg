@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   hasSoundEffects,
   aggregateCompositionFields,
+  withListLimits,
   defaultNestedValues,
   hasNextStep,
   type AggregatedFields,
@@ -190,7 +191,11 @@ export function PreviewModal({
 
   // D-025 — the aggregated fields: this composition's own fields plus each nested
   // child instance's fields under its namespace.
-  const aggregate = useMemo(() => aggregateCompositionFields(scene, scene), [scene]);
+  // `RUN-NEXT-VERSION-02` Q3 — each list carries its repeater's row limit, so the form stops there.
+  const aggregate = useMemo(
+    () => withListLimits(scene, scene, aggregateCompositionFields(scene, scene)),
+    [scene],
+  );
   // Nested field values live here (not in the form) so the fixed transport bar can
   // play() with the current data. Re-seed when the form *shape* changes (fields or
   // nested instances added/removed/renamed) but not on unrelated edits, so typed
