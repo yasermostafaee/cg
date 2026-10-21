@@ -249,6 +249,21 @@ describe('PAGE-REBUILD-01 — a console with another runtime builds the page aga
     expect(sent.result.html).toContain('CG.createRuntime(scene');
   });
 
+  it('🔴 B-352 — a template ADDED AS NEW beside its package’s id is rebuilt under its own library id', async () => {
+    const bridge = rebuildBridge(await vcg(), undefined, {
+      templateId: 'library-copy-id',
+      sourceFileName: 'khabar (2).vcg',
+      templateType: 'lower-third',
+      fields: [],
+    });
+    await runRebuildPass(bridge, { build: pageBuildOf('0.12.0', '') });
+    const sent = bridge.sent[0];
+    if (sent?.result.ok !== true) throw new Error('expected a built page');
+    // CG Bridge answers `stale` for a rebuild whose id differs from the page's.
+    expect(sent.result.template.templateId).toBe('library-copy-id');
+    expect(sent.result.template.sourceFileName).toBe('khabar (2).vcg');
+  });
+
   it('🔴 THE SIGNATURE CHECK STILL RUNS: a kept package that no longer verifies is reported, never built', async () => {
     const bad = tampered(await vcg());
     // The bridge's hash is of the bytes it holds, so the hash check alone passes — only verify can see it.

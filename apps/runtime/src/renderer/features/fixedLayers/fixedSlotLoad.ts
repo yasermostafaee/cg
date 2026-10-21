@@ -1,6 +1,10 @@
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { AsyncResult } from '../../ui/asyncButtonController.js';
-import { importSuccessMessage, importVcgFile } from '../library/importVcgFile.js';
+import {
+  importSuccessMessage,
+  importVcgFile,
+  type ChooseOnClash,
+} from '../library/importVcgFile.js';
 import { newItemFields, newItemId } from '../library/newItemFields.js';
 import { reportCommandSuccess } from '../status/commandFeedback.js';
 
@@ -92,6 +96,7 @@ export function loadTemplateOntoFixedSlot(
 export async function importVcgToStation(
   pick: () => Promise<File | null>,
   channel?: number,
+  choose?: ChooseOnClash,
 ): Promise<TemplateInfo | null> {
   const file = await pick();
   // The operator dismissed the OS file dialog — their own "no".
@@ -99,7 +104,10 @@ export async function importVcgToStation(
 
   // Throws the operator-facing message (naming the file) and registers nothing
   // on a bad package — the R-001 invariant, inherited from the shared flow.
-  const imported = await importVcgFile(file, channel);
+  // `B-352` — `choose` is asked when the channel already lists the package's id; a `null` answer
+  // is the operator's own "no" too, and imports nothing.
+  const imported = await importVcgFile(file, channel, choose);
+  if (imported === null) return null;
   reportCommandSuccess(importSuccessMessage(imported));
 
   // The registry is the authority on the registered template's shape; read the

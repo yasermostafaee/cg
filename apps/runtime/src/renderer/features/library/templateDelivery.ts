@@ -419,16 +419,8 @@ export async function produceTemplateDelivery(
   }
 }
 
-/**
- * Produce the standalone HTML from a `.vcg` and deliver it to the bridge over the
- * extended `templates.import` channel (`{ template, html }`). Returns the
- * registered id + any warnings; throws (registering nothing) on a bad package.
- */
-export async function importTemplateFromBytes(
-  bridge: TemplateImportBridge,
-  bytes: Uint8Array,
-  opts: ProduceOptions = {},
-): Promise<{
+/** What an import registered, for the operator's line and the per-template side facts. */
+export interface ImportedTemplate {
   templateId: string;
   /** R-004 — what the operator should be told they imported (falls back to the id). */
   displayName: string;
@@ -441,9 +433,48 @@ export async function importTemplateFromBytes(
    * which is a real answer and not an absence.
    */
   declaredPlateIds: readonly string[];
-}> {
-  const { template, html, warnings, defaultPosition, listFieldTargets } =
-    await produceTemplateDelivery(bytes, opts);
+}
+
+/**
+ * 🔴 `B-352` — **WHO THE TEMPLATE IS IN THE LIBRARY**, when it is not the package's own id: a package
+ * added as a NEW template beside one with its id gets a library id of its own, and a name that does
+ * not clash (`sourceFileName` is what the operator's label is read from).
+ */
+export interface TemplateIdentity {
+  templateId: string;
+  sourceFileName: string;
+}
+
+/**
+ * Produce the standalone HTML from a `.vcg` and deliver it to the bridge over the
+ * extended `templates.import` channel (`{ template, html }`). Returns the
+ * registered id + any warnings; throws (registering nothing) on a bad package.
+ */
+export async function importTemplateFromBytes(
+  bridge: TemplateImportBridge,
+  bytes: Uint8Array,
+  opts: ProduceOptions = {},
+): Promise<ImportedTemplate> {
+  return deliverTemplateImport(bridge, bytes, await produceTemplateDelivery(bytes, opts), opts);
+}
+
+/**
+ * `B-352` — the second half of an import: the delivery {@link produceTemplateDelivery} made, kept and
+ * registered — under `identity` when the caller chose one (a package added as a new template), else
+ * under the package's own id. Split from the first half so the caller can ask the operator, between
+ * the two, what to do with a package whose id the channel already lists. Throws, registering nothing,
+ * when the page is too large for CG Bridge.
+ */
+export async function deliverTemplateImport(
+  bridge: TemplateImportBridge,
+  bytes: Uint8Array,
+  delivery: TemplateDelivery,
+  opts: ProduceOptions = {},
+  identity?: TemplateIdentity,
+): Promise<ImportedTemplate> {
+  const { html, warnings, defaultPosition, listFieldTargets } = delivery;
+  const template: TemplateInfo =
+    identity === undefined ? delivery.template : { ...delivery.template, ...identity };
   /*
     🔴 `BOOK-EXPORT-01` (`B-351`) — **THE PAGE GOES TO CG BRIDGE IN ONE FRAME**, and past the
     bridge's cap the socket closed: a 141 MB book read "Bridge disconnected — command rejected" about

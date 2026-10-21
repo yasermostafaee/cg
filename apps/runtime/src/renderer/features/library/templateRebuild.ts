@@ -118,7 +118,16 @@ async function buildAgain(
         sourceFileName: entry.template.sourceFileName,
       }),
     });
-    return { ok: true, template: produced.template, html: produced.html };
+    /*
+      🔴 `B-352` — rebuilt under the id the LIBRARY gave it. A package added as a new template beside
+      one with its own id is listed under another id than its manifest's, and CG Bridge answers a
+      rebuild whose id differs from the page's as `stale` — so it would never have been rebuilt.
+    */
+    return {
+      ok: true,
+      template: { ...produced.template, templateId: entry.template.templateId },
+      html: produced.html,
+    };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     return { ok: false, reason: reason.slice(0, 512) || 'the page could not be built' };

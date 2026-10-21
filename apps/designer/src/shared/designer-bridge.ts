@@ -157,11 +157,23 @@ export interface DesignerBridge {
      * name (no path — browsers don't expose the absolute disk path).
      * Returns `{ ok: false }` when the operator cancels the dialog.
      */
-    saveDisk(req: { scene: Scene; askPath: boolean }): Promise<{
+    saveDisk(req: {
+      scene: Scene;
+      askPath: boolean;
+      /**
+       * 🔴 `B-352` — the author's own **Save As**: the file written is a COPY, a project of its own
+       * with a NEW project id (so its compositions export as their own templates in CG Control),
+       * and it becomes the open project. Absent for a Save, and for a Save that falls back to the
+       * dialog (no file yet, or the old file could not be written): those keep the project's id.
+       */
+      asCopy?: boolean;
+    }): Promise<{
       ok: boolean;
       filename: string | null;
       /** D-088 — IndexedDB key of the persisted file handle when saved via a handle. */
       handleKey?: string;
+      /** `B-352` — set when an `asCopy` save wrote a copy: the open project's id is this now. */
+      projectId?: string;
       /**
        * D-088 — set when the write to the cached handle THREW (permission revoked, disk
        * error, invalid handle): the caller should notice "Couldn't write to the file —

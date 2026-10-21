@@ -119,8 +119,9 @@ describe('importing is a STATION act, and it binds no row', () => {
     expect(template?.templateId).toBe('tpl-on-two');
     // The import names channel 2 and nothing else — no other channel's list is asked to change.
     expect(bridge.importChannels).toEqual([2]);
-    // The registered shape is read back as CHANNEL 2 lists it.
-    expect(bridge.getChannels).toEqual([2]);
+    // `B-352` asks channel 2 whether it lists the id already; then the registered shape is read
+    // back as CHANNEL 2 lists it. No other channel is asked.
+    expect(bridge.getChannels).toEqual([2, 2]);
     expect(bridge.loads).toEqual([]);
   });
 
@@ -131,7 +132,8 @@ describe('importing is a STATION act, and it binds no row', () => {
       Promise.resolve(new File([new Uint8Array(bytes)], 'unnamed.vcg')),
     );
     expect(bridge.importChannels).toEqual([undefined]);
-    expect(bridge.getChannels).toEqual([undefined]);
+    // The clash check and the read-back, both station-wide (`B-352`).
+    expect(bridge.getChannels).toEqual([undefined, undefined]);
   });
 
   it('a dismissed file picker is the operator’s own “no” — nothing imported, nothing loaded', async () => {

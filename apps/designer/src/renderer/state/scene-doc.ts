@@ -15,6 +15,7 @@ import type {
   Scene,
 } from '@cg/shared-schema';
 import { compositionClosure, migrateGlobalFieldsToCompositions } from '@cg/shared-schema';
+import { compositionPackageId } from '@cg/vcg-format';
 import { current } from './store-core.js';
 import { dropFullyOffFrameForExport } from './off-frame.js';
 
@@ -187,6 +188,14 @@ export function scopeSceneToComposition(scene: Scene | null, id: string | null):
   const { entryCompositionId: _projectEntry, ...rootIsTheEntry } = projected;
   const scoped: Scene = {
     ...rootIsTheEntry,
+    /*
+      🔴 `B-352` — THE PACKAGE IS THE COMPOSITION'S, SO ITS ID IS TOO. `editSceneOf` keeps the
+      project's `scene.id` (the canvas needs it stable across composition switches — B-035), and
+      the Exporter writes the scene id as `manifest.id`: every composition of one project went to CG
+      Control as ONE template, each import replacing the last. Derived from the project id and the
+      composition id, so the same composition exported again keeps its id and UPDATES its template.
+    */
+    id: compositionPackageId(scene.id, id),
     compositions: (scene.compositions ?? []).filter((c) => closure.has(c.id)),
   };
   // D-071 Phase A — EXPORT-ONLY: drop fully-off-frame STATIC elements so they don't

@@ -35,6 +35,7 @@ import { useConfirm } from '../../ui/useDialog.js';
 import { pickFile } from '../../ui/pickFile.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { importVcgToStation } from './fixedSlotLoad.js';
+import type { ChooseOnClash, ImportClashChoice } from '../library/importVcgFile.js';
 import { requestRowFocus } from '../layers/rowFocus.js';
 import { reportCommandSuccess } from '../status/commandFeedback.js';
 import {
@@ -730,16 +731,56 @@ export function useTemplatePicker(): {
     [confirm],
   );
 
+  /** `B-352` — the open clash question's answer (see `askOnClash`), or `null` when none is open. */
+  const clashAnswer = useRef<((choice: ImportClashChoice | null) => void) | null>(null);
   const settle = useCallback((choice: TemplateChoice): void => {
     setRequest(null);
     setMessage(null);
     setReferences([]);
     setDragging(false);
     setSelected(null);
+    // `B-352` — a clash question still open is answered "no" by closing the dialog: nothing imports.
+    const unanswered = clashAnswer.current;
+    clashAnswer.current = null;
+    unanswered?.(null);
     const resolve = resolver.current;
     resolver.current = null;
     resolve?.(choice);
   }, []);
+
+  /*
+    🔴 `B-352` — **A PACKAGE WHOSE ID THIS CHANNEL ALREADY LISTS IS A QUESTION, NOT A REPLACEMENT.** It
+    is asked in the dialog's own message region (a toast would sit under the backdrop): Update that
+    template — the default, first and primary: its rows and Source defaults stay — or Add as a new
+    template beside it. The import waits for the answer; closing the dialog answers no.
+  */
+  const askOnClash = useCallback<ChooseOnClash>(
+    (existing) =>
+      new Promise((resolve) => {
+        const name = templateDisplayName(existing);
+        const answer = (choice: ImportClashChoice): void => {
+          clashAnswer.current = null;
+          setMessage(null);
+          resolve(choice);
+        };
+        clashAnswer.current = resolve;
+        setMessage({
+          role: 'notice',
+          text: `“${name}” is already on this channel.`,
+          remedies: (
+            <>
+              <Button variant="primary" onClick={() => answer('update')}>
+                Update “<IsolatedName>{name}</IsolatedName>”
+              </Button>
+              <Button variant="secondary" onClick={() => answer('add')}>
+                Add as a new template
+              </Button>
+            </>
+          ),
+        });
+      }),
+    [],
+  );
 
   /**
    * `B-212` — the precise remedy for an item NO ROW SHOWS: remove that one item, after
@@ -881,7 +922,8 @@ export function useTemplatePicker(): {
       setReferences([]);
       try {
         // `CHANNEL-TEMPLATES-01` — onto the row's channel's list, and no other.
-        const template = await importVcgToStation(pick, channel);
+        // `B-352` — a package whose id the channel lists asks Update / Add as a new template.
+        const template = await importVcgToStation(pick, channel, askOnClash);
         // The operator dismissed the OS dialog: their own "no", not a failure.
         if (template === null) return;
         const templates = await window.cg.templates.list(listRequest(channel));
@@ -902,7 +944,7 @@ export function useTemplatePicker(): {
         setImportBusy(false);
       }
     },
-    [channel],
+    [askOnClash, channel],
   );
 
   /** `Import a .vcg`'s own press: the OS file chooser, directly — no dialog of ours between. */

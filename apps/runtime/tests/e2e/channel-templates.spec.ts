@@ -43,7 +43,13 @@ async function listed(app: RuntimeApp): Promise<string[]> {
 }
 
 /** Import a package through the OPEN picker's own door — the OS chooser. */
-async function importInPicker(app: RuntimeApp, name: string, templateId: string): Promise<void> {
+async function importInPicker(
+  app: RuntimeApp,
+  name: string,
+  templateId: string,
+  /** `B-352` — a package this channel already lists asks first; a re-import answers Update. */
+  reimport = false,
+): Promise<void> {
   const chooser = app.page.waitForEvent('filechooser');
   await app.templatePicker.getByRole('button', { name: 'Import a .vcg' }).first().click();
   await (
@@ -53,6 +59,12 @@ async function importInPicker(app: RuntimeApp, name: string, templateId: string)
     mimeType: 'application/octet-stream',
     buffer: Buffer.from(await buildValidVcg(templateId)),
   });
+  if (reimport) {
+    await app.page
+      .locator('[data-modal-message]')
+      .getByRole('button', { name: /^Update/ })
+      .click();
+  }
   await expect(app.templateRow(templateId)).toHaveAttribute('data-template-selected', 'true');
 }
 
@@ -108,7 +120,7 @@ test('🔴 a re-import on CH 2 moves CH 2 alone; a removal on CH 2 leaves CH 1 a
   await importInPicker(app, 'shared-one.vcg', 'tpl-shared');
 
   // RE-IMPORT on CH 2 — the same template, a new version (named from its new file).
-  await importInPicker(app, 'shared-two.vcg', 'tpl-shared');
+  await importInPicker(app, 'shared-two.vcg', 'tpl-shared', true);
   await expect(rowName(app, 'tpl-shared'), 'CH 2 moved to the new version').toHaveText(
     'shared two',
   );

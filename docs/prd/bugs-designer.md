@@ -4334,6 +4334,24 @@ to stop at. **Acceptance:** e2e `book-export.spec.ts` (the real folder pick, a r
 the pick as Chrome's is) — red at HEAD (no answer at all), green now; `book-export.test.ts`,
 `export-answer.dom.test.ts`.
 
+## [~] B-352 — Every composition exported from one project carried the PROJECT's id, so their imports replaced each other in CG Control ⟨priority: high — the owner could not have two outputs of one project side by side, and nothing said a template had been replaced⟩ — FILED 2026-10-16 by `RUN-NEXT-VERSION-02` (the owner: "each one takes the place of the previous one") · `openspec/changes/composition-package-ids/`
+
+**Repro / Actual:** two compositions of one project (or one composition saved as two files), exported and imported
+into CG Control: the second replaces the first, and the line reads `Imported · …` both times. **Cause (read in the
+code):** `editSceneOf` spreads the project scene, so the export projection `scopeSceneToComposition` kept the project's
+`scene.id`, and the Exporter writes the scene id as `manifest.id`; CG Control keys its library by it
+(`templateDelivery.ts`, `templateId: manifest.id`) and CG Bridge's `importOn` listed the new version under the same id.
+**Save As** kept the project id too, so a copy exported over its original (and the copy's file handle and Recent entry
+were filed under the original's id). The owner calls the bug old; no entry existed. **Fix:** each composition's
+package id is derived from the project id and the composition id (`compositionPackageId`), stable across re-exports
+so a re-export still UPDATES its template; Save As writes a copy with its own project id (assets carried, undo history
+renamed); CG Control asks when a package's id is already on the channel — `Update “<name>”` (default) or
+`Add as a new template` (a new id, ` (2)` on a name clash) — and says `Updated · …` / `Imported · …`. A row on air keeps
+its page until its next `CG ADD`, as before. **Migration:** a template already imported under a project-wide id stays;
+the first import of a re-exported composition arrives beside it. **Acceptance:** e2e `import-clash.spec.ts`,
+`save-as-copy.spec.ts`; `package-id.test.ts`, `per-composition-export.test.ts`, `package-ids.test.ts`,
+`importClash.test.ts`, `template-rebuild.test.ts`.
+
 ## [~] B-353 — A book lost its page-list mark in the Designer, and CG Control showed six EMPTY text boxes instead of its pages ⟨priority: high — the owner's book could not be turned on air, and an Update from the boxes would have replaced the pages with empty text⟩ — FILED 2026-10-16 by `RUN-NEXT-VERSION-02` (the owner's `telavat2.vcg`, row 98) · `openspec/changes/book-page-lists/`
 
 **Repro / Actual:** a Sequence, `Add folder…` (87 JPGs), a Data key `a1`, "Allow file source" ticked, `Export (.vcg)`;

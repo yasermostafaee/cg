@@ -4,6 +4,7 @@ import { activeRangeOf, playoutOf } from '@cg/shared-schema';
 import {
   current,
   getNoticeTimer,
+  renameProjectInHistory,
   resetHistory,
   set,
   setClipboard,
@@ -110,6 +111,23 @@ export const documentSlice = {
     setSuppressHistory(true);
     try {
       set({ scene: repaired });
+    } finally {
+      setSuppressHistory(false);
+    }
+  },
+
+  /**
+   * 🔴 `B-352` — **SAVE AS MADE A COPY, AND THE OPEN PROJECT IS THAT COPY NOW.** The copy has its own
+   * project id (so its compositions export as their own templates in CG Control, never over the
+   * original's); the open scene and every scene in its undo history take it, outside the history, so
+   * no undo brings the original's id back. The caller marks the project saved.
+   */
+  adoptProjectId(projectId: string): void {
+    if (current.scene === null || current.scene.id === projectId) return;
+    renameProjectInHistory(projectId);
+    setSuppressHistory(true);
+    try {
+      set({ scene: { ...current.scene, id: projectId } });
     } finally {
       setSuppressHistory(false);
     }

@@ -195,6 +195,38 @@ describe('D-086 — .vcg packages the root closure, excludes siblings', () => {
   });
 });
 
+/**
+ * 🔴 `B-352` — every composition of one project exported with the PROJECT's id, so in CG Control each
+ * import replaced the one before it. Each composition's package now has an id of its own, the same
+ * on every re-export.
+ */
+describe('🔴 B-352 — one package id per composition', () => {
+  it('two compositions of one project export with two ids, neither the project’s', async () => {
+    const project = fourCompScene();
+    const r = scopeSceneToComposition(project, 'R')!;
+    const s = scopeSceneToComposition(project, 'S')!;
+    expect(r.id).not.toBe(s.id);
+    expect(r.id).not.toBe(project.id);
+    const manifestId = async (scene: Scene): Promise<string> =>
+      (await unpack((await makeVcgExporter(ALL).produce(scene)).vcg)).manifest.id;
+    expect(await manifestId(r)).toBe(r.id);
+    expect(await manifestId(s)).toBe(s.id);
+  });
+
+  it('the same composition re-exported keeps its id (its template UPDATES in CG Control)', () => {
+    expect(scopeSceneToComposition(fourCompScene(), 'R')!.id).toBe(
+      scopeSceneToComposition(fourCompScene(), 'R')!.id,
+    );
+  });
+
+  it('a project saved as a copy (another project id) exports the same composition under another id', () => {
+    const copy = { ...fourCompScene(), id: 'the-copy' };
+    expect(scopeSceneToComposition(copy, 'R')!.id).not.toBe(
+      scopeSceneToComposition(fourCompScene(), 'R')!.id,
+    );
+  });
+});
+
 describe('D-086 — single-file HTML inlines the root closure, excludes siblings', () => {
   it('inlines the nested (composition + repeater) images, never the sibling', async () => {
     const scoped = scopeSceneToComposition(fourCompScene(), 'R')!;

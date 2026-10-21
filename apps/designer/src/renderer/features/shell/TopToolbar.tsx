@@ -137,18 +137,25 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
       return;
     }
     // D-088 — the write to the saved file threw (permission/disk/invalid handle):
-    // notice + retry as Save As.
+    // notice + retry as Save As — the SAME project in a new place, not a copy (`B-352`).
     if (res.reason === 'write-failed') {
       designerStore.showNotice("Couldn't write to the file — choose where to save.");
-      await saveAs();
+      await saveAs(false);
     }
   }
 
-  async function saveAs(): Promise<void> {
+  /**
+   * `B-352` — the author's Save As writes a COPY with its own project id, and the open project becomes
+   * that copy (its compositions then export as their own templates, never over the original's).
+   * `asCopy: false` is a Save that needed the dialog: the same project, in a new place.
+   */
+  async function saveAs(asCopy = true): Promise<void> {
     if (scene === null) return;
     try {
-      const res = await window.cg.projects.saveDisk({ scene, askPath: true });
-      if (res.ok) designerStore.markSaved();
+      const res = await window.cg.projects.saveDisk({ scene, askPath: true, asCopy });
+      if (!res.ok) return;
+      if (res.projectId !== undefined) designerStore.adoptProjectId(res.projectId);
+      designerStore.markSaved();
     } catch (err) {
       saveFailed(err);
     }

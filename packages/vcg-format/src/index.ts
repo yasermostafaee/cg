@@ -20,6 +20,8 @@ export type { IntegrityFile } from './integrity.js';
 export { signEd25519, verifyEd25519, generateEd25519KeyPair } from './sign.js';
 export type { Ed25519KeyInput } from './sign.js';
 
+export { compositionPackageId } from './package-id.js';
+
 export { buildGddSchema, gddExporter } from './gdd.js';
 export type { GddSchema, GddProperty, SchemaExporter } from './gdd.js';
 

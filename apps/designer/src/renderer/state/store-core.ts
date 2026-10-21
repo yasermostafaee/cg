@@ -562,6 +562,16 @@ export function resetHistory(): void {
   future = [];
 }
 
+/**
+ * 🔴 `B-352` — give the open project, AND every scene in its undo history, another project id. Save
+ * As makes a copy that is another project; an undo that brought back the original's id would export
+ * the copy's compositions over the original's templates in CG Control again.
+ */
+export function renameProjectInHistory(projectId: string): void {
+  past = past.map((s) => (s.id === projectId ? s : { ...s, id: projectId }));
+  future = future.map((s) => (s.id === projectId ? s : { ...s, id: projectId }));
+}
+
 /** Toggle the history-suppression flag (used by `setScene` while it seeds a load). */
 export function setSuppressHistory(v: boolean): void {
   suppressHistory = v;

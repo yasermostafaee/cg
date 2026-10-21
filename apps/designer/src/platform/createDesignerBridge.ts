@@ -31,6 +31,7 @@ import {
   workspaceRoot,
 } from './workspace.js';
 import { ProjectStore } from './ProjectStore.js';
+import { uuid } from './uuid.js';
 import { AssetStore } from './AssetStore.js';
 import { SharedImageStore } from './SharedImageStore.js';
 import { Exporter } from './Exporter.js';
@@ -116,7 +117,10 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
    * rendered and the assets panel was empty every time, which is the other half of
    * B-104 and the half that needed no permission subtlety to reproduce.
    */
-  async function adoptDocument(doc: ProjectDocument, path: string | null): Promise<void> {
+  async function adoptDocument(
+    doc: Pick<ProjectDocument, 'scene' | 'index' | 'files'>,
+    path: string | null,
+  ): Promise<void> {
     projects.activate(doc.scene, path);
     await assets.adoptFromPackage(doc.index, doc.files);
   }
@@ -240,9 +244,21 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
       // storage mechanism may not produce a weaker document: that asymmetry is what let a
       // project exist as a scene with no assets in the first place (B-104).
       saveDisk: async (req) => {
-        const { scene, askPath } = req;
+        const { askPath } = req;
+        /*
+          🔴 `B-352` — **SAVE AS MAKES A COPY, AND A COPY IS ANOTHER PROJECT.** It kept the project's
+          id, so the copy's compositions exported as the original's templates and replaced them in
+          CG Control — and the copy's file handle and Recent entry were filed under the original's
+          id, so reopening the original from Recent opened the copy. The copy gets its own id; once
+          written it becomes the open project, activated under that id with its assets written there
+          (the same adoption an Open does). The original file is not touched.
+        */
+        const asCopy = req.asCopy === true;
+        const scene: Scene = asCopy ? { ...req.scene, id: uuid() } : req.scene;
         const sfp = window.showSaveFilePicker;
-        const bytes = await buildPackage(scene);
+        const { index, files } = await assets.exportForPackage();
+        const bytes = await packProject({ scene, index, files, savedAt: new Date().toISOString() });
+        const copied = asCopy ? { projectId: scene.id } : {};
         /*
          * P-031 — THE FORCED-SAVE-AS RULE IS GONE WITH THE PATH THAT NEEDED IT, and
          * this is the judgment rather than a mechanical deletion.
@@ -299,20 +315,24 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
             throw err;
           }
           await writeBytesToHandle(handle, bytes);
+          if (asCopy) await adoptDocument({ scene, index, files }, null);
           sceneSaveHandles.set(scene.id, handle);
           await saveFileHandle(scene.id, handle);
           projects.recordRecentHandle(scene);
-          return { ok: true, filename: handle.name, handleKey: scene.id };
+          return { ok: true, filename: handle.name, handleKey: scene.id, ...copied };
         }
 
         // No File System Access -> workspace path-model (reopenable via Recent) -> download.
         if (isOpfsSupported()) {
+          // Activates the scene it saves — for a copy, under its new id: its assets go there.
           const { path } = await savePackageToWorkspace(scene, scene.name, bytes);
-          return { ok: true, filename: path };
+          if (asCopy) await assets.adoptFromPackage(index, files);
+          return { ok: true, filename: path, ...copied };
         }
         const filename = `${slugifyName(scene.name) || 'untitled'}${PROJECT_PACKAGE_EXT}`;
         triggerPackageDownload(bytes, filename);
-        return { ok: true, filename };
+        if (asCopy) await adoptDocument({ scene, index, files }, null);
+        return { ok: true, filename, ...copied };
       },
       // D-088 — open via showOpenFilePicker so the file carries a writable handle.
       openDisk: async () => {
