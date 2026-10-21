@@ -37,6 +37,9 @@ export {
   type SoundAudition,
 } from './audio-graph.js';
 export { AudioDriver, gainOfDb, type AudioHandle } from './audio-driver.js';
+// `RUN-NEXT-VERSION-03` 1.1 — a book's pictures, given by a host whose origin has no page route
+// (CG Control's PVW), through the page's OWN copy as the sound switch above.
+export { providePagePicture, hostPagePicture } from './page-pictures-host.js';
 export { buildScene } from './scene-builder.js';
 export { applyFieldValues } from './bindings.js';
 export { applyTransform, stringifyValue } from './transforms.js';

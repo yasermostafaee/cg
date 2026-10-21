@@ -338,6 +338,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         // The way out. A lock that refused this would need a bridge restart to escape.
         'lock.release',
         'lock.state',
+        // `RUN-NEXT-VERSION-03` 1.1 — a read: a book's stored picture. A locked console still sees PVW.
+        'pages.get',
         // `C-016` — a read: whether the programme return is live. A locked console still watches air.
         'pgmReturn.status',
         // `CENTRAL-BRIDGE-01` (D9) — a read: the picture's ticket. A locked console still watches air.

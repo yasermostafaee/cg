@@ -9,6 +9,7 @@ import {
 import type { FieldValues, Position } from '@cg/shared-schema';
 import type { PlateSourceLookup } from './livePlateGeometry.js';
 import type { TimingToSend } from '../inspector/timingToSend.js';
+import type { BookPage } from '../layers/bookOf.js';
 
 /**
  * R-022 — the SUBJECTS of a rehearsal render: one per rehearsing row, resolved
@@ -88,6 +89,13 @@ export interface RehearsalSubject {
    * override genuinely has.
    */
   timing: TimingToSend | undefined;
+  /**
+   * 🔴 `RUN-NEXT-VERSION-03` 1.1 / 1.3 — **THE ROW'S BOOK, as a take would show it** (`bookPageOf`):
+   * which page the bridge holds the row on, and the picture it names. PVW sent the book's VALUES and
+   * nothing about its page, so a loaded picture had no address in the frame (the page drew its file
+   * name) and PVW's NEXT turned a local copy the bridge never heard of. `undefined` — no book.
+   */
+  book: BookPage | undefined;
 }
 
 /**

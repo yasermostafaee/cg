@@ -349,3 +349,22 @@ it('🔴 the page number survives a restart, and the book leaves with its row', 
   expect((await again.remove('item1')).accepted).toBe(true);
   await waitFor(() => fs.readdirSync(pagesDir!).length === 0, 5000, 'the book is swept');
 }, 40_000);
+
+/*
+  `RUN-NEXT-VERSION-03` 1.1 — A STORED PICTURE, READ BACK. A console that did not load a book (PVW after
+  a reload, another console) draws its pages from these bytes: the very file the template server's page
+  route serves CasparCG for the same hash.
+*/
+it('🔴 1.1 — pages.get answers the stored bytes for a hash, and no-page for one it does not hold', async () => {
+  const r = await boot();
+  const bytes = pngBytes(1920, 1080, 7);
+  const put = await r.putPage('page7.png', bytes.toString('base64'));
+  expect(put.accepted).toBe(true);
+  const got = await r.getPage(put.sha256!);
+  expect(got).toEqual({ ok: true, base64: bytes.toString('base64'), mime: 'image/png' });
+  // Nothing reaches CasparCG for a read.
+  const before = await lineCount();
+  await r.getPage(put.sha256!);
+  expect(await linesSince(before)).toEqual([]);
+  expect(await r.getPage('f'.repeat(64))).toEqual({ ok: false, reason: 'no-page' });
+}, 30_000);

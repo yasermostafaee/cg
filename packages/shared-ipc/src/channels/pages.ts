@@ -34,6 +34,25 @@ export const PagesPutChannel = defineChannel(
 );
 
 /**
+ * `RUN-NEXT-VERSION-03` 1.1 — **A STORED PAGE, READ BACK by its hash**, for a console that must show
+ * a picture it did not load itself (PVW and the page tools after a reload, or a book another console
+ * loaded). The bytes are the ones the template server serves CasparCG for the same hash — one store,
+ * one key — so what the console draws is the picture the air gets. A read: no channel, no audit.
+ */
+export const PagesGetChannel = defineChannel(
+  'pages.get',
+  z.object({ sha256: z.string().regex(/^[0-9a-f]{64}$/) }),
+  z.union([
+    z.object({
+      ok: z.literal(true),
+      base64: z.string().min(1),
+      mime: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+    }),
+    z.object({ ok: z.literal(false), reason: z.literal('no-page') }),
+  ]),
+);
+
+/**
  * `R-100` — **THE LIMITS, in one place** for the console's own check before it sends and the
  * bridge's after it receives (a console of another build is not trusted to have checked).
  *

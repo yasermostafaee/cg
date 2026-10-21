@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Ref } from 'react';
-import type { FieldValues, Position } from '@cg/shared-schema';
-import { positionQuery, withCgControl } from '@cg/shared-schema';
+import type { CgPage, FieldValues, Position } from '@cg/shared-schema';
+import { pageMediaPath, positionQuery, withCgControl } from '@cg/shared-schema';
 import type { ChannelRaster } from '@cg/shared-ipc';
-import { applyOperatorPosition, silencePage, type PageRuntimeWindow } from './frameEnvironment.js';
+import {
+  applyOperatorPosition,
+  providePagePicture,
+  silencePage,
+  type PageRuntimeWindow,
+} from './frameEnvironment.js';
 import type { TimingToSend } from '../inspector/timingToSend.js';
 import { frameBox } from './rehearsalFrames.js';
+import type { BookPage } from '../layers/bookOf.js';
+import { MISSING_PICTURE_URL, pageExtOf, pictureDataUrl } from '../book/pagePictures.js';
 
 /**
  * R-022 — ONE rehearsing row's frame: the retained self-contained page, in a
@@ -134,6 +141,8 @@ interface Props {
   activeLookId: string | undefined;
   /** `PASSES-CYCLE-ONLY-26` Part B — the operator's effective pass timing, or undefined. */
   timing: TimingToSend | undefined;
+  /** `RUN-NEXT-VERSION-03` 1.1 — the page a take would show (`bookPageOf`), or undefined. */
+  book?: BookPage | undefined;
   handleRef?: Ref<RehearsalFrameHandle>;
   /** Told whenever this frame's readiness flips, so the stage can gate its transport. */
   onReadyChange?: (itemId: string, ready: boolean) => void;
@@ -150,15 +159,66 @@ export function RehearsalFrame({
   rowName,
   activeLookId,
   timing,
+  book,
   handleRef,
   onReadyChange,
 }: Props): JSX.Element {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const [ready, setReady] = useState(false);
 
+  /*
+    🔴 `RUN-NEXT-VERSION-03` 1.1 — **THE PAGE'S PICTURE, AS THE AIR NAMES IT.**
+
+    On air the bridge tells the page which page it is on and where its picture is (`__cg.page`, an
+    address on the template server). PVW told it neither, so a picture the operator loaded had no
+    address in this frame: the page drew its `<img>` with none, and the browser painted the file name
+    instead (the owner's `3.png`). The frame cannot reach the template server, so the address it
+    hands over is the picture itself — the bytes this console sent, or the bridge's own copy read
+    back (`pagePictures`), as a `data:` URL (the page's CSP admits `data:` and never `blob:`). A
+    picture neither holds is drawn as a placeholder, and the Inspector says which page.
+  */
+  const pageSha = book?.media;
+  const [picture, setPicture] = useState<{ sha: string; url: string } | null>(null);
+  useEffect(() => {
+    if (pageSha === undefined) return;
+    let cancelled = false;
+    void pictureDataUrl(pageSha).then((url) => {
+      if (!cancelled) setPicture({ sha: pageSha, url: url ?? MISSING_PICTURE_URL });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pageSha]);
+  /**
+   * The `__cg.page` member a take of this row would carry, in the bridge's OWN form — the picture
+   * named by its page-route address (`/page/<sha>.<ext>`), the one form the page accepts from the
+   * wire. `undefined` while the picture is read.
+   */
+  const page = useMemo((): CgPage | undefined => {
+    if (book === undefined) return undefined;
+    if (book.media === undefined) return { field: book.fieldId, index: book.index };
+    if (picture?.sha !== book.media) return undefined;
+    return {
+      field: book.fieldId,
+      index: book.index,
+      media: { [book.media]: pageMediaPath(book.media, pageExtOf(picture.url)) },
+    };
+  }, [book, picture]);
+  const pageKey =
+    page === undefined ? null : `${page.field}|${String(page.index)}|${pageSha ?? ''}`;
+
   const templateWindow = useCallback((): TemplateWindow | null => {
     return (frameRef.current?.contentWindow as TemplateWindow | null | undefined) ?? null;
   }, []);
+
+  /**
+   * Hand the page the picture its next turn names (`providePagePicture`): this frame's origin has no
+   * page route, so the address alone would draw nothing. Before every PLAY and every page push.
+   */
+  const offerPicture = useCallback((): void => {
+    if (picture === null || picture.sha !== pageSha) return;
+    providePagePicture(templateWindow(), picture.sha, picture.url);
+  }, [picture, pageSha, templateWindow]);
 
   /*
     🔴 `B-151` — ONE PAYLOAD BUILDER for both entry points, carrying the look on the reserved
@@ -201,9 +261,11 @@ export function RehearsalFrame({
         withCgControl(fields, {
           ...(activeLookId !== undefined && { look: activeLookId }),
           ...(timing !== undefined && { timing }),
+          // `RUN-NEXT-VERSION-03` 1.1 — a take carries its page (`#pageControl`); so does PVW's.
+          ...(page !== undefined && { page }),
         }),
       ),
-    [fields, activeLookId, timing],
+    [fields, activeLookId, timing, page],
   );
 
   /** The timing's VALUE as a stable key — an object identity would re-fire on every render. */
@@ -212,11 +274,14 @@ export function RehearsalFrame({
   useImperativeHandle(
     handleRef,
     () => ({
-      play: () => templateWindow()?.play?.(playPayload()),
+      play: () => {
+        offerPicture();
+        templateWindow()?.play?.(playPayload());
+      },
       next: () => templateWindow()?.next?.(),
       stop: () => templateWindow()?.stop?.(),
     }),
-    [templateWindow, playPayload],
+    [templateWindow, playPayload, offerPicture],
   );
 
   // Re-arm on a template change: a fresh document has not booted yet.
@@ -275,6 +340,30 @@ export function RehearsalFrame({
       JSON.stringify(withCgControl({} as FieldValues, { timing: JSON.parse(timingKey) as never })),
     );
   }, [ready, timingKey, templateWindow]);
+
+  /*
+    🔴 `RUN-NEXT-VERSION-03` 1.1 — **THE PAGE'S OWN PUSH, keyed on WHICH page and WHICH picture.**
+    A turn on the bridge (the row's Next, Go, another console's), a book loaded or replaced, a picture
+    read back: each re-tells the page, as the bridge tells an on-air page in one `CG UPDATE`. Keyed on
+    the field, the index and the hash rather than on the object, so a keystroke elsewhere re-tells
+    nothing. It carries the page ALONE — no fields, so it disturbs nothing else the page holds — and
+    runs after the field push above, so a new book's pages are in place before the turn names one.
+  */
+  const pageRef = useRef(page);
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+  const offerRef = useRef(offerPicture);
+  useEffect(() => {
+    offerRef.current = offerPicture;
+  }, [offerPicture]);
+  useEffect(() => {
+    if (!ready || pageKey === null || pageRef.current === undefined) return;
+    offerRef.current();
+    templateWindow()?.update?.(
+      JSON.stringify(withCgControl({} as FieldValues, { page: pageRef.current })),
+    );
+  }, [ready, pageKey, templateWindow]);
 
   // THE POSITION EDIT REACHING THE PREVIEW. `ready` and the placement are BOTH
   // dependencies, and that pairing is what makes an Apply visible: `ready`

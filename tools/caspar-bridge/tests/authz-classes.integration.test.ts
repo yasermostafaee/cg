@@ -273,6 +273,8 @@ describe('C-038 — the census: every route, classified', () => {
       'liveLayers.media-state',
       'liveLayers.state',
       'lock.state',
+      // `RUN-NEXT-VERSION-03` 1.1 — a book's stored picture read back by its hash (PVW, page tools).
+      'pages.get',
       // `C-016` — whether the programme return is live. A viewer may watch air.
       'pgmReturn.status',
       /*

@@ -11,6 +11,7 @@ import type { FieldValue } from '@cg/shared-schema';
 import { naturalCompare } from '@cg/text-shaping';
 import { Button } from '../../ui/Button.js';
 import { Notice } from '../../ui/Notice.js';
+import { rememberPicture } from '../book/pagePictures.js';
 
 /**
  * `R-100` — **A ROW'S BOOK: the operator loads its pages as pictures.**
@@ -129,6 +130,9 @@ export function PageListEditor({
           setRefusal(put.message ?? `${file.name} was not accepted by CG Bridge.`);
           return;
         }
+        // `RUN-NEXT-VERSION-03` 1.1 — the bytes just sent, kept under the hash the bridge answered,
+        // so PVW and the page tools draw this picture without asking the bridge for it back.
+        rememberPicture(put.sha256, bytes);
         pages.push({
           id: `${String(i + 1)}-${put.sha256.slice(0, 12)}`,
           kind: 'image',

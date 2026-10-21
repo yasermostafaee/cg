@@ -408,4 +408,50 @@ describe('R-100 — a bridge page turn (`__cg.page`) on an operator book', () =>
     await flush(clock, 100);
     expect(onStage()).toEqual([DATA(4)]);
   });
+
+  /*
+    🔴 `RUN-NEXT-VERSION-03` 1.1 — the owner's PVW drew `3.png` where the picture should be: the page
+    had no address for it, and the browser painted the `<img>`'s alt text — the file name.
+  */
+  it('🔴 1.1 — a page drawn before its address has NO alt text, and the turn that brings the address fills it', async () => {
+    const clock = makeClock();
+    const rt = createRuntime(book([], {}, { fields: [pagesField], bindings: [binding] }), {
+      skipFontLoad: true,
+      clock,
+      decodeImage: () => Promise.resolve(true),
+    });
+    // A take that carries the book and no page member: the run draws page 1 with nothing to show.
+    await rt.play({ pages: operatorBook(3) });
+    await flush(clock);
+    const img = document.querySelector<HTMLImageElement>('[data-cg-sequence-page] img')!;
+    expect(img.alt).toBe('');
+    expect(img.getAttribute('src')).toBeNull();
+    // The address arrives: the page on screen gets its picture — not a second node.
+    await rt.update({
+      __cg: { page: { field: 'pages', index: 0, media: { [SHA(1)]: DATA(1) } } },
+    });
+    await flush(clock, 100);
+    expect(onStage()).toEqual([DATA(1)]);
+    expect(document.querySelectorAll('[data-cg-sequence-page]')).toHaveLength(1);
+  });
+
+  it('🔴 1.1 — a picture the HOST gave for a hash is what the page draws (PVW: no page route)', async () => {
+    const { providePagePicture } = await import('../src/page-pictures-host.js');
+    const picture = 'data:image/png;base64,iVBORw0KGgo=';
+    providePagePicture(SHA(2), picture);
+    const { rt, clock } = await taken(3, 0);
+    await rt.update({
+      __cg: { page: { field: 'pages', index: 1, media: { [SHA(2)]: DATA(2) } } },
+    });
+    await flush(clock, 100);
+    expect(onStage()).toEqual([picture]);
+    // Never from the wire: a `data:` address in `__cg.page` is not the page route, and is dropped.
+    await rt.update({
+      __cg: {
+        page: { field: 'pages', index: 2, media: { [SHA(3)]: 'data:image/png;base64,AA==' } },
+      },
+    });
+    await flush(clock, 100);
+    expect(onStage()).toEqual([picture]);
+  });
 });

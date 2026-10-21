@@ -2589,6 +2589,15 @@ export const cssVars = {
   '--r-plate-hatch': 'rgba(0, 0, 0, 0.34)',
   '--r-plate-chip-bg': 'rgba(0, 0, 0, 0.78)',
   '--r-plate-ink': '#FFFFFF',
+  /*
+    `RUN-NEXT-VERSION-03` 1.1 — PVW'S PLACEHOLDER for a book picture neither this console nor CG Bridge
+    holds: a hatched frame with a crossed-out picture mark and no words (`pagePictures.ts` draws it as
+    an SVG from these four). Neutral, never a status colour: it is an absence, not an alarm.
+  */
+  '--r-pvw-missing-fill': '#2C3644',
+  '--r-pvw-missing-stripe': '#3A4557',
+  '--r-pvw-missing-line': '#8B97A6',
+  '--r-pvw-missing-mark': '#C9D3DF',
   '--r-plate-ink-dim': 'rgba(255, 255, 255, 0.72)',
   '--r-plate-outline': 'rgba(255, 255, 255, 0.85)',
 

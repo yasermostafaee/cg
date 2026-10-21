@@ -1,5 +1,5 @@
-import type { TemplateInfo } from '@cg/shared-ipc';
-import type { StackItemState } from '@cg/shared-schema';
+import { pageRefsOf, type TemplateInfo } from '@cg/shared-ipc';
+import type { FieldValues, StackItemState } from '@cg/shared-schema';
 
 /**
  * `R-100` — **A ROW'S BOOK, as the console shows it:** the page list it turns, the page it is on
@@ -30,4 +30,47 @@ export function bookOf(template: TemplateInfo | null, item: StackItemState | nul
       : 0;
   const index = Math.min(item.pages?.[entry.fieldId] ?? 0, Math.max(0, count - 1));
   return { fieldId: entry.fieldId, page: count === 0 ? 0 : index + 1, count, wrap: entry.wrap };
+}
+
+/**
+ * 🔴 `RUN-NEXT-VERSION-03` 1.1 — **THE PAGE A TAKE WOULD SHOW, for PVW.** The bridge's own reading
+ * (`#pageControl`), mirrored for the console's rehearsal: the template's FIRST page list, the page
+ * the bridge holds the row on (`item.pages`), and the picture that page names when it is an operator
+ * picture. Read from the values PVW is rehearsing (the staged book over the applied one), so a book
+ * loaded and not yet sent is what PVW shows — at the row's page, clamped to it. `null` for a template
+ * with no page list, or a book with no pages: PVW then sends no page, as a take sends none.
+ */
+export interface BookPage {
+  fieldId: string;
+  /** 0-based. */
+  index: number;
+  /** `false` — the author's sequence runs by itself (`D-163`): the console does not turn it. */
+  step: boolean;
+  /** The operator picture this page names (its SHA-256); `undefined` for an authored page. */
+  media: string | undefined;
+}
+
+export function bookPageOf(
+  template: TemplateInfo | null,
+  item: StackItemState | null,
+  fields: FieldValues,
+): BookPage | null {
+  const entry = template?.pageLists?.[0];
+  if (template === null || item === null || entry === undefined) return null;
+  const value: unknown = fields[entry.fieldId];
+  const declared = template.fields.find((f) => f.id === entry.fieldId);
+  const raw: unknown = Array.isArray(value)
+    ? value
+    : declared?.type === 'list'
+      ? declared.default
+      : [];
+  const refs = pageRefsOf(raw);
+  if (refs.length === 0) return null;
+  const index = Math.min(item.pages?.[entry.fieldId] ?? 0, refs.length - 1);
+  return {
+    fieldId: entry.fieldId,
+    index,
+    step: entry.step !== false,
+    media: refs[index]?.media,
+  };
 }

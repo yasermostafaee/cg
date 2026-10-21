@@ -45,6 +45,7 @@ import {
   StackLoadChannel,
   StackNextChannel,
   StackPageChannel,
+  PagesGetChannel,
   PagesPutChannel,
   StackOutChannel,
   StackClearAllChannel,
@@ -2302,6 +2303,9 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly pages = {
     put: (req: ChannelRequest<typeof PagesPutChannel>) =>
       this.#invoke(PagesPutChannel, req, PAGE_PUT_TIMEOUT_MS),
+    // `RUN-NEXT-VERSION-03` 1.1 — the same picture back, on the same long wait (it is as large).
+    get: (req: ChannelRequest<typeof PagesGetChannel>) =>
+      this.#invoke(PagesGetChannel, req, PAGE_PUT_TIMEOUT_MS),
   };
 
   readonly templates = {

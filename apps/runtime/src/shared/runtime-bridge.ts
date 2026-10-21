@@ -95,6 +95,7 @@ import type {
   LiveLayersStateChannel,
   StackNextChannel,
   StackPageChannel,
+  PagesGetChannel,
   PagesPutChannel,
   TemplateAct,
   TemplateInfo,
@@ -864,6 +865,10 @@ export interface RuntimeBridge {
     put(
       req: ChannelRequest<typeof PagesPutChannel>,
     ): Promise<ChannelResponse<typeof PagesPutChannel>>;
+    /** `RUN-NEXT-VERSION-03` 1.1 — a stored picture read back by its hash (PVW, the page tools). */
+    get(
+      req: ChannelRequest<typeof PagesGetChannel>,
+    ): Promise<ChannelResponse<typeof PagesGetChannel>>;
   };
 
   templates: {

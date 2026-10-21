@@ -329,6 +329,8 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   // `PAGE-REBUILD-01` — reads of the same store as `templates.list`, for the same reason.
   'templates.rebuild-plan': STATION_WIDE,
   'templates.source.get': STATION_WIDE,
+  // `RUN-NEXT-VERSION-03` 1.1 — a stored picture read back by its hash: the station's page store.
+  'pages.get': STATION_WIDE,
   'update.state': STATION_WIDE,
   'bridgeSession.state': STATION_WIDE,
   'bridgeSession.engines': STATION_WIDE,

@@ -45,7 +45,31 @@ export interface PageRuntimeWindow {
     ) => void;
     /** `D-165` — the page's own sound switch (`audio-graph.ts`). Absent on a pre-`D-165` page. */
     setSoundMuted?: (muted: boolean) => void;
+    /**
+     * `RUN-NEXT-VERSION-03` 1.1 — a book's picture for a hash, which this frame's origin cannot serve
+     * from the page route (`page-pictures-host.ts`). Absent on a page built before it.
+     */
+    providePagePicture?: (sha256: string, url: string) => void;
   };
+}
+
+/**
+ * 🔴 `RUN-NEXT-VERSION-03` 1.1 — **HAND THE PAGE ITS BOOK'S PICTURE**, through its own runtime, as its
+ * placement and its sound are set: the frame's origin is the console's, which has no
+ * `/page/<sha>.<ext>` route, so the address the turn names resolves to nothing here. Called before
+ * every page turn PVW sends.
+ *
+ * @returns whether the page could take it (a page built before this cannot).
+ */
+export function providePagePicture(
+  win: PageRuntimeWindow | null,
+  sha256: string,
+  url: string,
+): boolean {
+  const give = win?.CG?.providePagePicture;
+  if (give === undefined) return false;
+  give(sha256, url);
+  return true;
 }
 
 /**

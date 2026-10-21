@@ -6193,6 +6193,24 @@ export class CasparRuntime {
   }
 
   /**
+   * `RUN-NEXT-VERSION-03` 1.1 — **READ ONE STORED PICTURE BACK**, for a console showing a page it
+   * did not load itself (PVW, the page tools). The same bytes the template server's page route
+   * serves CasparCG for this hash. A read: it names no row, so it does not keep the picture alive
+   * (`#sweepPages` still decides that from the rows), and nothing reaches CasparCG.
+   */
+  async getPage(
+    sha256: string,
+  ): Promise<
+    | { ok: true; base64: string; mime: 'image/png' | 'image/jpeg' | 'image/webp' }
+    | { ok: false; reason: 'no-page' }
+  > {
+    const read = await this.#pages.read(sha256);
+    return read === null
+      ? { ok: false, reason: 'no-page' }
+      : { ok: true, base64: read.bytes.toString('base64'), mime: read.mime };
+  }
+
+  /**
    * `R-100` — **TURN A ROW'S BOOK: Next, Previous, or Go to page N.**
    *
    * The bridge owns the page number ({@link pageTarget}: a book stops at its ends, a wrapping list

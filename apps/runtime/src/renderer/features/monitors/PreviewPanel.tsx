@@ -23,6 +23,7 @@ import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { boundChannelOf } from '../channels/itemChannel.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { plateAudioState } from '../layers/plateAudio.js';
+import { bookPageOf } from '../layers/bookOf.js';
 import {
   buildApplyPayload,
   draftsVersion,
@@ -173,6 +174,7 @@ export function PreviewPanel(): JSX.Element {
           const alias = slots.find((s) => s.layer === r.layer && s.channel === r.channel)?.alias;
           const info = templates.get(item.templateId, r.channel) ?? null;
           const live = info?.liveSources;
+          const fields = buildApplyPayload(item.itemId, item.fields);
           return {
             itemId: r.itemId,
             layer: r.layer,
@@ -210,7 +212,9 @@ export function PreviewPanel(): JSX.Element {
             // edits layered on, through the same `buildApplyPayload` the
             // Inspector's Apply uses — so what is rehearsed is exactly what Apply
             // would send.
-            fields: buildApplyPayload(item.itemId, item.fields),
+            fields,
+            // `RUN-NEXT-VERSION-03` 1.1 / 1.3 — the page a take of these values would show.
+            book: bookPageOf(info, item, fields) ?? undefined,
             liveSources: live,
             // `B-151` — the bridge's published look drives BOTH halves of the preview.
             activeLookId: item.activeLookId,

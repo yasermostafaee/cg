@@ -113,6 +113,7 @@ import {
   StackLoadChannel,
   StackNextChannel,
   StackPageChannel,
+  PagesGetChannel,
   PagesPutChannel,
   BridgeCapabilitiesChannel,
   StackRestoreReportChangedChannel,
@@ -1600,7 +1601,8 @@ export function channelsForRequest(
     that is a `stack.update` judged on the row's own channel like every field. So `pages.put` is
     judged by its permission (`operator`) alone; an unnamed picture is swept after its grace.
   */
-  if (name === PagesPutChannel.name) return [];
+  // `RUN-NEXT-VERSION-03` 1.1 — and reading one back acts on none either: a read of the same store.
+  if (name === PagesPutChannel.name || name === PagesGetChannel.name) return [];
 
   /*
     🔴 `PAGE-REBUILD-01` (`C-034`) — KEEPING A PACKAGE AND SENDING A REBUILT PAGE ACT ON NO CHANNEL.
@@ -4652,6 +4654,8 @@ export function buildRoutes(
     route(PagesPutChannel, 'operator', 'operator', (r: { name: string; base64: string }) =>
       b.putPage(r.name, r.base64),
     ),
+    // `RUN-NEXT-VERSION-03` 1.1 — one stored picture read back, for PVW and the page tools.
+    route(PagesGetChannel, 'read', 'read', (r: { sha256: string }) => b.getPage(r.sha256)),
     route(StackOutChannel, 'operator', 'operator', (r: { itemId: string }) => b.out(r.itemId)),
     route(StackRemoveChannel, 'operator', 'operator', (r: { itemId: string }) =>
       b.remove(r.itemId),

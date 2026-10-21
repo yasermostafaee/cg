@@ -466,8 +466,14 @@ export class MockRuntime {
   // B-070 — producer-existence bookkeeping (bridge parity: the bridge's
   // `#loaded`). A producer lives from load/take until out/remove destroys it.
   // A seeded item that is not idle already has one.
-  /** `R-100` — the pictures test mode holds, by SHA-256 (the bytes themselves are not kept). */
-  readonly #pages = new Set<string>();
+  /**
+   * `R-100` — the pictures test mode holds, by SHA-256 — with their bytes since `RUN-NEXT-VERSION-03`
+   * 1.1, so `pages.get` reads one back as the bridge does.
+   */
+  readonly #pages = new Map<
+    string,
+    { base64: string; mime: 'image/png' | 'image/jpeg' | 'image/webp' }
+  >();
   readonly #loaded = new Set<string>(
     seedStack()
       .filter((i) => i.status !== 'idle')
@@ -858,8 +864,18 @@ export class MockRuntime {
     }
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     const sha256 = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-    this.#pages.add(sha256);
+    this.#pages.set(sha256, { base64, mime: probe.mime });
     return { accepted: true, sha256, width: probe.width, height: probe.height };
+  }
+
+  /** `RUN-NEXT-VERSION-03` 1.1 parity — read one stored picture back, as the bridge does. */
+  getPage(
+    sha256: string,
+  ):
+    | { ok: true; base64: string; mime: 'image/png' | 'image/jpeg' | 'image/webp' }
+    | { ok: false; reason: 'no-page' } {
+    const held = this.#pages.get(sha256);
+    return held === undefined ? { ok: false, reason: 'no-page' } : { ok: true, ...held };
   }
 
   /**

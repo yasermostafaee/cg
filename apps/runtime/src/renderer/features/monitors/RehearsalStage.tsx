@@ -635,6 +635,7 @@ export function RehearsalStage({
             rowName={subject.rowName}
             activeLookId={subject.activeLookId}
             timing={subject.timing}
+            book={subject.book}
             onReadyChange={onReadyChange}
             handleRef={(handle) => {
               if (handle === null) handles.current.delete(subject.itemId);

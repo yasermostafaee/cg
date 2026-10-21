@@ -1013,6 +1013,13 @@ export function buildSequenceImageItem(
     delete img.dataset['cgAssetId'];
     if (item.media !== undefined) img.dataset['cgPageMedia'] = item.media;
   }
+  /*
+    🔴 `RUN-NEXT-VERSION-03` 1.1 — A PAGE NEVER DRAWS ITS NAME. `buildImage` gives an image its element's
+    name as `alt`, and a browser paints the alt text of a picture it has not got — so an operator page
+    whose address had not arrived drew `3.png` in the graphic (the owner's PVW). The picture is the
+    page; with none yet, the cell is empty.
+  */
+  img.alt = '';
   cell.appendChild(node);
   return { cell, img };
 }

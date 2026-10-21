@@ -869,6 +869,21 @@ test and the hosts' asset-URL walks reach it — and `createRuntime` attaches an
 On air the page plays the sound itself; nothing is sent to CasparCG for it. Measured on CasparCG
 2.5.0: 0 dB → −6.02 dBFS for a −6.02 dBFS asset, −12 dB → −18.02 (`openspec/changes/add-audio-element`).
 
+### A book's pages and the host's pictures (D-163, R-100, `RUN-NEXT-VERSION-03` 1.1)
+
+A picture sequence bound to a page list is a BOOK. Its authored pages carry `assetId` and resolve
+like any image; an OPERATOR page carries `media` (a SHA-256) and is drawn only once a page turn
+(`__cg.page`, on `play` and `update`) has named its address — `/page/<sha>.<ext>` on the page's own
+origin, the only form `readCgControl` accepts from the wire. The page keeps the last three addresses
+(`PAGE_MEDIA_KEPT`), never a 300-page book. A picture is never painted as its name (`alt=""`), and a
+page drawn before its address arrived is filled when the turn brings it.
+
+**The host's pictures (`page-pictures-host.ts`).** A host whose origin has no page route — CG Control's
+PVW, a `srcdoc` frame — hands the page the picture for a hash through the page's OWN `CG` global,
+`CG.providePagePicture(sha, dataUrl)`, as it sets placement (`applyOutputPosition`) and sound
+(`setSoundMuted`). The page then draws that wherever a turn names the hash; the wire is unchanged, and
+a host that provides nothing (CasparCG) changes nothing. Only `data:` pictures are taken.
+
 ### LottieDriver + the element-outro seam (D-125)
 
 A `lottie` element mounts a `lottie_light` player (`@cg/lottie-bridge`,

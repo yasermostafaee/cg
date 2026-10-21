@@ -460,6 +460,7 @@ export function createMockBridge(): RuntimeBridge {
     // `R-100` — a book's pictures: test mode keeps them in this page's memory, checked as the bridge does.
     pages: {
       put: (req) => mock.putPage(req.name, req.base64),
+      get: (req) => Promise.resolve(mock.getPage(req.sha256)),
     },
 
     // `CHANNEL-TEMPLATES-01` — each channel's own list, the channel passed through as named.

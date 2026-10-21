@@ -115,6 +115,7 @@ import { LottieDriver } from './lottie-driver.js';
 import { VideoDriver, type VideoHandle, type ElementOutroDriver } from './video-driver.js';
 import { AudioDriver, gainOfDb } from './audio-driver.js';
 import { createAudioHandle, setSoundMuted, type SoundAudition } from './audio-graph.js';
+import { hostPagePicture } from './page-pictures-host.js';
 import {
   RepeaterDriver,
   registerRepeaterDriver,
@@ -716,6 +717,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   */
   const PAGE_MEDIA_KEPT = 3;
   const pageMedia = new Map<string, string>();
+  /**
+   * `RUN-NEXT-VERSION-03` 1.1 — where a page's picture is drawn from: the host's own copy when it gave
+   * one (`providePagePicture` — CG Control's PVW, whose origin has no page route), else the address
+   * the turn named. Only a hash the turns have named is drawn at all.
+   */
+  const pagePictureFor = (sha: string): string | undefined => {
+    const named = pageMedia.get(sha);
+    if (named === undefined) return undefined;
+    return hostPagePicture(sha, doc) ?? named;
+  };
   const sequenceElementOf = new WeakMap<SequenceDriver, string>();
   // `D-163` — the sequences the operator does NOT step (`sequenceStepsByOperator`): `CG NEXT`,
   // Previous and Go to pass them by; they run by themselves. A take still sets a book's first page.
@@ -757,7 +768,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // waiting for a decode there would wait forever. Only a picture with a `src` waits.
       if (built.img.getAttribute('src') !== null) ready = decodeImage(built.img);
     } else {
-      const url = item.media === undefined ? undefined : pageMedia.get(item.media);
+      const url = item.media === undefined ? undefined : pagePictureFor(item.media);
       if (url !== undefined) {
         built.img.src = url;
         ready = decodeImage(built.img);
@@ -2463,6 +2474,20 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     for (const [sha, url] of Object.entries(page.media ?? {})) {
       pageMedia.delete(sha);
       pageMedia.set(sha, url);
+      /*
+        `RUN-NEXT-VERSION-03` 1.1 — A PAGE ALREADY DRAWN WITHOUT ITS PICTURE GETS IT NOW. The scene's
+        static first item and a run's first page are drawn at once, before any address can have
+        arrived; until this, such a page stayed empty for good. Every picture of this hash that has
+        no source is filled, however it was drawn.
+      */
+      const picture = pagePictureFor(sha) ?? url;
+      for (const img of built.container.querySelectorAll<HTMLImageElement>(
+        'img[data-cg-page-media]',
+      )) {
+        if (img.dataset['cgPageMedia'] === sha && img.getAttribute('src') === null) {
+          img.src = picture;
+        }
+      }
     }
     while (pageMedia.size > PAGE_MEDIA_KEPT) {
       const oldest = pageMedia.keys().next().value;
