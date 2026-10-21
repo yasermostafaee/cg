@@ -1,3 +1,17 @@
+## ADDED Requirements
+
+### Requirement: The Preview's data form SHALL show a book's pictures as pictures
+
+The Designer's list editor SHALL show a picture item as its thumbnail and its file name, never a box to
+type in, wherever it shows a sequence's items — the Inspector, the Pages manager's List view, and the
+Preview's data form for a bound list; only a text item SHALL take text. A picture keeps its dwell, its
+move and its remove controls.
+
+#### Scenario: A book with a text page, keyed, in the Preview
+
+- **WHEN** a book of two pictures and a text page is given a Data key and the Preview is opened
+- **THEN** the data form shows the two pictures by name and one text box, the text page's
+
 ## MODIFIED Requirements
 
 ### Requirement: A picture sequence's Data key is a page list whatever order the author worked in

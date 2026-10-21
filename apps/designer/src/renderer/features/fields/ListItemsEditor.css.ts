@@ -145,6 +145,24 @@ export const pageButtons = style({
 });
 
 /** `D-163` — a picture item's file name: one line, cut with an ellipsis, the full name in its title. */
+/** `RUN-NEXT-VERSION-03` 1.6 — a picture item: its thumbnail and its name, filling the row. */
+export const pictureItem = style({
+  flex: 1,
+  minWidth: 0,
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.35rem',
+});
+
+export const pictureThumb = style({
+  height: '1.6rem',
+  aspectRatio: '16 / 9',
+  objectFit: 'contain',
+  flex: 'none',
+  borderRadius: '0.15rem',
+  background: colors.background,
+});
+
 export const pageName = style({
   color: colors.text,
   fontSize: '0.72rem',

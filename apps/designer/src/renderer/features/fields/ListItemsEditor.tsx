@@ -5,6 +5,7 @@ import { formatNumberLike, readLocalizedDuration, writeFieldDigits } from '@cg/t
 import { cx } from '../../cx.js';
 import { keyboardLanguage } from '../../keyboardLanguage.js';
 import { digitsWord } from '../inspector/DigitsField.js';
+import { usePageThumb } from '../inspector/pageThumbs.js';
 import { useTypedNumber } from '../../ui/typedNumber.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
@@ -143,6 +144,24 @@ function kindOf(item: ListItem): 'text' | 'composition' | 'image' {
 function pageNameOf(item: ListItem): string {
   const name = (item as Record<string, unknown>)['name'];
   return typeof name === 'string' && name !== '' ? name : item.id;
+}
+
+/**
+ * `D-163` / 🔴 `RUN-NEXT-VERSION-03` 1.6 — a PICTURE item, in either of the editor's forms: its thumbnail
+ * and its file name, never a box to type in. The Preview's data form shows a book through the plain
+ * form, which knew no pictures, so a book of four pictures and a text page drew five text boxes, four
+ * of them empty (the owner, 2026-10-21).
+ */
+function PictureItem({ item, ariaLabel }: { item: ListItem; ariaLabel: string }): JSX.Element {
+  const assetId = (item as Record<string, unknown>)['assetId'];
+  const thumb = usePageThumb(typeof assetId === 'string' ? assetId : undefined);
+  const name = pageNameOf(item);
+  return (
+    <span className={s.pictureItem} title={name} aria-label={ariaLabel} data-list-picture="">
+      {thumb !== null && <img src={thumb} alt="" className={s.pictureThumb} draggable={false} />}
+      <span className={s.pageName}>{name}</span>
+    </span>
+  );
 }
 
 /** The composition id a composition item references ('' when unset). */
@@ -413,13 +432,7 @@ export function ListItemsEditor({
                 </div>
               </div>
               {kindOf(item) === 'image' ? (
-                <span
-                  className={s.pageName}
-                  title={pageNameOf(item)}
-                  aria-label={`${label} item ${String(i + 1)} picture`}
-                >
-                  {pageNameOf(item)}
-                </span>
+                <PictureItem item={item} ariaLabel={`${label} item ${String(i + 1)} picture`} />
               ) : kindOf(item) === 'composition' ? (
                 <Select
                   value={compIdOf(item)}
@@ -546,6 +559,8 @@ export function ListItemsEditor({
                   />
                 ),
               )
+            ) : kindOf(item) === 'image' ? (
+              <PictureItem item={item} ariaLabel={`${label} item ${String(i + 1)} picture`} />
             ) : multiline ? (
               // D-118 — sequence contexts (inspector + preview form): a multi-line textarea (Enter
               // inserts `\n`, does not commit), same per-change item-update path. RTL via `dir`.

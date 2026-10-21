@@ -76,11 +76,22 @@ test('🔴 1.7 — each Add text: the new item selected, on the canvas, counted;
   await expect(canvasPictures).toHaveCount(1);
 });
 
-test('1.6 — a book whose Data key is set keeps it when a text page is added', async ({ app }) => {
+test('🔴 1.6 — a book whose Data key is set keeps it when a text page is added; the Preview shows its pictures as pictures', async ({
+  app,
+}) => {
   await bookOfTwo(app, 'BookKeyText');
   await app.setDataKey('pages');
   await expect(app.dataKeyInput).toHaveValue('pages');
   await app.inspector.getByRole('button', { name: 'Add text', exact: true }).click();
   await expect(app.inspector.getByTestId('sequence-page-count')).toHaveText('3 pages');
   await expect(app.dataKeyInput).toHaveValue('pages');
+
+  // The owner (2026-10-21): the Preview's data form drew every page as a text box, the pictures
+  // empty. A picture is its picture and its name; only the text page takes text.
+  await app.openPreviewModal();
+  const form = app.previewDialog;
+  await expect(form.locator('[data-list-picture]')).toHaveText(['p1.png', 'p2.png']);
+  const itemBoxes = form.getByRole('textbox', { name: /item \d+$/ });
+  await expect(itemBoxes).toHaveCount(1);
+  await expect(itemBoxes).toHaveAccessibleName(/item 3$/);
 });

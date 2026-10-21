@@ -107,6 +107,12 @@
       — RED on `HEAD`'s rule (no book bar), green; `page-lists.test.ts`, Designer `sequence-pages.test.ts`,
       `book-inspector.dom.test.ts`, `bookPages.model.test.ts`, page `sequence-pages.test.ts` (a turn onto a text
       page), bridge `book-pages.integration.test.ts` (accepted; no `media`).
+- [x] 1.6.9 The owner's follow-up (2026-10-21, mid-run): a book of four pictures and a text page, given a Data key,
+      showed FIVE text boxes in the Preview's data form, four empty. Cause: `ListItemsEditor` knew a picture
+      only in its Inspector form (`compositions` passed); the Preview uses the plain form, where a picture's
+      missing text is an empty box. Before 1.6 such a book lost its key, so the form never saw it. Fixed:
+      `PictureItem` (thumbnail + name) in both forms. Tests: `book-preview-list.dom.test.ts` — RED on
+      `HEAD` (`['', '', 'test1']`), green; e2e `sequence-add-text.spec.ts` › 1.6 (the Preview, in Chrome).
 - [ ] 1.6.8 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
 
 ## 1.7 — The Designer's `Add text` shows its result (FULL lane: Designer state and undo history, the page runtime's API)
