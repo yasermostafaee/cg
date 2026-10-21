@@ -94,7 +94,11 @@
       `null` only for a composition item. `isPageListField` (via `isBookValue`), `pageListsOf`, the import's
       repair and the automatic page list all read it — they cannot disagree.
 - [x] 1.6.3 The Designer: the key stays when a text page is added; the one sentence where a key disappears
-      (a composition item): `A sequence with a composition item has no Data key and is not a book in CG Control.`
+      (a composition item): the specified hint kept, opening "The item list can’t be data-bound while this
+      sequence has a composition item, and it is not a book in CG Control", then what the author can still do.
+      ⚠ First shipped (`170897ca`) as one shorter sentence, which dropped the specified "you can still edit" half
+      and failed two Designer e2e specs that pin it (golden rule 9's sweep, missed); restored in the push that
+      fixed it, the two specs unchanged.
 - [x] 1.6.4 CG Control: `bookPages.ts` — `withPicturesReplaced`: a load replaces the PICTURE pages only; each text
       page keeps its place after its picture; past a shorter folder's end, at the end. The Inspector's load uses it.
 - [x] 1.6.5 CG Bridge and the page: already carried a text page as text (`pageRefsOf` → no `media`; the page's

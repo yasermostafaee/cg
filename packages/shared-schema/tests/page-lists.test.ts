@@ -122,7 +122,8 @@ describe('🔴 B-353 — isPageListField, the one answer', () => {
     sequence of pictures AND text pages is still a book (a text page travels as text).
   */
   it('🔴 1.6 — pictures with text pages ARE a book; a composition item never is', () => {
-    const text = { id: 't1', text: 'متن' };
+    // A text item's `kind` is optional (absent ⇒ text), as the schema's own item type says.
+    const text: { id: string; kind?: string; text: string } = { id: 't1', text: 'متن' };
     const mixed = [page(1), text, page(2)];
     expect(sequenceItemsBinding(mixed)).toBe('pages');
     expect(

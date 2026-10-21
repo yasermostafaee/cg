@@ -158,9 +158,14 @@ describe('🔴 B-353 — a page list offers no text-file grant', () => {
     act(() => {
       host.querySelector<HTMLButtonElement>('[aria-label="Toggle Dynamic / Data"]')?.click();
     });
-    expect(host.querySelector('[data-testid="sequence-composition-lock"]')?.textContent).toBe(
-      'A sequence with a composition item has no Data key and is not a book in CG Control.',
+    // The specified hint (`designer-sequence-element`, scoped to the item list) — 1.6 adds that the
+    // sequence is not a book in CG Control.
+    const hint = host.querySelector('[data-testid="sequence-composition-lock"]')?.textContent ?? '';
+    expect(hint).toMatch(
+      /^The item list can’t be data-bound while this sequence has a composition item/,
     );
+    expect(hint).toContain('it is not a book in CG Control');
+    expect(hint).toContain('You can still edit each item’s text');
   });
 
   it('a TEXT list keeps its grant', () => {

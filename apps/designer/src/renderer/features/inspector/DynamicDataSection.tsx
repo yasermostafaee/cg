@@ -164,9 +164,14 @@ export function DynamicDataSection({
       {warn !== null && <p className={s.warn}>{warn}</p>}
 
       {compositionLocked ? (
-        /* `RUN-NEXT-VERSION-03` 1.6 — the one place the binding disappears, said in one sentence. */
+        /* The one place the binding disappears (`designer-sequence-element`: a hint scoped to the item
+           list, saying what the author can still do). `RUN-NEXT-VERSION-03` 1.6 — and that such a
+           sequence is not a book in CG Control. */
         <p className={s.hint} data-testid="sequence-composition-lock">
-          A sequence with a composition item has no Data key and is not a book in CG Control.
+          The item list can’t be data-bound while this sequence has a composition item, and it is
+          not a book in CG Control. You can still edit each item’s text, bind an individual text
+          item to a field via its data key in the Items list above, and bind fields inside
+          composition items from the data form.
         </p>
       ) : field === undefined ? (
         <p className={s.hint}>
