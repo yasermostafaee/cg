@@ -212,3 +212,49 @@ test('🔴 1.1 — PVW draws the loaded pictures, not their names; a turn moves 
   await pvwBar.getByRole('button', { name: 'PLAY', exact: true }).click();
   await expectPvw(page, BLUE);
 });
+
+/*
+  🔴 `RUN-NEXT-VERSION-03` 1.3 — the owner (2026-10-21 15:44): the preview bar's NEXT turned the
+  template's own pictures but not the ones loaded with Load folder. It called the page's local `next()`:
+  a step the bridge never heard of, onto a page whose picture the frame did not have. It now turns the
+  row's book exactly as the row's Next does — and PVW follows the bridge's page.
+*/
+test('🔴 1.3 — the preview bar’s NEXT turns the loaded pages, exactly as the row’s Next does', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const handle = await boot();
+  await openConsole(page, handle.url);
+  await showMonitors(page);
+  await importAndLoad(page, await buildBookVcg(TEMPLATE_ID));
+  await row(page).locator('[data-row-body]').click();
+  await row(page).getByRole('button', { name: 'ON PVW', exact: true }).click();
+  await expect(page.locator('iframe[data-rehearsal-frame]')).toHaveCount(1);
+  const pvwBar = page.locator('[data-pvw-controls]');
+  await expect(pvwBar.getByRole('button', { name: 'PLAY', exact: true })).toBeEnabled();
+  await pvwBar.getByRole('button', { name: 'PLAY', exact: true }).click();
+
+  const chooser = page.waitForEvent('filechooser');
+  await inspector(page)
+    .getByRole('button', { name: /^Load pictures/ })
+    .click();
+  await (
+    await chooser
+  ).setFiles([
+    { name: 'page1.png', mimeType: 'image/png', buffer: solidPng(64, 36, RED) },
+    { name: 'page2.png', mimeType: 'image/png', buffer: solidPng(64, 36, GREEN) },
+    { name: 'page3.png', mimeType: 'image/png', buffer: solidPng(64, 36, BLUE) },
+  ]);
+  await inspector(page).getByRole('button', { name: 'Apply staged edits' }).click();
+  await expect(inspector(page).getByTestId('book-counter')).toHaveText('1 / 3');
+  await expectPvw(page, RED);
+
+  // PVW's own NEXT: the row's book turns (the counter says so) and PVW shows that page.
+  await pvwBar.getByRole('button', { name: 'NEXT', exact: true }).click();
+  await expect(inspector(page).getByTestId('book-counter')).toHaveText('2 / 3');
+  await expectPvw(page, GREEN);
+  await pvwBar.getByRole('button', { name: 'NEXT', exact: true }).click();
+  await expect(inspector(page).getByTestId('book-counter')).toHaveText('3 / 3');
+  await expectPvw(page, BLUE);
+  await expect(row(page).locator('[data-page-counter]')).toHaveText('3 / 3');
+});

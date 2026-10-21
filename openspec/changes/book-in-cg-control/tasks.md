@@ -18,3 +18,13 @@
       address from the wire dropped); `book-pages.integration.test.ts` (read back; no-page; nothing on the
       wire); `pagePictures.dom.test.ts`; `mock-bridge-parity`.
 - [ ] 1.1.6 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+
+## 1.3 — PVW's NEXT turns the loaded pages (FULL lane: a verb that reaches the bridge)
+
+- [x] 1.3.1 Cause, proved: PVW's NEXT called the page's local `next()` (`RehearsalFrame.tsx`, the frame
+      handle's `next`) — a step the bridge never heard of (the counter stayed `1 / 3`), onto a page whose
+      picture the frame did not have, so the driver kept the page on screen.
+- [x] 1.3.2 A book row's NEXT on PVW is `stack.page` (`next`), as the row's NEXT (`layerRowActions`);
+      PVW follows the bridge's page. Any other row: unchanged.
+- [x] 1.3.3 Test: e2e `book-pvw.spec.ts` › 1.3 — RED on the 1.1 commit (`1 / 3` after PVW's NEXT), green.
+- [ ] 1.3.4 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_

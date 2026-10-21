@@ -26,3 +26,15 @@ be filled when it arrives.
 
 - **WHEN** the console is reloaded and the row is played on PVW again
 - **THEN** PVW draws the page from CG Bridge's stored copy
+
+### Requirement: PVW's NEXT SHALL turn a book row exactly as the row's Next does
+
+On a rehearsing row whose template has a book the operator turns, the preview bar's NEXT SHALL send
+the row's own page turn (`stack.page`, `next`) — the bridge's page number moves, the row and the
+Inspector say so — and PVW SHALL show the page the bridge then holds. On any other row, NEXT SHALL stay
+the template's own step (`CG NEXT`'s entry point).
+
+#### Scenario: PVW's NEXT on a loaded book
+
+- **WHEN** a three-page book is loaded and applied, played on PVW, and PVW's NEXT is pressed twice
+- **THEN** the Inspector and the row read `2 / 3`, then `3 / 3`, and PVW shows page 2, then page 3

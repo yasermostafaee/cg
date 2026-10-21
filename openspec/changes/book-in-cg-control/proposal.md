@@ -17,6 +17,8 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
   The pictures are the bytes this console sent, else the bridge's own copy read back once (`pages.get`).
   A page never draws its picture's name (`alt=""`), and a page drawn before its address arrived is filled
   when it does.
+- **1.3 — PVW's NEXT turns the book.** On a book row it is the row's own page turn (`stack.page`), and
+  PVW follows the bridge's page; on any other row it is the template's step, as before.
 
 ## Impact
 

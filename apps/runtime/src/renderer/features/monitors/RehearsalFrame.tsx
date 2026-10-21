@@ -278,10 +278,23 @@ export function RehearsalFrame({
         offerPicture();
         templateWindow()?.play?.(playPayload());
       },
-      next: () => templateWindow()?.next?.(),
+      /*
+        🔴 `RUN-NEXT-VERSION-03` 1.3 — A BOOK ROW'S NEXT IS THE ROW'S PAGE TURN. The page's local
+        `next()` stepped a copy the bridge never heard of — the counter stayed, and a loaded picture,
+        whose address the frame did not have, never came in. So PVW's NEXT on a book the operator turns
+        does exactly what the row's NEXT does (`stack.page`), and the frame follows the page the bridge
+        then holds (`book.index`, above). Any other row's NEXT is the template's own step, as before.
+      */
+      next: () => {
+        if (book !== undefined && book.step) {
+          void window.cg.stack.page({ itemId, field: book.fieldId, to: 'next' });
+          return;
+        }
+        templateWindow()?.next?.();
+      },
       stop: () => templateWindow()?.stop?.(),
     }),
-    [templateWindow, playPayload, offerPicture],
+    [templateWindow, playPayload, offerPicture, book, itemId],
   );
 
   // Re-arm on a template change: a fresh document has not booted yet.
