@@ -35,7 +35,44 @@ export const more = style({
   color: colors.textMuted,
   fontSize: '0.7rem',
   fontVariantNumeric: 'tabular-nums',
-  paddingInlineStart: '0.2rem',
+  paddingInline: '0.2rem',
+});
+
+/**
+ * `RUN-NEXT-VERSION-03` 1.7 — a strip face is a `bare` Control: picks the item the author works on.
+ * A text page shows its words, a composition its mark, where a picture shows its thumbnail.
+ */
+export const stripFace = style({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 0,
+  color: colors.textMuted,
+  cursor: 'pointer',
+});
+
+/** The item being worked on — the one the canvas shows. */
+export const stripCurrent = style({
+  borderColor: colors.accent,
+  boxShadow: `0 0 0 1px ${colors.accent}`,
+});
+
+export const stripText = style({
+  display: 'block',
+  maxWidth: '100%',
+  padding: '0 0.2rem',
+  boxSizing: 'border-box',
+  color: colors.text,
+  fontSize: '0.6rem',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+});
+
+/** The text of the text page being worked on, typed in the card. */
+export const workedText = style({
+  width: '100%',
+  boxSizing: 'border-box',
 });
 
 // ── The Pages manager ─────────────────────────────────────────────────────────────────────────

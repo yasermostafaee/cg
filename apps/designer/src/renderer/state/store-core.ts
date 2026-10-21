@@ -136,6 +136,13 @@ export interface DesignerStoreState {
    */
   stepsDialog: { clockId: string; filter: string | null } | null;
   /**
+   * `RUN-NEXT-VERSION-03` 1.7 — the sequence item the author is working on: `Add text` and
+   * `Add composition` select the item they add, the Inspector card's strip picks one. The canvas
+   * shows it while its sequence is the selected element (`shownSequenceItem`, `slices/view.ts`).
+   * Session-only: never saved, never undone.
+   */
+  sequenceItemFocus: { elementId: string; itemId: string } | null;
+  /**
    * Currently-selected keyframe in the timeline. Drives the yellow
    * highlight on the diamond glyph (in the timeline lane, the track
    * row's left label, and the Inspector's per-row indicator). A bare
@@ -262,6 +269,7 @@ export const initialState: DesignerStoreState = {
   soundMuted: false,
   stepRehearsal: null,
   stepsDialog: null,
+  sequenceItemFocus: null,
   selectedKeyframe: null,
   selectedKeyframes: [],
   keyframeInspectorOpen: false,

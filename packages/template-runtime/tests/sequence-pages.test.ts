@@ -446,9 +446,13 @@ describe('R-100 — a bridge page turn (`__cg.page`) on an operator book', () =>
       clock,
       decodeImage: () => Promise.resolve(true),
     });
-    const [p1, p2] = operatorBook(2);
+    const pictures = operatorBook(2);
     await rt.play({
-      pages: [p1, { id: 'note', text: 'یادداشت سردبیر' }, p2],
+      pages: [
+        ...pictures.slice(0, 1),
+        { id: 'note', text: 'یادداشت سردبیر' },
+        ...pictures.slice(1),
+      ],
       __cg: { page: { field: 'pages', index: 0, media: { [SHA(1)]: DATA(1) } } },
     });
     await flush(clock);
@@ -483,5 +487,35 @@ describe('R-100 — a bridge page turn (`__cg.page`) on an operator book', () =>
     });
     await flush(clock, 100);
     expect(onStage()).toEqual([picture]);
+  });
+});
+
+/*
+  `RUN-NEXT-VERSION-03` 1.7 — THE DESIGNER'S CANVAS SHOWS THE ITEM THE AUTHOR IS WORKING ON. The canvas
+  never plays: its page is built and ticked, and a sequence rests on its first item. `showSequenceItem`
+  moves ONE sequence, by its element id, to an item — drawn at once, before any run.
+*/
+describe('1.7 — showSequenceItem: one sequence, one item, unplayed', () => {
+  it('🔴 shows the item asked for at once; another id moves nothing; past the end is the last', async () => {
+    const rt = createRuntime(book([authored(1), { id: 'note', text: 'سرخط خبر' }, authored(2)]), {
+      skipFontLoad: true,
+      assetUrls: urls(2),
+      decodeImage: () => Promise.resolve(true),
+    });
+    await rt.ready;
+    rt.tick(0);
+    expect(onStage()).toEqual(['assets/p1.png']);
+
+    rt.showSequenceItem?.('book', 1);
+    expect(onStage()).toEqual([]);
+    expect(document.querySelector('[data-cg-sequence-item]')?.textContent).toBe('سرخط خبر');
+
+    rt.showSequenceItem?.('not-this-one', 0);
+    expect(document.querySelector('[data-cg-sequence-item]')?.textContent).toBe('سرخط خبر');
+
+    rt.showSequenceItem?.('book', 9);
+    expect(onStage()).toEqual(['assets/p2.png']);
+    rt.showSequenceItem?.('book', 0);
+    expect(onStage()).toEqual(['assets/p1.png']);
   });
 });

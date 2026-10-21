@@ -23,6 +23,7 @@ import { ARROW_CURSOR, CanvasOverlay } from './CanvasOverlay.js';
 import { LookPicker } from './LookPicker.js';
 import { CanvasToolbar } from './CanvasToolbar.js';
 import { arrangementViewOf, boxInstanceIds } from '../../state/slices/arrangements.js';
+import { shownSequenceItem } from '../../state/slices/view.js';
 import { PreviewHost } from './PreviewHost.js';
 import { B042Probe, b042ProbeEnabled } from './B042Probe.js';
 import {
@@ -402,6 +403,25 @@ export function CanvasArea({
     );
   }, [effectiveLookId]);
 
+  // `RUN-NEXT-VERSION-03` 1.7 — the sequence item the author is working on (`Add text` selects the
+  // item it adds), shown on the canvas: the page's own driver draws that item. Not a scene edit, so
+  // its own message; `null` hands the sequence back to its first item. Selected as a string so an
+  // unchanged answer is the same value.
+  const shownItemKey = useDesignerSelector((st) => {
+    const shown = shownSequenceItem(st, scene);
+    return shown === null ? null : JSON.stringify(shown);
+  });
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      {
+        kind: 'cg-preview',
+        action: 'sequence-item',
+        view: shownItemKey === null ? null : (JSON.parse(shownItemKey) as unknown),
+      },
+      '*',
+    );
+  }, [shownItemKey]);
+
   // Stream live scene updates to the existing iframe via postMessage,
   // rAF-throttled so we never queue more than one rebuild per frame.
   const pendingSceneRef = useRef<Scene | null>(null);
@@ -560,6 +580,17 @@ export function CanvasArea({
         if (stepRehearsal !== null) {
           cw.postMessage({ kind: 'cg-preview', action: 'rehearse-step', ...stepRehearsal }, '*');
         }
+        // RUN-NEXT-VERSION-03 1.7 — and the sequence item the author is working on, if any.
+        if (shownItemKey !== null) {
+          cw.postMessage(
+            {
+              kind: 'cg-preview',
+              action: 'sequence-item',
+              view: JSON.parse(shownItemKey) as unknown,
+            },
+            '*',
+          );
+        }
         cw.postMessage(
           { kind: 'cg-preview', action: 'editing-text', elementId: editingTextId },
           '*',
@@ -593,7 +624,7 @@ export function CanvasArea({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [currentFrame, editingTextId, timelinePlaying, soundMuted, stepRehearsal]);
+  }, [currentFrame, editingTextId, timelinePlaying, soundMuted, stepRehearsal, shownItemKey]);
 
   // D-060 — expose the live preview document so the selection gizmo (and the
   // auto→fixed one-shot size commit) can measure an auto-sized text box's rendered

@@ -768,6 +768,13 @@ DELIBERATELY the seam the D-031 authored steps model will join (steps
 register as another per-scope consumer, defining their precedence vs.
 in-scope sequences in that change).
 
+**`runtime.showSequenceItem(elementId, index)`** (`RUN-NEXT-VERSION-03` 1.7) is the driver's
+absolute `goTo` on ONE sequence, found by its element id (`sequenceElementOf`) — the Designer's
+canvas, which never plays, showing the item the author is working on. On an idle driver it redraws
+that item statically at once; it also sets where a later run starts, as every `goTo` does. A
+rebuilt runtime knows nothing of it: the host re-tells it after each build (the canvas preview's
+`sequence-item` message, kept across `scene-replace`).
+
 **Invariants**
 
 - A `next()` before `start()` (during the intro) is IGNORED — no queueing;

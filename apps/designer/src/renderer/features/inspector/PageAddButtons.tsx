@@ -11,6 +11,12 @@ import * as s from './Pages.css.js';
  * the one place a kind of item can be added (the owner's report: the grid and the Inspector could
  * add only pictures). A text or composition item is made exactly as the item editor's `Add item`
  * makes one (`newItemId`), appended as ONE edit.
+ *
+ * 🔴 `RUN-NEXT-VERSION-03` 1.7 — **EACH CLICK SHOWS ITS RESULT, AND IS ONE UNDO STEP.** The owner
+ * pressed `Add text` and saw nothing: an empty item at the end of a list nothing was looking at. The
+ * new item is now the one the author is working on (`focusSequenceItem` — the canvas shows it, the
+ * card's strip marks it), and each click is its own history entry: two clicks inside the history's
+ * coalescing window used to undo as one.
  */
 export function PageAddButtons({
   elementId,
@@ -18,6 +24,7 @@ export function PageAddButtons({
   firstComposition,
   size = 'md',
   picturesOnly = false,
+  onAdded,
 }: {
   elementId: string;
   items: readonly SequenceItem[];
@@ -29,10 +36,17 @@ export function PageAddButtons({
    * items: only the two picture buttons, so no surface offers the same act twice.
    */
   picturesOnly?: boolean;
+  /** A text or composition item was added (the Inspector card puts the focus in its text box). */
+  onAdded?: (item: SequenceItem) => void;
 }): JSX.Element {
   const { busy, add } = useAddPictures(elementId);
-  const append = (item: SequenceItem): void =>
-    designerStore.setSequenceItems(elementId, [...items, item]);
+  const append = (item: SequenceItem): void => {
+    designerStore.runAsSingleHistoryEntry(() =>
+      designerStore.setSequenceItems(elementId, [...items, item]),
+    );
+    designerStore.focusSequenceItem({ elementId, itemId: item.id });
+    onAdded?.(item);
+  };
   return (
     <div className={s.addButtons}>
       <Button

@@ -34,6 +34,11 @@ CanvasArea  ── host: zoom / pan / rulers / guides ────────�
                                    hit-test.ts · drill.ts · geometry.ts      ┘
 ```
 
+Besides the scene stream, a few editor views travel as their own messages and are re-asserted on
+every rebuild, because a fresh runtime knows nothing of them: `arrangement`, `look`, `rehearse-step`
+and `sequence-item` (`RUN-NEXT-VERSION-03` 1.7 — the sequence item the author is working on,
+`shownSequenceItem` in `state/slices/view.ts`, drawn through `runtime.showSequenceItem`).
+
 The editor **does not render scene elements itself** — the iframe runs the **real
 runtime**, the same code that powers preview/export/playout. So what you edit is
 exactly what airs (no editor-only renderer to drift). The overlay only adds the

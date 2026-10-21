@@ -94,3 +94,60 @@ sent; and that advance manual is the setting for a book the operator turns. A pa
 
 - **WHEN** a book's Data key section is open
 - **THEN** there is no "Allow file source" control, and a line names Load folder…
+
+### Requirement: Add many pictures at once, in natural order
+
+The Designer SHALL offer `Add pictures…` (many files) and `Add folder…` on a sequence. Each file
+SHALL be imported through the existing asset import (deduplicated by SHA-256) and become one picture
+item, in natural file-name order: digit runs compare as numbers in Latin, Persian and Arabic-Indic
+digits alike (`page2` before `page10`, `صفحه۲` before `صفحه۱۰`). For a sequence holding pictures,
+the Inspector's Items section SHALL be a card — the count (`N pages` for a book, its text pages
+counted; `N items` once it holds a composition item — the Pages manager's wording too), a strip of a
+few items as faces (a picture's thumbnail, a text page's words) around the item the author is working
+on, that item's text box when it is a text page, `Manage pages…`, and the add row `Add pictures…`,
+`Add folder…`, `Add text`, `Add composition` — and SHALL NOT list the pages one row each; the pages
+are seen and arranged in the Pages manager. `Add text` and `Add composition` SHALL each show their
+result: the new item becomes the item the author is working on — marked in the strip, a text page's
+box taking the focus — and each click SHALL be one undo step. A strip face SHALL pick the item to work
+on. The canvas SHALL show the item being worked on while its sequence is the one selected element;
+otherwise the sequence rests on its first item. Every button SHALL say what it does in its tooltip,
+drawn above any dialog. The first pictures added to a sequence SHALL make it a book: transition
+Crossfade (`fade`/`fade`, simultaneous), `advance: 'manual'`, `repeat: 1`, all of which the author can
+change.
+
+#### Scenario: Twelve files become twelve pages in natural order
+
+- **WHEN** the author adds twelve files named `page1.png` … `page12.png`, picked in any order
+- **THEN** the sequence holds twelve picture items in the order 1 … 12, the Inspector reads
+  `12 pages` with no row per page, and the Pages manager lists them 1 … 12
+
+#### Scenario: The pages render where the author works
+
+- **WHEN** pictures are added with the Assets panel closed
+- **THEN** the canvas and Preview draw the pictures themselves, not the missing-image placeholder
+
+#### Scenario: A duplicate file is one asset
+
+- **WHEN** two of the picked files have identical bytes
+- **THEN** the project holds one asset for them and both items name it
+
+#### Scenario: The first pictures make a book
+
+- **WHEN** pictures are added to a sequence that has none
+- **THEN** its transition is Crossfade, its advance manual and its repeat one pass
+
+#### Scenario: Each Add text shows its result
+
+- **WHEN** the author presses `Add text` on a book of two pictures, types a line, then presses it again
+- **THEN** the count reads `3 pages`, then `4 pages`; each time the new page is marked in the strip and
+  its text box has the focus; the canvas draws the typed line, then the new, empty page — never page 1
+
+#### Scenario: One undo step per click
+
+- **WHEN** the author presses `Add text` twice at once, then Undo, then Undo again
+- **THEN** each Undo takes one page, and with the sequence no longer selected the canvas is back on page 1
+
+#### Scenario: A book keeps its Data key when a text page is added
+
+- **WHEN** a book whose Data key is set gains a text page
+- **THEN** the key stays (`RUN-NEXT-VERSION-03` 1.6)

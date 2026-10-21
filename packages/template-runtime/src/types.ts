@@ -203,6 +203,14 @@ export interface TemplateRuntime {
   goTo?(index: number): Promise<void>;
 
   /**
+   * `RUN-NEXT-VERSION-03` 1.7 — show item `index` (0-based, clamped) of ONE sequence, by its element
+   * id: the Designer's canvas showing the item the author is working on. The same absolute,
+   * latest-wins move as {@link goTo}, on that sequence only; an id this page does not draw shows
+   * nothing new. Optional, like `next`.
+   */
+  showSequenceItem?(elementId: string, index: number): void;
+
+  /**
    * Paint every animated element at the given frame, without starting an
    * rAF loop. Used by Designer's timeline scrubber (M12.2) to preview a
    * specific frame; the runtime's on-air play() loop manages its own

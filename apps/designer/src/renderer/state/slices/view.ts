@@ -1,4 +1,43 @@
+import type { Scene } from '@cg/shared-schema';
 import { current, set, type DesignerStoreState, type DesignerTool } from '../store-core.js';
+
+/**
+ * `RUN-NEXT-VERSION-03` 1.7 — the index of the sequence item the author is working on, in the
+ * sequence `elementId` whose items are `items`: the focused item, while that sequence is the ONE
+ * selected element and the item is still in it; else `null` (the sequence rests on its first item).
+ * THE one rule the Inspector card's strip and the canvas both read ({@link shownSequenceItem}), so
+ * "the item being worked on" cannot mean two things — an undo (which clears the selection) or a
+ * removed item ends it without anyone clearing the focus.
+ */
+export function shownItemIndex(
+  state: Pick<DesignerStoreState, 'sequenceItemFocus' | 'selection'>,
+  elementId: string,
+  items: readonly { id: string }[],
+): number | null {
+  const focus = state.sequenceItemFocus;
+  if (focus === null || focus.elementId !== elementId) return null;
+  if (state.selection.size !== 1 || !state.selection.has(elementId)) return null;
+  const index = items.findIndex((item) => item.id === focus.itemId);
+  return index < 0 ? null : index;
+}
+
+/** {@link shownItemIndex}, found in `scene` (the canvas's edit scene): which sequence, which item. */
+export function shownSequenceItem(
+  state: Pick<DesignerStoreState, 'sequenceItemFocus' | 'selection'>,
+  scene: Scene | null,
+): { elementId: string; index: number } | null {
+  const focus = state.sequenceItemFocus;
+  if (focus === null || scene === null) return null;
+  for (const layer of scene.layers) {
+    for (const el of layer.children) {
+      if (el.id !== focus.elementId) continue;
+      if (el.type !== 'sequence') return null;
+      const index = shownItemIndex(state, el.id, el.items);
+      return index === null ? null : { elementId: el.id, index };
+    }
+  }
+  return null;
+}
 
 /**
  * `B-218` — is the aspect lock ON for `key` (a plate's element id, or an arrangement's id)?
@@ -65,6 +104,13 @@ export const viewSlice = {
    */
   setIssuesOpen(open: boolean): void {
     if (current.issuesOpen !== open) set({ issuesOpen: open });
+  },
+
+  /** `RUN-NEXT-VERSION-03` 1.7 — the sequence item the author is working on (`null` — none). */
+  focusSequenceItem(focus: { elementId: string; itemId: string } | null): void {
+    const was = current.sequenceItemFocus;
+    if (was?.elementId === focus?.elementId && was?.itemId === focus?.itemId) return;
+    set({ sequenceItemFocus: focus });
   },
 
   /**

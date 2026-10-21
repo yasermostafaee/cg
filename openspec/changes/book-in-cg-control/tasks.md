@@ -109,6 +109,29 @@
       page), bridge `book-pages.integration.test.ts` (accepted; no `media`).
 - [ ] 1.6.8 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
 
+## 1.7 — The Designer's `Add text` shows its result (FULL lane: Designer state and undo history, the page runtime's API)
+
+- [x] 1.7.1 Cause, proved (red in Chrome on `b1b14de3`: `2 pages` after `Add text`): the card counted and drew
+      PICTURES only (`SequencePagesControl.tsx`, `pictures.length` and the first four pictures), the canvas rests a
+      sequence on its first item (a sequence is time-driven; the canvas never plays), and the new, empty item sat at the
+      end where nothing looked — so a click changed nothing visible. And `PageAddButtons` committed with no history
+      boundary: two clicks inside `COALESCE_MS` (300 ms, `store-core.ts`) undid as one.
+- [x] 1.7.2 `sequenceItemFocus` (session-only store state) + `focusSequenceItem`; ONE predicate, `shownItemIndex` /
+      `shownSequenceItem` (`slices/view.ts`): the focused item while its sequence is the one selected element and the
+      item exists. `Add text` / `Add composition`: `runAsSingleHistoryEntry` per click, then focus the new item.
+- [x] 1.7.3 The card: `itemCountText` (a book's text pages are pages — the manager's wording too), a strip of every
+      item around the one being worked on (`stripWindow`; a face picks it), the text page's box in the card, focused
+      after `Add text`.
+- [x] 1.7.4 The canvas: `runtime.showSequenceItem(elementId, index)` (the driver's `goTo` on one sequence); the preview's
+      `sequence-item` message, re-asserted after every rebuild and on a fresh document. README + canvas README.
+- [x] 1.7.5 Superseded assertion: `sequence-pages.spec.ts` — the manager counts two pictures and a text page `3 pages`
+      (was `3 items`); swept by test id (`pages-manager-count`, `sequence-page-count` — 12 hits) and by the string
+      (`N items` — 2 hits, one changed).
+- [x] 1.7.6 Tests: e2e `sequence-add-text.spec.ts` (each click: counted, marked, focused, on the canvas; two quick
+      clicks, two undos; and 1.6's Data key kept) — RED on `b1b14de3`, green; `page-items.test.ts` (count, strip,
+      the predicate); `sequence-pages.test.ts` in the page runtime (`showSequenceItem` — red without it).
+- [ ] 1.7.7 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+
 ## 1.3 — PVW's NEXT turns the loaded pages (FULL lane: a verb that reaches the bridge)
 
 - [x] 1.3.1 Cause, proved: PVW's NEXT called the page's local `next()` (`RehearsalFrame.tsx`, the frame

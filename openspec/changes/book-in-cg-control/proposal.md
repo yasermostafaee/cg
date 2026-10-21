@@ -32,6 +32,9 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
   (`sequenceItemsBinding`): at least one picture, every other item a text page; only a composition item
   makes a sequence unbindable, and the Designer says so in one sentence. CG Control's loads replace the
   picture pages only, each text page keeping its place; a text page travels as text.
+- **1.7 — The Designer's `Add text` shows its result.** Each click selects the new item (the card's strip marks
+  it and its text box takes the focus), the canvas shows it (`runtime.showSequenceItem`), the card's count moves (a
+  book's text pages are pages), and each click is one undo step.
 - **1.3 — PVW's NEXT turns the book.** On a book row it is the row's own page turn (`stack.page`), and
   PVW follows the bridge's page; on any other row it is the template's step, as before.
 
@@ -40,5 +43,6 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
 - **Specs:** `runtime-ui` (MODIFIED, ADDED), `runtime-caspar-bridge` (MODIFIED — a book keeps the page on screen
   through an edit, superseding "else page 1" for an edit; ADDED), `designer-sequence-element` (MODIFIED).
 - **Code:** `@cg/shared-ipc` (`pages.get`), CG Bridge (`getPage`, route, scope), `@cg/template-runtime`
-  (`page-pictures-host`, the fill, `alt`), CG Control (`pagePictures`, `bookPageOf`, PVW's frame, the mock).
+  (`page-pictures-host`, the fill, `alt`, `showSequenceItem`), CG Control (`pagePictures`, `bookPageOf`, PVW's
+  frame, the mock), the Designer (the sequence card, `sequenceItemFocus`, the canvas's `sequence-item`).
 - **Wire:** one new read channel; `__cg` unchanged.

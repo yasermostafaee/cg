@@ -350,6 +350,14 @@ export class Preview {
           if (!runtime || typeof runtime.rehearseStep !== 'function') return;
           for (const [clockId, step] of rehearsedSteps) runtime.rehearseStep(clockId, step);
         }
+        // RUN-NEXT-VERSION-03 1.7 — the sequence item the author is working on, shown on the canvas
+        // ({ elementId, index }), retained across rebuilds as the arrangement is: every edit rebuilds,
+        // and a fresh runtime rests each sequence on its first item.
+        let shownSequenceItem = undefined;
+        function applyShownSequenceItem() {
+          if (!runtime || typeof runtime.showSequenceItem !== 'function' || !shownSequenceItem) return;
+          runtime.showSequenceItem(shownSequenceItem.elementId, shownSequenceItem.index);
+        }
         // Families we've already loaded into this iframe's
         // document.fonts. Keyed by family name; the value is the
         // assetUrl we loaded from, so we can re-fetch when a font
@@ -723,6 +731,8 @@ export class Preview {
             applyEditingHide();
             // A shown step survives the rebuild: the new drivers are told again.
             applyRehearsedSteps();
+            // …and so does the sequence item the author is working on (RUN-NEXT-VERSION-03 1.7).
+            applyShownSequenceItem();
           } finally {
             busy = false;
           }
@@ -1058,6 +1068,22 @@ export class Preview {
               } else if (msg.action === 'editing-text') {
                 editingTextId = typeof msg.elementId === 'string' ? msg.elementId : null;
                 applyEditingHide();
+              } else if (msg.action === 'sequence-item') {
+                // RUN-NEXT-VERSION-03 1.7 — show one sequence's item (Add text, a strip pick). Not a
+                // scene edit: the driver redraws that one item. null hands the sequence back to its
+                // resting first item.
+                const was = shownSequenceItem;
+                const view = msg.view;
+                shownSequenceItem =
+                  view && typeof view.elementId === 'string' && typeof view.index === 'number'
+                    ? { elementId: view.elementId, index: view.index }
+                    : undefined;
+                const handBack =
+                  was && (!shownSequenceItem || shownSequenceItem.elementId !== was.elementId);
+                if (handBack && runtime && typeof runtime.showSequenceItem === 'function') {
+                  runtime.showSequenceItem(was.elementId, 0);
+                }
+                applyShownSequenceItem();
               } else if (msg.action === 'update') {
                 currentFields = msg.fields ?? {};
                 const updateFn = controlFn('update');

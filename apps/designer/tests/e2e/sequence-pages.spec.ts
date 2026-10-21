@@ -202,7 +202,8 @@ test.describe('D-163 — Add pictures / Add folder on a sequence', () => {
     await expect(manage).toHaveAttribute('title', /\S/);
     await manage.click();
     const manager = app.page.getByRole('dialog', { name: /^Pages — / });
-    await expect(manager.getByTestId('pages-manager-count')).toHaveText('3 items');
+    // `RUN-NEXT-VERSION-03` 1.7 — a book's text page is a page (1.6); a composition item makes items.
+    await expect(manager.getByTestId('pages-manager-count')).toHaveText('3 pages');
 
     // In the GRID: the text item is typed where it stands, and a composition item is added.
     await manager.getByRole('textbox', { name: 'Item 3 text', exact: true }).fill('سرخط خبر');

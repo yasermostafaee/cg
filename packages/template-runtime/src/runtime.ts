@@ -3275,6 +3275,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       }
     },
 
+    showSequenceItem(elementId: string, index: number): void {
+      if (machine.state === 'removed') return;
+      for (const sub of subtrees) {
+        for (const s of sub.sequences) if (sequenceElementOf.get(s) === elementId) s.goTo(index);
+      }
+    },
+
     remove(): void {
       if (machine.state === 'removed') return;
       // D-125 §D6.4.4 — remove() is the PANIC path and stays a SYNCHRONOUS hard kill: it

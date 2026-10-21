@@ -13,6 +13,7 @@ import { Modal, ModalButton } from '../shell/Modal.js';
 import { PageAddButtons } from './PageAddButtons.js';
 import {
   isPicture,
+  itemCountText,
   itemLabel,
   moveItems,
   removeItems,
@@ -78,7 +79,6 @@ export function PagesModal({
     const live = new Set(items.map((i) => i.id));
     return new Set([...picked].filter((id) => live.has(id)));
   }, [picked, items]);
-  const allPictures = items.length > 0 && items.every(isPicture);
   const pictureCount = items.filter(isPicture).length;
   const commit = (next: SequenceItem[]): void => designerStore.setSequenceItems(elementId, next);
   const change = (id: string, patch: Partial<Record<'text' | 'compositionId', string>>): void =>
@@ -120,9 +120,8 @@ export function PagesModal({
     endDrag();
   }
 
-  const countText = allPictures
-    ? `${String(items.length)} ${items.length === 1 ? 'page' : 'pages'}`
-    : `${String(items.length)} ${items.length === 1 ? 'item' : 'items'}`;
+  // `RUN-NEXT-VERSION-03` 1.7 — the Inspector card's count, one wording: a book's text pages are pages.
+  const countText = itemCountText(items);
 
   return (
     <Modal

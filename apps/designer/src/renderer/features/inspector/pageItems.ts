@@ -1,4 +1,4 @@
-import type { SequenceImageItem, SequenceItem } from '@cg/shared-schema';
+import { sequenceItemsBinding, type SequenceImageItem, type SequenceItem } from '@cg/shared-schema';
 import { naturalCompare } from '@cg/text-shaping';
 
 /**
@@ -60,6 +60,37 @@ export function sortPicturesByName(items: readonly SequenceItem[]): SequenceItem
     next += 1;
     return sorted ?? item;
   });
+}
+
+/**
+ * `RUN-NEXT-VERSION-03` 1.7 — what one of a sequence's items is called: a `page` of a book (its
+ * pictures AND its text pages — 1.6, the schema's one rule, `sequenceItemsBinding`), an `item` of
+ * anything else (a sequence with a composition item, a text rotation).
+ */
+export function itemWord(items: readonly SequenceItem[]): 'page' | 'item' {
+  return sequenceItemsBinding(items) === 'pages' ? 'page' : 'item';
+}
+
+/** `3 pages` / `1 item` — the Inspector card's count and the Pages manager's, one wording. */
+export function itemCountText(items: readonly SequenceItem[]): string {
+  const n = items.length;
+  return `${String(n)} ${itemWord(items)}${n === 1 ? '' : 's'}`;
+}
+
+/**
+ * `RUN-NEXT-VERSION-03` 1.7 — the items the Inspector card's strip draws: `size` of them from the
+ * start, or — when the author is working on an item past them — a window that holds it (two before
+ * it, one after, where there are). `[from, to)`.
+ */
+export function stripWindow(
+  count: number,
+  focus: number | null,
+  size: number,
+): { from: number; to: number } {
+  const span = Math.min(count, size);
+  if (focus === null || focus < span) return { from: 0, to: span };
+  const from = Math.max(0, Math.min(focus - (size - 2), count - span));
+  return { from, to: from + span };
 }
 
 /** The words a page's card shows: a picture's file name, a text item's text. */
