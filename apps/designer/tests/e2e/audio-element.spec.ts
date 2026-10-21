@@ -175,6 +175,55 @@ test.describe('D-165 — sound effects in the Designer', () => {
     await expect(sound).toHaveAttribute('aria-pressed', 'false');
   });
 
+  test('🔴 Q10 — the Sound section shows loudness and true peak, and Normalise lands the sound on −23 LUFS', async ({
+    app,
+    page,
+  }) => {
+    await app.newProject('SoundLoudness');
+    await page.getByRole('button', { name: 'Project assets' }).click();
+    await importSounds(page, ['tone-44k-mono.wav']);
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            async () => (await window.cg.assets.list()).filter((a) => a.kind === 'audio').length,
+          ),
+        { timeout: 60_000 },
+      )
+      .toBe(1);
+    // Measured at import: a 1 kHz tone at −6 dBFS in both channels reads about −6 LUFS.
+    const imported = await page.evaluate(
+      async () => (await window.cg.assets.list()).find((a) => a.kind === 'audio')?.audio,
+    );
+    expect(Math.abs((imported?.loudnessLufs ?? 0) - -6)).toBeLessThanOrEqual(0.2);
+    expect(Math.abs((imported?.truePeakDbtp ?? 0) - -6)).toBeLessThanOrEqual(0.2);
+
+    await dropAsset(page, 'tone-44k-mono.wav');
+    await expect(app.inspector.getByTestId('audio-loudness')).toHaveText(
+      /^−(5\.9|6\.0|6\.1) LUFS$/,
+    );
+    await expect(app.inspector.getByTestId('audio-true-peak')).toHaveText(/ dBTP$/);
+    const offer = app.inspector.getByTestId('audio-normalise');
+    await expect(offer).toHaveText('Normalise to −23.0 LUFS');
+    await offer.click();
+
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async () =>
+            (await window.cg.assets.list())
+              .filter((a) => a.kind === 'audio')
+              .map((a) => a.filename)
+              .sort(),
+          ),
+        { timeout: 30_000 },
+      )
+      .toEqual(['tone-44k-mono (-23.0 LUFS).wav', 'tone-44k-mono.wav']);
+    // The element now plays the normalised sound: its facts say so, and nothing more is offered.
+    await expect(app.inspector.getByTestId('audio-loudness')).toHaveText('−23.0 LUFS');
+    await expect(offer).toHaveCount(0);
+  });
+
   test('the .vcg carries the WAV and the element (start, volume) round-trips', async ({
     app,
     page,

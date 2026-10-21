@@ -20,10 +20,24 @@ export const AssetKindSchema = z.enum(['image', 'font', 'lottie', 'video', 'audi
 export const AUDIO_PEAK_FLOOR_DBFS = -120;
 
 /**
+ * `RUN-NEXT-VERSION-02` Q10 — the loudness a sound is normalised TO (EBU R128's programme target)
+ * and the true-peak ceiling the gain never crosses. A sound whose peaks would cross the ceiling first
+ * is normalised as far as the ceiling allows, and is then quieter than the target.
+ */
+export const AUDIO_LOUDNESS_TARGET_LUFS = -23;
+export const AUDIO_TRUE_PEAK_CEILING_DBTP = -1;
+
+/**
  * 🔴 `D-165` — what an imported SOUND is, measured at import from the stored bytes: its length, its
- * PEAK sample level in dBFS (shown to the author; never normalised automatically), and the stored
- * form's rate and channel count (48 kHz stereo, the broadcast rate). Optional + additive: every
- * asset stored before it parses unchanged.
+ * PEAK sample level in dBFS, and the stored form's rate and channel count (48 kHz stereo, the
+ * broadcast rate). Optional + additive: every asset stored before it parses unchanged.
+ *
+ * `RUN-NEXT-VERSION-02` Q10 — and its LOUDNESS (ITU-R BS.1770-4: integrated, gated, in LUFS) and
+ * TRUE PEAK (4× oversampled, in dBTP), so a sound can be offered normalisation — never normalised
+ * without the author asking, because a sound meant to sit under a voice is quiet on purpose.
+ * `truePeakDbtp` present means the sound was measured; `loudnessLufs` is then absent only for a
+ * sound too quiet to measure (every block under BS.1770's −70 LUFS gate). Both optional: a sound
+ * stored before them is measured from its bytes when its Sound section opens.
  */
 export const AudioInfoSchema = z.object({
   /** The picked source file's name (the stored asset's filename is the converted WAV's). */
@@ -32,6 +46,8 @@ export const AudioInfoSchema = z.object({
   peakDbfs: z.number().min(AUDIO_PEAK_FLOOR_DBFS).max(0),
   sampleRate: z.number().int().positive(),
   channels: z.number().int().positive(),
+  loudnessLufs: z.number().max(0).optional(),
+  truePeakDbtp: z.number().min(AUDIO_PEAK_FLOOR_DBFS).optional(),
 });
 export type AudioInfo = z.infer<typeof AudioInfoSchema>;
 

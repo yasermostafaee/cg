@@ -85,7 +85,8 @@ Web Audio (`MediaElementSource` → gain) works in CasparCG 2.5.0's CEF with no 
    countdown; one whose moment has not come when the exit begins never starts.
 8. **Once per occurrence**: a loop cycle is a new occurrence (its entrance sound plays again); a hold
    never repeats a sound.
-9. **Nothing is normalised.** The peak is measured and shown; normalising is the owner's question.
+9. **Nothing is normalised.** The peak is measured and shown; normalising is the owner's question. (Answered by
+   `RUN-NEXT-VERSION-02` Q10: by loudness, −23 LUFS / −1 dBTP, offered per sound — `sound-normalise`.)
 10. **`hasSound` rides `TemplateInfo`**, derived once at import by `hasSoundEffects` (golden rule 6),
     for `hasNext`'s reason — every console marks the row alike. The mark is a `Tag`, not a control: a
     per-row mute is the owner's question.

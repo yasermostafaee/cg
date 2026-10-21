@@ -1,6 +1,12 @@
 import type { AnimatableProperty, Element, Layer } from '@cg/shared-schema';
 import { activeRangeOf, compositionInstancesOf, uniqueInstanceName } from '@cg/shared-schema';
-import { current, getClipboard, set, setClipboard } from '../store-core.js';
+import {
+  current,
+  getClipboard,
+  runAsSingleHistoryEntry,
+  set,
+  setClipboard,
+} from '../store-core.js';
 import {
   activeDocOf,
   activeFieldData,
@@ -480,6 +486,42 @@ export const elementsSlice = {
       selectedKeyframes: keepKey ? current.selectedKeyframes : [],
       keyframeInspectorOpen: keepKey ? current.keyframeInspectorOpen : false,
     });
+  },
+
+  /**
+   * `RUN-NEXT-VERSION-02` Q10 — every `audio` element that plays sound `from` plays sound `to`
+   * instead: the root's and every composition's, inside containers too, in ONE step (one undo). The
+   * normalised copy of a sound replaces the original wherever the original was placed — the sound is
+   * what was normalised, not one placement of it. Returns how many elements now play `to`.
+   */
+  replaceAudioAsset(from: string, to: string): number {
+    if (current.scene === null || from === to) return 0;
+    let count = 0;
+    const visit = (children: readonly Element[]): Element[] =>
+      children.map((child) => {
+        if (child.type === 'audio' && child.assetId === from) {
+          count += 1;
+          return { ...child, assetId: to };
+        }
+        if (child.type === 'container') return { ...child, children: visit(child.children) };
+        return child;
+      });
+    const remap = (layers: readonly Layer[]): Layer[] =>
+      layers.map((l) => ({ ...l, children: visit(l.children) }));
+    const nextLayers = remap(current.scene.layers);
+    const nextComps = current.scene.compositions?.map((c) => ({ ...c, layers: remap(c.layers) }));
+    if (count === 0) return 0;
+    const scene = current.scene;
+    runAsSingleHistoryEntry(() =>
+      set({
+        scene: {
+          ...scene,
+          layers: nextLayers,
+          ...(nextComps !== undefined ? { compositions: nextComps } : {}),
+        },
+      }),
+    );
+    return count;
   },
 
   /**

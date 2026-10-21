@@ -14,6 +14,7 @@ import { clearAll as clearAllLottieAssets } from './lottieAssetCache.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
 import { VideoImportModal, loadConverter } from './VideoImportModal.js';
 import { wavStats } from './wav-stats.js';
+import { loudnessInfo, measureLoudness } from './loudness.js';
 import { ImageSequenceImportModal } from './ImageSequenceImportModal.js';
 import { findImageSequences, noSequenceSentence, SEQUENCE_ACCEPT } from './image-sequence.js';
 import type { VideoSource } from './video-convert-args.js';
@@ -224,8 +225,9 @@ export function ProjectAssetsPanel(): JSX.Element {
   /**
    * 🔴 D-165 — SOUNDS import as a batch, like images: each picked file (WAV, MP3, OGG, M4A, …) is
    * converted by the in-app converter to the ONE stored form — a 48 kHz stereo 16-bit WAV — and
-   * measured from those bytes (length, peak dBFS); a loading tile per file meanwhile. Nothing is
-   * normalised. A file that does not convert is skipped and named in one notice; the others still
+   * measured from those bytes (length, peak dBFS — and, `RUN-NEXT-VERSION-02` Q10, loudness and true
+   * peak); a loading tile per file meanwhile. Nothing is normalised here: the Sound section OFFERS it
+   * per sound. A file that does not convert is skipped and named in one notice; the others still
    * import. The sound is placed by dragging its tile onto the canvas.
    */
   async function importAudio(): Promise<void> {
@@ -265,6 +267,7 @@ export function ProjectAssetsPanel(): JSX.Element {
             peakDbfs: stats.peakDbfs,
             sampleRate: stats.sampleRate,
             channels: stats.channels,
+            ...loudnessInfo(measureLoudness(converted.bytes)),
           },
         });
       } catch {
