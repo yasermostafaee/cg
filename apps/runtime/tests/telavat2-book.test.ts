@@ -18,7 +18,7 @@ const row = (fields: Record<string, unknown>): StackItemState =>
 describe('🔴 B-353 — importing telavat2.vcg as it is', () => {
   it('records a1 as the template’s page list, a book that stops at its ends', async () => {
     const { template } = await produceTemplateDelivery(await buildTelavat2Vcg({ pages: 3 }));
-    expect(template.pageLists).toEqual([{ fieldId: 'a1', wrap: false }]);
+    expect(template.pageLists).toEqual([{ fieldId: 'a1', wrap: false, name: 'Sequence' }]);
     expect(template.fields.find((f) => f.id === 'a1')).toMatchObject({ type: 'list', pages: true });
   });
 
@@ -37,7 +37,7 @@ describe('🔴 B-353 — importing telavat2.vcg as it is', () => {
       await buildTelavat2Vcg({ pages: 3, keyed: false }),
     );
     const id = `pages-${TELAVAT2_SEQUENCE}`;
-    expect(template.pageLists).toEqual([{ fieldId: id, wrap: false }]);
+    expect(template.pageLists).toEqual([{ fieldId: id, wrap: false, name: 'Sequence' }]);
     expect(template.fields.find((f) => f.id === id)).toMatchObject({
       label: 'Sequence',
       type: 'list',

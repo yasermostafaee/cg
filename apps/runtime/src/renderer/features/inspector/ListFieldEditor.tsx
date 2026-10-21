@@ -117,7 +117,7 @@ const styles = {
 
 /**
  * 🔴 `B-353` — the sentence a list of PICTURES gets when it reaches this editor instead of the book's
- * (`PageListEditor`): a template imported before CG Control read such a list as a book. A refusal
+ * (`BookBlock`): a template imported before CG Control read such a list as a book. A refusal
  * with its remedy, in the operator's words.
  */
 export const PICTURE_LIST_SENTENCE = 'These are pictures. Import the template again to turn them.';

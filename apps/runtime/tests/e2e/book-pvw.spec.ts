@@ -5,6 +5,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, FixedLayerBank } from '@cg/shared-ipc';
 import { buildBookVcg, expect, test } from './fixtures/runtime.js';
 import { solidPng } from './fixtures/pictures.js';
+import { buildTelavat2Vcg } from '../support/telavat2Vcg.js';
 
 /**
  * 🔴 `RUN-NEXT-VERSION-03` 1.1 — **PVW DRAWS A LOADED BOOK'S PICTURES, NEVER THEIR NAMES.**
@@ -257,4 +258,25 @@ test('🔴 1.3 — the preview bar’s NEXT turns the loaded pages, exactly as t
   await expect(inspector(page).getByTestId('book-counter')).toHaveText('3 / 3');
   await expectPvw(page, BLUE);
   await expect(row(page).locator('[data-page-counter]')).toHaveText('3 / 3');
+});
+
+/*
+  `RUN-NEXT-VERSION-03` 1.4 — the Inspector's strip draws the TEMPLATE'S OWN pages from the page CG Bridge
+  stores (the `assetUrls` CG Control baked into it at import): real pixels, the same bytes air draws.
+*/
+test('1.4 — the strip draws the template’s own pages from the page the bridge stores', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const handle = await boot();
+  await openConsole(page, handle.url);
+  await importAndLoad(page, await buildTelavat2Vcg({ templateId: 'tpl-e2e-strip', pages: 3 }));
+  await row(page).locator('[data-row-body]').click();
+  const face = inspector(page).locator('[data-book-thumb="current"] img');
+  await expect(face).toHaveAttribute('src', /^data:image\/png/, { timeout: 15_000 });
+  expect(await face.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(8);
+  await expect(inspector(page).locator('[data-book-thumb="after"] img')).toHaveAttribute(
+    'src',
+    /^data:image\/png/,
+  );
 });

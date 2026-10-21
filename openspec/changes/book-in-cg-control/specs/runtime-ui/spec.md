@@ -12,11 +12,11 @@ any other picture SHALL be sent exactly as picked — say in one line what fitti
 (`12 pictures were resized to fit 1920×1080`), refuse BY NAME only a picture still over the cap after
 fitting or a file that is not a picture while the others load, send each picture to CG Bridge showing
 progress, and stage the resulting page list like any field value. CG Bridge's own check SHALL remain
-the guard. The Inspector SHALL show the current page (`12 / 300`) with Previous, Next and a page box
-that takes the operator's page number in Latin, Persian or Arabic-Indic digits, with Go beside it on
-the same line. The row SHALL show the same `12 / 300`; its NEXT SHALL turn the page, and its PREV
-SHALL be in the row's menu, so a book row keeps the same buttons, in the same columns, as every other
-row.
+the guard. The Inspector SHALL show the current page (`12 / 300`, under the current page's face) and
+one turning row — `Previous`, a page box holding the current page that takes the operator's page
+number in Latin, Persian or Arabic-Indic digits followed by ` / 300`, `Next`, `Go` — on one line,
+one height. The row SHALL show the same `12 / 300`; its NEXT SHALL turn the page, and its PREV SHALL
+be in the row's menu, so a book row keeps the same buttons, in the same columns, as every other row.
 
 #### Scenario: A folder becomes the row's book
 
@@ -76,6 +76,39 @@ be filled when it arrives.
 
 - **WHEN** the console is reloaded and the row is played on PVW again
 - **THEN** PVW draws the page from CG Bridge's stored copy
+
+### Requirement: The Inspector's book block SHALL name the book and say, always, where its pages come from and whether they are on the row
+
+A row's book SHALL be one block in the Inspector, on one grid, built from the console's primitives. Its heading
+SHALL be the book's name — the field's Title when the author gave one, else its sequence's name
+(`TemplateInfo.pageLists[].name`), else `Book` — never the field's id, which stays in the heading's tooltip; no
+Inspector field heading SHALL print a field id beside its label. The block SHALL always show where the pages come
+from (`Template's pictures`, `Folder "IN" · 87 pictures`, `Picked pictures · 12`, with `· N text pages` when there
+are any; a folder's name isolated), whether they are on the row (`Not sent — press Update`, `On the row`), and a
+strip of three faces — the page before, the current page, the page after — drawn from the console's pictures, the
+bridge's stored copies, or the template's own (read from the page CG Bridge stores), a text page as its words, a
+picture that cannot be had as a wordless placeholder, never its file name. Then the turning row (`Previous`, the
+page box with ` / count`, `Next`, `Go`, one height, one centre line, icons with words) and the loading row
+(`Load pictures…`, `Load folder…`, `Manage pages…`); each control's accessible name names the book. It SHALL fit
+the Inspector at 1280×720.
+
+#### Scenario: The owner's book, named and bound
+
+- **WHEN** a book whose field `a1` has no Title of its own, on a sequence named `Sequence`, is selected, and a
+  folder `IN` of three pictures is loaded, then applied
+- **THEN** the heading reads `Sequence` and no `a1` is shown; the source reads `Template's pictures`, then
+  `Folder "IN" · 3 pictures`; the state reads `On the row`, then `Not sent — press Update`, then `On the row`
+
+#### Scenario: One aligned turning row
+
+- **WHEN** the block is measured in Chrome at 1280×720
+- **THEN** Previous, the page box, Next and Go share one height and one centre line, left to right, inside the
+  Inspector
+
+#### Scenario: The strip draws the template's own pages
+
+- **WHEN** a template's book has its own pictures and its row is selected
+- **THEN** the current and next faces are those pictures, read from the page CG Bridge stores
 
 ### Requirement: A book with text pages SHALL stay a book, and a load SHALL replace its pictures only
 

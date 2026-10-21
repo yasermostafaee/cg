@@ -2241,7 +2241,7 @@ textarea.cg-field--autogrow {
    sit beside "Add item" or under a text field. */
 .cg-field-foot .cg-btn,
 .cg-from-file .cg-btn,
-.cg-book-row .cg-btn {
+.cg-book__row .cg-btn {
   height: 28px;
   min-height: 28px;
   padding-block: 0;
@@ -2274,27 +2274,98 @@ textarea.cg-field--autogrow {
   min-height: var(--r-insp-position-field-h);
 }
 /*
- * `R-100` — a row's BOOK in the Inspector (`PageListEditor`, `BookBar`): one wrapping line of
- * secondary controls — the count or the page, then its buttons — centred on the text, at the
- * field footers' 28 px (named in that rule above).
+ * `R-100` / `RUN-NEXT-VERSION-03` 1.4 — a row's BOOK in the Inspector (`BookBlock`): ONE grid, top to
+ * bottom — the facts (where its pages come from, whether they are on the row, how many), the strip
+ * (the page before, the current page, the page after), the turning row, the loading row. Every row of
+ * controls is one line of secondary controls at the field footers' 28 px (named in the rule above),
+ * centred on the text, so the buttons and the page box share one height and one baseline.
  */
-.cg-book-row {
+.cg-book {
+  display: grid;
+  gap: var(--r-space-2);
+  min-width: 0;
+}
+.cg-book__facts,
+.cg-book__row {
   display: flex;
   align-items: center;
   gap: var(--r-space-2);
   flex-wrap: wrap;
+  min-width: 0;
 }
 .cg-book-count {
   font-variant-numeric: tabular-nums;
-  min-width: 5ch;
+  color: var(--r-text-muted);
+  font-size: var(--r-text-sm);
+}
+/* The strip: three equal cells, each a 16:9 face the size the panel allows, its page number under it.
+   The current page's face carries the accent edge — the one the row is on. */
+.cg-book__strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--r-space-2);
+}
+.cg-book-thumb {
+  display: grid;
+  gap: var(--r-space-1);
+  margin: 0;
+  min-width: 0;
+}
+.cg-book-thumb__frame {
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-sm);
+  background: var(--r-monitor-bg);
+}
+.cg-book-thumb[data-current] .cg-book-thumb__frame {
+  border-color: var(--r-accent-strong);
+}
+.cg-book-thumb__frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.cg-book-thumb__text {
+  padding: var(--r-space-1);
+  font-size: var(--r-text-sm);
+  line-height: 1.3;
+  text-align: center;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  max-height: 100%;
+}
+.cg-book-thumb__num {
+  text-align: center;
+  font-size: var(--r-text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--r-text-muted);
+}
+.cg-book-thumb[data-current] .cg-book-thumb__num {
+  color: var(--r-text);
+}
+/* The page box and its ` / 87` read as one control between Previous and Next. */
+.cg-book__page {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-space-1);
+  flex: 0 0 auto;
+}
+.cg-book__of {
+  font-variant-numeric: tabular-nums;
+  color: var(--r-text-muted);
 }
 /* The page box holds a page number — three digits at most, in any digit set — so it is sized to
-   that and stays on the line beside Go, not stretched across the panel by `.cg-field`'s 100 %. */
+   that and stays on the line, not stretched across the panel by `.cg-field`'s 100 %. */
 input.cg-field.cg-book-page {
-  width: 7em;
+  width: 4.5em;
   flex: 0 0 auto;
   height: 28px;
   min-height: 28px;
+  text-align: center;
 }
 /* ── Inspector metadata chips (status / layer / channel / server) ───────────
  *

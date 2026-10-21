@@ -40,6 +40,26 @@
       transfer of each ~1 MB page is not in this figure.
 - [ ] 1.2.7 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
 
+## 1.4 — The Inspector's book block: named, bound, tidy (FULL lane: a TemplateInfo field; an operator-name rule)
+
+- [x] 1.4.1 Cause, proved: the Inspector's field heading printed the binding key beside every label that differed
+      from it (`Inspector.tsx` FieldEditor, the `fieldKey` span — `Sequence pages-el-1792581663991`,
+      `Target time targetTime`); the page list's controls were two components laid out separately (`PageListEditor`,
+      `BookBar`), and nothing said whether a loaded folder was staged or on the row.
+- [x] 1.4.2 `PageListInfo.name` / `TemplateInfo.pageLists[].name` (the sequence's name; optional, additive);
+      `bookTitle` (Title → sequence name → `Book`); every Inspector field heading prints its label only, the key in
+      its tooltip (swept: no other visible field id in CG Control's renderer — 112 files; 18 attribute hits, none
+      visible; positive control: `HEAD`'s `Inspector.tsx:1133`).
+- [x] 1.4.3 `BookBlock` (replaces `PageListEditor` + `BookBar`): facts (source, sent, count), the strip (before,
+      current, after — console / bridge / authored pictures, text faces, placeholder), turning row, loading row;
+      `loadPictures` (the shared pick → fit → send loop; a folder's pictures keep their folder in their name);
+      `authoredPictures` (the template's own pictures from the stored page's `assetUrls`); `controls.css` `.cg-book`.
+- [x] 1.4.4 Tests: e2e `book-block.spec.ts` (Chrome, 1280×720: name not id; source and sent through a real folder
+      and Update; one aligned turning row inside the Inspector), `book-pvw.spec.ts` › 1.4 (the strip draws the
+      template's own pictures from a real bridge); `bookFacts.test.ts`; `telavat2-book.spec.ts` now names the book
+      `Sequence`, never `a1` / `pages-el-…`; schema `pageListsOf` assertions carry the name.
+- [ ] 1.4.5 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+
 ## 1.6 — A book with text pages stays a book (FULL lane: the schema's rule, the bridge, the page)
 
 - [x] 1.6.1 Cause: `sequenceItemsBinding` (`@cg/shared-schema` `elements.ts`) answered `null` for pictures mixed

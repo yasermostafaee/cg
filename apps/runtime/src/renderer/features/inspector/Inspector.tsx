@@ -50,9 +50,9 @@ import { detachUngrantedSources } from './fromFileStore.js';
 import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import { CountdownTargetField } from './CountdownTargetField.js';
-import { PageListEditor } from './PageListEditor.js';
+import { BookBlock } from '../book/BookBlock.js';
+import { bookTitle } from '../book/bookFacts.js';
 import { fieldPatternRefusal } from './patternCheck.js';
-import { BookBar } from './BookBar.js';
 import { bookOf, type RowBook } from '../layers/bookOf.js';
 import { LivePlatesSection } from './LivePlatesSection.js';
 import { LooksBindingsSection } from './LooksBindingsSection.js';
@@ -286,7 +286,6 @@ const styles = {
   // 13px (owner) — a notch under the body scale, so a field's NAME sits between
   // the panel's content text and the 11px binding key beside it.
   fieldName: { color: colors.text, fontWeight: 500, fontSize: '13px' },
-  fieldKey: { color: colors.textMuted, fontSize: '11px', opacity: 0.75 },
   // B-067 — a nested composition's fields, indented under the instance's label.
   group: {
     marginTop: 'var(--r-space-3)',
@@ -803,6 +802,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
                   item={item}
                   applied={valueAt(item.fields, [row.key])}
                   book={rowBook?.fieldId === row.key ? rowBook : null}
+                  bookName={info?.pageLists?.find((l) => l.fieldId === row.key)?.name}
                 />
               ))}
               {groups.map((group) => (
@@ -1068,19 +1068,25 @@ function FieldEditor({
   item,
   applied,
   book = null,
+  bookName,
 }: {
   field: DynamicField | null;
   path: FieldPath;
   item: StackItemState;
   applied: FieldValue | undefined;
-  /** `R-100` — the row's book, when THIS field is its page list: the book bar renders below it. */
+  /** `R-100` — the row's book, when THIS field is its page list: it is turned in the book block. */
   book?: RowBook | null;
+  /** `RUN-NEXT-VERSION-03` 1.4 — the book's sequence name (`TemplateInfo.pageLists[].name`). */
+  bookName?: string | undefined;
 }): JSX.Element {
   const itemId = item.itemId;
   // The control's accessible name stays the FIELD id (not the full path): the operator
   // sees it inside its group, and the group's own label carries the namespace.
   const fieldId = path[path.length - 1] ?? '';
-  const label = field?.label ?? fieldId;
+  // `RUN-NEXT-VERSION-03` 1.4 — a BOOK is headed by its name (the field's Title, else its sequence's
+  // name), never by its field id.
+  const isBook = field?.type === 'list' && field.pages === true;
+  const label = isBook && field !== null ? bookTitle(field, bookName) : (field?.label ?? fieldId);
   const value = effectiveValue(itemId, path, applied);
   const kind = field?.type ?? inferKind(value);
   const dirty = isFieldDirty(itemId, path, applied);
@@ -1112,27 +1118,21 @@ function FieldEditor({
   return (
     <div className={isWideKind(kind) ? 'cg-field-row--wide' : 'cg-field-row'}>
       {/*
-        THE AUTHORED NAME IS PRIMARY; THE BINDING KEY IS SECONDARY — and the key is
-        printed ONLY when it differs from the name. A template whose author set no
-        label falls back to the key, and rendering both would print the same string
-        twice at two sizes, which is noise dressed as hierarchy.
+        🔴 THE AUTHORED NAME IS THE HEADING; THE BINDING KEY IS ITS TOOLTIP (`RUN-NEXT-VERSION-03`
+        1.4, golden rule 11). The key used to be printed beside the name whenever the two differed
+        (`Target time targetTime`, `Sequence pages-el-1792581663991`) — an internal id in the sentence
+        the operator reads. It is relocated, not deleted: a hover on the heading says it.
       */}
-      <span style={styles.fieldLabel}>
+      <span style={styles.fieldLabel} title={label !== fieldId ? fieldId : undefined}>
         {/*
           The AUTHORED name is the template author's string, not this console's chrome — a
-          Persian field label beside a Latin binding key is the ordinary case here — so its
-          characters are isolated and its BOX stays the LTR flex item it already was
-          (`MODAL-CHROME-10` ADDENDUM B: a `<bdi>` made a flex item would flush its own text
-          to the wrong side).
+          Persian field label is the ordinary case here — so its characters are isolated and its
+          BOX stays the LTR flex item it already was (`MODAL-CHROME-10` ADDENDUM B: a `<bdi>` made
+          a flex item would flush its own text to the wrong side).
         */}
-        <span style={styles.fieldName}>
+        <span style={styles.fieldName} data-field-heading={fieldId}>
           <IsolatedName>{label}</IsolatedName>
         </span>
-        {label !== fieldId && (
-          <span style={styles.fieldKey} title={fieldId}>
-            {fieldId}
-          </span>
-        )}
         {dirty && (
           <span className="cg-dirty-dot" aria-label={`${fieldId} has unapplied edits`}>
             ●
@@ -1142,18 +1142,34 @@ function FieldEditor({
       <div
         style={{ display: 'flex', flexDirection: 'column', gap: 'var(--r-space-2)', minWidth: 0 }}
       >
-        <FieldControl
-          kind={kind}
-          field={field}
-          value={value}
-          applied={applied}
-          fieldId={fieldId}
-          dirty={dirty}
-          onStage={stage}
-          onUnstage={unstage}
-          channel={item.slot?.channel}
-          {...(fromFileKind !== undefined ? { fromFile } : {})}
-        />
+        {isBook && field !== null && field.type === 'list' ? (
+          // `RUN-NEXT-VERSION-03` 1.4 — a BOOK: one block — where its pages come from, whether they are
+          // on the row, the pages around the current one, turning and loading.
+          <BookBlock
+            itemId={itemId}
+            fieldId={fieldId}
+            title={label}
+            value={value}
+            defaults={field.default}
+            dirty={dirty}
+            channel={item.slot?.channel}
+            templateId={item.templateId}
+            book={book}
+            onStage={stage}
+          />
+        ) : (
+          <FieldControl
+            kind={kind}
+            field={field}
+            value={value}
+            applied={applied}
+            fieldId={fieldId}
+            dirty={dirty}
+            onStage={stage}
+            onUnstage={unstage}
+            {...(fromFileKind !== undefined ? { fromFile } : {})}
+          />
+        )}
         {/* A LIST field's from-file control is rendered INSIDE the editor, beside
             "Add item" on the field's one footer row (see `ListFieldEditor`'s
             `footer` slot). Every other kind renders it here, beneath the control.
@@ -1168,7 +1184,6 @@ function FieldEditor({
             {patternLine}
           </p>
         )}
-        {book !== null && <BookBar itemId={itemId} book={book} />}
       </div>
     </div>
   );
@@ -1184,7 +1199,6 @@ function FieldControl({
   onStage,
   onUnstage,
   fromFile,
-  channel,
 }: {
   kind: DynamicField['type'] | 'unknown';
   field: DynamicField | null;
@@ -1198,8 +1212,6 @@ function FieldControl({
   onUnstage: () => void;
   /** Only a LIST consumes this — it shares its footer row with "Add item". */
   fromFile?: ReactNode;
-  /** `RUN-NEXT-VERSION-03` 1.2 — the row's channel: a book's pictures are fitted to its frame. */
-  channel?: number | undefined;
 }): JSX.Element {
   if (kind === 'boolean') {
     const v = typeof value === 'boolean' ? value : false;
@@ -1290,18 +1302,6 @@ function FieldControl({
         value={writeFieldDigits(v, digits)}
         onChange={(e) => onStage(writeFieldText(e.currentTarget, field, e.nativeEvent))}
         aria-label={fieldId}
-      />
-    );
-  }
-  if (kind === 'list' && field?.type === 'list' && field.pages === true) {
-    // `R-100` — a PAGE LIST: the operator loads pictures (a book), never types items.
-    return (
-      <PageListEditor
-        fieldId={fieldId}
-        value={value}
-        defaults={field.default}
-        channel={channel}
-        onStage={onStage}
       />
     );
   }

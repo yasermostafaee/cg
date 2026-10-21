@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PAGE_MAX_BYTES } from '@cg/shared-ipc';
 import { fitInside, fitLine, fitNeeded } from '../src/renderer/features/book/fitPicture.js';
-import { notLoadedLine } from '../src/renderer/features/inspector/PageListEditor.js';
+import { notLoadedLine } from '../src/renderer/features/book/loadPictures.js';
 
 /**
  * 🔴 `RUN-NEXT-VERSION-03` 1.2 — a page is FITTED, not refused: the rules, without a browser. The

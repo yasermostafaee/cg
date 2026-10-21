@@ -18,10 +18,13 @@ test('🔴 telavat2’s shape imports as a book: the bar, 1 / 87, Next, Previous
 
   // No text boxes for pictures: the book's own editor, with its folder door.
   await expect(app.inspector.getByRole('textbox', { name: /^a1 item \d+$/ })).toHaveCount(0);
-  await expect(app.inspector.getByRole('button', { name: 'Load a folder for a1' })).toBeVisible();
-  await expect(app.inspector.getByRole('button', { name: 'Load a folder for a1' })).toHaveText(
-    /Load folder…/,
-  );
+  // `RUN-NEXT-VERSION-03` 1.4 — the book is named by its sequence (`Sequence`), never its key `a1`.
+  await expect(
+    app.inspector.getByRole('button', { name: 'Load a folder for Sequence' }),
+  ).toBeVisible();
+  await expect(
+    app.inspector.getByRole('button', { name: 'Load a folder for Sequence' }),
+  ).toHaveText(/Load folder…/);
 
   const counter = app.inspector.getByTestId('book-counter');
   await expect(counter).toHaveText('1 / 87');
@@ -43,9 +46,11 @@ test('BOOK-EXPORT Q2 — the same book with no Data key is a book too', async ({
   );
   await app.selectStackRow(templateId);
   await expect(app.inspector.getByTestId('book-counter')).toHaveText('1 / 4');
+  // `RUN-NEXT-VERSION-03` 1.4 — its field is `pages-${TELAVAT2_SEQUENCE}`; the operator reads its name.
   await expect(
-    app.inspector.getByRole('button', { name: `Load a folder for pages-${TELAVAT2_SEQUENCE}` }),
+    app.inspector.getByRole('button', { name: 'Load a folder for Sequence' }),
   ).toBeVisible();
+  await expect(app.inspector.getByText(`pages-${TELAVAT2_SEQUENCE}`)).toHaveCount(0);
 });
 
 /*

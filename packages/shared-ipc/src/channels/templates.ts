@@ -311,6 +311,11 @@ export const TemplateInfoSchema = z.object({
         wrap: z.boolean(),
         /** `D-163` — `false`: the operator loads this book's pictures but does not step it. */
         step: z.literal(false).optional(),
+        /**
+         * `RUN-NEXT-VERSION-03` 1.4 — the sequence's name: the book's heading when its field has no
+         * Title of its own. Optional + additive: a template imported before it has none.
+         */
+        name: z.string().min(1).max(200).optional(),
       }),
     )
     .optional(),

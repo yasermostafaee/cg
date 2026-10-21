@@ -18,6 +18,11 @@ export interface PageListInfo {
    * pictures are still the operator's to load, but no console verb turns them. Absent ⇒ steps.
    */
   step?: false;
+  /**
+   * `RUN-NEXT-VERSION-03` 1.4 — the SEQUENCE's name, which CG Control heads the book with when the author
+   * gave its field no Title (never the field's id). Absent for a nameless sequence.
+   */
+  name?: string;
 }
 
 type ListField = Extract<DynamicField, { type: 'list' }>;
@@ -103,6 +108,7 @@ export function pageListsOf(scene: Scene): PageListInfo[] {
         fieldId: field.id,
         wrap: sequence.repeat === 'infinite',
         ...(sequenceStepsByOperator(sequence) ? {} : { step: false as const }),
+        ...(sequence.name.trim() !== '' ? { name: sequence.name.trim() } : {}),
       });
     }
   }

@@ -21,6 +21,9 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
   (never up); over 4 MB → re-encoded; PNG when transparent, else JPEG 0.92. One line says it
   (`12 pictures were resized to fit 1920×1080`); only what is still over the cap is refused, by name.
   The bridge's own check stays the guard.
+- **1.4 — The book block.** One block on one grid: headed by the book's name (never its field id — and no
+  Inspector heading prints a field id any more), always saying where its pages come from and whether they are
+  on the row, a strip of the pages around the current one, a turning row and a loading row.
 - **1.6 — A book with text pages stays a book** (the owner's decision). The one rule
   (`sequenceItemsBinding`): at least one picture, every other item a text page; only a composition item
   makes a sequence unbindable, and the Designer says so in one sentence. CG Control's loads replace the

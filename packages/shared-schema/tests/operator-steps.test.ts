@@ -97,9 +97,9 @@ describe('D-163 — a page list says when the operator does not step it', () => 
         ],
         bindings: [{ fieldId: 'pages', target: { kind: 'sequence-items', elementId: 'book' } }],
       } as unknown as Partial<Scene>);
-    expect(pageListsOf(book({}))).toEqual([{ fieldId: 'pages', wrap: false }]);
+    expect(pageListsOf(book({}))).toEqual([{ fieldId: 'pages', wrap: false, name: 'book' }]);
     expect(pageListsOf(book({ operatorSteps: false }))).toEqual([
-      { fieldId: 'pages', wrap: false, step: false },
+      { fieldId: 'pages', wrap: false, step: false, name: 'book' },
     ]);
   });
 });
@@ -139,7 +139,7 @@ describe('🔴 B-249 — pageListsOf resolves the ENTRY by id, and a miss is NOT
     } as unknown as Partial<Scene>);
 
   it('an id that names the composition reads its page list', () => {
-    expect(pageListsOf(withEntry('C'))).toEqual([{ fieldId: 'pages', wrap: false }]);
+    expect(pageListsOf(withEntry('C'))).toEqual([{ fieldId: 'pages', wrap: false, name: 'book' }]);
   });
 
   it('a DANGLING id reads nothing — never "whichever composition is first"', () => {
