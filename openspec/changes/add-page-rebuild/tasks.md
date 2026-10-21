@@ -41,9 +41,11 @@
       sweep; the plan (once per template, legacy listed, newer builder left alone); a rebuild
       swaps at a new path; held back while busy, swapped when free; a failure kept, not
       re-offered, listed; stale answers change nothing
-- [x] 5.2 `tools/caspar-bridge/tests/template-rebuild.integration.test.ts` — on air, then
-      stopped with its page loaded: held back; cleared: swapped in at a new path, one audit row,
-      and the next take's `CG ADD` loads it. Ablated (`#mayBeOnALayer` always free): red
+- [x] 5.2 `tools/caspar-bridge/tests/template-rebuild.integration.test.ts` — on air: held back;
+      stopped (`RUN-NEXT-VERSION-02` Q11, which superseded "stopped: held back; cleared: swapped
+      in"): swapped in at a new path, the stopped page untouched and still served, one audit row;
+      after a Clear the next take's `CG ADD` loads it. Ablated (`#mayBeOnALayer` always free): red;
+      the old predicate (`loaded` holds back): red at the stopped step
 - [x] 5.3 `apps/runtime/tests/template-rebuild.test.ts` — the verified bytes are the ones kept;
       a bridge that refuses keeps nothing; the pass rebuilds through the import's path; a
       tampered package fails `verify` and is reported, never built; a hash mismatch is

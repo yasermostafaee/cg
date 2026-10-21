@@ -82,11 +82,15 @@ A row's `CG ADD` records a HOLD (`itemId → versionId`), and an ADD in flight P
 is when either:
 
 - the old version is pinned; or
-- any row holding it is in any state but `idle`. That covers on air, exiting, `loaded`, unconfirmed,
-  error, or a row the stack does not know (not yet restored).
+- any row holding it may have it live: on air, playing, updating, exiting, unconfirmed, unverified,
+  error, disconnected, or a row the stack does not know (not yet restored).
 
-A STOPPED row settles to `loaded` (`reconciler.ts:789`, `B-053`) and its page stays on its layer, so
-it waits too. Only `idle`, the layer emptied by a CLEAR or a removal, frees it.
+**Superseded by `RUN-NEXT-VERSION-02` Q11 (the owner, 2026-10-16):** a STOPPED row settles to `loaded`
+(`reconciler.ts:789`, `B-053`) with its page still on its layer, and it used to make the rebuild wait
+until it was cleared — one stopped row kept every row and channel on the old page. Now `loaded` frees
+it, as `idle` does. Nothing a swap does reaches that layer: the row holds its version, which stays
+stored and served at its old path, and its resident page plays on until its next ADD (after a Clear,
+or a reload).
 
 The check is re-asked on every `item-changed` and `item-removed` (`:2399`) and after every ADD
 settles. The first change that frees the old page swaps every channel list over to the new one.
@@ -126,6 +130,7 @@ The old page stays stored and served at its own path while any row holds it. Tha
 
 ## Risks
 
-- A station whose rows are never cleared keeps the old page for those templates until they are. That
-  is the hard stop working as intended; the confirmation names the held-back templates.
+- A station whose rows are never taken off air keeps the old page for those templates until they are
+  stopped (Q11). That is the hard stop working as intended; the confirmation names the held-back
+  templates. A stopped row plays its resident page until its next ADD.
 - After a CG Bridge restart, a held-back swap is forgotten. The next connect rebuilds that page again.

@@ -42,18 +42,20 @@ never built.
 ### Requirement: A rebuilt page SHALL never land under a page on a layer
 
 A rebuilt page SHALL be stored as a new version at a new serve path (`<templateId>~<version>`). While
-an ADD of the old page is in flight, or any row holding it is in any state but `idle` (on air,
-exiting, loaded with its page on the layer, unconfirmed, or not known), CG Bridge SHALL hold the
-rebuilt page back and change nothing any channel's list names. The first row change that frees the
-old page SHALL swap every list that names it over to the rebuilt page. The old page SHALL stay stored
-and served while any row holds it.
+an ADD of the old page is in flight, or any row holding it may have it live (on air, playing, updating,
+exiting, unconfirmed, unverified, in error, disconnected, or not known), CG Bridge SHALL hold the
+rebuilt page back and change nothing any channel's list names. A row that is `idle`, or `loaded` —
+stopped with its page still on the layer, or cued — SHALL NOT hold it back (`RUN-NEXT-VERSION-02` Q11,
+the owner). The first row change that frees the old page SHALL swap every list that names it over to
+the rebuilt page. The old page SHALL stay stored and served while any row holds it, and a stopped row
+keeps playing its resident page until its next ADD.
 
-#### Scenario: An on-air page is not rebuilt until it is off
+#### Scenario: An on-air page is not rebuilt until it is stopped
 
-- **WHEN** a rebuilt page arrives for a template whose row is on air, and then stopped with its page on the layer
+- **WHEN** a rebuilt page arrives for a template whose row is on air
 - **THEN** the channel's list, the served path and the page on air are unchanged
-- **AND WHEN** the row is cleared
-- **THEN** the list names the rebuilt page at a new path, and the next take loads it
+- **AND WHEN** the row is stopped, its page still on the layer
+- **THEN** the list names the rebuilt page at a new path, the stopped page is untouched and still served, and after a Clear the next take loads the rebuilt page
 
 #### Scenario: A page on no layer is swapped at once
 
@@ -98,5 +100,5 @@ releases (`0.11.6 → 0.12.0`) and carry the runtime fingerprints on hover.
 
 #### Scenario: One row per rebuild
 
-- **WHEN** a held-back rebuild is swapped in after its row is cleared
+- **WHEN** a held-back rebuild is swapped in after its row is stopped
 - **THEN** exactly one `template-rebuild` row records it, naming the template and both runtimes

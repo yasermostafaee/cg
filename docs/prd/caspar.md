@@ -2335,11 +2335,12 @@ slipped in — see the open question.
 - WHEN a console whose template runtime differs from a kept page's connects THEN it rebuilds that page
   from the kept package through the import's own verify → unpack → bake, and the new page is served
   at a new path (`<templateId>~<version>`)
-- WHEN a row holding the old page is on air, exiting, loaded (a stopped row keeps its page on its
-  layer), unconfirmed or not known THEN the rebuilt page is held back and nothing is swapped under it;
-  the first change that leaves no such row swaps it in
+- WHEN a row holding the old page is on air, exiting, unconfirmed or not known THEN the rebuilt page is
+  held back and nothing is swapped under it; the first change that leaves no such row swaps it in. A
+  STOPPED row (`loaded`, its page still on its layer) does not hold it back — `RUN-NEXT-VERSION-02` Q11,
+  the owner, 2026-10-16; it plays its resident page until its next ADD
 - WHEN the pass rebuilt or held back anything THEN the operator reads ONE confirmation — how many, and
-  by name which wait for their row to be cleared — never a per-template list of the rebuilt ones, and
+  by name which wait for their row to be stopped — never a per-template list of the rebuilt ones, and
   never a progress dialog
 - WHEN a rebuild fails (the package no longer verifies, the bake throws) THEN the old page stays, the
   operator reads ONE sentence naming it and saying to import it again, and the same runtime does not

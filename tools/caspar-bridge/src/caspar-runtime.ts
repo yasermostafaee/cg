@@ -14534,18 +14534,24 @@ export class CasparRuntime {
   }
 
   /**
-   * 🔴 `PAGE-REBUILD-01` — **COULD A ROW HAVE THIS PAGE ON A LAYER NOW?** Yes while a `CG ADD` of it
-   * is in flight, and while any row holding it is in any state but `idle`: on air, exiting, loaded
-   * (a stopped row keeps its page on its layer — `B-053`), unconfirmed, or not known at all (a row
-   * the stack has not restored yet). Only `idle` — the layer emptied — frees it. Deliberately the
-   * cautious answer: a rebuild that waits costs nothing, one that lands under a live page would
-   * break the hard stop.
+   * 🔴 `PAGE-REBUILD-01` — **COULD A ROW HAVE THIS PAGE LIVE ON A LAYER NOW?** Yes while a `CG ADD` of
+   * it is in flight, and while any row holding it is on air, playing, updating, exiting, unconfirmed,
+   * unverified, in error, disconnected, or not known at all (a row the stack has not restored yet).
+   * Deliberately the cautious answer for every state that may be live: a rebuild that waits costs
+   * nothing, one that lands under a live page would break the hard stop.
+   *
+   * 🔴 `RUN-NEXT-VERSION-02` Q11 (the owner) — **A STOPPED ROW LETS ITS TEMPLATE'S REBUILD THROUGH.**
+   * `loaded` — stopped, its page still resident (`B-053`), or cued and never played — held the
+   * rebuild back until the row was cleared, so one stopped row kept every row and channel on the old
+   * page. Nothing a swap does reaches that layer: the row HOLDS its version (`hold`), which stays
+   * stored and served at its old path while it does, and its resident page plays on as it is. The
+   * rebuilt page reaches that row at its next `CG ADD` — after a Clear, or a reload.
    */
   #mayBeOnALayer(versionId: string): boolean {
     if (this.#templates.isPinned(versionId)) return true;
     return this.#templates.holdersOf(versionId).some((itemId) => {
       const item = this.#reconciler.get(itemId);
-      return item === null || item.status !== 'idle';
+      return item === null || (item.status !== 'idle' && item.status !== 'loaded');
     });
   }
 

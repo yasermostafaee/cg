@@ -151,9 +151,12 @@ export function rebuildFailedLine(
 
 /**
  * 🔴 `C-034`'s acceptance — **ONE CONFIRMATION FOR A PASS THAT REBUILT OR HELD BACK ANYTHING**: how
- * many, and — by name — which wait for their row to be cleared. Never a per-template list of the
+ * many, and — by name — which wait for their row to be stopped. Never a per-template list of the
  * rebuilt ones (the Log has a row each) and never a progress dialog. `null` when the pass did
  * nothing worth saying.
+ *
+ * `RUN-NEXT-VERSION-02` Q11 — a held-back page waits only for a row that is ON AIR now: a stopped
+ * row lets it through, so the wait ends when the row is stopped (it used to read "cleared").
  */
 export function rebuiltLine(
   result: Pick<RebuildPassResult, 'rebuilt' | 'deferred'>,
@@ -165,7 +168,7 @@ export function rebuiltLine(
   const names = result.deferred.map((t) => `“${templateDisplayName(t)}”`).join(', ');
   const verb =
     result.deferred.length === 1 ? 'waits until its row is' : 'wait until their rows are';
-  return `${head} · ${names} ${verb} cleared`;
+  return `${head} · ${names} ${verb} stopped`;
 }
 
 /**

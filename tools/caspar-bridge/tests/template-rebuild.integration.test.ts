@@ -13,9 +13,10 @@ import { twoChannelRig, waitUntil, type TwoChannelRig } from './support/two-chan
  *
  * The whole bridge on a loopback AMCP fake: a template imported by the old runtime with its package
  * kept is put on air on CH 1, and a console sends the page rebuilt by a new runtime. While the row is
- * on air — and while it is stopped with its page still loaded on the layer — the channel's list,
- * the served path and the page on air are untouched. The row is cleared, and only then does the
- * list move to the rebuilt page, at a new path; one audit row says so; the next take loads it.
+ * on air the channel's list, the served path and the page on air are untouched. When the row STOPS
+ * (`RUN-NEXT-VERSION-02` Q11: a stopped row lets the rebuild through) the list moves to the rebuilt
+ * page, at a new path, while the stopped page stays on its layer and is still served; one audit row
+ * says so; after a Clear the next take loads the rebuilt page.
  */
 
 const OLD: PageBuild = { consoleVersion: '0.11.6', runtimeBuild: 'aaaaaaaaaaaaaaaa' };
@@ -64,7 +65,7 @@ const lastAddPath = (rig: TwoChannelRig): string =>
   (rig.mock.lastCgAdd({ channel: 1, layer: 99 })?.template ?? '').split('?')[0] ?? '';
 
 describe('PAGE-REBUILD-01 — nothing on air or loaded is touched by a rebuild', () => {
-  it('🔴 on air, then stopped with its page on the layer: held back; cleared: swapped in at a new path, audited once, and the next take loads it', async () => {
+  it('🔴 on air: held back; stopped (Q11): swapped in at a new path, the stopped page untouched and still served, audited once; after a Clear the next take loads it', async () => {
     const rig = await station();
     const rt = rig.handle.runtime;
     const v1 = importKept(rig);
@@ -90,25 +91,30 @@ describe('PAGE-REBUILD-01 — nothing on air or loaded is touched by a rebuild',
     expect(rt.templateHtml('news', 1)).toBe(V1);
     expect(await rt.auditRecent(50, 'template-rebuild')).toEqual([]);
 
-    // STOPPED: the page is still loaded on the layer, so it still waits.
+    /*
+      STOPPED — `RUN-NEXT-VERSION-02` Q11 (the owner): a stopped row lets the rebuild through. The
+      list moves to the rebuilt page, at a new path, the moment the row stops; the stopped page is
+      untouched on its layer and still served from its old path (the row holds it).
+    */
+    const linesBeforeStop = (await rig.lines()).length;
     await rt.stopItem('row-ch1');
     await waitUntil(
       async () => (await rig.lines()).some((l) => l.startsWith('CG 1-99 STOP')),
       'the stop',
     );
     await waitUntil(
-      () => rt.stackSnapshot().find((i) => i.itemId === 'row-ch1')?.status === 'loaded',
-      'the stopped row to settle as loaded',
-    );
-    expect(rt.templateServeUrl('news', 1)?.endsWith(`/template/news~${v1}`)).toBe(true);
-
-    // CLEARED: the layer is empty, so the rebuilt page is swapped in — at a new path.
-    expect((await rt.out('row-ch1')).accepted).toBe(true);
-    await waitUntil(
       () => rt.templateServeUrl('news', 1)?.endsWith(`/template/news~${v2}`) === true,
-      'the rebuilt page to be listed once the row is cleared',
+      'the rebuilt page to be listed once the row is stopped',
     );
+    expect(rt.stackSnapshot().find((i) => i.itemId === 'row-ch1')?.status).toBe('loaded');
     expect(rt.templateHtml('news', 1)).toBe(V2);
+    expect(await get(onAirPath)).toEqual({ status: 200, body: V1 });
+    // Nothing but the STOP itself reached the layer.
+    expect(
+      (await rig.lines())
+        .slice(linesBeforeStop)
+        .filter((l) => l.startsWith('CG 1-99') && !l.startsWith('CG 1-99 STOP')),
+    ).toEqual([]);
     const rows = await rt.auditRecent(50, 'template-rebuild');
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
@@ -118,7 +124,8 @@ describe('PAGE-REBUILD-01 — nothing on air or loaded is touched by a rebuild',
       rebuild: { name: 'خبر فوری', from: OLD, to: NEW },
     });
 
-    // The next take loads the rebuilt page, from its new path.
+    // CLEARED, the next take loads the rebuilt page, from its new path.
+    expect((await rt.out('row-ch1')).accepted).toBe(true);
     expect((await rt.take('row-ch1')).accepted).toBe(true);
     await waitUntil(
       () => lastAddPath(rig).endsWith(`/template/news~${v2}`),

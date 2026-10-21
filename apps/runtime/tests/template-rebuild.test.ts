@@ -335,11 +335,12 @@ describe('PAGE-REBUILD-01 — the operator is told once, in his words', () => {
     expect(rebuiltLine({ rebuilt: 3, deferred: [] })).toBe(
       'Rebuilt for this CG Control · 3 templates',
     );
+    // `RUN-NEXT-VERSION-02` Q11 — only a row ON AIR holds a rebuild back; stopping it lets it through.
     expect(rebuiltLine({ rebuilt: 1, deferred: [t('خبر')] })).toBe(
-      'Rebuilt for this CG Control · 2 templates · “خبر” waits until its row is cleared',
+      'Rebuilt for this CG Control · 2 templates · “خبر” waits until its row is stopped',
     );
     expect(rebuiltLine({ rebuilt: 0, deferred: [t('A'), t('B')] })).toBe(
-      'Rebuilt for this CG Control · 2 templates · “A”, “B” wait until their rows are cleared',
+      'Rebuilt for this CG Control · 2 templates · “A”, “B” wait until their rows are stopped',
     );
   });
 });
