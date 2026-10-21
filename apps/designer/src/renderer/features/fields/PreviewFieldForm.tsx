@@ -11,7 +11,7 @@ import {
   type NestedFieldValues,
 } from '@cg/shared-schema';
 import { Check, TriangleAlert } from 'lucide-react';
-import { latinNumerals, writeFieldDigits, type DigitSet } from '@cg/text-shaping';
+import { valueMatchesPattern, writeFieldDigits, type DigitSet } from '@cg/text-shaping';
 import { cx } from '../../cx.js';
 import { keyboardLanguage } from '../../keyboardLanguage.js';
 import { Button } from '../../ui/Button.js';
@@ -601,20 +601,16 @@ export function validateField(field: DynamicField, value: FieldValue | undefined
   if (field.type === 'text' && field.maxLength !== undefined && len > field.maxLength) {
     return `Max ${String(field.maxLength)} characters`;
   }
-  if (field.pattern !== undefined && str !== '') {
-    try {
-      /*
-        `PERSIAN-DIGITS-01` — a pattern is written with Latin classes (`[0-9]`, `\d`), and the
-        author types on a Persian keyboard: the `Time (HH:MM)` preset refused `۲۱:۳۰`. So a value
-        is accepted when it matches as typed OR with its digits, `٫` and `٬` read as Latin. The
-        VALUE is not rewritten, and no stored pattern is — templates already exported carry the
-        old presets, and reading the value is the fix that reaches them.
-      */
-      const re = new RegExp(field.pattern);
-      if (!re.test(str) && !re.test(latinNumerals(str))) return `Doesn't match ${field.pattern}`;
-    } catch {
-      /* an invalid pattern is a field-config issue, not a value error */
-    }
+  /*
+    `PERSIAN-DIGITS-01` — a pattern is written with Latin classes (`[0-9]`, `\d`), and the author
+    types on a Persian keyboard: the `Time (HH:MM)` preset refused `۲۱:۳۰`. So a value is accepted
+    when it matches as typed OR with its digits, `٫` and `٬` read as Latin. The VALUE is not
+    rewritten, and no stored pattern is — templates already exported carry the old presets, and
+    reading the value is the fix that reaches them. `R-101` — the rule is `valueMatchesPattern`
+    now, the one CG Control asks too; an invalid pattern is a field-config issue, not a value error.
+  */
+  if (field.pattern !== undefined && !valueMatchesPattern(field.pattern, str)) {
+    return `Doesn't match ${field.pattern}`;
   }
   return null;
 }

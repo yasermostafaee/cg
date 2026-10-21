@@ -93,6 +93,26 @@ export function latinNumerals(text: string): string {
 }
 
 /**
+ * 🔴 `R-101` — **THE ONE ANSWER to "does this typed value satisfy a field's pattern?"** (golden rule 6),
+ * asked by the Designer's preview form and by CG Control before an Update. A pattern is written with
+ * Latin classes (`[0-9]`, `\d`) and the operator types on a Persian keyboard, so a value passes when
+ * the pattern matches it as typed OR read with Latin digits ({@link latinNumerals}): `۲۰:۳۲` is a
+ * time. The VALUE is never rewritten. An empty value passes (whether one is required is the field's
+ * Required rule), and so does a pattern that is not a valid regex (a template's fault, never the
+ * operator's — and refusing every value for it would lock the field).
+ */
+export function valueMatchesPattern(pattern: string, value: string): boolean {
+  if (value === '') return true;
+  let re: RegExp;
+  try {
+    re = new RegExp(pattern);
+  } catch {
+    return true;
+  }
+  return re.test(value) || re.test(latinNumerals(value));
+}
+
+/**
  * The `HH:mm[:ss]` shape, over CANONICAL Latin digits. The on-air countdown, the schema's
  * `timeofday` target (`@cg/shared-schema`, author-time) and this reader must agree; the schema
  * spells the same constraint and is not imported here to keep zod out of the on-air bundle.

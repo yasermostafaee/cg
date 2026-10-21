@@ -824,6 +824,53 @@ export async function buildListFieldVcg(templateId = 'tpl-e2e-list'): Promise<Ui
 }
 
 /**
+ * `R-101` — a verifiable `.vcg` whose text field `azanTime` ("Azan time") carries the Designer's
+ * `Time (HH:MM)` preset as its `pattern`, bound into the fixture's text, as an azan template's is.
+ */
+export async function buildPatternFieldVcg(templateId = 'tpl-e2e-pattern'): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  const text = scene.layers[0]?.children[0];
+  if (text === undefined || text.type !== 'text') throw new Error('fixture scene has no text');
+  text.text = '{{anchor}} {{azanTime}}';
+  scene.fields = [
+    ...scene.fields,
+    {
+      id: 'azanTime',
+      label: 'Azan time',
+      required: false,
+      type: 'text',
+      default: '20:32',
+      pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$',
+    },
+  ];
+  scene.bindings = [
+    ...scene.bindings,
+    {
+      fieldId: 'azanTime',
+      target: { kind: 'text', elementId: 'el-name', placeholder: '{{azanTime}}' },
+    },
+  ];
+  return pack({
+    scene,
+    manifestExtras: {
+      id: templateId,
+      name: 'e2e-azan',
+      authoring: {
+        designerVersion: '0.0.0',
+        createdAt: '2026-10-16T00:00:00.000Z',
+        exportedAt: '2026-10-16T00:01:00.000Z',
+      },
+      compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+      fontDeps: scene.fonts,
+      assetIndex: [],
+    },
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
+/**
  * `R-100` — a verifiable `.vcg` carrying a BOOK: a picture sequence (manual, one pass, Cut) bound
  * to a `list` field marked as a page list (`pages`). Its own pages are empty — the operator loads
  * them. CG Control's import records it as the template's page list (`TemplateInfo.pageLists`).

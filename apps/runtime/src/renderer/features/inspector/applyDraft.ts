@@ -7,6 +7,7 @@ import { commitSourceAssignments, currentSourceAssignments } from '../sources/so
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import { isPositionLocked } from './PositionPicker.js';
 import { recordSentPasses } from './timingSent.js';
+import { patternRefusalsOf } from './patternCheck.js';
 import {
   buildApplyPayload,
   buildLookBindingsPayload,
@@ -48,8 +49,22 @@ export function applyDraft(
    * `undefined` is a real answer — an old import states no mode — and admits no timing.
    */
   playout?: TemplateInfo['playout'] | undefined,
+  /** `R-101` — the template's field form, so a staged value its pattern refuses is never sent. */
+  template?: Pick<TemplateInfo, 'fields' | 'groups'> | undefined,
 ): Promise<{ accepted: boolean; errorCode?: string | undefined }> {
   const sent = snapshotDraft(item.itemId);
+  /*
+    🔴 `R-101` — **A VALUE ITS FIELD'S PATTERN REFUSES IS NOT SENT, AND NEITHER IS THE REST OF THE
+    PRESS.** Checked here, on the ONE path the Inspector's Update and the row's UPDATE share, so the
+    two cannot disagree. Nothing leaves this console: one press is one commit, and half of it on air
+    with the mistyped half dropped is not what the operator pressed. The field says why, under it.
+  */
+  const refused = template === undefined ? [] : patternRefusalsOf(template, sent);
+  const first = refused[0];
+  if (first !== undefined) {
+    reportCommandError(`Not sent: ${first.label} — ${first.line}`);
+    return Promise.resolve({ accepted: false, errorCode: 'pattern' });
+  }
   const plates = snapshotPlateDraft(item.itemId);
   /*
     🔴 **BM-2 §4.1 — THE PER-LOOK BINDINGS RIDE THE FIELD UPDATE, IN ONE CALL.**

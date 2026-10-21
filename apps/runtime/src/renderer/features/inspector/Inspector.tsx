@@ -51,6 +51,7 @@ import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import { CountdownTargetField } from './CountdownTargetField.js';
 import { PageListEditor } from './PageListEditor.js';
+import { fieldPatternRefusal } from './patternCheck.js';
 import { BookBar } from './BookBar.js';
 import { bookOf, type RowBook } from '../layers/bookOf.js';
 import { LivePlatesSection } from './LivePlatesSection.js';
@@ -1083,6 +1084,7 @@ function FieldEditor({
   const value = effectiveValue(itemId, path, applied);
   const kind = field?.type ?? inferKind(value);
   const dirty = isFieldDirty(itemId, path, applied);
+  const patternLine = fieldPatternRefusal(field, value);
   const stage = (next: FieldValue): void => stageField(itemId, path, next);
   const unstage = (): void => unstageField(itemId, path);
   /*
@@ -1157,6 +1159,14 @@ function FieldEditor({
             The difference is not cosmetic bookkeeping: a list is the only kind
             with a second footer control to share a row with. */}
         {fromFileKind !== undefined && kind !== 'list' && fromFile}
+        {/* 🔴 `R-101` — a STAGED value its field's pattern refuses says so here, under it, in the
+            form's own words; Update sends nothing while it stands (`applyDraft`). An applied value
+            is not this press's to judge, so only a draft is checked. */}
+        {dirty && patternLine !== null && (
+          <p style={styles.refusal} data-field-refusal={fieldId}>
+            {patternLine}
+          </p>
+        )}
         {book !== null && <BookBar itemId={itemId} book={book} />}
       </div>
     </div>

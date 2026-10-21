@@ -124,8 +124,13 @@ export function App(): JSX.Element {
   const templates = useTemplateIndex(
     items.map((i) => ({ templateId: i.templateId, channel: boundChannelOf(i, fixedSlots) })),
   );
-  const playoutOfItem = (item: StackItemState): TemplateInfo['playout'] | undefined =>
-    templates.get(item.templateId, boundChannelOf(item, fixedSlots))?.playout;
+  const templateOfItem = (item: StackItemState): TemplateInfo | undefined =>
+    templates.get(item.templateId, boundChannelOf(item, fixedSlots)) ?? undefined;
+  /** An Update's press: the row's draft, with its template's playout and (`R-101`) field form. */
+  const applyItem = (item: StackItemState): ReturnType<typeof applyDraft> => {
+    const template = templateOfItem(item);
+    return applyDraft(item, template?.playout, template);
+  };
   // B-156 — read ONCE here and threaded to both the layer table and the Inspector.
   const rehearsals = useRehearse();
   const lock = useLock();
@@ -518,7 +523,7 @@ export function App(): JSX.Element {
                       onUpdate={(id) => {
                         const target = items.find((i) => i.itemId === id);
                         return target !== undefined
-                          ? applyDraft(target, playoutOfItem(target))
+                          ? applyItem(target)
                           : Promise.resolve({ accepted: false });
                       }}
                     />
@@ -546,7 +551,7 @@ export function App(): JSX.Element {
                 onApply={(id) => {
                   const target = items.find((i) => i.itemId === id);
                   return target !== undefined
-                    ? applyDraft(target, playoutOfItem(target))
+                    ? applyItem(target)
                     : Promise.resolve({ accepted: false });
                 }}
                 onDiscard={(id) => clearDraft(id)}
@@ -600,7 +605,7 @@ export function App(): JSX.Element {
                 onApply={(id) => {
                   const target = items.find((i) => i.itemId === id);
                   return target !== undefined
-                    ? applyDraft(target, playoutOfItem(target))
+                    ? applyItem(target)
                     : Promise.resolve({ accepted: false });
                 }}
                 onDiscard={(id) => clearDraft(id)}
