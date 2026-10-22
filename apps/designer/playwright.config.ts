@@ -85,8 +85,12 @@ function resolveWorkers(): number | undefined {
  * the suite now needs ~8.2 min on the 4-core runner (it measured 5.7–6.8 before this run added the
  * steps, the date and time control, the Steps dialog, the picker and the timeline-sound specs). The
  * sum the cap allows still has room: 10 + 14 = 24 against ~27.4 usable (see the runtime config).
+ *
+ * 🔴 **RAISED 2026-10-22 (`RUN-NEXT-VERSION-03`), 10 → 11, with the cap (`30 → 35`) — flagged as shared
+ * CI config.** Run 39629476965: this suite used 9.3 of its 10.0 (`343 passed`), under 7 % headroom,
+ * while the Runtime suite ran out of its 14.0. 11 + 17 = 28 against ~32.4 usable (the runtime config).
  */
-const CI_GLOBAL_TIMEOUT_MS = 10 * 60_000;
+const CI_GLOBAL_TIMEOUT_MS = 11 * 60_000;
 
 const workers = resolveWorkers();
 

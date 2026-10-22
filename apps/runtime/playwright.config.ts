@@ -125,8 +125,18 @@ function resolveWorkers(): number | undefined {
  * 38668193061 (`15be0821`): the Designer suite ran out of its 8.0 having failed nothing
  * (`331 passed`, `2 did not run`); this suite used 12.9 of its 14.0 in the same run. 10 + 14 = 24
  * against ~27.4 usable — 3.4 min of margin. The next growth of either suite needs the cap raised.
+ *
+ * 🔴 **RAISED 2026-10-22 (`RUN-NEXT-VERSION-03`), in its own commit and flagged as shared CI config —
+ * the cap WITH it, as the note above says.** Run 39629476965 (`4a5cd051`, 4-core runner, the suites one
+ * after the other) went red having failed nothing: this suite `350 passed`, `2 skipped`, the 353rd cut
+ * off by _"Timed out waiting 840s for the test suite to run"_ — the run added the book (PVW pictures,
+ * fitting, the block, Manage pages) and the masked date-and-time specs, ~368 tests now needing ~14.6
+ * min. The Designer suite used 9.3 of its 10.0 in the same run (under 7 % headroom). So: this budget
+ * `14 → 17` (~16 % over the measured need), the Designer's `10 → 11`, the job cap `30 → 35`.
+ * 11 + 17 = 28 against 35 − ~1.6 setup − ~1 build = ~32.4 usable — 4.4 min of margin. The next growth
+ * redoes this arithmetic again, here.
  */
-const CI_GLOBAL_TIMEOUT_MS = 14 * 60_000;
+const CI_GLOBAL_TIMEOUT_MS = 17 * 60_000;
 
 export default defineConfig({
   globalTimeout: process.env.CI ? CI_GLOBAL_TIMEOUT_MS : undefined,
