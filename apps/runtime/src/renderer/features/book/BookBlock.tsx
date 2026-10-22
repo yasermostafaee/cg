@@ -316,8 +316,10 @@ function BookStrip({
             {...(isCurrent ? { 'data-current': '' } : {})}
           >
             <PageFrame page={page} authored={authored} fit={fit} raster={raster} />
+            {/* A number readout is LTR chrome: in an RTL context `1 / 4` would be drawn `4 / 1`. */}
             <figcaption
               className="cg-book-thumb__num"
+              dir="ltr"
               {...(isCurrent ? { 'data-testid': 'book-counter' } : {})}
             >
               {isCurrent
@@ -469,7 +471,8 @@ function BookTurn({
           <Icon icon={ChevronLeft} size={13} flipRtl />
           Previous
         </Button>
-        <span className="cg-book__page">
+        {/* The page box and its ` / 87` are one LTR readout, whatever the panel's direction. */}
+        <span className="cg-book__page" dir="ltr">
           <TextInput
             className="cg-book-page"
             value={shown}

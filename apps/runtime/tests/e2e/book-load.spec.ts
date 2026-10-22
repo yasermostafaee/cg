@@ -45,6 +45,25 @@ async function dropPaths(page: Page, target: Locator, files: readonly string[]):
 
 const sources = (block: Locator): Locator => block.locator('[data-book-source]');
 
+/**
+ * The drawn order of a `n / N` readout: true when its first character is drawn LEFT of its last. Read
+ * from the engine's own glyph boxes — the text is the same string either way; only the bidi algorithm
+ * decides whether `1 / 4` is painted `4 / 1`.
+ */
+function readsLeftToRight(el: Element): boolean {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const node = walker.nextNode();
+  const text = node?.textContent ?? '';
+  if (node === null || text.length < 2) return false;
+  const at = (i: number): number => {
+    const range = document.createRange();
+    range.setStart(node, i);
+    range.setEnd(node, i + 1);
+    return range.getBoundingClientRect().left;
+  };
+  return at(0) < at(text.length - 1);
+}
+
 test('🔴 delta A — one Load pages… button: its menu holds Pictures… and Folder…, beside Manage pages…, on one line', async ({
   app,
 }) => {
@@ -148,6 +167,17 @@ test('delta A — the book block at 1280×720 and 200 % text, in RTL: no empty b
   const caption = block.locator('[data-book-thumb][data-current] figcaption');
   const captionAtRest = (await caption.boundingBox())?.height ?? 0;
 
+  // The instrument, proved live: a bare `1 / 4` in an RTL span IS drawn reversed, and it says so.
+  const planted = await page.evaluateHandle(() => {
+    const s = document.createElement('span');
+    s.dir = 'rtl';
+    s.textContent = '1 / 4';
+    document.body.append(s);
+    return s;
+  });
+  expect(await planted.evaluate(readsLeftToRight)).toBe(false);
+  await planted.evaluate((s) => s.remove());
+
   for (const [label, size, dir] of [
     ['1280×720', '', 'ltr'],
     ['1280×720 in RTL', '', 'rtl'],
@@ -183,6 +213,16 @@ test('delta A — the book block at 1280×720 and 200 % text, in RTL: no empty b
         (panel?.x ?? 0) + (panel?.width ?? 0) + 0.5,
       );
     }
+    // The readouts say `1 / 4`, never `4 / 1`: the strip's counter and the row's.
+    expect(await caption.evaluate(readsLeftToRight), `${label}: the strip's counter`).toBe(true);
+    const rowCounter = app.stackRow(templateId).first().locator('[data-page-counter]');
+    expect(await rowCounter.evaluate(readsLeftToRight), `${label}: the row's counter`).toBe(true);
+    // The page box, then its ` / 4`, left to right.
+    const pageBox = await block
+      .getByRole('textbox', { name: 'Page number of Sequence' })
+      .boundingBox();
+    const of = await block.locator('.cg-book__of').boundingBox();
+    expect((pageBox?.x ?? 0) < (of?.x ?? 0), `${label}: the page box before its / 4`).toBe(true);
     if (size === '200%') {
       // The positive control: the text really grew.
       expect((await caption.boundingBox())?.height ?? 0, label).toBeGreaterThan(

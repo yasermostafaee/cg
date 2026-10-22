@@ -1111,7 +1111,8 @@ export function LayerRow({
             title={`Page ${String(rowBook.page)} of ${String(rowBook.count)}`}
             aria-label={`Page ${String(rowBook.page)} of ${String(rowBook.count)}`}
           >
-            {`${String(rowBook.page)} / ${String(rowBook.count)}`}
+            {/* An LTR isolate: in an RTL context `1 / 3` would otherwise be drawn `3 / 1` (delta A). */}
+            <bdi dir="ltr">{`${String(rowBook.page)} / ${String(rowBook.count)}`}</bdi>
           </Tag>
         )}
         {item !== null &&
