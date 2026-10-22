@@ -3,6 +3,7 @@ import {
   followsComposition,
   pathVisualBBox,
   repeaterRowLimit,
+  sequencePictureFit,
 } from '@cg/shared-schema';
 import { writeFieldDigits } from '@cg/text-shaping';
 import type {
@@ -991,7 +992,7 @@ export function buildSequenceImageItem(
     type: 'image',
     assetId: item.assetId ?? '',
     source: 'project',
-    fit: element.imageFit ?? 'contain',
+    fit: sequencePictureFit(element),
     preserveAspect: true,
     transform: {
       position: { x: 0, y: 0 },

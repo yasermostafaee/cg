@@ -19,7 +19,8 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { Tag } from '../../ui/Tag.js';
-import { PageFace } from './BookBlock.js';
+import type { ImageFit } from '@cg/shared-schema';
+import { PageFrame } from './BookBlock.js';
 import { pictureName } from './bookFacts.js';
 import {
   freshTextPageId,
@@ -64,8 +65,10 @@ export interface ManagePagesModalProps {
   onAir: boolean;
   /** The row is in PVW: the current page of the opened book is marked `PVW`. */
   inPvw: boolean;
-  /** The row's channel frame — what an added picture is fitted to. */
+  /** The row's channel frame — what an added picture is fitted to, and every page's frame shape. */
   raster: Raster;
+  /** `RUN-NEXT-VERSION-03` delta A — the sequence's picture fit: every page is drawn at it. */
+  fit: ImageFit;
   /** The template's own pictures, by asset id. */
   authored: Readonly<Record<string, string>>;
   /** Stage the edited book. */
@@ -81,6 +84,7 @@ export function ManagePagesModal({
   onAir,
   inPvw,
   raster,
+  fit,
   authored,
   onDone,
   onClose,
@@ -263,9 +267,7 @@ export function ManagePagesModal({
                     </Tag>
                   )}
                 </div>
-                <div className="cg-book-thumb__frame">
-                  <PageFace page={page} authored={authored} />
-                </div>
+                <PageFrame page={page} authored={authored} fit={fit} raster={raster} />
                 <span className="cg-page-tile__name" title={label}>
                   <bdi>{isPicturePage(page) ? label : label === '' ? 'Text page' : label}</bdi>
                 </span>

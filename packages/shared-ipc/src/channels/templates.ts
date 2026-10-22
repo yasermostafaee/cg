@@ -3,6 +3,7 @@ import {
   CompositionFieldGroupSchema,
   DynamicFieldSchema,
   IdSchema,
+  ImageFitSchema,
   LiveSourceArrangementSchema,
   LiveFitModeSchema,
   LiveSourceDeclarationSchema,
@@ -316,6 +317,12 @@ export const TemplateInfoSchema = z.object({
          * Title of its own. Optional + additive: a template imported before it has none.
          */
         name: z.string().min(1).max(200).optional(),
+        /**
+         * `RUN-NEXT-VERSION-03` delta A — how the sequence fits its pictures (`sequencePictureFit`): the
+         * page thumbnails draw at it. Optional + additive: a template imported before it reads as the
+         * default, `contain`, until it is imported again.
+         */
+        fit: ImageFitSchema.optional(),
       }),
     )
     .optional(),

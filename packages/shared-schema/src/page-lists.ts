@@ -1,8 +1,10 @@
 import type { FieldBinding } from './bindings.js';
 import {
   sequenceItemsBinding,
+  sequencePictureFit,
   sequenceStepsByOperator,
   type Element,
+  type ImageFit,
   type SequenceElement,
 } from './elements.js';
 import type { DynamicField, ListItem } from './fields.js';
@@ -23,6 +25,11 @@ export interface PageListInfo {
    * gave its field no Title (never the field's id). Absent for a nameless sequence.
    */
   name?: string;
+  /**
+   * `RUN-NEXT-VERSION-03` delta A — how the sequence fits its pictures (`sequencePictureFit`): CG
+   * Control's page thumbnails draw each picture at it, as the air does.
+   */
+  fit: ImageFit;
 }
 
 type ListField = Extract<DynamicField, { type: 'list' }>;
@@ -109,6 +116,7 @@ export function pageListsOf(scene: Scene): PageListInfo[] {
         wrap: sequence.repeat === 'infinite',
         ...(sequenceStepsByOperator(sequence) ? {} : { step: false as const }),
         ...(sequence.name.trim() !== '' ? { name: sequence.name.trim() } : {}),
+        fit: sequencePictureFit(sequence),
       });
     }
   }

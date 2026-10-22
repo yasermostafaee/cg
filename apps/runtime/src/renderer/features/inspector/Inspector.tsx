@@ -15,6 +15,7 @@ import {
   type DynamicField,
   type FieldValue,
   type FieldValues,
+  type ImageFit,
   type StackItemState,
 } from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
@@ -803,6 +804,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
                   applied={valueAt(item.fields, [row.key])}
                   book={rowBook?.fieldId === row.key ? rowBook : null}
                   bookName={info?.pageLists?.find((l) => l.fieldId === row.key)?.name}
+                  bookFit={info?.pageLists?.find((l) => l.fieldId === row.key)?.fit}
                 />
               ))}
               {groups.map((group) => (
@@ -1069,6 +1071,7 @@ function FieldEditor({
   applied,
   book = null,
   bookName,
+  bookFit,
 }: {
   field: DynamicField | null;
   path: FieldPath;
@@ -1078,6 +1081,8 @@ function FieldEditor({
   book?: RowBook | null;
   /** `RUN-NEXT-VERSION-03` 1.4 — the book's sequence name (`TemplateInfo.pageLists[].name`). */
   bookName?: string | undefined;
+  /** `RUN-NEXT-VERSION-03` delta A — the sequence's picture fit (`TemplateInfo.pageLists[].fit`). */
+  bookFit?: ImageFit | undefined;
 }): JSX.Element {
   const itemId = item.itemId;
   // The control's accessible name stays the FIELD id (not the full path): the operator
@@ -1158,6 +1163,7 @@ function FieldEditor({
             onStage={stage}
             applied={applied}
             onAir={isOnAirStatus(item)}
+            fit={bookFit}
           />
         ) : (
           <FieldControl

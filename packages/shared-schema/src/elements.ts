@@ -917,6 +917,15 @@ export function sequenceStepsByOperator(element: Pick<SequenceElement, 'operator
 }
 
 /**
+ * `RUN-NEXT-VERSION-03` delta A — **THE ONE ANSWER to "how does this sequence fit its pictures?"**: the
+ * page draws each picture item at it, and CG Control's page thumbnails draw at it, so the operator sees
+ * what the air shows. Absent is `contain`.
+ */
+export function sequencePictureFit(element: Pick<SequenceElement, 'imageFit'>): ImageFit {
+  return element.imageFit ?? 'contain';
+}
+
+/**
  * `TEXT-DIGITS-01` — THE ANSWER to "which digits is the text an author typed into this element drawn
  * in", read by the page and the Designer alike (golden rule 6): the element's choice, absent read as
  * `as-typed` (Keyboard) — the identity, so a template made before the setting draws unchanged.

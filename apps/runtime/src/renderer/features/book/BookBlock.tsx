@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ChevronLeft, ChevronRight, FolderOpen, Images, ListOrdered } from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
-import type { FieldValue } from '@cg/shared-schema';
+import type { FieldValue, ImageFit } from '@cg/shared-schema';
 import { parseLocalizedNumber } from '@cg/text-shaping';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -13,6 +13,7 @@ import type { RowBook } from '../layers/bookOf.js';
 import { bookPagesOf, isPicturePage, withPicturesReplaced, type BookPage } from './bookPages.js';
 import { bookSent, bookSource, bookSourceText, bookSourceWords, pictureName } from './bookFacts.js';
 import { loadPictures } from './loadPictures.js';
+import type { Raster } from './fitPicture.js';
 import { useAuthoredPictures } from './authoredPictures.js';
 import { ManagePagesModal } from './ManagePagesModal.js';
 import { useRehearse } from '../../hooks/useRehearse.js';
@@ -61,6 +62,11 @@ export interface BookBlockProps {
   applied: FieldValue | undefined;
   /** The row is on air (`isOnAirStatus`). */
   onAir: boolean;
+  /**
+   * `RUN-NEXT-VERSION-03` delta A — the sequence's picture fit (`TemplateInfo.pageLists[].fit`): every
+   * page face is drawn at it. Absent (a template imported before it) is `contain`, the default.
+   */
+  fit?: ImageFit | undefined;
 }
 
 export function BookBlock({
@@ -76,6 +82,7 @@ export function BookBlock({
   onStage,
   applied,
   onAir,
+  fit = 'contain',
 }: BookBlockProps): JSX.Element {
   const loaded = Array.isArray(value);
   const pages = bookPagesOf(loaded ? value : defaults);
@@ -124,7 +131,15 @@ export function BookBlock({
           {pages.length === 1 ? '1 page' : `${String(pages.length)} pages`}
         </span>
       </div>
-      <BookStrip title={title} pages={pages} current={current} book={book} authored={authored} />
+      <BookStrip
+        title={title}
+        pages={pages}
+        current={current}
+        book={book}
+        authored={authored}
+        fit={fit}
+        raster={raster}
+      />
       {book !== null && <BookTurn itemId={itemId} title={title} book={book} />}
       <div className="cg-book__row" data-book-load="">
         <Button
@@ -172,6 +187,7 @@ export function BookBlock({
           onAir={onAir}
           inPvw={inPvw}
           raster={raster}
+          fit={fit}
           authored={authored}
           onDone={(next) => {
             // `RUN-NEXT-VERSION-03` 1.5 — STAGED, like every Inspector edit: Update sends it.
@@ -192,12 +208,16 @@ function BookStrip({
   current,
   book,
   authored,
+  fit,
+  raster,
 }: {
   title: string;
   pages: readonly BookPage[];
   current: number;
   book: RowBook | null;
   authored: Readonly<Record<string, string>>;
+  fit: ImageFit;
+  raster: Raster;
 }): JSX.Element {
   const at = [current - 1, current, current + 1];
   return (
@@ -216,9 +236,7 @@ function BookStrip({
             data-book-thumb={isCurrent ? 'current' : slot === 0 ? 'before' : 'after'}
             {...(isCurrent ? { 'data-current': '' } : {})}
           >
-            <div className="cg-book-thumb__frame">
-              {page !== undefined && <PageFace page={page} authored={authored} />}
-            </div>
+            <PageFrame page={page} authored={authored} fit={fit} raster={raster} />
             <figcaption
               className="cg-book-thumb__num"
               {...(isCurrent ? { 'data-testid': 'book-counter' } : {})}
@@ -236,15 +254,48 @@ function BookStrip({
   );
 }
 
-/** One page's face: its picture, or a text page's words. */
+/**
+ * `RUN-NEXT-VERSION-03` delta A — **ONE PAGE AS THE AIR SHOWS IT**: the channel's frame shape (the row's
+ * raster) on PVW's checker, the picture at the sequence's own picture fit. The strip and `Manage pages…`
+ * both draw a page through this — never a second treatment.
+ */
+export function PageFrame({
+  page,
+  authored,
+  fit,
+  raster,
+}: {
+  page: BookPage | undefined;
+  authored: Readonly<Record<string, string>>;
+  fit: ImageFit;
+  raster: Raster;
+}): JSX.Element {
+  return (
+    <div
+      className="cg-book-thumb__frame"
+      data-page-fit={fit}
+      style={{ aspectRatio: `${String(raster.width)} / ${String(raster.height)}` }}
+    >
+      {page !== undefined && <PageFace page={page} authored={authored} fit={fit} raster={raster} />}
+    </div>
+  );
+}
+
+/** One page's face: its picture placed at the sequence's fit, or a text page's words. */
 export function PageFace({
   page,
   authored,
+  fit,
+  raster,
 }: {
   page: BookPage;
   authored: Readonly<Record<string, string>>;
+  fit: ImageFit;
+  raster: Raster;
 }): JSX.Element {
   useSyncExternalStore(subscribePictures, picturesVersion, picturesVersion);
+  // `none` draws the picture at its own size against the channel: its box needs its natural size.
+  const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
   const media = isPicturePage(page) ? page.media : undefined;
   useEffect(() => {
     if (media !== undefined) void ensurePicture(media);
@@ -269,7 +320,26 @@ export function PageFace({
   return url === undefined ? (
     <span aria-hidden="true" />
   ) : (
-    <img src={url} alt={name} title={name} draggable={false} />
+    <img
+      className="cg-page-pic"
+      data-fit={fit}
+      src={url}
+      alt={name}
+      title={name}
+      draggable={false}
+      onLoad={(e) => {
+        const img = e.currentTarget;
+        setNatural({ width: img.naturalWidth, height: img.naturalHeight });
+      }}
+      style={
+        fit === 'none' && natural !== null
+          ? {
+              width: `${String((natural.width / raster.width) * 100)}%`,
+              height: `${String((natural.height / raster.height) * 100)}%`,
+            }
+          : undefined
+      }
+    />
   );
 }
 

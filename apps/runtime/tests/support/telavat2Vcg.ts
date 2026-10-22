@@ -18,7 +18,14 @@ export const TELAVAT2_ID = '5c3c6424-3208-44e9-b235-2e9b4a23ef1b';
 export const TELAVAT2_SEQUENCE = 'el-1792090411157';
 
 export async function buildTelavat2Vcg(
-  opts: { templateId?: string; pages?: number; keyed?: boolean; textPageAfter?: number } = {},
+  opts: {
+    templateId?: string;
+    pages?: number;
+    keyed?: boolean;
+    textPageAfter?: number;
+    /** `RUN-NEXT-VERSION-03` delta A — the sequence's picture fit (the owner's file: `cover`). */
+    imageFit?: 'contain' | 'cover' | 'fill' | 'none' | 'fit-width' | 'fit-height';
+  } = {},
 ): Promise<Uint8Array> {
   const count = opts.pages ?? 87;
   const assets = new Map<string, Uint8Array>();
@@ -120,7 +127,7 @@ export async function buildTelavat2Vcg(
             transitionMs: 400,
             repeat: 1,
             digits: 'persian',
-            imageFit: 'cover',
+            imageFit: opts.imageFit ?? 'cover',
           },
         ],
       },
