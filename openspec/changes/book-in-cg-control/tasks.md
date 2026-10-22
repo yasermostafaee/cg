@@ -185,4 +185,9 @@
       two items, `Folder…` a folder picker, one aligned row; a folder and files dropped on the block; a folder
       and a file dropped on the dialog — through Chrome's own drag input with real paths; the block at
       1280×720 and 200 % text, in RTL); unit `page-lists.test.ts` (`fit`), `bookPages.model.test.ts`.
-- [ ] A.6 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] A.6 Measured at 1280×720 and 200 % text, in RTL, in Chrome (`book-load.spec.ts`). Found there: the
+      readouts were drawn `3 / 1` (the strip's counter, the page box, the row's counter in the table) — digits
+      reordered around the neutral `/`. A number readout is LTR chrome: `dir="ltr"` on the caption and the
+      page box, an LTR `<bdi>` in the row. Measured from the engine's glyph boxes, the instrument proved live on
+      a planted bare `1 / 4` in an RTL span.
+- [ ] A.7 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
