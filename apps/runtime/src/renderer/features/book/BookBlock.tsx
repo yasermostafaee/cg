@@ -10,7 +10,13 @@ import { Tag } from '../../ui/Tag.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
 import type { RowBook } from '../layers/bookOf.js';
-import { bookPagesOf, isPicturePage, withPicturesReplaced, type BookPage } from './bookPages.js';
+import {
+  bookPagesOf,
+  isPicturePage,
+  stripWindow,
+  withPicturesReplaced,
+  type BookPage,
+} from './bookPages.js';
 import { bookSent, bookSource, bookSourceText, bookSourceWords, pictureName } from './bookFacts.js';
 import { loadPictures } from './loadPictures.js';
 import type { Raster } from './fitPicture.js';
@@ -201,7 +207,11 @@ export function BookBlock({
   );
 }
 
-/** The page before, the page the row is on, the page after — each as the operator will see it. */
+/**
+ * Up to three pages around the one the row is on (`stripWindow`: never an empty box), each as the
+ * operator will see it, the current one marked wherever it sits. Nothing moves when a page turns: the
+ * strip is always three equal columns of frame-shaped faces (`controls.css`'s `.cg-book__strip`).
+ */
 function BookStrip({
   title,
   pages,
@@ -219,21 +229,20 @@ function BookStrip({
   fit: ImageFit;
   raster: Raster;
 }): JSX.Element {
-  const at = [current - 1, current, current + 1];
   return (
     <div
       className="cg-book__strip"
       role="group"
       aria-label={`${title} — pages around the current one`}
     >
-      {at.map((index, slot) => {
+      {stripWindow(pages.length, current).map((index, slot) => {
         const page = pages[index];
-        const isCurrent = slot === 1;
+        const isCurrent = index === current;
         return (
           <figure
             key={slot}
             className="cg-book-thumb"
-            data-book-thumb={isCurrent ? 'current' : slot === 0 ? 'before' : 'after'}
+            data-book-thumb={isCurrent ? 'current' : index < current ? 'before' : 'after'}
             {...(isCurrent ? { 'data-current': '' } : {})}
           >
             <PageFrame page={page} authored={authored} fit={fit} raster={raster} />
@@ -241,11 +250,9 @@ function BookStrip({
               className="cg-book-thumb__num"
               {...(isCurrent ? { 'data-testid': 'book-counter' } : {})}
             >
-              {page === undefined
-                ? ''
-                : isCurrent
-                  ? `${String(book?.page ?? index + 1)} / ${String(book?.count ?? pages.length)}`
-                  : String(index + 1)}
+              {isCurrent
+                ? `${String(book?.page ?? index + 1)} / ${String(book?.count ?? pages.length)}`
+                : String(index + 1)}
             </figcaption>
           </figure>
         );

@@ -3,6 +3,7 @@ import {
   bookPagesOf,
   freshTextPageId,
   movePage,
+  stripWindow,
   withPicturesReplaced,
   withPicturesSortedByName,
   withUniqueIds,
@@ -78,5 +79,21 @@ describe('1.6 — replace the pictures, keep the text pages in place', () => {
   it('a value is read defensively; a fresh text page id is unique', () => {
     expect(bookPagesOf([pic(1), { id: 'c', kind: 'composition' }, txt('a'), 3])).toHaveLength(2);
     expect(freshTextPageId([{ id: 'text-1', text: '' }, pic(1)])).toBe('text-2');
+  });
+});
+
+describe('🔴 delta A — the strip shows only pages that exist', () => {
+  it('first page: 1–3; middle: before, current, after; last page: the last three', () => {
+    expect(stripWindow(4, 0)).toEqual([0, 1, 2]);
+    expect(stripWindow(4, 1)).toEqual([0, 1, 2]);
+    expect(stripWindow(4, 2)).toEqual([1, 2, 3]);
+    expect(stripWindow(4, 3)).toEqual([1, 2, 3]);
+  });
+
+  it('a one- or two-page book shows only its pages; an empty book shows none', () => {
+    expect(stripWindow(1, 0)).toEqual([0]);
+    expect(stripWindow(2, 0)).toEqual([0, 1]);
+    expect(stripWindow(2, 1)).toEqual([0, 1]);
+    expect(stripWindow(0, 0)).toEqual([]);
   });
 });

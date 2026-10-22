@@ -275,7 +275,8 @@ test('1.4 — the strip draws the template’s own pages from the page the bridg
   const face = inspector(page).locator('[data-book-thumb="current"] img');
   await expect(face).toHaveAttribute('src', /^data:image\/png/, { timeout: 15_000 });
   expect(await face.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(8);
-  await expect(inspector(page).locator('[data-book-thumb="after"] img')).toHaveAttribute(
+  // On page 1 the strip holds pages 1–3 (delta A): the first page after the current one is page 2.
+  await expect(inspector(page).locator('[data-book-thumb="after"] img').first()).toHaveAttribute(
     'src',
     /^data:image\/png/,
   );

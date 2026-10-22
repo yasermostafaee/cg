@@ -130,3 +130,16 @@ export function freshTextPageId(taken: readonly BookPage[]): string {
     if (!ids.has(id)) return id;
   }
 }
+
+/**
+ * 🔴 `RUN-NEXT-VERSION-03` delta A — **THE STRIP'S PAGES: up to three that EXIST, around the current one.**
+ * The owner (2026-10-22): on page 1 the strip showed an empty box where no page before it exists. The
+ * window (0-based indices) is the page before, the current page and the page after where all three exist;
+ * on the first page it is pages 1–3, on the last page the last three, and a one- or two-page book shows
+ * only its own pages. `current` is clamped by the caller.
+ */
+export function stripWindow(count: number, current: number): number[] {
+  const shown = Math.min(3, Math.max(0, count));
+  const start = Math.min(Math.max(0, current - 1), count - shown);
+  return Array.from({ length: shown }, (_, i) => start + i);
+}
