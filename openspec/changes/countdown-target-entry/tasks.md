@@ -51,7 +51,7 @@ carried the defect is replaced by it.
 - [x] 2.1.7 Found, not changed: CG Control's `Popover` closes on any scroll beneath it, including the one
       a click that scrolled its own button into view starts (the scroll event lands a frame after the
       panel opens). A person sees the field before pressing its icon; the e2e brings it into view first.
-- [ ] 2.1.8 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] 2.1.8 Linux `e2e` discharged on the pushed commit — run URL: https://github.com/yasermostafaee/cg/actions/runs/39698919913 — `7eec321b` (carries every commit of this run), completed `success`, its E2E job RAN (Designer 343 passed, CG Control 367 passed)
 
 ## 2.3 — `Solar Hijri` → `Jalali` (FULL lane: a label shared by both apps; its pins)
 
@@ -70,4 +70,4 @@ carried the defect is replaced by it.
       default unchanged); `dateTimeInput.dom.test.ts` (the buttons read `Jalali`, `Gregorian`, `Lunar Hijri`;
       the facts say `Jalali`); Designer `date-time-input.dom.test.ts` (the options, by value and label);
       e2e `countdown-target.spec.ts` and Designer `date-time-input.spec.ts` (the same, in Chrome).
-- [ ] 2.3.5 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] 2.3.5 Linux `e2e` discharged on the pushed commit — run URL: https://github.com/yasermostafaee/cg/actions/runs/39698919913 — `7eec321b` (carries every commit of this run), completed `success`, its E2E job RAN (Designer 343 passed, CG Control 367 passed)

@@ -229,7 +229,7 @@ function FieldMeta({
         {field.pages === true ? (
           <p className={s.hint} data-testid="page-list-hint">
             A book: operators turn its pages in CG Control, and load new ones there with Load
-            folder….
+            pages….
           </p>
         ) : (
           <>

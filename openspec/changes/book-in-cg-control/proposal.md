@@ -37,12 +37,18 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
   book's text pages are pages), and each click is one undo step.
 - **1.3 — PVW's NEXT turns the book.** On a book row it is the row's own page turn (`stack.page`), and
   PVW follows the bridge's page; on any other row it is the template's step, as before.
+- **Delta A (the owner, 2026-10-22) — the book block.** The strip shows only pages that exist (no empty box on
+  the first or last page) and nothing moves as a page turns; every face, in the strip and in `Manage pages…`, is
+  drawn as the air shows it — the channel's frame shape on PVW's checker, the picture at the sequence's own fit
+  (`TemplateInfo.pageLists[].fit`); `Load pictures…` and `Load folder…` become one `Load pages… ▾` (`Pictures…`,
+  `Folder…`), and files or a folder dropped on the block replace its pictures, dropped on `Manage pages…` are added.
 
 ## Impact
 
 - **Specs:** `runtime-ui` (MODIFIED, ADDED), `runtime-caspar-bridge` (MODIFIED — a book keeps the page on screen
-  through an edit, superseding "else page 1" for an edit; ADDED), `designer-sequence-element` (MODIFIED).
+  through an edit, superseding "else page 1" for an edit; ADDED), `designer-sequence-element` (MODIFIED),
+  `designer-composition-export` (MODIFIED — the export refusal names `Load pages…`; delta A).
 - **Code:** `@cg/shared-ipc` (`pages.get`), CG Bridge (`getPage`, route, scope), `@cg/template-runtime`
   (`page-pictures-host`, the fill, `alt`, `showSequenceItem`), CG Control (`pagePictures`, `bookPageOf`, PVW's
   frame, the mock), the Designer (the sequence card, `sequenceItemFocus`, the canvas's `sequence-item`).
-- **Wire:** one new read channel; `__cg` unchanged.
+- **Wire:** one new read channel; `TemplateInfo.pageLists[]` gains an optional `fit` (delta A); `__cg` unchanged.

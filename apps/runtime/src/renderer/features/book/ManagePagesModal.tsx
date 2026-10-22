@@ -31,7 +31,13 @@ import {
   withUniqueIds,
   type BookPage,
 } from './bookPages.js';
-import { loadPictures } from './loadPictures.js';
+import {
+  dragCarriesFiles,
+  droppedPictures,
+  loadPictureFiles,
+  loadPictures,
+  type PictureFile,
+} from './loadPictures.js';
 import type { Raster } from './fitPicture.js';
 
 /**
@@ -44,7 +50,8 @@ import type { Raster } from './fitPicture.js';
  * - `Remove` per page, and the pages selected (`Select`) removed together;
  * - `Sort by name` (natural order; text pages keep their places);
  * - `Add pictures…`, `Add folder…` (appended), `Replace with folder…` (the pictures only — each text page
- *   keeps its place; 1.6), all through 1.2's fitting;
+ *   keeps its place; 1.6), and files or a folder dropped on the dialog (appended; delta A), all through
+ *   1.2's fitting;
  * - `Add text page`, and a text page's words edited in place.
  *
  * Its edits STAGE, like every Inspector edit: `Done` puts the book in the row's draft, and `Discard`
@@ -95,14 +102,23 @@ export function ManagePagesModal({
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
   const [lines, setLines] = useState<ModalMessage[]>([]);
   const [dragging, setDragging] = useState<string | null>(null);
+  const [dropping, setDropping] = useState(false);
 
   const onAirId = onAir ? appliedPages[current]?.id : undefined;
   const pvwId = inPvw ? pages[Math.min(current, pages.length - 1)]?.id : undefined;
 
-  async function add(folder: boolean, replace: boolean): Promise<void> {
+  /** Pictures picked (a folder, or files) or dropped: appended, or replacing the pictures (1.6). */
+  async function add(
+    from: boolean | Promise<readonly PictureFile[]>,
+    replace: boolean,
+  ): Promise<void> {
     setLines([]);
     try {
-      const outcome = await loadPictures(folder, raster, (done, total) => setBusy({ done, total }));
+      const progress = (done: number, total: number): void => setBusy({ done, total });
+      const outcome =
+        typeof from === 'boolean'
+          ? await loadPictures(from, raster, progress)
+          : await loadPictureFiles(await from, raster, progress);
       if (outcome === null) return;
       const said: ModalMessage[] = [];
       if (outcome.fitted !== null) said.push({ role: 'notice', text: outcome.fitted });
@@ -134,8 +150,10 @@ export function ManagePagesModal({
   };
 
   const onDrop = (e: DragEvent<HTMLElement>, to: number): void => {
-    e.preventDefault();
+    // A drop of files is the dialog's (it adds them); only a tile being moved is handled here.
     if (dragging === null) return;
+    e.preventDefault();
+    e.stopPropagation();
     const from = draft.findIndex((p) => p.id === dragging);
     setDragging(null);
     if (from >= 0) move(from, to);
@@ -195,7 +213,36 @@ export function ManagePagesModal({
         </>
       }
     >
-      <div className="cg-pages" data-manage-pages="">
+      {/*
+        `RUN-NEXT-VERSION-03` delta A — files or a folder dropped on the dialog are ADDED at the end, through
+        the same fitting (1.2); a tile dragged inside it still reorders (it carries no files).
+      */}
+      <div
+        className="cg-pages"
+        data-manage-pages=""
+        {...(dropping ? { 'data-drop-target': '' } : {})}
+        onDragOver={(e) => {
+          if (!dragCarriesFiles(e.dataTransfer) || busy !== null) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+          setDropping(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false);
+        }}
+        onDrop={(e) => {
+          if (!dragCarriesFiles(e.dataTransfer) || busy !== null) return;
+          e.preventDefault();
+          setDropping(false);
+          // Read now: the drop's items are gone once this handler returns.
+          void add(droppedPictures(e.dataTransfer), false);
+        }}
+      >
+        {dropping && (
+          <span className="cg-drop-hint" aria-hidden="true">
+            Drop to add pages
+          </span>
+        )}
         <div className="cg-pages__tools" role="toolbar" aria-label={`${title} — page tools`}>
           <Button variant="neutral" disabled={busy !== null} onClick={() => void add(false, false)}>
             <Icon icon={FilePlus2} size={13} />

@@ -3,7 +3,7 @@ import {
   bookPagesOf,
   freshTextPageId,
   movePage,
-  stripWindow,
+  pagesAroundCurrent,
   withPicturesReplaced,
   withPicturesSortedByName,
   withUniqueIds,
@@ -12,7 +12,7 @@ import {
 } from '../src/renderer/features/book/bookPages.js';
 
 /**
- * 🔴 `RUN-NEXT-VERSION-03` 1.6 — a book with TEXT pages stays a book, and `Load folder…` /
+ * 🔴 `RUN-NEXT-VERSION-03` 1.6 — a book with TEXT pages stays a book, and a load in the book block /
  * `Replace with folder…` replace the PICTURE pages only: each text page keeps its place after the
  * picture it followed; past the new folder's end, it moves to the end.
  */
@@ -84,16 +84,16 @@ describe('1.6 — replace the pictures, keep the text pages in place', () => {
 
 describe('🔴 delta A — the strip shows only pages that exist', () => {
   it('first page: 1–3; middle: before, current, after; last page: the last three', () => {
-    expect(stripWindow(4, 0)).toEqual([0, 1, 2]);
-    expect(stripWindow(4, 1)).toEqual([0, 1, 2]);
-    expect(stripWindow(4, 2)).toEqual([1, 2, 3]);
-    expect(stripWindow(4, 3)).toEqual([1, 2, 3]);
+    expect(pagesAroundCurrent(4, 0)).toEqual([0, 1, 2]);
+    expect(pagesAroundCurrent(4, 1)).toEqual([0, 1, 2]);
+    expect(pagesAroundCurrent(4, 2)).toEqual([1, 2, 3]);
+    expect(pagesAroundCurrent(4, 3)).toEqual([1, 2, 3]);
   });
 
   it('a one- or two-page book shows only its pages; an empty book shows none', () => {
-    expect(stripWindow(1, 0)).toEqual([0]);
-    expect(stripWindow(2, 0)).toEqual([0, 1]);
-    expect(stripWindow(2, 1)).toEqual([0, 1]);
-    expect(stripWindow(0, 0)).toEqual([]);
+    expect(pagesAroundCurrent(1, 0)).toEqual([0]);
+    expect(pagesAroundCurrent(2, 0)).toEqual([0, 1]);
+    expect(pagesAroundCurrent(2, 1)).toEqual([0, 1]);
+    expect(pagesAroundCurrent(0, 0)).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
-import type { Locator, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { probeImage } from '@cg/shared-ipc';
-import { buildBookVcg, expect, test } from './fixtures/runtime.js';
+import { buildBookVcg, expect, test, type RuntimeApp } from './fixtures/runtime.js';
 import { noisePng, solidPng } from './fixtures/pictures.js';
 
 /**
@@ -9,18 +9,13 @@ import { noisePng, solidPng } from './fixtures/pictures.js';
  * Camera and scanner pictures are larger than the channel and over 4 MB; the owner's were refused.
  * CG Control now scales each one to fit the channel's frame (never up, aspect kept), re-encodes it
  * (PNG when it is transparent, else JPEG), says so in one line, and refuses — naming them — only the
- * pictures still over the cap after fitting. Real pictures through the real `Load pictures…` path; the
+ * pictures still over the cap after fitting. Real pictures through the real `Load pages… ▾` → `Pictures…` path; the
  * stored pages are read back (`pages.get`) and measured from their own bytes.
  */
 
-const load = async (
-  app: { page: Page; inspector: Locator },
-  files: { name: string; buffer: Buffer }[],
-): Promise<void> => {
-  const chooser = app.page.waitForEvent('filechooser');
-  await app.inspector.getByRole('button', { name: /^Load pictures/ }).click();
+const load = async (app: RuntimeApp, files: { name: string; buffer: Buffer }[]): Promise<void> => {
   await (
-    await chooser
+    await app.chooseBookPages('Pictures…')
   ).setFiles(files.map((f) => ({ name: f.name, mimeType: 'image/png', buffer: f.buffer })));
 };
 

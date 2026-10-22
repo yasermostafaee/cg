@@ -2,8 +2,9 @@
 
 ### Requirement: The operator loads a book of pictures on a row and turns its pages
 
-For a template field that is a page list, the CG Control Inspector SHALL offer `Load pictures…` and
-`Load folder…` in place of the list editor, sort the picked files in natural file-name order, FIT each
+For a template field that is a page list, the CG Control Inspector SHALL offer one `Load pages… ▾` button
+whose menu holds `Pictures…` and `Folder…`, and SHALL take files or a folder dropped on the book block, in
+place of the list editor, sort the picked files in natural file-name order, FIT each
 picture before it is sent — a picture larger than the row's channel frame on either side SHALL be
 scaled to fit inside it (never upscaled, the aspect kept) and re-encoded, and one within the frame
 but over the 4 MB page cap SHALL be re-encoded at its own size; a re-encoded picture SHALL be a PNG
@@ -85,12 +86,20 @@ SHALL be the book's name — the field's Title when the author gave one, else it
 Inspector field heading SHALL print a field id beside its label. The block SHALL always show where the pages come
 from (`Template's pictures`, `Folder "IN" · 87 pictures`, `Picked pictures · 12`, with `· N text pages` when there
 are any; a folder's name isolated), whether they are on the row (`Not sent — press Update`, `On the row`), and a
-strip of three faces — the page before, the current page, the page after — drawn from the console's pictures, the
-bridge's stored copies, or the template's own (read from the page CG Bridge stores), a text page as its words, a
-picture that cannot be had as a wordless placeholder, never its file name. Then the turning row (`Previous`, the
-page box with ` / count`, `Next`, `Go`, one height, one centre line, icons with words) and the loading row
-(`Load pictures…`, `Load folder…`, `Manage pages…`); each control's accessible name names the book. It SHALL fit
-the Inspector at 1280×720.
+strip of up to three pages that EXIST around the current one — the page before, the current page and the page
+after where all three exist; on the first page the first three, on the last page the last three; a one- or
+two-page book only its own pages, together in the middle at the same size — never an empty box, the current page
+marked wherever it sits, and nothing in the block moving when a page turns. Each face SHALL be drawn as the air
+shows it: the channel's frame shape (the row's raster) on PVW's checker, the picture placed at the sequence's own
+picture fit (`TemplateInfo.pageLists[].fit`; `contain` when a template imported before it carries none), from the
+console's pictures, the bridge's stored copies, or the template's own (read from the page CG Bridge stores); a
+text page as its words, small; a picture that cannot be had as a wordless placeholder, never its file name. Then
+the turning row (`Previous`, the page box with ` / count`, `Next`, `Go`, one height, one centre line, icons with
+words) and the loading row — `Load pages… ▾` and `Manage pages…`, one height, one line; each control's accessible
+name names the book. `Load pages… ▾` SHALL open a menu of `Pictures…` and `Folder…`, each saying in its title that
+it replaces the book's pictures; files or a folder dropped on the block SHALL load the same way, the block saying
+`Drop to replace the pictures` while they are held over it. It SHALL fit the Inspector at 1280×720 and at 200 %
+text, in RTL.
 
 #### Scenario: The owner's book, named and bound
 
@@ -110,14 +119,44 @@ the Inspector at 1280×720.
 - **WHEN** a template's book has its own pictures and its row is selected
 - **THEN** the current and next faces are those pictures, read from the page CG Bridge stores
 
+#### Scenario: No empty box on the first or the last page
+
+- **WHEN** a four-page book is on page 1, and is turned to page 4
+- **THEN** the strip reads `1 / 4`, `2`, `3`, then `2`, `3`, `4 / 4`, every face a page, the current one marked;
+  the strip and the loading row keep their place in the block on every turn
+
+#### Scenario: A one- or two-page book
+
+- **WHEN** a one-page book, then a two-page book, is selected
+- **THEN** the strip shows `1 / 1`, then `1 / 2` and `2`, each face the size of a three-page book's
+
+#### Scenario: A portrait page as the air shows it
+
+- **WHEN** a portrait picture is loaded on a book whose sequence fits `contain`, and on one that fits `cover`
+- **THEN** in the strip and in `Manage pages…` the face is 16:9 for a 1920×1080 channel; the `contain` face shows
+  the whole picture with bars beside it, and the `cover` face is filled
+
+#### Scenario: One load button
+
+- **WHEN** the operator presses `Load pages for Sequence`
+- **THEN** a menu offers `Pictures…` and `Folder…`, and `Folder…` opens a folder picker
+
+#### Scenario: A folder or files dropped on the block
+
+- **WHEN** a folder `IN` of three pictures is dropped on the block, then two loose pictures
+- **THEN** the source reads `Folder "IN" · 3 pictures`, then `Picked pictures · 2`, and the state
+  `Not sent — press Update`
+
 ### Requirement: `Manage pages…` SHALL be the operator's tool for a book, and its edits SHALL stage
 
 The book block's `Manage pages…` SHALL open the app's shared Modal holding a numbered grid of the book's pages, the
 page on air and the page in PVW marked (`On air`, `PVW`); drag to reorder, and `Move earlier` / `Move later` on every
 page as the keyboard path; `Remove` per page and the selected pages removed together; `Sort by name` (natural order —
 `MRN (2)` before `MRN (10)` — text pages keeping their places); `Add pictures…` and `Add folder…` (appended, ids made
-unique) and `Replace with folder…` (the pictures only, each text page keeping its place), all through the console's
-fitting; `Add text page`, and a text page's words edited in place. `Done` SHALL stage the edited book like every
+unique), files or a folder dropped on the dialog (appended, the dialog saying `Drop to add pages` while they are
+held over it) and `Replace with folder…` (the pictures only, each text page keeping its place), all through the
+console's fitting; each page drawn as the book block's strip draws it; `Add text page`, and a text page's words
+edited in place. `Done` SHALL stage the edited book like every
 Inspector edit — `Discard` and `Update` keep their meaning and nothing reaches air before Update. When the edit
 removes the page on air, the dialog SHALL say which page takes its place at Update. The dialog SHALL fit at 1280×720,
 at 200 % text and at 200 % browser zoom on a screen that shows the Inspector, in RTL, its footer inside it.
@@ -140,11 +179,16 @@ at 200 % text and at 200 % browser zoom on a screen that shows the Inspector, in
 - **THEN** page 2 is marked `On air`, still marked after the drag, and its removal reads `Page 2 is on air and is
 removed; at Update, page 2 takes its place.`; after Update the row reads `2 / 3`
 
+#### Scenario: Pictures dropped on the dialog are added
+
+- **WHEN** a folder of `b.png` and `a.png`, then `a.png` alone, is dropped on a two-page book's dialog
+- **THEN** the grid reads the two pages, then `a.png`, `b.png`, then `a.png` again, at the end
+
 ### Requirement: A book with text pages SHALL stay a book, and a load SHALL replace its pictures only
 
-A row whose template's book holds pictures and TEXT pages SHALL be a book in CG Control (the book bar, Load
-pictures…, Load folder…), and the operator SHALL turn every page, text pages included. `Load pictures…` and
-`Load folder…` SHALL replace the PICTURE pages only: each text page SHALL keep its place after the picture it followed
+A row whose template's book holds pictures and TEXT pages SHALL be a book in CG Control (the book bar,
+`Load pages…`), and the operator SHALL turn every page, text pages included. A load in the book block —
+`Pictures…`, `Folder…` or a drop — SHALL replace the PICTURE pages only: each text page SHALL keep its place after the picture it followed
 (those before the first picture stay first), and when the new pictures are fewer, the text pages that followed a
 picture past their end SHALL move to the end, in their order.
 

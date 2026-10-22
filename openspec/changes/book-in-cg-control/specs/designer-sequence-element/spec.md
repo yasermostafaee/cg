@@ -96,7 +96,7 @@ The Designer's Inspector SHALL show one sentence under **advance** when a sequen
 text pages), is stepped by the operator, and is set to `auto`: that the book turns itself every dwell while CG Control
 counts only the operator's turns, so its page number falls behind and its Next goes to the page after the last one it
 sent; and that advance manual is the setting for a book the operator turns. A page list's Data key SHALL NOT offer
-"Allow file source"; it SHALL say that operators turn and load its pages in CG Control (Load folder…).
+"Allow file source"; it SHALL say that operators turn and load its pages in CG Control (Load pages…).
 
 #### Scenario: Auto is said, manual is not
 
@@ -107,7 +107,7 @@ sent; and that advance manual is the setting for a book the operator turns. A pa
 #### Scenario: A book's key offers no text-file grant
 
 - **WHEN** a book's Data key section is open
-- **THEN** there is no "Allow file source" control, and a line names Load folder…
+- **THEN** there is no "Allow file source" control, and a line names Load pages…
 
 ### Requirement: Add many pictures at once, in natural order
 

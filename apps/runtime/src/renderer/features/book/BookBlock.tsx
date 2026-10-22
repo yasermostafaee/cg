@@ -1,5 +1,12 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { ChevronLeft, ChevronRight, FolderOpen, Images, ListOrdered } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  FolderOpen,
+  Images,
+  ListOrdered,
+} from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
 import type { FieldValue, ImageFit } from '@cg/shared-schema';
 import { parseLocalizedNumber } from '@cg/text-shaping';
@@ -13,13 +20,20 @@ import type { RowBook } from '../layers/bookOf.js';
 import {
   bookPagesOf,
   isPicturePage,
-  stripWindow,
+  pagesAroundCurrent,
   withPicturesReplaced,
   type BookPage,
 } from './bookPages.js';
 import { bookSent, bookSource, bookSourceText, bookSourceWords, pictureName } from './bookFacts.js';
-import { loadPictures } from './loadPictures.js';
+import {
+  dragCarriesFiles,
+  droppedPictures,
+  loadPictureFiles,
+  loadPictures,
+  type LoadOutcome,
+} from './loadPictures.js';
 import type { Raster } from './fitPicture.js';
+import { ContextMenu } from '../../ui/ContextMenu.js';
 import { useAuthoredPictures } from './authoredPictures.js';
 import { ManagePagesModal } from './ManagePagesModal.js';
 import { useRehearse } from '../../hooks/useRehearse.js';
@@ -43,7 +57,8 @@ import {
  * - WHICH pages are around the one the row is on: the page before, that page, the page after;
  *
  * and offers two rows of controls: turning (`Previous`, the page box with ` / 87`, `Next`, `Go`) and
- * loading (`Load pictures…`, `Load folder…`, `Manage pages…`). Its heading is the book's name, never
+ * loading (`Load pages… ▾` — `Pictures…` / `Folder…` — and `Manage pages…`; delta A: one load button, and
+ * files or a folder dropped on the block load the same way). Its heading is the book's name, never
  * its field id (`bookTitle`). Built from the console's primitives only; its grid is `controls.css`'s
  * `.cg-book`. Labels, values and facts — no sentence explains it.
  */
@@ -75,6 +90,9 @@ export interface BookBlockProps {
   fit?: ImageFit | undefined;
 }
 
+/** One way of getting pictures in — the picker, or a drop — told how far it is. */
+type Loader = (progress: (done: number, total: number) => void) => Promise<LoadOutcome | null>;
+
 export function BookBlock({
   itemId,
   fieldId,
@@ -104,12 +122,15 @@ export function BookBlock({
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
   const [fitted, setFitted] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const [dropping, setDropping] = useState(false);
 
-  async function load(folder: boolean): Promise<void> {
+  /** Every load — picked pictures, a picked folder, or a drop — REPLACES the book's pictures (1.6). */
+  async function load(outcomeOf: Loader): Promise<void> {
     setFitted(null);
     setRefusal(null);
     try {
-      const outcome = await loadPictures(folder, raster, (done, total) => setBusy({ done, total }));
+      const outcome = await outcomeOf((done, total) => setBusy({ done, total }));
       if (outcome === null) return;
       setFitted(outcome.fitted);
       setRefusal(outcome.refusal);
@@ -123,7 +144,33 @@ export function BookBlock({
   }
 
   return (
-    <div className="cg-book" data-book={fieldId}>
+    <div
+      className="cg-book"
+      data-book={fieldId}
+      {...(dropping ? { 'data-drop-target': '' } : {})}
+      onDragOver={(e) => {
+        if (!dragCarriesFiles(e.dataTransfer) || busy !== null) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        setDropping(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false);
+      }}
+      onDrop={(e) => {
+        if (!dragCarriesFiles(e.dataTransfer) || busy !== null) return;
+        e.preventDefault();
+        setDropping(false);
+        // Read now: the drop's items are gone once this handler returns.
+        const dropped = droppedPictures(e.dataTransfer);
+        void load(async (progress) => loadPictureFiles(await dropped, raster, progress));
+      }}
+    >
+      {dropping && (
+        <span className="cg-drop-hint" aria-hidden="true">
+          Drop to replace the pictures
+        </span>
+      )}
       <div className="cg-book__facts">
         <Tag className="cg-meta-chip" data-book-source={source.kind} title={bookSourceText(source)}>
           {words.head}
@@ -148,25 +195,26 @@ export function BookBlock({
       />
       {book !== null && <BookTurn itemId={itemId} title={title} book={book} />}
       <div className="cg-book__row" data-book-load="">
+        {/*
+          🔴 `RUN-NEXT-VERSION-03` delta A — ONE load button (the owner's choice): a browser's picker takes
+          files OR a folder, never both, so the button opens a two-item menu. Every load here REPLACES the
+          book's pictures (each text page keeps its place, 1.6) — the menu's items say so in their title,
+          and a drop says so while it is held over the block.
+        */}
         <Button
           variant="neutral"
-          aria-label={`Load pictures for ${title}`}
+          aria-label={`Load pages for ${title}`}
+          aria-haspopup="menu"
+          aria-expanded={menuAt !== null}
           disabled={busy !== null}
-          onClick={() => void load(false)}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setMenuAt({ x: r.left, y: r.bottom + 2 });
+          }}
         >
           <Icon icon={Images} size={13} />
-          {busy === null
-            ? 'Load pictures…'
-            : `Loading ${String(busy.done)} / ${String(busy.total)}…`}
-        </Button>
-        <Button
-          variant="neutral"
-          aria-label={`Load a folder for ${title}`}
-          disabled={busy !== null}
-          onClick={() => void load(true)}
-        >
-          <Icon icon={FolderOpen} size={13} />
-          Load folder…
+          {busy === null ? 'Load pages…' : `Loading ${String(busy.done)} / ${String(busy.total)}…`}
+          <Icon icon={ChevronDown} size={13} />
         </Button>
         <Button
           variant="neutral"
@@ -178,6 +226,28 @@ export function BookBlock({
           Manage pages…
         </Button>
       </div>
+      {menuAt !== null && (
+        <ContextMenu
+          x={menuAt.x}
+          y={menuAt.y}
+          ariaLabel={`Load pages for ${title}`}
+          onClose={() => setMenuAt(null)}
+          items={[
+            {
+              label: 'Pictures…',
+              icon: Images,
+              title: "Replaces the book's pictures; text pages keep their places",
+              onSelect: () => void load((progress) => loadPictures(false, raster, progress)),
+            },
+            {
+              label: 'Folder…',
+              icon: FolderOpen,
+              title: "Replaces the book's pictures with a folder's; text pages keep their places",
+              onSelect: () => void load((progress) => loadPictures(true, raster, progress)),
+            },
+          ]}
+        />
+      )}
       {fitted !== null && (
         <span className="cg-book-count" data-testid="page-fit-line">
           {fitted}
@@ -208,7 +278,7 @@ export function BookBlock({
 }
 
 /**
- * Up to three pages around the one the row is on (`stripWindow`: never an empty box), each as the
+ * Up to three pages around the one the row is on (`pagesAroundCurrent`: never an empty box), each as the
  * operator will see it, the current one marked wherever it sits. Nothing moves when a page turns: the
  * strip is always three equal columns of frame-shaped faces (`controls.css`'s `.cg-book__strip`).
  */
@@ -235,7 +305,7 @@ function BookStrip({
       role="group"
       aria-label={`${title} — pages around the current one`}
     >
-      {stripWindow(pages.length, current).map((index, slot) => {
+      {pagesAroundCurrent(pages.length, current).map((index, slot) => {
         const page = pages[index];
         const isCurrent = index === current;
         return (

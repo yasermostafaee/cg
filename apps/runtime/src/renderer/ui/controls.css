@@ -2281,9 +2281,34 @@ textarea.cg-field--autogrow {
  * centred on the text, so the buttons and the page box share one height and one baseline.
  */
 .cg-book {
+  position: relative;
   display: grid;
   gap: var(--r-space-2);
   min-width: 0;
+}
+/*
+ * `RUN-NEXT-VERSION-03` delta A — files or a folder held over the book block (or over `Manage pages…`):
+ * the surface's edge turns to the accent and one line over it says what the drop will do (replace the
+ * pictures / add pages). Drawn over the surface and never in its flow, so nothing under it moves; it
+ * takes no pointer, so the drag never leaves the surface for it.
+ */
+.cg-book[data-drop-target],
+.cg-pages[data-drop-target] {
+  outline: 2px dashed var(--r-accent-strong);
+  outline-offset: 2px;
+}
+.cg-drop-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: var(--r-scrim);
+  color: var(--r-text);
+  font-weight: 600;
+  border-radius: var(--r-radius-sm);
 }
 .cg-book__facts,
 .cg-book__row {
@@ -2298,14 +2323,14 @@ textarea.cg-field--autogrow {
   color: var(--r-text-muted);
   font-size: var(--r-text-sm);
 }
-/* The strip: ALWAYS three equal cells, each a frame-shaped face the size the panel allows, its page
-   number under it — filled with up to three pages that exist (`stripWindow`), so a one- or two-page book
-   leaves the remaining cells bare rather than drawing empty boxes, and a turn changes only what fills
-   the cells: the strip's box, and every row under it, never move. The current page's face carries the
+/* The strip: up to three pages that exist (`pagesAroundCurrent`), each cell ALWAYS a third of the strip (less
+   its gaps) holding a frame-shaped face and its page number — so a one- or two-page book's pages sit
+   together in the middle at the same size, with no empty box, and a turn changes only what fills the
+   cells: the strip's box, and every row under it, never move. The current page's face carries the
    accent edge and a ring outside it (a shadow, so it takes no layout space). */
 .cg-book__strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  justify-content: center;
   gap: var(--r-space-2);
 }
 .cg-book-thumb {
@@ -2313,6 +2338,7 @@ textarea.cg-field--autogrow {
   gap: var(--r-space-1);
   margin: 0;
   min-width: 0;
+  flex: 0 0 calc((100% - 2 * var(--r-space-2)) / 3);
 }
 /*
  * `RUN-NEXT-VERSION-03` delta A — A PAGE'S FACE AS THE AIR SHOWS IT (the strip and `Manage pages…`): the
@@ -2424,6 +2450,7 @@ textarea.cg-field--autogrow {
  * alone: the selected one also carries its pressed toggle.
  */
 .cg-pages {
+  position: relative;
   display: grid;
   gap: var(--r-space-3);
   min-width: 0;

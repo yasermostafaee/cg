@@ -52,10 +52,8 @@ test('🔴 a folder’s pictures load in natural order; Next, Previous and Go to
   await app.selectStackRow(templateId);
 
   // Load three pictures picked out of order: they stage, then apply like any field.
-  const chooser = app.page.waitForEvent('filechooser');
-  await app.inspector.getByRole('button', { name: 'Load pictures for pages' }).click();
   await (
-    await chooser
+    await app.chooseBookPages('Pictures…', 'pages')
   ).setFiles(
     ['page10.png', 'page2.png', 'page1.png'].map((name, i) => ({
       name,
@@ -120,9 +118,9 @@ test('a file that cannot be read as a picture is refused with a sentence naming 
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0x13,
     0x88, 0, 0, 0x07, 0xd0, 8, 2, 0, 0, 0, 1, 2, 3,
   ]);
-  const chooser = app.page.waitForEvent('filechooser');
-  await app.inspector.getByRole('button', { name: /^Load pictures/ }).click();
-  await (await chooser).setFiles({ name: 'panorama.png', mimeType: 'image/png', buffer: wide });
+  await (
+    await app.chooseBookPages('Pictures…')
+  ).setFiles({ name: 'panorama.png', mimeType: 'image/png', buffer: wide });
   await expect(
     app.inspector.getByText(/panorama\.png is not a PNG, JPEG or WebP picture/),
   ).toBeVisible();

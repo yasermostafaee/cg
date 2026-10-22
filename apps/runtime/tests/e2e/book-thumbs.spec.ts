@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { expect, test } from './fixtures/runtime.js';
+import { expect, test, type RuntimeApp } from './fixtures/runtime.js';
 import { solidPng } from './fixtures/pictures.js';
 import { buildTelavat2Vcg } from '../support/telavat2Vcg.js';
 
@@ -46,18 +46,10 @@ async function sampleRgb(page: Page, locator: Locator, fx: number, fy: number): 
 const near = (a: RGB, b: RGB, tolerance = 30): boolean =>
   a.every((c, i) => Math.abs(c - (b[i] ?? 0)) <= tolerance);
 
-/** Pick pictures through the book block's own load control, whichever spelling it has. */
-async function loadPictures(page: Page, block: Locator, files: { name: string; png: Buffer }[]) {
-  const chooser = page.waitForEvent('filechooser');
-  const menu = block.getByRole('button', { name: 'Load pages for Sequence' });
-  if ((await menu.count()) > 0) {
-    await menu.click();
-    await page.getByRole('menuitem', { name: 'Pictures…' }).click();
-  } else {
-    await block.getByRole('button', { name: 'Load pictures for Sequence' }).click();
-  }
+/** Pick pictures through the book block's one load button: `Load pages… ▾` → `Pictures…`. */
+async function loadPictures(app: RuntimeApp, files: { name: string; png: Buffer }[]) {
   await (
-    await chooser
+    await app.chooseBookPages('Pictures…', 'Sequence')
   ).setFiles(files.map((f) => ({ name: f.name, mimeType: 'image/png', buffer: f.png })));
 }
 
@@ -156,7 +148,7 @@ test('🔴 delta A — a contain sequence draws a portrait page whole, with bars
     );
     await app.selectStackRow(templateId);
     const block = app.inspector.locator('[data-book]');
-    await loadPictures(page, block, portrait);
+    await loadPictures(app, portrait);
     const frame = frameOf(block);
     // The frame is the channel's shape: 16:9 for 1920×1080.
     const box = await frame.boundingBox();

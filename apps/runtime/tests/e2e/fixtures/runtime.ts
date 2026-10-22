@@ -1,4 +1,4 @@
-import { test as base, expect, type Locator, type Page } from '@playwright/test';
+import { test as base, expect, type FileChooser, type Locator, type Page } from '@playwright/test';
 import {
   aggregateCompositionFields,
   compositionClosure,
@@ -532,6 +532,26 @@ export class RuntimeApp {
     if (await show.count()) await show.first().click();
     await expect(this.page.getByRole('button', { name: 'Hide monitors' })).toBeVisible();
     await expect(this.page.locator('[data-monitor-strip]')).toHaveCount(1);
+  }
+
+  /**
+   * 🔴 `RUN-NEXT-VERSION-03` delta A — **OPEN THE BOOK'S PICKER** through its one load button: `Load pages… ▾`,
+   * then `Pictures…` or `Folder…`. Resolves to the browser's chooser for the caller to fill. One place,
+   * so the next time the door moves the book specs do not each have to be found and edited.
+   */
+  async chooseBookPages(
+    item: 'Pictures…' | 'Folder…',
+    book: string | RegExp = /^Load pages for /,
+  ): Promise<FileChooser> {
+    const chooser = this.page.waitForEvent('filechooser');
+    const name = typeof book === 'string' ? `Load pages for ${book}` : book;
+    const load = this.inspector.getByRole('button', { name });
+    // In view FIRST: the menu closes on any scroll (`ContextMenu`), and a click's own scroll-into-view of
+    // a button below the Inspector's fold can land just after the menu opens.
+    await load.scrollIntoViewIfNeeded();
+    await load.click();
+    await this.page.getByRole('menuitem', { name: item, exact: true }).click();
+    return chooser;
   }
 
   /** R-003 — apply the selected item's staged edits via the Inspector's Update. */

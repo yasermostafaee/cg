@@ -6,21 +6,28 @@ import type { PicturePage } from './bookPages.js';
 
 /**
  * `R-100` / `RUN-NEXT-VERSION-03` — **PICK, FIT AND SEND A BOOK'S PICTURES**: the one loader the Inspector's
- * `Load pictures…` / `Load folder…` and `Manage pages…`' `Add pictures…` / `Add folder…` /
- * `Replace with folder…` share. The files are put in natural order (the comparison the Designer uses
- * too), each is FITTED to the row's channel (1.2, `fitPicture`) and sent to CG Bridge one at a time;
- * the bytes sent are kept under the hash the bridge answered (1.1, `pagePictures`). A picture from a
- * folder keeps its folder in its name (`IN/MRN (1).jpg`), so the Inspector can say where the book came
- * from on any console, at any later time.
+ * `Load pages… ▾` (`Pictures…` / `Folder…`) and `Manage pages…`' `Add pictures…` / `Add folder…` /
+ * `Replace with folder…` share — and, since delta A, files or a folder DROPPED on the book block or on
+ * `Manage pages…`. The files are put in natural order (the comparison the Designer uses too), each is
+ * FITTED to the row's channel (1.2, `fitPicture`) and sent to CG Bridge one at a time; the bytes sent
+ * are kept under the hash the bridge answered (1.1, `pagePictures`). A picture from a folder keeps its
+ * folder in its name (`IN/MRN (1).jpg`), so the Inspector can say where the book came from on any
+ * console, at any later time.
  */
 const PICTURE_EXT = /\.(png|jpe?g|webp)$/i;
 
-function orderName(file: File): string {
-  return file.webkitRelativePath !== '' ? file.webkitRelativePath : file.name;
+/** A picture to load, with its path from the folder it was picked or dropped in (`IN/MRN (1).jpg`). */
+export interface PictureFile {
+  readonly file: File;
+  readonly path: string;
+}
+
+function picked(file: File): PictureFile {
+  return { file, path: file.webkitRelativePath !== '' ? file.webkitRelativePath : file.name };
 }
 
 /** Open the browser's own picker: many files, or one folder. `[]` when dismissed. */
-export function pickPictures(folder: boolean): Promise<File[]> {
+function pickPictures(folder: boolean): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -84,6 +91,55 @@ export interface LoadOutcome {
 }
 
 /**
+ * 🔴 `RUN-NEXT-VERSION-03` delta A — **WHAT WAS DROPPED: files, a folder, or both.** Read from the drop
+ * event's items while the event lasts (a `DataTransferItemList` is emptied when the handler returns);
+ * a folder is read through its entry, every level down, each file keeping its path inside it. Where a
+ * browser hands no entry (a file only), the item's file is taken as it is.
+ */
+export function droppedPictures(data: DataTransfer): Promise<PictureFile[]> {
+  const reads: Promise<PictureFile[]>[] = [];
+  for (const item of [...data.items]) {
+    if (item.kind !== 'file') continue;
+    const entry = item.webkitGetAsEntry();
+    if (entry !== null && entry.isDirectory) {
+      reads.push(readFolder(entry as FileSystemDirectoryEntry));
+      continue;
+    }
+    const file = item.getAsFile();
+    if (file !== null) reads.push(Promise.resolve([{ file, path: file.name }]));
+  }
+  return Promise.all(reads).then((lists) => lists.flat());
+}
+
+/** The drag carries files or folders from outside the page (not a page tile being reordered). */
+export function dragCarriesFiles(data: DataTransfer | null): boolean {
+  return data !== null && [...data.types].includes('Files');
+}
+
+async function readFolder(folder: FileSystemDirectoryEntry): Promise<PictureFile[]> {
+  const reader = folder.createReader();
+  const out: PictureFile[] = [];
+  // `readEntries` answers in batches; an empty batch is the end.
+  for (;;) {
+    const batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
+      reader.readEntries(resolve, reject),
+    );
+    if (batch.length === 0) break;
+    for (const entry of batch) {
+      if (entry.isDirectory) {
+        out.push(...(await readFolder(entry as FileSystemDirectoryEntry)));
+      } else {
+        const file = await new Promise<File>((resolve, reject) =>
+          (entry as FileSystemFileEntry).file(resolve, reject),
+        );
+        out.push({ file, path: entry.fullPath.replace(/^\/+/, '') });
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Pick pictures (or a folder), fit each, send each to CG Bridge. `progress` is told after every file;
  * `null` is answered when the operator dismissed the picker.
  */
@@ -92,23 +148,35 @@ export async function loadPictures(
   raster: Raster,
   progress: (done: number, total: number) => void,
 ): Promise<LoadOutcome | null> {
-  const picked = (await pickPictures(folder)).filter((f) => PICTURE_EXT.test(f.name));
-  if (picked.length === 0) return null;
-  if (picked.length > PAGES_MAX_PER_ROW) {
+  return loadPictureFiles((await pickPictures(folder)).map(picked), raster, progress);
+}
+
+/**
+ * Fit and send pictures already in hand (picked, or dropped). `null` when none of them is a picture
+ * file — nothing to load, nothing to say, as when a picker is dismissed.
+ */
+export async function loadPictureFiles(
+  given: readonly PictureFile[],
+  raster: Raster,
+  progress: (done: number, total: number) => void,
+): Promise<LoadOutcome | null> {
+  const candidates = given.filter((f) => PICTURE_EXT.test(f.file.name));
+  if (candidates.length === 0) return null;
+  if (candidates.length > PAGES_MAX_PER_ROW) {
     return {
       pages: [],
       fitted: null,
-      refusal: pageRefusalMessage('page-too-many', { count: picked.length }),
+      refusal: pageRefusalMessage('page-too-many', { count: candidates.length }),
     };
   }
-  const files = [...picked].sort((a, b) => naturalCompare(orderName(a), orderName(b)));
+  const files = [...candidates].sort((a, b) => naturalCompare(a.path, b.path));
   const pages: PicturePage[] = [];
   const tooLarge: string[] = [];
   const notPictures: string[] = [];
   let resized = 0;
   let reencoded = 0;
   progress(0, files.length);
-  for (const [i, file] of files.entries()) {
+  for (const [i, { file, path }] of files.entries()) {
     // `RUN-NEXT-VERSION-03` 1.2 — FITTED, not refused: a picture larger than the channel, or over the
     // cap, is scaled and re-encoded here; only what is still over the cap is named.
     const fit = await fitPicture(file, new Uint8Array(await file.arrayBuffer()), raster);
@@ -135,7 +203,7 @@ export async function loadPictures(
       id: `${String(pages.length + 1)}-${put.sha256.slice(0, 12)}`,
       kind: 'image',
       media: put.sha256,
-      name: orderName(file),
+      name: path,
     });
   }
   return {

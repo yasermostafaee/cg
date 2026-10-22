@@ -11,7 +11,7 @@ import { buildTelavat2Vcg } from '../support/telavat2Vcg.js';
  * The owner (2026-10-21): the book was headed `Sequence pages-el-1792581663991`, the buttons were not
  * aligned, and nothing said whether a chosen folder was bound or sent. Measured in Chrome (golden rule
  * 12 c): the heading is the book's NAME and no field id is on the panel; the source and sent facts
- * follow a real `Load folder…` and an Update; the strip shows the pages around the current one; and the
+ * follow a real `Load pages… ▾` → `Folder…` and an Update; the strip shows the pages around the current one; and the
  * turning row's four controls share one height and one centre line, inside the Inspector, at 1280×720.
  */
 
@@ -41,7 +41,7 @@ test('🔴 1.4 — the book is named, its pages’ source and state are said, an
   await expect(currentFace).toHaveAttribute('title', 'MRN (1).jpg');
   await expect(block.locator('[data-book-thumb="current"]')).not.toContainText('MRN');
 
-  // A real folder named `IN`, through Load folder…: bound and staged, then sent.
+  // A real folder named `IN`, through Load pages… ▾ → Folder…: bound and staged, then sent.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-book-block-'));
   const folder = path.join(dir, 'IN');
   fs.mkdirSync(folder);
@@ -54,9 +54,7 @@ test('🔴 1.4 — the book is named, its pages’ source and state are said, an
   ).entries()) {
     fs.writeFileSync(path.join(folder, `MRN (${String(i + 1)}).png`), solidPng(64, 36, rgb));
   }
-  const chooser = page.waitForEvent('filechooser');
-  await block.getByRole('button', { name: 'Load a folder for Sequence' }).click();
-  await (await chooser).setFiles(folder);
+  await (await app.chooseBookPages('Folder…', 'Sequence')).setFiles(folder);
   await expect(block.locator('[data-book-source]')).toHaveText('Folder "IN" · 3 pictures');
   await expect(block.locator('[data-book-sent]')).toHaveText('Not sent — press Update');
   await app.applyEdits();

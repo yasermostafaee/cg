@@ -17,7 +17,7 @@
       (PVW never red), green after; `sequence-pages.test.ts` (no alt; late fill; host picture; a `data:`
       address from the wire dropped); `book-pages.integration.test.ts` (read back; no-page; nothing on the
       wire); `pagePictures.dom.test.ts`; `mock-bridge-parity`.
-- [ ] 1.1.6 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] 1.1.6 Linux `e2e` discharged on the pushed commit — run URL: https://github.com/yasermostafaee/cg/actions/runs/39698919913 — `7eec321b` (carries every commit of this run), completed `success`, its E2E job RAN (Designer 343 passed, CG Control 367 passed)
 
 ## 1.2 — A page is fitted, not refused (FULL lane: what is sent toward air)
 
@@ -38,7 +38,7 @@
       each → 23.8 s in all (≈0.3 s a picture), progress shown throughout (`Loading 1 / 80…`), the longest
       main-thread task 84 ms (one per picture) — the console stays responsive. Test mode: the bridge's
       transfer of each ~1 MB page is not in this figure.
-- [ ] 1.2.7 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] 1.2.7 Linux `e2e` discharged on the pushed commit — run URL: https://github.com/yasermostafaee/cg/actions/runs/39698919913 — `7eec321b` (carries every commit of this run), completed `success`, its E2E job RAN (Designer 343 passed, CG Control 367 passed)
 
 ## 1.4 — The Inspector's book block: named, bound, tidy (FULL lane: a TemplateInfo field; an operator-name rule)
 
@@ -58,7 +58,7 @@
       and Update; one aligned turning row inside the Inspector), `book-pvw.spec.ts` › 1.4 (the strip draws the
       template's own pictures from a real bridge); `bookFacts.test.ts`; `telavat2-book.spec.ts` now names the book
       `Sequence`, never `a1` / `pages-el-…`; schema `pageListsOf` assertions carry the name.
-- [ ] 1.4.5 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] 1.4.5 Linux `e2e` discharged on the pushed commit — run URL: https://github.com/yasermostafaee/cg/actions/runs/39698919913 — `7eec321b` (carries every commit of this run), completed `success`, its E2E job RAN (Designer 343 passed, CG Control 367 passed)
 
 ## 1.5 — `Manage pages…` in CG Control (FULL lane: the book on the row; the bridge's page rule)
 
@@ -83,7 +83,7 @@
       (`88vh`, `--r-modal-h-frame`'s `100vh`) are zoomed with the page and overflow the window. Real browser zoom at
       200 % on a 1280×720 window is a 640×360 page, below the console's 1100×700 floor (the Inspector is folded away);
       on a screen that keeps the Inspector, the dialog fits (measured, DPR 2).
-- [ ] 1.5.6 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] 1.5.6 Linux `e2e` discharged on the pushed commit — run URL: https://github.com/yasermostafaee/cg/actions/runs/39698919913 — `7eec321b` (carries every commit of this run), completed `success`, its E2E job RAN (Designer 343 passed, CG Control 367 passed)
 
 ## 1.6 — A book with text pages stays a book (FULL lane: the schema's rule, the bridge, the page)
 
@@ -117,7 +117,7 @@
       missing text is an empty box. Before 1.6 such a book lost its key, so the form never saw it. Fixed:
       `PictureItem` (thumbnail + name) in both forms. Tests: `book-preview-list.dom.test.ts` — RED on
       `HEAD` (`['', '', 'test1']`), green; e2e `sequence-add-text.spec.ts` › 1.6 (the Preview, in Chrome).
-- [ ] 1.6.8 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] 1.6.8 Linux `e2e` discharged on the pushed commit — run URL: https://github.com/yasermostafaee/cg/actions/runs/39698919913 — `7eec321b` (carries every commit of this run), completed `success`, its E2E job RAN (Designer 343 passed, CG Control 367 passed)
 
 ## 1.7 — The Designer's `Add text` shows its result (FULL lane: Designer state and undo history, the page runtime's API)
 
@@ -140,7 +140,7 @@
 - [x] 1.7.6 Tests: e2e `sequence-add-text.spec.ts` (each click: counted, marked, focused, on the canvas; two quick
       clicks, two undos; and 1.6's Data key kept) — RED on `b1b14de3`, green; `page-items.test.ts` (count, strip,
       the predicate); `sequence-pages.test.ts` in the page runtime (`showSequenceItem` — red without it).
-- [ ] 1.7.7 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] 1.7.7 Linux `e2e` discharged on the pushed commit — run URL: https://github.com/yasermostafaee/cg/actions/runs/39698919913 — `7eec321b` (carries every commit of this run), completed `success`, its E2E job RAN (Designer 343 passed, CG Control 367 passed)
 
 ## 1.3 — PVW's NEXT turns the loaded pages (FULL lane: a verb that reaches the bridge)
 
@@ -150,4 +150,39 @@
 - [x] 1.3.2 A book row's NEXT on PVW is `stack.page` (`next`), as the row's NEXT (`layerRowActions`);
       PVW follows the bridge's page. Any other row: unchanged.
 - [x] 1.3.3 Test: e2e `book-pvw.spec.ts` › 1.3 — RED on the 1.1 commit (`1 / 3` after PVW's NEXT), green.
-- [ ] 1.3.4 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] 1.3.4 Linux `e2e` discharged on the pushed commit — run URL: https://github.com/yasermostafaee/cg/actions/runs/39698919913 — `7eec321b` (carries every commit of this run), completed `success`, its E2E job RAN (Designer 343 passed, CG Control 367 passed)
+
+## Delta A — the book block: no empty boxes, thumbnails as on air, one Load button (`DELTA-RUN-NEXT-VERSION-03-A`)
+
+- [x] A.1 No empty slots (FAST lane: layout). Cause: the strip drew slots `current - 1, current, current + 1`
+      whatever existed. `pagesAroundCurrent` (`bookPages.ts`): up to three pages that exist — on page 1 pages
+      1–3, on the last page the last three, a one- or two-page book only its own, centred at the same size;
+      the current page marked wherever it sits (accent edge + a ring drawn as a shadow). Kept still: every
+      cell is a third of the strip and every face a fixed frame shape, so a turn changes only what fills the
+      cells — measured from the block's own origin (a click scrolls the Inspector; that is not a jump).
+- [x] A.2 Thumbnails as on air (FULL lane: `TemplateInfo.pageLists[].fit`, an IPC field). Cause: the face was a
+      grid row sized by its content, so the picture's `height: 100%` never resolved and it took the frame's
+      width — cropped, whatever the fit. One `PageFrame` draws every face in the strip and in `Manage pages…`:
+      the row's raster as the frame's shape, PVW's checker, the picture at the sequence's own fit
+      (`sequencePictureFit`, the one rule the page runtime uses too; absent = `contain`), a text page's words
+      small and centred. Nothing sent to CasparCG changes.
+- [x] A.3 One Load button (FULL lane: a drop is a new door into the loader that sends page bytes to CG Bridge;
+      the send itself is unchanged). `Load pages… ▾` (the app's `ContextMenu`) → `Pictures…` / `Folder…`,
+      each titled "Replaces the book's pictures…"; a drop on the block replaces the pictures (1.6's rule),
+      saying `Drop to replace the pictures` while held; a drop on `Manage pages…` appends, saying
+      `Drop to add pages`; the dialog's `Add…` / `Replace with folder…` stay. One loader for all
+      (`loadPictureFiles`); a dropped folder is read through its entry, every level, keeping its path, so the
+      block says `Folder "IN"` for a dropped folder as for a picked one.
+- [x] A.4 Ripples (golden rule 9; two axes): by STRING (`Load pictures`, `Load a folder`, `Load folder`,
+      case-insensitive) and by COMPONENT (every runtime test driving a `filechooser` or `[data-book-load]`).
+      Six book specs moved onto one fixture step, `app.chooseBookPages`. The Designer named the retired
+      `Load folder…` twice — its export refusal and a book's Data key hint — now `Load pages…`
+      (`designer-composition-export` MODIFIED here; `designer-sequence-element` delta updated). CG Control's
+      strip rule is named `pagesAroundCurrent`, apart from the Designer's `stripWindow` (a different rule).
+- [x] A.5 Tests: e2e `book-thumbs.spec.ts` (first/last page and one-/two-page books — no empty box, nothing
+      moves; a `contain` portrait drawn whole with bars and a `cover` one filled, sampled PIXELS, strip and
+      `Manage pages…`) — red on `7eec321b` for the owner's reasons, green; e2e `book-load.spec.ts` (the menu's
+      two items, `Folder…` a folder picker, one aligned row; a folder and files dropped on the block; a folder
+      and a file dropped on the dialog — through Chrome's own drag input with real paths; the block at
+      1280×720 and 200 % text, in RTL); unit `page-lists.test.ts` (`fit`), `bookPages.model.test.ts`.
+- [ ] A.6 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_

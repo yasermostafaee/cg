@@ -141,7 +141,7 @@ describe('🔴 B-353 — a page list offers no text-file grant', () => {
     );
     expect(host.querySelector('input[aria-label="Allow file source"]')).toBeNull();
     expect(host.querySelector('[data-testid="page-list-hint"]')?.textContent).toContain(
-      'Load folder…',
+      'Load pages…',
     );
   });
 

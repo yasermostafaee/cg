@@ -17,7 +17,7 @@ import { buildTelavat2Vcg } from '../support/telavat2Vcg.js';
  *
  * The real path end to end: a real `@cg/caspar-bridge` and `@cg/amcp-mock` (`pvw-from-bridge`'s
  * shape), the template imported and loaded through the console's own controls (so PVW renders the
- * page CG Control baked), REAL pictures (`solidPng`) loaded through `Load pictures…`, and PVW's
+ * page CG Control baked), REAL pictures (`solidPng`) loaded through `Load pages… ▾` → `Pictures…`, and PVW's
  * composite SAMPLED — the checker's screenshot holds every frame drawn over it
  * (`rehearse-canvas.spec.ts`'s method). One colour per page, so the sample says which page PVW is on.
  * A reload at the end proves the read-back: the console no longer holds the bytes it sent, and PVW
@@ -171,8 +171,9 @@ test('🔴 1.1 — PVW draws the loaded pictures, not their names; a turn moves 
   // Loaded, not yet sent: PVW shows the staged book at the row's page — page 1, red.
   const chooser = page.waitForEvent('filechooser');
   await inspector(page)
-    .getByRole('button', { name: /^Load pictures/ })
+    .getByRole('button', { name: /^Load pages for / })
     .click();
+  await page.getByRole('menuitem', { name: 'Pictures…', exact: true }).click();
   await (
     await chooser
   ).setFiles([
@@ -237,8 +238,9 @@ test('🔴 1.3 — the preview bar’s NEXT turns the loaded pages, exactly as t
 
   const chooser = page.waitForEvent('filechooser');
   await inspector(page)
-    .getByRole('button', { name: /^Load pictures/ })
+    .getByRole('button', { name: /^Load pages for / })
     .click();
+  await page.getByRole('menuitem', { name: 'Pictures…', exact: true }).click();
   await (
     await chooser
   ).setFiles([
