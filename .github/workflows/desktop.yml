@@ -1339,6 +1339,106 @@ jobs:
           path: acceptance/
           retention-days: 30
 
+  # RUN-NEXT-VERSION-03 — the owner already carries 0.11.6. Prove the 0.12.0 installers upgrade that
+  # exact delivered build in place, with a row ON AIR and both apps open through their upgrades.
+  acceptance-upgrade-0116:
+    name: Release acceptance — upgrade from 0.11.6, apps open (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 50
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node 24 (the fakes run by type stripping)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CasparCG's stand-in
+        run: pnpm --filter @cg/amcp-mock build
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: The 0.11.6 installers, from the v0.11.6 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.11.6 --pattern 'CG-*_0.11.6_x64-setup.exe' --dir previous
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem previous | Format-Table Name, Length
+
+      # ONE step, for the reason the fresh job gives.
+      - name: The 0.11.6 set up with a row ON AIR, each installer upgraded (the apps open), the upgraded console
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          $node = (Get-Command node -ErrorAction Stop).Source
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          $v = '${{ needs.installers.outputs.version }}'
+          $acceptance = 'apps/runtime/tests/desktop/release-acceptance.mjs'
+          New-Item -ItemType Directory -Force acceptance | Out-Null
+          $station = Start-Process $node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -PassThru -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
+          Get-Content acceptance/station.json
+          $old = @{ bridge = (Resolve-Path previous/CG-Bridge_0.11.6_x64-setup.exe).Path; control = (Resolve-Path previous/CG-Control_0.11.6_x64-setup.exe).Path; designer = (Resolve-Path previous/CG-Designer_0.11.6_x64-setup.exe).Path }
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          "::group::install-classic 0.11.6 (elevated)"
+          & $node $acceptance --phase install-classic --from 0.11.6 --bridge $old.bridge --control $old.control --designer $old.designer --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the 0.11.6 console, a row ON AIR (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive --mode classic --from 0.11.6 --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade CG Bridge; read every Welcome (elevated)"
+          & $node $acceptance --phase upgrade --apps-open yes --from 0.11.6 --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade CG Control and CG Designer over the two apps OPEN (medium integrity)"
+          # Names without a space, for gsudo (it splits a quoted path at its space — measured on the 0.11.3 job).
+          Copy-Item $control installers\cg-control-setup.exe
+          Copy-Item $designer installers\cg-designer-setup.exe
+          $controlNs = (Resolve-Path installers\cg-control-setup.exe).Path
+          $designerNs = (Resolve-Path installers\cg-designer-setup.exe).Path
+          & $gsudo --integrity Medium $node $acceptance --phase upgrade-apps-open --from 0.11.6 --control $controlNs --designer $designerNs --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the upgraded console (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive-upgraded --from 0.11.6 --version $v --out acceptance
+          "::endgroup::"
+          "station alive at the end: $(-not $station.HasExited)"
+          & $node $acceptance --phase summary --expect install-classic,drive,upgrade,upgrade-apps-open,drive-upgraded --out acceptance
+          $code = $LASTEXITCODE
+          Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
+          exit $code
+
+      - name: Upload the acceptance evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-upgrade-0116
+          path: acceptance/
+          retention-days: 30
+
   # RELEASE-0110-01 §2 — THE INSTALL GUIDE'S PICTURES OF CG CONTROL AND CG DESIGNER, from the built
   # consoles on Windows (the client's fonts and rendering), by the two `guide-shots.spec.ts` harnesses
   # (`CG_GUIDE_SHOTS`). By hand only (`gh workflow run Desktop --ref dev`): a push never pays for it.
@@ -1409,6 +1509,7 @@ jobs:
   # RELEASE-0114-01 Part D — and the real upgrade from 0.11.3, the two apps open through it (delta C).
   # RELEASE-0115-01 Part C — and the real upgrade from 0.11.4, the two apps open through it.
   # RELEASE-0116-01 Part C — and the real upgrade from 0.11.5, the two apps open through it.
+  # RUN-NEXT-VERSION-03 — and the real upgrade from the owner's installed 0.11.6.
   release:
     name: Draft release (tag only)
     if: ${{ github.ref_type == 'tag' }}
@@ -1426,6 +1527,7 @@ jobs:
         acceptance-upgrade-0113,
         acceptance-upgrade-0114,
         acceptance-upgrade-0115,
+        acceptance-upgrade-0116,
       ]
     runs-on: windows-latest
     timeout-minutes: 20
