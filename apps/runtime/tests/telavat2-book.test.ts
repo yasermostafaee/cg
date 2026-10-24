@@ -20,7 +20,7 @@ describe('🔴 B-353 — importing telavat2.vcg as it is', () => {
     const { template } = await produceTemplateDelivery(await buildTelavat2Vcg({ pages: 3 }));
     // Delta A: the owner's sequence is `cover`, and the list says so — every thumbnail is drawn at it.
     expect(template.pageLists).toEqual([
-      { fieldId: 'a1', wrap: false, name: 'Sequence', fit: 'cover' },
+      { fieldId: 'a1', wrap: false, name: 'Sequence', fit: 'cover', advance: 'auto' },
     ]);
     expect(template.fields.find((f) => f.id === 'a1')).toMatchObject({ type: 'list', pages: true });
   });
@@ -32,6 +32,7 @@ describe('🔴 B-353 — importing telavat2.vcg as it is', () => {
       page: 1,
       count: 3,
       wrap: false,
+      advance: 'auto',
     });
   });
 
@@ -41,7 +42,7 @@ describe('🔴 B-353 — importing telavat2.vcg as it is', () => {
     );
     const id = `pages-${TELAVAT2_SEQUENCE}`;
     expect(template.pageLists).toEqual([
-      { fieldId: id, wrap: false, name: 'Sequence', fit: 'cover' },
+      { fieldId: id, wrap: false, name: 'Sequence', fit: 'cover', advance: 'auto' },
     ]);
     expect(template.fields.find((f) => f.id === id)).toMatchObject({
       label: 'Sequence',

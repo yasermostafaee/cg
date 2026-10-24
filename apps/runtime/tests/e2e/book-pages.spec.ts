@@ -98,8 +98,21 @@ test('🔴 a folder’s pictures load in natural order; Next, Previous and Go to
   await app.inspector.getByRole('button', { name: 'Go to page' }).click();
   await expect(counter).toHaveText('3 / 3');
   await expect(rowCounter).toHaveText('3 / 3');
-  // A book stops at its last page.
-  await expect(app.inspector.getByRole('button', { name: 'Next page' })).toBeDisabled();
+  // Off air there is nothing to transition out, so the terminal turn stays unavailable.
+  const next = app.inspector.getByRole('button', { name: 'Next page' });
+  await expect(next).toBeDisabled();
+
+  // On air, the same last-page Next is an exit verb: the real template plays the page's
+  // configured transition and reports completion. Test mode has no page to animate, so its
+  // faithful stand-in reports immediately; the row stops and PLAY becomes available again.
+  const row = app.stackRow(templateId).first();
+  await row.getByRole('button', { name: 'PLAY' }).click();
+  await expect(row.getByLabel('status SIM ON AIR')).toBeVisible();
+  await expect(next).toBeEnabled();
+  await next.click();
+  await expect(row.getByLabel('status READY')).toBeVisible();
+  await expect(row.getByRole('button', { name: 'PLAY' })).toBeEnabled();
+  await expect(next).toBeDisabled();
 });
 
 /*

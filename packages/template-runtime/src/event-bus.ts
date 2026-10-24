@@ -1,4 +1,10 @@
-import type { ErrorEvent, EventListener, LifecycleEvent, SelfEndEvent } from './types.js';
+import type {
+  BookPageEvent,
+  ErrorEvent,
+  EventListener,
+  LifecycleEvent,
+  SelfEndEvent,
+} from './types.js';
 
 type AnyListener = (payload: unknown) => void;
 
@@ -27,8 +33,10 @@ export class EventBus {
   // a caller cannot emit a self-end that names no run BY ACCIDENT: an unarmed page passes `{}`
   // deliberately, which reads differently at the call site from forgetting the argument.
   emit(event: 'self-end', payload: SelfEndEvent): void;
-  emit(event: Exclude<LifecycleEvent, 'error' | 'self-end'>): void;
-  emit(event: LifecycleEvent, payload?: ErrorEvent | SelfEndEvent): void {
+  emit(event: 'book-end', payload: SelfEndEvent): void;
+  emit(event: 'book-page', payload: BookPageEvent): void;
+  emit(event: Exclude<LifecycleEvent, 'error' | 'self-end' | 'book-end' | 'book-page'>): void;
+  emit(event: LifecycleEvent, payload?: ErrorEvent | SelfEndEvent | BookPageEvent): void {
     const set = this.listeners.get(event);
     if (!set) return;
     for (const listener of set) {

@@ -57,6 +57,26 @@ function get(url: string): Promise<HttpResult> {
   });
 }
 
+function post(url: string, body: unknown): Promise<HttpResult> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(url, { method: 'POST' }, (res) => {
+      let responseBody = '';
+      res.setEncoding('utf-8');
+      res.on('data', (c: string) => (responseBody += c));
+      res.on('end', () =>
+        resolve({
+          status: res.statusCode ?? 0,
+          contentType: res.headers['content-type'],
+          cacheControl: res.headers['cache-control'],
+          body: responseBody,
+        }),
+      );
+    });
+    req.on('error', reject);
+    req.end(JSON.stringify(body));
+  });
+}
+
 describe('TemplateHttpServer', () => {
   it('serves the stored HTML at its version’s key with `no-store`, and 404s an unknown key', async () => {
     const reg = new TemplateRegistry();
@@ -121,6 +141,46 @@ describe('TemplateHttpServer', () => {
     await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
     expect(server.urlFor('abc')).toBe(`http://127.0.0.1:${String(server.port)}/template/abc`);
     expect(server.port).toBeGreaterThan(0);
+  });
+
+  it('🔴 accepts a current book page report and refuses a stale token', async () => {
+    const received: unknown[] = [];
+    server = new TemplateHttpServer(
+      () => null,
+      undefined,
+      undefined,
+      (take, field, index) => {
+        received.push({ take, field, index });
+        return take === 'live-take';
+      },
+    );
+    await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
+    const url = `http://127.0.0.1:${String(server.port)}/page-state`;
+
+    expect(await post(url, { take: 'live-take', field: 'pages', index: 2 })).toMatchObject({
+      status: 204,
+    });
+    expect(await post(url, { take: 'old-take', field: 'pages', index: 7 })).toMatchObject({
+      status: 404,
+    });
+    expect(received).toEqual([
+      { take: 'live-take', field: 'pages', index: 2 },
+      { take: 'old-take', field: 'pages', index: 7 },
+    ]);
+  });
+
+  it('🔴 serves a stored picture by bare hash when Auto reaches a page no command preloaded', async () => {
+    const sha = 'a'.repeat(64);
+    server = new TemplateHttpServer(
+      () => null,
+      undefined,
+      async (requested) =>
+        requested === sha ? { bytes: Buffer.from('picture'), mime: 'image/png' } : null,
+    );
+    await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
+
+    const result = await get(`http://127.0.0.1:${String(server.port)}/page/${sha}`);
+    expect(result).toMatchObject({ status: 200, contentType: 'image/png', body: 'picture' });
   });
 });
 

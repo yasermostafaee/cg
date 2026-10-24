@@ -15,6 +15,8 @@ export interface PageListInfo {
   fieldId: string;
   /** `true` when the sequence it drives repeats forever; `false` for a book that stops at its ends. */
   wrap: boolean;
+  /** The sequence's authored advance mode; CG Control may override it per row. */
+  advance: 'auto' | 'manual';
   /**
    * `D-163` — `false` when the operator does not step the sequence (`sequenceStepsByOperator`): its
    * pictures are still the operator's to load, but no console verb turns them. Absent ⇒ steps.
@@ -114,6 +116,7 @@ export function pageListsOf(scene: Scene): PageListInfo[] {
       out.push({
         fieldId: field.id,
         wrap: sequence.repeat === 'infinite',
+        advance: sequence.advance,
         ...(sequenceStepsByOperator(sequence) ? {} : { step: false as const }),
         ...(sequence.name.trim() !== '' ? { name: sequence.name.trim() } : {}),
         fit: sequencePictureFit(sequence),

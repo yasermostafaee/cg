@@ -13,8 +13,9 @@ any other picture SHALL be sent exactly as picked — say in one line what fitti
 (`12 pictures were resized to fit 1920×1080`), refuse BY NAME only a picture still over the cap after
 fitting or a file that is not a picture while the others load, send each picture to CG Bridge showing
 progress, and stage the resulting page list like any field value. CG Bridge's own check SHALL remain
-the guard. The Inspector SHALL show the current page (`12 / 300`, under the current page's face) and
-one turning row — `Previous`, a page box holding the current page that takes the operator's page
+the guard. The Inspector SHALL show the page actually shown on air (`12 / 300`, under the current page's face),
+an `Auto` / `Manual` row-local choice initialized from the Designer's authored mode, and one turning row —
+`Previous`, a page box holding the current page that takes the operator's page
 number in Latin, Persian or Arabic-Indic digits followed by ` / 300`, `Next`, `Go` — on one line,
 one height. The row SHALL show the same `12 / 300`; its NEXT SHALL turn the page, and its PREV SHALL
 be in the row's menu, so a book row keeps the same buttons, in the same columns, as every other row.
@@ -42,6 +43,19 @@ be in the row's menu, so a book row keeps the same buttons, in the same columns,
 
 - **WHEN** the operator presses Next, then Previous, then types `۱۲` in the page box
 - **THEN** the counter reads `2 / 300`, then `1 / 300`, then `12 / 300`
+
+#### Scenario: Auto advances the live counter and Manual can interrupt it
+
+- **WHEN** an on-air book advances from page 1 to page 2 in Auto, the operator presses Previous during its transition,
+  then selects Manual
+- **THEN** the Inspector and row follow the actual page through `1`, `2`, `1`; the manual turn is not lost, and no
+  further dwell advances the book until Auto is selected again
+
+#### Scenario: Next on the last live page is the terminal turn
+
+- **WHEN** a finite book is on air on its last page and the operator presses Next
+- **THEN** Next is enabled, the last page plays its authored transition out, the row stops itself, and PLAY is no
+  longer marked active; on the same last page off air, Next stays disabled
 
 #### Scenario: A book row keeps the table's shape
 
@@ -94,7 +108,7 @@ shows it: the channel's frame shape (the row's raster) on PVW's checker, the pic
 picture fit (`TemplateInfo.pageLists[].fit`; `contain` when a template imported before it carries none), from the
 console's pictures, the bridge's stored copies, or the template's own (read from the page CG Bridge stores); a
 text page as its words, small; a picture that cannot be had as a wordless placeholder, never its file name. Then
-the turning row (`Previous`, the page box with ` / count`, `Next`, `Go`, one height, one centre line, icons with
+the advance row (`Manual`, `Auto`) and the turning row (`Previous`, the page box with ` / count`, `Next`, `Go`, one height, one centre line, icons with
 words) and the loading row — `Load pages… ▾` and `Manage pages…`, one height, one line; each control's accessible
 name names the book. `Load pages… ▾` SHALL open a menu of `Pictures…` and `Folder…`, each saying in its title that
 it replaces the book's pictures; files or a folder dropped on the block SHALL load the same way, the block saying

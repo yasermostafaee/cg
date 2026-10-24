@@ -180,6 +180,21 @@ export const StackPageChannel = defineChannel(
   }),
 );
 
+/** Change one book between automatic dwell advance and operator-only manual advance. */
+export const StackSetPageAdvanceChannel = defineChannel(
+  'stack.set-page-advance',
+  z.object({
+    itemId: IdSchema,
+    field: z.string().min(1),
+    mode: z.enum(['auto', 'manual']),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.string().optional(),
+    message: z.string().optional(),
+  }),
+);
+
 export const StackOutChannel = defineChannel(
   'stack.out',
   z.object({ itemId: IdSchema, immediate: z.boolean().optional() }),

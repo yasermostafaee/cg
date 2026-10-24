@@ -35,6 +35,7 @@ import type {
   LiveSourceOverride,
   Position,
   RetainedStackItem,
+  StackItemPageAdvance,
   StackItemState,
   StackItemTimingOverride,
   TakeRefusal,
@@ -1033,6 +1034,8 @@ interface AuditDetail {
   media?: AuditEntry['media'];
   /** `RUN-NEXT-VERSION-02` Q9 — `set-sound-muted` ONLY: muted, or not, as asked. */
   sound?: AuditEntry['sound'];
+  /** `book-in-cg-control` delta B — `set-page-advance` ONLY: field and mode as asked. */
+  pageAdvance?: AuditEntry['pageAdvance'];
 }
 
 /**
@@ -1751,6 +1754,8 @@ export class CasparRuntime {
    * by a turn that succeeded (or a state-only one); published and retained like `#passTimings`.
    */
   readonly #pageIndexes = new Map<string, Record<string, number>>();
+  /** Per-row Auto/Manual overrides for page-list sequences. */
+  readonly #pageAdvance = new Map<string, StackItemPageAdvance>();
   /** `R-100` — the pictures operators loaded, kept by SHA-256 (see `page-store.ts`). */
   readonly #pages: PageStore;
   /*
@@ -2419,6 +2424,7 @@ export class CasparRuntime {
     this.#pages = new PageStore(options.pagesDir ?? null);
     this.#reconciler.on('item-removed', (info) => {
       this.#pageIndexes.delete(info.itemId);
+      this.#pageAdvance.delete(info.itemId);
       void this.#sweepPages(info.itemId);
     });
     // R-034 — same shape, same reason: the delimiter list is read from disk
@@ -2488,6 +2494,8 @@ export class CasparRuntime {
         (take) => this.#onTemplateComplete(take),
         // `R-100` — a book's pages, by their SHA-256: only pictures this bridge stored.
         (sha256) => this.#pages.read(sha256),
+        // A current take may report page progress many times; unlike completion this does not spend it.
+        (take, field, index) => this.#onTemplatePageState(take, field, index),
       );
     this.#config = config;
     this.#serveOverride = serveOverride;
@@ -3111,6 +3119,8 @@ export class CasparRuntime {
       const timingOverride = this.#passTimings.get(item.itemId);
       // `R-100` — the page each page list is on: the console's `12 / 300` reads it.
       const pages = this.#pageIndexes.get(item.itemId);
+      // The Auto/Manual choice beside that counter.
+      const pageAdvance = this.#pageAdvance.get(item.itemId);
       // `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute: the toggle beside its speaker reads it.
       const soundMuted = this.#soundMutes.get(item.itemId);
       /*
@@ -3164,6 +3174,7 @@ export class CasparRuntime {
         timingOverride === undefined &&
         // `R-100` — and the page number, for `timingOverride`'s reason, on the day it was added.
         pages === undefined &&
+        pageAdvance === undefined &&
         // `RUN-NEXT-VERSION-02` Q9 — and the sound mute, for the same reason, on the day it was added.
         soundMuted === undefined &&
         !removeExempt &&
@@ -3182,6 +3193,7 @@ export class CasparRuntime {
         ...(activeLookId !== undefined && { activeLookId }),
         ...(timingOverride !== undefined && { timingOverride }),
         ...(pages !== undefined && { pages }),
+        ...(pageAdvance !== undefined && { pageAdvance }),
         ...(soundMuted !== undefined && { soundMuted }),
         ...(removeExempt && { removeExempt: true }),
         ...(backupUnmirrored && { backupUnmirrored: true }),
@@ -3932,6 +3944,9 @@ export class CasparRuntime {
       // `R-100` — a book reopens on the page it was on, not page 1. A direct re-apply, like the
       // two above: no page turn is sent mid-restore.
       if (item.pages !== undefined) this.#pageIndexes.set(item.itemId, { ...item.pages });
+      if (item.pageAdvance !== undefined) {
+        this.#pageAdvance.set(item.itemId, { ...item.pageAdvance });
+      }
       /*
        * 🔴 B-109 / B-107 — THE PENDING RESTORE IS THE LICENCE TO TOUCH THE LAYER, and
        * only a restorable state gets one.
@@ -6309,6 +6324,10 @@ export class CasparRuntime {
       return { accepted: true, page: target + 1, count };
     }
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+    // Golden rule 10: a recovered/adopted row can own live producers before its status catches up.
+    // Relative turns must therefore use the same canonical live-seat predicate as every other
+    // configuration door, so the page itself resolves the turn from what is really on screen.
+    const ownsLiveSeats = this.#ownsLiveSeats(itemId);
     const ref = list.items[target];
     const media = ref === undefined ? undefined : await this.#pageMediaFor(ref);
     if (media === null) {
@@ -6320,7 +6339,13 @@ export class CasparRuntime {
         }),
       };
     }
-    const page: CgPage = { field, index: target, ...(media !== undefined ? { media } : {}) };
+    // While live, relative turns are resolved by the page from what it is ACTUALLY showing. Its
+    // page-state report then confirms the bridge's counter. Go-to and stopped producers stay
+    // absolute so the next take opens deterministically.
+    const page: CgPage =
+      ownsLiveSeats && typeof to !== 'number'
+        ? { field, turn: to, ...(media !== undefined ? { media } : {}) }
+        : { field, index: target, ...(media !== undefined ? { media } : {}) };
     const { ok, errorCode, command } = await this.#send(
       this.#builder.updatePage(slot, page),
       this.#nextSeq(),
@@ -6342,6 +6367,61 @@ export class CasparRuntime {
     this.#markDirty(itemId);
   }
 
+  /** Set one book's row-local Auto/Manual mode; live rows are told in one configuration UPDATE. */
+  async setPageAdvance(
+    itemId: string,
+    field: string,
+    mode: 'auto' | 'manual',
+  ): Promise<{ ok: boolean; reason?: string; message?: string }> {
+    const item = this.#reconciler.get(itemId);
+    const slot = this.#slots.get(itemId);
+    const asked: NonNullable<AuditEntry['pageAdvance']> = { field, mode };
+    if (item === null || slot === undefined) {
+      this.#recordOutcome(
+        'set-page-advance',
+        { itemId, pageAdvance: asked },
+        { outcome: 'failed', errorCode: 'unknown-item' },
+      );
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    const detail: AuditDetail = { ...this.#itemDetail(itemId), pageAdvance: asked };
+    const list = this.#pageList(itemId, item.templateId, field);
+    if (list === undefined || !list.step) {
+      this.#recordOutcome('set-page-advance', detail, {
+        outcome: 'failed',
+        errorCode: 'not-a-page-list',
+      });
+      return {
+        ok: false,
+        reason: 'not-a-page-list',
+        message: 'This row has no operator-controlled book by that name.',
+      };
+    }
+    if (this.#ownsLiveSeats(itemId)) {
+      const { ok, errorCode, command } = await this.#send(
+        this.#builder.updatePageAdvance(slot, { field, mode }),
+        this.#nextSeq(),
+        'normal',
+      );
+      if (!ok) {
+        this.#recordOutcome('set-page-advance', detail, {
+          outcome: errorCode === AMCP_TIMEOUT_CODE ? 'timeout' : 'failed',
+          errorCode: errorCode ?? 'amcp-error',
+          ...(command !== undefined ? { command } : {}),
+        });
+        return {
+          ok: false,
+          reason: errorCode ?? 'amcp-error',
+          message: 'CasparCG did not accept the book advance change.',
+        };
+      }
+    }
+    this.#pageAdvance.set(itemId, { ...this.#pageAdvance.get(itemId), [field]: mode });
+    this.#markDirty(itemId);
+    this.#recordOutcome('set-page-advance', detail, { outcome: 'ok' });
+    return { ok: true };
+  }
+
   /**
    * `R-100` — a row's page list, as it stands: the row's own value when it has one, else the
    * template's default (the pages the author put in it). `fieldId` absent ⇒ the template's FIRST
@@ -6351,7 +6431,15 @@ export class CasparRuntime {
     itemId: string,
     templateId: string | undefined,
     fieldId?: string,
-  ): { fieldId: string; wrap: boolean; step: boolean; items: PageRef[] } | undefined {
+  ):
+    | {
+        fieldId: string;
+        wrap: boolean;
+        step: boolean;
+        advance: 'auto' | 'manual';
+        items: PageRef[];
+      }
+    | undefined {
     if (templateId === undefined) return undefined;
     const info = this.#templateOfItem(itemId, templateId);
     const lists = info?.pageLists ?? [];
@@ -6362,7 +6450,13 @@ export class CasparRuntime {
     const raw: unknown = Array.isArray(value) ? value : field?.type === 'list' ? field.default : [];
     const items = pageRefsOf(raw);
     this.#pages.markNamed(items.flatMap((ref) => (ref.media === undefined ? [] : [ref.media])));
-    return { fieldId: entry.fieldId, wrap: entry.wrap, step: entry.step !== false, items };
+    return {
+      fieldId: entry.fieldId,
+      wrap: entry.wrap,
+      step: entry.step !== false,
+      advance: this.#pageAdvance.get(itemId)?.[entry.fieldId] ?? entry.advance ?? 'manual',
+      items,
+    };
   }
 
   /**
@@ -6384,7 +6478,10 @@ export class CasparRuntime {
    * that page's picture by its address. Empty for a template with no page list, so every other template's take
    * puts exactly the bytes on the wire it always did.
    */
-  async #pageControl(itemId: string, templateId: string | undefined): Promise<{ page?: CgPage }> {
+  async #pageControl(
+    itemId: string,
+    templateId: string | undefined,
+  ): Promise<Pick<CgControl, 'page' | 'pageAdvance'>> {
     const list = this.#pageList(itemId, templateId);
     if (list === undefined || list.items.length === 0) return {};
     const index = Math.min(
@@ -6399,6 +6496,7 @@ export class CasparRuntime {
         index,
         ...(media !== undefined && media !== null ? { media } : {}),
       },
+      pageAdvance: { field: list.fieldId, mode: list.advance },
     };
   }
 
@@ -15014,6 +15112,8 @@ export class CasparRuntime {
       ...(detail.media !== undefined ? { media: detail.media } : {}),
       // `RUN-NEXT-VERSION-02` Q9 — what a `set-sound-muted` press asked for.
       ...(detail.sound !== undefined ? { sound: detail.sound } : {}),
+      // `book-in-cg-control` delta B — what a row's Auto/Manual press asked for.
+      ...(detail.pageAdvance !== undefined ? { pageAdvance: detail.pageAdvance } : {}),
     });
   }
 
@@ -16999,6 +17099,24 @@ export class CasparRuntime {
     const token = randomBytes(16).toString('hex');
     this.#takeTokens.set(itemId, token);
     return token;
+  }
+
+  /** Accept the current page from the page that owns this still-live take. The token is not spent. */
+  #onTemplatePageState(take: string, field: string, index: number): boolean {
+    let owner: string | undefined;
+    for (const [itemId, token] of this.#takeTokens) {
+      if (token === take) {
+        owner = itemId;
+        break;
+      }
+    }
+    if (owner === undefined || !this.#completionMayStop(owner)) return false;
+    const item = this.#reconciler.get(owner);
+    if (item === null) return false;
+    const list = this.#pageList(owner, item.templateId, field);
+    if (list === undefined || index >= list.items.length) return false;
+    this.#setPageIndex(owner, field, index);
+    return true;
   }
 
   /**

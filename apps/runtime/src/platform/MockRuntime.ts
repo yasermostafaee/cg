@@ -922,11 +922,48 @@ export class MockRuntime {
         count,
       };
     }
-    const target = pageTarget(Math.min(item.pages?.[field] ?? 0, count - 1), count, entry.wrap, to);
+    const current = Math.min(item.pages?.[field] ?? 0, count - 1);
+    const target = pageTarget(current, count, entry.wrap, to);
     this.#patch(itemId, { pages: { ...item.pages, [field]: target } });
     this.#record(auditEntry('page-turn', this.#auditItem(itemId, item.templateId)));
+    // Offline parity for the live terminal turn: the real page plays its transition and reports
+    // completion; the mock has no page to animate, so it delivers that receipt immediately.
+    if (to === 'next' && !entry.wrap && current === count - 1 && isOnAirStatus(item)) {
+      const take = this.currentTakeToken(itemId);
+      if (take !== undefined) this.templateCompleted(take);
+    }
     this.#emitStack();
     return { accepted: true, page: target + 1, count };
+  }
+
+  setPageAdvance(
+    itemId: string,
+    field: string,
+    mode: 'auto' | 'manual',
+  ): { ok: boolean; reason?: string; message?: string } {
+    const item = this.#find(itemId);
+    if (item === null) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    const entry = this.#templateOfItem(itemId, item.templateId)?.pageLists?.find(
+      (candidate) => candidate.fieldId === field,
+    );
+    if (entry === undefined || entry.step === false) {
+      return {
+        ok: false,
+        reason: 'not-a-page-list',
+        message: 'This row has no operator-controlled book by that name.',
+      };
+    }
+    this.#patch(itemId, { pageAdvance: { ...item.pageAdvance, [field]: mode } });
+    this.#record(
+      auditEntry('set-page-advance', {
+        ...this.#auditItem(itemId, item.templateId),
+        pageAdvance: { field, mode },
+      }),
+    );
+    this.#emitStack();
+    return { ok: true };
   }
 
   /**

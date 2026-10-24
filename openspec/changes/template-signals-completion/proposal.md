@@ -43,6 +43,12 @@ on the template HTTP server, validating the token against the live take; a valid
 calls the same internal stop the operator's STOP calls, recorded under a non-operator
 actor. Anything else is a `404` with no side effect.
 
+**Extended 2026-10-24 for live books.** A finite book's terminal Next/natural end emits the same
+completion meaning and therefore reuses this receipt and graceful STOP. The same token-bearing page
+adapter also reports non-terminal page progress to the separate narrow `POST /page-state` route;
+progress never spends the token, while completion remains one-shot. This supersedes no STOP rule —
+it adds another content-driven source of the same terminal fact.
+
 **`C-017`'s terminal verb is superseded.** That item proposed a hard CLEAR. The owner's
 decision of 2026-09-15 is that the terminal verb is `C-012`'s graceful **STOP**: the row
 leaves ON AIR and lands exactly where a manual STOP leaves it — producer resident, a later
@@ -57,7 +63,7 @@ PLAY instant. One transport, one verb, both items.
   (`runtime.ts`, `playout-controller.ts`, a new completion-ping adapter),
   `@cg/single-file-export` (the boot script and the CSP), `tools/caspar-bridge`
   (`template-http-server.ts`, `caspar-runtime.ts`), `apps/runtime` (`MockRuntime` parity).
-- **Affected docs:** `SECURITY.md` (the relaxation, stated where the old claim is),
+- **Affected docs:** `SECURITY.md` (the relaxation and four-route census, stated where the old claim is),
   ADR 0009 (a dated section), `docs/prd/caspar.md` (`C-013` to `[~]`, `C-017` annotated).
 
 ⚠ **Every template must be re-imported.** This changes the page runtime, and a template's

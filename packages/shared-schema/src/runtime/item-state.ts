@@ -115,6 +115,10 @@ export type TakeRefusal = z.infer<typeof TakeRefusalSchema>;
 export const StackItemPagesSchema = z.record(z.string().min(1), z.number().int().min(0));
 export type StackItemPages = z.infer<typeof StackItemPagesSchema>;
 
+/** A row's Auto/Manual choice for each page-list field. */
+export const StackItemPageAdvanceSchema = z.record(z.string().min(1), z.enum(['auto', 'manual']));
+export type StackItemPageAdvance = z.infer<typeof StackItemPageAdvanceSchema>;
+
 export const StackItemStateSchema = z.object({
   itemId: IdSchema,
   templateId: IdSchema,
@@ -251,6 +255,8 @@ export const StackItemStateSchema = z.object({
    * The console's `12 / 300` reads it; a page turn changes it. ABSENT means page 1 of every list.
    */
   pages: StackItemPagesSchema.optional(),
+  /** Per-row override; absent fields inherit the template's authored advance mode. */
+  pageAdvance: StackItemPageAdvanceSchema.optional(),
   /**
    * 🔴 `RUN-NEXT-VERSION-02` Q9 — the row's mute of its TEMPLATE's own sound, the published half of the
    * pair whose retained half is {@link RetainedStackItemSchema.soundMuted}: the toggle beside the
@@ -646,6 +652,8 @@ export const RetainedStackItemSchema = z.object({
    * at page 1 after every bridge restart while the reader is on page 140.
    */
   pages: StackItemPagesSchema.optional(),
+  /** Retained so an operator's Auto/Manual choice survives a bridge restart. */
+  pageAdvance: StackItemPageAdvanceSchema.optional(),
   /**
    * `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute, RETAINED for `timingOverride`'s reason:
    * dropped, a row the operator muted comes back after a bridge restart and plays its sound on air.
@@ -701,6 +709,7 @@ export function retainedFromStackItem(item: StackItemState): RetainedStackItem {
     ...(item.timingOverride !== undefined && { timingOverride: item.timingOverride }),
     ...(item.activeLookId !== undefined && { activeLookId: item.activeLookId }),
     ...(item.pages !== undefined && { pages: item.pages }),
+    ...(item.pageAdvance !== undefined && { pageAdvance: item.pageAdvance }),
     ...(item.soundMuted !== undefined && { soundMuted: item.soundMuted }),
   };
 }

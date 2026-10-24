@@ -1,7 +1,12 @@
 import * as http from 'node:http';
 import type * as net from 'node:net';
 import * as os from 'node:os';
-import { PAGE_MEDIA_PATH_RE, TEMPLATE_COMPLETE_PATH } from '@cg/shared-schema';
+import {
+  PAGE_MEDIA_HASH_PATH_RE,
+  PAGE_MEDIA_PATH_RE,
+  TEMPLATE_COMPLETE_PATH,
+  TEMPLATE_PAGE_STATE_PATH,
+} from '@cg/shared-schema';
 
 /** Where/how the template HTTP server binds + the host CasparCG uses to reach it. */
 export interface TemplateServeOptions {
@@ -231,7 +236,7 @@ export interface TemplateServerRoute {
   /** The single method this route answers. Anything else is refused. */
   readonly method: 'GET' | 'POST';
   /** Which handler serves it — the router's discriminant. */
-  readonly kind: 'template' | 'complete' | 'page';
+  readonly kind: 'template' | 'complete' | 'page-state' | 'page';
   /** Does this path select the route? Query already stripped. */
   readonly match: (path: string) => boolean;
 }
@@ -249,6 +254,12 @@ export const TEMPLATE_SERVER_ROUTES: readonly TemplateServerRoute[] = [
     kind: 'complete',
     match: (path) => path === TEMPLATE_COMPLETE_PATH,
   },
+  {
+    name: `POST ${TEMPLATE_PAGE_STATE_PATH}`,
+    method: 'POST',
+    kind: 'page-state',
+    match: (path) => path === TEMPLATE_PAGE_STATE_PATH,
+  },
   /*
     🔴 `R-100` (`IMAGE-PAGES-01`, `SECURITY.md`) — A BOOK'S PAGES, AND ONLY THOSE.
 
@@ -262,10 +273,10 @@ export const TEMPLATE_SERVER_ROUTES: readonly TemplateServerRoute[] = [
     pictures it was told the names of.
   */
   {
-    name: 'GET /page/<sha256>.<ext>',
+    name: 'GET /page/<sha256>[.<ext>]',
     method: 'GET',
     kind: 'page',
-    match: (path) => PAGE_MEDIA_PATH_RE.test(path),
+    match: (path) => PAGE_MEDIA_PATH_RE.test(path) || PAGE_MEDIA_HASH_PATH_RE.test(path),
   },
 ];
 
@@ -327,6 +338,8 @@ export class TemplateHttpServer {
    * and must keep behaving exactly as it did.
    */
   readonly #onComplete: ((take: string) => boolean) | undefined;
+  /** The live page a token-bearing book has actually reached. */
+  readonly #onPageState: ((take: string, field: string, index: number) => boolean) | undefined;
 
   /**
    * `R-100` — the page store's reader: a stored picture's bytes and type by its SHA-256, or `null`.
@@ -340,10 +353,12 @@ export class TemplateHttpServer {
     getHtml: (templateId: string) => string | null,
     onComplete?: (take: string) => boolean,
     readPage?: (sha256: string) => Promise<{ bytes: Buffer; mime: string } | null>,
+    onPageState?: (take: string, field: string, index: number) => boolean,
   ) {
     this.#getHtml = getHtml;
     this.#onComplete = onComplete;
     this.#readPage = readPage;
+    this.#onPageState = onPageState;
   }
 
   /** Start listening. Idempotent — a second call resolves without rebinding. */
@@ -406,6 +421,10 @@ export class TemplateHttpServer {
       this.#handleComplete(req, res);
       return;
     }
+    if (route.kind === 'page-state') {
+      this.#handlePageState(req, res);
+      return;
+    }
     if (route.kind === 'page') {
       void this.#handlePage(req, res, path);
       return;
@@ -459,7 +478,7 @@ export class TemplateHttpServer {
       });
       res.end('not found');
     };
-    const sha256 = PAGE_MEDIA_PATH_RE.exec(path)?.[1];
+    const sha256 = PAGE_MEDIA_PATH_RE.exec(path)?.[1] ?? PAGE_MEDIA_HASH_PATH_RE.exec(path)?.[1];
     if (req.method !== 'GET' || sha256 === undefined || this.#readPage === undefined) {
       notFound();
       return;
@@ -561,6 +580,75 @@ export class TemplateHttpServer {
       }
       if (!accepted) {
         refuse('token names no live take');
+        return;
+      }
+      res.writeHead(204);
+      res.end();
+    });
+  }
+
+  /** Receive the live page index without spending the take token used by completion. */
+  #handlePageState(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const refuse = (why: string): void => {
+      process.stderr.write(`[caspar-bridge] template page state refused (${why})\n`);
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('not found');
+    };
+    if (this.#onPageState === undefined || req.method !== 'POST') {
+      refuse(this.#onPageState === undefined ? 'no handler' : `method ${req.method ?? 'none'}`);
+      return;
+    }
+    let body = '';
+    let overflowed = false;
+    req.setEncoding('utf-8');
+    req.on('data', (chunk: string) => {
+      if (overflowed) return;
+      body += chunk;
+      if (body.length > MAX_COMPLETE_BODY) {
+        overflowed = true;
+        body = '';
+        refuse('body too large');
+        req.resume();
+      }
+    });
+    req.on('end', () => {
+      if (overflowed) return;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        refuse('body is not JSON');
+        return;
+      }
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        refuse('body is not an object');
+        return;
+      }
+      const record = parsed as Record<string, unknown>;
+      const take = record['take'];
+      const field = record['field'];
+      const index = record['index'];
+      if (
+        typeof take !== 'string' ||
+        take === '' ||
+        typeof field !== 'string' ||
+        field === '' ||
+        typeof index !== 'number' ||
+        !Number.isInteger(index) ||
+        index < 0
+      ) {
+        refuse('invalid page state');
+        return;
+      }
+      let accepted = false;
+      try {
+        accepted = this.#onPageState?.(take, field, index) ?? false;
+      } catch (err) {
+        refuse(`handler threw: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+      if (!accepted) {
+        refuse('token names no live page');
         return;
       }
       res.writeHead(204);

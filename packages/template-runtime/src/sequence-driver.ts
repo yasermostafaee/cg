@@ -26,15 +26,14 @@ import {
  *
  * Passes: `repeat: N` counts full passes through the list. Advancing past
  * the last item of pass N — by timer OR by `next()` — completes the run
- * exactly once: the LAST item stays on screen and {@link whenComplete}
- * resolves (the scope's `holdSource: 'content-driven'` hold awaits it,
+ * exactly once: the LAST item plays its authored exit and {@link whenComplete}
+ * resolves after it leaves (the scope's `holdSource: 'content-driven'` hold awaits it,
  * alongside finite tickers and countdown clocks). `reset()` mints a fresh
  * promise per run; `'infinite'` wraps to item 1 forever. An empty list is
  * complete by definition at `start()` (the ticker's zero-content parity).
  *
- * v1 advance semantics: a `next()` before `start()` is IGNORED (no
- * queueing), and a `next()` while a transition is in flight is ignored too
- * (no mid-motion restarts) — both documented out-of-scope seams.
+ * A `next()` before `start()` is ignored. Once running, relative turns received during entrance,
+ * decode or transition queue in order; the active motion is never restarted mid-frame.
  */
 
 /**
@@ -148,6 +147,10 @@ export interface SequenceDriverOptions {
   renderImage?: ((item: SequenceDriverImageItem) => RenderedSequenceItem) | undefined;
   /** `D-163` — a page turn could not be shown (the previous page stayed on screen). */
   onItemUnavailable?: ((item: SequenceDriverItem) => void) | undefined;
+  /** A list-bound book reports the item it has actually begun showing. */
+  onItemShown?: ((index: number) => void) | undefined;
+  /** A finite book has played its final item's exit. */
+  onComplete?: (() => void) | undefined;
   clock?: RuntimeClock | undefined;
 }
 
@@ -190,8 +193,8 @@ export class SequenceDriver {
   private startIdx = 0;
   /** `D-163` — a `goTo` that arrived while the stage was busy; applied as soon as it is not. */
   private pendingIdx: number | null = null;
-  /** `D-163` — a `next()` that arrived during the first item's entrance, applied as it ends. */
-  private nextAfterEntrance = false;
+  /** Manual turns that arrived while a transition/load/entrance was in flight, in wire order. */
+  private readonly pendingTurns: ('next' | 'previous')[] = [];
   /** `D-163` — the item being made ready, and the generation that names its load. */
   private loadingHooks: RenderedSequenceItem | null = null;
   private loadGen = 0;
@@ -213,9 +216,14 @@ export class SequenceDriver {
   private completed = false;
   private resolveComplete: (() => void) | null = null;
   private completion: Promise<void>;
+  private advanceMode: 'auto' | 'manual';
+  private exitCompletesRun = false;
+  private exitPromise: Promise<void> | null = null;
+  private resolveExit: (() => void) | null = null;
 
   constructor(options: SequenceDriverOptions) {
     this.o = options;
+    this.advanceMode = options.advance;
     this.logical = options.items.map((i) => ({ ...i }));
     this.completion = new Promise<void>((res) => {
       this.resolveComplete = res;
@@ -248,6 +256,7 @@ export class SequenceDriver {
     if (this.currentNode === null) this.renderCurrentStatic();
     // D-083 — start the on-screen item's inner drivers (a composition item's clock ticks).
     this.currentHooks?.show();
+    this.reportCurrent();
     if (this.logical.length === 0) {
       // Nothing to advance through — complete by definition (zero-length
       // content, the ticker's empty parity), regardless of `repeat`.
@@ -282,18 +291,17 @@ export class SequenceDriver {
   /**
    * Advance one item with the transition. In `'auto'` the new item's dwell
    * restarts. Ignored before `start()` (no queueing), after completion, and
-   * while a transition is already in flight (v1 — no mid-motion restarts).
-   * `D-163` — pressed during the FIRST item's entrance it is KEPT, once, and applied as the
-   * entrance ends: every sequence now enters with its effect, and an operator's NEXT right after
-   * the take must not be lost to it.
+   * while a transition is already in flight (no mid-motion restart; each press queues in order).
+   * `D-163` — pressed during the FIRST item's entrance it is kept and applied as the entrance ends:
+   * every sequence now enters with its effect, and an operator's NEXT right after the take must not
+   * be lost to it.
    */
   next(): void {
     if (!this.running || this.paused || this.completed) return;
-    if (this.phase === 'entrance') {
-      this.nextAfterEntrance = true;
+    if (this.phase !== 'dwell') {
+      this.pendingTurns.push('next');
       return;
     }
-    if (this.phase !== 'dwell') return;
     this.advance();
   }
 
@@ -304,7 +312,11 @@ export class SequenceDriver {
    * read to its last page can still be paged back.
    */
   previous(): void {
-    if (!this.rearm() || this.paused || this.phase !== 'dwell') return;
+    if (!this.rearm() || this.paused) return;
+    if (this.phase !== 'dwell') {
+      this.pendingTurns.push('previous');
+      return;
+    }
     const idx = this.currentIndex();
     if (idx > 0) {
       this.beginTransition(idx - 1);
@@ -327,6 +339,8 @@ export class SequenceDriver {
     if (len === 0) return;
     const target = Math.max(0, Math.min(len - 1, Math.floor(index)));
     this.startIdx = target;
+    // Absolute Go-to is intentionally latest-wins and supersedes relative turns already waiting.
+    this.pendingTurns.length = 0;
     if (this.phase === 'idle') {
       this.current = null;
       this.renderCurrentStatic();
@@ -351,6 +365,38 @@ export class SequenceDriver {
   /** `B-217` — rotating right now (started, and not frozen). The look park asks before it pauses. */
   isRunning(): boolean {
     return this.running && !this.paused;
+  }
+
+  /** Change Auto/Manual in place; switching to Auto grants the current item a fresh dwell. */
+  setAdvance(mode: 'auto' | 'manual'): void {
+    if (this.advanceMode === mode) return;
+    this.advanceMode = mode;
+    this.cancelFrame();
+    if (mode === 'auto' && this.running && !this.paused && this.phase === 'dwell') {
+      this.enterPhase('dwell');
+    }
+    this.scheduleIfNeeded();
+  }
+
+  /**
+   * The element-outro seam used by an operator STOP/OUT. The current page leaves with the
+   * sequence's authored transitionOut, but this externally requested exit does not announce a
+   * natural book completion.
+   */
+  playOutro(): Promise<void> {
+    if (this.destroyed || this.phase === 'idle' || this.currentNode === null) {
+      return Promise.resolve();
+    }
+    if (this.phase === 'exit') return this.exitPromise ?? Promise.resolve();
+    this.pendingIdx = null;
+    this.pendingTurns.length = 0;
+    // A picture decode may settle after STOP. Retire that generation and tear its detached
+    // item down now, otherwise the late promise can append a fresh page after the book left.
+    this.loadGen += 1;
+    this.loadingHooks?.hide();
+    this.loadingHooks = null;
+    if (this.phase === 'transition') this.finishTransition();
+    return this.beginExit(false);
   }
 
   /** Freeze the dwell timer AND any in-flight transition (lockstep pause). */
@@ -388,7 +434,7 @@ export class SequenceDriver {
     this.loadingHooks?.hide();
     this.loadingHooks = null;
     this.pendingIdx = null;
-    this.nextAfterEntrance = false;
+    this.pendingTurns.length = 0;
     // D-083 — tear down the on-screen item's inner drivers (a composition item's clock stops).
     this.currentHooks?.hide();
     this.incomingHooks?.hide();
@@ -409,6 +455,9 @@ export class SequenceDriver {
     this.incomingNode = null;
     this.current = null; // back to item 1 — renderCurrentStatic re-derives it
     this.completed = false;
+    this.exitPromise = null;
+    this.resolveExit = null;
+    this.exitCompletesRun = false;
     this.completion = new Promise<void>((res) => {
       this.resolveComplete = res;
     });
@@ -533,17 +582,9 @@ export class SequenceDriver {
         // D-116 — play the LAST item's `transitionOut` (it exits to the OUT edge), and signal
         // completion ONLY AFTER that exit finishes — so the parent's content-driven hold ends after
         // the content has left and its outro fires last (D-105 content-first / background-last). A
-        // 'none' edge / zero duration completes immediately with the last item frozen (today's
-        // behavior). `phase === 'exit'` already in flight ⇒ don't restart it.
-        if (this.o.transitionOut !== 'none' && this.o.transitionMs > 0 && this.phase !== 'exit') {
-          this.enterPhase('exit');
-          this.paintBoundary('exit');
-          this.scheduleIfNeeded();
-          return;
-        }
-        this.fireComplete();
-        this.running = false;
-        this.cancelFrame();
+        // 'none' edge / zero duration hides it immediately. `phase === 'exit'` already in flight ⇒
+        // don't restart it.
+        void this.beginExit(true);
         return;
       }
       if (this.logical.length === 0) return; // nothing to show — keep the stage
@@ -594,6 +635,8 @@ export class SequenceDriver {
     this.incomingNode = r.node;
     this.o.host.appendChild(r.node);
     r.show(); // D-083 — the incoming item's inner drivers run as it enters
+    const shownIndex = this.logical.findIndex((item) => item.id === incoming.id);
+    if (shownIndex >= 0) this.o.onItemShown?.(shownIndex);
     this.enterPhase('transition');
     this.paintTransition();
     this.scheduleIfNeeded();
@@ -661,11 +704,32 @@ export class SequenceDriver {
 
   /** `D-163` — apply a kept `goTo` once the stage is free (dwelling, running, not frozen). */
   private consumePending(): void {
-    if (this.pendingIdx === null) return;
     if (!this.running || this.paused || this.phase !== 'dwell') return;
-    const target = this.pendingIdx;
-    this.pendingIdx = null;
-    if (target !== this.currentIndex()) this.beginTransition(target);
+    if (this.pendingIdx !== null) {
+      const target = this.pendingIdx;
+      this.pendingIdx = null;
+      this.pendingTurns.length = 0;
+      if (target !== this.currentIndex()) this.beginTransition(target);
+      return;
+    }
+    const turn = this.pendingTurns.shift();
+    if (turn === 'next') this.advance();
+    else if (turn === 'previous') this.previous();
+  }
+
+  private beginExit(completesRun: boolean): Promise<void> {
+    if (this.phase === 'exit') return this.exitPromise ?? Promise.resolve();
+    this.exitCompletesRun = completesRun;
+    this.exitPromise = new Promise<void>((resolve) => {
+      this.resolveExit = resolve;
+    });
+    this.running = true;
+    this.paused = false;
+    this.cancelFrame();
+    this.enterPhase('exit');
+    this.paintBoundary('exit');
+    this.scheduleIfNeeded();
+    return this.exitPromise;
   }
 
   /**
@@ -702,18 +766,19 @@ export class SequenceDriver {
         this.currentNode.style.opacity = '';
       }
       this.enterPhase('dwell');
-      this.consumePending(); // D-163 — a goTo that arrived during the entrance
-      // …or a NEXT, unless a goTo already took the stage.
-      const nextWaiting = this.nextAfterEntrance;
-      this.nextAfterEntrance = false;
-      if (nextWaiting && this.phase === 'dwell') this.advance();
+      this.consumePending(); // D-163 — a Go-to or queued turn that arrived during the entrance
       return;
     }
     // exit — the last item has left the box; NOW signal completion and freeze (the parent's outro
     // follows, so content exits before the background — D-105).
-    this.fireComplete();
+    if (this.currentNode !== null) this.currentNode.style.visibility = 'hidden';
+    if (this.exitCompletesRun) this.fireComplete();
     this.running = false;
+    // Keep the settled phase operable for `previous()`'s documented post-completion repair path.
+    this.enterPhase('dwell');
     this.cancelFrame();
+    this.resolveExit?.();
+    this.resolveExit = null;
   }
 
   private applyPose(node: HTMLElement, pose: MotionPose): void {
@@ -734,7 +799,7 @@ export class SequenceDriver {
       this.phase === 'transition' ||
       this.phase === 'entrance' ||
       this.phase === 'exit' ||
-      (this.phase === 'dwell' && this.o.advance === 'auto')
+      (this.phase === 'dwell' && this.advanceMode === 'auto')
     ) {
       this.scheduleFrame();
     }
@@ -745,7 +810,7 @@ export class SequenceDriver {
       this.paintTransition();
     } else if (this.phase === 'entrance' || this.phase === 'exit') {
       this.paintBoundary(this.phase);
-    } else if (this.phase === 'dwell' && this.o.advance === 'auto') {
+    } else if (this.phase === 'dwell' && this.advanceMode === 'auto') {
       if (this.phaseElapsedMs() >= this.currentDwellMs()) this.advance();
     }
   }
@@ -771,6 +836,12 @@ export class SequenceDriver {
     if (this.completed) return;
     this.completed = true;
     this.resolveComplete?.();
+    this.o.onComplete?.();
+  }
+
+  private reportCurrent(): void {
+    const index = this.currentIndex();
+    if (index >= 0) this.o.onItemShown?.(index);
   }
 
   /** Render the resting state: item 1 (or the empty box) — no motion, no inner drivers started. */

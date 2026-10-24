@@ -959,7 +959,7 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
                 blocked ||
                 needsCaspar ||
                 book.count === 0 ||
-                (!book.wrap && book.page >= book.count),
+                (!book.wrap && book.page >= book.count && !onAir),
               () => (item === null ? noop() : page(item.itemId, book.fieldId, 'next')),
               ArrowRightFromLine,
             );

@@ -61,6 +61,9 @@ export const CG_CONTROL_KEY = '__cg';
  */
 export const TEMPLATE_COMPLETE_PATH = '/complete';
 
+/** A served page reports the page its live book has actually reached on this same-origin route. */
+export const TEMPLATE_PAGE_STATE_PATH = '/page-state';
+
 /**
  * ⭐ `C-028` — **the two INSTALLATION facts one plate's fit depends on.**
  *
@@ -112,10 +115,24 @@ export interface CgPassTiming {
  * MB per 1 MB update, and a `CLEAR` gives none of it back (measured, `IMAGE-PAGES-01`). A book read on
  * air is hundreds of turns, so a turn now names its picture and the page fetches it.
  */
-export interface CgPage {
+export type CgPage =
+  | {
+      field: string;
+      /** An absolute page, used by a take and Go to page. */
+      index: number;
+      media?: Record<string, string>;
+    }
+  | {
+      field: string;
+      /** A live relative turn, resolved by the page from the item it is actually showing. */
+      turn: 'next' | 'previous';
+      media?: Record<string, string>;
+    };
+
+/** Change how one live book advances without changing its authored template. */
+export interface CgPageAdvance {
   field: string;
-  index: number;
-  media?: Record<string, string>;
+  mode: 'auto' | 'manual';
 }
 
 /**
@@ -126,8 +143,15 @@ export interface CgPage {
  */
 export const PAGE_MEDIA_PATH_RE = /^\/page\/([0-9a-f]{64})\.(png|jpg|webp)$/;
 
+/** Extension-free page address used by an auto sequence, which knows the hash but not the MIME. */
+export const PAGE_MEDIA_HASH_PATH_RE = /^\/page\/([0-9a-f]{64})$/;
+
 export function pageMediaPath(sha256: string, ext: 'png' | 'jpg' | 'webp'): string {
   return `/page/${sha256}.${ext}`;
+}
+
+export function pageMediaHashPath(sha256: string): string {
+  return `/page/${sha256}`;
 }
 
 /** `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute, as it crosses to the page. */
@@ -142,6 +166,8 @@ export interface CgControl {
    * page", never "go to page 1".
    */
   page?: CgPage;
+  /** A row-local Auto/Manual override for one page-list sequence. */
+  pageAdvance?: CgPageAdvance;
   /**
    * The look the row is showing NOW. The page enters it through its own `setActiveLook`, so
    * the visibility flip and the re-punch happen exactly where they already happened.
@@ -272,6 +298,7 @@ export function readCgControl(payload: unknown): CgControl | undefined {
     ...(typeof take === 'string' && take !== '' ? { take } : {}),
     ...readPassTiming((raw as Record<string, unknown>)['timing']),
     ...readPage((raw as Record<string, unknown>)['page']),
+    ...readPageAdvance((raw as Record<string, unknown>)['pageAdvance']),
     ...readSound((raw as Record<string, unknown>)['sound']),
   };
 }
@@ -292,9 +319,12 @@ function readPage(raw: unknown): { page?: CgPage } {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
   const r = raw as Record<string, unknown>;
   const field = r['field'];
-  const index = r['index'];
   if (typeof field !== 'string' || field === '') return {};
-  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) return {};
+  const index = r['index'];
+  const turn = r['turn'];
+  const absolute = typeof index === 'number' && Number.isInteger(index) && index >= 0;
+  const relative = turn === 'next' || turn === 'previous';
+  if (absolute === relative) return {};
   const mediaRaw = r['media'];
   const media: Record<string, string> = {};
   if (typeof mediaRaw === 'object' && mediaRaw !== null && !Array.isArray(mediaRaw)) {
@@ -306,7 +336,25 @@ function readPage(raw: unknown): { page?: CgPage } {
       if (m !== null && m[1] === sha && typeof url === 'string') media[sha] = url;
     }
   }
-  return { page: { field, index, ...(Object.keys(media).length > 0 ? { media } : {}) } };
+  return {
+    page: absolute
+      ? { field, index, ...(Object.keys(media).length > 0 ? { media } : {}) }
+      : {
+          field,
+          turn: turn === 'next' ? 'next' : 'previous',
+          ...(Object.keys(media).length > 0 ? { media } : {}),
+        },
+  };
+}
+
+function readPageAdvance(raw: unknown): { pageAdvance?: CgPageAdvance } {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const r = raw as Record<string, unknown>;
+  const field = r['field'];
+  const mode = r['mode'];
+  return typeof field === 'string' && field !== '' && (mode === 'auto' || mode === 'manual')
+    ? { pageAdvance: { field, mode } }
+    : {};
 }
 
 /**

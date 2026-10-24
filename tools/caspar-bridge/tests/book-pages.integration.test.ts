@@ -141,7 +141,17 @@ const cg = (r: CasparRuntime, itemId: string): string => {
 const pagesOf = (r: CasparRuntime, itemId: string): Record<string, number> | undefined =>
   r.stackSnapshot().find((i) => i.itemId === itemId)?.pages;
 
-it('🔴 a page turn on air is ONE CG UPDATE carrying exactly the page asked for', async () => {
+const latestTakeToken = (lines: readonly string[]): string => {
+  const tokens = lines.flatMap((line) => {
+    const match = /"take":"([0-9a-f]{32})"/.exec(line);
+    return match?.[1] === undefined ? [] : [match[1]];
+  });
+  const token = tokens.at(-1);
+  if (token === undefined) throw new Error('no take token on the wire');
+  return token;
+};
+
+it('🔴 a live page turn is ONE relative CG UPDATE, resolved from what the page actually shows', async () => {
   const r = await boot();
   const book = await storeBook(r, 5);
   expect((await r.load('item1', 'book', { pages: book })).accepted).toBe(true);
@@ -154,7 +164,7 @@ it('🔴 a page turn on air is ONE CG UPDATE carrying exactly the page asked for
   const sent = await linesSince(before);
   expect(sent).toHaveLength(1);
   expect(sent[0]?.startsWith(`${cg(r, 'item1')} UPDATE 0 `)).toBe(true);
-  expect(sent[0]).toContain('"page":{"field":"pages","index":1');
+  expect(sent[0]).toContain('"page":{"field":"pages","turn":"next"');
   // Exactly page 2's ADDRESS travels — never its bytes, no other page, and no PLAY / ADD / CLEAR.
   expect(sent[0]).toContain(`"${book[1]!.media}":"/page/${book[1]!.media}.png"`);
   expect(sent[0]).not.toContain('base64');
@@ -190,6 +200,74 @@ it('🔴 a page turn on air is ONE CG UPDATE carrying exactly the page asked for
   expect(turns[0]).toMatchObject({ outcome: 'ok', itemId: 'item1' });
 }, 40_000);
 
+it('🔴 a current template page report updates the counter; a stale take cannot', async () => {
+  const r = await boot();
+  const book = await storeBook(r, 4);
+  expect((await r.load('item1', 'book', { pages: book })).accepted).toBe(true);
+  await expect(mock!.waitForCgAddResolution(slotOf(r, 'item1'))).resolves.toBe('resolved');
+  expect((await r.take('item1')).accepted).toBe(true);
+  const token = latestTakeToken(await linesSince(0));
+  const serve = r.templateServe;
+  if (serve === null) throw new Error('the template server is not serving');
+  const url = `http://${serve.serveHost}:${String(serve.port)}/page-state`;
+
+  const accepted = await fetch(url, {
+    method: 'POST',
+    body: JSON.stringify({ take: token, field: 'pages', index: 2 }),
+  });
+  expect(accepted.status).toBe(204);
+  expect(pagesOf(r, 'item1')).toEqual({ pages: 2 });
+
+  const stale = await fetch(url, {
+    method: 'POST',
+    body: JSON.stringify({ take: '0'.repeat(32), field: 'pages', index: 3 }),
+  });
+  expect(stale.status).toBe(404);
+  expect(pagesOf(r, 'item1')).toEqual({ pages: 2 });
+}, 40_000);
+
+it('🔴 Auto/Manual changes live with one UPDATE, persists, and never plays an off-air row', async () => {
+  const r = await boot();
+  const book = await storeBook(r, 2);
+  expect((await r.load('item1', 'book', { pages: book })).accepted).toBe(true);
+  await expect(mock!.waitForCgAddResolution(slotOf(r, 'item1'))).resolves.toBe('resolved');
+  expect((await r.take('item1')).accepted).toBe(true);
+  const beforeLive = await lineCount();
+
+  expect(await r.setPageAdvance('item1', 'pages', 'auto')).toEqual({ ok: true });
+  const live = await linesSince(beforeLive);
+  expect(live).toHaveLength(1);
+  expect(live[0]).toContain('"pageAdvance":{"field":"pages","mode":"auto"}');
+  expect(r.stackSnapshot().find((item) => item.itemId === 'item1')?.pageAdvance).toEqual({
+    pages: 'auto',
+  });
+  await waitFor(
+    () => fs.readFileSync(auditFile!, 'utf-8').includes('"action":"set-page-advance"'),
+    4000,
+    'the advance audit row',
+  );
+  const advanceAudit = fs
+    .readFileSync(auditFile!, 'utf-8')
+    .split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as { action: string; pageAdvance?: unknown })
+    .find((entry) => entry.action === 'set-page-advance');
+  expect(advanceAudit?.pageAdvance).toEqual({ field: 'pages', mode: 'auto' });
+
+  expect((await r.out('item1')).accepted).toBe(true);
+  const beforeStopped = await lineCount();
+  expect(await r.setPageAdvance('item1', 'pages', 'manual')).toEqual({ ok: true });
+  expect(await linesSince(beforeStopped)).toEqual([]);
+  expect(retainedFromStackItem(r.stackSnapshot()[0]!).pageAdvance).toEqual({ pages: 'manual' });
+
+  const beforeRetake = await lineCount();
+  expect((await r.take('item1')).accepted).toBe(true);
+  const add = (await linesSince(beforeRetake)).find((line) =>
+    line.startsWith(`${cg(r, 'item1')} ADD`),
+  );
+  expect(add).toContain('"pageAdvance":{"field":"pages","mode":"manual"}');
+}, 40_000);
+
 it('🔴 a book stops at its ends, and Go to takes the operator’s page number', async () => {
   const r = await boot();
   const book = await storeBook(r, 3);
@@ -200,7 +278,7 @@ it('🔴 a book stops at its ends, and Go to takes the operator’s page number'
   expect(await r.pageItem('item1', 'pages', 99)).toMatchObject({ page: 3 });
 }, 40_000);
 
-/** The page index each `CG UPDATE` since `from` told the page, in wire order. */
+/** The absolute page indexes each `CG UPDATE` since `from` carried, in wire order. */
 async function toldIndexes(from: number): Promise<number[]> {
   return (await linesSince(from)).flatMap((l) => {
     const m = /"page":\{"field":"pages","index":(\d+)/.exec(l);
@@ -223,7 +301,9 @@ it('🔴 ten Next presses at once turn ten pages, in order — not one is lost',
 
   expect(answers.map((a) => a.page)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   expect(pagesOf(r, 'item1')).toEqual({ pages: 10 });
-  expect(await toldIndexes(before)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  const sent = await linesSince(before);
+  expect(sent).toHaveLength(10);
+  expect(sent.every((line) => line.includes('"page":{"field":"pages","turn":"next"'))).toBe(true);
 }, 40_000);
 
 it('🔴 a new book applied during a page turn waits for it: the page and the book agree', async () => {
@@ -391,7 +471,7 @@ it('🔴 1.6 — a text page in a book is accepted, and a turn onto it carries n
   expect(await r.pageItem('item1', 'pages', 'next')).toEqual({ accepted: true, page: 2, count: 3 });
   const sent = await linesSince(before);
   expect(sent).toHaveLength(1);
-  expect(sent[0]).toContain('"page":{"field":"pages","index":1}');
+  expect(sent[0]).toContain('"page":{"field":"pages","turn":"next"}');
   expect(sent[0]).not.toContain('"media"');
 
   // …and the next turn names the picture after it, as any page does.

@@ -82,7 +82,7 @@ function render(node: ReturnType<typeof createElement>): HTMLDivElement {
 const autoLine = (host: ParentNode): Element | null =>
   host.querySelector('[data-testid="book-auto-advance"]');
 
-describe('🔴 B-353 — a book set to advance auto is told what CG Control can follow', () => {
+describe('book advance — the authored default and CG Control’s live override', () => {
   it('manual (what Add folder… sets) says nothing', () => {
     seedBook();
     const host = render(
@@ -92,16 +92,16 @@ describe('🔴 B-353 — a book set to advance auto is told what CG Control can 
     expect(autoLine(host)).toBeNull();
   });
 
-  it('auto says that the page count falls behind, with the dwell, and what to set', () => {
+  it('auto says it is the initial mode and that CG Control follows and can switch it', () => {
     seedBook();
     designerStore.updateElement('sq', { advance: 'auto' } as Partial<SceneElement>);
     const host = render(
       createElement(StyleSection, { element: sequence(), selectedKeyframe: null }),
     );
     const line = autoLine(host);
-    expect(line?.textContent).toContain('every 5 s');
-    expect(line?.textContent).toContain('page number falls behind');
-    expect(line?.textContent).toContain('Set advance to manual');
+    expect(line?.textContent).toContain("Auto is this book's initial mode");
+    expect(line?.textContent).toContain('CG Control follows the page on air');
+    expect(line?.textContent).toContain('between Auto and Manual');
   });
 
   it('a picture sequence the operator does not step, or a text sequence, says nothing', () => {

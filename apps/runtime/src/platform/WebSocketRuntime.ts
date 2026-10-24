@@ -65,6 +65,7 @@ import {
   StackSetPositionChannel,
   StackSetActiveLookChannel,
   StackSetPassTimingChannel,
+  StackSetPageAdvanceChannel,
   StackSetSoundMutedChannel,
   StackSwapLiveSourceChannel,
   StackSnapshotChannel,
@@ -1843,6 +1844,8 @@ export class WebSocketRuntime implements RuntimeBridge {
     next: (req: ChannelRequest<typeof StackNextChannel>) => this.#invoke(StackNextChannel, req),
     // `R-100` — a page turn: the urgent verb's default timeout, like NEXT.
     page: (req: ChannelRequest<typeof StackPageChannel>) => this.#invoke(StackPageChannel, req),
+    setPageAdvance: (req: ChannelRequest<typeof StackSetPageAdvanceChannel>) =>
+      this.#invoke(StackSetPageAdvanceChannel, req),
     out: (req: ChannelRequest<typeof StackOutChannel>) => this.#invoke(StackOutChannel, req),
     remove: (req: ChannelRequest<typeof StackRemoveChannel>) =>
       this.#invoke(StackRemoveChannel, req),

@@ -1,5 +1,5 @@
-import { TEMPLATE_COMPLETE_PATH } from '@cg/shared-schema';
-import type { SelfEndEvent, TemplateRuntime } from '../types.js';
+import { TEMPLATE_COMPLETE_PATH, TEMPLATE_PAGE_STATE_PATH } from '@cg/shared-schema';
+import type { BookPageEvent, SelfEndEvent, TemplateRuntime } from '../types.js';
 
 /**
  * 🔴 `SELF-STOP-24` / `C-013` + `C-017` — **THE COMPLETION CHANNEL OUT OF CEF, page side.**
@@ -51,7 +51,7 @@ export function installCompletionPing(
   */
   const reported = new Set<string>();
 
-  return runtime.on('self-end', (event: SelfEndEvent) => {
+  const reportEnd = (event: SelfEndEvent): void => {
     const take = event.take;
     // Guard 1 — unarmed. Not an error: most pages in the world are in this state.
     if (take === undefined || take === '') return;
@@ -62,7 +62,30 @@ export function installCompletionPing(
     if (protocol !== 'http:' && protocol !== 'https:') return;
     reported.add(take);
     post(win, win.location.origin + TEMPLATE_COMPLETE_PATH, JSON.stringify({ take }));
-  });
+  };
+  const lastPage = new Map<string, number>();
+  const reportPage = (event: BookPageEvent): void => {
+    const take = event.take;
+    if (take === undefined || take === '') return;
+    const protocol = win.location.protocol;
+    if (protocol !== 'http:' && protocol !== 'https:') return;
+    const key = `${take}:${event.field}`;
+    if (lastPage.get(key) === event.index) return;
+    lastPage.set(key, event.index);
+    post(
+      win,
+      win.location.origin + TEMPLATE_PAGE_STATE_PATH,
+      JSON.stringify({ take, field: event.field, index: event.index }),
+    );
+  };
+  const offSelf = runtime.on('self-end', reportEnd);
+  const offBook = runtime.on('book-end', reportEnd);
+  const offPage = runtime.on('book-page', reportPage);
+  return (): void => {
+    offSelf();
+    offBook();
+    offPage();
+  };
 }
 
 /**

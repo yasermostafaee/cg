@@ -131,3 +131,21 @@ NOT carry explanatory prose.
 - **WHEN** a client sends the reserved template actor as its console name
 - **THEN** the value is not believed and the request is attributed as `console` — amended in place
   2026-09-23 by `BRIDGE-TRUTH-01` §4, which stopped the bridge reading a wire actor at all
+
+### Requirement: A finite book end SHALL use the same completion receipt
+
+A finite book that exhausts itself or receives Next on its last live page SHALL report completion
+with the current take token through the same `/complete` route as a root lifecycle self-end. The
+page adapter SHALL de-duplicate both terminal event sources per token. A non-terminal book page
+report SHALL use `/page-state`, MAY repeat for that token, and SHALL NOT spend it. An
+operator-initiated STOP/OUT SHALL emit neither terminal event.
+
+#### Scenario: Page progress does not consume the terminal receipt
+
+- **WHEN** one current take reports several book pages and then its final page leaves
+- **THEN** every valid page can update the row and the one completion report still gracefully stops it
+
+#### Scenario: Operator Stop is not reported back as natural completion
+
+- **WHEN** the operator stops a book while its page transition out is running
+- **THEN** the transition completes through the operator's stop and the page sends no completion report

@@ -165,8 +165,8 @@ test('🔴 a book exported by the Designer imports, loads, takes and turns its p
   await app.inspector.getByRole('textbox', { name: 'Page number' }).fill('3');
   await app.inspector.getByRole('button', { name: 'Go to page' }).click();
   await expect(counter).toHaveText('3 / 3');
-  // A book stops at its last page.
-  await expect(app.inspector.getByRole('button', { name: 'Next page' })).toBeDisabled();
+  // On air, the terminal Next remains available: it is the book's transition-out door.
+  await expect(app.inspector.getByRole('button', { name: 'Next page' })).toBeEnabled();
 
   // STOP takes it off air; the row keeps its template.
   await row.getByRole('button', { name: 'STOP' }).click();

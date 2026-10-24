@@ -35,6 +35,16 @@ test('🔴 1.4 — the book is named, its pages’ source and state are said, an
   await expect(block.locator('[data-book-source]')).toHaveText("Template's pictures");
   await expect(block.locator('[data-book-sent]')).toHaveText('On the row');
   await expect(block.getByTestId('book-counter')).toHaveText('1 / 5');
+  const manualAdvance = block.getByRole('button', { name: 'Manual' });
+  const autoAdvance = block.getByRole('button', { name: 'Auto' });
+  await expect(autoAdvance).toHaveAttribute('aria-pressed', 'true');
+  await expect(manualAdvance).toHaveAttribute('aria-pressed', 'false');
+  await manualAdvance.click();
+  await expect(manualAdvance).toHaveAttribute('aria-pressed', 'true');
+  await expect(autoAdvance).toHaveAttribute('aria-pressed', 'false');
+  await autoAdvance.click();
+  await expect(autoAdvance).toHaveAttribute('aria-pressed', 'true');
+  await expect(manualAdvance).toHaveAttribute('aria-pressed', 'false');
   // Test mode holds no page to read the template's own pictures from (the real-bridge spec draws
   // them): the face is the wordless placeholder, its file name only in the tooltip.
   const currentFace = block.locator('[data-book-thumb="current"] img');

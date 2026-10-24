@@ -310,6 +310,8 @@ export const TemplateInfoSchema = z.object({
       z.object({
         fieldId: z.string().min(1),
         wrap: z.boolean(),
+        /** Authored default; absent on a template imported before live book advance controls. */
+        advance: z.enum(['auto', 'manual']).optional(),
         /** `D-163` — `false`: the operator loads this book's pictures but does not step it. */
         step: z.literal(false).optional(),
         /**

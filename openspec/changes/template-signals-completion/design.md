@@ -152,3 +152,16 @@ differs, which is exactly what an actor field is for. `PLAYOUT_VERBS` needs no n
 - **No per-pass reporting.** The same channel could later report each PASS boundary, which
   would let the Inspector show a live `Passes remaining` instead of `Sent N more`. Filed as
   `C-035`, not built.
+
+## 8. 2026-10-24 extension — book progress and terminal end
+
+A page-list sequence has two facts to report. `book-page` is repeatable progress and posts
+`{ take, field, index }` to `/page-state`; the bridge verifies the current live token and declared
+in-range book, publishes the index, and does not spend the token. `book-end` is terminal and joins
+`self-end` at `/complete`; the adapter de-duplicates both event names by token, so one run can still
+produce only one graceful STOP.
+
+Operator STOP/OUT is not a book end: it plays the book's element outro but emits neither terminal
+event. A final live Next or finite Auto exhaustion plays the same authored transition, then emits
+`book-end`. This preserves the decision's original discriminator — content finished itself versus
+an external command initiated the exit — while adding a second content driver.

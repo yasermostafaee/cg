@@ -194,7 +194,7 @@ export function RehearsalFrame({
    * named by its page-route address (`/page/<sha>.<ext>`), the one form the page accepts from the
    * wire. `undefined` while the picture is read.
    */
-  const page = useMemo((): CgPage | undefined => {
+  const page = useMemo((): Extract<CgPage, { index: number }> | undefined => {
     if (book === undefined) return undefined;
     if (book.media === undefined) return { field: book.fieldId, index: book.index };
     if (picture?.sha !== book.media) return undefined;

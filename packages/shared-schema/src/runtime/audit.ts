@@ -46,6 +46,8 @@ export const AuditEntrySchema = z.object({
     // `RUN-NEXT-VERSION-02` Q9 — the operator muted or unmuted a row's template sound (a
     // configuration verb, like the timing above: it puts a value in force and seats nothing).
     'set-sound-muted',
+    // `book-in-cg-control` delta B — the row-local Auto/Manual book configuration.
+    'set-page-advance',
     'update-deferred',
     'update-installed',
     /*
@@ -229,6 +231,8 @@ export const AuditEntrySchema = z.object({
    * other action.
    */
   sound: z.object({ muted: z.boolean() }).optional(),
+  /** The book field and Auto/Manual value asked for by `set-page-advance`. */
+  pageAdvance: z.object({ field: z.string().min(1), mode: z.enum(['auto', 'manual']) }).optional(),
   /**
    * `MEDIA-PLATES-01` — WHAT a `set-media-playback` or `media-transport` row carried: the clip's
    * name, and what was ASKED — the settings as set, or the transport action and its plate. Absent on

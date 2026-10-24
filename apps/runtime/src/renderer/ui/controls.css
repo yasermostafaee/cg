@@ -2323,6 +2323,16 @@ textarea.cg-field--autogrow {
   color: var(--r-text-muted);
   font-size: var(--r-text-sm);
 }
+.cg-book__advance .cg-btn {
+  height: 28px;
+  min-height: 28px;
+  padding-block: 0;
+}
+.cg-book__advance .cg-btn[aria-pressed='true'] {
+  border-color: var(--r-accent-line);
+  color: var(--r-accent-ink);
+  background: var(--r-accent-fill);
+}
 /* The strip: up to three pages that exist (`pagesAroundCurrent`), each cell ALWAYS a third of the strip (less
    its gaps) holding a frame-shaped face and its page number — so a one- or two-page book's pages sit
    together in the middle at the same size, with no empty box, and a turn changes only what fills the

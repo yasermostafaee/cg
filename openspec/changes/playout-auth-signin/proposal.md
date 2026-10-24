@@ -49,7 +49,9 @@ This change makes that day. It implements `C-037` in full and the sign-in half o
 - **Auth OFF is byte-identical to today.** Every existing integration test is green and
   unedited; no new persisted key is written; no surface appears.
 - The path to air is unchanged: bridge → AMCP/OSC → apasai-core, on the bridge's own session.
-- The template origin keeps exactly its file routes plus `POST /complete` (ADR 0010 rule 13).
+- The template origin keeps exactly the four routes enumerated in `SECURITY.md`: the template and
+  content-addressed page reads, plus the take-token-bound `/complete` and `/page-state` reports (ADR
+  0010 rule 13).
 
 ## A client-driven write path the gate now covers
 

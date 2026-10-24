@@ -42,6 +42,10 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
   drawn as the air shows it — the channel's frame shape on PVW's checker, the picture at the sequence's own fit
   (`TemplateInfo.pageLists[].fit`); `Load pictures…` and `Load folder…` become one `Load pages… ▾` (`Pictures…`,
   `Folder…`), and files or a folder dropped on the block replace its pictures, dropped on `Manage pages…` are added.
+- **Delta B (the owner, 2026-10-24) — the live book is one state.** The page reports the index it actually shows, so
+  Auto updates the Inspector and a manual Previous/Next during Auto moves from the live page and is never lost. CG
+  Control exposes Auto/Manual per row. Next on the final live page and STOP play the book's authored transition out;
+  a natural/terminal end uses the existing completion receipt and leaves PLAY inactive, like every self-ending graphic.
 
 ## Impact
 
@@ -51,4 +55,7 @@ pages needed a tool in CG Control, not in the Designer; and a book with a text p
 - **Code:** `@cg/shared-ipc` (`pages.get`), CG Bridge (`getPage`, route, scope), `@cg/template-runtime`
   (`page-pictures-host`, the fill, `alt`, `showSequenceItem`), CG Control (`pagePictures`, `bookPageOf`, PVW's
   frame, the mock), the Designer (the sequence card, `sequenceItemFocus`, the canvas's `sequence-item`).
-- **Wire:** one new read channel; `TemplateInfo.pageLists[]` gains an optional `fit` (delta A); `__cg` unchanged.
+- **Wire:** one new read channel; `TemplateInfo.pageLists[]` gains optional `fit` (delta A) and authored `advance`
+  metadata; delta B adds `stack.set-page-advance`, relative `__cg.page` turns, `__cg.pageAdvance`, and the token-bound
+  same-origin `POST /page-state` report. Existing imports remain readable; templates must be re-imported to bake the
+  new page runtime.

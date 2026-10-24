@@ -1,9 +1,9 @@
 /** @vitest-environment jsdom */
 import { describe, expect, it, vi } from 'vitest';
-import { TEMPLATE_COMPLETE_PATH } from '@cg/shared-schema';
+import { TEMPLATE_COMPLETE_PATH, TEMPLATE_PAGE_STATE_PATH } from '@cg/shared-schema';
 import { installCompletionPing } from '../src/adapters/completion-ping.js';
 import { EventBus } from '../src/event-bus.js';
-import type { SelfEndEvent, TemplateRuntime } from '../src/types.js';
+import type { BookPageEvent, SelfEndEvent, TemplateRuntime } from '../src/types.js';
 
 /**
  * 🔴 `SELF-STOP-24` §2.1 — **THE REPORTER: one request per take, and silence everywhere else.**
@@ -23,12 +23,23 @@ import type { SelfEndEvent, TemplateRuntime } from '../src/types.js';
  */
 
 /** A minimal stand-in for the runtime's event surface — the adapter uses nothing else. */
-function fakeRuntime(): { rt: TemplateRuntime; selfEnd: (e: SelfEndEvent) => void } {
+function fakeRuntime(): {
+  rt: TemplateRuntime;
+  selfEnd: (e: SelfEndEvent) => void;
+  bookEnd: (e: SelfEndEvent) => void;
+  bookPage: (e: BookPageEvent) => void;
+} {
   const bus = new EventBus();
   return {
     rt: { on: bus.on.bind(bus) } as unknown as TemplateRuntime,
     selfEnd: (e) => {
       bus.emit('self-end', e);
+    },
+    bookEnd: (e) => {
+      bus.emit('book-end', e);
+    },
+    bookPage: (e) => {
+      bus.emit('book-page', e);
     },
   };
 }
@@ -118,6 +129,41 @@ describe('SELF-STOP-24 — the served page reports its own completion', () => {
     selfEnd({ take: 'tok-1' });
 
     expect(win.fetch as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
+  });
+
+  it('🔴 book progress posts the actual field/index and only de-duplicates the same page', () => {
+    const { rt, bookPage } = fakeRuntime();
+    const win = fakeWin();
+    install(rt, win);
+
+    bookPage({ take: 'tok-book', field: 'pages', index: 0 });
+    bookPage({ take: 'tok-book', field: 'pages', index: 0 });
+    bookPage({ take: 'tok-book', field: 'pages', index: 1 });
+
+    const fetchMock = win.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [call, index] of fetchMock.mock.calls.map((entry, i) => [entry, i] as const)) {
+      const [url, init] = call as [string, Record<string, unknown>];
+      expect(url).toBe(`http://10.0.0.5:9271${TEMPLATE_PAGE_STATE_PATH}`);
+      expect(JSON.parse(String(init['body'])) as unknown).toEqual({
+        take: 'tok-book',
+        field: 'pages',
+        index,
+      });
+    }
+  });
+
+  it('🔴 a natural book end and self-end share one completion receipt for the take', () => {
+    const { rt, bookEnd, selfEnd } = fakeRuntime();
+    const win = fakeWin();
+    install(rt, win);
+
+    bookEnd({ take: 'tok-book' });
+    selfEnd({ take: 'tok-book' });
+
+    const fetchMock = win.fetch as ReturnType<typeof vi.fn>;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://10.0.0.5:9271${TEMPLATE_COMPLETE_PATH}`);
   });
 
   it('a NEW token re-arms — a re-taken row reports its second run too', () => {

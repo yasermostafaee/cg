@@ -220,6 +220,8 @@ export function createMockBridge(): RuntimeBridge {
       next: (req) => Promise.resolve(mock.next(req.itemId)),
       // `R-100` — a page turn on a row's book, with the bridge's arithmetic.
       page: (req) => Promise.resolve(mock.page(req.itemId, req.field, req.to)),
+      setPageAdvance: (req) =>
+        Promise.resolve(mock.setPageAdvance(req.itemId, req.field, req.mode)),
       out: (req) => Promise.resolve(mock.out(req.itemId)),
       remove: (req) => Promise.resolve(mock.remove(req.itemId)),
       dismissError: (req) => Promise.resolve(mock.dismissError(req.itemId)),

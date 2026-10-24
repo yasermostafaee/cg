@@ -206,8 +206,9 @@ behind the bridge, and the browser talks to nothing but the bridge for control.
     `tools/caspar-bridge/tests/template-server-route-set.test.ts`. So: the `auth` frame travels ONLY
     on the control WebSocket (5280); the JWKS, channel-catalogue and revocation reads are bridge →
     Playout, server-side; and the Playout API is a THIRD origin the console browser calls directly.
-    The template origin keeps exactly its file routes plus `POST /complete`. An identity or control
-    route appearing there is a defect, not a convenience.
+    The template origin keeps exactly the four routes enumerated in `SECURITY.md`: the template and
+    content-addressed page reads, plus the take-token-bound `/complete` and `/page-state` reports.
+    An identity or control route appearing there is a defect, not a convenience.
 
 14. **The Playout's source lists are kept through an outage, never pruned, and never read inside a
     verb** (`PLAYOUT-SOURCES-01`, 2026-09-27). The station's inputs (D10) and the media items it has

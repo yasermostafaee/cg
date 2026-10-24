@@ -15,6 +15,8 @@ export interface RowBook {
   count: number;
   /** A wrapping list (`repeat: 'infinite'`) turns past its ends; a book stops at them. */
   wrap: boolean;
+  /** The row's live choice, falling back to the template's authored mode. */
+  advance: 'auto' | 'manual';
 }
 
 export function bookOf(template: TemplateInfo | null, item: StackItemState | null): RowBook | null {
@@ -29,7 +31,13 @@ export function bookOf(template: TemplateInfo | null, item: StackItemState | nul
       ? declared.default.length
       : 0;
   const index = Math.min(item.pages?.[entry.fieldId] ?? 0, Math.max(0, count - 1));
-  return { fieldId: entry.fieldId, page: count === 0 ? 0 : index + 1, count, wrap: entry.wrap };
+  return {
+    fieldId: entry.fieldId,
+    page: count === 0 ? 0 : index + 1,
+    count,
+    wrap: entry.wrap,
+    advance: item.pageAdvance?.[entry.fieldId] ?? entry.advance ?? 'manual',
+  };
 }
 
 /**

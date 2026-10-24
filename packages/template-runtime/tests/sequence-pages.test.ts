@@ -174,7 +174,7 @@ describe('D-163 — Next, Previous and Go to', () => {
     return { rt, clock };
   }
 
-  it('🔴 a book (repeat 1) does not wrap: Next on the last page and Previous on the first stay', async () => {
+  it('🔴 Next on the last page plays the terminal exit instead of holding the last picture', async () => {
     const { rt, clock } = await onAir();
     await rt.previous!();
     await flush(clock, 100);
@@ -184,11 +184,9 @@ describe('D-163 — Next, Previous and Go to', () => {
     expect(onStage()).toEqual(['assets/p3.png']);
     await rt.next!();
     await flush(clock, 100);
-    expect(onStage()).toEqual(['assets/p3.png']);
-    // …and a book read to its end can still be paged back.
-    await rt.previous!();
-    await flush(clock, 100);
-    expect(onStage()).toEqual(['assets/p2.png']);
+    expect(document.querySelector<HTMLElement>('[data-cg-sequence-page]')?.style.visibility).toBe(
+      'hidden',
+    );
   });
 
   it('an infinite sequence wraps both ways: Previous on the first item goes to the last', async () => {
@@ -211,6 +209,16 @@ describe('D-163 — Next, Previous and Go to', () => {
     await rt.goTo!(4); // mid-push
     await flush(clock, 1500);
     expect(onStage()).toEqual(['assets/p5.png']);
+  });
+
+  it('🔴 relative turns received during motion queue in order — ten presses lose none', async () => {
+    const { rt, clock } = await onAir(
+      { transitionIn: 'right', transitionOut: 'left', transitionMs: 100 },
+      12,
+    );
+    for (let i = 0; i < 10; i += 1) await rt.next!();
+    await flush(clock, 1200);
+    expect(onStage()).toEqual(['assets/p11.png']);
   });
 
   it('a goTo before the run starts sets the page the run opens on', async () => {
@@ -372,6 +380,134 @@ describe('R-100 — a bridge page turn (`__cg.page`) on an operator book', () =>
     });
     await flush(clock, 100);
     expect(onStage()).toEqual([DATA(13)]);
+  });
+
+  it('🔴 reports the page actually shown, queues a manual turn during Auto, and changes mode live', async () => {
+    const clock = makeClock();
+    const rt = createRuntime(
+      book(
+        [],
+        {
+          advance: 'auto',
+          defaultDwellMs: 1000,
+          transitionIn: 'right',
+          transitionOut: 'left',
+          transitionMs: 400,
+        },
+        { fields: [pagesField], bindings: [binding] },
+      ),
+      { skipFontLoad: true, clock, decodeImage: () => Promise.resolve(true) },
+    );
+    const shown: number[] = [];
+    rt.on('book-page', (event) => shown.push(event.index));
+
+    await rt.play({
+      pages: operatorBook(3),
+      __cg: {
+        take: 'take-live-book',
+        page: { field: 'pages', index: 0, media: { [SHA(1)]: DATA(1) } },
+        pageAdvance: { field: 'pages', mode: 'auto' },
+      },
+    });
+    await flush(clock, 500);
+    expect(shown).toEqual([0]);
+
+    // The bridge deliberately sends a relative turn because its counter may be behind Auto.
+    await rt.update({ __cg: { page: { field: 'pages', turn: 'next' } } });
+    await flush(clock, 100);
+    await rt.update({ __cg: { page: { field: 'pages', turn: 'previous' } } });
+    await flush(clock, 750);
+    expect(shown).toEqual([0, 1, 0]);
+    expect(onStage()).toEqual([DATA(1)]);
+
+    await rt.update({ __cg: { pageAdvance: { field: 'pages', mode: 'manual' } } });
+    await flush(clock, 1500);
+    expect(shown).toEqual([0, 1, 0]);
+
+    await rt.update({ __cg: { pageAdvance: { field: 'pages', mode: 'auto' } } });
+    await flush(clock, 1050);
+    expect(shown).toEqual([0, 1, 0, 1]);
+    expect(onStage()).toContain(`/page/${SHA(2)}`);
+  });
+
+  it('🔴 the last Next plays transitionOut, hides the book, then reports completion', async () => {
+    const clock = makeClock();
+    const rt = createRuntime(
+      book(
+        [],
+        { transitionOut: 'left', transitionMs: 400 },
+        { fields: [pagesField], bindings: [binding] },
+      ),
+      { skipFontLoad: true, clock, decodeImage: () => Promise.resolve(true) },
+    );
+    const ended: string[] = [];
+    rt.on('book-end', (event) => ended.push(event.take ?? ''));
+    await rt.play({
+      pages: operatorBook(1),
+      __cg: {
+        take: 'take-terminal-next',
+        page: { field: 'pages', index: 0, media: { [SHA(1)]: DATA(1) } },
+      },
+    });
+    await flush(clock);
+
+    await rt.update({ __cg: { page: { field: 'pages', turn: 'next' } } });
+    await flush(clock, 200);
+    expect(ended).toEqual([]);
+    expect(
+      document.querySelector<HTMLElement>('[data-cg-sequence-page]')?.style.transform,
+    ).not.toBe('');
+    await flush(clock, 250);
+    expect(ended).toEqual(['take-terminal-next']);
+    expect(document.querySelector<HTMLElement>('[data-cg-sequence-page]')?.style.visibility).toBe(
+      'hidden',
+    );
+  });
+
+  it('🔴 Stop awaits the book transitionOut and a late picture decode cannot bring it back', async () => {
+    const clock = makeClock();
+    let release: (ok: boolean) => void = () => undefined;
+    const rt = createRuntime(
+      book(
+        [],
+        { transitionOut: 'fade', transitionMs: 400 },
+        { fields: [pagesField], bindings: [binding] },
+      ),
+      {
+        skipFontLoad: true,
+        clock,
+        decodeImage: (img) =>
+          img.src.includes(SHA(2))
+            ? new Promise<boolean>((resolve) => {
+                release = resolve;
+              })
+            : Promise.resolve(true),
+      },
+    );
+    await rt.play({
+      pages: operatorBook(2),
+      __cg: {
+        take: 'take-stop',
+        page: { field: 'pages', index: 0, media: { [SHA(1)]: DATA(1) } },
+      },
+    });
+    await flush(clock);
+    await rt.update({ __cg: { page: { field: 'pages', turn: 'next' } } });
+    await flush(clock, 50);
+
+    let stopped = false;
+    const stopping = rt.stop().then(() => {
+      stopped = true;
+    });
+    await flush(clock, 200);
+    expect(stopped).toBe(false);
+    release(true);
+    await flush(clock, 250);
+    await stopping;
+    expect(stopped).toBe(true);
+    // The normal STOP settle removes the scene after the authored fade; resolving the retired
+    // decode afterwards must not append page 2 back into that cleared scene.
+    expect(document.querySelectorAll('[data-cg-sequence-page]')).toHaveLength(0);
   });
 
   it('🔴 a turn to a page whose bytes never arrived keeps the current page', async () => {

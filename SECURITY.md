@@ -30,17 +30,17 @@ should be treated like signed software:
   🔴 **ACCEPTED BY THE OWNER ON 2026-09-16**, for the reasons set out in
   `openspec/changes/template-signals-completion/design.md` §1 and recorded in
   [ADR 0009](docs/adrs/0009-timing-setting-ownership.md). It exists for exactly one message: a
-  template telling the bridge that its own run has finished, so the row stops claiming ON AIR
-  ([[C-013]]). **Do not widen it further without strong justification** — a host list or a
+  token-bearing template reporting its own run state — completion, or the live page of a book —
+  so the console stays honest ([[C-013]]). **Do not widen it further without strong justification** — a host list or a
   scheme wildcard is what "phoning home" means, and `'self'` is not.
 - **The narrow part is not the policy, it is the key.** A page opens no connection at all unless
   the bridge handed it a per-take token inside the reserved `__cg` payload. A single-file
   template dropped into CasparCG by hand, a template served by anything that is not this bridge,
   and the Designer's own preview all receive no token and therefore never open a socket.
-- 🔴 **THE TEMPLATE-SERVING ORIGIN HOSTS TEMPLATES AND THEIR BOOK PAGES, NOTHING ELSE.** `'self'`
+- 🔴 **THE TEMPLATE-SERVING ORIGIN HOSTS TEMPLATES, THEIR BOOK PAGES AND TWO TOKEN-BOUND REPORTS, NOTHING ELSE.** `'self'`
   is an ORIGIN, not a path, so a served template can reach **every route on the server that
-  served it**. That origin therefore hosts exactly three routes — `GET /template/<id>`,
-  `POST /complete` and `GET /page/<sha256>.<ext>` — and **no control, identity or data route may
+  served it**. That origin therefore hosts exactly four routes — `GET /template/<id>`,
+  `POST /complete`, `POST /page-state` and `GET /page/<sha256>[.<ext>]` — and **no control, identity or general data route may
   ever be added to it.** The control WebSocket is deliberately a separate server on a separate
   port (`DEFAULT_BRIDGE_PORT`), which is what keeps it outside `'self'`. The rule is enforced,
   not merely stated: the router consults `TEMPLATE_SERVER_ROUTES` and nothing else, and
@@ -54,7 +54,14 @@ should be treated like signed software:
     back). The route is READ-ONLY and GET-only, named by the picture's SHA-256, and serves only a
     PNG, JPEG or WebP that CG Bridge stored after its own checks, `no-store` and `nosniff`. A
     template that can reach it learns only the pictures it was told the names of. The template's
-    CSP admits it as `img-src data: 'self'` — the own origin, never a host list.
+    CSP admits it as `img-src data: 'self'` — the own origin, never a host list. The bare-hash
+    spelling was added on 2026-10-24 so an Auto turn can fetch a stored page whose extension URL
+    was not carried by an operator command; it selects the same hash-only reader.
+  - **The page-state route (added 2026-10-24, `book-in-cg-control` delta B).** A template may POST
+    only `{ take, field, index }`; the bridge accepts it only when the unguessable token names the
+    current live take, the field is that row's declared page list and the integer is in range. It
+    updates that row's published counter, spends no token, exposes no lookup or enumeration, and
+    performs no playout verb. Malformed, stale and off-air reports are indistinguishable `404`s.
 
 ## Reporting a vulnerability
 

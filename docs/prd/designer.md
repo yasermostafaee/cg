@@ -5724,8 +5724,10 @@ owner found a Cut's jump "not good"). **Why (the owner, 2026-10-14):** _"Someone
 book on air … the operator must be able to move between the pages. Today it can be done with a sequence and one
 composition per page, but with many pages that is very hard. It must be possible to choose all the pictures, or
 their folder, at once."_ **Acceptance:** WHEN twelve files (or a folder) are added THEN twelve picture items in
-natural order and `12 pages`; WHEN a duplicate file is added THEN one asset; WHEN a book shows its last page and
-Next arrives (or its first and Previous) THEN it stays; WHEN `goTo` arrives mid-transition THEN it is applied
+natural order and `12 pages`; WHEN a live book shows its last page and Next arrives THEN that page plays its authored
+transition out and the row gracefully stops (off air, Next stays); WHEN its first page receives Previous THEN it stays;
+WHEN Auto advances THEN CG Control follows the actual page and a manual turn during motion queues from that page;
+WHEN `goTo` arrives mid-transition THEN it is applied
 when the transition ends; WHEN a page turn's picture is missing or undecodable THEN the previous page stays; WHEN an
 old sequence is parsed THEN it is unchanged; WHEN a picture sequence is exported and unpacked THEN it round-trips.
 

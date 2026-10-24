@@ -193,7 +193,7 @@ export function BookBlock({
         fit={fit}
         raster={raster}
       />
-      {book !== null && <BookTurn itemId={itemId} title={title} book={book} />}
+      {book !== null && <BookTurn itemId={itemId} title={title} book={book} onAir={onAir} />}
       <div className="cg-book__row" data-book-load="">
         {/*
           🔴 `RUN-NEXT-VERSION-03` delta A — ONE load button (the owner's choice): a browser's picker takes
@@ -432,10 +432,12 @@ function BookTurn({
   itemId,
   title,
   book,
+  onAir,
 }: {
   itemId: string;
   title: string;
   book: RowBook;
+  onAir: boolean;
 }): JSX.Element {
   const [typed, setTyped] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -454,6 +456,21 @@ function BookTurn({
     }
   }
 
+  async function setAdvance(mode: 'auto' | 'manual'): Promise<void> {
+    if (mode === book.advance) return;
+    setBusy(true);
+    try {
+      const r = await window.cg.stack.setPageAdvance({
+        itemId,
+        field: book.fieldId,
+        mode,
+      });
+      setRefusal(r.ok ? null : (r.message ?? 'The advance mode did not change.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const shown = typed ?? (book.count === 0 ? '' : String(book.page));
   const target = typed === null ? null : parseLocalizedNumber(typed.trim());
   const goable = target !== null && Number.isInteger(target) && target >= 1;
@@ -461,6 +478,25 @@ function BookTurn({
 
   return (
     <div data-book-bar="">
+      <div className="cg-book__row cg-book__advance" role="group" aria-label={`Advance ${title}`}>
+        <span className="cg-book-count">Advance</span>
+        <Button
+          variant="neutral"
+          aria-pressed={book.advance === 'manual'}
+          disabled={busy}
+          onClick={() => void setAdvance('manual')}
+        >
+          Manual
+        </Button>
+        <Button
+          variant="neutral"
+          aria-pressed={book.advance === 'auto'}
+          disabled={busy}
+          onClick={() => void setAdvance('auto')}
+        >
+          Auto
+        </Button>
+      </div>
       <div className="cg-book__row cg-book__turn">
         <Button
           variant="neutral"
@@ -492,7 +528,7 @@ function BookTurn({
         <Button
           variant="neutral"
           aria-label={`Next page of ${title}`}
-          disabled={busy || none || (!book.wrap && book.page >= book.count)}
+          disabled={busy || none || (!book.wrap && book.page >= book.count && !onAir)}
           onClick={() => void turn('next')}
         >
           Next

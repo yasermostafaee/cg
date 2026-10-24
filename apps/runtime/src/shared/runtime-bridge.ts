@@ -80,6 +80,7 @@ import type {
   StackSetPositionChannel,
   StackSetActiveLookChannel,
   StackSetPassTimingChannel,
+  StackSetPageAdvanceChannel,
   StackSetSoundMutedChannel,
   StackSwapLiveSourceChannel,
   StackRestoreReportDismissChannel,
@@ -426,6 +427,9 @@ export interface RuntimeBridge {
     page(
       req: ChannelRequest<typeof StackPageChannel>,
     ): Promise<ChannelResponse<typeof StackPageChannel>>;
+    setPageAdvance(
+      req: ChannelRequest<typeof StackSetPageAdvanceChannel>,
+    ): Promise<ChannelResponse<typeof StackSetPageAdvanceChannel>>;
     out(
       req: ChannelRequest<typeof StackOutChannel>,
     ): Promise<ChannelResponse<typeof StackOutChannel>>;

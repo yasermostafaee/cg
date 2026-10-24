@@ -190,4 +190,25 @@
       reordered around the neutral `/`. A number readout is LTR chrome: `dir="ltr"` on the caption and the
       page box, an LTR `<bdi>` in the row. Measured from the engine's glyph boxes, the instrument proved live on
       a planted bare `1 / 4` in an RTL span.
-- [ ] A.7 Linux `e2e` discharged on the pushed commit — run URL: _(pending)_
+- [x] A.7 Linux `e2e` discharged on the pushed commit — run URL:
+      https://github.com/yasermostafaee/cg/actions/runs/39709186385 — `5eba7f81`, completed
+      `success`; the E2E job RAN (Designer 343 passed, CG Control 374 passed, 2 skipped).
+
+## Delta B — live Auto/Manual state, terminal transition and self-stop
+
+- [x] B.1 Reproduce and isolate: Auto advances inside the baked template runtime while CG Bridge's persisted
+      `pages` index moved only on operator commands; absolute live turns therefore used a stale page.
+- [x] B.2 Export each book's authored `advance`; add retained row-local `pageAdvance`,
+      `stack.set-page-advance`, live configuration-only `CG UPDATE`, and Inspector Auto/Manual controls.
+- [x] B.3 Add `book-page` / `POST /page-state`: current-token and live-row validation, in-range page state update,
+      published counter, stale-token refusal; keep the token reusable until completion.
+- [x] B.4 Send live Previous/Next as relative turns resolved by the page, queue turns during entrance/load/motion,
+      keep Go to and off-air state absolute, and serve stored Auto pages at the bare hash route.
+- [x] B.5 Treat a page-list sequence as an element-outro owner: STOP/OUT and final Next play its authored
+      `transitionOut`; natural/final completion reports through `/complete` and reaches graceful STOP.
+- [x] B.6 Replace the Designer's obsolete drift warning with the authored-default/live-override contract; update
+      active specs, security route census and decision record.
+- [x] B.7 Tests: runtime page reports/mode/queued turns/terminal and Stop transitions; completion adapter; HTTP route
+      and security census; bridge integration; CG Control model and real-browser Inspector mode control.
+- [ ] B.8 Full `pnpm gate`, CG Control + Designer E2E, conventional commit and push to `dev`; verify the Linux E2E
+      job RAN and record its URL here.

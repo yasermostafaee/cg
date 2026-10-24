@@ -154,7 +154,7 @@ describe('🔴 B-353 — isPageListField, the one answer', () => {
 describe('🔴 B-353 — pageListsOf reads the owner’s file as a book', () => {
   it('telavat2 has ONE page list, a1, that stops at its ends', () => {
     expect(pageListsOf(telavat2())).toEqual([
-      { fieldId: 'a1', wrap: false, name: 'Sequence', fit: 'cover' },
+      { fieldId: 'a1', wrap: false, advance: 'auto', name: 'Sequence', fit: 'cover' },
     ]);
   });
 
@@ -168,7 +168,14 @@ describe('🔴 B-353 — pageListsOf reads the owner’s file as a book', () => 
   it('…and the same list with `operatorSteps: false` is a page list the operator does not step', () => {
     const s = scene([sequence(SEQ, { operatorSteps: false })], [A1], [bindA1]);
     expect(pageListsOf(s)).toEqual([
-      { fieldId: 'a1', wrap: false, step: false, name: 'Sequence', fit: 'cover' },
+      {
+        fieldId: 'a1',
+        wrap: false,
+        advance: 'auto',
+        step: false,
+        name: 'Sequence',
+        fit: 'cover',
+      },
     ]);
   });
 });
@@ -239,7 +246,7 @@ describe('🔴 B-353 (BOOK-EXPORT Q2) — a stepped picture sequence is a book w
       { fieldId: id, target: { kind: 'sequence-items', elementId: SEQ } },
     ]);
     expect(pageListsOf(out)).toEqual([
-      { fieldId: id, wrap: false, name: 'Sequence', fit: 'cover' },
+      { fieldId: id, wrap: false, advance: 'auto', name: 'Sequence', fit: 'cover' },
     ]);
   });
 
@@ -276,7 +283,7 @@ describe('🔴 B-353 (BOOK-EXPORT Q2) — a stepped picture sequence is a book w
 
   it('withPageLists does both: the owner’s file is a book, a keyless one is too', () => {
     expect(pageListsOf(withPageLists(telavat2()))).toEqual([
-      { fieldId: 'a1', wrap: false, name: 'Sequence', fit: 'cover' },
+      { fieldId: 'a1', wrap: false, advance: 'auto', name: 'Sequence', fit: 'cover' },
     ]);
     expect(withPageLists(telavat2()).fields).toHaveLength(1);
     expect(pageListsOf(withPageLists(keyless()))).toHaveLength(1);

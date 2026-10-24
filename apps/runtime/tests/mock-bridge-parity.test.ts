@@ -197,6 +197,8 @@ const BRIDGE_SURFACE: {
       'swapLiveSource',
       // §14 (LOOKS) Stage E — the row’s look picker.
       'setActiveLook',
+      // `BOOK-IN-CONTROL` — the per-row page-advance mode configuration verb.
+      'setPageAdvance',
       // `TIMING-WIRE-22` (c) — the per-row pass-timing configuration verb.
       'setPassTiming',
       // `RUN-NEXT-VERSION-02` Q9 — the row's template-sound mute, the same configuration shape.

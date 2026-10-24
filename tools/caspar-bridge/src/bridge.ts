@@ -147,6 +147,7 @@ import {
   StackDismissErrorChannel,
   StackSetActiveLookChannel,
   StackSetPassTimingChannel,
+  StackSetPageAdvanceChannel,
   StackSetSoundMutedChannel,
   StackSetPlateVolumeChannel,
   StackSetPlateVolumesChannel,
@@ -4650,6 +4651,13 @@ export function buildRoutes(
       'operator',
       (r: { itemId: string; field: string; to: 'next' | 'previous' | number }) =>
         b.pageItem(r.itemId, r.field, r.to),
+    ),
+    route(
+      StackSetPageAdvanceChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; field: string; mode: 'auto' | 'manual' }) =>
+        b.setPageAdvance(r.itemId, r.field, r.mode),
     ),
     route(PagesPutChannel, 'operator', 'operator', (r: { name: string; base64: string }) =>
       b.putPage(r.name, r.base64),

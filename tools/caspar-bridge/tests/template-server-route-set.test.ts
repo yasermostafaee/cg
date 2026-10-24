@@ -1,6 +1,6 @@
 import * as http from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
-import { TEMPLATE_COMPLETE_PATH } from '@cg/shared-schema';
+import { TEMPLATE_COMPLETE_PATH, TEMPLATE_PAGE_STATE_PATH } from '@cg/shared-schema';
 import { DEFAULT_BRIDGE_PORT } from '@cg/shared-ipc';
 import {
   TemplateHttpServer,
@@ -61,13 +61,14 @@ async function serve(): Promise<number> {
     (id) => (id === 't1' ? '<html>t1</html>' : null),
     () => false,
     (sha) => Promise.resolve(sha === STORED ? { bytes: PNG, mime: 'image/png' } : null),
+    () => false,
   );
   await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
   return server.port;
 }
 
-describe('REPLY 1 §R3 — the template server hosts exactly three routes', () => {
-  it('🔴 the route table is EXACTLY these three, by name', () => {
+describe('REPLY 1 §R3 — the template server hosts exactly four routes', () => {
+  it('🔴 the route table is EXACTLY these four, by name', () => {
     /*
       🔴 IF THIS FAILS, READ `SECURITY.md` BEFORE CHANGING THE EXPECTATION.
 
@@ -80,18 +81,23 @@ describe('REPLY 1 §R3 — the template server hosts exactly three routes', () =
       Adding a route is not forbidden; adding one WITHOUT a decision is. Update this list only
       together with `SECURITY.md`'s statement of the rule.
 
-      `GET /page/<sha256>.<ext>` is such a decision (`R-100`, `IMAGE-PAGES-01`, 2026-10-14): a
+      `GET /page/<sha256>[.<ext>]` is such a decision (`R-100`, `IMAGE-PAGES-01`, 2026-10-14): a
       read-only picture route, named by content hash, serving only pictures CG Bridge stored —
       recorded in `SECURITY.md` in the same change.
+
+      `POST /page-state` is the second narrow exception (2026-10-24): a token-bearing template may
+      report only one page-list field and non-negative index; the bridge accepts it only for the
+      current live take. It exposes no lookup and performs no playout verb.
     */
     expect(TEMPLATE_SERVER_ROUTES.map((r) => r.name)).toEqual([
       'GET /template/<id>',
       `POST ${TEMPLATE_COMPLETE_PATH}`,
-      'GET /page/<sha256>.<ext>',
+      `POST ${TEMPLATE_PAGE_STATE_PATH}`,
+      'GET /page/<sha256>[.<ext>]',
     ]);
   });
 
-  it('🔴 the table carries exactly THREE KINDS — a route class cannot be added silently', () => {
+  it('🔴 the table carries exactly FOUR KINDS — a route class cannot be added silently', () => {
     /*
       🔴 `C-037` / ADR 0010 rule 13 — THE AXIS THE FORBIDDEN-PATH LIST CANNOT COVER.
 
@@ -108,10 +114,11 @@ describe('REPLY 1 §R3 — the template server hosts exactly three routes', () =
     expect([...TEMPLATE_SERVER_ROUTES.map((r) => r.kind)].sort()).toEqual([
       'complete',
       'page',
+      'page-state',
       'template',
     ]);
     // The positive control: the table is not empty, so the equality above is a real comparison.
-    expect(TEMPLATE_SERVER_ROUTES.length).toBe(3);
+    expect(TEMPLATE_SERVER_ROUTES.length).toBe(4);
   });
 
   it('each table entry declares one method, and no entry is a wildcard', () => {
@@ -175,7 +182,6 @@ describe('REPLY 1 §R3 — the template server hosts exactly three routes', () =
       '/page/',
       '/pages',
       '/page/abc.png',
-      `/page/${'a'.repeat(64)}`,
       `/page/${'a'.repeat(64)}.gif`,
       `/page/${'a'.repeat(64)}.svg`,
       `/page/${'a'.repeat(64)}.png/extra`,
@@ -203,7 +209,7 @@ describe('REPLY 1 §R3 — the template server hosts exactly three routes', () =
     }
   });
 
-  it('the three real routes are reachable — so the 404s above are a refusal, not a dead server', async () => {
+  it('the four real routes are reachable — so the 404s above are a refusal, not a dead server', async () => {
     // The positive control. Without it "everything 404s" is satisfied by a server that serves
     // nothing at all, and the test above would pass over a broken boundary.
     const port = await serve();
@@ -211,8 +217,11 @@ describe('REPLY 1 §R3 — the template server hosts exactly three routes', () =
     // POST /complete reaches the handler; this fixture's handler says "no live take", so 404 —
     // the point is that it is ROUTED, which `template-complete-route.test.ts` proves in full.
     expect(await probe(port, 'GET', TEMPLATE_COMPLETE_PATH)).toBe(404);
-    // `R-100` — a stored picture is served, by GET only.
+    // POST /page-state reaches its handler too; this fixture rejects the empty body/current token.
+    expect(await probe(port, 'GET', TEMPLATE_PAGE_STATE_PATH)).toBe(404);
+    // `R-100` — a stored picture is served, by GET only, with or without the compatibility suffix.
     expect(await probe(port, 'GET', `/page/${STORED}.png`)).toBe(200);
+    expect(await probe(port, 'GET', `/page/${STORED}`)).toBe(200);
     expect(await probe(port, 'POST', `/page/${STORED}.png`)).toBe(404);
   });
 

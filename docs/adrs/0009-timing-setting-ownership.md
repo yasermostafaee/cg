@@ -379,6 +379,13 @@ belong on the control socket's side.
 > control, identity or data route; recorded in `SECURITY.md` with its reason (CasparCG 2.5.0 keeps
 > memory for every `CG UPDATE`'s bytes, so a page cannot ride the command).
 
+> **Amended 2026-10-24 (`book-in-cg-control` delta B).** The origin now has exactly four routes.
+> `GET /page/<sha256>[.<ext>]` accepts the same stored hash with or without the compatibility
+> extension, and `POST /page-state` accepts only `{ take, field, index }` from the current live take
+> for that row's declared in-range book. It spends no token, exposes no read/enumeration and performs
+> no playout verb; it exists so Auto's actual page can keep the operator surface honest. The route
+> table and security census pin all four.
+
 ⚠ **And the "Related PRD items" block above is now stale in TWO ways, both of them this
 session's doing.** Its coordinates have drifted — `C-013` is at `docs/prd/caspar.md:304` and
 `C-017` at `:661`, not `:284` / `:641` — and, more importantly, **its statuses are no longer

@@ -58,6 +58,8 @@ const CONFIG_VERBS = [
   'set-pass-timing',
   // `RUN-NEXT-VERSION-02` Q9 — a row's template-sound mute, the same shape; driven at the foot too.
   'set-sound-muted',
+  // `book-in-cg-control` delta B — driven by the book-pages integration suite.
+  'set-page-advance',
 ] as const;
 
 /**

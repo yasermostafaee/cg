@@ -69,7 +69,22 @@ describe('R-100 — bookOf, the one reading of a row’s book', () => {
       page: 12,
       count: 300,
       wrap: false,
+      advance: 'manual',
     });
+  });
+
+  it('the authored advance mode is the default and the row override wins', () => {
+    const authoredAuto = {
+      ...BOOK,
+      pageLists: [{ fieldId: 'pages', wrap: false, advance: 'auto' as const }],
+    };
+    expect(bookOf(authoredAuto, item({ fields: { pages: [{ id: 'p1' }] } }))?.advance).toBe('auto');
+    expect(
+      bookOf(
+        authoredAuto,
+        item({ fields: { pages: [{ id: 'p1' }] }, pageAdvance: { pages: 'manual' } }),
+      )?.advance,
+    ).toBe('manual');
   });
 
   it('no page list ⇒ no book; an empty book reads 0 / 0', () => {
@@ -109,6 +124,28 @@ describe('R-100 — test mode turns a book with the bridge’s rules', () => {
     expect(mock.page('item-1', 'pages', 3)).toMatchObject({ page: 3 });
     expect(mock.page('item-1', 'pages', 'next')).toMatchObject({ page: 3 });
     expect(mock.stackSnapshot().find((i) => i.itemId === 'item-1')?.pages).toEqual({ pages: 2 });
+  });
+
+  it('🔴 Auto/Manual is row-local state in test mode too', async () => {
+    const { mock } = await mockWithBook(2);
+    expect(mock.setPageAdvance('item-1', 'pages', 'auto')).toEqual({ ok: true });
+    expect(mock.stackSnapshot().find((i) => i.itemId === 'item-1')?.pageAdvance).toEqual({
+      pages: 'auto',
+    });
+    expect(mock.setPageAdvance('missing', 'pages', 'manual')).toMatchObject({
+      ok: false,
+      reason: 'unknown-item',
+    });
+  });
+
+  it('🔴 Next on the last on-air page self-stops the mock row, as the live page reports', async () => {
+    const { mock } = await mockWithBook(2);
+    expect(mock.page('item-1', 'pages', 2)).toMatchObject({ page: 2 });
+    expect(mock.take('item-1').accepted).toBe(true);
+    expect(mock.page('item-1', 'pages', 'next')).toMatchObject({ accepted: true, page: 2 });
+    expect(mock.stackSnapshot().find((item) => item.itemId === 'item-1')?.status).toBe('exiting');
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    expect(mock.stackSnapshot().find((item) => item.itemId === 'item-1')?.status).toBe('loaded');
   });
 
   it('🔴 D-163 — a list the template turns by itself is not turned: the bridge’s refusal', () => {
@@ -166,9 +203,9 @@ describe('R-100 — test mode turns a book with the bridge’s rules', () => {
 });
 
 describe('R-100 — the row’s verbs on a book row', () => {
-  const bookRow = (page: number, count: number) =>
+  const bookRow = (page: number, count: number, status: StackItemState['status'] = 'loaded') =>
     rowDeps({
-      binding: bindingFor(itemWith('loaded', { templateId: 'tpl-book' })),
+      binding: bindingFor(itemWith(status, { templateId: 'tpl-book' })),
       book: { fieldId: 'pages', page, count, wrap: false },
       page: () => Promise.resolve({ accepted: true }),
     });
@@ -197,6 +234,9 @@ describe('R-100 — the row’s verbs on a book row', () => {
   it('a book stops at its ends: PREV off on page 1, NEXT off on the last page', () => {
     expect(layerRowActions(bookRow(1, 300)).find((a) => a.label === 'PREV')?.disabled).toBe(true);
     expect(layerRowActions(bookRow(300, 300)).find((a) => a.label === 'NEXT')?.disabled).toBe(true);
+    expect(
+      layerRowActions(bookRow(300, 300, 'on-air')).find((a) => a.label === 'NEXT')?.disabled,
+    ).toBe(false);
   });
 
   it('a row with no book keeps exactly its old verbs: no PREV, NEXT is CG NEXT', () => {

@@ -90,19 +90,19 @@ SHALL apply the same rule, so a package exported before it reads as a book witho
 - **WHEN** a book whose key field lacks the mark is exported
 - **THEN** the package's field carries `pages: true`
 
-### Requirement: A book on advance auto is said in the Inspector
+### Requirement: A book's authored advance mode SHALL be its initial CG Control mode
 
 The Designer's Inspector SHALL show one sentence under **advance** when a sequence is a book (pictures, with or without
-text pages), is stepped by the operator, and is set to `auto`: that the book turns itself every dwell while CG Control
-counts only the operator's turns, so its page number falls behind and its Next goes to the page after the last one it
-sent; and that advance manual is the setting for a book the operator turns. A page list's Data key SHALL NOT offer
-"Allow file source"; it SHALL say that operators turn and load its pages in CG Control (Load pages…).
+text pages), is stepped by the operator, and is set to `auto`: Auto is the book's initial mode, CG Control follows the
+page actually shown on air, and the operator can switch that row between Auto and Manual. The exported page-list
+metadata SHALL carry the authored `advance` mode. A page list's Data key SHALL NOT offer "Allow file source"; it SHALL
+say that operators turn and load its pages in CG Control (Load pages…).
 
-#### Scenario: Auto is said, manual is not
+#### Scenario: Auto is the initial mode, not a drift warning
 
 - **WHEN** a book's advance is `auto`
-- **THEN** the sentence shows, naming the dwell; with `manual`, or for a sequence that runs by itself, or for text, it
-  does not
+- **THEN** the sentence says Auto is the initial mode and CG Control follows and can switch it; with `manual`, or for a
+  sequence that runs by itself, or for text, it does not show
 
 #### Scenario: A book's key offers no text-file grant
 

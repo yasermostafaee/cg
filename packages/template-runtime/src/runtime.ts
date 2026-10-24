@@ -20,6 +20,7 @@ import {
   defaultLookOf,
   elementDigitsOf,
   lookGroupOf,
+  pageMediaHashPath,
   readCgControl,
   sequenceStepsByOperator,
   stripCgControl,
@@ -734,12 +735,21 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // Which sequences a list field drives (`sequence-items`), across the scene and every composition:
   // a page turn names its FIELD, and every sequence that field feeds turns.
   const pageListTargets = new Map<string, Set<string>>();
+  const pageListFieldByElement = new Map<string, string>();
   for (const d of [scene, ...(scene.compositions ?? [])]) {
     for (const b of d.bindings ?? []) {
       if (b.target.kind !== 'sequence-items') continue;
       const set = pageListTargets.get(b.fieldId) ?? new Set<string>();
       set.add(b.target.elementId);
       pageListTargets.set(b.fieldId, set);
+      const field = (d.fields ?? []).find((candidate) => candidate.id === b.fieldId);
+      if (
+        field?.type === 'list' &&
+        field.pages === true &&
+        !pageListFieldByElement.has(b.target.elementId)
+      ) {
+        pageListFieldByElement.set(b.target.elementId, b.fieldId);
+      }
     }
   }
   const decodeImage = (img: HTMLImageElement): Promise<boolean> => {
@@ -768,7 +778,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // waiting for a decode there would wait forever. Only a picture with a `src` waits.
       if (built.img.getAttribute('src') !== null) ready = decodeImage(built.img);
     } else {
-      const url = item.media === undefined ? undefined : pagePictureFor(item.media);
+      const protocol = doc.defaultView?.location.protocol;
+      const url =
+        item.media === undefined
+          ? undefined
+          : (pagePictureFor(item.media) ??
+            (takeToken !== undefined && (protocol === 'http:' || protocol === 'https:')
+              ? pageMediaHashPath(item.media)
+              : undefined));
       if (url !== undefined) {
         built.img.src = url;
         ready = decodeImage(built.img);
@@ -1170,6 +1187,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       });
       // D-029 — sequence drivers; the host→driver registry routes
       // `sequence-items` bindings, and `runtime.next()` dispatches per scope.
+      // Shared element-outro array for this scope. Books join it below; Lottie, Video and
+      // exit-start Audio join it in their own blocks.
+      const scopeOutroLotties: ElementOutroDriver[] = [];
       const holdSequences: SequenceDriver[] = [];
       const scopeSequences = scope.sequences.map((s) => {
         // D-102 Phase 2 — the session override is PER-ELEMENT (keyed by the sequence's element id),
@@ -1256,6 +1276,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             },
           };
         };
+        const bookField = pageListFieldByElement.get(s.element.id);
         const driver = new SequenceDriver({
           host: s.host,
           direction: s.element.direction,
@@ -1298,6 +1319,22 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           onItemUnavailable: (item) => {
             console.warn(`[cg] page "${item.id}" could not be shown; the previous page stays`);
           },
+          ...(bookField !== undefined
+            ? {
+                onItemShown: (index: number): void => {
+                  bus.emit('book-page', {
+                    field: bookField,
+                    index,
+                    ...(takeToken !== undefined ? { take: takeToken } : {}),
+                  });
+                },
+                onComplete: (): void => {
+                  bus.emit('book-end', {
+                    ...(takeToken !== undefined ? { take: takeToken } : {}),
+                  });
+                },
+              }
+            : {}),
           clock: options.clock,
         });
         registerSequenceDriver(s.host, driver);
@@ -1305,6 +1342,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         if (!sequenceStepsByOperator(s.element)) operatorFixed.add(driver);
         // D-105 — mark the content root for the coordinated exit (out/stop).
         s.host.dataset['cgContent'] = 'sequence';
+        if (bookField !== undefined && s.element.visible !== false) {
+          s.host.dataset['cgOutro'] = 'sequence';
+          scopeOutroLotties.push(driver);
+        }
         // D-102 Phase 2 — stamp the EFFECTIVE (post-override) timing on the host so the operator
         // (and the tests) can see which passes/dwell each sequence is actually running this session.
         s.host.dataset['cgSequenceRepeat'] = String(effSeqRepeat);
@@ -1341,9 +1382,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // `whenComplete()` to the content-driven hold when it OPTS IN (`drivesHold === true`)
       // and registers in `scopeOutroLotties` for the element-outro seam (§D6.2).
       const scopeLotties: LottieDriver[] = [];
-      // D-128 — the shared element-outro array for THIS scope: Lottie AND Video
-      // outro drivers both register here (§D6.2), keyed identically in the one ledger.
-      const scopeOutroLotties: ElementOutroDriver[] = [];
+      // D-128 — Lottie and Video join the shared array declared beside sequences above.
       /** §D6.3 — only the Lotties that OPTED IN (`drivesHold === true`) gate this hold. */
       const holdLotties: LottieDriver[] = [];
       // D-128 — this scope's Video drivers (all, for the cascades) + the opted-in
@@ -2499,7 +2538,22 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     for (const sub of subtrees) {
       for (const s of sub.sequences) {
         const el = sequenceElementOf.get(s);
-        if (el !== undefined && targets.has(el)) s.goTo(page.index);
+        if (el === undefined || !targets.has(el)) continue;
+        if ('index' in page) s.goTo(page.index);
+        else if (page.turn === 'next') s.next();
+        else s.previous();
+      }
+    }
+  };
+
+  /** Change one book's Auto/Manual mode in place, without rebuilding or replaying it. */
+  const applyPageAdvance = (field: string, mode: 'auto' | 'manual'): void => {
+    const targets = pageListTargets.get(field);
+    if (targets === undefined) return;
+    for (const sub of subtrees) {
+      for (const s of sub.sequences) {
+        const el = sequenceElementOf.get(s);
+        if (el !== undefined && targets.has(el)) s.setAdvance(mode);
       }
     }
   };
@@ -2857,6 +2911,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       reapplyClockTargets();
       // D-163 — the take's page: AFTER the fields (a new book is in place first), BEFORE the run
       // starts (a goTo before start sets the page the run opens on).
+      if (control?.pageAdvance !== undefined) {
+        applyPageAdvance(control.pageAdvance.field, control.pageAdvance.mode);
+      }
       if (control?.page !== undefined) applyPageTurn(control.page);
       machine.transition('playing');
       bus.emit('play.start');
@@ -3139,6 +3196,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         `D-163` — A PAGE TURN, after the fields: when the same payload carries a new book and its
         page, the book is in place before the page is looked up in it.
       */
+      if (control?.pageAdvance !== undefined) {
+        applyPageAdvance(control.pageAdvance.field, control.pageAdvance.mode);
+      }
       if (control?.page !== undefined) applyPageTurn(control.page);
       bus.emit('update');
     },

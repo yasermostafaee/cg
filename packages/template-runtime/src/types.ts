@@ -36,6 +36,8 @@ export type LifecycleEvent =
    * whole of `C-013` is that distinction.
    */
   | 'self-end'
+  | 'book-end'
+  | 'book-page'
   | 'stop.start'
   | 'stop.end'
   | 'error';
@@ -61,8 +63,20 @@ export interface SelfEndEvent {
   take?: string;
 }
 
+export interface BookPageEvent {
+  take?: string;
+  field: string;
+  index: number;
+}
+
 export type EventListener<E extends LifecycleEvent> = (
-  payload: E extends 'error' ? ErrorEvent : E extends 'self-end' ? SelfEndEvent : void,
+  payload: E extends 'error'
+    ? ErrorEvent
+    : E extends 'self-end' | 'book-end'
+      ? SelfEndEvent
+      : E extends 'book-page'
+        ? BookPageEvent
+        : void,
 ) => void;
 
 /**
