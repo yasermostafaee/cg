@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
  * the bug reads as "the tool is broken".
  *
  * Scanned rather than exercised, because the sites are string-templated boot scripts
- * inside generated HTML (`Exporter.ts`, `exporter-single-file.ts`) that no unit test
+ * inside generated HTML (`vcg-page.ts`, `exporter-single-file.ts`) that no unit test
  * can call. This is the `dynamicLoadUnreachable.test.ts` shape: assert the property
  * over the source, so a future edit cannot walk it back silently.
  */
@@ -34,7 +34,7 @@ const SITES: readonly { file: string; mode: 'author' | 'output'; why: string }[]
     why: 'the editor canvas AND the Preview modal — both preview what the author is building',
   },
   {
-    file: 'apps/designer/src/platform/Exporter.ts',
+    file: 'packages/single-file-export/src/vcg-page.ts',
     mode: 'output',
     why: 'the .vcg package that goes on air',
   },

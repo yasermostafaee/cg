@@ -14,8 +14,8 @@ import type {
   Resolution,
   Scene,
 } from '@cg/shared-schema';
-import { compositionClosure, migrateGlobalFieldsToCompositions } from '@cg/shared-schema';
-import { compositionPackageId } from '@cg/vcg-format';
+import { migrateGlobalFieldsToCompositions } from '@cg/shared-schema';
+import { projectCompositionForExport } from '@cg/vcg-format';
 import { current } from './store-core.js';
 import { dropFullyOffFrameForExport } from './off-frame.js';
 
@@ -174,30 +174,8 @@ export function editSceneOf(scene: Scene | null, id: string | null): Scene | nul
  * (its layers are now the top-level doc; nothing reachable references it).
  */
 export function scopeSceneToComposition(scene: Scene | null, id: string | null): Scene | null {
-  const projected = editSceneOf(scene, id);
-  if (projected === null || scene === null || id === null) return null;
-  const closure = compositionClosure(scene, id);
-  /*
-    🔴 `B-249` — `entryCompositionId` is DROPPED, never copied through. It names the project's MAIN
-    composition, and in a per-composition export the chosen composition has just been flattened
-    into the ROOT — the root IS the entry, so the pointer has nothing to say. Copied, it named a
-    composition the package does not contain (or, worse, one nested inside the export, which a
-    reader would then take for the entry): a dangling id that reads as data. Omitted, not
-    rewritten; and no consumer is taught to tolerate it.
-  */
-  const { entryCompositionId: _projectEntry, ...rootIsTheEntry } = projected;
-  const scoped: Scene = {
-    ...rootIsTheEntry,
-    /*
-      🔴 `B-352` — THE PACKAGE IS THE COMPOSITION'S, SO ITS ID IS TOO. `editSceneOf` keeps the
-      project's `scene.id` (the canvas needs it stable across composition switches — B-035), and
-      the Exporter writes the scene id as `manifest.id`: every composition of one project went to CG
-      Control as ONE template, each import replacing the last. Derived from the project id and the
-      composition id, so the same composition exported again keeps its id and UPDATES its template.
-    */
-    id: compositionPackageId(scene.id, id),
-    compositions: (scene.compositions ?? []).filter((c) => closure.has(c.id)),
-  };
+  const scoped = projectCompositionForExport(scene, id);
+  if (scoped === null || scene === null) return null;
   // D-071 Phase A — EXPORT-ONLY: drop fully-off-frame STATIC elements so they don't
   // bloat the package. Output is unchanged (they were already clipped invisible by
   // the runtime's `.cg-stage { overflow: hidden }`). `editSceneOf` (the canvas

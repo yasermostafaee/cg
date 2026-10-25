@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "customer-id-never-rename",
+  "name": "Example Customer",
+  "author": "Internal CG Studio",
+  "motion": "news",
+  "targets": [{ "key": "hd", "width": 1920, "height": 1080 }],
+  "colors": {
+    "primary": { "value": "#164E63", "source": "brand" },
+    "accent": { "value": "#F59E0B", "source": "brand" },
+    "plate": {
+      "value": "#0B1720E6",
+      "source": "derived",
+      "derivedFrom": "primary",
+      "note": "90% opaque support plate; white text measured above 7:1"
+    }
+  },
+  "fonts": {
+    "display-bold": {
+      "path": "./assets/CustomerDisplay-Bold.woff2",
+      "family": "Customer Display",
+      "weight": 700,
+      "style": "normal",
+      "licenseConfirmed": true,
+      "licenseNote": "Customer supplied broadcast embedding licence, ticket ABC-123"
+    }
+  },
+  "assets": {
+    "logo": {
+      "kind": "image",
+      "sourcePath": "./assets/logo-master.svg",
+      "renderPath": "./assets/logo-master.svg",
+      "note": "Approved horizontal lockup"
+    }
+  },
+  "brandbookNotes": ["Never recolour the logo", "Use accent only for breaking states"],
+  "references": ["./references/approved-frame.png"]
+}

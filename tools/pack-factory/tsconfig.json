@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["dist", "tests/**/*"],
+  "references": [
+    { "path": "../../packages/shared-schema" },
+    { "path": "../../packages/single-file-export" },
+    { "path": "../../packages/vcg-format" }
+  ]
+}

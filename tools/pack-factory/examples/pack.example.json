@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "family": "News essentials v1",
+  "templates": [
+    {
+      "key": "lower-third",
+      "sourceProject": "../masters/news-master.cgproj",
+      "compositionId": "comp-lower-third",
+      "target": "hd",
+      "displayName": "Example Customer — Lower Third",
+      "outputName": "lower-third.vcg",
+      "colors": {
+        "#123456": "primary",
+        "#FFB000": "accent",
+        "#101820E6": "plate"
+      },
+      "assets": {
+        "00000000-0000-4000-8000-000000000001": "logo"
+      },
+      "fonts": {
+        "00000000-0000-4000-8000-000000000002": "display-bold"
+      },
+      "preview": {
+        "data": { "headline": "Sample headline", "name": "Sample Name" },
+        "introMs": 100,
+        "holdMs": 900,
+        "outMs": 120
+      }
+    }
+  ]
+}
