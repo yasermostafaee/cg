@@ -661,10 +661,24 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
   it('`RELEASE-0115-01` (`LOGO-LOOP-01`) — ONE line in the prerequisites says to import a looping template again after the upgrade', () => {
     // A page is baked at import from CG Control's own runtime, so a template imported before the upgrade keeps
     // its old loop until it is imported again (`C-034`'s manual step). Said once, where an upgrade is described.
-    const again = sectionLines('۲. پیش‌نیازها').filter((line) => line.includes('`Import a .vcg`'));
+    const again = sectionLines('۲. پیش‌نیازها').filter(
+      (line) => line.includes('`Import a .vcg`') && line.includes('شمارِ تکرار'),
+    );
     expect(again).toHaveLength(1);
     expect(again[0]).toContain('یک بار دیگر');
     expect(again[0]).toContain('`.vcg`');
+  });
+
+  it('`BOOK-IN-CG-CONTROL` — ONE separate line requires image-book templates to be re-exported and re-imported for 0.12.0', () => {
+    // The book state machine is baked into Designer's exported page. Re-importing the old VCG is insufficient:
+    // the operator must export it with 0.12.0 first, then import that new package into CG Control.
+    const again = sectionLines('۲. پیش‌نیازها').filter(
+      (line) => line.includes('`Import a .vcg`') && line.includes('Sequence تصویری'),
+    );
+    expect(again).toHaveLength(1);
+    expect(again[0]).toContain('از هر نسخه‌ای به `0.12.0`');
+    expect(again[0]).toContain('دوباره `Export (.vcg)`');
+    expect(again[0]).toContain('دوباره وارد کنید');
   });
 
   it('`RELEASE-0111-01` §D2 — a separate server is the installer’s page, never a PowerShell line', () => {
