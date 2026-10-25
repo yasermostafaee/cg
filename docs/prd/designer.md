@@ -3650,7 +3650,7 @@ delivered to the client, so the compatibility floor has not been set (see [[P-03
 [platform.md](platform.md)) — the gated affordance may be replaced outright rather than kept
 beside the unconditional one.
 
-## [~] D-134 — clock: custom UTC offset ⟨priority: low — ACTIVE: `openspec/changes/clock-custom-utc-offset/`⟩
+## [x] D-134 — clock: custom UTC offset ⟨priority: low⟩ — ARCHIVED 2026-10-26 (`openspec/changes/archive/2026-10-25-clock-custom-utc-offset/`; Linux `gate:e2e` run 40237770720)
 
 **What:** A "Custom offset" mode on the wall clock: the operator enters a UTC offset (±HH:MM) and
 the clock renders that offset's time.

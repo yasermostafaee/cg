@@ -32,4 +32,4 @@
 - [x] 4.2 Run strict OpenSpec validation and the focused schema, runtime and Designer checks.
 - [x] 4.3 Re-run the full local repository gate after the owner-requested two-source/masked-input
       correction (99/99 tasks; OpenSpec 89/89).
-- [ ] 4.4 Run Linux `gate:e2e`; record authoritative evidence before closing D-134.
+- [x] 4.4 Run Linux `gate:e2e`; authoritative run 40237770720 passed on 2026-10-26.
