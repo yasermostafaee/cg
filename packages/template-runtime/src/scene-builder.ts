@@ -853,6 +853,7 @@ function buildClock(element: ClockElement, ctx: BuildCtx): HTMLElement {
       digits: element.digits,
       target: element.target,
       timezone: element.timezone,
+      utcOffsetMinutes: element.utcOffsetMinutes,
       afterZero: element.mode === 'countdown' ? element.afterZero : undefined,
     },
     Date.now(),

@@ -72,12 +72,24 @@ function mapDigits(s: string, digits: ClockDigits): string {
 function wallComponents(
   date: Date,
   timezone: string | undefined,
+  utcOffsetMinutes: number | undefined,
 ): { h24: number; minutes: number; seconds: number } {
   const local = (): { h24: number; minutes: number; seconds: number } => ({
     h24: date.getHours(),
     minutes: date.getMinutes(),
     seconds: date.getSeconds(),
   });
+  // D-134 — a FIXED offset is deliberately not a time zone: it never inherits the playout
+  // machine's zone or DST. Shift the absolute instant, then read the result as UTC wall fields.
+  // Valid scenes cannot carry both sources (the shared schema refuses that state).
+  if (utcOffsetMinutes !== undefined) {
+    const shifted = new Date(date.getTime() + utcOffsetMinutes * 60_000);
+    return {
+      h24: shifted.getUTCHours(),
+      minutes: shifted.getUTCMinutes(),
+      seconds: shifted.getUTCSeconds(),
+    };
+  }
   if (timezone === undefined || timezone === '') return local();
   try {
     const parts = new Intl.DateTimeFormat('en-US', {
@@ -112,8 +124,9 @@ export function formatWallClock(
   format: string,
   digits: ClockDigits,
   timezone?: string,
+  utcOffsetMinutes?: number,
 ): string {
-  const { h24, minutes, seconds } = wallComponents(date, timezone);
+  const { h24, minutes, seconds } = wallComponents(date, timezone, utcOffsetMinutes);
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
   const out = tokenize(format)
     .map((part) => {

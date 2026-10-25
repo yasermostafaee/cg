@@ -99,6 +99,8 @@ export interface ClockDriverOptions {
    * Absent ⇒ machine-local time. `countup`/`countdown` ignore it.
    */
   timezone?: string | undefined;
+  /** D-134 — fixed UTC offset in minutes for `wall`; count modes ignore it. */
+  utcOffsetMinutes?: number | undefined;
   /**
    * D-103 — when true, the colon separator(s) blink: the formatted time is rendered as
    * segment spans and ONLY the colon spans' opacity toggles (no reflow). Off ⇒ the prior
@@ -290,12 +292,18 @@ interface NormalizedDriverClock {
 export function clockInitialText(
   opts: Pick<
     ClockDriverOptions,
-    'mode' | 'format' | 'digits' | 'target' | 'timezone' | 'afterZero'
+    'mode' | 'format' | 'digits' | 'target' | 'timezone' | 'utcOffsetMinutes' | 'afterZero'
   >,
   nowMs: number,
 ): string {
   if (opts.mode === 'wall')
-    return formatWallClock(new Date(nowMs), opts.format, opts.digits, opts.timezone);
+    return formatWallClock(
+      new Date(nowMs),
+      opts.format,
+      opts.digits,
+      opts.timezone,
+      opts.utcOffsetMinutes,
+    );
   if (opts.mode === 'countup') return formatCountClock(0, opts.format, opts.digits);
   const t = opts.target;
   // D-141 — a `timeofday` resolves against `nowMs` here for the same reason a
@@ -581,7 +589,13 @@ export class ClockDriver {
   private currentText(): string {
     const o = this.o;
     if (o.mode === 'wall')
-      return formatWallClock(new Date(this.clock.now()), o.format, o.digits, o.timezone);
+      return formatWallClock(
+        new Date(this.clock.now()),
+        o.format,
+        o.digits,
+        o.timezone,
+        o.utcOffsetMinutes,
+      );
     if (o.mode === 'countup') {
       return formatCountClock(Math.floor(this.activeElapsedMs() / 1000), o.format, o.digits);
     }

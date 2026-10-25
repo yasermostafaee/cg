@@ -275,6 +275,38 @@ describe('ClockDriver (D-027)', () => {
     const wall = clockInitialText({ mode: 'wall', format: 'ss', digits: 'latin' }, 5000);
     expect(wall).toBe(String(new Date(5000).getSeconds()).padStart(2, '0'));
   });
+
+  it('D-134 — a fixed offset reaches initial + live wall paint and count modes ignore it', () => {
+    expect(
+      clockInitialText(
+        {
+          mode: 'wall',
+          format: 'HH:mm:ss',
+          digits: 'latin',
+          utcOffsetMinutes: 210,
+        },
+        0,
+      ),
+    ).toBe('03:30:00');
+
+    const wall = make({
+      mode: 'wall',
+      format: 'HH:mm:ss',
+      utcOffsetMinutes: -240,
+    });
+    wall.driver.start();
+    expect(wall.node.textContent).toBe('20:00:00');
+    wall.clock.advance(1000);
+    expect(wall.node.textContent).toBe('20:00:01');
+    wall.driver.stop();
+
+    expect(
+      clockInitialText(
+        { mode: 'countup', format: 'mm:ss', digits: 'latin', utcOffsetMinutes: 840 },
+        12 * 60 * 60_000,
+      ),
+    ).toBe('00:00');
+  });
 });
 
 describe('ClockDriver — blinking colon (D-103)', () => {

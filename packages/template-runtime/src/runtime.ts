@@ -1152,6 +1152,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           digits: c.element.digits,
           target: effTarget,
           timezone: c.element.timezone,
+          utcOffsetMinutes: c.element.utcOffsetMinutes,
           blinkColon: c.element.blinkColon,
           blinkPeriodMs: c.element.blinkPeriodMs,
           steps: countdownIndex === undefined ? undefined : c.element.steps,

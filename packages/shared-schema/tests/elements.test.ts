@@ -782,6 +782,25 @@ describe('ClockElement (D-027)', () => {
     const viaUnion = ElementSchema.parse({ ...clock, timezone: 'Asia/Tokyo' });
     expect((viaUnion as { timezone?: string }).timezone).toBe('Asia/Tokyo');
   });
+  it('D-134 — a fixed UTC offset is optional, bounded and exclusive with timezone', () => {
+    expect(ClockElementSchema.parse(clock).utcOffsetMinutes).toBeUndefined();
+    for (const utcOffsetMinutes of [-840, -210, 0, 345, 765, 840]) {
+      const parsed = ClockElementSchema.parse({ ...clock, utcOffsetMinutes });
+      expect(parsed.utcOffsetMinutes).toBe(utcOffsetMinutes);
+      const viaUnion = ElementSchema.parse({ ...clock, utcOffsetMinutes });
+      expect((viaUnion as { utcOffsetMinutes?: number }).utcOffsetMinutes).toBe(utcOffsetMinutes);
+    }
+    for (const utcOffsetMinutes of [-841, 841, 210.5]) {
+      expect(() => ClockElementSchema.parse({ ...clock, utcOffsetMinutes })).toThrow();
+    }
+    expect(() =>
+      ClockElementSchema.parse({
+        ...clock,
+        timezone: 'Asia/Tehran',
+        utcOffsetMinutes: 210,
+      }),
+    ).toThrow();
+  });
   it('D-103 — blinkColon + blinkPeriodMs are optional, backward-compatible fields', () => {
     // An OLD clock has neither field.
     const old = ClockElementSchema.parse(clock);

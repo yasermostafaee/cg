@@ -67,8 +67,11 @@ test.describe('Clock element (D-027)', () => {
       .locator('[data-cg-clock-time]');
     await expect(clockTime).toHaveText(PERSIAN_TIME);
 
+    const source = app.inspector.getByRole('combobox', { name: 'time source' });
+    await expect(source).toHaveValue('local'); // default = machine-local
+    await source.selectOption('time zone');
     const tz = app.inspector.getByRole('combobox', { name: 'time zone' });
-    await expect(tz).toHaveValue('Local'); // default = machine-local
+    await expect(tz).toHaveValue('UTC');
 
     // Two zones 16–17h apart can NEVER show the same hour, so the displayed time
     // must change with the zone — proving the timezone reaches the render (the
@@ -85,6 +88,36 @@ test.describe('Clock element (D-027)', () => {
       .poll(async () => ((await clockTime.textContent()) ?? '').slice(0, 2))
       .not.toBe(tokyoHour);
     await expect(clockTime).toHaveText(PERSIAN_TIME);
+  });
+
+  test('a wall clock renders an authored fixed UTC offset (D-134)', async ({ app }) => {
+    await app.newProject('ClockOffset');
+    await app.addClock();
+
+    const clockTime = app.page
+      .frameLocator('iframe[title="cgpreview"]')
+      .locator('[data-cg-clock-time]');
+    const source = app.inspector.getByRole('combobox', { name: 'time source' });
+    await source.selectOption('custom offset');
+
+    const offset = app.inspector.getByRole('textbox', { name: 'UTC offset' });
+    await expect(offset).toHaveValue('+00:00');
+    await offset.fill('+14:00');
+    await offset.press('Enter');
+    const plusHour = ((await clockTime.textContent()) ?? '').slice(0, 2);
+
+    await offset.fill('-14:00');
+    await offset.press('Enter');
+    await expect(offset).toHaveValue('-14:00');
+    // +14 and -14 differ by four wall-clock hours modulo a day, so this remains deterministic
+    // regardless of when or in which zone the E2E host runs.
+    await expect
+      .poll(async () => ((await clockTime.textContent()) ?? '').slice(0, 2))
+      .not.toBe(plusHour);
+    await expect(clockTime).toHaveText(PERSIAN_TIME);
+
+    const { html } = await app.exportHtml();
+    expect(html).toContain('"utcOffsetMinutes":-840');
   });
 
   test('a blinking colon renders its own (blinking) colon span in the preview (D-103)', async ({

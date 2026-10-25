@@ -78,6 +78,27 @@ describe('formatWallClock — time zone (D-084)', () => {
   });
 });
 
+describe('formatWallClock — custom UTC offset (D-134)', () => {
+  const noonUtc = new Date('2026-06-11T12:00:09.000Z');
+
+  it('renders positive, negative and quarter-hour fixed offsets', () => {
+    expect(formatWallClock(noonUtc, 'HH:mm:ss', 'latin', undefined, 210)).toBe('15:30:09');
+    expect(formatWallClock(noonUtc, 'HH:mm:ss', 'latin', undefined, -240)).toBe('08:00:09');
+    expect(formatWallClock(noonUtc, 'HH:mm:ss', 'latin', undefined, 345)).toBe('17:45:09');
+  });
+
+  it('wraps correctly across the UTC day boundary', () => {
+    const lateUtc = new Date('2026-06-11T23:50:00.000Z');
+    expect(formatWallClock(lateUtc, 'HH:mm', 'latin', undefined, 210)).toBe('03:20');
+    const earlyUtc = new Date('2026-06-11T00:10:00.000Z');
+    expect(formatWallClock(earlyUtc, 'HH:mm', 'latin', undefined, -210)).toBe('20:40');
+  });
+
+  it('applies authored format and digit mapping after the fixed shift', () => {
+    expect(formatWallClock(noonUtc, 'hh:mm A', 'persian', undefined, 210)).toBe('۰۳:۳۰ PM');
+  });
+});
+
 describe('formatCountClock (D-027)', () => {
   it('formats a full H:M:S count', () => {
     expect(formatCountClock(3725, 'HH:mm:ss', 'latin')).toBe('01:02:05');

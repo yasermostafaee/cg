@@ -614,6 +614,17 @@ export const ClockElementSchema = ElementBaseSchema.extend({
    */
   timezone: z.string().optional(),
   /**
+   * D-134 — a fixed UTC offset in whole minutes for `wall` mode. Mutually exclusive with
+   * `timezone` (refined below); absence of both means machine-local time. The civil offset
+   * envelope is ±14:00. Count modes ignore it, exactly as they ignore `timezone`.
+   */
+  utcOffsetMinutes: z
+    .number()
+    .int()
+    .min(-14 * 60)
+    .max(14 * 60)
+    .optional(),
+  /**
    * D-103 — blink the colon separator(s) on/off. Off/absent by default (steady colons —
    * the unchanged render). Additive + backward-compatible: no schema-version bump.
    */
@@ -640,6 +651,13 @@ export const ClockElementSchema = ElementBaseSchema.extend({
         code: z.ZodIssueCode.custom,
         path: ['target'],
         message: "mode 'countdown' requires a target (duration, datetime or timeofday)",
+      });
+    }
+    if (el.timezone !== undefined && el.utcOffsetMinutes !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['utcOffsetMinutes'],
+        message: 'timezone and utcOffsetMinutes are mutually exclusive wall-clock sources',
       });
     }
     // D-141 — zones ride on a countdown's remaining time, which `wall`/`countup`
