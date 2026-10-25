@@ -169,5 +169,5 @@ verify, never assume.
 - [x] 9.1 `book-end` joins `self-end` at the one per-token completion reporter; operator Stop/Out does not emit it.
 - [x] 9.2 Repeatable `book-page` reports use `/page-state`, preserve the token, and are current-live-take bounded.
 - [x] 9.3 Proposal, design, requirement, SECURITY and ADR route census updated with the extension.
-- [ ] 9.4 Full gate, E2E, commit/push and authoritative Linux E2E evidence are recorded by
+- [x] 9.4 Full gate, E2E, commit/push and authoritative Linux E2E evidence are recorded by
       `book-in-cg-control` delta B.

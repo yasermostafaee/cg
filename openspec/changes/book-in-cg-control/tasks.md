@@ -210,5 +210,5 @@
       active specs, security route census and decision record.
 - [x] B.7 Tests: runtime page reports/mode/queued turns/terminal and Stop transitions; completion adapter; HTTP route
       and security census; bridge integration; CG Control model and real-browser Inspector mode control.
-- [ ] B.8 Full `pnpm gate`, CG Control + Designer E2E, conventional commit and push to `dev`; verify the Linux E2E
-      job RAN and record its URL here.
+- [x] B.8 Full `pnpm gate`, CG Control + Designer E2E, conventional commit and push to `dev`; Linux E2E RAN and
+      passed for commit `19f789b5`: https://github.com/yasermostafaee/cg/actions/runs/40219232417
