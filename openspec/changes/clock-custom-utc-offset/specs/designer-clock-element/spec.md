@@ -38,11 +38,12 @@ change. Countup and countdown SHALL ignore both wall-time source fields.
 
 ### Requirement: Designer authoring — time-driven, not scrubbed
 
-For a wall clock, the Inspector SHALL show one explicit `time source` choice: Local, Time zone, or
-Custom offset. Time zone SHALL show the existing IANA picker. Custom offset SHALL show one signed
-`±HH:MM` input, accept Latin, Persian and Arabic-Indic digits, and accept only real offsets inside
-`-14:00…+14:00`. Changing source SHALL clear the mutually exclusive field. An invalid draft SHALL
-not alter the scene and SHALL reset to the last committed value.
+For a wall clock, the Inspector SHALL show only Local and Custom offset as explicit `time source`
+choices. Custom offset SHALL show one fixed `±HH:MM` mask, accept Latin, Persian and Arabic-Indic
+digits, and accept only real offsets inside `-14:00…+14:00`. The sign and separator SHALL be owned
+by the mask; letters or impossible digits SHALL not enter the displayed value. Changing source
+SHALL clear the mutually exclusive field. Legacy IANA values SHALL remain schema/runtime-readable
+but SHALL NOT be authorable in the Inspector.
 
 #### Scenario: The author selects a custom offset
 
@@ -50,10 +51,16 @@ not alter the scene and SHALL reset to the last committed value.
 - **THEN** the scene stores `utcOffsetMinutes: 210`, clears `timezone`, and the canvas renders that
   fixed-offset time
 
-#### Scenario: Existing IANA selection stays available
+#### Scenario: The mask refuses non-time input before display
 
-- **WHEN** the author selects Time zone
-- **THEN** the existing curated IANA picker remains available and Custom offset is inactive
+- **WHEN** the author types letters, invalid minutes, or a value beyond `±14:00`
+- **THEN** the characters do not enter the mask and the last valid scene value stays unchanged
+
+#### Scenario: Legacy IANA data remains playable but not authorable
+
+- **WHEN** an existing scene carries `timezone`
+- **THEN** schema/runtime parsing keeps its old result, while the Inspector offers no Time zone
+  option and either visible source replaces the legacy value when committed
 
 #### Scenario: Local clears authored wall-time sources
 

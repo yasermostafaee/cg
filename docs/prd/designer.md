@@ -3659,12 +3659,13 @@ the clock renders that offset's time.
 
 - WHEN the operator picks "Custom offset" and enters a UTC offset (±HH:MM) THEN the wall clock
   renders that offset's time in preview and on air
-- WHEN an IANA zone is already set THEN it keeps working unchanged (presets stay — removing them
-  would break D-084 scenes)
-- WHEN both could apply THEN the Inspector makes the choice explicit (one mode at a time)
+- WHEN the operator edits the offset THEN a fixed mask accepts only a possible `±HH:MM`; letters,
+  missing signs, invalid minutes and values beyond `±14:00` never enter the control
+- WHEN the author chooses a wall-time source THEN the Inspector offers only `Local` and
+  `Custom offset`; legacy IANA values remain readable by the schema/runtime but are not authorable
 
-**Notes:** additive field alongside `timezone` (`ClockElementSchema`); countdown/countup ignore it
-like they ignore `timezone`.
+**Notes:** additive field alongside the legacy `timezone` (`ClockElementSchema`);
+countdown/countup ignore both.
 
 ## [x] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-133]] as ONE change; §5 answers play-and-re-anchor vs position-by-`currentTime`; **all FIVE §9 decisions ANSWERED** — §9.1–§9.4 on 2026-08-12, §9.5 on 2026-08-13: (a), position everywhere — **BOTH halves are BUILT**; [[D-133]]'s §1–§3 are now built too, so the item stays `[~]` only pending the owner's archive confirmation) · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-timeline-drives-loop-and-media/`, `RELEASE-0110-01` §0.3)
 

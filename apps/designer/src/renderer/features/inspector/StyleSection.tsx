@@ -52,7 +52,7 @@ import { ClockTargetDataKey } from './ClockTargetDataKey.js';
 import { clockTargetValue, commitClockTarget, exposeClockTarget } from './clock-data-key.js';
 import { DateTimeInput } from '../../ui/DateTimeInput.js';
 import { CountdownStepsSection } from './CountdownStepsSection.js';
-import { formatUtcOffset, parseUtcOffset } from './clock-offset.js';
+import { ClockOffsetField } from './ClockOffsetField.js';
 import { formatPeak, formatSeconds } from '../assets/wav-stats.js';
 import { formatGain, formatLoudness, formatTruePeak, offeredGainDb } from '../assets/loudness.js';
 import { normaliseSound, useSoundLoudness } from '../assets/normaliseSound.js';
@@ -2615,27 +2615,6 @@ function seedTimeOfDay(nowMs: number): string {
  * padding are keyframe-able (the clock tick stays time-driven, only the box STYLE
  * animates on the timeline).
  */
-/**
- * D-084 / D-134 — curated IANA zones for the wall-clock picker. Machine-local
- * time is now an explicit source beside this picker. A stored zone outside this
- * list (a hand-edited file) is surfaced as an extra leading option so it stays editable.
- */
-const CLOCK_TIMEZONES: readonly string[] = [
-  'UTC',
-  'America/Los_Angeles',
-  'America/New_York',
-  'America/Sao_Paulo',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Moscow',
-  'Asia/Tehran',
-  'Asia/Dubai',
-  'Asia/Kolkata',
-  'Asia/Shanghai',
-  'Asia/Tokyo',
-  'Australia/Sydney',
-];
-
 function ClockSections({
   element,
   currentFrame,
@@ -2643,13 +2622,7 @@ function ClockSections({
 }: SectionProps<ClockElement>): JSX.Element {
   const id = element.id;
   const target = element.target;
-  const [offsetDraftKey, setOffsetDraftKey] = useState(0);
-  const timeSource =
-    element.utcOffsetMinutes !== undefined
-      ? 'custom offset'
-      : element.timezone !== undefined
-        ? 'time zone'
-        : 'local';
+  const timeSource = element.utcOffsetMinutes !== undefined ? 'custom offset' : 'local';
   return (
     <>
       <CollapseSection title="Clock" pinned>
@@ -2692,23 +2665,19 @@ function ClockSections({
           options={NumberFieldDigitsSchema.options}
           onCommit={(digits) => designerStore.updateElement(id, { digits } as Partial<Element>)}
         />
-        {/* D-084 / D-134 — exactly ONE wall-time source. Count modes ignore both optional fields,
-            so the controls remain wall-only and a temporary mode switch preserves the choice. */}
+        {/* D-134 owner correction — authoring offers only machine-local or a fixed offset. The
+            runtime/schema still read D-084's old IANA value so an existing package can play, but
+            choosing either visible source replaces it rather than keeping a hidden third mode. */}
         {element.mode === 'wall' && (
           <>
             <SelectField
               label="time source"
               value={timeSource}
-              options={['local', 'time zone', 'custom offset'] as const}
+              options={['local', 'custom offset'] as const}
               onCommit={(source) => {
                 if (source === 'local') {
                   designerStore.updateElement(id, {
                     timezone: undefined,
-                    utcOffsetMinutes: undefined,
-                  } as Partial<Element>);
-                } else if (source === 'time zone') {
-                  designerStore.updateElement(id, {
-                    timezone: element.timezone ?? 'UTC',
                     utcOffsetMinutes: undefined,
                   } as Partial<Element>);
                 } else {
@@ -2719,44 +2688,25 @@ function ClockSections({
                 }
               }}
             />
-            {timeSource === 'time zone' && (
-              <SelectField
-                label="time zone"
-                value={element.timezone ?? 'UTC'}
-                options={
-                  element.timezone !== undefined && !CLOCK_TIMEZONES.includes(element.timezone)
-                    ? [element.timezone, ...CLOCK_TIMEZONES]
-                    : CLOCK_TIMEZONES
-                }
-                onCommit={(timezone) =>
-                  designerStore.updateElement(id, {
-                    timezone,
-                    utcOffsetMinutes: undefined,
-                  } as Partial<Element>)
-                }
-              />
-            )}
             {timeSource === 'custom offset' && (
               <>
-                <TextField
-                  label="UTC offset"
-                  ariaLabel="UTC offset"
-                  value={formatUtcOffset(element.utcOffsetMinutes ?? 0)}
-                  resetKey={`${id}-${String(offsetDraftKey)}`}
-                  onCommit={(draft) => {
-                    const utcOffsetMinutes = parseUtcOffset(draft);
-                    if (utcOffsetMinutes === undefined) {
-                      setOffsetDraftKey((key) => key + 1);
-                      return;
-                    }
+                <ClockOffsetField
+                  value={element.utcOffsetMinutes ?? 0}
+                  onCommit={(utcOffsetMinutes) => {
                     designerStore.updateElement(id, {
                       timezone: undefined,
                       utcOffsetMinutes,
                     } as Partial<Element>);
                   }}
                 />
-                <p className={dds.hint}>Signed ±HH:MM, from −14:00 to +14:00.</p>
+                <p className={dds.hint}>Masked ±HH:MM, from −14:00 to +14:00.</p>
               </>
+            )}
+            {element.timezone !== undefined && (
+              <p className={dds.hint}>
+                This older clock still reads {element.timezone}. Choose Local or Custom offset to
+                replace it.
+              </p>
             )}
           </>
         )}

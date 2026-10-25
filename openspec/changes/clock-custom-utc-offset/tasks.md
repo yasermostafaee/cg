@@ -18,17 +18,18 @@
 
 ## 3. Designer
 
-- [x] 3.1 Add pure `±HH:MM` parse/format helpers accepting Latin, Persian and Arabic-Indic digits,
-      with unit tests for valid values, boundaries and invalid drafts.
-- [x] 3.2 Replace the implicit time-zone picker with an explicit Local / Time zone / Custom offset
-      source choice; clear mutually exclusive state on every mode change.
-- [x] 3.3 Show and commit the custom offset field in wall mode, resetting invalid drafts to the last
-      valid value and keeping count modes unchanged.
+- [x] 3.1 Add pure `±HH:MM` parse/format/mask helpers accepting Latin, Persian and Arabic-Indic
+      digits, with unit tests for valid values, boundaries, slot editing and refused drafts.
+- [x] 3.2 Replace the time-zone picker with only Local / Custom offset; keep legacy IANA data
+      runtime-readable but not authorable, and clear it when either visible source is committed.
+- [x] 3.3 Show and commit a fixed mask in wall mode: own the sign/separator, refuse letters and
+      impossible times before display, and keep count modes unchanged.
 
 ## 4. Integration and verification
 
 - [x] 4.1 Add a Designer E2E that authors two distant fixed offsets, observes the canvas hour
       change through the real Inspector/runtime path, and confirms the exported scene carries it.
 - [x] 4.2 Run strict OpenSpec validation and the focused schema, runtime and Designer checks.
-- [x] 4.3 Run the full local repository gate (99/99 tasks; OpenSpec 89/89).
+- [x] 4.3 Re-run the full local repository gate after the owner-requested two-source/masked-input
+      correction (99/99 tasks; OpenSpec 89/89).
 - [ ] 4.4 Run Linux `gate:e2e`; record authoritative evidence before closing D-134.

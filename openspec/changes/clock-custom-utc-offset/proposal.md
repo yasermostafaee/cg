@@ -14,10 +14,12 @@ must render identically on the Designer canvas, in Preview and in the exported t
   machine-local time.
 - The wall-clock formatter can derive components from a fixed UTC offset. This is arithmetic on the
   absolute instant, deliberately without IANA/DST rules. Countup and countdown ignore the field.
-- The clock Inspector exposes one explicit time source: `Local`, `Time zone`, or `Custom offset`.
-  The custom value is entered as signed `±HH:MM`, accepting Latin, Persian and Arabic-Indic digits.
-- Existing clocks remain unchanged. The optional additive field needs no schema-version bump or
-  migration, and ordinary JSON export already carries it.
+- The clock Inspector exposes only `Local` and `Custom offset`. The custom value is a fixed
+  `±HH:MM` mask: separators belong to the control, letters cannot enter it, and impossible values
+  are refused before display. Latin, Persian and Arabic-Indic digits are accepted.
+- Existing `timezone` data remains schema/runtime-compatible but is no longer authorable in the
+  Inspector. The optional additive field needs no schema-version bump or migration, and ordinary
+  JSON export already carries it.
 
 ## Impact
 
