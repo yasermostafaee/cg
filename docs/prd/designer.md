@@ -4081,16 +4081,15 @@ Acceptance):**
 
 ## [!] D-142 — Brand Pack Factory ⟨priority: unrated⟩
 
-— owner decision 2026-10-14 (DESIGNER-DECISIONS Q14): **re-filed as an in-house tool** in [roadmap.md](roadmap.md) (strategic, not a D- item). The owner's 1 Aug note (`claude/feature-template-pack.md`) is in neither the repo nor `Claude outputs/`; it was not brought in.
+— owner decision 2026-10-14 (DESIGNER-DECISIONS Q14): **re-filed as an in-house tool** in [roadmap.md](roadmap.md) (strategic, not a D- item). The owner's 1 Aug note was recovered from the historical project archive on 2026-10-26; its implementation contract is now tracked by the active [`brand-pack-factory`](../../openspec/changes/brand-pack-factory/) change rather than copied back into this Designer backlog.
 
 **What:** a factory for brand packs — a reusable set of brand assets, colours and type that a
 template can be built against, so a station's identity is applied once rather than re-authored per
 template.
 
-**SCOPED STUB — the design work is tracked elsewhere and is NOT restated here.** The capability
-lives in `claude/feature-template-pack.md`, which is the source of truth for its requirements. This
-entry exists so the capability has a number and appears in the backlog; **no requirements are
-invented here.** Anyone picking it up reads that document first.
+**SCOPED STUB — the design work is tracked elsewhere and is NOT restated here.** The capability is
+an internal CLI/tooling workflow, not customer-facing Designer UI. Its current requirements live in
+the active OpenSpec change linked above; this row remains only as the historical redirect.
 
 **Why it is filed as a stub rather than left unfiled:** the whole purpose of the filing phase is
 that nothing is lost. A capability tracked only in a working document is one reorganisation away
