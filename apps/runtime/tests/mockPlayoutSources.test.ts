@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ROUTE_NO_LAYER_REASON } from '@cg/shared-ipc';
+import { isolateText, ROUTE_NO_LAYER_REASON } from '@cg/shared-ipc';
 import { MockRuntime } from '../src/platform/MockRuntime.js';
 import { createMockBridge } from '../src/platform/createRuntimeBridge.js';
 
@@ -301,6 +301,239 @@ describe('with a seed, the one builder decides', () => {
         sourceId: 'in-li-studio1',
       }),
     ).toMatchObject({ ok: true });
+  });
+
+  it('🔴 B-355 — a live swap refuses a listed unavailable source before writing, without blocking a healthy neighbour repair', async () => {
+    host.CG_E2E_PLAYOUT_SOURCES = {
+      ...SEED,
+      inputs: {
+        ...SEED.inputs,
+        inputs: [
+          ...SEED.inputs.inputs,
+          {
+            id: 'li-down',
+            name: 'Down feed',
+            producer: { kind: 'ndi', source: 'DOWN (Feed)' },
+            available: false,
+            reason: 'no signal',
+          },
+        ],
+      },
+    };
+    const cg = createMockBridge();
+    const left = { x: 0, y: 0, width: 960, height: 1080 };
+    const right = { x: 960, y: 0, width: 960, height: 1080 };
+    await cg.templates.import({
+      template: {
+        templateId: 'b-355-swap',
+        templateType: 'debate',
+        fields: [],
+        liveSources: {
+          resolution: { width: 1920, height: 1080 },
+          defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+          sources: [
+            { elementId: 'e1', sourceId: 'l-1', rect: left, dynamic: false },
+            { elementId: 'e2', sourceId: 'l-2', rect: right, dynamic: false },
+          ],
+          looks: [
+            {
+              id: 'main',
+              name: 'Main',
+              entered: { mode: 'cut' },
+              rects: { 'l-2': right },
+            },
+            {
+              id: 'preset',
+              name: 'Preset',
+              entered: { mode: 'cut' },
+              rects: { 'l-1': left, 'l-2': right },
+            },
+          ],
+          defaultLookId: 'main',
+        },
+      } as never,
+      html: '<!doctype html><html><body>B-355 swap</body></html>',
+    });
+    await cg.sources.setAssignments({
+      assignments: [
+        { templateId: 'b-355-swap', plateId: 'l-1', sourceId: 'in-li-studio1' },
+        { templateId: 'b-355-swap', plateId: 'l-2', sourceId: 'in-li-newscam' },
+      ],
+    });
+    await cg.stack.load({ itemId: 'item-1', templateId: 'b-355-swap', fields: {} });
+
+    // Off air, the unavailable source remains a legal preset for the inactive look.
+    expect(
+      await cg.stack.swapLiveSource({
+        itemId: 'item-1',
+        plateId: 'l-1',
+        sourceId: 'in-li-down',
+        lookId: 'preset',
+      }),
+    ).toEqual({ ok: true });
+    expect(await cg.stack.take({ itemId: 'item-1' })).toMatchObject({ accepted: true });
+
+    // The unchanged bad preset is unrelated: repairing the live plate to a healthy feed still lands.
+    expect(
+      await cg.stack.swapLiveSource({
+        itemId: 'item-1',
+        plateId: 'l-2',
+        sourceId: 'in-li-studio1',
+      }),
+    ).toEqual({ ok: true });
+    const before = JSON.stringify(
+      (await cg.stack.snapshot()).find((item) => item.itemId === 'item-1'),
+    );
+
+    expect(
+      await cg.stack.swapLiveSource({
+        itemId: 'item-1',
+        plateId: 'l-2',
+        sourceId: 'in-li-down',
+      }),
+    ).toEqual({
+      ok: false,
+      reason: 'source-unavailable',
+      message: `Plate 2: “${isolateText('Down feed')}” is unavailable: no signal`,
+    });
+    expect(
+      JSON.stringify((await cg.stack.snapshot()).find((item) => item.itemId === 'item-1')),
+      'the refused source and the unrelated invalid preset leave no state residue',
+    ).toBe(before);
+  });
+
+  it('🔴 B-355 — an unavailable off-air preset is refused at take, then the same preset takes when the source returns', async () => {
+    const downInput = {
+      id: 'li-down',
+      name: 'Down feed',
+      producer: { kind: 'ndi', source: 'DOWN (Feed)' },
+      available: false,
+      reason: 'no signal',
+    };
+    host.CG_E2E_PLAYOUT_SOURCES = {
+      ...SEED,
+      inputs: {
+        ...SEED.inputs,
+        inputs: [...SEED.inputs.inputs, downInput],
+      },
+    };
+    const template = {
+      templateId: 'b-355-take',
+      templateType: 'debate',
+      fields: [],
+      liveSources: {
+        resolution: { width: 1920, height: 1080 },
+        defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+        sources: [
+          {
+            elementId: 'e1',
+            sourceId: 'l-1',
+            rect: { x: 0, y: 0, width: 1920, height: 1080 },
+            dynamic: false,
+          },
+        ],
+        looks: [
+          {
+            id: 'main',
+            name: 'Main',
+            entered: { mode: 'cut' },
+            rects: { 'l-1': { x: 0, y: 0, width: 1920, height: 1080 } },
+          },
+        ],
+        defaultLookId: 'main',
+      },
+    };
+    const html = '<!doctype html><html><body>B-355 take</body></html>';
+    const cg = createMockBridge();
+    await cg.templates.import({ template: template as never, html });
+
+    // Bindable and seatable are separate axes: this listed-but-down source is a legal preset.
+    expect(
+      await cg.sources.setAssignments({
+        assignments: [{ templateId: 'b-355-take', plateId: 'l-1', sourceId: 'in-li-down' }],
+      }),
+    ).toEqual({ ok: true });
+    await cg.stack.load({ itemId: 'item-b-355', templateId: 'b-355-take', fields: {} });
+    const assignmentBefore = await cg.sources.assignments();
+    const layersBefore = await cg.liveLayers.state();
+    const rowBefore = (await cg.stack.snapshot()).find((item) => item.itemId === 'item-b-355');
+    expect(rowBefore).toMatchObject({
+      status: 'loaded',
+      pending: false,
+      activeLookId: 'main',
+    });
+
+    expect(await cg.stack.take({ itemId: 'item-b-355' })).toEqual({
+      accepted: false,
+      errorCode: 'source-unavailable',
+      message: `Plate 1: “${isolateText('Down feed')}” is unavailable: no signal`,
+      refusalOnRow: true,
+    });
+    const rowAfter = (await cg.stack.snapshot()).find((item) => item.itemId === 'item-b-355');
+    expect(rowAfter).toMatchObject({
+      status: 'error',
+      pending: false,
+      errorCode: 'source-unavailable',
+      takeRefusal: {
+        code: 'source-unavailable',
+        plateId: 'l-1',
+        sourceId: 'in-li-down',
+        sourceName: 'Down feed',
+        sourceOrigin: 'input',
+      },
+    });
+    expect(
+      {
+        templateId: rowAfter?.templateId,
+        fields: rowAfter?.fields,
+        activeLookId: rowAfter?.activeLookId,
+        position: rowAfter?.position,
+        sourceOverride: rowAfter?.sourceOverride,
+        lookSourceOverride: rowAfter?.lookSourceOverride,
+        frozenAssignment: rowAfter?.frozenAssignment,
+        slot: rowAfter?.slot,
+      },
+      'the refusal records its line but changes no content, binding, look, freeze or slot state',
+    ).toEqual({
+      templateId: rowBefore?.templateId,
+      fields: rowBefore?.fields,
+      activeLookId: rowBefore?.activeLookId,
+      position: rowBefore?.position,
+      sourceOverride: rowBefore?.sourceOverride,
+      lookSourceOverride: rowBefore?.lookSourceOverride,
+      frozenAssignment: rowBefore?.frozenAssignment,
+      slot: rowBefore?.slot,
+    });
+    expect(await cg.sources.assignments()).toEqual(assignmentBefore);
+    expect(await cg.liveLayers.state()).toEqual(layersBefore);
+
+    /*
+      The mock seed is immutable for one page lifetime. A fresh bridge is its catalogue-reload
+      boundary; localStorage is shared, so this is still the SAME off-air preset being retried.
+    */
+    host.CG_E2E_PLAYOUT_SOURCES = {
+      ...SEED,
+      inputs: {
+        ...SEED.inputs,
+        inputs: [...SEED.inputs.inputs, { ...downInput, available: true, reason: undefined }],
+      },
+    };
+    const retry = createMockBridge();
+    await retry.templates.import({ template: template as never, html });
+    await retry.stack.load({ itemId: 'item-b-355', templateId: 'b-355-take', fields: {} });
+    expect(await retry.sources.assignments()).toEqual(assignmentBefore);
+    expect(
+      (await retry.sources.config()).sources.find((source) => source.id === 'in-li-down')?.status,
+    ).toBeUndefined();
+    expect(await retry.stack.take({ itemId: 'item-b-355' })).toEqual({ accepted: true });
+    expect(
+      (await retry.stack.snapshot()).find((item) => item.itemId === 'item-b-355'),
+    ).toMatchObject({
+      status: 'playing',
+      pending: true,
+      activeLookId: 'main',
+      frozenAssignment: { 'l-1': 'in-li-down' },
+    });
   });
 
   it('a Playout that does not answer says so', () => {

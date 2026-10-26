@@ -13816,3 +13816,44 @@ size warning now says it applies to both. **Not changed:** the cap itself — th
 larger book's pages are loaded by the operator. **Acceptance:** `WebSocketRuntime.test.ts` against a real bridge
 (red with the guard removed: `BridgeDisconnectedError`), `template-delivery.test.ts`, `book-export.test.ts`,
 `ws-frame-size.test.ts`.
+
+## [~] B-355 — An unavailable source change is accepted on air, and a shared plate lets a look switch expose the wrong or an empty picture ⟨priority: high — a multi-box action reports success without putting its requested composition on air⟩ — FILED 2026-10-26 from the owner's installed-system reproduction · `openspec/changes/refuse-unavailable-on-air-source-changes/`
+
+**Repro / Actual (the owner, installed CG Control and CG Bridge, 2026-10-26):** take a multi-box row with two
+healthy pictures. Change one plate in a look to an input the Playout lists as `Unavailable`, then press
+**Update on air**. The command is accepted and no error is shown, but that plate keeps its previous picture. The
+unavailable binding is nevertheless recorded. The owner's concrete switch route starts with the Playout's Playlist
+output full-screen on the single look. The two-box destination reuses that `plateId` but changes its binding to an
+unavailable source, while the other box has a valid source. The switch is accepted because the shared plate is
+already punched: the old Playlist picture remains full-screen while the other valid frame is applied — a partial
+composition belonging to neither look. The reverse arrangement is already safe: if the shared plate keeps the
+Playlist source and the newly introduced/held plate is unavailable, the existing `source-unavailable` switch gate
+refuses it. The missed case is specifically the punched, shared `plateId` whose per-look source changes.
+
+**Expected:** an on-air Update that introduces an unavailable source is refused as one atomic action before any
+AMCP: no fields, bindings, pictures or geometry change, and the message names `Plate N`, the source and the Playout's
+reason. A switch validates every frame of the destination look, including a `plateId` already punched by the current
+look; if its destination source is unavailable, the page is not told, no wire command is sent, the previous look and
+ledger stay in force, and a two-box layout is never applied partially. An unavailable binding may still be prepared
+while the row is off air, but a later take or switch that would put it on air is refused. A binding which has not
+changed and only became unavailable after it was already in force does not block an otherwise valid text-only Update.
+An emergency live-source swap likewise refuses when its newly requested target is unavailable, while an unchanged
+invalid frame elsewhere does not block a healthy repair.
+
+**Cause:** the catalogue intentionally distinguishes bindable from seatable: a listed unavailable input may be bound
+for an off-air preset but cannot be seated. `#refuseBindingChange` checks a new frame for loop and channel compatibility
+but omits the canonical `sourceSeatable` check. The live planner then resolves the new source to nothing and preserves
+the old punched record, so the transaction reports success. The switch path has the same blind spot from another
+direction: it plans `switch` with the permissive `already-live` scope, and `punchedAlready` is keyed only by
+`plateId`; a different unavailable source in the destination frame is therefore excused as though the requested
+frame were already on screen. The existing plan-time refusal and all-or-nothing rollback are sufficient once that
+frame is required to resolve.
+
+**Regression:** bridge integration tests shall pin (1) atomic rejection of a new unavailable binding on an on-air
+row, with zero wire and unchanged binding/ledger; (2) a single → two-box switch where the shared `plateId` changes
+from a healthy source to an unavailable one, with zero page or mixer command and byte-identical prior state; (3) an
+unchanged binding that later becomes unavailable does not block a text-only Update; (4) an off-air preset is stored,
+but take/switch refuses it; and (5) availability returning is the positive control. Runtime e2e shall pin the kept
+draft/error sentence and the old selected look/row refusal. The existing held-plate unavailable-switch test remains
+green; a live swap to an unavailable target is refused without state residue, while a healthy emergency swap remains
+possible despite an unrelated unchanged invalid plate.

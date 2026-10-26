@@ -122,6 +122,7 @@ import {
   pruneAssignmentsForCatalog,
   // `PLAYOUT-SOURCES-01` — what may be bound and what may be seated, asked of the ONE module.
   sourceSeatable,
+  unseatableWords,
   // `ROUTE-PLATES-01` — which entries are Playout routes, and on which channels one may be shown.
   isPlayoutRoute,
   sourceShowableOn,
@@ -249,6 +250,8 @@ import {
   type AuditFile,
 } from '@cg/audit';
 import {
+  LIVE_PLATE_SOURCE_UNAVAILABLE,
+  LIVE_PLATE_SOURCE_UNUSABLE,
   LIVE_PLATE_SOURCE_NOT_SHOWABLE,
   resolvePlateAssignments,
 } from './live-plate-assignment.js';
@@ -7421,10 +7424,11 @@ export class CasparRuntime {
      * a hole would block air for a non-reason, so it no longer does; the hole is surfaced in
      * CG Control and refuses at the moment somebody tries to SWITCH into it.
      *
-     * `'already-live'` — a LIVE switch or swap. The row is on air and the operator is
-     * usually repairing something. Only a frame that must be seated ANEW may refuse: one
-     * this look does not show cannot, and — the case that matters most — neither can one
-     * that is ALREADY ON SCREEN.
+     * `'already-live'` — a live binding repair (`swapLiveSource` or Update). The row is on air
+     * and the operator is usually repairing something. Only a frame that must be seated ANEW
+     * may refuse: an unrelated frame already on screen must not block the repair. A look switch
+     * does NOT use this scope: every frame of the destination look must resolve before the page
+     * or its geometry can move (`B-355`).
      */
     scope: 'entering-look' | 'already-live',
     /**
@@ -8045,10 +8049,31 @@ export class CasparRuntime {
       source: { id: string };
     }) => `${frame.lookId ?? ''}\u001f${frame.plateId}\u001f${frame.source.id}`;
     const held = new Set(inForce.frames.map(frameKey));
+    const ownsLiveSeats = this.#ownsLiveSeats(itemId);
     for (const frame of prospective.frames) {
       if (held.has(frameKey(frame))) continue;
       // `B-308` — the plate is `Plate N` and the source's name sits in its own isolate.
       const plate = plateLabel(carrier.sources, frame.plateId) ?? 'A plate';
+      /*
+        🔴 `B-355` — BINDABLE OFF AIR IS NOT SEATABLE ON AIR. A listed-but-unavailable
+        Playout input is deliberately bindable so a preset can be prepared. Once this row owns
+        live seats, however, a NEW or CHANGED frame must be seatable before the binding maps are
+        written. Otherwise the planner preserves the old punched producer and the action reports
+        success while the requested picture never arrives.
+
+        Only frames absent from `held` reach this branch. An unchanged binding that lost signal
+        later therefore does not block a text edit or a repair of another plate.
+      */
+      if (ownsLiveSeats && !sourceSeatable(frame.source)) {
+        const words = unseatableWords(frame.source);
+        return {
+          reason:
+            frame.source.status === 'unavailable'
+              ? LIVE_PLATE_SOURCE_UNAVAILABLE
+              : LIVE_PLATE_SOURCE_UNUSABLE,
+          message: `${plate}: “${isolateText(words.name)}”${words.rest}`,
+        };
+      }
       if (sourceLoopsOn(frame.source, slot.channel)) {
         const words = ownOutputWords(frame.source.name, slot.channel);
         return {
@@ -8979,8 +9004,10 @@ export class CasparRuntime {
         🔴 `B-166` — `'switch'`, not `'live'`. A look switch is ONE GEOMETRY across every plate,
         so a failure part-way through must put the boxes back rather than leave the row in a
         shape no look authored while every surface reports the switch was refused. The PLAN is
-        byte-identical to `'live'`'s (same `already-live` scope, same `pinned` level 2, same
-        UNION pre-seat) — only what a failure MEANS differs. See `#applyLivePlates`.
+        uses the same pinned level 2 and UNION pre-seat as `'live'`, but `B-355` makes its
+        destination validation strict (`entering-look`): a shared plate id does not prove the
+        destination's different source is already on screen. Only what an apply failure MEANS
+        differs after that preflight. See `#applyLivePlates`.
       */
       /*
       🔴 `B-174` — **THE ORDER: plan → tell the page → HOLD one channel frame → move the
@@ -9304,7 +9331,7 @@ export class CasparRuntime {
     itemId: string,
     opts: {
       /**
-       * 🔴 **`B-166`/`B-167` — `'switch'` PLANS EXACTLY AS `'live'` AND FAILS DIFFERENTLY.**
+       * 🔴 **`B-166`/`B-167` — `'switch'` SHARES LIVE'S PRE-SEAT SET AND FAILS DIFFERENTLY.**
        *
        * Three actions, and the mode names WHICH ACTION IT IS rather than what it should do —
        * the rule this argument already carried for two. A look SWITCH is not a source SWAP,
@@ -9315,11 +9342,12 @@ export class CasparRuntime {
        *   at all. Undoing "only the failed plate" leaves the row in a shape nobody authored,
        *   while every surface says the switch did not happen (`B-166`).
        *
-       * ⚠ **The PLAN is identical for `'live'` and `'switch'` and MUST stay identical.** Both
-       * resolve `'already-live'` + `'pinned'` below, so the UNION PRE-SEAT is untouched —
-       * every look's inputs stay seated, including the looks that are not punched. Narrowing
-       * that set would put a `PLAY` back inside a switch and reintroduce `B-155` case 3. A
-       * change here that alters the pre-seat SET is the wrong change.
+       * ⚠ **The UNION PRE-SEAT SET is identical for `'live'` and `'switch'` and MUST stay
+       * identical.** Both keep `'pinned'` level-two assignments, so every look's inputs stay
+       * seated, including the looks that are not punched. `B-355` deliberately makes only the
+       * refusal scope different: a switch validates the complete destination as
+       * `'entering-look'`, while a live binding repair remains `'already-live'`. Narrowing the
+       * pre-seat set would put a `PLAY` back inside a switch and reintroduce `B-155` case 3.
        */
       mode: 'take' | 'live' | 'switch';
       /**
@@ -9375,7 +9403,11 @@ export class CasparRuntime {
         itemId,
         slot,
         opts.lookId ?? this.activeLookId(itemId),
-        opts.mode === 'take' ? 'entering-look' : 'already-live',
+        // `B-355` — a switch enters a complete destination look just like a take. Only a
+        // live binding repair may preserve an unrelated already-punched frame that no longer
+        // resolves; excusing a switched frame merely because its plate id is punched can leave
+        // the page on the new look while the old source/geometry remains.
+        opts.mode === 'live' ? 'already-live' : 'entering-look',
         // SESSION BP — a take resolves level 2 afresh; every other reconcile reads the pin.
         opts.mode === 'take' ? 'fresh' : 'pinned',
       );

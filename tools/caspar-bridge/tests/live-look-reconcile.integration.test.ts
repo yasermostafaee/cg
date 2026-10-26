@@ -4,12 +4,13 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
-import type {
-  ConnectionConfig,
-  SourceAssignments,
-  SourceCatalog,
-  TemplateInfo,
-  TemplateLook,
+import {
+  isolateText,
+  type ConnectionConfig,
+  type SourceAssignments,
+  type SourceCatalog,
+  type TemplateInfo,
+  type TemplateLook,
 } from '@cg/shared-ipc';
 import { readCgControl, type LiveFitMode, type LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
@@ -245,6 +246,17 @@ function catalog(over: Partial<SourceCatalog> = {}): SourceCatalog {
     ],
     layerRange: BAND,
     ...over,
+  };
+}
+
+/** One source that the Playout still lists, but says cannot be seated right now. */
+function catalogWithUnavailable(sourceId: string, reason = 'no signal'): SourceCatalog {
+  const current = catalog();
+  return {
+    ...current,
+    sources: current.sources.map((source) =>
+      source.id === sourceId ? { ...source, status: 'unavailable' as const, reason } : source,
+    ),
   };
 }
 
@@ -1978,6 +1990,7 @@ const OWNERS_ASSIGNMENTS = assign([
   ['live-2', 'src-2'],
   ['live-3', 'src-3'],
 ]);
+const NEW_BINDING = { two: { 'live-2': 'src-4' } } as const;
 
 it('🔴 B-178 — a PARKED seat must NOT overwrite the punched plate’s facts on the wire', async () => {
   /*
@@ -2232,6 +2245,177 @@ it('🔴 §8.8 — a hole in a look you are NOT showing does not refuse the take
   expect(playsIn(await since(before))).toEqual([]);
 });
 
+it('🔴 B-355 — a live switch refuses an unavailable DIFFERENT source for the same plate before telling the page', async () => {
+  const full = { x: 0, y: 0, width: 1920, height: 1080 };
+  const left = { x: 0, y: 0, width: 960, height: 1080 };
+  const right = { x: 960, y: 0, width: 960, height: 1080 };
+  const template = sixBoxTemplate({
+    sources: ['live-1', 'live-2'],
+    looks: [look('single', { 'live-1': full }), look('two', { 'live-1': left, 'live-2': right })],
+    defaultLookId: 'single',
+  });
+  const r = await boot({
+    template,
+    assignments: assign([
+      // The shared plate starts on the Playout's playlist output.
+      ['live-1', 'src-playlist'],
+      // The second plate of the destination 2-box is healthy.
+      ['live-2', 'src-2'],
+    ]),
+  });
+  const playlistOutput = {
+    id: 'src-playlist',
+    name: 'Playlist output',
+    format: '1080i5000' as const,
+    producer: { kind: 'route' as const, channel: 20, layer: 7 },
+    playlistOf: 20,
+  };
+  const unavailable = catalogWithUnavailable('src-4');
+  r.setSourceCatalog({
+    ...unavailable,
+    sources: [...unavailable.sources, playlistOutput],
+  });
+  await r.load('item-1', 'debate', {});
+
+  /*
+    The exact plant sequence: preset the bad source while off air (intentionally allowed), take the
+    SINGLE look with the playlist output full-screen, then request the TWO-box look. Its shared
+    Plate 1 changes to unavailable src-4 while its new Plate 2 remains healthy on src-2.
+  */
+  expect(
+    (
+      await r.update('item-1', {}, 'merge', {
+        two: { 'live-1': 'src-4' },
+      })
+    ).accepted,
+  ).toBe(true);
+  expect((await r.take('item-1')).accepted).toBe(true);
+  expect(r.activeLookId('item-1')).toBe('single');
+  expect(
+    recordOf(r, 'live-1'),
+    'the shared plate is the full-screen playlist output',
+  ).toMatchObject({
+    producer: '"route://20-7"',
+    audioLocked: true,
+    fill: { x: 0, y: 0, width: 1, height: 1 },
+    clip: { x: 0, y: 0, width: 1, height: 1 },
+  });
+  expect(recordOf(r, 'live-2'), 'the other 2-box plate is healthy and pre-seated').toMatchObject({
+    producer: '"route://3"',
+    held: true,
+  });
+
+  const ledgerBefore = JSON.stringify(r.liveLayers().get('item-1') ?? []);
+  const geometryBefore = JSON.stringify(
+    layerSet(r).map((layer) => ({ layer, state: mock?.layerState({ channel: 1, layer }) })),
+  );
+  const before = (await recvLines()).length;
+
+  const res = await r.setActiveLook('item-1', 'two');
+
+  expect(res).toEqual({
+    ok: false,
+    reason: 'source-unavailable',
+    message: `Plate 1: “${isolateText('Feed 4')}” is unavailable: no signal`,
+    refusalOnRow: true,
+  });
+  // The plan-time refusal is before both the page's CG UPDATE and every producer/mixer command.
+  expect(await since(before), 'the page and the live layers are both untouched').toEqual([]);
+  expect(r.activeLookId('item-1'), 'the page is still punching the single look').toBe('single');
+  expect(JSON.stringify(r.liveLayers().get('item-1') ?? []), 'the ledger is unchanged').toBe(
+    ledgerBefore,
+  );
+  expect(
+    JSON.stringify(
+      layerSet(r).map((layer) => ({ layer, state: mock?.layerState({ channel: 1, layer }) })),
+    ),
+    'every live layer keeps its old producer and geometry',
+  ).toBe(geometryBefore);
+
+  // Positive control: availability is the only fact that changes. The exact same switch now
+  // seats Feed 4, tells the page and punches the complete two-box destination.
+  const available = catalog();
+  r.setSourceCatalog({ ...available, sources: [...available.sources, playlistOutput] });
+  const retryBefore = (await recvLines()).length;
+
+  expect(await r.setActiveLook('item-1', 'two')).toEqual({ ok: true });
+
+  const retryLines = await since(retryBefore);
+  expect(playsIn(retryLines).some((line) => line.includes('"route://5"'))).toBe(true);
+  expect(
+    retryLines.some((line) => /^CG 1-\d+ UPDATE /.test(line)),
+    'the page is told',
+  ).toBe(true);
+  expect(
+    retryLines.some((line) => /^MIXER 1-\d+ FILL /.test(line)),
+    'the destination geometry reaches the wire',
+  ).toBe(true);
+  expect(r.activeLookId('item-1')).toBe('two');
+  expect(recordOf(r, 'live-1'), 'Plate 1 now punches Feed 4 in the left cell').toMatchObject({
+    producer: '"route://5"',
+    fill: { x: 0, width: 0.5 },
+  });
+  expect(recordOf(r, 'live-1')?.held ?? false).toBe(false);
+  expect(
+    recordOf(r, 'live-2'),
+    'Plate 2 stays healthy and is punched in the right cell',
+  ).toMatchObject({
+    producer: '"route://3"',
+    fill: { x: 0.5, width: 0.5 },
+  });
+  expect(recordOf(r, 'live-2')?.held ?? false).toBe(false);
+});
+
+it('🔴 B-355 — a live swap refuses an unavailable target without blocking a healthy neighbour repair', async () => {
+  const r = await boot({
+    template: ownersTemplate(),
+    assignments: OWNERS_ASSIGNMENTS,
+  });
+  r.setSourceCatalog(catalogWithUnavailable('src-4'));
+  await r.load('item-1', 'debate', {});
+
+  // Off air, the unavailable feed remains a legal preset for an inactive look.
+  expect(await r.swapLiveSource('item-1', 'live-3', 'src-4', 'solo')).toEqual({ ok: true });
+  expect((await r.take('item-1')).accepted).toBe(true);
+
+  // That unchanged bad preset must not veto an emergency repair of its healthy neighbour.
+  expect(await r.swapLiveSource('item-1', 'live-2', 'src-5')).toEqual({ ok: true });
+  expect(recordOf(r, 'live-2')?.producer).toBe('"route://6"');
+
+  const rowBefore = JSON.stringify(
+    r.stackSnapshot().find((candidate) => candidate.itemId === 'item-1'),
+  );
+  const ledgerBefore = JSON.stringify(r.liveLayers().get('item-1') ?? []);
+  const geometryBefore = JSON.stringify(
+    layerSet(r).map((layer) => ({ layer, state: mock?.layerState({ channel: 1, layer }) })),
+  );
+  const before = (await recvLines()).length;
+
+  const refused = await r.swapLiveSource('item-1', 'live-2', 'src-4');
+
+  expect(refused).toEqual({
+    ok: false,
+    reason: 'source-unavailable',
+    message: `Plate 2: “${isolateText('Feed 4')}” is unavailable: no signal`,
+  });
+  expect(await since(before), 'the refused target reaches neither producer nor mixer wire').toEqual(
+    [],
+  );
+  expect(
+    JSON.stringify(r.stackSnapshot().find((candidate) => candidate.itemId === 'item-1')),
+    'neither the healthy emergency override nor the unrelated preset is changed',
+  ).toBe(rowBefore);
+  expect(JSON.stringify(r.liveLayers().get('item-1') ?? []), 'the ledger is unchanged').toBe(
+    ledgerBefore,
+  );
+  expect(
+    JSON.stringify(
+      layerSet(r).map((layer) => ({ layer, state: mock?.layerState({ channel: 1, layer }) })),
+    ),
+    'every producer and geometry stays as it was after the healthy repair',
+  ).toBe(geometryBefore);
+});
+
 // ───────── SESSION BM-2 — ONE ATOMIC UPDATE: the texts and the bindings together ─────────
 
 /** The owner's template again, with a text field so an UPDATE has both halves to carry. */
@@ -2305,6 +2489,97 @@ it('🔴 §6.2 — a REFUSED batch lands NOTHING: not the texts, not the binding
   const item = r.stackSnapshot().find((i) => i.itemId === 'item-1');
   expect(item?.fields.title, 'the text must not land when the binding was refused').toBe('before');
   expect(item?.lookSourceOverride, 'and no binding residue').toBeUndefined();
+});
+
+it('🔴 B-355 — a live UPDATE refuses a newly bound unavailable input atomically', async () => {
+  const r = await boot({
+    template: ownersTemplateWithField(),
+    assignments: OWNERS_ASSIGNMENTS,
+  });
+  await r.load('item-1', 'debate', { title: 'before' });
+  expect((await r.take('item-1')).accepted).toBe(true);
+  r.setSourceCatalog(catalogWithUnavailable('src-4'));
+
+  const ledgerBefore = JSON.stringify(r.liveLayers().get('item-1') ?? []);
+  const before = (await recvLines()).length;
+
+  const res = await r.update('item-1', { title: 'after' }, 'merge', {
+    two: { 'live-2': 'src-4' },
+  });
+
+  expect(res).toEqual({
+    accepted: false,
+    errorCode: 'source-unavailable',
+    message: `Plate 2: “${isolateText('Feed 4')}” is unavailable: no signal`,
+  });
+  expect(await since(before), 'neither the fill nor the page update reaches the wire').toEqual([]);
+  const item = r.stackSnapshot().find((candidate) => candidate.itemId === 'item-1');
+  expect(item?.fields.title, 'the text half of the batch is not committed').toBe('before');
+  expect(item?.lookSourceOverride, 'the refused binding leaves no residue').toBeUndefined();
+  expect(
+    JSON.stringify(r.liveLayers().get('item-1') ?? []),
+    'the old pictures stay as recorded',
+  ).toBe(ledgerBefore);
+
+  // Positive control: no draft changes between attempts. Restoring only source availability
+  // makes the same atomic text+binding Update land on the wire and in published row state.
+  r.setSourceCatalog(catalog());
+  const retryBefore = (await recvLines()).length;
+  const retry = await r.update('item-1', { title: 'after' }, 'merge', {
+    two: { 'live-2': 'src-4' },
+  });
+
+  expect(retry).toEqual({ accepted: true });
+  const retryLines = await since(retryBefore);
+  const retryPlay = retryLines.findIndex((line) => line.includes('"route://5"'));
+  const retryPage = retryLines.findIndex((line) => /^CG 1-\d+ UPDATE /.test(line));
+  expect(retryPlay, 'Feed 4 reaches the producer wire').toBeGreaterThanOrEqual(0);
+  expect(retryPage, 'the text reaches the page wire').toBeGreaterThanOrEqual(0);
+  expect(retryPlay, 'the producer is ready before the page is told').toBeLessThan(retryPage);
+  expect(retryLines[retryPage]).toContain('after');
+  expect(r.stackSnapshot().find((candidate) => candidate.itemId === 'item-1')).toMatchObject({
+    fields: { title: 'after' },
+    lookSourceOverride: { two: { 'live-2': 'src-4' } },
+  });
+  expect(recordOf(r, 'live-2')?.producer).toBe('"route://5"');
+  expect(recordOf(r, 'live-2')?.held ?? false).toBe(false);
+});
+
+it('B-355 neighbour — an unchanged binding that later became unavailable does not block a text-only UPDATE', async () => {
+  const r = await boot({
+    template: ownersTemplateWithField(),
+    assignments: OWNERS_ASSIGNMENTS,
+  });
+  await r.load('item-1', 'debate', { title: 'before' });
+  expect((await r.take('item-1')).accepted).toBe(true);
+  expect((await r.update('item-1', {}, 'merge', NEW_BINDING)).accepted).toBe(true);
+
+  // The binding was valid when made; the Playout marks it unavailable afterwards.
+  r.setSourceCatalog(catalogWithUnavailable('src-4'));
+  const ledgerBefore = JSON.stringify(r.liveLayers().get('item-1') ?? []);
+  const before = (await recvLines()).length;
+
+  /*
+    Whenever bindings participate in one apply, the contract carries the COMPLETE map and therefore
+    repeats unchanged entries. Here the title is the only effective change: the repeated degraded
+    feed must not become a veto over an unrelated caption correction.
+  */
+  const res = await r.update('item-1', { title: 'after' }, 'merge', NEW_BINDING);
+
+  expect(res.accepted).toBe(true);
+  const lines = await since(before);
+  expect(lines.some((line) => /^CG 1-\d+ UPDATE /.test(line))).toBe(true);
+  expect(
+    {
+      plays: playsIn(lines),
+      mixers: lines.filter((line) => /^MIXER 1-\d+ /.test(line)),
+    },
+    'the repeated degraded binding triggers no producer substitution or mixer repair',
+  ).toEqual({ plays: [], mixers: [] });
+  const item = r.stackSnapshot().find((candidate) => candidate.itemId === 'item-1');
+  expect(item?.fields.title).toBe('after');
+  expect(item?.lookSourceOverride).toEqual(NEW_BINDING);
+  expect(JSON.stringify(r.liveLayers().get('item-1') ?? [])).toBe(ledgerBefore);
 });
 
 it('🔴 §6.2 — a batch refused by the BAND leaves the texts alone too', async () => {
@@ -2999,8 +3274,6 @@ const volumesIn = (lines: readonly string[]): string[] =>
 /** Every `MIXER 1-<layer> FILL|CLIP …` — the GEOMETRY half. */
 const fitsIn = (lines: readonly string[]): string[] =>
   lines.filter((l) => /^MIXER 1-\d+ (FILL|CLIP)/.test(l));
-
-const NEW_BINDING = { two: { 'live-2': 'src-4' } } as const;
 
 it('🔴 B-161 — a row that is NOT ON AIR: UPDATE with new bindings reaches NO live layer at all', async () => {
   const r = await boot({ template: ownersTemplateWithField(), assignments: OWNERS_ASSIGNMENTS });

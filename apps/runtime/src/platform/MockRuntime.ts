@@ -96,8 +96,14 @@ import {
   parsePlayoutInputs,
   parsePlayoutMediaPage,
   playoutMediaIdOf,
+  isolateText,
+  lookPlateRects,
+  plateLabel,
+  resolvePlateSourcesForLook,
+  sourceSeatable,
   toBoundMedia,
   unbindableChange,
+  unseatableWords,
   redactUrlCredentials,
   REFERENCE_RASTER,
   REMOVE_ON_AIR_CODE,
@@ -123,6 +129,20 @@ import { seedConfig, seedHealth, seedStack, seedTemplates } from './seed.js';
 type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
 
 type FieldValues = StackItemState['fields'];
+type MockSource = SourceCatalog['sources'][number];
+
+interface MockSourceRefusal {
+  errorCode: 'source-unavailable' | 'source-unusable';
+  message: string;
+  plateId: string;
+  source: MockSource;
+}
+
+/** The bridge's plate/source refusal sentence, including the bidi isolation around the name. */
+function mockSourceRefusalMessage(plate: string, source: MockSource): string {
+  const words = unseatableWords(source);
+  return `${plate}: “${isolateText(words.name)}”${words.rest}`;
+}
 
 const DELIMITERS_KEY = 'cg-runtime:delimiters';
 /** `DELTA-RUN-NEXT-VERSION-01-C` — the station's calendar settings, test mode's `calendar.json`. */
@@ -604,7 +624,12 @@ export class MockRuntime {
     return { accepted: true };
   }
 
-  take(itemId: string): { accepted: boolean; errorCode?: string; refusalOnRow?: true } {
+  take(itemId: string): {
+    accepted: boolean;
+    errorCode?: string;
+    message?: string;
+    refusalOnRow?: true;
+  } {
     // R-022 parity — THE INTERLOCK, and the mock must hold it too. If test mode
     // allowed a take the real bridge refuses, the interlock would be exercised
     // nowhere in the suite and the UI would be built against semantics the bridge
@@ -620,6 +645,36 @@ export class MockRuntime {
     */
     if (ownsLiveSeats(item, this.#liveSeatedItems.has(itemId))) {
       return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
+    }
+    /*
+      `B-355` parity — a listed-but-down source may be prepared while off air, but the TAKE of
+      the look which needs it must stop before any row state, freeze or simulated seat changes.
+      Only the ENTERED look is checked: an unavailable source in an inactive preset must not block
+      an otherwise healthy take.
+    */
+    const sourceRefusal = this.#unseatableLookSource(itemId, this.resolvedActiveLook(itemId));
+    if (sourceRefusal !== null) {
+      const takeRefusal: TakeRefusal = {
+        code: sourceRefusal.errorCode,
+        plateId: sourceRefusal.plateId,
+        sourceId: sourceRefusal.source.id,
+        sourceName: sourceRefusal.source.name,
+        ...(sourceRefusal.source.origin !== undefined
+          ? { sourceOrigin: sourceRefusal.source.origin }
+          : {}),
+      };
+      this.#patch(itemId, {
+        status: 'error',
+        pending: false,
+        errorCode: sourceRefusal.errorCode,
+        takeRefusal,
+      });
+      return {
+        accepted: false,
+        errorCode: sourceRefusal.errorCode,
+        message: sourceRefusal.message,
+        refusalOnRow: true,
+      };
     }
     /*
       `FIELD-FIXES-01` B parity — a take REFUSED AT THE WIRE. The mock's sends always land, so this
@@ -702,16 +757,20 @@ export class MockRuntime {
     /**
      * Session BM-2 — the row's COMPLETE per-look input map, applied with the fields.
      *
-     * ⚠ Applied BEFORE the merge below, mirroring the bridge's order: the bindings move the
-     * fills and the page is told afterwards. The mock has no fills to move, so what parity
-     * requires of it is only that ONE call carries both halves and that the map REPLACES
-     * rather than merges — a mock that merged would let a test pass while the real bridge
-     * cleared a binding the test thought it had removed.
+     * ⚠ Validated BEFORE either half is recorded, mirroring the bridge transaction: a refused
+     * binding leaves the fields and the applied map untouched. The mock has no fills to move, so
+     * what parity requires is that ONE call carries both halves and that the map REPLACES rather
+     * than merges — a mock that merged would let a test pass while the real bridge cleared a
+     * binding the test thought it had removed.
      */
     lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>>,
   ): { accepted: boolean; errorCode?: string; message?: string } {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+    // `R-100` parity — refuse a bad page list before recording EITHER half of this atomic update.
+    const pageRefusal = this.#refusePageLists(item.templateId, itemId, fields);
+    if (pageRefusal !== null) return { accepted: false, ...pageRefusal };
+
     if (lookBindings !== undefined) {
       /*
         `PLAYOUT-SOURCES-01` parity, in the bridge's order: a media id the row newly names is bound
@@ -740,16 +799,36 @@ export class MockRuntime {
       if (refusal !== null) {
         return { accepted: false, errorCode: refusal.code, message: refusal.message };
       }
+
+      /*
+        `B-355` — on a row which owns live seats, a NEW OR CHANGED binding must be seatable now.
+        The same unavailable source remains a valid preset off air, and an UNCHANGED binding is
+        deliberately skipped: a Playout state change must not turn an unrelated text edit into a
+        refusal. This runs before the map or fields are written, so the whole Update is atomic.
+      */
+      if (ownsLiveSeats(item, this.#liveSeatedItems.has(itemId))) {
+        const sourceRefusal = this.#changedUnseatableLookSource(itemId, {
+          lookBindings,
+          overrides: this.#sourceOverrides.get(itemId),
+        });
+        if (sourceRefusal !== null)
+          return {
+            accepted: false,
+            errorCode: sourceRefusal.errorCode,
+            message: sourceRefusal.message,
+          };
+      }
+
+      // Every refusal is now behind us: publish the replacement map as the binding half's commit.
       if (Object.keys(lookBindings).length === 0) this.#lookSourceBindings.delete(itemId);
       else
         this.#lookSourceBindings.set(
           itemId,
-          lookBindings as Record<string, Record<string, string>>,
+          Object.fromEntries(
+            Object.entries(lookBindings).map(([lookId, plates]) => [lookId, { ...plates }]),
+          ),
         );
     }
-    // `R-100` parity — a page list naming a picture this runtime does not hold refuses the WHOLE update.
-    const pageRefusal = this.#refusePageLists(item.templateId, itemId, fields);
-    if (pageRefusal !== null) return { accepted: false, ...pageRefusal };
     const pages = this.#pagesAfterUpdate(item, fields);
     const merged = mergeMode === 'merge' ? { ...item.fields, ...fields } : fields;
 
@@ -1194,11 +1273,10 @@ export class MockRuntime {
    * refit, the audio intent) is integration-tested bridge-side against the AMCP
    * mock, which is the only place it can be observed at all.
    *
-   * ⚠ **It deliberately does NOT refuse an on-air item, and that is the contract
-   * rather than an omission** — `setPosition` above refuses one because moving a
-   * live graphic mid-shot is a different act. Patching around a dead feed is the
-   * ENTIRE use of this verb, so refusing on air would refuse it in the only
-   * situation it exists for.
+   * ⚠ **It deliberately does NOT refuse an item merely because it is on air.**
+   * `setPosition` above does because moving a live graphic mid-shot is a different act.
+   * Patching around a dead feed is the entire use of this verb. `B-355` adds only the
+   * narrower refusal production has too: a new target which cannot itself be seated.
    */
   swapLiveSource(
     itemId: string,
@@ -1228,18 +1306,46 @@ export class MockRuntime {
       else forLook[plateId] = sourceId;
       if (Object.keys(forLook).length === 0) delete bindings[lookId];
       else bindings[lookId] = forLook;
-      if (Object.keys(bindings).length === 0) this.#lookSourceBindings.delete(itemId);
-      else this.#lookSourceBindings.set(itemId, bindings);
+      const nextBindings = Object.keys(bindings).length === 0 ? undefined : bindings;
+      if (ownsLiveSeats(item, this.#liveSeatedItems.has(itemId))) {
+        const sourceRefusal = this.#changedUnseatableLookSource(itemId, {
+          lookBindings: nextBindings,
+          overrides: this.#sourceOverrides.get(itemId),
+        });
+        if (sourceRefusal !== null) {
+          return {
+            ok: false,
+            reason: sourceRefusal.errorCode,
+            message: sourceRefusal.message,
+          };
+        }
+      }
+      if (nextBindings === undefined) this.#lookSourceBindings.delete(itemId);
+      else this.#lookSourceBindings.set(itemId, nextBindings);
       this.#emitStack();
       return { ok: true };
     }
     const next: Record<string, string> = { ...this.#sourceOverrides.get(itemId) };
     if (sourceId === null) delete next[plateId];
     else next[plateId] = sourceId;
+    const nextOverrides = Object.keys(next).length === 0 ? undefined : next;
+    if (ownsLiveSeats(item, this.#liveSeatedItems.has(itemId))) {
+      const sourceRefusal = this.#changedUnseatableLookSource(itemId, {
+        lookBindings: this.#lookSourceBindings.get(itemId),
+        overrides: nextOverrides,
+      });
+      if (sourceRefusal !== null) {
+        return {
+          ok: false,
+          reason: sourceRefusal.errorCode,
+          message: sourceRefusal.message,
+        };
+      }
+    }
     // An EMPTY map is no override at all: keeping one would publish
     // `sourceOverride: {}` and make a row back on its assignment look substituted.
-    if (Object.keys(next).length === 0) this.#sourceOverrides.delete(itemId);
-    else this.#sourceOverrides.set(itemId, next);
+    if (nextOverrides === undefined) this.#sourceOverrides.delete(itemId);
+    else this.#sourceOverrides.set(itemId, nextOverrides);
     this.#emitStack();
     return { ok: true };
   }
@@ -1265,6 +1371,126 @@ export class MockRuntime {
       looks.find((l) => l.id === live?.defaultLookId)?.id ??
       looks[0]?.id
     );
+  }
+
+  /**
+   * `B-355` parity — the first source the requested look would have to put on air but cannot.
+   *
+   * This deliberately composes the shared look-membership and four-level source resolver. The
+   * preview and the real bridge ask those same functions, so test mode cannot validate a different
+   * plate set or precedence order. A listed-but-down source is still bindable while off air; this
+   * helper is consulted only by an action which would seat the requested look.
+   */
+  #unseatableLookSource(
+    itemId: string,
+    lookId: string | undefined,
+    lookBindings = this.#lookSourceBindings.get(itemId),
+  ): MockSourceRefusal | null {
+    const item = this.#find(itemId);
+    if (item === null) return null;
+    const carrier = this.#templateOfItem(itemId, item.templateId)?.liveSources;
+    if (carrier === undefined) return null;
+
+    const plateIds = Object.keys(lookPlateRects(carrier, lookId));
+    const resolved = resolvePlateSourcesForLook({
+      templateId: item.templateId,
+      plateIds,
+      assignments: this.sourceAssignments(),
+      channel: this.#slotFor(itemId)?.channel ?? this.#fixedBanks[0]?.channel ?? 1,
+      frozenAssignment: this.#frozenAssignments.get(itemId),
+      lookId,
+      lookBindings,
+      overrides: this.#sourceOverrides.get(itemId),
+    });
+    const byId = new Map(
+      this.sourceCatalog().sources.map((source) => [source.id, source] as const),
+    );
+    for (const plateId of plateIds) {
+      const sourceId = resolved.get(plateId);
+      const source = sourceId === null || sourceId === undefined ? undefined : byId.get(sourceId);
+      if (source === undefined || sourceSeatable(source)) continue;
+      return {
+        errorCode: source.status === 'unavailable' ? 'source-unavailable' : 'source-unusable',
+        message: mockSourceRefusalMessage(
+          plateLabel(carrier.sources, plateId) ?? 'A plate',
+          source,
+        ),
+        plateId,
+        source,
+      };
+    }
+    return null;
+  }
+
+  /**
+   * `B-355` — a binding action's first CHANGED resolved frame which the live row cannot seat.
+   *
+   * Compare the canonical prospective and in-force answers rather than the raw map entries.
+   * That catches removal of an override which falls through to an unavailable default, ignores
+   * irrelevant keys outside a look's membership, and preserves an unchanged unavailable binding.
+   */
+  #changedUnseatableLookSource(
+    itemId: string,
+    next: {
+      readonly lookBindings: Readonly<Record<string, Readonly<Record<string, string>>>> | undefined;
+      readonly overrides: Readonly<Record<string, string>> | undefined;
+    },
+  ): MockSourceRefusal | null {
+    const item = this.#find(itemId);
+    if (item === null) return null;
+    const carrier = this.#templateOfItem(itemId, item.templateId)?.liveSources;
+    if (carrier === undefined) return null;
+
+    const catalog = this.sourceCatalog();
+    const byId = new Map(catalog.sources.map((source) => [source.id, source] as const));
+    const channel = this.#slotFor(itemId)?.channel ?? this.#fixedBanks[0]?.channel ?? 1;
+    const assignments = this.sourceAssignments();
+    const frozenAssignment = this.#frozenAssignments.get(itemId);
+    const currentOverrides = this.#sourceOverrides.get(itemId);
+    const currentLookBindings = this.#lookSourceBindings.get(itemId);
+    const lookIds =
+      carrier.looks === undefined || carrier.looks.length === 0
+        ? [undefined]
+        : carrier.looks.map((look) => look.id);
+    for (const lookId of lookIds) {
+      const plateIds = Object.keys(lookPlateRects(carrier, lookId));
+      const current = resolvePlateSourcesForLook({
+        templateId: item.templateId,
+        plateIds,
+        assignments,
+        channel,
+        frozenAssignment,
+        lookId,
+        lookBindings: currentLookBindings,
+        overrides: currentOverrides,
+      });
+      const prospective = resolvePlateSourcesForLook({
+        templateId: item.templateId,
+        plateIds,
+        assignments,
+        channel,
+        frozenAssignment,
+        lookId,
+        lookBindings: next.lookBindings,
+        overrides: next.overrides,
+      });
+      for (const plateId of plateIds) {
+        const sourceId = prospective.get(plateId);
+        if (sourceId === current.get(plateId)) continue;
+        const source = sourceId === null || sourceId === undefined ? undefined : byId.get(sourceId);
+        if (source === undefined || sourceSeatable(source)) continue;
+        return {
+          errorCode: source.status === 'unavailable' ? 'source-unavailable' : 'source-unusable',
+          message: mockSourceRefusalMessage(
+            plateLabel(carrier.sources, plateId) ?? 'A plate',
+            source,
+          ),
+          plateId,
+          source,
+        };
+      }
+    }
+    return null;
   }
 
   /**
@@ -1333,6 +1559,35 @@ export class MockRuntime {
         message: `This template has no look called "${lookId}".`,
       };
     }
+    const ownsSeats = ownsLiveSeats(item, this.#liveSeatedItems.has(itemId));
+    if (ownsSeats) {
+      /*
+        `B-355` — validate the DESTINATION look, not merely a same-named plate which happens to
+        be working in the current one. The shared resolver applies look membership and all four
+        source levels; refusal happens before `#activeLooks` changes, so the row and its page keep
+        naming the look that is genuinely on air.
+      */
+      const sourceRefusal = this.#unseatableLookSource(itemId, lookId);
+      if (sourceRefusal !== null) {
+        this.#patch(itemId, {
+          takeRefusal: {
+            code: sourceRefusal.errorCode,
+            plateId: sourceRefusal.plateId,
+            sourceId: sourceRefusal.source.id,
+            sourceName: sourceRefusal.source.name,
+            ...(sourceRefusal.source.origin !== undefined
+              ? { sourceOrigin: sourceRefusal.source.origin }
+              : {}),
+          },
+        });
+        return {
+          ok: false,
+          reason: sourceRefusal.errorCode,
+          message: sourceRefusal.message,
+          refusalOnRow: true,
+        };
+      }
+    }
     /*
       `LOOK-SWITCH-01` / `B-273` parity — a switch REFUSED AT THE WIRE because CasparCG refused a
       plate its new look needs. The mock's sends always land, so — exactly like the take's
@@ -1363,7 +1618,7 @@ export class MockRuntime {
     this.#activeLooks.set(itemId, lookId);
     // `LOOK-SWITCH-01` parity — a switch that lands on a row that owns live seats withdraws the
     // line a refused one left (the bridge's success path; an off-air row only records the look).
-    if (ownsLiveSeats(item, this.#liveSeatedItems.has(itemId))) this.#retireTakeRefusal(itemId);
+    if (ownsSeats) this.#retireTakeRefusal(itemId);
     this.#emitStack();
     return { ok: true };
   }

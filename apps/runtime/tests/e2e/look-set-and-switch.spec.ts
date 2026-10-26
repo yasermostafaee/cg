@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 /**
@@ -28,6 +28,7 @@ import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
  */
 
 const SIX = 'e2e-looks-six';
+const B355 = 'e2e-b355-live-binding';
 
 /** `PLAYOUT-SOURCES-01` — the station's sources are the seeded Playout's inputs. */
 test.use({ playoutSources: E2E_PLAYOUT });
@@ -72,6 +73,143 @@ async function seedSources(page: Page): Promise<void> {
       })),
     });
   }, SIX);
+}
+
+/**
+ * `B-355` — two looks, one ordinary text field and one Playout input which is listed but down.
+ * The inactive look is deliberately the one we preset to the down input: a take of `two` must
+ * still land, while a later switch into `solo` must refuse before changing the selected look.
+ */
+async function registerB355Template(page: Page): Promise<void> {
+  await page.evaluate(async (templateId) => {
+    const w = window as unknown as {
+      cg: {
+        templates: { import: (req: { template: unknown; html: string }) => Promise<unknown> };
+        sources: {
+          setConfig: (req: unknown) => Promise<{ ok: boolean }>;
+          setAssignments: (req: unknown) => Promise<{ ok: boolean }>;
+        };
+      };
+    };
+    const left = { x: 0, y: 0, width: 960, height: 1080 };
+    const right = { x: 960, y: 0, width: 960, height: 1080 };
+    await w.cg.sources.setConfig({ layerRange: { start: 60, end: 79 } });
+    await w.cg.sources.setAssignments({
+      assignments: [
+        { templateId, plateId: 'l-1', sourceId: 'in-studio-1' },
+        { templateId, plateId: 'l-2', sourceId: 'in-studio-2' },
+      ],
+    });
+    await w.cg.templates.import({
+      template: {
+        templateId,
+        name: 'B-355 live binding',
+        sourceFileName: 'b-355-live-binding.vcg',
+        templateType: 'lower-third',
+        fields: [
+          {
+            id: 'caption',
+            label: 'Caption',
+            required: false,
+            type: 'text',
+            default: 'Original caption',
+          },
+        ],
+        liveSources: {
+          resolution: { width: 1920, height: 1080 },
+          defaultPosition: { anchor: 'center', dx: 0, dy: 0 },
+          sources: [
+            { elementId: 'el-1', sourceId: 'l-1', rect: left, dynamic: false },
+            { elementId: 'el-2', sourceId: 'l-2', rect: right, dynamic: false },
+          ],
+          looks: [
+            {
+              id: 'two',
+              name: 'Two',
+              entered: { mode: 'cut' },
+              rects: { 'l-1': left, 'l-2': right },
+            },
+            {
+              id: 'solo',
+              name: 'Solo',
+              entered: { mode: 'cut' },
+              rects: { 'l-1': { x: 0, y: 0, width: 1920, height: 1080 } },
+            },
+          ],
+          defaultLookId: 'two',
+        },
+      },
+      html: '<!doctype html><html><body>B-355</body></html>',
+    });
+  }, B355);
+}
+
+interface B355Row {
+  itemId: string;
+  fields: Record<string, unknown>;
+  status: string;
+  pending: boolean;
+  activeLookId?: string;
+  lookSourceOverride?: Record<string, Record<string, string>>;
+}
+
+async function b355Row(page: Page): Promise<B355Row> {
+  return page.evaluate(async (templateId) => {
+    const rows = await (
+      window as unknown as {
+        cg: { stack: { snapshot: () => Promise<(B355Row & { templateId: string })[]> } };
+      }
+    ).cg.stack.snapshot();
+    const row = rows.find((candidate) => candidate.templateId === templateId);
+    if (row === undefined) throw new Error('B-355 fixture row is missing');
+    return row;
+  }, B355);
+}
+
+/** Capture the replies while the test still drives the real row controls. */
+async function captureB355Replies(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      cg: {
+        stack: {
+          update: (req: unknown) => Promise<unknown>;
+          setActiveLook: (req: unknown) => Promise<unknown>;
+        };
+      };
+      CG_B355_REPLIES?: { update?: unknown; look?: unknown };
+    };
+    w.CG_B355_REPLIES = {};
+    const update = w.cg.stack.update.bind(w.cg.stack);
+    const setActiveLook = w.cg.stack.setActiveLook.bind(w.cg.stack);
+    w.cg.stack.update = async (req) => {
+      const reply = await update(req);
+      if (w.CG_B355_REPLIES !== undefined) w.CG_B355_REPLIES.update = reply;
+      return reply;
+    };
+    w.cg.stack.setActiveLook = async (req) => {
+      const reply = await setActiveLook(req);
+      if (w.CG_B355_REPLIES !== undefined) w.CG_B355_REPLIES.look = reply;
+      return reply;
+    };
+  });
+}
+
+async function b355Reply(page: Page, kind: 'update' | 'look'): Promise<Record<string, unknown>> {
+  return page.evaluate(
+    (key) =>
+      (window as unknown as { CG_B355_REPLIES?: Record<string, Record<string, unknown>> })
+        .CG_B355_REPLIES?.[key] ?? {},
+    kind,
+  );
+}
+
+/** The amber tag is part of this option's accessible name, so address the full rendered row. */
+async function chooseDownInput(page: Page, field: Locator): Promise<void> {
+  await field.click();
+  await page
+    .getByRole('dialog', { name: 'Choose a source' })
+    .getByRole('option', { name: /^ورودی ۴/ })
+    .click();
 }
 
 const px = (s: string): number => Number.parseFloat(s);
@@ -294,6 +432,132 @@ test('🔴 §4 — RED-FIRST: switch away and back, and the same source is on th
   // 🔴 THE PROPERTY — every frame TRIO places carries the same source in the same box,
   // including the one whose source is the row's own per-look binding.
   await expect.poll(async () => placeholders(page)).toEqual(before);
+});
+
+test('🔴 B-355 — an unavailable preset saves off air, but a live switch into it is refused', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await registerB355Template(page);
+  const layer = await app.loadTemplate(B355);
+  const row = app.layerRow(layer);
+  await app.selectLayerRow(layer);
+  await captureB355Replies(page);
+
+  const inputs = app.inspector.locator('[aria-label="Look inputs"]');
+  await inputs.locator('[data-look-tab="solo"]').click();
+  const soloInput = inputs.locator('[data-look-binding="solo:l-1"]');
+  await chooseDownInput(page, soloInput);
+  await app.applyEdits();
+
+  // Listed-but-down is a legal PRESET while off air. It remains named and marked, not discarded.
+  await expect.poll(() => b355Reply(page, 'update')).toMatchObject({ accepted: true });
+  await expect(soloInput).toHaveAttribute('data-picker-value', 'in-input-4');
+  await expect(soloInput.locator('.cg-source-tag--unavailable')).toHaveText('Unavailable');
+  expect(await b355Row(page)).toMatchObject({
+    activeLookId: 'two',
+    lookSourceOverride: { solo: { 'l-1': 'in-input-4' } },
+  });
+
+  // The default look resolves only healthy sources, so the take itself still lands.
+  await row.getByRole('button', { name: 'PLAY' }).click();
+  await expect(row.getByText('ON AIR')).toBeVisible();
+
+  const segment = (id: string) => row.locator(`[data-look-id="${id}"]`);
+  await segment('solo').click();
+
+  // Nothing moves: the reply names the source condition and the row still marks the old look.
+  await expect
+    .poll(() => b355Reply(page, 'look'))
+    .toMatchObject({
+      ok: false,
+      reason: 'source-unavailable',
+      refusalOnRow: true,
+    });
+  expect(String((await b355Reply(page, 'look'))['message'])).toContain('ورودی ۴');
+  expect(String((await b355Reply(page, 'look'))['message'])).toContain('Plate 1');
+  expect(String((await b355Reply(page, 'look'))['message'])).toContain('no signal');
+  // The bridge/mock records the row's refusal. At this density the same canonical line is visible
+  // in the selected row's Inspector; the async action must not duplicate it in a page-level banner.
+  const refusalLine = app.inspector.locator('[data-inspector-take-refusal]');
+  await expect(refusalLine).toContainText('Plate 1');
+  await expect(refusalLine).toContainText('ورودی ۴');
+  await expect(refusalLine).toContainText('no signal');
+  await expect(page.locator('[data-refusal]')).toHaveCount(0);
+  await expect(segment('two')).toHaveAttribute('aria-pressed', 'true');
+  await expect(segment('solo')).toHaveAttribute('aria-pressed', 'false');
+  expect((await b355Row(page)).activeLookId).toBe('two');
+});
+
+test('🔴 B-355 — live Update is atomic, keeps every draft, and ignores an unchanged down preset', async ({
+  app,
+}) => {
+  const page = app.page;
+  await registerB355Template(page);
+  const layer = await app.loadTemplate(B355);
+  const row = app.layerRow(layer);
+  await app.selectLayerRow(layer);
+  await captureB355Replies(page);
+
+  const inputs = app.inspector.locator('[aria-label="Look inputs"]');
+  await inputs.locator('[data-look-tab="solo"]').click();
+  await chooseDownInput(page, inputs.locator('[data-look-binding="solo:l-1"]'));
+  await app.applyEdits();
+  await expect.poll(() => b355Reply(page, 'update')).toMatchObject({ accepted: true });
+
+  await row.getByRole('button', { name: 'PLAY' }).click();
+  await expect(row.getByText('ON AIR')).toBeVisible();
+
+  // The inactive preset is now unavailable but UNCHANGED. A text-only edit must still apply.
+  const caption = app.inspector.getByRole('textbox', { name: 'caption' });
+  await caption.fill('Applied while preset is down');
+  await app.applyEdits();
+  await expect.poll(() => b355Reply(page, 'update')).toMatchObject({ accepted: true });
+  await expect(app.inspector.getByText('● draft')).toHaveCount(0);
+  await expect
+    .poll(() => b355Row(page))
+    .toMatchObject({
+      fields: { caption: 'Applied while preset is down' },
+      lookSourceOverride: { solo: { 'l-1': 'in-input-4' } },
+      status: 'on-air',
+      pending: false,
+    });
+  const appliedBeforeRefusal = await b355Row(page);
+
+  // One press now stages BOTH halves. The newly changed LIVE binding is impossible to seat.
+  await caption.fill('Must stay a draft');
+  await inputs.locator('[data-look-tab="two"]').click();
+  const changedInput = inputs.locator('[data-look-binding="two:l-1"]');
+  await chooseDownInput(page, changedInput);
+  await app.applyEdits();
+
+  await expect
+    .poll(() => b355Reply(page, 'update'))
+    .toMatchObject({
+      accepted: false,
+      errorCode: 'source-unavailable',
+    });
+  expect(String((await b355Reply(page, 'update'))['message'])).toContain('Plate 1');
+  expect(String((await b355Reply(page, 'update'))['message'])).toContain('no signal');
+
+  // The complete published row is byte-for-byte unchanged; the operator's two drafts remain editable.
+  // This catches residue outside the obvious fields too: status/pending, row refusal, emergency
+  // overrides, the frozen level-two assignment and any future published state all travel in this object.
+  expect(await b355Row(page)).toStrictEqual(appliedBeforeRefusal);
+  expect(appliedBeforeRefusal).toMatchObject({
+    fields: { caption: 'Applied while preset is down' },
+    lookSourceOverride: { solo: { 'l-1': 'in-input-4' } },
+    activeLookId: 'two',
+  });
+  expect(appliedBeforeRefusal.lookSourceOverride?.['two']).toBeUndefined();
+  await expect(caption).toHaveValue('Must stay a draft');
+  await expect(changedInput).toHaveAttribute('data-picker-value', 'in-input-4');
+  await expect(app.inspector.getByLabel('caption has unapplied edits')).toBeVisible();
+  await expect(inputs.locator('[data-look-tab-dirty="two"]')).toBeVisible();
+  await expect(app.error).toContainText('Plate 1');
+  await expect(app.error).toContainText('ورودی ۴');
+  await expect(app.error).toContainText('no signal');
 });
 
 /**
