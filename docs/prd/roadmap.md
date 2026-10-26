@@ -78,14 +78,15 @@ integrations to validate. They live here so the conversation isn't the only reco
 
 ## In-house tools — not product features
 
-- **Brand Pack Factory (was `D-142`, re-filed 2026-10-14 by the owner's decision Q14 (a)) — ACTIVE
-  in [`brand-pack-factory`](../../openspec/changes/brand-pack-factory/).** A private, in-house
+- **Brand Pack Factory (was `D-142`, re-filed 2026-10-14 by the owner's decision Q14 (a)) — BUILT
+  AND ARCHIVED 2026-10-26 in
+  [`brand-pack-factory`](../../openspec/changes/archive/2026-10-26-brand-pack-factory/).** A private, in-house
   factory turns a customer's Brand Kit plus reusable master `.cgproj` compositions into stable,
   customer-specific `.vcg` files and a visual QC pack. It is **not a Designer feature**, does not
   alter the starter catalogue, and keeps customer files and outputs outside this repository. The
   owner's 1 Aug 2026 contract was recovered from the historical project archive on 2026-10-26;
   the four-template Refaee delivery outside the repo confirms the requested Phase-0 hand build has
-  already happened. The active change now records the v1 contract: strict brand/font/logo input,
+  already happened. The archived v1 contract records strict brand/font/logo input,
   deterministic identities, shared export primitives, playable-package QC, a contact sheet and a
   pack sheet. [[D-143]] (`.vcg` back into the Designer) remains a separate D-item and is not needed
   by the factory or by playout.

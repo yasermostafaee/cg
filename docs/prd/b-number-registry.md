@@ -3493,3 +3493,13 @@ after `git fetch` returned nothing, and `git grep --untracked` over the tree lik
 `B-351` on 2 refs; no stash.
 
 ⇒ **Next free after this entry is `B-354`**, **`D-166`**, **`P-068`**, **`R-102`** and **`C-049`**.
+
+### 2026-10-26 — `RELEASE-0121-01` takes `P-068`
+
+- `P-068` — release candidate `0.12.1`, including the tested upgrade from the owner's installed `0.11.6` —
+  [platform.md](platform.md).
+
+Measured free before use: the registry named `P-068` as next free; `git grep -n -E "^## \[.\] P-068 "`
+over tracked PRD files returned nothing before this filing.
+
+⇒ **Next free after this entry is `B-354`**, **`D-166`**, **`P-069`**, **`R-102`** and **`C-049`**.

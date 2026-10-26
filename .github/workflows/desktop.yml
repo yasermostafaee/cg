@@ -1339,7 +1339,8 @@ jobs:
           path: acceptance/
           retention-days: 30
 
-  # RUN-NEXT-VERSION-03 — the owner already carries 0.11.6. Prove the 0.12.0 installers upgrade that
+  # RUN-NEXT-VERSION-03 / RELEASE-0121-01 — the owner already carries 0.11.6. Prove the current
+  # 0.12.1 installers upgrade that
   # exact delivered build in place, with a row ON AIR and both apps open through their upgrades.
   acceptance-upgrade-0116:
     name: Release acceptance — upgrade from 0.11.6, apps open (clean Windows)

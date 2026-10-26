@@ -4114,3 +4114,21 @@ at the foot of its step rail, and a second window frame stood behind it with `Ve
 **Expected:** CG Control keeps today's motif; CG Designer and CG Bridge get their own (or none); the second frame
 is identified — ours and fixed so one window shows, or named if it is not ours. **Acceptance:** every installer's
 rail pictured before and after on the clean runner.
+
+## [~] P-068 — Release candidate `0.12.1`: tested installers after the delivered `0.11.6` ⟨priority: high⟩ — FILED 2026-10-26 by `RELEASE-0121-01` · `openspec/changes/prepare-0-12-1-installers/`
+
+**What.** Move the one shared release number from the already-tagged `0.12.0` to `0.12.1`, build the three
+matching Windows installers from one commit, and hand the owner the requested CG Control and CG Designer
+installers. The Desktop workflow still builds and tests CG Bridge because the three installed parts share one
+version and protocol line. This is a manual candidate build, not a tag or a published release.
+
+**Why.** The owner has `0.11.6` installed and several completed features and fixes were added after it. Reusing
+`0.12.0` would put different bytes under an existing release identity. The candidate must prove the real
+`0.11.6 → 0.12.1` in-place upgrade, including the two apps open during upgrade and the station still usable
+afterwards.
+
+**Acceptance.** All nine version sources read `0.12.1`; the Persian guide names the exact installers and uses
+fresh screenshots from this build; the full local gate and Linux CI pass; the manual Desktop run builds all
+three installers and passes clean-install, setup-window, bridge, app and every upgrade acceptance, including
+`0.11.6`; the two requested installer files are downloaded and their SHA-256 hashes recorded. No tag or release
+is published without a separate owner decision.
