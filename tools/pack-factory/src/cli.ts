@@ -1,13 +1,16 @@
 import { preparePack } from './build.js';
 import { writeDelivery } from './delivery.js';
 import { PackFactoryError } from './errors.js';
+import { runStudioUntilSignal } from './studio-server.js';
 
 interface ParsedArgs {
-  command: 'build' | 'validate' | 'help';
+  command: 'build' | 'validate' | 'studio' | 'help';
   brandKit?: string;
   recipe?: string;
   out?: string;
   exportedAt?: string;
+  workspace?: string;
+  port?: number;
   noPreview: boolean;
   force: boolean;
 }
@@ -17,6 +20,13 @@ export async function main(argv: readonly string[]): Promise<number> {
     const args = parseArgs(argv);
     if (args.command === 'help') {
       print(USAGE);
+      return 0;
+    }
+    if (args.command === 'studio') {
+      await runStudioUntilSignal({
+        ...(args.workspace === undefined ? {} : { workspace: args.workspace }),
+        ...(args.port === undefined ? {} : { port: args.port }),
+      });
       return 0;
     }
     if (args.brandKit === undefined || args.recipe === undefined) {
@@ -63,7 +73,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     return { command: 'help', noPreview: false, force: false };
   }
   const command = argv[0];
-  if (command !== 'build' && command !== 'validate') {
+  if (command !== 'build' && command !== 'validate' && command !== 'studio') {
     throw new PackFactoryError('unknown-command', `Unknown command: ${command ?? ''}\n\n${USAGE}`);
   }
   const parsed: ParsedArgs = { command, noPreview: false, force: false };
@@ -94,6 +104,17 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       case '--exported-at':
         parsed.exportedAt = value;
         break;
+      case '--workspace':
+        parsed.workspace = value;
+        break;
+      case '--port': {
+        const port = Number(value);
+        if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+          throw new PackFactoryError('invalid-port', '--port must be an integer from 1 to 65535');
+        }
+        parsed.port = port;
+        break;
+      }
       default:
         throw new PackFactoryError('unknown-option', `Unknown option: ${flag ?? ''}`);
     }
@@ -104,6 +125,9 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
 
 const USAGE = `Brand Pack Factory v1
 
+Start the private local browser Studio (loopback only):
+  cg-pack-factory studio --workspace <directory> --port 4319
+
 Validate without writing:
   cg-pack-factory validate --brand-kit <brandkit.json> --recipe <pack.json>
 
@@ -111,6 +135,8 @@ Build a completed delivery with Chromium visual QC:
   cg-pack-factory build --brand-kit <brandkit.json> --recipe <pack.json> --out <directory>
 
 Options:
+  --workspace <path>  Studio customer workspace (defaults below the current user's home)
+  --port <number>     Studio loopback port (default: 4319)
   --exported-at <ISO>  Pin the export time (reproducible/test builds)
   --force              Replace an existing delivery atomically
   --no-preview         Skip Chromium (result is marked INCOMPLETE)

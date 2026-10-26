@@ -10,3 +10,13 @@ export type { DeliveryOptions } from './delivery.js';
 export { runVisualQc } from './qc.js';
 export type { TemplateQcResult } from './qc.js';
 export { PackFactoryError } from './errors.js';
+export { inspectStudioMaster } from './studio-inspect.js';
+export { runStudioUntilSignal, startStudioServer } from './studio-server.js';
+export {
+  defaultStudioWorkspace,
+  listStudioCustomers,
+  listStudioDeliveries,
+  openStudioWorkspace,
+  readStudioCustomer,
+  saveStudioCustomer,
+} from './studio-workspace.js';

@@ -14,6 +14,7 @@
       ],
       "inputs": [
         "src/**",
+        "studio/**",
         "scripts/**",
         "tsconfig.json",
         "package.json",
@@ -27,6 +28,7 @@
       "outputs": [],
       "inputs": [
         "src/**",
+        "studio/**",
         "tests/**",
         "types/**",
         "tsconfig.json",
@@ -43,6 +45,7 @@
       "outputs": [],
       "inputs": [
         "src/**",
+        "studio/**",
         "tests/**",
         "tsconfig.json",
         "tsconfig.*.json",
@@ -58,6 +61,7 @@
       "outputs": [],
       "inputs": [
         "src/**",
+        "studio/**",
         "tests/**",
         "types/**",
         "bin/**",
@@ -219,7 +223,7 @@
     "test:e2e": {
       "dependsOn": ["build", "@cg/amcp-mock#build"],
       "outputs": ["playwright-report/**", "test-results/**"],
-      "inputs": ["src/**", "tests/e2e/**", "playwright.config.*"],
+      "inputs": ["src/**", "studio/**", "tests/e2e/**", "playwright.config.*"],
       "cache": false,
       "passThroughEnv": ["CG_E2E_WORKERS"]
     },

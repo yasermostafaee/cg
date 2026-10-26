@@ -4,7 +4,46 @@ Private in-house tooling for turning a customer's external Brand Kit and reusabl
 `.cgproj` compositions into verified `.vcg` deliveries. It is not shipped in Designer, Runtime or
 CG Bridge, and it must not be pointed at customer files stored inside this repository.
 
+## Local browser Studio
+
+The normal operating surface is the private Studio. It is not installed and never listens on the
+LAN: start it from this checkout, then open the printed `127.0.0.1` URL in a browser.
+
+```powershell
+pnpm pack:studio -- --workspace D:\CG-Customers --port 4319
+```
+
+Without arguments it uses port `4319` and the current user's
+`APASAI CG\Brand Pack Studio` directory. For production, always pass the explicit customer
+workspace you back up. The server accepts no host override and binds only to `127.0.0.1`.
+
+The Studio stores each valid customer as:
+
+```text
+<workspace>\customers\<customer-id>\
+  brandkit.json
+  pack.json
+  deliveries\<timestamp>\
+    templates\*.vcg
+    previews\*.png
+    contact-sheet.html
+    pack-sheet.md
+    pack-report.json
+```
+
+Use **بررسی فایل مادر** to read the selected `.cgproj`'s compositions, exact colour tokens and
+asset/font ids before entering mappings. **بررسی پک** runs the canonical validation path without
+writing a delivery. **ساخت خروجی** always runs visual QC and adds a new timestamped delivery; it
+does not overwrite prior deliveries.
+
+Customer profiles and generated templates never enter Designer storage or its first-page samples.
+Designer remains the tool for authoring reusable master `.cgproj` files; the Studio applies each
+customer's declared brand mappings and creates the deliverable pack.
+
 ## Build workflow
+
+The commands below remain available for automation and troubleshooting. The Studio calls the same
+engine; it is not a second exporter.
 
 1. Keep `brandkit.json`, licensed font files, vector logo/source assets, references and `pack.json`
    in the private customer workspace outside this repo.
