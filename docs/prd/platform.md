@@ -4175,3 +4175,35 @@ E2E; Desktop [run 40260874571](https://github.com/yasermostafaee/cg/actions/runs
 applicable job, including the open-app `0.11.6 → 0.12.1` upgrade. The two requested installers were downloaded
 to the untracked `installers-ci-0.12.1/` folder and their exact sizes and hashes are retained in the archived
 change. No tag, draft or published release was created.
+
+## [~] P-070 — Release candidate `0.12.2`: matching installers for the CG Control and CG Bridge follow-up ⟨priority: high⟩ — FILED 2026-10-26 by `RELEASE-0122-01` · `openspec/changes/prepare-0-12-2-installers/`
+
+**What:** move the shared release identity from `0.12.1` to `0.12.2`, update the Persian install guide, and
+produce the matching CG Control, CG Designer and CG Bridge installers from one verified commit. Download and
+retain all three installer files with their exact hashes. This is an on-demand candidate build, not a tag or a
+published release.
+
+**Why:** `0.12.1` already has delivered artifacts, and the CG Control source-picker follow-up plus `B-355` landed
+afterwards. `B-355` changes the production CG Bridge's on-air refusal boundary as well as CG Control's parity and
+operator feedback, so both CG Control and CG Bridge need the new identity. Relative to `0.12.1`, Designer has no
+product change and is optional; the owner's installed baseline is still `0.11.6`, however, so the handoff for that
+station is the complete three-installer set and the Windows workflow must prove that exact in-place upgrade.
+
+**Acceptance:**
+
+- WHEN the candidate is prepared THEN every release-version source, installed-version surface and all three
+  installer filenames say `0.12.2`, and no current artifact reuses the `0.12.1` identity.
+- WHEN upgrading an already complete `0.12.1` set THEN CG Bridge and CG Control both need to be reinstalled and
+  Designer is optional; WHEN upgrading the owner's installed `0.11.6` THEN all three installers are applied so the
+  accumulated Designer features are included too.
+- WHEN the candidate is ready for Windows packaging THEN its Persian guide names the exact `0.12.2` files, the
+  full local gate passes, and Linux CI completes both its workspace checks and E2E on the candidate commit.
+- WHEN the on-demand Desktop workflow is started by the final installer marker or a manual dispatch THEN it
+  builds all three installers from that exact commit and every applicable Windows smoke and acceptance job
+  passes, including `acceptance-upgrade-0116` with CG Control and CG Designer open and a row on air.
+- WHEN the candidate is handed over THEN all three installers are downloaded into an untracked
+  `installers-ci-0.12.2/` folder and their exact filenames, byte sizes, SHA-256 hashes and Desktop run URL are
+  recorded; no tag, draft release or published release is created.
+
+**Notes:** active change: [`prepare-0-12-2-installers`](../../openspec/changes/prepare-0-12-2-installers/).
+The shared compatibility floor remains unchanged; publication requires a separate owner decision.

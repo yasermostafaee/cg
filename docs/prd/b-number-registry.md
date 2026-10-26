@@ -3513,3 +3513,27 @@ Measured free before use: the registry named `B-354` as next free; `git grep -n 
 over tracked PRD files returned nothing before this filing; control: the same sweep found `B-353`.
 
 ⇒ **Next free after this entry is `B-355`**, **`D-166`**, **`P-069`**, **`R-102`** and **`C-049`**.
+
+### 2026-10-26 — `RELEASE-0122-01` takes `P-070`
+
+- `P-070` — release candidate `0.12.2`, with all three matching installers; CG Control and CG Bridge are
+  required for the post-`0.12.1` follow-up, while the owner's installed `0.11.6` is upgraded as a complete
+  three-installer set — [platform.md](platform.md).
+
+Measured free before use: after `git fetch origin`, `git grep -n -E "^## \[.\] P-070 " <ref> -- docs` across
+every local and remote-tracking ref returned nothing, and the corresponding working-tree sweep found nothing;
+the same sweep found the existing `P-069` heading as its positive control.
+
+⇒ **Next free after this entry is `B-355`**, **`D-166`**, **`P-071`**, **`R-102`** and **`C-049`**.
+
+### 2026-10-26 — `REFUSE-UNAVAILABLE-ON-AIR-SOURCE-CHANGES-01` takes `B-355`
+
+- `B-355` — an on-air source Update can accept a new unavailable binding while keeping the previous picture, and a
+  look switch can miss the same failure when the destination reuses an already-punched `plateId` —
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the registry named `B-355` as next free; `git grep -n -E "^## \[.\] B-355 "`
+over all 11 local and remote-tracking refs returned nothing before this filing; control: the same sweep found
+`B-354` on two refs.
+
+⇒ **Next free after this entry is `B-356`**, **`D-166`**, **`P-071`**, **`R-102`** and **`C-049`**.
