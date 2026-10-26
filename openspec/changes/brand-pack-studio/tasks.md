@@ -19,6 +19,8 @@ Lane: **FULL** — this local UI persists customer configuration and produces pl
       routes with body/path limits
 - [x] 2.3 Route validation/build through `preparePack` and `writeDelivery`; Studio builds always run
       preview QC and create append-only timestamped deliveries
+- [x] 2.4 Accept pnpm's literal `--` script delimiter so the documented root command works with the
+      repository's current pnpm version
 
 ## 3. Browser operating surface
 
@@ -36,7 +38,8 @@ Lane: **FULL** — this local UI persists customer configuration and produces pl
 
 ## 5. Verification
 
-- [x] 5.1 Focused typecheck/lint/unit tests green: 21/21 tests plus package typecheck/lint/build
+- [x] 5.1 Focused typecheck/lint/unit tests green: 22/22 tests plus package typecheck/lint/build;
+      includes the pnpm literal-delimiter regression
 - [x] 5.2 Real-browser Studio E2E covers restore → edit/save → inspect → validate/build →
       restart-visible and responsive RTL layout at 1280/390 px; both package Playwright tests green
 - [x] 5.3 Full local gate green: 103/103 tasks; strict OpenSpec 90/90

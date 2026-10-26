@@ -3,7 +3,7 @@ import { writeDelivery } from './delivery.js';
 import { PackFactoryError } from './errors.js';
 import { runStudioUntilSignal } from './studio-server.js';
 
-interface ParsedArgs {
+export interface ParsedArgs {
   command: 'build' | 'validate' | 'studio' | 'help';
   brandKit?: string;
   recipe?: string;
@@ -68,17 +68,18 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 }
 
-function parseArgs(argv: readonly string[]): ParsedArgs {
-  if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
+export function parseArgs(argv: readonly string[]): ParsedArgs {
+  const args = argv[1] === '--' ? [argv[0], ...argv.slice(2)] : argv;
+  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
     return { command: 'help', noPreview: false, force: false };
   }
-  const command = argv[0];
+  const command = args[0];
   if (command !== 'build' && command !== 'validate' && command !== 'studio') {
     throw new PackFactoryError('unknown-command', `Unknown command: ${command ?? ''}\n\n${USAGE}`);
   }
   const parsed: ParsedArgs = { command, noPreview: false, force: false };
-  for (let index = 1; index < argv.length; index += 1) {
-    const flag = argv[index];
+  for (let index = 1; index < args.length; index += 1) {
+    const flag = args[index];
     if (flag === '--no-preview') {
       parsed.noPreview = true;
       continue;
@@ -87,7 +88,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
       parsed.force = true;
       continue;
     }
-    const value = argv[index + 1];
+    const value = args[index + 1];
     if (value === undefined || value.startsWith('--')) {
       throw new PackFactoryError('missing-option-value', `${flag ?? '<option>'} needs a value`);
     }

@@ -59,6 +59,19 @@ pnpm --filter @cg/designer dev   # visual editor  → http://<this machine>:4000
 pnpm --filter @cg/runtime  dev   # playout controller → http://<this machine>:5174
 ```
 
+### Internal Brand Pack Studio
+
+Start the private customer-template tool from the repository root, then open the printed local URL
+(`http://127.0.0.1:4319` by default):
+
+```powershell
+pnpm pack:studio -- --workspace D:\CG-Customers --port 4319
+```
+
+The customer workspace stays outside the repository and generated templates do not enter Designer's
+starter catalogue. See [`tools/pack-factory/README.md`](./tools/pack-factory/README.md) for the form,
+validation, delivery and backup workflow.
+
 Both dev servers listen on **every interface by default** (P-041), so a second machine on
 the plant network can open them at this machine's LAN address — Vite prints each
 `Network:` URL at start. Set `HOST=127.0.0.1` to restrict a dev server back to loopback.

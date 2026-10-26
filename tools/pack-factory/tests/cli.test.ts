@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { main } from '../src/cli.js';
+import { main, parseArgs } from '../src/cli.js';
 import { createFactoryFixture, type FactoryFixture } from './fixtures.js';
 
 const fixtures: FactoryFixture[] = [];
@@ -10,6 +10,16 @@ afterEach(async () => {
 });
 
 describe('cg-pack-factory CLI', () => {
+  it('accepts the literal pnpm script delimiter before Studio options', () => {
+    expect(
+      parseArgs(['studio', '--', '--workspace', 'D:\\CG-Customers', '--port', '4319']),
+    ).toMatchObject({
+      command: 'studio',
+      workspace: 'D:\\CG-Customers',
+      port: 4319,
+    });
+  });
+
   it('validates and builds an explicitly incomplete no-preview delivery', async () => {
     const fixture = await createFactoryFixture();
     fixtures.push(fixture);
