@@ -2855,13 +2855,16 @@ rules as their V13-STATE answer completed them (C1–C5): hidden and silent firs
 bare `PLAY` 40–200 ms later, shown by `OPACITY` in one `MIXER <ch> COMMIT`; only on a channel the
 input names; never from a stale or unconfirmed `epoch`; never on a backup server; and nothing the
 contract forbids ever leaves the bridge. `PLAYOUT-SOURCES-01`'s `Not supported yet` gate is gone.
-The Playout keeps `CgControl.RouteInputs` off until we confirm in writing. **Target activation follow-up
-(owner, 2026-10-26):** the field installation shown in the owner's Playout/CG Control screenshots now
-needs this path: its direct-only D10 lists multicast UDP, NDI and RTMP but omits the exclusive unicast
-RTP and SDI inputs, and it has no playlist-output row. CG `0.11.6` already implements the route and
-playlist contracts; the remaining work is to identify that exact Playout, move it to `2.9.2+` if
-needed, enable its input holder and `CgControl.RouteInputs` in a maintenance window, then capture the
-credential-free D10/epoch and joint visual evidence. Tracked in `route-plates` tasks §6 and
+The Playout kept `CgControl.RouteInputs` off until we confirmed in writing. **Target activation result
+(owner, 2026-10-26):** target `192.168.21.112` was already on Playout `2.12.0`, so no upgrade was
+needed. During owner-approved test playback, its input holder was enabled, the one required core
+restart completed, and `CgControl.RouteInputs` was then enabled. CG Control's CH 1 catalogue grew from
+three direct inputs to all five configured inputs plus the raw Playlist output. A real Bed 59 take
+showed the current Playlist picture once, with audio locked at zero and no recursive CG feedback; the
+row was stopped and its prior mapping restored. The target currently reports RTP cycling through
+reopen/disconnected, SDI no-signal and the placeholder RTMP hostname unresolved, so healthy-feed
+picture checks, a scrubbed raw D10/epoch capture and the stale-epoch restart exercise remain open.
+Tracked in `route-plates` tasks §6 and
 `CG-CONTROL-REQUEST-ROUTE-INPUTS-PLAYLIST-2026-10-26.md`.
 
 **Why.** A cold route can put one black, silent frame on air, a preloaded one holds a stale frame,

@@ -90,8 +90,27 @@
       Playout session `signed-in`; the owner's credential-free UI census shows five Playout inputs
       versus only the three direct-safe D10 rows and no route/playlist row, so `RouteInputs` is off,
       not unsupported. Evidence is recorded in the target-side request document
-- [ ] 6.5 In a maintenance window, enable this Playout's input holder plus
-      `CgControl.RouteInputs`; no Playout upgrade is needed, but this operation may restart the core
-- [ ] 6.6 Verify D10 carries an epoch, route rows for the unicast RTP and SDI inputs, and `pl-` rows with
-      `playlistOf`; then verify selection, picture, no feedback loop and restart/epoch behavior in CG
-      Control
+- [x] 6.5 On target `192.168.21.112`, during the owner-approved test-playback window, enable
+      `InputHolder.Enabled`, accept the one required core restart (the UI reported 8 seconds), and
+      then enable and save `CgControl.RouteInputs` without a second restart or a Playout upgrade.
+      After the restart Playout `2.12.0` was ready; Bridge `0.12.0` reported CasparCG and AMCP `up`,
+      OSC subscribed, channel 1 present, the Playout session signed-in, and no problems
+- [x] 6.6a Verify catalogue propagation in CG Control: the CH 1 picker grew from `Inputs 3` to
+      `Inputs 6` and now lists UDP, unicast RTP, SDI, NDI, RTMP and `خروجیِ پخش: آپاسای`. The
+      playlist row is available/selectable; RTP, SDI and RTMP are visible but currently
+      `Unavailable`, as explicitly reported by the Playout rather than filtered by CG
+- [ ] 6.6b Capture a credential-scrubbed D10 answer proving the top-level `epoch`, RTP and SDI
+      `route` producers with real `channel`/`layer` plus `compatibleChannels`, and a `pl-` route with
+      `playlistOf`
+- [x] 6.6c On the real test output, select the playlist route and verify the raw current Playlist
+      picture, locked/muted zero audio, and no recursive CG feedback; stop the test row and restore
+      the previous Plate 1 mapping afterward
+- [ ] 6.6d With healthy RTP and SDI feeds, verify both can be selected and render on an allowed
+      channel. The current target reports the RTP holder cycling through reopen/disconnected and
+      the SDI holder no-signal; RTMP also cycles because its test hostname does not resolve
+- [ ] 6.6e Restart the core while exercising a route and verify a stale epoch is never seated: the
+      plate stays empty/waiting until a fresh D10 is read, and the Bridge recovers healthy
+- [ ] 6.6f Correct the diagnostic source-kind label: today Station setup intentionally renders every
+      `route` as `SDI`, so held RTP/RTMP and the Playlist route are mislabeled. CG can distinguish
+      `playlistOf` and otherwise fall back to `Route`; exact original RTP/RTMP/SDI provenance needs
+      an optional additive D10 field from the Playout
