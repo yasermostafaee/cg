@@ -90,6 +90,10 @@ integrations to validate. They live here so the conversation isn't the only reco
   deterministic identities, shared export primitives, playable-package QC, a contact sheet and a
   pack sheet. [[D-143]] (`.vcg` back into the Designer) remains a separate D-item and is not needed
   by the factory or by playout.
+  **The internal browser workflow is now active as [P-069](./platform.md):** a loopback-only Studio
+  on a configurable port, with one external on-machine workspace for customer profiles and
+  deliveries. It remains outside Designer and never adds customer packs to Designer's first-page
+  samples.
 
 ## Already tracked elsewhere (do not duplicate)
 

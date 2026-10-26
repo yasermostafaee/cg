@@ -4117,6 +4117,37 @@ rail pictured before and after on the clean runner.
 
 ## [x] P-068 — Release candidate `0.12.1`: tested installers after the delivered `0.11.6` ⟨priority: high⟩ — DONE 2026-10-26 by `RELEASE-0121-01` · `openspec/changes/archive/2026-10-26-prepare-0-12-1-installers/`
 
+## [~] P-069 — Brand Pack Studio: local browser tool for preparing each customer's template pack ⟨priority: high⟩
+
+**What:** turn the existing Brand Pack Factory engine into an internal, browser-based tool that
+runs on a configurable local port. It keeps customer profiles, Brand Kits, build recipes and
+generated deliveries in one explicit workspace folder on the same computer.
+
+**Why:** the deterministic factory core is built, but editing JSON and invoking a CLI is not the
+day-to-day tool the owner asked for. This workflow is private production tooling: it must be easy
+for our own team to operate without becoming an installable customer product or mixing generated
+customer templates into Designer's sample/starter catalogue.
+
+**Acceptance:**
+
+- WHEN the operator starts the Studio with a workspace and port THEN it serves only on local
+  loopback, prints the local URL, and needs no installer.
+- WHEN the operator creates or edits a customer THEN the Studio stores that customer's Brand Kit,
+  recipe and delivery history under the chosen workspace on that computer and restores them after
+  restart.
+- WHEN the operator selects a master `.cgproj` THEN the Studio can inspect its compositions,
+  colours and packaged assets/fonts so mappings can be prepared without editing JSON by hand.
+- WHEN a customer pack is validated or built THEN the Studio uses the existing canonical Factory
+  engine, shows readable errors, and writes a new delivery folder containing the `.vcg` files and
+  QC evidence.
+- WHEN the Studio creates customer templates THEN neither those templates nor the customer list
+  appears on Designer's first page; the existing Designer samples remain unchanged.
+- WHEN a remote machine attempts to reach the Studio THEN no non-loopback listener exposes the
+  private tool.
+
+**Notes:** active change: [`brand-pack-studio`](../../openspec/changes/brand-pack-studio/). This is
+an internal tool layered over the archived Brand Pack Factory v1; it is not a third desktop app.
+
 **What.** Move the one shared release number from the already-tagged `0.12.0` to `0.12.1`, build the three
 matching Windows installers from one commit, and hand the owner the requested CG Control and CG Designer
 installers. The Desktop workflow still builds and tests CG Bridge because the three installed parts share one
