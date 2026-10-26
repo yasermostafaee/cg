@@ -634,9 +634,11 @@ return signal".
 the relay holds nothing then) and 0.21–1.12 % shown, so the relay costs at most ~1 % of one core
 and 1–2 MB; 24.9 fps in, 24.9 relayed, 321 KB/s. Table: `docs/integration/playout/PGM-FEED-AS-USED.md`.
 
-**Finding for [[C-023]].** The feed is per CHANNEL (every programme channel and every preview
-channel has one). A live SOURCE is not a channel, so a per-source thumbnail cannot ride this relay
-as built — that is this item's finding, as the note below asks, and C-023 needs its own answer.
+**Superseded C-023 finding.** The feed is per CHANNEL (every programme channel and every preview
+channel has one), not per source. C-023 no longer asks this PGM relay to make thumbnails: Playout
+now offers a preview-only lifecycle that puts one selected input on the corresponding preview
+channel. C-023 uses that distinct `935x` path only after its control/auth/lease contract is answered;
+this PGM relay remains on `925x` and unchanged.
 
 **Acceptance as delivered** (the four bullets below are the grab-era wording; the first and third
 are superseded by the owner's decision): the panel shows the programme channel **live, not at
@@ -650,11 +652,9 @@ captures the program channel via a CasparCG grab/print-class command, serves the
 over its existing HTTP server, and the Runtime shows it in a PGM panel refreshing ~1 s. OWNER
 DECISION recorded: stills-at-~1 s IS the v1 bar; full-motion return (STREAM consumer + relay
 transcode) is RECORDED IN THIS ITEM as an explicit later phase, not a v1 requirement.
-**A SECOND CONSUMER, filed 2026-08-10:** [[C-023]] wants the same grab path pointed at a live
-SOURCE rather than at the programme channel, for a per-source confidence thumbnail. It rides this
-item deliberately instead of building a second mechanism — **and if this design turns out not to
-generalise beyond the programme channel, that is a finding for THIS item**, not a licence for C-023
-to fork its own grab path.
+**C-023 no longer consumes this path.** Its original 2026-08-10 periodic-thumbnail proposal was
+superseded on 2026-10-26 by an operator-triggered live check using Playout's official preview
+channel. C-016 remains the PGM path; C-023 must not repurpose it or its programme meter.
 **Why:** The operator currently confirms what the viewer sees by looking at a separate monitor
 (or guessing from row badges). A confidence view inside the console closes that loop — and a
 Live-Source-heavy composite ([[C-015]]) makes PGM confidence MORE valuable, because the browser
@@ -689,9 +689,9 @@ third acceptance bullet demands, and the form to fill in at the box:
 **What it will answer:** which grab verb this build actually has (discovered from the server's own
 enumeration — it refuses to guess one); the latency of one grab at rest and under load; whether the
 channel's own counters move during a grab; whether that cost is flat over a ≥5-minute 1 Hz run (the
-measurement that decides whether the "~1 s" bar is affordable at all); whether the path generalises
-beyond the programme channel ([[C-023]]'s whole ride, both candidate paths distinguished); and what
-the produced artifact is.
+measurement that decides whether the "~1 s" bar is affordable at all); and what the produced
+artifact is. Its former C-023 generalisation question is historical: C-023 now uses the official
+preview lifecycle and does not ride this grab path.
 
 🔴 **TWO FINDINGS ALREADY, both read from the code rather than measured, and both are design work
 for this item's session rather than defects:**
@@ -1285,65 +1285,66 @@ not the CasparCG **server**, and its capture date is unknown. It is evidence abo
 expects to consume**, which is exactly what this item needs it for — it is NOT evidence about server
 capability.
 
-## [ ] C-023 — a confidence THUMBNAIL per live source in CG Control ⟨priority: medium⟩ — rides [[C-016]]
+## [~] C-023 — check one live input with picture and optional sound in PVW ⟨priority: high⟩ — **BLOCKED / WAITING FOR PLAYOUT CONTRACT** · `openspec/changes/preview-live-input-check/`
 
-**What:** beside each entry in CG Control's source list, a small **periodically-refreshed still**
-showing what that source is delivering **right now**, so the operator can confirm a feed before it is
-needed and identify a failed one during a programme.
+**Owner decision, 2026-10-26 — this supersedes the periodic-thumbnail proposal in full.** The
+operator chooses one Playout live input and checks its current moving picture before it is needed.
+The same action is available in the normal PVW workflow and beside a source in the Source defaults
+dialog. Source defaults stays open and nothing is selected, saved or applied by checking.
 
-**Why:** the operator's real question is _"has guest 2's feed arrived, and is it the right camera?"_
-A reachable/unreachable indicator **cannot answer it** — a black feed and a colour-bar feed are both
-"present" and both wrong. Only a picture settles it.
+**Why:** `Available` proves routability, not content. A black feed, colour bars and the wrong camera
+can all be available. The operator needs to answer _"is this the intended picture and is its sound
+present?"_ before take, without guessing from a status tag or putting the source on air.
 
-It is also the **diagnosis half of [[R-048]]**: the thumbnails say WHICH plate died and which source
-is healthy; R-048 performs the repair. Filed as a pair deliberately — an operator who can swap a
-dead plate but cannot see which source to swap it to is being asked to guess on air.
+**The three truths stay separate:**
 
-**This REPLACES the parked "LIVE row" idea entirely.** The ad-hoc picture-in-picture use that
-justified a LIVE row is explicitly not needed; do not re-file it.
+1. Rehearse remains the retained exported page plus Runtime-owned Live Source placeholders. The
+   live check is a distinct card in the PVW area; it is not composited into a template plate and
+   does not make the browser iframe capable of SDI/NDI.
+2. PGM remains the real programme return. Its speaker preference and VU meter continue to describe
+   the final programme mix, including a one-to-four-box look. Even when the Playlist picture is not
+   one of the visible boxes, that meter is still PGM and is not an input meter.
+3. The new card carries a separately labelled `PVW INPUT` meter for the one checked source. Its
+   sound starts OFF on every check and plays only after an explicit operator gesture.
 
-**Two constraints that SHAPE the solution — part of the item, not footnotes:**
+**Intended mechanism:** Playout `2.12.0` exposes
+`POST/DELETE /api/v1/channels/{code}/live-preview` and the corresponding preview-channel MJPEG/WAV
+on `9350 + channel − 1`. CG Bridge — never the renderer — owns start, replacement, relay, stop and
+cleanup. It uses no C-016/PGM frame grab, sends no AMCP command, touches no programme layer and never
+changes PGM, a look, a binding or Source defaults.
 
-1. **The Runtime's PVW cannot be its home.** Rehearse renders the retained exported HTML in a
-   browser iframe (`RehearsalFrame.tsx`, `srcDoc={html}`), and **a browser cannot display SDI or
-   NDI** — the same wall `live-source-multibox` design.md §12.2 settled when it decided PVW shows an
-   EMPTY, transparent region for a Live Source. Anyone reaching for "just show it in PVW" must be
-   stopped by this item.
-2. **Producing a picture means PLAYING the source somewhere**, and doing that on the air channel
-   risks putting it on air. It needs a channel with **no air-carrying consumer**. ⚠ Whether this
-   installation's CasparCG config has, or can gain, such a channel is a **RECON QUESTION — recorded
-   OPEN, not assumed**. ⚠ **A CANDIDATE answer, not the answer:**
-   `openspec/changes/live-source-multibox/design.md` **§9b** proposes a dedicated multi-box channel
-   with no consumer of its own, and **§9b.1 sharpens what it would and would not give this item** —
-   the isolation is the air route being DOWN, not the channel being consumer-less, so a probing grab
-   is free off air and is a live picture change on air. That proposal is **not adopted** and this
-   question stays OPEN; record the real answer here, including a negative.
-   (`D:\programs\CasparCG\casparcg.config` declares `<system-audio />` +
-   `<newtek-ivga />` + `<screen />`; whether an additional consumer-less channel is available or
-   addable has not been established.)
+**Hard blocker:** read-only recon deliberately sent no POST or DELETE. The installed OpenAPI cannot
+provide the missing shapes because `/openapi/v1.json` returns `500` while Swashbuckle processes an
+unsupported `PROPFIND`. We do not yet have the exact request/response DTO, endpoint auth policy,
+preview-meter correlation or a server-enforced owner/lease token with TTL and conditional DELETE.
+Without that ownership contract, a stale dialog can stop a newer client's preview. Production work
+must not guess around this.
 
-**Mechanism:** rides [[C-016]]'s frame-grab-over-HTTP work rather than building a second mechanism;
-cross-referenced both ways. If C-016's design does not generalise beyond the programme channel, that
-is a **finding for C-016**, not a reason to fork a second grab path.
+The exact request to the Playout team is
+`docs/integration/playout/CG-CONTROL-REQUEST-LIVE-INPUT-PREVIEW-2026-10-26.md`. Implementation may
+start only after a versioned response answers the DTO, success/errors, auth role/scope,
+owner/generation/TTL/conditional-stop race, port/index/feed formats, air-priority revocation and
+preview-meter API.
 
 **Acceptance:**
 
-- WHEN the source list is shown THEN each entry carries a periodically-refreshed still of that
-  source, and a stale or unavailable still is shown AS stale rather than as a black picture
-- WHEN a thumbnail is produced THEN it is produced on a channel with no air-carrying consumer, and
-  the mechanism is C-016's grab path
-- WHEN the recon question above is answered THEN the answer is recorded here, including a negative
+- WHEN an eligible source is checked from PVW or Source defaults THEN one PVW card shows its current
+  moving picture, canonical name, channel and honest connecting/live/stalled/conflict state
+- WHEN that action starts from Source defaults THEN the dialog, draft, dirty state and saved defaults
+  are unchanged
+- WHEN a check starts THEN its sound is off regardless of the PGM preference; only a user gesture
+  starts it, and close/replacement/disconnect/expiry stops and resets it
+- WHEN levels arrive for the checked preview THEN a distinct `PVW INPUT` meter shows only that
+  current lease; the existing PGM meter and sound path remain unchanged
+- WHEN another check replaces it or air needs the source THEN the old picture/sound/meter close and
+  the reason is shown; a stale stop cannot close the newer preview
+- WHEN any start, failure, replacement or cleanup occurs THEN no PGM, programme layer, row, look,
+  binding, rehearsal page or Source default changes, and no AMCP command is sent
+- WHEN the picture or meter stalls THEN its last value is removed/reset rather than masquerading as
+  live
 
-**Explicitly OUT of scope:** any path that puts the checked source on the **programme channel**, and
-any **continuous video stream** to the browser. A periodic still is the deliverable.
-
-⚠ **NOT a duplicate of [[R-049]], and neither makes the other unnecessary.** R-049 draws a labelled
-placeholder over each rehearse plate, naming the plate and its assigned source. **This item answers
-"IS THE PICTURE GOOD"; R-049 answers "WHICH SOURCE IS WHERE."** They are related and they cost
-completely different things: R-049 needs no frame grabs, no consumer-less channel and no [[C-016]] —
-it reads the assignment the Runtime already holds — while this item needs all three. A thumbnail that
-does not say which plate it belongs to, and a plate label that does not say whether the feed arrived,
-are each half an answer.
+**Out of scope:** thumbnails on every source row, automatic scanning, multiview, simultaneous input
+checks, ad-hoc sources not present in D10, and replacing R-049's labelled Live Source placeholders.
 
 ## [~] C-024 — the bridge advertises a HARDCODED LAN address, and only an uncommitted hack makes testing possible ⟨priority: high⟩ — the CURE that [[P-035]] merely NETS — **CLI half LANDED 2026-08-23 by [[B-162]]; PERSISTED + PANEL half LANDED 2026-08-24 (`serve-host-from-app`); HACK DELETED + never-stage entry DROPPED + warning sentence completed 2026-09-04 (`LAN-DEV-ACCESS-01`) — every Acceptance bullet now met; awaiting archive of `serve-host-from-app`**
 

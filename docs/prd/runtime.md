@@ -2305,9 +2305,10 @@ failure the operator often needs a source nobody predicted, and an **open list b
 wrong one**. Revisit only if use shows otherwise.
 
 **Also out of scope, and filed as its own thought rather than widening this item:** automatic
-**DETECTION** of a dead input. The client asked for a fast SWAP; detection is a separate capability,
-and [[C-023]]'s per-source confidence thumbnails already give the operator eyes on which plate died
-and which source is healthy. C-023 is the diagnosis half; this item is the repair.
+**DETECTION** of a dead input. The client asked for a fast SWAP; detection is a separate capability.
+[[C-023]] now gives the operator an explicit live picture/sound check for one chosen input, which can
+confirm the replacement source, but it neither scans every source nor detects a failure automatically.
+C-023 is the operator's diagnosis tool; this item is the repair.
 
 **Where it is implemented:** inside `openspec/changes/live-source-multibox/` **phase 6** (tasks
 6.9–6.9f), cross-referenced both ways — the same pattern D-147 used to ride phase 1 rather than
@@ -2383,10 +2384,10 @@ Three consequences of that, each a reason this is cheap:
   operator's last chance to see it before air.)
 
 - 🔴 **UNMISTAKABLY NOT A PREVIEW — a requirement, not a styling preference.** WHEN the placeholder is
-  drawn THEN an operator must **never** be able to believe PVW is showing the real picture. A browser
-  cannot display SDI or NDI (the wall §12.2 settled and [[C-023]] restates), so a placeholder that
-  reads as a picture is worse than the blank region it replaces: it converts "I can't see it" into "I
-  saw it and it was fine".
+  drawn THEN an operator must **never** be able to believe PVW is showing the real picture. The page's
+  browser cannot display SDI or NDI (the wall §12.2 settled); [[C-023]]'s real input check is a separate
+  Bridge-relayed PVW card, never this placeholder. A placeholder that reads as a picture is worse than
+  the blank region it replaces: it converts "I can't see it" into "I saw it and it was fine".
 - **Geometry comes from the SAME transform the stage already uses** — the FIT scale on the iframe
   elements (`RehearsalStage.tsx:289`), not a second one derived beside it. **Deriving a second scale
   factor is how an overlay drifts off the page beneath it**, and the drift is invisible until the
@@ -2426,11 +2427,10 @@ Pinned at both levels so it cannot drift silently: the E2E above for the real li
 
 ### Cross-references, so neither is read as a duplicate of the other
 
-- **[[C-023]]** (a confidence thumbnail per live source) answers **"is the picture good"** — it needs
-  frame grabs, a consumer-less channel and [[C-016]], and it is filed with those costs. **This item
-  answers "WHICH SOURCE IS WHERE"** — it needs none of them. **Related, not duplicates**, and neither
-  makes the other unnecessary: a thumbnail that does not say which plate it belongs to and a plate
-  label that does not say whether the feed arrived are each half an answer.
+- **[[C-023]]** (an operator-triggered live input check) answers **"is this source's picture and sound
+  good"** through Playout's official preview channel and a separate PVW card. **This item answers
+  "WHICH SOURCE IS WHERE"** without opening a feed. **Related, not duplicates:** the check does not
+  identify every template plate, and a plate label does not prove the incoming picture is good.
 - **`live-source-multibox` design.md §12.2** — see the compatibility paragraph above. The
   placeholders are drawn by the Runtime OVER the frame; the page still paints nothing, and §12.2 is
   not reopened.
@@ -3290,7 +3290,7 @@ path could reach. ✅ Its DISPLAY half (change `tasks.md` 2.8) landed 2026-08-20
 - **Cross-refs:** [[D-152]] (the AUTHORING half — looks, declared sources, titles; read both),
   [[B-145]] (landed in full, display half 2026-08-20), [[B-146]] (the Inspector surface, same row),
   [[R-048]] (the source swap this reconcile absorbs), [[C-015]] (Live Source routing and seating),
-  [[C-023]] (the confidence thumbnails — with six live inputs nothing here detects a dead one),
+  [[C-023]] (the explicit live-input check — with six live inputs nothing here detects a dead one automatically),
   [[D-137]] (the Live Source element), [[R-028]] (the declared-rows model the control lives in).
 
 ## [~] R-058 — "reachable" is not "working": a channel that produces nothing must be LOUD, and a bare ERROR must say WHY ⟨priority: high — the console read HEALTHY over a channel that was producing nothing at all⟩ — IMPLEMENTED 2026-08-24
