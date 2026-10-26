@@ -10,12 +10,14 @@ Lane: **FULL**
 
 ## 2. Version and guide
 
-- [ ] 2.1 Move all nine release-version sources and the release-version regression pin to `0.12.2`
-- [ ] 2.2 Add the Persian `0.12.2` guide with exact filenames: all three are applied over the owner's `0.11.6`;
+- [x] 2.1 Move all nine release-version sources and the release-version regression pin to `0.12.2`
+- [x] 2.2 Add the Persian `0.12.2` guide with exact filenames: all three are applied over the owner's `0.11.6`;
       over a complete `0.12.1` set, CG Bridge and CG Control are required and Designer is optional
-- [ ] 2.3 Run preliminary `guide-shots` from a pushed `0.12.2` ref, replace the version-bearing pictures and
-      record that run URL here
-- [ ] 2.4 Build and test the final guide, including its version-bearing text and image references
+- [x] 2.3 Run preliminary `guide-shots` from a pushed `0.12.2` ref, replace the version-bearing pictures and
+      record that run URL here — [Desktop run 40314018361](https://github.com/yasermostafaee/cg/actions/runs/40314018361),
+      using `guide-shots`, `setup-window-windows-2025` and the successful `acceptance-upgrade-0116` artifact
+- [x] 2.4 Build and test the final guide, including its version-bearing text and image references — 6-page A4 PDF,
+      visually reviewed from all six rendered pages; release suite 79/79 green
 
 ## 3. Gates and final Windows build
 
