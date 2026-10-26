@@ -10,13 +10,16 @@ Lane: **FULL**
 
 ## 2. Current guide evidence
 
-- [ ] 2.1 Run Desktop on the temporary branch to obtain real setup and app screenshots
-- [ ] 2.2 Add the `0.12.1` Persian guide, preserving the book re-export floor of `0.12.0`
-- [ ] 2.3 Prove the guide is two pages, every quoted label is current and version-bearing images are fresh
+- [x] 2.1 Run Desktop on the temporary branch to obtain real setup and app screenshots
+      ([run 40251651277](https://github.com/yasermostafaee/cg/actions/runs/40251651277), 16/16 jobs green)
+- [x] 2.2 Add the `0.12.1` Persian guide, preserving the book re-export floor of `0.12.0`
+- [x] 2.3 Prove the guide keeps the prior six-page layout, every quoted label is current and version-bearing
+      images are fresh (`@cg/release`: 79/79 tests green)
 
 ## 3. Gates and final Windows build
 
-- [ ] 3.1 Full local gate green and strict OpenSpec validation green
+- [x] 3.1 Full local gate green and strict OpenSpec validation green
+      (`gate-20261026T004406Z-22600.log`: 103/103 tasks green; OpenSpec: 90/90)
 - [ ] 3.2 Push the complete candidate to `dev`; Linux CI including E2E green
 - [ ] 3.3 Manual Desktop run green: installers, setup window, guide shots, fresh install, bridge/app smokes and
       every upgrade acceptance, including `0.11.6` with both apps open
