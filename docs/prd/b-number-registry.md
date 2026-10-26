@@ -3503,3 +3503,13 @@ Measured free before use: the registry named `P-068` as next free; `git grep -n 
 over tracked PRD files returned nothing before this filing.
 
 ⇒ **Next free after this entry is `B-354`**, **`D-166`**, **`P-069`**, **`R-102`** and **`C-049`**.
+
+### 2026-10-26 — `RELEASE-0121-01` takes `B-354`
+
+- `B-354` — a clean Turbo cache hit omitted `single-file-export`'s generated runtime source and broke a downstream
+  build in Linux CI — [bugs.md](bugs.md).
+
+Measured free before use: the registry named `B-354` as next free; `git grep -n -E "^## \[.\] B-354 "`
+over tracked PRD files returned nothing before this filing; control: the same sweep found `B-353`.
+
+⇒ **Next free after this entry is `B-355`**, **`D-166`**, **`P-069`**, **`R-102`** and **`C-049`**.

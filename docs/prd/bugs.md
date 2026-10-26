@@ -1364,6 +1364,32 @@ weaker claim than it sounds, since CI runs the same suite far less contended.
   fails an innocent suite), [[B-078]] (the stale-process Playwright collision the repair rules
   already carve out as "not a code bug").
 
+## [~] B-354 — a clean Turbo cache hit drops the generated single-file runtime and breaks downstream builds ⟨priority: high — blocks Linux CI and the 0.12.1 installer candidate⟩ — FILED 2026-10-26 by `RELEASE-0121-01`
+
+**Repro:** run the PR workflow from a clean Linux checkout when
+`@cg/single-file-export#build` is restored from Turbo's cache, then let the test graph build
+`@cg/pack-factory`.
+
+**Expected:** the cached build restores every file needed by a downstream TypeScript project, so
+`@cg/pack-factory#build` sees `packages/single-file-export/src/generated/cg-runtime-bundles.ts`.
+
+**Actual:** run
+[`40255376542`](https://github.com/yasermostafaee/cg/actions/runs/40255376542) failed with `TS2307`:
+`./generated/cg-runtime-bundles.js` was absent. The package's `prebuild` had created the file when
+the cache entry was first built, but the root `build.outputs` saved only `dist`, `build`, `out` and
+tsbuildinfo. On the clean cache hit, Turbo restored `dist` but not `src/generated`; the downstream
+project reference still compiled the package source and failed. A populated developer worktree
+masked the defect.
+
+**Fix in progress:** treat `src/generated/**` as a build output and `scripts/**` as a build input.
+The latter makes a generator edit invalidate the artifact that generator produced. Regression pin:
+`packages/single-file-export/tests/build-cache-contract.test.ts`; the release gate must also prove a
+real delete-and-cache-restore cycle before this item closes.
+
+**Env:** GitHub Actions Ubuntu runner, clean checkout; release candidate commit `960e6a4c`.
+**Cross-refs:** [[P-042]] / [[P-049]] (the same generator's separate concurrent-writer debt),
+[[P-068]] (the release whose clean CI exposed this cache contract).
+
 ## [x] B-290 — CG Control and CG Designer showed the same icon in the Windows taskbar ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §3 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
 
 **Seen (owner, installed `0.9.0`):** the desktop shortcuts carry different icons — CG Control dark, CG

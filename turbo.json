@@ -4,9 +4,17 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "build/**", "out/**", "*.tsbuildinfo", "!typecheck.tsbuildinfo"],
+      "outputs": [
+        "dist/**",
+        "build/**",
+        "out/**",
+        "src/generated/**",
+        "*.tsbuildinfo",
+        "!typecheck.tsbuildinfo"
+      ],
       "inputs": [
         "src/**",
+        "scripts/**",
         "tsconfig.json",
         "package.json",
         "vite.config.*",
