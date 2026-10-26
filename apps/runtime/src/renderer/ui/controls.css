@@ -8047,6 +8047,16 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-text);
   font-size: var(--r-text-md);
 }
+/*
+  Owner follow-up, 2026-10-26 — the source menu sits over panels and dialogs whose default
+  ground is also `--r-surface`. Its opt-in raised treatment makes that layer boundary legible
+  without adding a modal scrim or changing the shared Popover's geometry/keyboard contract.
+*/
+.cg-popover[data-popover-variant='raised'] {
+  background: var(--r-surface-raised);
+  border-color: var(--r-border-strong);
+  box-shadow: var(--r-shadow-menu);
+}
 
 /* ── THE PICKER'S INSIDE ─────────────────────────────────────────────────────────────── */
 .cg-picker {

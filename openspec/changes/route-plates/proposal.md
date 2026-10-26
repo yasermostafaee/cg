@@ -48,6 +48,9 @@ what the core team measured:
 - **Playlist-first picker order (owner follow-up, 2026-10-26).** Every `playlistOf` row leads the Inputs
   list. The picker uses a stable partition: playlist rows keep their D10 order, all remaining inputs keep
   theirs, and `None`, Media, availability and compatible-channel behaviour do not move or change.
+- **Raised SourcePicker surface (owner follow-up, 2026-10-26).** The anchored panel shared by Inputs and
+  Media opts into a `raised` visual variant made only from existing tokens: the raised surface, strong
+  border and menu shadow. It adds no scrim and changes no geometry, source behaviour or keyboard contract.
 - **The fakes (§1.H).** The AMCP mock accepts `LOADBG`, promotes the background on a bare `PLAY` and stamps
   every received line with an injectable clock; the fake Playout simulates a core restart (a new epoch,
   renumbered holders, a dropped AMCP connection) and can send a 64-bit epoch literal.
@@ -60,7 +63,8 @@ bound to a D10 input (byte-identical), `FIELD-FIXES-01-A`, the bank and channel 
 ### Modified Capabilities
 
 - `runtime-playout-sources`: the v1.3 requirement stops forbidding route seats; rule 1 is asked of one
-  predicate for Playout routes; the Inputs picker puts `playlistOf` rows first with a stable partition.
+  predicate for Playout routes; the Inputs picker puts `playlistOf` rows first with a stable partition,
+  and the shared Inputs/Media panel uses the raised visual variant without becoming a modal.
 - `runtime-caspar-bridge`: route seating, the epoch, the send-seam guard, and the backup line.
 
 ## Impact
@@ -72,7 +76,7 @@ bound to a D10 input (byte-identical), `FIELD-FIXES-01-A`, the bank and channel 
 - `packages/shared-ipc`: the lossless epoch, `isPlayoutRoute`, `sourceShowableOn`, `notShowableWords`,
   `SourceCatalog.inputsEpoch`; the gate removed.
 - `packages/shared-schema`: `StackItemState.backupUnmirrored` (published, never retained).
-- `apps/runtime`: the two row lines, the backup line, the error-code sentences, and the picker's
-  playlist-first stable order.
+- `apps/runtime`: the two row lines, the backup line, the error-code sentences, the picker's
+  playlist-first stable order, and its opt-in raised surface treatment.
 - `tools/amcp-mock`: `LOADBG`, the bare `PLAY` (acked with nothing loaded, as CasparCG 2.5.0 answers it —
   measured), the command log.

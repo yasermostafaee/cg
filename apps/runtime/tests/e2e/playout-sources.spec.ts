@@ -24,6 +24,25 @@ test.use({ playoutSources: E2E_PLAYOUT });
 
 const TPL = 'tpl-e2e-picker';
 
+function colourContrast(a: string, b: string): number {
+  const luminance = (value: string): number => {
+    const channels = value
+      .match(/[\d.]+/g)
+      ?.slice(0, 3)
+      .map(Number);
+    if (channels === undefined || channels.length !== 3 || channels.some(Number.isNaN)) {
+      throw new Error(`cannot read colour ${value}`);
+    }
+    const [r, g, blue] = channels.map((channel) => {
+      const unit = channel / 255;
+      return unit <= 0.04045 ? unit / 12.92 : ((unit + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (blue ?? 0);
+  };
+  const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return ((lighter ?? 0) + 0.05) / ((darker ?? 0) + 0.05);
+}
+
 /** Two plates, one look placing both — the shape Look inputs exists for. */
 async function registerTemplate(page: Page): Promise<void> {
   await page.evaluate(async (templateId) => {
@@ -95,6 +114,24 @@ test('the picker hangs from its field, over the dialog — not a second modal �
   // The dialog it was opened from is still there, under it: the picker is not a modal.
   await expect(dialog).toBeVisible();
   await expect(panel).not.toHaveAttribute('aria-modal', 'true');
+
+  // Owner follow-up, 2026-10-26 — the menu must read as a surface ABOVE the dialog beneath it,
+  // not as one more patch of the same dark ground. This is measured in Chrome: jsdom cannot prove
+  // painted contrast, and a class-name assertion would stay green if its tokens regressed.
+  const [panelPaint, dialogPaint] = await Promise.all([
+    panel.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return {
+        background: style.backgroundColor,
+        border: style.borderTopColor,
+        shadow: style.boxShadow,
+      };
+    }),
+    dialog.evaluate((el) => getComputedStyle(el).backgroundColor),
+  ]);
+  expect(colourContrast(panelPaint.background, dialogPaint)).toBeGreaterThan(1.1);
+  expect(colourContrast(panelPaint.border, panelPaint.background)).toBeGreaterThan(1.8);
+  expect(panelPaint.shadow).not.toBe('none');
 
   // §2.A geometry — measured, because jsdom cannot: ≥ 440 wide, ≤ 480 tall, hanging BELOW its field.
   const [fieldBox, panelBox] = [await field.boundingBox(), await panel.boundingBox()];

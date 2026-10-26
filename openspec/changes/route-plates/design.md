@@ -128,3 +128,12 @@ The source catalogue itself is not reordered, so no other consumer silently inhe
 choice. An unavailable Playlist output stays first and disabled with the same reason; `None`, the Media
 tab and the existing availability and compatible-channel decisions are unchanged. The explicit order is
 pinned in `sourcePicker.dom.test.ts` and on the rendered picker in `playlist-output.spec.ts`.
+
+**SourcePicker raised above its host.** Inputs and Media are two tabs of the same anchored panel, so the
+visual distinction belongs to an opt-in `raised` variant on the shared `Popover`, selected only by
+`SourcePicker`; changing the default would silently restyle date/time, playback and error popovers too. The
+variant changes only paint, using the existing `--r-surface-raised` background, `--r-border-strong` edge and
+`--r-shadow-menu` elevation. The backdrop remains transparent — no modal scrim — and the current width, height,
+placement, portal, list contents, click selection, focus trap, Tab containment, Escape/outside-press closing,
+scroll/resize closing and focus restoration stay byte-for-byte in behaviour. No token or second popover is
+introduced.

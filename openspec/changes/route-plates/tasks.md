@@ -118,3 +118,10 @@
       partition that preserves D10 order within the Playlist and ordinary groups; leave `None`, Media,
       unavailable/disabled and channel-compatibility behaviour unchanged. Update
       `sourcePicker.dom.test.ts` and add a Playwright assertion in `playlist-output.spec.ts`
+- [x] 6.6h Record the owner's SourcePicker surface decision in the PRD, proposal, design and
+      `runtime-playout-sources` delta: Inputs and Media opt into a token-only `raised` Popover variant
+      (`--r-surface-raised`, `--r-border-strong`, `--r-shadow-menu`), with no scrim, geometry, source behaviour or
+      keyboard change
+- [x] 6.6i Implement that opt-in variant only on `SourcePicker`; prove in Chromium that its painted
+      background differs from the host surface, its edge remains legible and its shadow is present, while the
+      existing placement, modal and keyboard assertions stay green

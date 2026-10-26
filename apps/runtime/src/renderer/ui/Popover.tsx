@@ -58,6 +58,8 @@ export interface PopoverProps {
   maxHeight: number;
   /** Where focus lands inside the panel when it opens (a CSS selector). */
   initialFocusSelector?: string | undefined;
+  /** Optional paint treatment; geometry, focus and close behaviour are identical. */
+  variant?: 'default' | 'raised' | undefined;
   children: ReactNode;
 }
 
@@ -77,6 +79,7 @@ export function Popover({
   minWidth,
   maxHeight,
   initialFocusSelector,
+  variant = 'default',
   children,
 }: PopoverProps): JSX.Element {
   const panel = useRef<HTMLDivElement>(null);
@@ -164,6 +167,7 @@ export function Popover({
         aria-label={ariaLabel}
         className="cg-popover"
         data-popover=""
+        data-popover-variant={variant}
         data-popover-side={placement?.above === true ? 'above' : 'below'}
         style={{
           left: placement?.left ?? 0,

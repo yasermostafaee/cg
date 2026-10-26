@@ -234,6 +234,7 @@ export function SourcePicker({
           aria-label="Choose a source"
           minWidth={PICKER_MIN_WIDTH}
           maxHeight={PICKER_MAX_HEIGHT}
+          variant="raised"
           initialFocusSelector={isMediaId(value) ? '[data-picker-search]' : '[data-picker-list]'}
         >
           <PickerPanel

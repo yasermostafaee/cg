@@ -72,6 +72,12 @@ SHALL be stable: Playlist rows SHALL keep their D10 order among themselves, and 
 keep their D10 order. An unavailable Playlist row SHALL remain first but disabled with its existing reason.
 The separate `None` choice, Media tab, availability and compatible-channel behaviour SHALL NOT change.
 
+The anchored SourcePicker panel shared by the Inputs and Media tabs SHALL opt into the Popover's `raised`
+visual variant. That variant SHALL use only the existing raised-surface, strong-border and menu-shadow
+tokens so the picker is visibly distinct from the surface beneath it. It SHALL paint no scrim and SHALL NOT
+change the panel's size or placement, its source and selection behaviour, or its focus, Tab, Escape and close
+contracts.
+
 #### Scenario: The playlist output in the Inputs tab
 
 - **WHEN** D10 lists `خروجیِ پخش: …` for CH 1 with `route` layer 7 **THEN** the Inputs tab lists it under that
@@ -86,3 +92,11 @@ The separate `None` choice, Media tab, availability and compatible-channel behav
 - **AND** multiple Playlist outputs keep their D10 order
 - **AND** every remaining input keeps its prior relative order
 - **AND** an unavailable Playlist output remains first and disabled with its reason
+
+#### Scenario: Inputs and Media are visibly raised without becoming modal
+
+- **WHEN** a SourcePicker opens on either the Inputs or Media tab
+- **THEN** its panel uses the existing raised surface, strong border and menu shadow
+- **AND** no scrim is painted and its size and placement are unchanged
+- **AND** source selection, focus, Tab, Escape, outside-press, scroll/resize close and focus-restoration
+  behaviour are unchanged
