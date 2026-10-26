@@ -4115,7 +4115,7 @@ at the foot of its step rail, and a second window frame stood behind it with `Ve
 is identified — ours and fixed so one window shows, or named if it is not ours. **Acceptance:** every installer's
 rail pictured before and after on the clean runner.
 
-## [~] P-068 — Release candidate `0.12.1`: tested installers after the delivered `0.11.6` ⟨priority: high⟩ — FILED 2026-10-26 by `RELEASE-0121-01` · `openspec/changes/prepare-0-12-1-installers/`
+## [x] P-068 — Release candidate `0.12.1`: tested installers after the delivered `0.11.6` ⟨priority: high⟩ — DONE 2026-10-26 by `RELEASE-0121-01` · `openspec/changes/archive/2026-10-26-prepare-0-12-1-installers/`
 
 **What.** Move the one shared release number from the already-tagged `0.12.0` to `0.12.1`, build the three
 matching Windows installers from one commit, and hand the owner the requested CG Control and CG Designer
@@ -4132,3 +4132,10 @@ fresh screenshots from this build; the full local gate and Linux CI pass; the ma
 three installers and passes clean-install, setup-window, bridge, app and every upgrade acceptance, including
 `0.11.6`; the two requested installer files are downloaded and their SHA-256 hashes recorded. No tag or release
 is published without a separate owner decision.
+
+**Evidence.** The final full local gate passed `103/103`; Linux
+[run 40258454645](https://github.com/yasermostafaee/cg/actions/runs/40258454645) passed all five jobs including
+E2E; Desktop [run 40260874571](https://github.com/yasermostafaee/cg/actions/runs/40260874571) passed every
+applicable job, including the open-app `0.11.6 → 0.12.1` upgrade. The two requested installers were downloaded
+to the untracked `installers-ci-0.12.1/` folder and their exact sizes and hashes are retained in the archived
+change. No tag, draft or published release was created.

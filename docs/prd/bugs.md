@@ -1364,7 +1364,7 @@ weaker claim than it sounds, since CI runs the same suite far less contended.
   fails an innocent suite), [[B-078]] (the stale-process Playwright collision the repair rules
   already carve out as "not a code bug").
 
-## [~] B-354 — a clean Turbo cache hit drops the generated single-file runtime and breaks downstream builds ⟨priority: high — blocks Linux CI and the 0.12.1 installer candidate⟩ — FILED 2026-10-26 by `RELEASE-0121-01`
+## [x] B-354 — a clean Turbo cache hit drops the generated single-file runtime and breaks downstream builds ⟨priority: high — blocked Linux CI and the 0.12.1 installer candidate⟩ — FIXED 2026-10-26 by `RELEASE-0121-01` (`22d51af3`)
 
 **Repro:** run the PR workflow from a clean Linux checkout when
 `@cg/single-file-export#build` is restored from Turbo's cache, then let the test graph build
@@ -1381,12 +1381,14 @@ tsbuildinfo. On the clean cache hit, Turbo restored `dist` but not `src/generate
 project reference still compiled the package source and failed. A populated developer worktree
 masked the defect.
 
-**Fix in progress:** treat `src/generated/**` as a build output and `scripts/**` as a build input.
-The latter makes a generator edit invalidate the artifact that generator produced. Regression pin:
-`packages/single-file-export/tests/build-cache-contract.test.ts`; the release gate must also prove a
-real delete-and-cache-restore cycle before this item closes.
+**Fix:** treat `src/generated/**` as a build output and `scripts/**` as a build input. The latter makes a
+generator edit invalidate the artifact that generator produced. Regression pin:
+`packages/single-file-export/tests/build-cache-contract.test.ts`. A real delete-and-restore probe returned
+`9/9` cache hits and `FULL TURBO` while restoring the missing file; the full local gate passed `103/103`, and
+clean Linux [run 40258454645](https://github.com/yasermostafaee/cg/actions/runs/40258454645) passed all five
+jobs, including the downstream `pack-factory` build and E2E.
 
-**Env:** GitHub Actions Ubuntu runner, clean checkout; release candidate commit `960e6a4c`.
+**Env:** GitHub Actions Ubuntu runner, clean checkout; fixed release candidate commit `22d51af3`.
 **Cross-refs:** [[P-042]] / [[P-049]] (the same generator's separate concurrent-writer debt),
 [[P-068]] (the release whose clean CI exposed this cache contract).
 

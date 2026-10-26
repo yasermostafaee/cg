@@ -1,6 +1,6 @@
 # desktop-delivery
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: A candidate uses a new, internally consistent release identity
 
