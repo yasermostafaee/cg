@@ -39,7 +39,9 @@ ids immutable after creation.
 The Studio SHALL provide a Persian/RTL structured interface for customer identity, targets, semantic
 colours, licensed fonts, brand assets, template recipes, explicit mappings and preview data. Saving
 SHALL validate the existing `BrandKitSchema` and `PackRecipeSchema`, write those canonical JSON
-documents, and return readable field-specific errors.
+documents, and return readable field-specific errors. Before save, every required field SHALL be
+visibly distinguishable from optional fields, with short inline guidance that tells the operator
+what value is expected and what the next incomplete step is.
 
 #### Scenario: The operator saves valid customer configuration
 
@@ -50,6 +52,31 @@ documents, and return readable field-specific errors.
 
 - **WHEN** the operator attempts to save a font without confirmed embedding rights
 - **THEN** the save is refused and the previous valid documents remain intact
+
+#### Scenario: A new operator opens an incomplete customer
+
+- **WHEN** one or more required fields are empty
+- **THEN** those fields are marked as required before save
+- **AND** the interface identifies the next incomplete step without requiring schema knowledge
+
+### Requirement: The Studio provides inspectable examples without publishing customer work
+
+The Studio SHALL include a small set of read-only example customer packs that demonstrate materially
+different outputs the Factory can produce. An operator SHALL be able to inspect an example's Brand
+Kit, recipes, mappings and representative preview/delivery evidence, and start a new customer from a
+copy. Examples SHALL live in Studio-owned assets, SHALL NOT be mistaken for real customer records and
+SHALL NOT appear in Designer's starter catalogue.
+
+#### Scenario: The operator explores what the Factory can produce
+
+- **WHEN** the operator opens the examples area
+- **THEN** at least one complete example can be inspected from inputs through representative output
+- **AND** copying it creates an independent editable customer without modifying the example
+
+#### Scenario: Designer opens after examples are installed
+
+- **WHEN** the Studio's example assets exist on the same computer
+- **THEN** Designer's existing first-page samples are unchanged
 
 ### Requirement: The Studio inspects masters without modifying them
 

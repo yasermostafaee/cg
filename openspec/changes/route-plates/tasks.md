@@ -77,3 +77,21 @@
       `FOLLOWUPS-01`'s head `b5e681f4`: PR <https://github.com/yasermostafaee/cg/actions/runs/36410757836>
       and Desktop <https://github.com/yasermostafaee/cg/actions/runs/36410757798>, both `success`, every job
       RAN
+
+## 6. Target Playout activation (owner field report, 2026-10-26)
+
+- [x] 6.1 Diagnose the screenshots: multicast UDP, NDI and RTMP are D10's direct-safe inputs; the
+      missing unicast RTP and SDI are exclusive inputs intentionally absent from a direct-only D10
+- [x] 6.2 Verify CG `0.11.6` already contains route-input, playlist-output and loop-prevention support
+- [x] 6.3 Write the target-side request and acceptance evidence in
+      `docs/integration/playout/CG-CONTROL-REQUEST-ROUTE-INPUTS-PLAYLIST-2026-10-26.md`
+- [x] 6.4 Identify the exact target and distinguish configuration from an old build: live target
+      `192.168.21.112` serves Playout `2.12.0`; CG Bridge `0.12.0` reports CasparCG `up` and its
+      Playout session `signed-in`; the owner's credential-free UI census shows five Playout inputs
+      versus only the three direct-safe D10 rows and no route/playlist row, so `RouteInputs` is off,
+      not unsupported. Evidence is recorded in the target-side request document
+- [ ] 6.5 In a maintenance window, enable this Playout's input holder plus
+      `CgControl.RouteInputs`; no Playout upgrade is needed, but this operation may restart the core
+- [ ] 6.6 Verify D10 carries an epoch, route rows for the unicast RTP and SDI inputs, and `pl-` rows with
+      `playlistOf`; then verify selection, picture, no feedback loop and restart/epoch behavior in CG
+      Control

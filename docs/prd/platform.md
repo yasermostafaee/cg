@@ -4144,6 +4144,11 @@ customer templates into Designer's sample/starter catalogue.
   appears on Designer's first page; the existing Designer samples remain unchanged.
 - WHEN a remote machine attempts to reach the Studio THEN no non-loopback listener exposes the
   private tool.
+- WHEN a customer is incomplete THEN required fields are visibly different from optional fields and
+  the Studio identifies the next incomplete step before save, validation or build.
+- WHEN an operator needs to understand the possible outputs THEN the Studio offers read-only,
+  end-to-end examples that can be inspected and copied into a new customer without modifying the
+  examples or adding anything to Designer's starter catalogue.
 
 **Notes:** active change: [`brand-pack-studio`](../../openspec/changes/brand-pack-studio/). This is
 an internal tool layered over the archived Brand Pack Factory v1; it is not a third desktop app.

@@ -43,5 +43,17 @@ Lane: **FULL** — this local UI persists customer configuration and produces pl
 - [x] 5.2 Real-browser Studio E2E covers restore → edit/save → inspect → validate/build →
       restart-visible and responsive RTL layout at 1280/390 px; both package Playwright tests green
 - [x] 5.3 Full local gate green: 103/103 tasks; strict OpenSpec 90/90
-- [ ] 5.4 Push to `dev` and record completed green Linux CI including the E2E job
+- [x] 5.4 Pushed through `4f730e0f` to `dev`; Linux CI completed green, including the E2E job:
+      <https://github.com/yasermostafaee/cg/actions/runs/40285911739>
 - [ ] 5.5 Request owner confirmation before archive
+
+## 6. Owner UX follow-up (reported 2026-10-26)
+
+- [ ] 6.1 Mark every required Brand Kit/recipe/mapping field visibly and distinguish optional fields
+- [ ] 6.2 Add short field guidance plus a next-incomplete-step summary before save/validate/build
+- [ ] 6.3 Add read-only, end-to-end examples showing distinct output types, with representative
+      preview/delivery evidence
+- [ ] 6.4 Allow an example to be copied into a new independent customer; examples remain outside the
+      customer workspace and Designer starter catalogue
+- [ ] 6.5 Cover required-state guidance, example inspection/copy and Designer isolation in unit and
+      real-browser tests
