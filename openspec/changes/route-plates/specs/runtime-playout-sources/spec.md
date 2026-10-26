@@ -58,3 +58,31 @@ station's channels SHALL be offered on none. The picker and the bridge's refusal
 - **WHEN** a Playout route's `compatibleChannels` names none of this station's channels **THEN** it is disabled on
   every row
 - **AND** a hand-made entry or a D10 stream that names no channels is offered everywhere, as before (the control)
+
+### Requirement: The Playout's playlist output SHALL be listed as an input under the Playout's own name
+
+D10's per-channel playlist row (`pl-<code>`, a `route` producer with its `layer`, and `playlistOf`) SHALL be
+parsed and listed in the Inputs tab under the name D10 gives it. Its layer SHALL be read from D10 and never
+assumed. A row with `available: false` SHALL be shown disabled with its reason in words — `not-running`,
+`pending-restart`, and `unlicensed`, which also says the Playout clears that channel. It SHALL be offered on
+the channels its `compatibleChannels` names, by the one predicate the picker and the bridge share.
+
+Inside the Inputs tab, every row carrying `playlistOf` SHALL precede every row without it. The partition
+SHALL be stable: Playlist rows SHALL keep their D10 order among themselves, and all remaining inputs SHALL
+keep their D10 order. An unavailable Playlist row SHALL remain first but disabled with its existing reason.
+The separate `None` choice, Media tab, availability and compatible-channel behaviour SHALL NOT change.
+
+#### Scenario: The playlist output in the Inputs tab
+
+- **WHEN** D10 lists `خروجیِ پخش: …` for CH 1 with `route` layer 7 **THEN** the Inputs tab lists it under that
+  name, and binding it seats `route://1-7`
+- **AND WHEN** the row is `available: false` with `unlicensed` **THEN** it is disabled and its title says the
+  Playout clears that channel
+
+#### Scenario: The playlist output leads the Inputs list
+
+- **WHEN** D10 lists ordinary inputs before a `pl-<code>` row **THEN** the Playlist output is the first row
+  inside Inputs
+- **AND** multiple Playlist outputs keep their D10 order
+- **AND** every remaining input keeps its prior relative order
+- **AND** an unavailable Playlist output remains first and disabled with its reason

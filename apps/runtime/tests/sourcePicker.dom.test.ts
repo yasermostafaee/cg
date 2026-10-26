@@ -22,10 +22,10 @@ import { choosePickerOption, closePicker, openPicker, pickerTab } from './suppor
  *
  * What it must be true of, whichever of its three call sites it sits in: it looks like the select
  * it replaced; it opens an anchored panel with the call site's choices above two tabs; inputs are
- * listed by NAME in the Playout's order, disabled — never hidden — when they cannot be bound or are
- * not on this row's channel; media are searched on the Playout's side, a page at a time, in a list
- * that draws only what is in view; inputs and media never meet; the keyboard reaches everything;
- * and a choice is returned ONCE.
+ * listed by NAME with playlist outputs first and both groups otherwise in the Playout's order,
+ * disabled — never hidden — when they cannot be bound or are not on this row's channel; media are
+ * searched on the Playout's side, a page at a time, in a list that draws only what is in view;
+ * inputs and media never meet; the keyboard reaches everything; and a choice is returned ONCE.
  */
 
 const CATALOG: SourceCatalog = {
@@ -331,11 +331,13 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
     ).toBe(1);
   });
 
-  it('Inputs lists the Playout’s inputs by NAME, in its order — no kind, no address; the tabs carry counts', async () => {
+  it('Inputs puts playlist outputs first and preserves both groups’ Playout order — no kind, no address; the tabs carry counts', async () => {
     const panel = await openPicker(await render({}));
     await settle();
     const names = [...panel.querySelectorAll('[data-picker-input] bdi')].map((b) => b.textContent);
     expect(names).toEqual([
+      'خروجیِ پخش: آپاسای',
+      'خروجیِ پخش: کانال دوم',
       'Studio 1',
       'دوربین خبر',
       'ورودی ۳',
@@ -343,8 +345,6 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
       'Channel one only',
       'Studio 7',
       'خروجی کانال ۲',
-      'خروجیِ پخش: آپاسای',
-      'خروجیِ پخش: کانال دوم',
     ]);
     expect(panel.textContent).not.toMatch(/NDI|Stream|rtsp|STUDIO-PC/);
     const tabs = [...panel.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
@@ -620,7 +620,7 @@ describe('the keyboard, and a choice returned ONCE', () => {
     const active = list?.getAttribute('aria-activedescendant');
     expect(active).toBeTruthy();
     expect(document.getElementById(active ?? '')?.getAttribute('data-picker-input')).toBe(
-      'in-studio1',
+      'in-pl-apasai',
     );
     await act(async () => {
       list?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -628,7 +628,7 @@ describe('the keyboard, and a choice returned ONCE', () => {
     });
     await settle();
     expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith('in-studio1');
+    expect(onChange).toHaveBeenCalledWith('in-pl-apasai');
     expect(document.querySelector('[data-popover]')).toBeNull();
   });
 

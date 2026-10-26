@@ -4252,6 +4252,11 @@ tick error that clears the box with no `epoch` change is caught by `B-292`'s sil
 `sourcePicker.dom.test.ts`, `playlistAudioLock.dom.test.ts`, e2e `playlist-output.spec.ts`. **Owed:** `2.9.2`
 on `.111`, where both channels' L is 5.
 
+**Owner follow-up (2026-10-26; built by `route-plates` §6.6g).** WHEN the Inputs tab contains one or
+more D10 rows carrying `playlistOf` THEN those rows are the first rows inside the Inputs list, even when
+unavailable. Their D10 order, and the D10 order of every remaining input, is preserved. The separate
+`None` choice, Media tab, availability reasons and compatible-channel rules are unchanged.
+
 ## [x] R-076 — PGM audio in CG Control, in sync with the PGM picture, with a VU meter ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.2 · ANSWERED by `PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §2 (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` E (§5) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: `2.9.2` on `.111`
 
 **What.** The programme's sound in CG Control, in sync with the PGM monitor's picture, and a VU meter

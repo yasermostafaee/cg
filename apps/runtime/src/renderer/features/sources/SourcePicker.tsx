@@ -41,12 +41,13 @@ import {
 /**
  * 🔴 `PLAYOUT-SOURCES-01` §2.A — **ONE SOURCE PICKER, AT EVERY PLACE A PLATE IS BOUND.**
  *
- * The station's sources are the Playout's now: its INPUTS (a short list, in the Playout's own order)
- * and its MEDIA library (thousands of items, searched on the Playout's side). A native select over
- * `catalog.sources` could show neither honestly, so the three call sites — Template defaults, the
- * Inspector's Look inputs and the on-air swap — share this one picker. Each keeps its own commit
- * model (Save defaults · the draft with Update/Discard · the swap committing on change): the picker
- * only RETURNS A CHOICE, once, and closes.
+ * The station's sources are the Playout's now: its INPUTS (a short list whose playlist outputs lead,
+ * with the Playout's order preserved inside both groups) and its MEDIA library (thousands of items,
+ * searched on the Playout's side). A native select over `catalog.sources` could show neither
+ * honestly, so the three call sites — Template defaults, the Inspector's Look inputs and the on-air
+ * swap — share this one picker. Each keeps its own commit model (Save defaults · the draft with
+ * Update/Discard · the swap committing on change): the picker only RETURNS A CHOICE, once, and
+ * closes.
  *
  * ── CLOSED ──────────────────────────────────────────────────────────────────────────────
  *
@@ -58,13 +59,14 @@ import {
  * ── OPEN: AN ANCHORED PANEL, NOT A MODAL ────────────────────────────────────────────────
  *
  * Two of the call sites are dialogs already (`Popover`). The call site's special choices sit in
- * one row above the tabs, the same in both. `Inputs n` lists what the Playout offers, in its order,
- * by NAME only — never the kind, never an address; one this product cannot play, or not on this
- * row's channel (v1.3 rule 1), is listed DISABLED with the reason in its `title`, not hidden, so
- * nobody wonders where it went. `Media n` searches the library: pages of 50, a virtualised list, the
- * next page fetched near the end, typing debounced 250 ms, earlier results kept under a thin line
- * while the next ones load. Media never appear under Inputs and inputs never under Media — a media
- * item named `Studio 1` is a media row, with the media icon.
+ * one row above the tabs, the same in both. `Inputs n` puts playlist outputs first, then everything
+ * else, preserving the Playout's order inside each group. It lists each source by NAME only — never
+ * the kind, never an address; one this product cannot play, or not on this row's channel (v1.3 rule
+ * 1), is listed DISABLED with the reason in its `title`, not hidden, so nobody wonders where it went.
+ * `Media n` searches the library: pages of 50, a virtualised list, the next page fetched near the end,
+ * typing debounced 250 ms, earlier results kept under a thin line while the next ones load. Media
+ * never appear under Inputs and inputs never under Media — a media item named `Studio 1` is a media
+ * row, with the media icon.
  */
 
 export interface SourceChoice {
@@ -266,7 +268,13 @@ function PickerPanel({
   const [tab, setTab] = useState<Tab>(initialTab);
   const media = useMediaSearch();
   const catalog = currentSourceCatalog();
-  const inputs = catalog.sources.filter((s) => s.origin !== 'media' && s.departed !== true);
+  const catalogInputs = catalog.sources.filter(
+    (source) => source.origin !== 'media' && source.departed !== true,
+  );
+  const inputs = [
+    ...catalogInputs.filter(isPlaylistOutput),
+    ...catalogInputs.filter((source) => !isPlaylistOutput(source)),
+  ];
   const tabs = [
     { id: 'inputs', label: `Inputs ${String(inputs.length)}` },
     {

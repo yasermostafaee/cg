@@ -117,3 +117,14 @@ The report's §5 left eight decisions to the owner. Those he took, and what beca
   our own recorded stray off air on an operator's request, never in 1–49.
 - **§5.6 — a holder moved while the core runs: the row says it waits, until a re-take** (recorded, no
   change — decision 3's last sentence stands).
+
+## Target activation UI follow-ups (2026-10-26)
+
+**Playlist output first in Inputs.** Ordering is presentation-only and belongs at the shared
+`SourcePicker` boundary, after media and departed rows have been excluded. The picker stable-partitions
+the remaining rows by whether `playlistOf` is present: every Playlist output comes first, Playlist outputs
+keep their D10 order among themselves, and every ordinary input keeps its D10 order among the remainder.
+The source catalogue itself is not reordered, so no other consumer silently inherits a presentation
+choice. An unavailable Playlist output stays first and disabled with the same reason; `None`, the Media
+tab and the existing availability and compatible-channel decisions are unchanged. The explicit order is
+pinned in `sourcePicker.dom.test.ts` and on the rendered picker in `playlist-output.spec.ts`.

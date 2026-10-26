@@ -114,3 +114,7 @@
       `route` as `SDI`, so held RTP/RTMP and the Playlist route are mislabeled. CG can distinguish
       `playlistOf` and otherwise fall back to `Route`; exact original RTP/RTMP/SDI provenance needs
       an optional additive D10 field from the Playout
+- [x] 6.6g Put every `playlistOf` row first inside every `SourcePicker` Inputs list, using a stable
+      partition that preserves D10 order within the Playlist and ordinary groups; leave `None`, Media,
+      unavailable/disabled and channel-compatibility behaviour unchanged. Update
+      `sourcePicker.dom.test.ts` and add a Playwright assertion in `playlist-output.spec.ts`

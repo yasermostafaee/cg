@@ -31,12 +31,58 @@ test.use({
 });
 
 const REASON = 'Programme sound is already on air';
+const PICKER_TEMPLATE = 'tpl-playlist-picker';
 
-test('the playlist output is an input under the Playout’s name; bound to a plate, its audio is LOCKED at 0 — control: the plate beside it keeps its controls', async ({
+test('the playlist output leads Inputs under the Playout’s name; bound to a plate, its audio is LOCKED at 0 — control: the plate beside it keeps its controls', async ({
   app,
 }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
+
+  // Owner follow-up, 2026-10-26 — the high-value Playlist source leads the picker even though D10
+  // lists it after the ordinary inputs. This is presentation order only; the catalogue keeps D10 order.
+  await page.evaluate(async (templateId) => {
+    const w = window as unknown as {
+      cg: { templates: { import: (req: { template: unknown; html: string }) => Promise<unknown> } };
+    };
+    await w.cg.templates.import({
+      template: {
+        templateId,
+        name: 'playlist-picker',
+        sourceFileName: 'playlist-picker.vcg',
+        templateType: 'lower-third',
+        fields: [],
+        liveSources: {
+          resolution: { width: 1920, height: 1080 },
+          defaultPosition: { anchor: 'center', dx: 0, dy: 0 },
+          sources: [
+            {
+              elementId: 'picker-plate',
+              sourceId: 'guest-1',
+              rect: { x: 0, y: 0, width: 640, height: 360 },
+              dynamic: false,
+            },
+          ],
+        },
+      },
+      html: '<!doctype html><html><body>playlist picker</body></html>',
+    });
+  }, PICKER_TEMPLATE);
+  const pickerRow = await app.loadTemplate(PICKER_TEMPLATE);
+  await app.selectLayerRow(pickerRow);
+  await app.inspector.locator('[data-open-template-defaults]').click();
+  const defaults = page.getByRole('dialog', { name: 'Source defaults' });
+  await expect(defaults).toBeVisible();
+  await defaults.locator('[data-defaults-select="guest-1"]').click();
+  const picker = page.getByRole('dialog', { name: 'Choose a source' });
+  await expect(picker.locator('[data-picker-input]').first()).toHaveAttribute(
+    'data-picker-input',
+    'in-pl-apasai',
+  );
+  await page.keyboard.press('Escape');
+  await expect(picker).toHaveCount(0);
+  await defaults.getByRole('button', { name: 'Cancel' }).click();
+
   // Bind the seeded row's first plate to the playlist output, as its template's default.
   const bound = await page.evaluate(async () => {
     const w = window as unknown as {
