@@ -39,7 +39,12 @@
 
 ## 4. Verification and closeout
 
-- [ ] 4.1 Run focused shared/bridge/runtime unit and integration suites, typecheck and lint for affected workspaces
-- [ ] 4.2 Run Runtime Playwright for the operator-visible contract, then the repository full gate
-- [ ] 4.3 Re-read the PRD and both deltas against the implementation; record required Linux CI evidence beside this
-      task before archiving the change
+- [x] 4.1 Focused shared/bridge/runtime verification is green: `playout-sources.test.ts` 33/33,
+      `live-look-reconcile.integration.test.ts` 70/70 (including all four B-355 cases), and
+      `mockPlayoutSources.test.ts` 11/11; affected typecheck and lint also passed in the full gate
+- [x] 4.2 Runtime Playwright's two B-355 operator scenarios passed, followed by the green repository full gate at
+      `.gate-logs/gate-20261026T115628Z-4712.log` (`exit 0`, 103/103 Turbo tasks, strict OpenSpec 93/93)
+- [x] 4.3 Re-read `B-355` and both deltas against the implementation: the atomic Update refusal, destination-strict
+      shared-plate switch, off-air preparation, unchanged-binding exception and narrow emergency repair all match;
+      full CI and Playwright E2E both ran and passed on the exact candidate in
+      [Linux run 40320200025](https://github.com/yasermostafaee/cg/actions/runs/40320200025)
