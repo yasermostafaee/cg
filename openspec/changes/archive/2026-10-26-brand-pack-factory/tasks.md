@@ -54,5 +54,7 @@ Lane: **FULL** — the output is a playout artifact even though the factory is a
       are legible with no horizontal overflow (2026-10-26)
 - [x] 5.3 Full local gate green: 103/103 tasks, format/control-byte checks clean and strict
       OpenSpec validation 89/89 (`gate-20261025T231623Z-22200.log`, 2026-10-26)
-- [ ] 5.4 Push and obtain green Linux CI including e2e
-- [ ] 5.5 Archive the OpenSpec only after all requirements and delivery evidence are complete
+- [x] 5.4 Push and obtain green Linux CI including e2e: GitHub Actions run
+      [40245694112](https://github.com/yasermostafaee/cg/actions/runs/40245694112) succeeded
+      (2026-10-26)
+- [x] 5.5 Archive the OpenSpec only after all requirements and delivery evidence are complete
