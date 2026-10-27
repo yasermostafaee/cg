@@ -804,6 +804,47 @@ export async function buildValidVcg(templateId = 'tpl-e2e-1'): Promise<Uint8Arra
  */
 export async function buildListFieldVcg(templateId = 'tpl-e2e-list'): Promise<Uint8Array> {
   const scene = fixtureScene();
+  const layer = scene.layers[0];
+  if (layer === undefined) throw new Error('fixture scene has no layer');
+  layer.children = [
+    ...layer.children,
+    {
+      id: 'el-ticker',
+      name: 'Ticker',
+      type: 'ticker',
+      transform: {
+        position: { x: 100, y: 900 },
+        size: { w: 1200, h: 72 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 2,
+      font: {
+        family: 'Vazirmatn',
+        weight: 500,
+        style: 'normal',
+        size: 36,
+        lineHeight: 1.4,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      direction: 'rtl',
+      verticalAlign: 'middle',
+      speed: 120,
+      repeat: 'infinite',
+      cycleBoundary: 'seamless',
+      gap: 48,
+      separator: ' • ',
+      items: [
+        { id: 'i1', text: 'سلام دنیا' },
+        { id: 'i2', text: 'اخبار فوری' },
+      ],
+    },
+  ];
   scene.fields = [
     ...scene.fields,
     {
@@ -816,6 +857,13 @@ export async function buildListFieldVcg(templateId = 'tpl-e2e-list'): Promise<Ui
         { id: 'i2', text: 'اخبار فوری' },
       ],
     },
+  ];
+  // CG Control intentionally exposes only fields that drive a render target. Keep
+  // this fixture representative of a real ticker instead of relying on an orphaned
+  // authoring field that the operator form now correctly omits.
+  scene.bindings = [
+    ...scene.bindings,
+    { fieldId: '_tickerTexts', target: { kind: 'ticker-items', elementId: 'el-ticker' } },
   ];
   const fontDeps: readonly FontReference[] = scene.fonts;
   const assetIndex: readonly AssetEntry[] = [];
@@ -1334,6 +1382,10 @@ export async function buildNumberFieldVcg(templateId = 'tpl-e2e-number'): Promis
   scene.fields = [
     ...scene.fields,
     { id: 'fontSize', label: 'Font size', required: false, type: 'number', default: 5, step: 1 },
+  ];
+  scene.bindings = [
+    ...scene.bindings,
+    { fieldId: 'fontSize', target: { kind: 'transform', elementId: 'el-name', property: 'x' } },
   ];
   const fontDeps: readonly FontReference[] = scene.fonts;
   const assetIndex: readonly AssetEntry[] = [];

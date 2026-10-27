@@ -20,8 +20,8 @@ SHALL be built from one commit and SHALL be required when updating a `0.12.2` st
 
 ### Requirement: The candidate proves delivery and remains unpublished
 
-The full local gate and E2E lane, Linux workspace/E2E and every applicable Windows installer, smoke and upgrade
-job SHALL pass. The exact installer artifacts SHALL be downloaded, checksummed and placed in the local handoff
+The full local gate and E2E lane SHALL pass, together with Linux workspace/E2E and every applicable Windows
+installer, smoke and upgrade job. The exact installer artifacts SHALL be downloaded, checksummed and placed in the local handoff
 folders. The candidate SHALL NOT create a tag, draft release or published release.
 
 #### Scenario: Delivery completes
