@@ -4207,3 +4207,16 @@ station is the complete three-installer set and the Windows workflow must prove 
 
 **Notes:** active change: [`prepare-0-12-2-installers`](../../openspec/changes/prepare-0-12-2-installers/).
 The shared compatibility floor remains unchanged; publication requires a separate owner decision.
+
+## [~] P-071 — Release candidate `0.12.3`: fixed-file and Variables delivery ⟨priority: high⟩ — FILED 2026-10-27 by `RELEASE-0123-01` · `openspec/changes/prepare-0-12-3-installers/`
+
+**What:** build and retain one matching `0.12.3` set of CG Bridge, CG Control and CG Designer installers from the
+completed fixed-file, delimiter, Variables-tab and Inspector follow-up work. Put the final installers in the local
+handoff folder and `dist/`; do not publish a release.
+
+**Why:** `0.12.2` already names delivered bytes. The new file contract crosses all three products, so a station
+already on `0.12.2` must install the complete `0.12.3` set rather than receiving mixed binaries.
+
+**Acceptance:** all version surfaces say `0.12.3`; the full local gate and E2E lane pass; Linux workspace/E2E and
+all applicable Windows installer/smoke/upgrade jobs pass on the exact candidate commit; all three installer files
+are downloaded with hashes and placed in `installers-ci-0.12.3/` and `dist/`; no tag or release is created.

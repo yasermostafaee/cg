@@ -27,7 +27,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 // `RELEASE-0116-01`: `0.11.6`; `RUN-NEXT-VERSION-03`: `0.12.0`; `RELEASE-0121-01`: `0.12.1`;
 // `RELEASE-0122-01`: `0.12.2`),
 // which is the point.
-const RELEASE = '0.12.2';
+const RELEASE = '0.12.3';
 
 let scratch: string | null = null;
 
