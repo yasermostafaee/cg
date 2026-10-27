@@ -29,6 +29,7 @@ test.describe('Regressions', () => {
     await app.setDataKey('title');
 
     await app.deselect();
+    await app.page.getByRole('tab', { name: 'Variables' }).click();
     const bind = app.fieldCard('title').getByRole('button', { name: /Bind from canvas/ });
     await expect(bind).toBeDisabled(); // already bound — can't add another
   });

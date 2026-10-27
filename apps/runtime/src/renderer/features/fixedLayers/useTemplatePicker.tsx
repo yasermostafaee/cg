@@ -499,6 +499,7 @@ export function useTemplatePicker(): {
     dropped on the list imports the same way. `importBusy` holds the door while one runs.
   */
   const [importBusy, setImportBusy] = useState(false);
+  const [importingFileName, setImportingFileName] = useState<string | null>(null);
   /** This dialog's OWN hidden `.vcg` input — the row's is no longer in the import path. */
   const fileRef = useRef<HTMLInputElement | null>(null);
   /** The latest `runImport`, for the drop handler declared before it. */
@@ -618,6 +619,8 @@ export function useTemplatePicker(): {
         setQuery('');
         setKind('all');
         setDragging(false);
+        setImportBusy(false);
+        setImportingFileName(null);
         setUsage(new Map());
         // A selection is per-opening: the row that asked last time is not this row.
         setSelected(null);
@@ -917,15 +920,27 @@ export function useTemplatePicker(): {
    */
   const runImport = useCallback(
     async (pick: () => Promise<File | null>): Promise<void> => {
-      setImportBusy(true);
       setMessage(null);
       setReferences([]);
+      let file: File | null;
+      try {
+        file = await pick();
+      } catch (err) {
+        setMessage({
+          role: 'refusal',
+          text: err instanceof Error ? err.message : 'The package could not be selected.',
+        });
+        return;
+      }
+      // Closing the operating-system chooser is not an import and must not flash a busy surface.
+      if (file === null) return;
+      setImportBusy(true);
+      setImportingFileName(file.name);
       try {
         // `CHANNEL-TEMPLATES-01` — onto the row's channel's list, and no other.
         // `B-352` — a package whose id the channel lists asks Update / Add as a new template.
-        const template = await importVcgToStation(pick, channel, askOnClash);
-        // The operator dismissed the OS dialog: their own "no", not a failure.
-        if (template === null) return;
+        const template = await importVcgToStation(() => Promise.resolve(file), channel, askOnClash);
+        if (template === null) return; // The injected file means this is defensive only.
         const templates = await window.cg.templates.list(listRequest(channel));
         setRequest((current) => (current === null ? null : { ...current, templates }));
         setSelected(template);
@@ -942,6 +957,7 @@ export function useTemplatePicker(): {
         });
       } finally {
         setImportBusy(false);
+        setImportingFileName(null);
       }
     },
     [askOnClash, channel],
@@ -1035,6 +1051,7 @@ export function useTemplatePicker(): {
         /* `REPAIR-03` B, audit row 98 — the reference draws a 42 px emblem in this head. */
         emblem={LayoutTemplate}
         size="library"
+        busy={importBusy}
         onClose={() => settle(null)}
         {...(message !== null
           ? { message: remedies === null ? message : { ...message, remedies } }
@@ -1057,7 +1074,7 @@ export function useTemplatePicker(): {
               which reads as a line of static text rather than a control. `cancel`
               resolves to `neutral`: neutral must not mean invisible.
             */}
-            <ModalAction actionRole="cancel" onClick={() => settle(null)}>
+            <ModalAction actionRole="cancel" disabled={importBusy} onClick={() => settle(null)}>
               Cancel
             </ModalAction>
             {/*
@@ -1088,7 +1105,7 @@ export function useTemplatePicker(): {
               */
               <ModalAction
                 actionRole="primary"
-                disabled={!loadable(selected)}
+                disabled={importBusy || !loadable(selected)}
                 data-template-commit=""
                 onClick={() => commit(selected)}
               >
@@ -1112,7 +1129,16 @@ export function useTemplatePicker(): {
           onDragLeave={onDragLeave}
           onDrop={onDrop}
         >
-          {/*
+          {importBusy ? (
+            <div className="cg-tpl-import-progress" data-template-import-progress="" role="status">
+              <span className="cg-tpl-import-progress__spinner" aria-hidden="true" />
+              <strong>Importing template…</strong>
+              <bdi title={importingFileName ?? undefined}>{importingFileName}</bdi>
+              <span>Verifying and preparing the package.</span>
+            </div>
+          ) : (
+            <>
+              {/*
             🔴 `MODAL-CHROME-10` ADDENDUM D §D1 — **ONE TOOLS ROW, IN THE DIALOG'S CHROME.**
             (`CHANNEL-TEMPLATES-01` — every door on it acts on the row's channel's list.)
 
@@ -1134,120 +1160,121 @@ export function useTemplatePicker(): {
             `UI-POLISH-01` C — there is one view again (`Manage` is retired), and the row stays
             where it is: the tools row still reaches the divider, and the one door still ends it.
           */}
-          <div className="cg-tpl-tools" data-template-tools="">
-            <label className="cg-tpl-search">
-              <Icon icon={Search} size={16} />
-              <input
-                type="search"
-                className="cg-field"
-                placeholder="Search templates…"
-                aria-label="Search templates"
-                autoComplete="off"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </label>
-            {/*
+              <div className="cg-tpl-tools" data-template-tools="">
+                <label className="cg-tpl-search">
+                  <Icon icon={Search} size={16} />
+                  <input
+                    type="search"
+                    className="cg-field"
+                    placeholder="Search templates…"
+                    aria-label="Search templates"
+                    autoComplete="off"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                </label>
+                {/*
               `RUNTIME-REPAIR-05` — IMPORT LIVES OUT HERE, not in the footer, because the
               footer's one primary is the LOAD. It sits at the end of the row, where the reference
               puts its own `Manage`: a station-level door, not about the row this dialog was
               opened from — which is why it belongs to the chrome rather than to a view.
               (`UI-POLISH-01` C — `Manage` itself is retired; delete is on each row.)
             */}
-            <ImportDoor onImport={openImport} busy={importBusy} />
-          </div>
-          {/*
+                <ImportDoor onImport={openImport} busy={importBusy} />
+              </div>
+              {/*
             🔴 `PAGE-REBUILD-01` (`C-034`) — THE TEMPLATES THIS CONSOLE CANNOT REBUILD, NAMED ONCE.
             Imported before CG Bridge kept the packages pages are built from (or their rebuild
             failed), so an earlier runtime's page is what they play. One line, each name isolated,
             the long form on hover; nothing else changes for them — no chip, no refusal.
           */}
-          {reimport.length > 0 && (
-            <div
-              className="cg-tpl-reimport"
-              data-template-reimport={String(reimport.length)}
-              title={REIMPORT_TITLE}
-            >
-              <Notice
-                noticeRole="notice"
-                aria="note"
-                text={reimportLine(reimport.length)}
-                remedies={reimport.map((t) => (
-                  <IsolatedName key={t.templateId} title={t.templateId}>
-                    {templateDisplayName(t)}
-                  </IsolatedName>
-                ))}
-              />
-            </div>
-          )}
-          {
-            /*
+              {reimport.length > 0 && (
+                <div
+                  className="cg-tpl-reimport"
+                  data-template-reimport={String(reimport.length)}
+                  title={REIMPORT_TITLE}
+                >
+                  <Notice
+                    noticeRole="notice"
+                    aria="note"
+                    text={reimportLine(reimport.length)}
+                    remedies={reimport.map((t) => (
+                      <IsolatedName key={t.templateId} title={t.templateId}>
+                        {templateDisplayName(t)}
+                      </IsolatedName>
+                    ))}
+                  />
+                </div>
+              )}
+              {
+                /*
               `RUNTIME-REPAIR-04` — the reference's `.template-layout`: a main column that reads
               the list DOWN, and a 342 px aside beside it. The aside is fixed and the main
               column takes the rest, which is the drawing's own arrangement.
             */
-            <div className="cg-tpl-layout" data-template-layout="">
-              <div className="cg-tpl-main">
-                {request.templates.length === 0 ? (
-                  /*
+                <div className="cg-tpl-layout" data-template-layout="">
+                  <div className="cg-tpl-main">
+                    {request.templates.length === 0 ? (
+                      /*
                     The reference's `.empty` shape (a title over a sentence) carrying the app's
                     own sentence — it names the control that ends the emptiness rather than a
                     panel that no longer exists (§6).
                   */
-                  <div className="cg-tpl-empty" data-template-empty="">
-                    <h3>Nothing on {listScope(channel)} yet</h3>
-                    <p>Import a .vcg package to begin.</p>
-                    <Button variant="primary" disabled={importBusy} onClick={openImport}>
-                      <Icon icon={FileUp} size={14} />
-                      Import a .vcg
-                    </Button>
+                      <div className="cg-tpl-empty" data-template-empty="">
+                        <h3>Nothing on {listScope(channel)} yet</h3>
+                        <p>Import a .vcg package to begin.</p>
+                        <Button variant="primary" disabled={importBusy} onClick={openImport}>
+                          <Icon icon={FileUp} size={14} />
+                          Import a .vcg
+                        </Button>
+                      </div>
+                    ) : (
+                      <PickerList
+                        request={request}
+                        query={query}
+                        kind={kind}
+                        onKind={setKind}
+                        unassigned={unassigned}
+                        selected={selected}
+                        onSelect={setSelected}
+                        onCommit={commit}
+                        onDelete={(t) => void deleteTemplate(t, channel)}
+                        onKeyDown={onListKeyDown}
+                      />
+                    )}
                   </div>
-                ) : (
-                  <PickerList
-                    request={request}
-                    query={query}
-                    kind={kind}
-                    onKind={setKind}
-                    unassigned={unassigned}
-                    selected={selected}
-                    onSelect={setSelected}
-                    onCommit={commit}
-                    onDelete={(t) => void deleteTemplate(t, channel)}
-                    onKeyDown={onListKeyDown}
-                  />
-                )}
-              </div>
-              <aside className="cg-tpl-aside" data-template-aside="" aria-label="Destination">
-                {request.destination !== null && (
-                  <div className="cg-tpl-dest" data-template-destination="">
-                    <span className="cg-tpl-dest__icon" aria-hidden="true">
-                      <Icon icon={Layers} size={18} />
-                    </span>
-                    <span className="cg-tpl-dest__text">
-                      <span className="cg-tpl-dest__name">
-                        Destination · <bdi>{request.destination.rowName}</bdi>
-                      </span>
-                      {/*
+                  <aside className="cg-tpl-aside" data-template-aside="" aria-label="Destination">
+                    {request.destination !== null && (
+                      <div className="cg-tpl-dest" data-template-destination="">
+                        <span className="cg-tpl-dest__icon" aria-hidden="true">
+                          <Icon icon={Layers} size={18} />
+                        </span>
+                        <span className="cg-tpl-dest__text">
+                          <span className="cg-tpl-dest__name">
+                            Destination · <bdi>{request.destination.rowName}</bdi>
+                          </span>
+                          {/*
                         `R-028` — the real coordinate stays in the sentence, because this is
                         where an operator finds the layer they may have to clear by hand.
                       */}
-                      <span className="cg-tpl-dest__meta">
-                        {request.accepts === 'low' ? 'Graphics bed row' : 'Operator row'} · on{' '}
-                        {request.destination.coord}
-                      </span>
-                      <span className="cg-tpl-dest__meta">
-                        {request.destination.holding === null ? (
-                          'Empty — nothing loaded on it.'
-                        ) : (
-                          <>
-                            Holding <bdi>{request.destination.holding}</bdi>. Loading replaces it.
-                          </>
-                        )}
-                      </span>
-                    </span>
-                  </div>
-                )}
-                {/*
+                          <span className="cg-tpl-dest__meta">
+                            {request.accepts === 'low' ? 'Graphics bed row' : 'Operator row'} · on{' '}
+                            {request.destination.coord}
+                          </span>
+                          <span className="cg-tpl-dest__meta">
+                            {request.destination.holding === null ? (
+                              'Empty — nothing loaded on it.'
+                            ) : (
+                              <>
+                                Holding <bdi>{request.destination.holding}</bdi>. Loading replaces
+                                it.
+                              </>
+                            )}
+                          </span>
+                        </span>
+                      </div>
+                    )}
+                    {/*
                   🔴 `RUNTIME-REPAIR-05` — THE SELECTION, READ OUT. This is the half of the
                   reference's aside `REPAIR-04` argued away for want of a selection to describe;
                   the owner has since made the selection real, so it is built.
@@ -1257,57 +1284,63 @@ export function useTemplatePicker(): {
                   a refusal it carries the whole sentence, not the chip, because this is the one
                   place there is room for it.
                 */}
-                {selected === null ? (
-                  <p className="cg-tpl-aside__hint" data-template-aside-hint="">
-                    Choose a template to see its details.
-                  </p>
-                ) : (
-                  <div className="cg-tpl-pick" data-template-selected={selected.templateId}>
-                    <p className="cg-tpl-pick__eyebrow">Selected template</p>
-                    {/* Golden rule 11 — the operator's word in the sentence, the id on the title. */}
-                    <IsolatedName className="cg-tpl-pick__name" title={selected.templateId}>
-                      {templateDisplayName(selected)}
-                    </IsolatedName>
-                    <dl className="cg-tpl-kv">
-                      <dt>Type</dt>
-                      <dd>{kindOf(selected) === 'bed' ? 'Graphics bed' : selected.templateType}</dd>
-                      <dt>Text fields</dt>
-                      <dd>{String(selected.fields.length)}</dd>
-                      <dt>Looks</dt>
-                      <dd>{String(selected.liveSources?.looks?.length ?? 0)}</dd>
-                      <dt>Live plates</dt>
-                      <dd>{String(selected.liveSources?.sources.length ?? 0)}</dd>
-                      {/* `UI-POLISH-01` C — `Manage`'s usage line, here now that `Manage` is gone. */}
-                      <dt>Rows</dt>
-                      <dd data-template-usage={String(usage.get(selected.templateId) ?? 0)}>
-                        {(usage.get(selected.templateId) ?? 0) === 0
-                          ? 'Not on any row'
-                          : `Used by ${count(usage.get(selected.templateId) ?? 0, 'row')}`}
-                      </dd>
-                    </dl>
-                    {(() => {
-                      const ok = loadable(selected);
-                      const refusal = REFUSAL[request.accepts];
-                      return (
-                        <div
-                          className={ok ? 'cg-tpl-verdict' : 'cg-tpl-verdict cg-tpl-verdict--warn'}
-                          data-template-verdict={ok ? 'ok' : 'refused'}
-                        >
-                          <span className="cg-tpl-verdict__icon" aria-hidden="true">
-                            <Icon icon={ok ? CheckCircle2 : AlertTriangle} size={16} />
-                          </span>
-                          <span>
-                            <strong>{ok ? COMPATIBLE.title : refusal.title}</strong>
-                            <span>{ok ? COMPATIBLE.text : refusal.text}</span>
-                          </span>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-              </aside>
-            </div>
-          }
+                    {selected === null ? (
+                      <p className="cg-tpl-aside__hint" data-template-aside-hint="">
+                        Choose a template to see its details.
+                      </p>
+                    ) : (
+                      <div className="cg-tpl-pick" data-template-selected={selected.templateId}>
+                        <p className="cg-tpl-pick__eyebrow">Selected template</p>
+                        {/* Golden rule 11 — the operator's word in the sentence, the id on the title. */}
+                        <IsolatedName className="cg-tpl-pick__name" title={selected.templateId}>
+                          {templateDisplayName(selected)}
+                        </IsolatedName>
+                        <dl className="cg-tpl-kv">
+                          <dt>Type</dt>
+                          <dd>
+                            {kindOf(selected) === 'bed' ? 'Graphics bed' : selected.templateType}
+                          </dd>
+                          <dt>Text fields</dt>
+                          <dd>{String(selected.fields.length)}</dd>
+                          <dt>Looks</dt>
+                          <dd>{String(selected.liveSources?.looks?.length ?? 0)}</dd>
+                          <dt>Live plates</dt>
+                          <dd>{String(selected.liveSources?.sources.length ?? 0)}</dd>
+                          {/* `UI-POLISH-01` C — `Manage`'s usage line, here now that `Manage` is gone. */}
+                          <dt>Rows</dt>
+                          <dd data-template-usage={String(usage.get(selected.templateId) ?? 0)}>
+                            {(usage.get(selected.templateId) ?? 0) === 0
+                              ? 'Not on any row'
+                              : `Used by ${count(usage.get(selected.templateId) ?? 0, 'row')}`}
+                          </dd>
+                        </dl>
+                        {(() => {
+                          const ok = loadable(selected);
+                          const refusal = REFUSAL[request.accepts];
+                          return (
+                            <div
+                              className={
+                                ok ? 'cg-tpl-verdict' : 'cg-tpl-verdict cg-tpl-verdict--warn'
+                              }
+                              data-template-verdict={ok ? 'ok' : 'refused'}
+                            >
+                              <span className="cg-tpl-verdict__icon" aria-hidden="true">
+                                <Icon icon={ok ? CheckCircle2 : AlertTriangle} size={16} />
+                              </span>
+                              <span>
+                                <strong>{ok ? COMPATIBLE.title : refusal.title}</strong>
+                                <span>{ok ? COMPATIBLE.text : refusal.text}</span>
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </aside>
+                </div>
+              }
+            </>
+          )}
         </div>
         {/*
           The dialog's OWN `.vcg` input. It used to be the ROW's, because the row owned the

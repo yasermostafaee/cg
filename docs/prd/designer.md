@@ -5774,3 +5774,31 @@ own level); WHEN a sound is dropped on the canvas THEN one `audio` element with 
 template is taken THEN an entrance sound plays, a timed one at its moment, an exit sound only at the stop; WHEN it is
 cleared without a stop THEN no sound; WHEN played at −12 dB on CasparCG THEN the channel reads 12 dB below 0 dB; WHEN
 rehearsed in CG Control THEN silence; WHEN exported THEN the `.vcg` and the single file carry the WAV.
+
+## [~] D-166 — Variables is its own tab: one compact table for every Data key, with empty Sequence groups omitted ⟨priority: high — the owner, 2026-10-27⟩ — `openspec/changes/designer-variables-tab/`
+
+**What:** move the composition's dynamic-field list out of the bottom of the Inspector and into a
+top-level **Variables** tab beside **Inspector** in the Designer's right pane. Variables presents the
+composition's own Data keys and non-empty nested namespaces in one compact table while retaining the
+existing authoring actions (rename the label, bind/rebind, unbind and delete). A Sequence composition
+item or nested composition with no dynamic data contributes no row and no `(no fields)` message.
+**Why:** on a real template the field cards are buried below playout and LOOK settings, while empty
+Sequence items add lines that say nothing. Cinegy Title's separate Variables surface is the clearer
+mental model: the canvas/element Inspector answers how the graphic looks, and Variables answers what
+data the operator may supply.
+**Acceptance:**
+
+- WHEN the author opens a composition with Data keys THEN the right pane offers **Inspector** and
+  **Variables**, and Variables shows every field in a compact table with its key, title, type and
+  binding plus the existing edit/remove actions
+- WHEN the author selects elements or edits the canvas THEN the Variables tab remains a
+  composition-level view and does not collapse back into the selected element's Inspector
+- WHEN a Sequence contains composition items whose aggregate has no dynamic fields THEN those items
+  produce no row and no `no fields` text; a nested item with fields still appears under its namespace
+- WHEN a composition has no variables THEN the Variables tab shows one concise empty state, while the
+  Inspector contains no FIELDS section
+- WHEN the author binds, unbinds, relabels or deletes a field from Variables THEN the existing field
+  and binding model changes exactly as it did from the former Inspector cards
+- WHEN Variables is viewed at the normal narrow Inspector width THEN Key, Title, Type / binding and
+  Actions remain aligned as one table row per field; actions do not fall into a separate card footer,
+  and the already-selected Variables tab is not repeated as another panel heading

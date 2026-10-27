@@ -358,6 +358,49 @@ describe('the authored file-source grant round-trips through the `.vcg` exporter
     expect(out.fields[0]).toMatchObject({ id: 'items', allowFileSource: true });
     expect((out.fields[0] as { default: unknown }).default).toEqual([{ id: 'i1', text: 'یک' }]);
   });
+
+  it('carries file-only and the locked relative Bridge path without embedding file bytes', async () => {
+    const out = await packWithFields([
+      {
+        id: 'crawl',
+        label: 'Crawl',
+        required: false,
+        type: 'multiline',
+        default: 'fallback',
+        allowFileSource: true,
+        fileSource: {
+          inputMode: 'file-only',
+          bridgePath: 'newsroom/crawl.txt',
+          lockFile: true,
+        },
+      },
+    ]);
+    expect(out.fields[0]).toMatchObject({
+      id: 'crawl',
+      fileSource: {
+        inputMode: 'file-only',
+        bridgePath: 'newsroom/crawl.txt',
+        lockFile: true,
+      },
+    });
+  });
+
+  it('carries a list-file delimiter as authored configuration', async () => {
+    const out = await packWithFields([
+      {
+        id: 'headlines',
+        label: 'Headlines',
+        required: false,
+        type: 'list',
+        default: [],
+        fileSource: { bridgePath: 'newsroom/headlines.txt', delimiter: '|' },
+      },
+    ]);
+    expect(out.fields[0]).toMatchObject({
+      id: 'headlines',
+      fileSource: { bridgePath: 'newsroom/headlines.txt', delimiter: '|' },
+    });
+  });
 });
 
 /**

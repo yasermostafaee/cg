@@ -139,6 +139,7 @@ test.describe('D-125 Phase 3c — lottie-override field bindings', () => {
     await app.addTextElement({ x: 340, y: 260 });
     await app.setDataKey('headline');
     await app.deselect();
+    await app.page.getByRole('tab', { name: 'Variables' }).click();
     const card = app.fieldCard('headline');
     await card.getByRole('button', { name: 'Unbind' }).click();
 

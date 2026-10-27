@@ -76,6 +76,16 @@ export interface AppInfo {
   platform: string;
 }
 
+/** One text file selected for a Bridge-backed dynamic field. */
+export interface DesignerTextSourceFile {
+  /** Safe path stored in the template and resolved below CG Bridge's textSourceRoot. */
+  bridgePath: string;
+  /** Full Windows/UNC path shown to the author; never persisted in the template. */
+  sourcePath: string;
+  name: string;
+  content: string;
+}
+
 export type Unsubscribe = () => void;
 
 /** D-150 — which storage root the Designer is using, and why. */
@@ -120,6 +130,13 @@ export interface DesignerBridge {
     reportsLanguage(): boolean;
     /** `persian`, `arabic`, `latin` or `unknown` — the shell's reply, checked by the detector. */
     language(): Promise<unknown>;
+  };
+
+  textSources: {
+    /** Native on desktop so the Designer can show the chosen Windows/UNC path. */
+    pick(): Promise<DesignerTextSourceFile | null>;
+    /** Re-read the same session-selected file after another application saves it. */
+    reload(sourcePath: string): Promise<string>;
   };
 
   /**
@@ -253,7 +270,10 @@ export interface DesignerBridge {
      * sequence's frames are PNG or TGA, which no asset kind names. A hint only: the
      * caller still validates what comes back.
      */
-    pick(kind?: AssetMeta['kind'], opts?: { folder?: boolean; accept?: string }): Promise<File[]>;
+    pick(
+      kind?: AssetMeta['kind'],
+      opts?: { folder?: boolean; accept?: string; multiple?: boolean },
+    ): Promise<File[]>;
     /** D-067 — import one already-picked file (decode / store / dedupe by sha256). */
     store(
       file: File,

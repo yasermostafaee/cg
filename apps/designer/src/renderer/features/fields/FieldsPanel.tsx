@@ -5,12 +5,14 @@ import {
   type FieldBinding,
   type Scene,
 } from '@cg/shared-schema';
+import { Link2, Trash2, Unlink2 } from 'lucide-react';
 import { designerStore } from '../../state/store.js';
-import { cx } from '../../cx.js';
-import { Button } from '../../ui/Button.js';
+import { Control } from '../../ui/Control.js';
+import { Icon } from '../../ui/Icon.js';
 import * as s from './FieldsPanel.css.js';
 import { TextField } from '../inspector/controls.js';
 import { describeBinding, elementNameResolver } from './bind-resolver.js';
+import { isFixedFileFieldId } from './fixedFileField.js';
 
 interface Props {
   scene: Scene;
@@ -18,9 +20,9 @@ interface Props {
 }
 
 /**
- * Scene-level fields editor. Lives in the Inspector's SceneInspector
- * region (shown when no element is selected). Fields are the operator's
- * runtime payload contract; bindings wire them to elements.
+ * D-166 — composition-level Variables table. Fields are the operator's
+ * runtime payload contract; bindings wire them to elements. It deliberately
+ * lives beside the Inspector, not inside a selection-owned inspector branch.
  *
  * The "Bind from canvas" workflow:
  *   1. operator clicks Bind on a field → store.bindModeFieldId = fieldId
@@ -45,27 +47,57 @@ export function FieldsPanel({ scene, bindModeFieldId }: Props): JSX.Element {
   // D-025 — this composition's OWN fields (editable here) plus its nested child
   // instances' fields, shown grouped/namespaced (edited by opening the child).
   const aggregate = aggregateCompositionFields(scene, scene);
-  const empty = aggregate.fields.length === 0 && aggregate.groups.length === 0;
+  const ownFields = aggregate.fields.filter((field) => !isFixedFileFieldId(field.id));
+  const visibleGroups = aggregate.groups.filter(namespaceHasFields);
+  const empty = ownFields.length === 0 && visibleGroups.length === 0;
   return (
     <div className={s.block}>
       {empty ? (
-        <p className={s.empty}>No fields.</p>
+        <p className={s.empty}>No variables.</p>
       ) : (
         <div className={s.list}>
-          {aggregate.fields.map((f) => (
-            <FieldCard
-              key={f.id}
-              field={f}
-              bindings={scene.bindings}
-              bindModeFieldId={bindModeFieldId}
-              nameOf={nameOf}
-            />
-          ))}
-          {aggregate.groups.map((g) => (
+          {ownFields.length > 0 && (
+            <div className={s.table} role="table" aria-label="Composition variables">
+              <TableHeader />
+              <div role="rowgroup">
+                {ownFields.map((f) => (
+                  <FieldRow
+                    key={f.id}
+                    field={f}
+                    bindings={scene.bindings}
+                    bindModeFieldId={bindModeFieldId}
+                    nameOf={nameOf}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+          {visibleGroups.map((g) => (
             <NamespaceGroup key={g.instanceId} group={g} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** A namespace is useful iff it or one of its descendants contains a field. */
+export function namespaceHasFields(group: CompositionFieldGroup): boolean {
+  return (
+    group.aggregate.fields.some((field) => !isFixedFileFieldId(field.id)) ||
+    group.aggregate.groups.some(namespaceHasFields)
+  );
+}
+
+function TableHeader(): JSX.Element {
+  return (
+    <div className={s.tableHeader} role="row">
+      <span role="columnheader">Key</span>
+      <span role="columnheader">Title</span>
+      <span role="columnheader">Type / binding</span>
+      <span role="columnheader" className={s.actionsHeader}>
+        Actions
+      </span>
     </div>
   );
 }
@@ -77,23 +109,45 @@ export function FieldsPanel({ scene, bindModeFieldId }: Props): JSX.Element {
  */
 function NamespaceGroup({ group }: { group: CompositionFieldGroup }): JSX.Element {
   const { fields, groups } = group.aggregate;
+  const visibleFields = fields.filter((field) => !isFixedFileFieldId(field.id));
+  const visibleGroups = groups.filter(namespaceHasFields);
   return (
     <div className={s.nsGroup}>
       <div className={s.nsTitle}>{group.label ?? group.name}</div>
-      {fields.map((f) => (
-        <div key={f.id} className={s.nsItem}>
-          {f.label || f.id} <span className={s.nsType}>{f.type}</span>
+      {visibleFields.length > 0 && (
+        <div className={s.table} role="table" aria-label={`${group.label ?? group.name} variables`}>
+          <TableHeader />
+          <div role="rowgroup">
+            {visibleFields.map((f) => (
+              <div
+                key={f.id}
+                className={s.readonlyRow}
+                data-testid={`field-row-${f.id}`}
+                role="row"
+              >
+                <span className={s.cardId} role="cell" title={f.id}>
+                  {f.id}
+                </span>
+                <span className={s.readonlyLabel} role="cell">
+                  {f.label || f.id}
+                </span>
+                <span className={s.cardType} role="cell">
+                  {f.type}
+                </span>
+                <span role="cell" aria-label="Read-only nested variable" />
+              </div>
+            ))}
+          </div>
         </div>
-      ))}
-      {groups.map((g) => (
+      )}
+      {visibleGroups.map((g) => (
         <NamespaceGroup key={g.instanceId} group={g} />
       ))}
-      {fields.length === 0 && groups.length === 0 && <div className={s.nsItem}>(no fields)</div>}
     </div>
   );
 }
 
-function FieldCard({
+function FieldRow({
   field,
   bindings,
   bindModeFieldId,
@@ -114,25 +168,33 @@ function FieldCard({
   // several elements, relax this — see canBindFromCanvas.)
   const canBind = canBindFromCanvas(field.id, bindings);
   return (
-    <div className={s.fieldCard} data-testid={`field-card-${field.id}`}>
-      <div className={s.cardHeader}>
-        <span className={s.cardId}>{field.id}</span>
-        <span className={s.cardType}>{field.type}</span>
+    <div className={s.fieldRow} data-testid={`field-card-${field.id}`} role="row">
+      <span className={s.cardId} role="cell" title={field.id}>
+        {field.id}
+      </span>
+      <div className={s.titleCell} role="cell">
+        <TextField
+          bare
+          label="Title"
+          ariaLabel={`Title for ${field.id}`}
+          value={field.label}
+          resetKey={field.id}
+          onCommit={(label) =>
+            designerStore.updateField(field.id, { label } as Partial<DynamicField>)
+          }
+        />
       </div>
-      <TextField
-        label="label"
-        value={field.label}
-        resetKey={field.id}
-        onCommit={(label) =>
-          designerStore.updateField(field.id, { label } as Partial<DynamicField>)
-        }
-      />
-      <div className={s.cardActions}>
-        <Button
-          variant="bare"
-          className={cx(s.smallButton, bindActive && s.smallButtonActive)}
+      <div className={s.fieldDetails} role="cell">
+        <span className={s.cardType}>{field.type}</span>
+        <BindingList bindings={ownBindings} nameOf={nameOf} />
+      </div>
+      <div className={s.cardActions} role="cell">
+        <Control
+          size="sm"
           disabled={!canBind}
           aria-pressed={bindActive}
+          aria-label={bindActive ? 'Click a canvas element' : 'Bind from canvas'}
+          selected={bindActive}
           title={
             canBind
               ? 'Bind this field to a canvas element'
@@ -140,18 +202,17 @@ function FieldCard({
           }
           onClick={() => designerStore.setBindMode(bindActive ? null : field.id)}
         >
-          {bindActive ? 'Click a canvas element…' : 'Bind from canvas'}
-        </Button>
-        <Button
-          variant="bare"
-          className={s.smallButton}
+          <Icon icon={Link2} size={13} />
+        </Control>
+        <Control
+          size="sm"
+          aria-label={`Delete ${field.id}`}
           title="Delete this field and all its bindings"
           onClick={() => designerStore.removeField(field.id)}
         >
-          delete field
-        </Button>
+          <Icon icon={Trash2} size={13} />
+        </Control>
       </div>
-      <BindingList bindings={ownBindings} nameOf={nameOf} />
     </div>
   );
 }
@@ -170,16 +231,15 @@ function BindingList({
     <div className={s.bindList}>
       {bindings.map(({ b, idx }) => (
         <div key={idx} className={s.bindRow}>
-          <span>→ {describeBinding(b, nameOf)}</span>
-          <Button
-            variant="bare"
-            className={s.smallButton}
+          <span className={s.bindingText}>→ {describeBinding(b, nameOf)}</span>
+          <Control
+            size="xs"
             title="Unbind (keeps the field)"
             aria-label="Unbind"
             onClick={() => designerStore.removeBindingAt(idx)}
           >
-            ×
-          </Button>
+            <Icon icon={Unlink2} size={11} />
+          </Control>
         </div>
       ))}
     </div>

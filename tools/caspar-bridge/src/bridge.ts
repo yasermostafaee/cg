@@ -194,6 +194,7 @@ import {
   TemplatesRebuildPlanChannel,
   TemplatesSourceGetChannel,
   TemplatesSourcePutChannel,
+  TextSourcesReadChannel,
   type PageBuild,
   TEMPLATE_REDELIVERY_REFUSAL,
   UpdateCancelChannel,
@@ -312,6 +313,7 @@ import {
   saveBackupEntries,
 } from './backup-channels-store.js';
 import type { BackupChannelMap } from './server-b-line.js';
+import { readTextSource } from './text-source-reader.js';
 import {
   airOf,
   casparJoinOf,
@@ -452,6 +454,8 @@ export interface BridgeOptions {
    * never inside it. Absent = in memory only; a restart then forgets them.
    */
   pagesDir?: string;
+  /** R-102 — root under which authored relative text-file paths may be read. */
+  textSourceRoot?: string;
   /**
    * D-137 / C-015 — a PRE-RESOLVED source catalogue, explicit (tests, embedders). When given it is
    * the catalogue in force as-is, and the Playout's lists are not read.
@@ -2963,6 +2967,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     ...(options.persistPath !== undefined ? { persistPath: options.persistPath } : {}),
     ...(options.oscPort !== undefined ? { oscPort: options.oscPort } : {}),
     ...(options.fixedLayersPath !== undefined ? { fixedLayersPath: options.fixedLayersPath } : {}),
+    ...(options.textSourceRoot !== undefined ? { textSourceRoot: options.textSourceRoot } : {}),
     ...(options.sourceCatalogPath !== undefined
       ? { sourceCatalogPath: options.sourceCatalogPath }
       : {}),
@@ -4303,6 +4308,8 @@ export function buildRoutes(
     /** `PLAYOUT-FEATURES-01` D — the CG license as last read, or `null`. Absent: nothing read. */
     license?: () => PlayoutLicense | null;
     fixedLayersPath?: string;
+    /** R-102 — the filesystem boundary for `textSources.read`. */
+    textSourceRoot?: string;
     sourceCatalogPath?: string;
     sourceAssignmentsPath?: string;
     /**
@@ -4546,6 +4553,9 @@ export function buildRoutes(
       intent: the lock refuses everything (the owner's no-carve-out answer) and signing out is
       something the operator does, not something they read.
     */
+    route(TextSourcesReadChannel, 'read', 'read', (r: { path: string }) =>
+      readTextSource(paths.textSourceRoot, r.path),
+    ),
     route(AuthStateChannel, 'read', 'read', () => {
       /*
         🔴 IT ASKS THE ONE PREDICATE. It used to report `token?.principal` directly, and that

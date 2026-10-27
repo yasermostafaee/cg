@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act } from 'react-dom/test-utils';
 import type { TemplateAct } from '@cg/shared-ipc';
 import { onCommandError } from '../src/renderer/features/status/commandFeedback.js';
@@ -21,6 +21,12 @@ const RLI = String.fromCodePoint(0x2067);
 const PDI = String.fromCodePoint(0x2069);
 
 let rendered: Awaited<ReturnType<typeof renderLayerRow>> | null = null;
+
+beforeEach(() => {
+  // A prior DOM suite can leave the module-level bridge subscription bound to its own window.
+  // Reset before the first test too, not only after ours, so this file is order-independent.
+  __resetTemplateActsForTest();
+});
 
 afterEach(async () => {
   await rendered?.unmount();
@@ -70,11 +76,10 @@ async function loadRefused(removedOnTheWay: TemplateAct | null): Promise<string[
     });
   };
   await click('button[aria-label="LOAD"]');
+  await vi.waitFor(() => expect(acted).toHaveLength(1));
   await click('[data-template-id="tpl-news"] .cg-tpl-row__load');
   await click('[data-template-commit]');
-  await act(async () => {
-    await new Promise((r) => setTimeout(r, 0));
-  });
+  await vi.waitFor(() => expect(errors).toHaveLength(1));
   off();
   return errors;
 }

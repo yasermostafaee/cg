@@ -1751,6 +1751,13 @@
     border-color var(--r-dur-fast) ease,
     box-shadow var(--r-dur-fast) ease;
 }
+
+/* R-102 — the delimiter picker moved with the file preview into its wide modal.
+ * Keep the control content-sized so it does not consume the entire two-pane row. */
+.cg-file-preview__delimiter {
+  width: auto;
+  max-width: 20rem;
+}
 .cg-field:hover:not(:disabled):not(:focus) {
   border-color: var(--r-border-strong);
 }
@@ -6977,6 +6984,46 @@ input[type='checkbox']:disabled:checked {
     height: a long list still scrolls inside `.cg-tpl-list`.
   */
   flex: 1 1 auto;
+}
+.cg-tpl-import-progress {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--r-space-3);
+  padding: var(--r-space-6);
+  text-align: center;
+  color: var(--r-text-secondary);
+  background: var(--r-tpl-aside-bg);
+}
+.cg-tpl-import-progress strong {
+  color: var(--r-text);
+  font-size: var(--r-text-lg);
+}
+.cg-tpl-import-progress bdi {
+  max-width: min(38rem, 90%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--r-accent);
+  font-weight: var(--r-weight-semibold);
+}
+.cg-tpl-import-progress__spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 3px solid var(--r-border);
+  border-top-color: var(--r-accent);
+  border-radius: var(--r-radius-full);
+  animation: cg-spin var(--r-dur-spin) linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cg-tpl-import-progress__spinner {
+    animation: none;
+    border-color: var(--r-accent);
+    border-right-color: transparent;
+  }
 }
 /* `.template-layout{grid-template-columns:776px 342px}` — the ASIDE is the fixed half. */
 .cg-tpl-layout {

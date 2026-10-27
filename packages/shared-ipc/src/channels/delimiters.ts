@@ -33,6 +33,22 @@ export const DelimiterOptionSchema = z.object({
 export type DelimiterOption = z.infer<typeof DelimiterOptionSchema>;
 
 /**
+ * The shipped station choices, shared by Bridge, CG Control and the offline
+ * Designer. A station may add more choices, but an authored template needs the
+ * same dependable starting vocabulary before it is connected to any station.
+ */
+export const SHIPPED_DELIMITERS: readonly DelimiterOption[] = [
+  { id: 'newline', label: 'new line', value: '\\n' },
+  { id: 'pipe', label: 'pipe', value: '|' },
+  { id: 'persian-comma', label: 'Persian comma', value: '،' },
+  { id: 'comma', label: 'comma', value: ',' },
+  { id: 'semicolon', label: 'semicolon', value: ';' },
+];
+
+/** One entry per line — the shipped default. */
+export const SHIPPED_DEFAULT_DELIMITER = '\\n';
+
+/**
  * The whole list, replaced at once.
  *
  * Deliberately NOT add/remove verbs. Two browsers editing the list concurrently

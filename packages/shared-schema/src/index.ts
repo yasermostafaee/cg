@@ -10,6 +10,7 @@ export * from './element-changes.js';
 export * from './countdown.js';
 export * from './follow-window.js';
 export * from './fields.js';
+export * from './file-source-content.js';
 export * from './bindings.js';
 export * from './live-source.js';
 export * from './control-payload.js';

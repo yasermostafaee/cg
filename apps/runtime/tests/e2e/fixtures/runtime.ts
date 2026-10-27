@@ -843,6 +843,97 @@ export async function buildListFieldVcg(templateId = 'tpl-e2e-list'): Promise<Ui
   });
 }
 
+/**
+ * R-102 — a verifiable template whose list starts from an authored, replaceable Bridge file.
+ * The E2E patches the mock's text-source read at the browser seam, so the real Inspector/modal
+ * path is exercised without granting a machine-local file handle to the test runner.
+ */
+export async function buildFileSourceVcg(templateId = 'tpl-e2e-file-source'): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  const layer = scene.layers[0];
+  if (layer === undefined) throw new Error('fixture scene has no layer');
+  layer.children = [
+    ...layer.children,
+    {
+      id: 'el-headlines',
+      name: 'Headlines',
+      type: 'ticker',
+      transform: {
+        position: { x: 100, y: 900 },
+        size: { w: 1200, h: 72 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 2,
+      font: {
+        family: 'Vazirmatn',
+        weight: 500,
+        style: 'normal',
+        size: 36,
+        lineHeight: 1.4,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      direction: 'ltr',
+      verticalAlign: 'middle',
+      speed: 120,
+      repeat: 'infinite',
+      cycleBoundary: 'seamless',
+      gap: 48,
+      separator: ' • ',
+      items: [{ id: 'fallback-1', text: 'Fallback headline' }],
+      digits: 'persian',
+    },
+  ];
+  scene.fields = [
+    ...scene.fields,
+    {
+      id: 'headlines',
+      label: 'Newsroom headlines',
+      required: false,
+      type: 'list',
+      default: [{ id: 'fallback-1', text: 'Fallback headline' }],
+      fileSource: {
+        inputMode: 'file-only',
+        bridgePath: 'headlines.txt',
+        delimiter: '|',
+      },
+    },
+  ];
+  scene.bindings = [
+    ...scene.bindings,
+    { fieldId: 'headlines', target: { kind: 'ticker-items', elementId: 'el-headlines' } },
+  ];
+  const fontDeps: readonly FontReference[] = scene.fonts;
+  const assetIndex: readonly AssetEntry[] = [];
+  const manifestExtras = {
+    id: templateId,
+    name: 'e2e-file-source',
+    authoring: {
+      designerVersion: '0.0.0',
+      createdAt: '2026-10-27T00:00:00.000Z',
+      exportedAt: '2026-10-27T00:01:00.000Z',
+    },
+    compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+    fontDeps,
+    assetIndex,
+  } satisfies Pick<Manifest, 'id' | 'name' | 'authoring' | 'compatibility'> & {
+    fontDeps: readonly FontReference[];
+    assetIndex: readonly AssetEntry[];
+  };
+  return pack({
+    scene,
+    manifestExtras,
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
 /** A real, tiny WAV: 0.1 s of 8 kHz mono 16-bit silence. */
 function silentWav(): Uint8Array {
   const samples = 800;

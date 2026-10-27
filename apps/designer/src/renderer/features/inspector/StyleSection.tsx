@@ -48,6 +48,7 @@ import type {
 import { LiveSourceIdSchema } from '@cg/shared-schema';
 import { AUDIO_VOLUME_DB_MAX, AUDIO_VOLUME_DB_MIN } from '@cg/shared-schema';
 import { isoOfInstant, nowPlus } from '@cg/text-shaping';
+import { compositionPackageId } from '@cg/vcg-format';
 import { ClockTargetDataKey } from './ClockTargetDataKey.js';
 import { clockTargetValue, commitClockTarget, exposeClockTarget } from './clock-data-key.js';
 import { DateTimeInput } from '../../ui/DateTimeInput.js';
@@ -75,6 +76,13 @@ import {
 } from './sequence-presets.js';
 import { ListItemsEditor } from '../fields/ListItemsEditor.js';
 import { SequencePagesControl } from './SequencePagesControl.js';
+import {
+  designerFileSourcePreviewsVersion,
+  getDesignerFileSourcePreview,
+  isDesignerFixedFileIntent,
+  subscribeDesignerFileSourcePreviews,
+} from '../fields/fileSourcePreviewStore.js';
+import { isFixedFileFieldId } from '../fields/fixedFileField.js';
 import { CheckRow } from './DynamicDataSection.js';
 import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
 import { TickerSeparatorControl } from './TickerSeparatorControl.js';
@@ -2431,6 +2439,7 @@ function TickerSections({
   const dataBound = useDesignerSelector(
     (st) => st.scene !== null && elementDataField(st.scene, id) !== undefined,
   );
+  const fileItems = useFileSourceItems(id);
   return (
     <>
       <CollapseSection title="Ticker" pinned>
@@ -2512,15 +2521,6 @@ function TickerSections({
         </StateLine>
       </CollapseSection>
 
-      <CollapseSection title="Items" defaultExpanded>
-        <ListItemsEditor
-          items={element.items}
-          label={element.name || 'Ticker'}
-          digits={itemDigits}
-          onChange={(items) => designerStore.setTickerItems(id, items)}
-        />
-      </CollapseSection>
-
       {/* Style parity with text: family/weight/size, colour, band background. D-052 —
           colour / background / shadow are keyframe-able (the crawl stays time-driven;
           only the box STYLE animates on the timeline). */}
@@ -2582,6 +2582,17 @@ function TickerSections({
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
       />
+
+      {fileItems === null && (
+        <CollapseSection title="Items" defaultExpanded>
+          <ListItemsEditor
+            items={element.items}
+            label={element.name || 'Ticker'}
+            digits={itemDigits}
+            onChange={(items) => designerStore.setTickerItems(id, items)}
+          />
+        </CollapseSection>
+      )}
     </>
   );
 }
@@ -2972,6 +2983,7 @@ function SequenceSections({
     return field === undefined ? undefined : fieldDigitsOf(field);
   };
   const dataBound = scene !== null && elementDataField(scene, id) !== undefined;
+  const fileItems = useFileSourceItems(id);
   // D-163 — the book's pages: how many, and the ONE fit they are drawn at.
   const pageCount = element.items.filter((it) => it.kind === 'image').length;
   // `B-353` — a BOOK: all pictures, stepped by the operator — what CG Control shows a book bar for.
@@ -3155,43 +3167,6 @@ function SequenceSections({
         </StateLine>
       </CollapseSection>
 
-      <CollapseSection
-        title="Items"
-        defaultExpanded
-        trailing={
-          // `DESIGNER-FIX-0905` — the paragraph under the list held one TEACHING sentence (what
-          // a composition item is) and one that DUPLICATED the per-item data-key field's own
-          // placeholder ("data key — bind for operator editing (optional)"). The duplicate is
-          // deleted; the teaching is read once, here.
-          <InfoTip title="Sequence items">
-            <p>
-              A <strong>text</strong> item is one line of the rotation. Give it a data key to make
-              it operator-editable; without one it is static design-time text.
-            </p>
-            <p>
-              A <strong>composition</strong> item rotates a one-element clock or logo, or a composed
-              layout, through the sequence’s transitions; its live content — a clock — keeps ticking
-              while it is shown.
-            </p>
-          </InfoTip>
-        }
-      >
-        {/* `D-163` — a book (any picture item) shows a card here and its pages in the Pages
-            manager, whose List view is this same item editor; a text or composition rotation
-            keeps its item list inline, as before. */}
-        <SequencePagesControl
-          elementId={id}
-          title={element.name || 'Sequence'}
-          items={element.items}
-          listView={itemsEditor}
-          compositions={compChoicesAll}
-          firstComposition={compChoices[0]?.id}
-          dir={element.direction}
-          textDigits={(itemId) => itemDigits(itemId) ?? typedTextDigits(scene, element)}
-        />
-        {pageCount === 0 && itemsEditor}
-      </CollapseSection>
-
       {/* Style parity with the ticker/clock text sections. D-052 — colour /
           background / shadow / padding are keyframe-able (paging stays time-driven;
           only the box STYLE animates on the timeline). */}
@@ -3273,6 +3248,45 @@ function SequenceSections({
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
       />
+
+      {fileItems === null && (
+        <CollapseSection
+          title="Items"
+          defaultExpanded
+          trailing={
+            // `DESIGNER-FIX-0905` — the paragraph under the list held one TEACHING sentence (what
+            // a composition item is) and one that DUPLICATED the per-item data-key field's own
+            // placeholder ("data key — bind for operator editing (optional)"). The duplicate is
+            // deleted; the teaching is read once, here.
+            <InfoTip title="Sequence items">
+              <p>
+                A <strong>text</strong> item is one line of the rotation. Give it a data key to make
+                it operator-editable; without one it is static design-time text.
+              </p>
+              <p>
+                A <strong>composition</strong> item rotates a one-element clock or logo, or a
+                composed layout, through the sequence’s transitions; its live content — a clock —
+                keeps ticking while it is shown.
+              </p>
+            </InfoTip>
+          }
+        >
+          {/* `D-163` — a book (any picture item) shows a card here and its pages in the Pages
+              manager, whose List view is this same item editor; a text or composition rotation
+              keeps its item list inline, as before. */}
+          <SequencePagesControl
+            elementId={id}
+            title={element.name || 'Sequence'}
+            items={element.items}
+            listView={itemsEditor}
+            compositions={compChoicesAll}
+            firstComposition={compChoices[0]?.id}
+            dir={element.direction}
+            textDigits={(itemId) => itemDigits(itemId) ?? typedTextDigits(scene, element)}
+          />
+          {pageCount === 0 && itemsEditor}
+        </CollapseSection>
+      )}
     </>
   );
 }
@@ -3303,6 +3317,7 @@ function RepeaterSections({
   );
   const child = comps.find((c) => c.id === element.compositionId);
   const columns = columnsForFields(child?.fields);
+  const fileItems = useFileSourceItems(id);
   return (
     <>
       <CollapseSection title="Repeater" pinned>
@@ -3381,23 +3396,47 @@ function RepeaterSections({
         </StateLine>
       </CollapseSection>
 
-      <CollapseSection title="Rows" defaultExpanded>
-        <ListItemsEditor
-          items={element.items}
-          label={element.name || 'Repeater'}
-          columns={columns}
-          maxItems={repeaterRowLimit(element)}
-          onChange={(items) => designerStore.setRepeaterItems(id, items)}
-        />
-      </CollapseSection>
-
       <FilterSection
         element={element}
         currentFrame={currentFrame}
         selectedKeyframe={selectedKeyframe}
       />
+
+      {fileItems === null && (
+        <CollapseSection title="Rows" defaultExpanded>
+          <ListItemsEditor
+            items={element.items}
+            label={element.name || 'Repeater'}
+            columns={columns}
+            maxItems={repeaterRowLimit(element)}
+            onChange={(items) => designerStore.setRepeaterItems(id, items)}
+          />
+        </CollapseSection>
+      )}
     </>
   );
+}
+
+/** Current session-only file rows for a bound list element, if the selected path still matches. */
+function useFileSourceItems(elementId: string): { id: string; text?: unknown }[] | null {
+  useSyncExternalStore(subscribeDesignerFileSourcePreviews, designerFileSourcePreviewsVersion);
+  const scene = useDesignerSelector((state) => state.scene);
+  const activeCompositionId = useDesignerSelector((state) => state.activeCompositionId);
+  if (scene === null) return null;
+  const previewSceneId =
+    activeCompositionId === null ? scene.id : compositionPackageId(scene.id, activeCompositionId);
+  if (isDesignerFixedFileIntent(previewSceneId, elementId)) return [];
+  const field = elementDataField(scene, elementId);
+  if (field !== undefined && isFixedFileFieldId(field.id)) return [];
+  if (field?.type !== 'list' || field.fileSource?.bridgePath === undefined) return null;
+  const preview = getDesignerFileSourcePreview(
+    previewSceneId,
+    field.id,
+    field.fileSource.bridgePath,
+  );
+  return preview !== null && Array.isArray(preview.value)
+    ? (preview.value as { id: string; text?: unknown }[])
+    : null;
 }
 
 /**

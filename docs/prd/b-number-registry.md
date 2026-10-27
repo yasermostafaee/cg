@@ -3537,3 +3537,35 @@ over all 11 local and remote-tracking refs returned nothing before this filing; 
 `B-354` on two refs.
 
 ⇒ **Next free after this entry is `B-356`**, **`D-166`**, **`P-071`**, **`R-102`** and **`C-049`**.
+
+### 2026-10-27 — the owner's field-authority and Variables requests take `D-166` and `R-102`
+
+- `D-166` — Variables is its own compact Designer tab; empty Sequence namespaces are omitted —
+  [designer.md](designer.md).
+- `R-102` — the template author may require file-only input and lock a live text file under CG
+  Bridge's configured source root — [runtime.md](runtime.md).
+
+Measured free before use: the registry named both ids as next free; a tracked PRD-heading sweep found
+neither `D-166` nor `R-102` before filing.
+
+⇒ **Next free after this entry is `B-356`**, **`D-167`**, **`P-071`**, **`R-103`** and **`C-049`**.
+
+### 2026-10-27 — `RELEASE-0123-01` takes `P-071`
+
+- `P-071` — release candidate `0.12.3`, the matching three-installer delivery for fixed-file authoring,
+  Variables and their follow-up fixes — [platform.md](platform.md).
+
+Measured free before use: the registry named `P-071` as next free; the tracked PRD-heading sweep found no
+`P-071` before this filing.
+
+⇒ **Next free after this entry is `B-356`**, **`D-167`**, **`P-072`**, **`R-103`** and **`C-049`**.
+
+### 2026-10-27 — visible heavy-template import takes `R-103`
+
+- `R-103` — after a `.vcg` is selected, CG Control names it in a blocking progress state until the
+  import succeeds or fails — [runtime.md](runtime.md).
+
+Measured free before use: the registry named `R-103` as next free; the tracked PRD-heading sweep
+found no `R-103` before filing.
+
+⇒ **Next free after this entry is `B-356`**, **`D-167`**, **`P-072`**, **`R-104`** and **`C-049`**.

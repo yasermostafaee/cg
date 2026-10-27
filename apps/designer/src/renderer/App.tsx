@@ -6,7 +6,7 @@ import { SharedLibraryPanel } from './features/sharedLibrary/SharedLibraryPanel.
 import { CompositionsPanel } from './features/compositions/CompositionsPanel.js';
 import { CompositionActionBar } from './features/compositions/CompositionActionBar.js';
 import { CanvasArea } from './features/canvas/CanvasArea.js';
-import { InspectorPanel } from './features/inspector/InspectorPanel.js';
+import { DesignerRightPanel } from './features/fields/DesignerRightPanel.js';
 import { InputTooltip } from './features/shell/InputTooltip.js';
 import { DurationGuardDialog } from './features/addGuard/DurationGuardDialog.js';
 import { LandingView } from './features/shell/LandingView.js';
@@ -589,12 +589,13 @@ export function App(): JSX.Element {
               <TransportBar scene={editScene} />
             </div>
             <div className={s.sidePanel} style={{ width: INSPECTOR_DEFAULT }}>
-              <InspectorPanel
+              <DesignerRightPanel
                 scene={editScene}
                 selection={selection}
                 selectedKeyframe={selectedKeyframe}
                 selectedKeyframes={selectedKeyframes}
                 keyframeInspectorOpen={keyframeInspectorOpen}
+                bindModeFieldId={bindModeFieldId}
               />
             </div>
           </>

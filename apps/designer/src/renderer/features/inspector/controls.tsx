@@ -573,6 +573,8 @@ function formatNumberDisplay(v: number): string {
 
 interface TextFieldProps {
   label: string;
+  /** Control only, for a table/grid cell whose column header already supplies the visible label. */
+  bare?: boolean | undefined;
   value: string;
   onCommit: (s: string) => void;
   /**
@@ -621,8 +623,8 @@ export function TextField(props: TextFieldProps): JSX.Element {
   const digits = props.digits;
   const shown = digits === undefined ? props.value : writeFieldDigits(props.value, digits);
   return (
-    <div className={s.row}>
-      <span className={s.label}>{props.label}</span>
+    <div className={props.bare === true ? s.rowBare : s.row}>
+      {props.bare !== true && <span className={s.label}>{props.label}</span>}
       <div className="cg-field">
         <input
           className={s.inputInner}

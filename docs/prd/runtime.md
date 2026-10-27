@@ -4703,3 +4703,95 @@ operator types a new azan time, presses Update, and the countdown keeps counting
 **Acceptance:** WHEN an operator types `25:00` into a field whose pattern is the time preset THEN the Inspector says
 it is not a time and sends nothing; WHEN `۲۰:۳۲` or `20:32` THEN it is sent; WHEN a field has no pattern THEN nothing
 changes.
+
+## [~] R-102 — the template author may require file-only input and lock a live text file on CG Bridge ⟨priority: high — the owner, 2026-10-27⟩ — `openspec/changes/lock-file-backed-fields/`
+
+**What:** extend an authored text/multiline/text-list field's existing file-source grant (image page
+lists are not text sources) with two
+independent optional policies. **File-only** removes the operator's manual value editor (including a
+list's add/remove controls), while leaving file selection changeable. **Lock file** names a live text
+file under CG Bridge's configured text-source root and removes every replace/detach route in CG
+Control; it is available only when the author supplied a relative file path. With neither policy,
+today's operator-choice behaviour is unchanged. Designer selects one text file directly from the
+same network share configured as CG Bridge's text-source root, previews its current content as the
+actual field value on the authoring canvas, and stores only its filename relative to that root.
+Text-list fields may also author their initial delimiter from a persistent custom catalogue managed
+under Designer's Edit menu.
+For the fully constrained **File only + Lock file** case, a keyless eligible element also offers
+**Use fixed file** in its own always-visible Inspector section rather than under Dynamic/Data. Checking
+it immediately hides Items/Rows and reveals Browse; unchecking removes the fixed source and restores
+Items/Rows. After selection, that same section continues to show the checked mode, fixed source and
+preview/settings action.
+Designer creates the required runtime field/binding internally and hides its reserved id from the
+Data key input, Variables table and Dynamic/Data. The selected file's session value is
+shared by the file-preview modal, canvas and composition Preview and survives selection changes. File
+content, delimiter selection and interpreted values have one spacious modal rather than occupying
+the narrow Inspector, and that modal links directly to delimiter management. The installed Designer
+labels the complete Windows/UNC path separately from the Bridge-relative saved name; browser mode
+explicitly says the platform hides the full path. Its Reload action re-reads the same session-selected
+disk/share file, reapplies the delimiter and updates every Designer preview without another Browse;
+the native shell refuses paths not chosen in that session. While that preview is available, the duplicate Inspector
+Items/Rows section is hidden; otherwise Items/Rows sits immediately after Filter and before
+Dynamic/Data. File-only values are visible but read-only in composition Preview, including list shape.
+The full chosen Windows/UNC path is shown for verification, while only the Bridge-relative filename
+is persisted. A fixed text-list starts with an explicit new-line
+delimiter; because it is
+not a dynamic operator field, Designer does not show **CG Control default** for it.
+**Why:** newsroom subtitle/crawl files are continuously saved again by another system. Some templates
+must guarantee that the operator cannot accidentally type over that feed, alter its item count, or
+point the field at a different file. The file must stay external and live rather than becoming a
+snapshot embedded in `.vcg`.
+**Acceptance:**
+
+- WHEN the author enables **File only** on a file-capable field THEN CG Control renders no manual text,
+  textarea or list item editor for it; the operator can still choose/change its file unless file lock
+  is also enabled
+- WHEN the author records a relative bridge file and enables **Lock file** THEN CG Control shows the
+  authored file as a fact and offers Reload, but no choose, replace or detach action
+- WHEN the author chooses a text file directly from the shared root THEN Designer displays its
+  current content consistently in the large file-preview modal, canvas and composition Preview,
+  hides the duplicate Inspector Items/Rows section, keeps it after selection changes, and saves only
+  its Bridge-relative filename, never the UNC root, file bytes or transient preview value
+- WHEN a File-only field appears in Designer composition Preview THEN its current value remains
+  visible but no edit, add, remove, reorder or per-field Update control is available
+- WHEN a keyless eligible element chooses a fixed file THEN Designer authors File only + Lock file
+  without asking for or displaying a Data key, while CG Control receives the same runtime contract;
+  a text-list stores new line explicitly and has no **CG Control default** delimiter option
+- WHEN the author adds or edits a custom delimiter under **Edit → Manage delimiters** THEN list-file
+  fields offer it, store its literal value, and remain unchanged if that catalogue entry is later
+  renamed or removed
+- WHEN a text-list field has an authored delimiter THEN CG Control initially enables splitting with
+  that delimiter while keeping the existing split controls available only while the file is
+  unlocked; **Lock file** also removes the split toggle and delimiter picker
+- WHEN neither policy is enabled THEN the existing manual editor, local File System Access picker,
+  detach action, split controls and Reload behaviour stay unchanged
+- WHEN Reload follows another process saving the file again THEN CG Bridge reads its current UTF-8
+  bytes and stages them through the normal Update path; no read operation writes to air by itself
+- WHEN the configured file is missing or unreadable THEN the applied/on-air value is kept and the
+  operator sees a legible error naming the file
+- WHEN the operator inspects an attached file in CG Control THEN raw content, parsed fields and any
+  unlocked list delimiter controls appear in one large modal rather than expanding the Inspector;
+  preview reads alone neither stage nor apply the field
+- WHEN a template requests an absolute path, `..` traversal or a file outside CG Bridge's configured
+  text-source root THEN CG Bridge refuses the read and returns no bytes
+- WHEN an older `.vcg` carries only `allowFileSource` THEN it behaves exactly as today: operator choice,
+  no authored bridge path and no lock
+
+**Notes:** the template stores a relative path only. CG Bridge resolves it below its configured
+`textSourceRoot` (default: the service state home's `text-sources` folder; a UNC/network folder may be
+configured). Automatic watch remains [[R-026]]; this item guarantees every explicit Reload sees the
+latest saved bytes. Designer Browse/preview requires that the same root be exposed as a Windows share
+to the authoring workstation and that the selected file be directly inside that root.
+
+## [~] R-103 — Template import shows progress after file selection ⟨priority: medium — the owner, 2026-10-27⟩ — `openspec/changes/template-import-progress/`
+
+**What:** after the operator selects a `.vcg`, replace the interactive Templates body with a clear
+loading state that names the file while CG Control verifies, unpacks, renders and registers it. Block
+repeat import, search, selection, delete, load and dismissal until the operation settles; cancelling
+the Windows chooser does not enter loading. Success returns to the list with the imported template
+selected; failure uses the existing pinned refusal.
+**Why:** large templates can take several seconds and the current dialog looks idle after the chooser
+closes, so the operator has no evidence that the first press is still working.
+**Acceptance:** WHEN a selected package is still importing THEN the dialog names it and visibly shows
+progress with conflicting actions unavailable; WHEN the chooser is cancelled THEN no loading state
+appears; WHEN import settles THEN loading clears into the existing success or refusal state.

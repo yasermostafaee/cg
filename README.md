@@ -23,8 +23,9 @@ desktop build (milestones M0–M12) is preserved in git history.
   export all work in the browser against file-based storage.
 - **Runtime — browser:** running. The CasparCG control path goes through a
   small local WebSocket↔TCP bridge (browsers can't open raw sockets) — see
-  [The CasparCG bridge](#the-casparcg-bridge) for how to start it. With no
-  bridge reachable the SPA still runs, against an in-memory mock.
+  [The CasparCG bridge](#the-casparcg-bridge) for the manual real-station setup.
+  For a complete browser test without an installed Bridge or Playout, use the
+  repository's [fake station](#checking-a-change-in-the-browser).
 
 ## Layout
 
@@ -52,12 +53,16 @@ pnpm install   # install / refresh node_modules
 pnpm build     # build all @cg/* workspace packages so the apps can import them
 ```
 
-Run an app — each is a Vite dev server in the browser:
+Run Designer directly, or start CG Control with its complete fake station:
 
 ```bash
-pnpm --filter @cg/designer dev   # visual editor  → http://<this machine>:4000
-pnpm --filter @cg/runtime  dev   # playout controller → http://<this machine>:5174
+pnpm --filter @cg/designer dev   # Designer → http://<this machine>:4000
+pnpm dev:station --fake          # CG Control + fake Bridge/Playout/CasparCG → http://127.0.0.1:5174
 ```
+
+Running `pnpm --filter @cg/runtime dev` by itself starts only the CG Control web UI. It is useful
+only when a compatible Bridge and Playout are already running; without them, the console is offline
+and cannot load the station's layers.
 
 ### Internal Brand Pack Studio
 
@@ -89,11 +94,30 @@ session-only there.
 
 ### Checking a change in the browser
 
-`pnpm dev:station` builds, then runs the current source as CG Control does — same ports, its own state in `%LOCALAPPDATA%\CG Control Dev`, the bridge's output kept in `bridge.log` there.
+For the normal self-contained CG Control test, run:
+
+```powershell
+pnpm dev:station --fake
+```
+
+This builds the current source and starts the fake Bridge, Playout, CasparCG and programme feeds
+together. It uses the product's real connection path, keeps isolated state in
+`%LOCALAPPDATA%\CG Control Dev`, and writes the Bridge output to `bridge.log` there.
+For a template whose fixed text file was selected from a shared folder, point the fake Bridge at
+that same folder (the `.vcg` stores only the filename):
+
+```powershell
+pnpm dev:station --fake --text-source-root "\\server\share\CG Text"
+```
+
+The shared folder is only read; refreshing fake-station state does not delete or rotate it. An
+installed CG Bridge uses `textSourceRoot` in `C:\ProgramData\CG Bridge\cg-bridge.json` instead.
 The console opens at **http://127.0.0.1:5174** (`--playout <url>` changes the Playout).
-`--fake` runs a whole station on loopback — a fake Playout, CasparCG's stand-in serving channels 1 and 2, and their programme feeds — fresh every run, the last one kept as `fake.previous`.
-`--fake --pair` adds a backup engine beside it — a second fake Playout with its own password and its own CasparCG stand-in on 5251, the bridge's server B — and prints both passwords; its state is `fake-pair`.
-Close CG Control first — the launcher offers to, and asks before it does.
+For a primary/backup test, run `pnpm dev:station --fake --pair`; it adds a second fake Playout with
+its own password and CasparCG stand-in on port 5251. Fake-station runs require Node.js 23 or newer.
+Stop any earlier `pnpm --filter @cg/runtime dev` terminal first; its Vite server holds port 5174.
+If another station process owns a required port, the launcher identifies it and refuses to replace
+it silently.
 
 ### The CasparCG bridge
 
@@ -105,7 +129,8 @@ pnpm build                                    # REQUIRED after any source change
 node tools/caspar-bridge/bin/caspar-bridge.mjs
 ```
 
-Then start the Runtime SPA (`pnpm --filter @cg/runtime dev`); it connects to the bridge
+For this manual real-Bridge setup only, start the Runtime SPA with
+`pnpm --filter @cg/runtime dev`; it connects to the bridge
 on its own at **the host the page was served from**, port `5280` — `ws://127.0.0.1:5280`
 when you open it locally, `ws://<this machine>:5280` when a second machine opens it
 (P-041). For that second case the bridge must also be told to listen on the LAN

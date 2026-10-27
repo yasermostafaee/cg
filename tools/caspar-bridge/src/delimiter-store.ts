@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { DelimiterOptionSchema, type DelimiterOption } from '@cg/shared-ipc';
+import { DelimiterOptionSchema, SHIPPED_DELIMITERS, type DelimiterOption } from '@cg/shared-ipc';
 
 /**
  * R-034 — the station's split-delimiter list, owned by the bridge and persisted
@@ -27,13 +27,7 @@ const PersistedSchema = z.object({
 });
 
 /** The list a station starts with — the five R-018 shipped, Persian comma included. */
-export const DEFAULT_DELIMITERS: readonly DelimiterOption[] = [
-  { id: 'newline', label: 'new line', value: '\\n' },
-  { id: 'pipe', label: 'pipe', value: '|' },
-  { id: 'persian-comma', label: 'Persian comma', value: '،' },
-  { id: 'comma', label: 'comma', value: ',' },
-  { id: 'semicolon', label: 'semicolon', value: ';' },
-];
+export const DEFAULT_DELIMITERS: readonly DelimiterOption[] = SHIPPED_DELIMITERS;
 
 export interface SetRefusal {
   reason: 'empty-list' | 'duplicate-value';

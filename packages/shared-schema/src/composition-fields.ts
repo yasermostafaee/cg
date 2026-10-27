@@ -354,17 +354,23 @@ export function compositionClosure(
  * standalone composition (no instances) returns just its flat fields with no
  * groups — i.e. unchanged, no namespacing.
  */
-export function aggregateCompositionFields(
+function aggregateCompositionFieldsImpl(
   scene: Pick<Scene, 'compositions'>,
   doc: FieldDoc,
-  depth = 0,
+  depth: number,
+  boundOnly: boolean,
 ): AggregatedFields {
   const groups: CompositionFieldGroup[] = [];
   // The doc's own authored fields. A sequence TEXT item that the designer explicitly
   // bound (a `sequence-item-text` binding → a `text` field) is among these, exactly like
   // a bound text element — so it surfaces here with NO special handling. UNBOUND text
   // items contribute nothing (D-083 follow-up: sequences never auto-expose their items).
-  const fields: DynamicField[] = [...(doc.fields ?? [])];
+  const boundFieldIds = boundOnly
+    ? new Set((doc.bindings ?? []).map((binding) => binding.fieldId))
+    : null;
+  const fields: DynamicField[] = (doc.fields ?? []).filter(
+    (field) => boundFieldIds === null || boundFieldIds.has(field.id),
+  );
   if (depth < MAX_DEPTH) {
     for (const inst of compositionInstancesOf(doc)) {
       const child = scene.compositions?.find((c) => c.id === inst.compositionId);
@@ -373,7 +379,7 @@ export function aggregateCompositionFields(
         instanceId: inst.id,
         name: inst.name,
         compositionId: child.id,
-        aggregate: aggregateCompositionFields(scene, child, depth + 1),
+        aggregate: aggregateCompositionFieldsImpl(scene, child, depth + 1, boundOnly),
       });
     }
     // D-083 — a sequence COMPOSITION item exposes its composition's fields as a group,
@@ -401,7 +407,7 @@ export function aggregateCompositionFields(
           label: sequenceItemHeading(parts),
           labelParts: parts,
           compositionId: child.id,
-          aggregate: aggregateCompositionFields(scene, child, depth + 1),
+          aggregate: aggregateCompositionFieldsImpl(scene, child, depth + 1, boundOnly),
         };
         groups.push(group);
         itemGroups.push({ group, seq });
@@ -410,6 +416,27 @@ export function aggregateCompositionFields(
     disambiguateItemHeadings(itemGroups);
   }
   return { fields, groups };
+}
+
+export function aggregateCompositionFields(
+  scene: Pick<Scene, 'compositions'>,
+  doc: FieldDoc,
+  depth = 0,
+): AggregatedFields {
+  return aggregateCompositionFieldsImpl(scene, doc, depth, false);
+}
+
+/**
+ * The operator form of a composition: only fields that drive at least one render target in their
+ * owning document. Designer may temporarily keep an authored field before it is bound, and older
+ * fixed-file conversions could leave the former Data-key field orphaned. Those are valid authoring
+ * records, but exposing them in CG Control would create an input whose value can affect nothing.
+ */
+export function aggregateBoundCompositionFields(
+  scene: Pick<Scene, 'compositions'>,
+  doc: FieldDoc,
+): AggregatedFields {
+  return aggregateCompositionFieldsImpl(scene, doc, 0, true);
 }
 
 /**

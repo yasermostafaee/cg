@@ -122,6 +122,15 @@ describe('pickFiles cancel-detection (B-020)', () => {
     restore();
   });
 
+  it('lets a caller request one text file without changing legacy picker defaults', () => {
+    const { inputs, restore } = captureInputs();
+    void pickFiles(undefined, { accept: '.txt,text/plain', multiple: false });
+    expect(inputs[0]!.multiple).toBe(false);
+    expect(inputs[0]!.accept).toBe('.txt,text/plain');
+    expect(inputs[0]!.webkitdirectory).not.toBe(true);
+    restore();
+  });
+
   it('selecting succeeds on every open across repeated picks (no intermittent drop)', async () => {
     vi.useFakeTimers();
     const { inputs, restore } = captureInputs();

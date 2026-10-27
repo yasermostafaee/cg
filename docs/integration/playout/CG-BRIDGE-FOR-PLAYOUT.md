@@ -200,20 +200,52 @@ plays is adopted; a row whose layer is empty is reported off air (§6).
 
 `%ProgramData%\CG Bridge\cg-bridge.json`, read at every start:
 
-| Key              | Meaning                                                      | Default            |
-| ---------------- | ------------------------------------------------------------ | ------------------ |
-| `playoutAddress` | The primary engine's API (required)                          | —                  |
-| `amcpHost`       | CasparCG's AMCP host                                         | `127.0.0.1` (IPv4) |
-| `amcpPort`       | CasparCG's AMCP port                                         | `5250`             |
-| `oscPort`        | Our OSC port (server B's is `+1`); `6250` refused            | `6251`             |
-| `controlPort`    | Consoles and `/health`                                       | `5280`             |
-| `templatePort`   | Template pages CasparCG fetches                              | `7911`             |
-| `bridgeAddress`  | The host CasparCG fetches templates from (a separate server) | this machine       |
+| Key              | Meaning                                                      | Default                         |
+| ---------------- | ------------------------------------------------------------ | ------------------------------- |
+| `playoutAddress` | The primary engine's API (required)                          | —                               |
+| `amcpHost`       | CasparCG's AMCP host                                         | `127.0.0.1` (IPv4)              |
+| `amcpPort`       | CasparCG's AMCP port                                         | `5250`                          |
+| `oscPort`        | Our OSC port (server B's is `+1`); `6250` refused            | `6251`                          |
+| `controlPort`    | Consoles and `/health`                                       | `5280`                          |
+| `templatePort`   | Template pages CasparCG fetches                              | `7911`                          |
+| `bridgeAddress`  | The host CasparCG fetches templates from (a separate server) | this machine                    |
+| `textSourceRoot` | Root for Designer-authored live UTF-8 text files             | `text-sources` beside this file |
 
 The file is strict: an unknown key is refused, and the service then does not start; the log names the
-file. `0.11.6` adds no key. To change a value, re-run the installer with it, or edit the file and restart
+file. To change a value, re-run the installer with it, or edit the file and restart
 the service. The same values can be given on the command line (`cg-bridge.exe caspar-bridge.mjs
 --service-config <file> --port …`); the command line wins.
+
+#### Live text files for locked template fields
+
+Designer stores only a relative name such as `newsroom/crawl.txt`. CG Bridge reads that file below
+`textSourceRoot` when the CG Control operator presses **Reload**; the read stages a pending field value
+and does not update an on-air graphic by itself. The default local location is:
+
+```text
+%ProgramData%\CG Bridge\text-sources\newsroom\crawl.txt
+```
+
+Create that folder as an administrator and let the system that produces the text save UTF-8 files
+there. To keep the files on a network share, add (or preserve during an upgrade) this key and restart
+the `CGBridge` service:
+
+```json
+{
+  "playoutAddress": "http://192.168.21.112:8080",
+  "textSourceRoot": "\\\\fileserver\\newsroom\\CG Text"
+}
+```
+
+The service only reads these files. Give the Windows computer account running CG Bridge read access
+to the share (for example `DOMAIN\\CGSERVER$`); give the producing application write access. Paths
+stored by Designer stay relative: on the authoring workstation, use **Browse shared file…** and
+choose the text file directly inside this same `textSourceRoot` share, then verify its live preview.
+Designer saves only a filename such as `crawl.txt`; drive paths, UNC roots, `..`, preview bytes and
+files over 1 MiB are never stored. A missing share or file leaves the current applied/on-air value
+unchanged and is reported beside that field in CG Control. If files are grouped in subfolders,
+configure `textSourceRoot` to the folder whose files are being authored; Designer does not guess a
+relative subfolder from a hidden Windows absolute path.
 
 **CG Bridge never changes a port by itself.** At start it reads Windows' reserved port ranges
 (`netsh interface ipv4 show excludedportrange`): a port of ours inside one is one line in the log and a
@@ -224,6 +256,7 @@ the service. The same values can be given on the command line (`cg-bridge.exe ca
 `%ProgramData%\CG Bridge\`:
 
 - `cg-bridge.json` — the configuration;
+- `text-sources\` — the default root for live UTF-8 files referenced by locked template fields;
 - `.cg-runtime\` — the state (the stack, the layer ledger, the templates, the channels declared, the
   servers, and `bridge-session.json`: CG Bridge's own session on the primary engine — a refresh token, never
   a password; from `0.11.2` `bridge-session-backup.json` beside it, the backup engine's; from `0.11.3`

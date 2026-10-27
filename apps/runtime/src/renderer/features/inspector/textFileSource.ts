@@ -2,13 +2,10 @@
  * R-018 — a replaceable text-file source for field values.
  *
  * The Runtime is a browser SPA (no Node `fs`), so the ONLY real implementation
- * today wraps a File System Access API handle: `showOpenFilePicker` → keep the
- * `FileSystemFileHandle` → `getFile()` + `.text()` on every read, so a read
- * always sees the file's CURRENT bytes. The interface exists on purpose:
- * (a) the split/apply/error logic tests against a fake source with no DOM, and
- * (b) the future watch half (R-026) may source values from a BRIDGE-watched
- * path instead — an FSA handle cannot be converted to a filesystem path, so
- * that source is a different implementation, not a redesign.
+ * has two real implementations: an operator-owned File System Access handle,
+ * and an authored relative path read by CG Bridge. Both read CURRENT bytes on
+ * demand. The interface also keeps split/apply/error logic testable without a
+ * DOM; automatic watching remains the separate R-026 concern.
  */
 export interface TextFileSource {
   /** Operator-facing display name (the picked file's name). */
@@ -26,6 +23,10 @@ export interface TextFileSource {
    * rather than part of the contract every source must satisfy.
    */
   readonly handle?: FileSystemFileHandle;
+  /** R-102 — present only for a source whose bytes come from CG Bridge. */
+  readonly bridgePath?: string;
+  /** Full path returned by CG Bridge after a successful read, or the browser-visible file name. */
+  readonly displayPath?: string;
 }
 
 /**
@@ -106,14 +107,32 @@ export function fileSourceSupported(w: Window = window): boolean {
   return typeof (w as FilePickerWindow).showOpenFilePicker === 'function';
 }
 
-/** A {@link TextFileSource} over a File System Access handle (the only real one today). */
+/** A {@link TextFileSource} over an operator-owned File System Access handle. */
 export function fsaTextFileSource(handle: FileSystemFileHandle): TextFileSource {
   return {
     name: handle.name,
     handle,
+    displayPath: handle.name,
     read: async (): Promise<string> => {
       const file = await handle.getFile();
       return file.text();
+    },
+  };
+}
+
+/** R-102 — a live source read on the Bridge host under its configured safe root. */
+export function bridgeTextFileSource(bridgePath: string): TextFileSource {
+  let sourcePath: string | undefined;
+  return {
+    name: bridgePath,
+    bridgePath,
+    get displayPath(): string {
+      return sourcePath ?? bridgePath;
+    },
+    read: async (): Promise<string> => {
+      const answer = await window.cg.textSources.read({ path: bridgePath });
+      sourcePath = answer.sourcePath ?? bridgePath;
+      return answer.content;
     },
   };
 }

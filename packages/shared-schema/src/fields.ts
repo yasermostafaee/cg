@@ -53,7 +53,69 @@ const RegexSourceSchema = z.string().refine(
  * `TemplateInfo.hasNext` already chose for an authored capability bit: an
  * affordance that is not offered costs less than one that is offered everywhere.
  */
-const FileSourceGrant = { allowFileSource: z.boolean().optional() } as const;
+/**
+ * R-102 — a bridge-backed text source is addressed RELATIVE to the station's
+ * configured root. Kept browser-safe here (no Node `path`) because Designer,
+ * Runtime and Bridge must reject the same spelling before any filesystem read.
+ */
+export function isSafeBridgeTextSourcePath(value: string): boolean {
+  const v = value.trim();
+  if (v !== value || v === '' || v.length > 512 || v.includes('\0')) return false;
+  if (v.startsWith('/') || v.startsWith('\\') || /^[A-Za-z]:[\\/]/.test(v)) return false;
+  const parts = v.replace(/\\/g, '/').split('/');
+  return parts.every((part) => part !== '' && part !== '.' && part !== '..');
+}
+
+export const BridgeTextSourcePathSchema = z
+  .string()
+  .refine(isSafeBridgeTextSourcePath, 'Use a relative path below the CG Bridge text-source root.');
+
+const FileSourcePolicyShape = {
+  inputMode: z.enum(['operator-choice', 'file-only']).optional(),
+  bridgePath: BridgeTextSourcePathSchema.optional(),
+  lockFile: z.literal(true).optional(),
+} as const;
+
+function requirePathWhenLocked(
+  policy: { bridgePath?: string | undefined; lockFile?: true | undefined },
+  ctx: z.RefinementCtx,
+): void {
+  if (policy.lockFile === true && policy.bridgePath === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['bridgePath'],
+      message: 'A locked file needs a relative CG Bridge path.',
+    });
+  }
+}
+
+const ScalarFileSourcePolicySchema = z
+  .object(FileSourcePolicyShape)
+  .superRefine(requirePathWhenLocked);
+
+export const FileSourcePolicySchema = z
+  .object({
+    ...FileSourcePolicyShape,
+    /**
+     * R-102 follow-up — an authored default for turning a text-list file into rows.
+     * The printable spelling is stored (`\\n`, `\\t`, or a literal separator),
+     * exactly like CG Control's station delimiter list. Presence means split;
+     * absence keeps the target-derived CG Control default.
+     */
+    delimiter: z.string().min(1).optional(),
+  })
+  .superRefine(requirePathWhenLocked);
+export type FileSourcePolicy = z.infer<typeof FileSourcePolicySchema>;
+
+const ScalarFileSourceGrant = {
+  allowFileSource: z.boolean().optional(),
+  fileSource: ScalarFileSourcePolicySchema.optional(),
+} as const;
+
+const ListFileSourceGrant = {
+  allowFileSource: z.boolean().optional(),
+  fileSource: FileSourcePolicySchema.optional(),
+} as const;
 
 /**
  * `FIELD-DIGITS-01` — the digits a field's value is written in, as the operator types it in CG
@@ -80,7 +142,7 @@ const TextFieldSchema = DynamicFieldBaseSchema.extend({
   pattern: RegexSourceSchema.optional(),
   direction: z.enum(['auto', 'ltr', 'rtl']).optional(),
   digits: FieldDigitsSchema.optional(),
-  ...FileSourceGrant,
+  ...ScalarFileSourceGrant,
   /**
    * `DELTA-RUN-NEXT-VERSION-01-C` §2 — present when this field drives a countdown's target: CG
    * Control then offers the date and time control and states a passed target in the author's words.
@@ -98,7 +160,7 @@ const MultilineFieldSchema = DynamicFieldBaseSchema.extend({
   pattern: RegexSourceSchema.optional(),
   maxLines: z.number().int().positive().optional(),
   digits: FieldDigitsSchema.optional(),
-  ...FileSourceGrant,
+  ...ScalarFileSourceGrant,
 });
 
 const ImageFieldSchema = DynamicFieldBaseSchema.extend({
@@ -156,7 +218,7 @@ const ListFieldSchema = DynamicFieldBaseSchema.extend({
    * types a cell. Absent is `as-typed` (Keyboard), the identity: an old list draws unchanged.
    */
   digits: FieldDigitsSchema.optional(),
-  ...FileSourceGrant,
+  ...ListFileSourceGrant,
   /**
    * `D-163` — this list is a PAGE LIST: its items are picture items (`{ kind: 'image', … }`) of the
    * sequence it is bound to, and the operator loads its pages as pictures in CG Control rather than
@@ -223,7 +285,9 @@ export function fieldTypeTakesFileSource(
  * once while giving callers the narrowing they actually need.
  */
 export function fieldTakesFileSource(field: DynamicField): field is FileSourceCapableField {
-  return fieldTypeTakesFileSource(field.type);
+  // A page-list is a book of image assets, not a text list. Feeding it lines of
+  // text would corrupt the book payload, so it never participates in this grant.
+  return fieldTypeTakesFileSource(field.type) && !(field.type === 'list' && field.pages === true);
 }
 
 /**
@@ -242,7 +306,44 @@ export function fieldTakesFileSource(field: DynamicField): field is FileSourceCa
  */
 export function fieldAllowsFileSource(field: DynamicField | null | undefined): boolean {
   if (field === null || field === undefined) return false;
-  return fieldTakesFileSource(field) && field.allowFileSource === true;
+  return (
+    fieldTakesFileSource(field) &&
+    (field.allowFileSource === true || field.fileSource !== undefined)
+  );
+}
+
+/** R-102 — the optional authored policy, only where the field variant can carry it. */
+export function fileSourcePolicyOf(
+  field: DynamicField | null | undefined,
+): FileSourcePolicy | undefined {
+  return field !== null && field !== undefined && fieldTakesFileSource(field)
+    ? field.fileSource
+    : undefined;
+}
+
+/** R-102 — whether manual value/list editing is withheld from CG Control. */
+export function fieldUsesFileOnly(field: DynamicField | null | undefined): boolean {
+  return fileSourcePolicyOf(field)?.inputMode === 'file-only';
+}
+
+/** R-102 — any authored Bridge default, whether or not the operator may replace it. */
+export function bridgeTextSourcePath(field: DynamicField | null | undefined): string | undefined {
+  return fileSourcePolicyOf(field)?.bridgePath;
+}
+
+/** R-102 — the locked bridge path, or undefined when the operator still owns file choice. */
+export function lockedBridgeTextSourcePath(
+  field: DynamicField | null | undefined,
+): string | undefined {
+  const policy = fileSourcePolicyOf(field);
+  return policy?.lockFile === true ? policy.bridgePath : undefined;
+}
+
+/** R-102 follow-up — the author's list-file split default, if one was chosen. */
+export function authoredFileDelimiter(field: DynamicField | null | undefined): string | undefined {
+  return field?.type === 'list' && fieldTakesFileSource(field)
+    ? field.fileSource?.delimiter
+    : undefined;
 }
 
 /**

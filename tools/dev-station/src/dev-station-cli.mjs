@@ -8,6 +8,9 @@
  *   pnpm dev:station --playout <url>  change it
  *   pnpm dev:station --fake           a whole fake station on loopback — the Playout, CasparCG
  *                                     serving channels 1 and 2, and their programme feeds (Node 23+)
+ *   pnpm dev:station --fake --text-source-root "\\\\server\\share"
+ *                                     resolve authored text files from the same shared folder as
+ *                                     Designer instead of the fake station's local test folder
  *   pnpm dev:station --fake --pair    the same with a BACKUP ENGINE beside it: a second fake Playout
  *                                     (its own key and password) and its own CasparCG on 5251, the
  *                                     bridge's server B — both passwords printed (RELEASE-0112-01)
@@ -415,7 +418,11 @@ async function main() {
   }
   // `--fake` keeps its own station, so a fake run never replaces the remembered Playout.
   const stateDir = options.fake ? path.join(root, fakeStateName(options)) : root;
-  const paths = stationPaths(stateDir, platform);
+  const basePaths = stationPaths(stateDir, platform);
+  const paths =
+    options.textSourceRoot === undefined
+      ? basePaths
+      : { ...basePaths, textSources: path.resolve(options.textSourceRoot) };
   fs.mkdirSync(stateDir, { recursive: true });
 
   const result = await runDevStation(

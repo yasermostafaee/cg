@@ -8,6 +8,7 @@ import {
   type Element,
   type FieldBinding,
   type FieldDigits,
+  type FileSourcePolicy,
   type ListItem,
   type Scene,
   type SequenceElement,
@@ -48,6 +49,8 @@ export interface ElementFieldMetaPatch {
    * carries it on those three and DROPS it when the author switches to `number`.
    */
   allowFileSource?: boolean;
+  /** R-102 — null explicitly clears the authored authority object. */
+  fileSource?: FileSourcePolicy | null;
   /**
    * `FIELD-DIGITS-01` — the digits the value is written in. `rebuildField` carries it across
    * text ↔ multiline ↔ number; `as-typed` has no number form, so a number built from it carries
@@ -98,6 +101,10 @@ function currentFileSourceGrant(field: DynamicField): boolean | undefined {
   return fieldTakesFileSource(field) ? field.allowFileSource : undefined;
 }
 
+function currentFileSourcePolicy(field: DynamicField): FileSourcePolicy | undefined {
+  return fieldTakesFileSource(field) ? field.fileSource : undefined;
+}
+
 /**
  * `FIELD-DIGITS-01` — the field's AUTHORED digits, or `undefined` when it carries none. Absence
  * stays absence (never normalised to the effective choice), so an old field round-trips without
@@ -141,6 +148,9 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
   // not fall through to the field's previous value.
   const rawGrant = patch.allowFileSource ?? currentFileSourceGrant(field);
   const grant = rawGrant === undefined ? {} : { allowFileSource: rawGrant };
+  const rawPolicy =
+    patch.fileSource === null ? undefined : (patch.fileSource ?? currentFileSourcePolicy(field));
+  const policy = rawPolicy === undefined ? {} : { fileSource: rawPolicy };
 
   // FIELD-DIGITS-01 — carried like the grant: resolved once, absent stays absent.
   const rawDigits = patch.digits ?? currentDigits(field);
@@ -162,6 +172,7 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
       default: field.default,
       ...textDigits,
       ...grant,
+      ...policy,
       ...(field.pages === true ? { pages: true as const } : {}),
     };
   }
@@ -213,6 +224,7 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
       ...(pattern !== undefined ? { pattern } : {}),
       ...textDigits,
       ...grant,
+      ...policy,
     };
   }
   return {
@@ -227,6 +239,7 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
       : {}),
     ...textDigits,
     ...grant,
+    ...policy,
   };
 }
 

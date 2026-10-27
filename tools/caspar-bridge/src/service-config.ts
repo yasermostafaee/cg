@@ -37,6 +37,8 @@ export const ServiceConfigSchema = z
      * separate server; on the Playout machine the core fetches from `127.0.0.1`.
      */
     bridgeAddress: z.string().min(1).optional(),
+    /** Root of live UTF-8 field sources. Relative paths in templates resolve only below this. */
+    textSourceRoot: z.string().min(1).optional(),
   })
   .strict();
 
@@ -117,6 +119,7 @@ export function serviceFlags(loaded: LoadedServiceConfig): Record<string, string
     port: String(c.controlPort ?? SERVICE_DEFAULTS.controlPort),
     'template-serve-port': String(c.templatePort ?? SERVICE_DEFAULTS.templatePort),
     ...(c.bridgeAddress !== undefined ? { 'template-serve-host': c.bridgeAddress } : {}),
+    'text-source-root': c.textSourceRoot ?? path.join(loaded.stateHome, 'text-sources'),
     'bridge-session-path': path.join(loaded.stateHome, '.cg-runtime', 'bridge-session.json'),
     // A fresh CG Bridge declares no channel until a station admin picks them from a console.
     'first-run': true,

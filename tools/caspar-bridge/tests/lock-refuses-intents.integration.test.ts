@@ -367,6 +367,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         // `PAGE-REBUILD-01` — two reads; keeping a package and a rebuild are refused locked.
         'templates.rebuild-plan',
         'templates.source.get',
+        // `R-102` — file-backed variables keep refreshing while the operator lock is active.
+        'textSources.read',
         'update.state',
       ].sort(),
     );

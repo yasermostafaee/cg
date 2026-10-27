@@ -28,6 +28,7 @@ declare module '*station-plan.mjs' {
     readonly fixedLayers: string;
     readonly reservedLayers: string;
     readonly templates: string;
+    readonly pages: string;
     readonly sourceCatalog: string;
     readonly sourceAssignments: string;
     readonly playoutInputs: string;
@@ -37,6 +38,7 @@ declare module '*station-plan.mjs' {
     readonly bridgeSession: string;
     readonly audit: string;
     readonly playoutConfig: string;
+    readonly textSources: string;
     readonly consoleDir: string;
     readonly bridgeLog: string;
     readonly amcpLog: string;
@@ -168,6 +170,8 @@ declare module '*station-plan.mjs' {
         /** `CENTRAL-BRIDGE-01` — the fake Playout alone, for an installed CG Bridge. */
         playoutOnly: boolean;
         playoutPort: number | undefined;
+        /** Optional external root forwarded to the fake CG Bridge; never part of rotated fake state. */
+        textSourceRoot: string | undefined;
       }
     | { error: string };
   /** `CENTRAL-BRIDGE-01` — where `--playout-only` listens unless told: CG Bridge's default Playout. */

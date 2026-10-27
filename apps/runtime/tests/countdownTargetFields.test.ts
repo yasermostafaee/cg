@@ -240,7 +240,7 @@ describe('countdownTargetFieldsOf — the binding marks the field', () => {
 });
 
 describe('produceTemplateDelivery — the marker reaches TemplateInfo', () => {
-  it('a packed template’s target field arrives marked; its untargeted neighbour does not', async () => {
+  it('a packed template’s target field arrives marked; its untargeted neighbour is omitted', async () => {
     const scene = sceneOf({
       layers: [layerOf('l', [clockEl('cd', { target: DATETIME, afterZero: 'count-past' })])],
       fields: [textField('targetTime'), textField('headline')],
@@ -270,6 +270,6 @@ describe('produceTemplateDelivery — the marker reaches TemplateInfo', () => {
     expect(byId.get('targetTime')).toMatchObject({
       countdown: { target: 'datetime', afterZero: 'count-past' },
     });
-    expect(byId.get('headline')).not.toHaveProperty('countdown');
+    expect(byId.has('headline')).toBe(false);
   });
 });

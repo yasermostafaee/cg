@@ -1,18 +1,11 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import type { FieldPath } from './draftStore.js';
-import {
-  DEFAULT_DELIMITER,
-  delimitersVersion,
-  listDelimiters,
-  subscribeDelimiters,
-} from './delimiterStore.js';
-import { ManageDelimitersButton } from './DelimitersSection.js';
-import { openStationSetup } from '../stationSetup/stationSetupStore.js';
+import { DEFAULT_DELIMITER } from './delimiterStore.js';
 import { splitDefaultFor } from './fieldTargetStore.js';
 import { type FromFileFieldKind } from './fromFileContent.js';
 import { reloadFromFile, stageFromFile } from './fromFileOps.js';
@@ -22,9 +15,9 @@ import {
   detachFileSource,
   fromFileState,
   fromFileVersion,
+  reconcileAuthoredFileSource,
   setFromFilePermission,
   subscribeFromFile,
-  updateSplitConfig,
 } from './fromFileStore.js';
 import {
   FILE_SOURCE_NEEDS_PERMISSION_MESSAGE,
@@ -33,6 +26,7 @@ import {
   pickTextFileSource,
   requestReadPermission,
 } from './textFileSource.js';
+import { FromFilePreviewDialog } from './FromFilePreviewDialog.js';
 
 const styles = {
   // NO `marginTop`: the field's column (or, for a list, its footer ROW) owns the
@@ -55,21 +49,6 @@ const styles = {
   // buttons around as the path grew.
   hint: { fontSize: '0.72rem', color: colors.textMuted, margin: 0 },
   error: { fontSize: '0.75rem', color: colors.errorText, margin: 0 },
-  splitLabel: {
-    display: 'flex',
-    gap: '0.3rem',
-    alignItems: 'center',
-    fontSize: '0.75rem',
-    color: colors.textMuted,
-  },
-  // AUTO width, never a fixed one: the options are NAMES now ("Persian comma"),
-  // not one-character values, and an operator can add a longer one at any time.
-  // The old 5rem was sized for `\n` and would clip every real label. `maxWidth`
-  // keeps a pathologically long custom name from pushing the row wider than the
-  // Inspector — it truncates instead, and the full text is still in the menu.
-  // Both override `.cg-field`'s `width: 100%`, which is right for a text input
-  // and wrong for a select that should be as wide as what it holds.
-  delimiter: { width: 'auto', maxWidth: '100%' },
 } as const;
 
 /**
@@ -85,25 +64,62 @@ const styles = {
  * component is mounted only for a field that passed it. Nothing here re-checks the
  * grant — a second copy of that rule is how the two would come to disagree.
  *
- * Chromium-only by nature (File System Access API): elsewhere the button
- * renders disabled with the reason — a legible degrade, never a broken control.
+ * The operator-owned picker is Chromium-only (File System Access API): where it
+ * is unavailable that picker is disabled with a reason. An authored Bridge
+ * source does not depend on the browser filesystem API.
  */
 export function FromFileControl({
   item,
   path,
   kind,
   fieldId,
+  authoredPath,
+  authoredDelimiter,
+  lockFile = false,
 }: {
   item: StackItemState;
   path: FieldPath;
   kind: FromFileFieldKind;
   fieldId: string;
+  /** R-102 — the author's Bridge default; it remains replaceable unless locked. */
+  authoredPath?: string | undefined;
+  /** R-102 — the author's initial delimiter for a list file. */
+  authoredDelimiter?: string | undefined;
+  lockFile?: boolean;
 }): JSX.Element {
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
-  useSyncExternalStore(subscribeDelimiters, delimitersVersion);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const state = fromFileState(item.itemId, path);
+  const lockedPath = lockFile ? authoredPath : undefined;
   const supported = fileSourceSupported();
-  const delimiters = listDelimiters();
+  const pathKey = JSON.stringify(path);
+  const lockedSplit = kind === 'list' && authoredDelimiter !== undefined;
+
+  useEffect(() => {
+    reconcileAuthoredFileSource(item.itemId, path, authoredPath, lockFile, {
+      split: lockFile
+        ? lockedSplit
+        : (state?.split ??
+          (kind === 'list' &&
+            (authoredDelimiter !== undefined || splitDefaultFor(item.templateId, path)))),
+      delimiter: lockFile
+        ? (authoredDelimiter ?? DEFAULT_DELIMITER)
+        : (state?.delimiter ?? authoredDelimiter ?? DEFAULT_DELIMITER),
+    });
+  }, [
+    authoredDelimiter,
+    authoredPath,
+    item.itemId,
+    item.templateId,
+    kind,
+    lockFile,
+    lockedSplit,
+    path,
+    pathKey,
+    state?.delimiter,
+    state?.source.bridgePath,
+    state?.split,
+  ]);
 
   const choose = async (): Promise<void> => {
     let source;
@@ -118,12 +134,31 @@ export function FromFileControl({
     // import): a sequence's list splits into discrete items; a ticker — and any
     // unknown/ambiguous target — stays whole-text verbatim (Cinegy parity).
     attachFileSource(item.itemId, path, source, {
-      split: kind === 'list' && splitDefaultFor(item.templateId, path),
-      delimiter: DEFAULT_DELIMITER,
+      split:
+        kind === 'list' &&
+        (authoredDelimiter !== undefined || splitDefaultFor(item.templateId, path)),
+      delimiter: authoredDelimiter ?? DEFAULT_DELIMITER,
     });
     // Initial load STAGES like a hand edit; the operator applies with Update.
     await stageFromFile(item, path, kind);
   };
+
+  if (lockedPath !== undefined && state?.source.bridgePath !== lockedPath) {
+    return (
+      <div className="cg-from-file" style={styles.wrap}>
+        <div style={styles.row}>
+          <Tag className="cg-file-chip">
+            <span className="cg-file-chip__name" title={lockedPath}>
+              {lockedPath}
+            </span>
+          </Tag>
+          <Button variant="secondary" disabled aria-label={`Reload ${fieldId} from file`}>
+            Reload
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (state === undefined) {
     return (
@@ -181,15 +216,17 @@ export function FromFileControl({
           <span className="cg-file-chip__name" title={state.source.name}>
             {state.source.name}
           </span>
-          <button
-            type="button"
-            className="cg-file-chip__detach"
-            aria-label={`Detach ${fieldId} file source`}
-            title={`Detach ${state.source.name}`}
-            onClick={() => detachFileSource(item.itemId, path)}
-          >
-            ×
-          </button>
+          {lockedPath === undefined && (
+            <button
+              type="button"
+              className="cg-file-chip__detach"
+              aria-label={`Detach ${fieldId} file source`}
+              title={`Detach ${state.source.name}`}
+              onClick={() => detachFileSource(item.itemId, path)}
+            >
+              ×
+            </button>
+          )}
         </Tag>
         {needsGrant ? (
           <AsyncButton
@@ -220,69 +257,35 @@ export function FromFileControl({
             Reload
           </AsyncButton>
         )}
+        {!needsGrant && (
+          <Button
+            variant="secondary"
+            aria-label={`View ${fieldId} file content and fields`}
+            onClick={() => setPreviewOpen(true)}
+          >
+            View content…
+          </Button>
+        )}
         {/* THE DETACH `✕` MOVED INTO THE FILE CHIP ABOVE — it is part of the file
             now, not a free-standing button at the end of the row. It stood here as
             an `icon`: the same shape and the same glyph as the item-delete buttons
             one row up, doing something else entirely. Do not put it back. */}
       </div>
-      {kind === 'list' && (
-        <div style={styles.row}>
-          <label style={styles.splitLabel}>
-            <input
-              type="checkbox"
-              checked={state.split}
-              onChange={(e) => updateSplitConfig(item.itemId, path, { split: e.target.checked })}
-              aria-label={`Split ${fieldId} into items`}
-            />
-            Split on delimiter
-          </label>
-          {state.split && (
-            <>
-              {/* B-113 — a PICKER, not a text box. As a free-text input backed by
-                  a <datalist>, this showed only the option matching whatever was
-                  already typed: with the default `\n` in the box, the other four
-                  delimiters were filtered out and invisible until the operator
-                  cleared it. A select lists them all, by NAME, and cannot be
-                  typed into — a hand-typed delimiter was only ever a way to
-                  produce a split nobody intended.
-
-                  The current value is included even when it is not in the
-                  configured list, so removing a delimiter in the modal cannot
-                  silently change how an attached field splits. */}
-              <select
-                className="cg-field"
-                style={styles.delimiter}
-                value={state.delimiter}
-                onChange={(e) =>
-                  updateSplitConfig(item.itemId, path, { delimiter: e.target.value })
-                }
-                aria-label={`${fieldId} split delimiter`}
-              >
-                {delimiters.every((d) => d.value !== state.delimiter) && (
-                  <option value={state.delimiter}>{state.delimiter} (in use)</option>
-                )}
-                {delimiters.map((d) => (
-                  <option key={d.id} value={d.value}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-              {/* `STATION-SETUP-02` — a deep link into Station setup's Delimiters section,
-                  kept beside the picker because this is where the need is discovered. */}
-              <ManageDelimitersButton onOpen={() => openStationSetup('delimiters')} />
-            </>
-          )}
-        </div>
-      )}
-      {kind === 'list' && !state.split && (
-        <p style={styles.hint}>Whole file becomes ONE item — separators render exactly as typed.</p>
-      )}
       {needsGrant && <p style={styles.hint}>{FILE_SOURCE_NEEDS_PERMISSION_MESSAGE}</p>}
       {state.error !== null && (
         <p style={styles.error} role="alert">
           {state.error}
         </p>
       )}
+      <FromFilePreviewDialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        item={item}
+        path={path}
+        kind={kind}
+        fieldId={fieldId}
+        lockFile={lockedPath !== undefined}
+      />
     </div>
   );
 }

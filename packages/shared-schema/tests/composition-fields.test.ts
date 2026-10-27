@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  aggregateBoundCompositionFields,
   aggregateCompositionFields,
   aggregateHasFields,
   compositionClosure,
@@ -103,6 +104,36 @@ function comp(over: Partial<Composition> & { id: string }): Composition {
 }
 
 describe('aggregateCompositionFields (D-025)', () => {
+  it('keeps authoring fields intact but omits unbound fields from the operator form', () => {
+    const child = comp({
+      id: 'child',
+      fields: [textField('connected'), textField('orphan')],
+      bindings: [{ fieldId: 'connected', target: { kind: 'text', elementId: 'label' } }],
+    });
+    const scene = { compositions: [child] } as Pick<Scene, 'compositions'>;
+
+    expect(aggregateCompositionFields(scene, child).fields.map((field) => field.id)).toEqual([
+      'connected',
+      'orphan',
+    ]);
+    expect(aggregateBoundCompositionFields(scene, child).fields.map((field) => field.id)).toEqual([
+      'connected',
+    ]);
+  });
+
+  it("filters nested operator groups by each child document's own bindings", () => {
+    const child = comp({
+      id: 'child',
+      fields: [textField('connected'), textField('orphan')],
+      bindings: [{ fieldId: 'connected', target: { kind: 'text', elementId: 'label' } }],
+    });
+    const parent = comp({ id: 'parent', layers: [layer([instance('i1', 'child', 'nested')])] });
+    const scene = { compositions: [child, parent] } as Pick<Scene, 'compositions'>;
+
+    const aggregate = aggregateBoundCompositionFields(scene, parent);
+    expect(aggregate.groups[0]?.aggregate.fields.map((field) => field.id)).toEqual(['connected']);
+  });
+
   it('(a) a standalone composition shows only its own field(s), no namespaces', () => {
     const child = comp({ id: 'child', fields: [textField('teamName')] });
     const scene = { compositions: [child] } as Pick<Scene, 'compositions'>;

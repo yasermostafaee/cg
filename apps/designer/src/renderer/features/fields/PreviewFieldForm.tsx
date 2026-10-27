@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { writeDigitsInto } from '@cg/gesture';
 import {
   fieldDigitsOf,
+  fieldTakesFileSource,
+  fileSourcePolicyOf,
   type AggregatedFields,
   type DynamicField,
   type FieldDigits,
@@ -227,6 +229,7 @@ function AggregateSection({
               ? (itemId) => onUpdateItem([...path, f.id], itemId)
               : undefined
           }
+          readOnly={fieldTakesFileSource(f) && fileSourcePolicyOf(f)?.inputMode === 'file-only'}
         />
       ))}
 
@@ -279,6 +282,7 @@ function FieldRow({
   columns,
   appliedItems,
   onUpdateItem,
+  readOnly = false,
 }: {
   field: DynamicField;
   value: FieldValue | undefined;
@@ -290,6 +294,7 @@ function FieldRow({
   columns?: readonly ListItemColumn[] | undefined;
   appliedItems?: readonly ListItem[] | undefined;
   onUpdateItem?: ((itemId: string) => void) | undefined;
+  readOnly?: boolean | undefined;
 }): JSX.Element {
   const error = validateField(field, value);
   // D-106 follow-up — a `list` field applies PER ITEM (each item input carries its
@@ -300,29 +305,32 @@ function FieldRow({
       <label className={s.label} title={field.description}>
         {field.label || field.id}
         {field.required && <span className={s.required}> *</span>}
+        {readOnly && <span className={s.readOnlyTag}>file only</span>}
         {pending === true && (
           <span className={s.pendingTag} title="Edited — not yet applied to the stage">
             pending
           </span>
         )}
       </label>
-      {renderInput(
-        field,
-        value,
-        onChange,
-        error !== null,
-        showDwell === true,
-        columns,
-        appliedItems,
-        onUpdateItem,
-      )}
+      {readOnly
+        ? renderReadOnlyValue(field, value)
+        : renderInput(
+            field,
+            value,
+            onChange,
+            error !== null,
+            showDwell === true,
+            columns,
+            appliedItems,
+            onUpdateItem,
+          )}
       {error !== null && (
         <span className={s.error} role="alert">
           <Icon icon={TriangleAlert} size={14} />
           {error}
         </span>
       )}
-      {pending === true && onUpdate !== undefined && !isList && (
+      {!readOnly && pending === true && onUpdate !== undefined && !isList && (
         <Button
           size="sm"
           className={s.updateField}
@@ -335,6 +343,32 @@ function FieldRow({
         </Button>
       )}
     </div>
+  );
+}
+
+function renderReadOnlyValue(field: DynamicField, value: FieldValue | undefined): JSX.Element {
+  const label = field.label || field.id;
+  if (field.type === 'list') {
+    const items = listItems(value, field.default);
+    return (
+      <ol className={s.readOnlyItems} aria-label={`${label} read-only items`}>
+        {items.map((item, index) => (
+          <li key={item.id}>
+            <span>{String(index + 1)}</span>
+            <bdi>{typeof item.text === 'string' ? item.text : ''}</bdi>
+          </li>
+        ))}
+      </ol>
+    );
+  }
+  return (
+    <textarea
+      className={cx(s.input, s.readOnlyValue)}
+      readOnly
+      rows={field.type === 'multiline' ? 3 : 1}
+      value={asString(value)}
+      aria-label={label}
+    />
   );
 }
 

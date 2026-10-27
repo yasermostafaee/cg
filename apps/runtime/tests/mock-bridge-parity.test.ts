@@ -149,6 +149,8 @@ const BRIDGE_SURFACE: {
     // `R-100` — a book's pictures (the mock: kept in the page's memory, checked as the bridge checks).
     // `RUN-NEXT-VERSION-03` 1.1 — and a stored picture read back.
     pages: ['put', 'get'],
+    // `R-102` — live authored text comes from CG Bridge; test mode refuses honestly.
+    textSources: ['read'],
     /*
       🔴 **SESSION BR — `delimiters` AND `sources` were BOTH missing from this expected tree,
       so the one guard that exists to prove the mock shim matches the real bridge has never

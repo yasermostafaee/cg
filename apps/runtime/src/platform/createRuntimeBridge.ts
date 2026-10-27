@@ -465,6 +465,11 @@ export function createMockBridge(): RuntimeBridge {
       get: (req) => Promise.resolve(mock.getPage(req.sha256)),
     },
 
+    textSources: {
+      read: (req) =>
+        Promise.reject(new Error(`Test mode has no CG Bridge text source for “${req.path}”.`)),
+    },
+
     // `CHANNEL-TEMPLATES-01` — each channel's own list, the channel passed through as named.
     templates: {
       get: (req) => Promise.resolve(mock.templateGet(req.templateId, req.channel)),

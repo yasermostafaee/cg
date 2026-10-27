@@ -8,6 +8,7 @@ import {
 } from './fromFilePersistence.js';
 import { fieldPathKey } from './listFieldTargets.js';
 import {
+  bridgeTextFileSource,
   fsaTextFileSource,
   queryReadPermission,
   type FileSourcePermission,
@@ -44,6 +45,10 @@ export interface FromFileState {
 }
 
 const entries = new Map<string, FromFileState>();
+/** The authored default already considered for each row/field during this session. */
+const authoredDefaultPaths = new Map<string, string>();
+/** Items whose persisted operator choices have been read (including an empty result). */
+const restoredItemIds = new Set<string>();
 let version = 0;
 const listeners = new Set<() => void>();
 
@@ -111,8 +116,62 @@ export function attachFileSource(
     permission: 'granted',
   };
   entries.set(keyOf(itemId, path), entry);
+  // A bridge-authored source replaces any operator-owned durable handle. It has
+  // no handle of its own to persist, and the old one must not reappear next boot.
+  if (source.bridgePath !== undefined) void deleteAttachment(keyOf(itemId, path));
   persist(itemId, path, entry);
   bump();
+}
+
+/**
+ * R-102 — reconcile a template-authored Bridge source with operator state.
+ *
+ * An unlocked path is a DEFAULT: install it once when the field has no source,
+ * then preserve an operator replacement or detach for the rest of the session.
+ * A locked path is an author-owned fact and therefore replaces any other source.
+ */
+export function reconcileAuthoredFileSource(
+  itemId: string,
+  path: FieldPath,
+  bridgePath: string | undefined,
+  locked: boolean,
+  defaults: { split: boolean; delimiter: string },
+): void {
+  const key = keyOf(itemId, path);
+  if (bridgePath === undefined) {
+    authoredDefaultPaths.delete(key);
+    return;
+  }
+  // Do not let an authored default race the IndexedDB restore and erase an
+  // operator override before it has had a chance to reappear.
+  if (!restoredItemIds.has(itemId)) return;
+
+  const previousDefault = authoredDefaultPaths.get(key);
+  authoredDefaultPaths.set(key, bridgePath);
+  const current = entries.get(key);
+  const needsLockedSource = locked && current?.source.bridgePath !== bridgePath;
+  const needsFirstDefault = !locked && previousDefault === undefined && current === undefined;
+  const authoredDefaultChanged =
+    !locked &&
+    previousDefault !== undefined &&
+    previousDefault !== bridgePath &&
+    (current === undefined || current.source.bridgePath === previousDefault);
+  if (needsLockedSource || needsFirstDefault || authoredDefaultChanged) {
+    attachFileSource(itemId, path, bridgeTextFileSource(bridgePath), defaults);
+    return;
+  }
+  // A lock owns the whole source definition, including how list bytes become
+  // items. An operator choice persisted before the template was locked must not
+  // survive behind a read-only UI and silently override the authored delimiter.
+  if (
+    locked &&
+    current !== undefined &&
+    current.source.bridgePath === bridgePath &&
+    (current.split !== defaults.split || current.delimiter !== defaults.delimiter)
+  ) {
+    entries.set(key, { ...current, split: defaults.split, delimiter: defaults.delimiter });
+    bump();
+  }
 }
 
 /** Detach the field's source (the field goes back to hand editing only). */
@@ -244,6 +303,13 @@ export function pruneFromFile(snapshot: StackPruneInput): void {
       changed = true;
     }
   }
+  for (const itemId of [...restoredItemIds]) {
+    if (!live.has(itemId)) restoredItemIds.delete(itemId);
+  }
+  for (const key of [...authoredDefaultPaths.keys()]) {
+    const [itemId] = JSON.parse(key) as [string, ...string[]];
+    if (!live.has(itemId)) authoredDefaultPaths.delete(key);
+  }
   if (changed) bump();
 }
 
@@ -290,11 +356,20 @@ export async function restoreFromFileAttachments(snapshot: StackPruneInput): Pro
     changed = true;
   }
   void pruneAttachments(live);
-  if (changed) bump();
+  let readinessChanged = false;
+  for (const itemId of live) {
+    if (!restoredItemIds.has(itemId)) {
+      restoredItemIds.add(itemId);
+      readinessChanged = true;
+    }
+  }
+  if (changed || readinessChanged) bump();
 }
 
 /** Test-only: wipe all entries. */
 export function __resetFromFileForTest(): void {
   entries.clear();
+  authoredDefaultPaths.clear();
+  restoredItemIds.clear();
   bump();
 }

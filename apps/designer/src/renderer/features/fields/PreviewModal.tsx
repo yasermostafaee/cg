@@ -25,7 +25,12 @@ import { PreviewTransport } from './PreviewTransport.js';
 import { parseRehearsalChoice, stepRehearsalChoices } from '../inspector/countdown-steps.js';
 import { PreviewScopeTiming } from './PreviewScopeTiming.js';
 import { type TimingOverride } from './PreviewTimingControls.js';
+import { applyDesignerFileSourcePreviews } from './fileSourcePreviewStore.js';
 import * as s from './PreviewModal.css.js';
+
+function previewSeed(sceneId: string, aggregate: AggregatedFields): NestedFieldValues {
+  return applyDesignerFileSourcePreviews(sceneId, aggregate.fields, defaultNestedValues(aggregate));
+}
 
 /** A stable key for the aggregate's SHAPE (fields + nested namespaces), so the
  *  preview re-seeds only when the form structure changes — not on value edits. */
@@ -201,14 +206,16 @@ export function PreviewModal({
   // nested instances added/removed/renamed) but not on unrelated edits, so typed
   // test values survive — the "adjust state during render on key change" pattern.
   const shapeKey = useMemo(() => aggregateShapeKey(aggregate), [aggregate]);
-  const [values, setValues] = useState<NestedFieldValues>(() => defaultNestedValues(aggregate));
+  const [values, setValues] = useState<NestedFieldValues>(() => previewSeed(scene.id, aggregate));
   // D-106 — `values` is the PENDING (edited) form state; `applied` is what's on the
   // stage. Editing changes `values` only; an explicit Update commits pending → applied.
-  const [applied, setApplied] = useState<NestedFieldValues>(() => defaultNestedValues(aggregate));
+  const [applied, setApplied] = useState<NestedFieldValues>(() => previewSeed(scene.id, aggregate));
+  const appliedRef = useRef(applied);
+  appliedRef.current = applied;
   const [seededKey, setSeededKey] = useState(shapeKey);
   if (seededKey !== shapeKey) {
     setSeededKey(shapeKey);
-    const seeded = defaultNestedValues(aggregate);
+    const seeded = previewSeed(scene.id, aggregate);
     setValues(seeded);
     setApplied(seeded);
   }
@@ -302,12 +309,12 @@ export function PreviewModal({
   const onNext = useCallback(() => dispatch.next(), [dispatch]);
   const onPrevious = useCallback(() => dispatch.previous(), [dispatch]);
   const onReset = useCallback(() => {
-    const seeded = defaultNestedValues(aggregate);
+    const seeded = previewSeed(scene.id, aggregate);
     setValues(seeded);
     setApplied(seeded);
     dispatch.reset();
     setPaused(false);
-  }, [dispatch, aggregate]);
+  }, [dispatch, aggregate, scene.id]);
   // D-106 — apply pending edits to the stage. "Update all" commits every pending
   // field at once; a per-field Update commits just one path.
   const onUpdateAll = useCallback(() => {
@@ -440,7 +447,7 @@ export function PreviewModal({
       // Lottie mounts its player on this dedicated preview iframe.
       post({ action: 'lottie-assets', lottieAssets: lottieAssetsForScene(scene) });
       post({ action: 'scrub', frame: 0 });
-      post({ action: 'update', fields: defaultNestedValues(aggregate) });
+      post({ action: 'update', fields: appliedRef.current });
       // `D-165` — a freshly booted page starts unmuted; carry the author's switch over.
       post({ action: 'sound-muted', muted: soundMutedRef.current });
       // `D-141` — and the zone rehearsal knobs, which a fresh page has forgotten too.

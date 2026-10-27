@@ -704,6 +704,11 @@ interface ModalProps {
   message?: ModalMessage | readonly ModalMessage[];
   /** Cancel — Escape, backdrop click, and the dialog's own dismiss all route here. */
   onClose: () => void;
+  /**
+   * A non-cancellable operation is running inside the dialog. The frame stays visible and announces
+   * progress, but Escape, backdrop and the close affordance cannot imply that the work was cancelled.
+   */
+  busy?: boolean;
   children?: ReactNode;
   ariaLabel?: string;
   /**
@@ -829,6 +834,7 @@ export function Modal({
   footer,
   message,
   onClose,
+  busy = false,
   children,
   ariaLabel,
   size = 'prose',
@@ -909,14 +915,14 @@ export function Modal({
       */
       if (!layer.isTop()) return;
       e.stopPropagation();
-      onClose();
+      if (!busy) onClose();
     }
 
     document.addEventListener('keydown', onKeyDown, true);
     return () => {
       document.removeEventListener('keydown', onKeyDown, true);
     };
-  }, [onClose, layer]);
+  }, [busy, onClose, layer]);
 
   return createPortal(
     <div
@@ -929,7 +935,7 @@ export function Modal({
       }
       role="presentation"
       data-modal-layer={layerLevel}
-      onClick={onClose}
+      onClick={busy ? undefined : onClose}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* The scrim cancels; a click INSIDE the dialog must not. */}
@@ -938,6 +944,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel ?? title}
+        aria-busy={busy ? 'true' : undefined}
         data-modal-size={size}
         style={{
           ...styles.dialog,
@@ -998,6 +1005,7 @@ export function Modal({
             aria-label="Close"
             title="Close (Escape)"
             onClick={onClose}
+            disabled={busy}
             className="cg-modal-close"
           >
             <Icon icon={X} size={16} />

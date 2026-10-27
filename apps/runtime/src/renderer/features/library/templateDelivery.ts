@@ -11,7 +11,7 @@ import {
   type TemplatesSourcePutChannel,
 } from '@cg/shared-ipc';
 import {
-  aggregateCompositionFields,
+  aggregateBoundCompositionFields,
   hasNextStep,
   hasSoundEffects,
   pageListsOf,
@@ -322,7 +322,7 @@ export async function produceTemplateDelivery(
   const aggregate = withListLimits(
     scene,
     scene,
-    countdownTargetFieldsOf(scene, scene, aggregateCompositionFields(scene, scene)),
+    countdownTargetFieldsOf(scene, scene, aggregateBoundCompositionFields(scene, scene)),
   );
   // R-004 — carry BOTH labels the package can offer, and let the display rule choose.
   //

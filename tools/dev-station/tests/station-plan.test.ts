@@ -132,6 +132,16 @@ describe('isolation — its own state folder, every path named', () => {
     }
   });
 
+  it('passes the authored text-source root explicitly, inside fake state by default', () => {
+    const stateDir = 'C:\\Users\\op\\AppData\\Local\\CG Control Dev\\fake';
+    const paths = stationPaths(stateDir, 'win32');
+    const args = bridgeArgs(paths, 'http://127.0.0.1:8080');
+    expect(paths.textSources).toBe(`${stateDir}\\text-sources`);
+    expect(
+      args.slice(args.indexOf('--text-source-root'), args.indexOf('--text-source-root') + 2),
+    ).toEqual(['--text-source-root', `${stateDir}\\text-sources`]);
+  });
+
   it('the bridge is started as a station’s bridge starts — first-run, the lifeline, 5280 and 7911 — with no flag that would override the plant connection', () => {
     const args = bridgeArgs(stationPaths('/s', 'linux'), 'http://192.168.21.111:8080');
     for (const flag of ['--first-run', '--exit-on-stdin-close']) expect(args).toContain(flag);
@@ -413,6 +423,15 @@ describe('the flags', () => {
       playout: '192.168.21.111',
     });
     expect(parseArgs(['--fake', '--no-open'])).toMatchObject({ fake: true, open: false });
+    expect(
+      parseArgs(['--fake', '--text-source-root', String.raw`\\newsroom\CG Text`]),
+    ).toMatchObject({
+      textSourceRoot: String.raw`\\newsroom\CG Text`,
+    });
+    expect(parseArgs(['--fake', '--text-source-root=D:\\CG-Customers\\Text'])).toMatchObject({
+      textSourceRoot: 'D:\\CG-Customers\\Text',
+    });
+    expect(parseArgs(['--fake', '--text-source-root'])).toHaveProperty('error');
     expect(parseArgs(['--playout'])).toHaveProperty('error');
     expect(parseArgs(['--fake', '--playout', 'x'])).toHaveProperty('error');
     expect(parseArgs(['--port', '1'])).toHaveProperty('error');

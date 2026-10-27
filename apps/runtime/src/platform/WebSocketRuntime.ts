@@ -2311,6 +2311,12 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(PagesGetChannel, req, PAGE_PUT_TIMEOUT_MS),
   };
 
+  /** R-102 — authored live files are read by CG Bridge, never by browser filesystem APIs. */
+  readonly textSources = {
+    read: (req: ChannelRequest<typeof ipcChannels.TextSourcesReadChannel>) =>
+      this.#invoke(ipcChannels.TextSourcesReadChannel, req),
+  };
+
   readonly templates = {
     get: async (req: ChannelRequest<typeof TemplatesGetChannel>) => {
       if (this.#status === 'live') {

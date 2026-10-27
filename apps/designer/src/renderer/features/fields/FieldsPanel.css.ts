@@ -4,24 +4,53 @@ import { colors } from '../../theme.js';
 export const block = style({
   display: 'flex',
   flexDirection: 'column',
-  gap: '0.4rem',
+  minWidth: 0,
 });
 
 export const list = style({
   display: 'flex',
   flexDirection: 'column',
-  gap: '0.45rem',
+  gap: '0.65rem',
+  minWidth: 0,
 });
 
-export const empty = style({ color: colors.textMuted, fontSize: '0.82rem' });
+export const empty = style({ color: colors.textMuted, fontSize: '0.78rem', margin: '0.2rem 0' });
+
+const columns = 'minmax(44px, 0.72fr) minmax(66px, 1.12fr) minmax(84px, 1.42fr) 48px';
+
+export const table = style({
+  minWidth: 0,
+  overflow: 'hidden',
+  border: `1px solid ${colors.border}`,
+  borderRadius: '0.25rem',
+  background: colors.panel,
+});
+
+export const tableHeader = style({
+  display: 'grid',
+  gridTemplateColumns: columns,
+  gap: '0.3rem',
+  alignItems: 'center',
+  padding: '0.34rem 0.4rem',
+  borderBottom: `1px solid ${colors.border}`,
+  background: colors.panelMuted,
+  color: colors.textMuted,
+  fontSize: '0.62rem',
+  fontWeight: 700,
+  letterSpacing: '0.035em',
+  textTransform: 'uppercase',
+});
+
+export const actionsHeader = style({ textAlign: 'end' });
 
 /** A nested child-instance namespace group (D-025) — read-only, indented. */
 export const nsGroup = style({
-  paddingLeft: '0.5rem',
+  paddingInlineStart: '0.5rem',
   borderLeft: `2px solid ${colors.border}`,
   display: 'flex',
   flexDirection: 'column',
-  gap: '0.1rem',
+  gap: '0.2rem',
+  marginTop: '0.25rem',
 });
 
 export const nsTitle = style({
@@ -32,28 +61,46 @@ export const nsTitle = style({
   textTransform: 'uppercase',
 });
 
-export const nsItem = style({ color: colors.text, fontSize: '0.74rem' });
-
-export const nsType = style({ color: colors.textMuted, fontSize: '0.66rem' });
-
-export const fieldCard = style({
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.25rem',
-  padding: '0.4rem 0.5rem',
-  border: `1px solid ${colors.border}`,
-  borderRadius: '0.25rem',
-  background: colors.panelMuted,
-});
-
-export const cardHeader = style({
-  display: 'flex',
-  justifyContent: 'space-between',
+export const fieldRow = style({
+  display: 'grid',
+  gridTemplateColumns: columns,
+  gap: '0.3rem',
   alignItems: 'center',
-  gap: '0.5rem',
+  padding: '0.4rem',
+  minWidth: 0,
+  borderBottom: `1px solid ${colors.border}`,
+  selectors: {
+    '&:last-child': { borderBottom: 0 },
+    '&:nth-child(even)': { background: colors.panelMuted },
+    '&:hover': { background: colors.menuHover },
+  },
 });
 
-export const cardId = style({ fontSize: '0.78rem', color: colors.text, fontWeight: 600 });
+export const readonlyRow = style({
+  display: 'grid',
+  gridTemplateColumns: columns,
+  gap: '0.3rem',
+  alignItems: 'center',
+  padding: '0.4rem',
+  minWidth: 0,
+  borderBottom: `1px solid ${colors.border}`,
+  selectors: {
+    '&:last-child': { borderBottom: 0 },
+    '&:nth-child(even)': { background: colors.panelMuted },
+  },
+});
+
+export const readonlyLabel = style({ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' });
+
+export const cardId = style({
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontSize: '0.72rem',
+  color: colors.text,
+  fontWeight: 600,
+});
 
 export const cardType = style({
   fontSize: '0.7rem',
@@ -62,22 +109,20 @@ export const cardType = style({
   letterSpacing: '0.05em',
 });
 
-export const cardActions = style({ display: 'flex', gap: '0.3rem' });
+export const titleCell = style({ minWidth: 0 });
 
-export const smallButton = style({
-  background: 'transparent',
-  color: colors.textMuted,
-  border: `1px solid ${colors.border}`,
-  padding: '0.15rem 0.45rem',
-  borderRadius: '0.2rem',
-  cursor: 'pointer',
-  fontSize: '0.72rem',
+export const fieldDetails = style({
+  minWidth: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.12rem',
 });
 
-export const smallButtonActive = style({
-  background: 'rgba(56,189,248,0.2)',
-  color: '#e0f2fe',
-  borderColor: 'rgba(56,189,248,0.6)',
+export const cardActions = style({
+  display: 'grid',
+  gridTemplateColumns: '22px 22px',
+  justifyContent: 'end',
+  gap: '0.1rem',
 });
 
 export const bindList = style({
@@ -89,11 +134,18 @@ export const bindList = style({
 
 export const bindRow = style({
   display: 'flex',
-  justifyContent: 'space-between',
   alignItems: 'center',
-  gap: '0.4rem',
-  fontSize: '0.78rem',
+  gap: '0.15rem',
+  minWidth: 0,
+  fontSize: '0.7rem',
   color: colors.text,
+});
+
+export const bindingText = style({
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
 });
 
 export const bindEmpty = style({

@@ -352,4 +352,60 @@ describe('§2B — importing is reachable, and it is not the load', () => {
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
     expect(document.querySelector('[data-import-drop]')).toBeNull();
   });
+
+  it('R-103 — cancelling the OS chooser does not enter the import progress state', async () => {
+    await openPicker();
+    const importOpen = document.querySelector<HTMLButtonElement>('[data-template-import-open]');
+    const input = document.querySelector<HTMLInputElement>('input[data-template-file-input]');
+    if (input === null) throw new Error('no file input');
+
+    await click(importOpen);
+    await act(async () => {
+      input.dispatchEvent(new Event('cancel'));
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector('[data-template-import-progress]')).toBeNull();
+    expect(document.querySelector('[role="dialog"]')?.getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('R-103 — a selected package names itself in a blocking progress state until import settles', async () => {
+    await openPicker();
+    const importOpen = document.querySelector<HTMLButtonElement>('[data-template-import-open]');
+    const input = document.querySelector<HTMLInputElement>('input[data-template-file-input]');
+    if (input === null) throw new Error('no file input');
+    let rejectRead: ((reason: Error) => void) | null = null;
+    const file = new File(['package'], 'heavy-news.vcg', { type: 'application/octet-stream' });
+    Object.defineProperty(file, 'arrayBuffer', {
+      value: () =>
+        new Promise<ArrayBuffer>((_resolve, reject) => {
+          rejectRead = reject;
+        }),
+    });
+
+    await click(importOpen);
+    Object.defineProperty(input, 'files', { configurable: true, value: [file] });
+    await act(async () => {
+      input.dispatchEvent(new Event('change'));
+      await Promise.resolve();
+    });
+
+    const progress = document.querySelector('[data-template-import-progress]');
+    expect(progress?.textContent).toContain('Importing template');
+    expect(progress?.textContent).toContain('heavy-news.vcg');
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    expect(dialog?.getAttribute('aria-busy')).toBe('true');
+    expect(dialog?.querySelector<HTMLButtonElement>('[aria-label="Close"]')?.disabled).toBe(true);
+    expect(dialog?.querySelector('[data-template-list]')).toBeNull();
+    expect(commitButton()?.disabled).toBe(true);
+
+    await act(async () => {
+      rejectRead?.(new Error('test read stopped'));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(document.querySelector('[data-template-import-progress]')).toBeNull();
+    expect(dialog?.getAttribute('aria-busy')).toBeNull();
+    expect(dialog?.textContent).toContain('Could not read heavy-news.vcg');
+  });
 });

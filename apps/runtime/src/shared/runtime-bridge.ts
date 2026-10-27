@@ -108,6 +108,7 @@ import type {
   TemplatesRemoveChannel,
   TemplatesSourceGetChannel,
   TemplatesSourcePutChannel,
+  TextSourcesReadChannel,
   DelimitersListChannel,
   DelimitersSetChannel,
   DelimiterOption,
@@ -873,6 +874,13 @@ export interface RuntimeBridge {
     get(
       req: ChannelRequest<typeof PagesGetChannel>,
     ): Promise<ChannelResponse<typeof PagesGetChannel>>;
+  };
+
+  /** R-102 — current UTF-8 content from CG Bridge's confined live-text root. */
+  textSources: {
+    read(
+      req: ChannelRequest<typeof TextSourcesReadChannel>,
+    ): Promise<ChannelResponse<typeof TextSourcesReadChannel>>;
   };
 
   templates: {

@@ -15,6 +15,7 @@
 //   caspar-bridge --fixed-layers-path C:\cg\fixed.json  # R-021: the fixed operator layer bank
 //   caspar-bridge --reserved-layers 60-69             # R-028/C-015: the playout system's layers
 //   caspar-bridge --templates-dir C:\cg\templates     # R-028: where the template library persists
+//   caspar-bridge --text-source-root C:\cg\text-sources # R-102: live text files named by templates
 //   caspar-bridge --source-catalog-path C:\cg\sources.json      # D-137/C-015: the plate band (PLAYOUT-SOURCES-01)
 //   caspar-bridge --source-assignments-path C:\cg\plates.json   # D-137/C-015: which live each plate uses
 //   caspar-bridge --playout-inputs-path C:\cg\inputs.json       # PLAYOUT-SOURCES-01: the last good D10 list
@@ -194,6 +195,7 @@ if (args['write-service-config'] !== undefined) {
       controlPort: asPort('port'),
       templatePort: asPort('template-serve-port'),
       bridgeAddress: given('template-serve-host'),
+      textSourceRoot: given('text-source-root'),
     }).filter(([, value]) => value !== undefined),
   );
   try {
@@ -323,6 +325,15 @@ for (const flag of ['state-home', 'console-dir', 'console-port']) {
   }
 }
 const stateHome = typeof args['state-home'] === 'string' ? args['state-home'] : os.homedir();
+
+if (args['text-source-root'] === true) {
+  console.error('[caspar-bridge] --text-source-root needs a directory.');
+  process.exit(1);
+}
+const textSourceRoot =
+  typeof args['text-source-root'] === 'string'
+    ? args['text-source-root']
+    : path.join(stateHome, 'text-sources');
 
 const persistPath =
   typeof args['persist-path'] === 'string'
@@ -788,6 +799,7 @@ const bridgeOptions = {
   reservedLayersPath,
   templatesDir,
   pagesDir,
+  textSourceRoot,
   sourceCatalogPath,
   sourceAssignmentsPath,
   playoutInputsPath,

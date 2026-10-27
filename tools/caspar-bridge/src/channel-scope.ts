@@ -30,6 +30,7 @@ import {
   StackStateChangedChannel,
   StationStraysChangedChannel,
   StationStraysChannel,
+  TextSourcesReadChannel,
   type EmptiedAirNotice,
   type LivePlateReleaseState,
   type StackRestoreReport,
@@ -338,6 +339,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'license.state': STATION_WIDE,
   // `CENTRAL-BRIDGE-01` §1 A — the logs are no channel's; a `station-admin` asks for them.
   'bridge.logs-ticket': STATION_WIDE,
+  [TextSourcesReadChannel.name]: STATION_WIDE,
   // ── intents: the answer is the verdict on the principal's own press ──
   'air.dismiss-emptied': INTENT,
   'air.restore-emptied': INTENT,

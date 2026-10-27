@@ -33,7 +33,7 @@ const PENDING = new Set<HTMLInputElement>();
 
 export function pickFiles(
   kind?: PickKind,
-  opts: { folder?: boolean; accept?: string } = {},
+  opts: { folder?: boolean; accept?: string; multiple?: boolean } = {},
 ): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
@@ -45,7 +45,7 @@ export function pickFiles(
     // warning, progress, duplicate step), so the video picker is single-select so
     // the UI can't promise a batch it won't import. Every other kind stays
     // multi-select (image/font/lottie import as a batch).
-    input.multiple = kind !== 'video';
+    input.multiple = opts.multiple ?? kind !== 'video';
     // `accept` is only a hint — bypassable via "All files". The selection is enforced
     // after the fact against the SAME source of truth (see partitionSupported, B-021).
     if (kind !== undefined) input.accept = acceptAttr(kind);

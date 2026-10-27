@@ -1,19 +1,13 @@
-import {
-  compositionInstancesOf,
-  type AnimatableProperty,
-  type Element,
-  type FieldBinding,
-  type Scene,
-} from '@cg/shared-schema';
+import type { AnimatableProperty, Element, FieldBinding, Scene } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Control } from '../../ui/Control.js';
-import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { designerStore } from '../../state/store.js';
 import { BackgroundControl } from '../canvas/BackgroundControl.js';
 import { describeBinding, elementNameResolver } from '../fields/bind-resolver.js';
-import { FieldsPanel } from '../fields/FieldsPanel.js';
+import { isFixedFileFieldId } from '../fields/fixedFileField.js';
 import { CollapseSection } from './CollapseSection.js';
 import { RealtimeNumberInput } from './controls.js';
-import { DynamicDataSection } from './DynamicDataSection.js';
+import { DynamicDataSection, FixedFileSourceSection } from './DynamicDataSection.js';
 import { KeyframeInspector } from './KeyframeInspector.js';
 import { MultiSelectSection } from './MultiSelectSection.js';
 import { LooksSection } from './LooksSection.js';
@@ -77,7 +71,6 @@ export function InspectorPanel({
 }
 
 function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
-  const bindModeFieldId = useDesignerSelector((s) => s.bindModeFieldId);
   return (
     <aside className={s.panel} aria-label="Inspector">
       <h2 className={s.headingFirst}>COMPOSITION</h2>
@@ -94,12 +87,6 @@ function SceneInspector({ scene }: { scene: Scene }): JSX.Element {
           authoring uses LOOKS only, and the A′ code stays compiling-but-unreachable so a
           bug in the new surface cannot strand the owner. `tasks.md` §1b P2.DEL deletes it. */}
       <LooksSection scene={scene} />
-      {(scene.fields.length > 0 || compositionInstancesOf(scene).length > 0) && (
-        <>
-          <h3 className={s.heading}>FIELDS</h3>
-          <FieldsPanel scene={scene} bindModeFieldId={bindModeFieldId} />
-        </>
-      )}
     </aside>
   );
 }
@@ -119,7 +106,7 @@ function ElementInspector({
   // bindings) doesn't re-render on every playback frame.
   const bindings = scene.bindings
     .map((b, idx) => ({ b, idx }))
-    .filter(({ b }) => bindingTargetsElement(b, element.id));
+    .filter(({ b }) => bindingTargetsElement(b, element.id) && !isFixedFileFieldId(b.fieldId));
   return (
     <aside className={s.panel} aria-label="Inspector">
       <ElementNameRow elementId={element.id} name={element.name} />
@@ -133,7 +120,16 @@ function ElementInspector({
       {(element.type === 'text' ||
         element.type === 'ticker' ||
         element.type === 'sequence' ||
-        element.type === 'repeater') && <DynamicDataSection element={element} scene={scene} />}
+        element.type === 'repeater') && (
+        <>
+          <FixedFileSourceSection
+            key={`fixed-file-${element.id}`}
+            element={element}
+            scene={scene}
+          />
+          <DynamicDataSection element={element} scene={scene} />
+        </>
+      )}
       {/* DELTA-RUN-NEXT-VERSION-01-B — this element's door to the steps that change it. */}
       <ElementStepsSection element={element} />
       {bindings.length > 0 && (

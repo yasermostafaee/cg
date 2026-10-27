@@ -144,8 +144,9 @@ async function buildVcgWithImage(
   manifestName = 'delivery-lower-third',
   minRuntimeVersion = '0.0.0',
   image: Uint8Array = PNG_1X1,
+  sourceScene: Scene = fixtureScene(),
 ): Promise<Uint8Array> {
-  const scene = fixtureScene();
+  const scene = sourceScene;
   const assetPath = `assets/image/${sha256Hex(image)}.png`;
   const assetIndex: readonly AssetEntry[] = [
     {
@@ -184,6 +185,23 @@ async function buildVcgWithImage(
 }
 
 describe('produceTemplateDelivery', () => {
+  it('R-102 — exposes only connected fields, not a legacy orphan beside its fixed replacement', async () => {
+    const scene = fixtureScene();
+    scene.fields.push({
+      id: 'old-headlines',
+      label: 'Old headlines',
+      required: false,
+      type: 'list',
+      default: [{ id: 'old-1', text: 'authored fallback' }],
+    });
+
+    const { template } = await produceTemplateDelivery(
+      await buildVcgWithImage('tpl-orphan', 'orphan-check', '0.0.0', PNG_1X1, scene),
+    );
+
+    expect(template.fields.map((field) => field.id)).toEqual(['anchor']);
+  });
+
   it('renders a self-contained HTML with the runtime + scene inlined and no external refs', async () => {
     const { template, html } = await produceTemplateDelivery(await buildVcgWithImage('tpl-x'));
 

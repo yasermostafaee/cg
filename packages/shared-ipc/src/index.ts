@@ -59,6 +59,8 @@ export * from './channels/common.js';
 export * from './channels/stack.js';
 // `R-100` — a book's pages, sent to CG Bridge one picture at a time, and their limits.
 export * from './channels/pages.js';
+// `R-102` — live UTF-8 field sources, read under CG Bridge's configured safe root.
+export * from './channels/textSources.js';
 export * from './page-book.js';
 export * from './channels/connections.js';
 export * from './channels/outputs.js';

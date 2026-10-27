@@ -6,11 +6,15 @@ import { useOperatorNames } from '../../hooks/useOperatorNames.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import {
   aggregateHasFields,
+  authoredFileDelimiter,
+  bridgeTextSourcePath,
   fieldAllowsFileSource,
   fieldDigitsOf,
   fieldTypeTakesFileSource,
+  fieldUsesFileOnly,
   isFieldNamespace,
   isOnAirStatus,
+  lockedBridgeTextSourcePath,
   type CompositionFieldGroup,
   type DynamicField,
   type FieldValue,
@@ -1114,11 +1118,23 @@ function FieldEditor({
     field !== null && fieldAllowsFileSource(field) && fieldTypeTakesFileSource(field.type)
       ? field.type
       : undefined;
+  const fileOnly = fieldUsesFileOnly(field);
+  const authoredPath = bridgeTextSourcePath(field);
+  const authoredDelimiter = authoredFileDelimiter(field);
+  const lockedPath = lockedBridgeTextSourcePath(field);
   // Built ONCE and placed in one of two spots (see below), so the two placements
   // cannot drift into two differently-configured controls.
   const fromFile =
     fromFileKind === undefined ? null : (
-      <FromFileControl item={item} path={path} kind={fromFileKind} fieldId={fieldId} />
+      <FromFileControl
+        item={item}
+        path={path}
+        kind={fromFileKind}
+        fieldId={fieldId}
+        {...(authoredPath !== undefined ? { authoredPath } : {})}
+        {...(authoredDelimiter !== undefined ? { authoredDelimiter } : {})}
+        lockFile={lockedPath !== undefined}
+      />
     );
   return (
     <div className={isWideKind(kind) ? 'cg-field-row--wide' : 'cg-field-row'}>
@@ -1166,24 +1182,26 @@ function FieldEditor({
             fit={bookFit}
           />
         ) : (
-          <FieldControl
-            kind={kind}
-            field={field}
-            value={value}
-            applied={applied}
-            fieldId={fieldId}
-            dirty={dirty}
-            onStage={stage}
-            onUnstage={unstage}
-            {...(fromFileKind !== undefined ? { fromFile } : {})}
-          />
+          !fileOnly && (
+            <FieldControl
+              kind={kind}
+              field={field}
+              value={value}
+              applied={applied}
+              fieldId={fieldId}
+              dirty={dirty}
+              onStage={stage}
+              onUnstage={unstage}
+              {...(fromFileKind !== undefined ? { fromFile } : {})}
+            />
+          )
         )}
         {/* A LIST field's from-file control is rendered INSIDE the editor, beside
             "Add item" on the field's one footer row (see `ListFieldEditor`'s
             `footer` slot). Every other kind renders it here, beneath the control.
             The difference is not cosmetic bookkeeping: a list is the only kind
             with a second footer control to share a row with. */}
-        {fromFileKind !== undefined && kind !== 'list' && fromFile}
+        {fromFileKind !== undefined && (kind !== 'list' || fileOnly) && fromFile}
         {/* 🔴 `R-101` — a STAGED value its field's pattern refuses says so here, under it, in the
             form's own words; Update sends nothing while it stands (`applyDraft`). An applied value
             is not this press's to judge, so only a draft is checked. */}

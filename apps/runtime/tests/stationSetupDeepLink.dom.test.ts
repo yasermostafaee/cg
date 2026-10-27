@@ -322,11 +322,11 @@ describe('a deep link opens ONE dialog at the named section', () => {
       'SETTINGS ▸ Layers',
     );
 
-    const fromFile = readFileSync(
-      join(renderer, 'features', 'inspector', 'FromFileControl.tsx'),
+    const fromFilePreview = readFileSync(
+      join(renderer, 'features', 'inspector', 'FromFilePreviewDialog.tsx'),
       'utf8',
     );
-    expect(fromFile).toContain("openStationSetup('delimiters')");
-    expect(fromFile).not.toMatch(/DelimitersModal|managing/);
+    expect(fromFilePreview).toContain("openStationSetup('delimiters')");
+    expect(fromFilePreview).not.toMatch(/DelimitersModal|managing/);
   });
 });

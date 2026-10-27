@@ -682,16 +682,17 @@ export class DesignerApp {
 
   /**
    * Bind a field (by data key) to a canvas element: deselect → open the field card
-   * in the COMPOSITION inspector → "Bind from canvas" → click the element on canvas.
+   * in the Variables tab → "Bind from canvas" → click the element on canvas.
    */
   async bindFromCanvas(fieldId: string, canvasPos: { x: number; y: number }): Promise<void> {
     await this.deselect();
+    await this.page.getByRole('tab', { name: 'Variables' }).click();
     const card = this.fieldCard(fieldId);
     await card.getByRole('button', { name: /Bind from canvas|Click a canvas element/ }).click();
     await this.canvas.click({ position: canvasPos });
   }
 
-  /** A field card in the COMPOSITION inspector's FIELDS panel, by its data key. */
+  /** A field row in the Variables tab, by its data key. */
   fieldCard(fieldId: string): Locator {
     return this.page.getByTestId(`field-card-${fieldId}`);
   }

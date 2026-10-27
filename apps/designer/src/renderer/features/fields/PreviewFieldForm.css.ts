@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
 /** Header above the data-key form (its own scroll region in the modal). */
@@ -38,6 +38,15 @@ export const label = style({
 
 export const required = style({ color: colors.accent });
 
+export const readOnlyTag = style({
+  marginLeft: '0.4rem',
+  color: colors.accent,
+  fontSize: '0.58rem',
+  fontWeight: 700,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+});
+
 export const input = style({
   width: '100%',
   background: colors.panelMuted,
@@ -60,6 +69,39 @@ export const grow = style({
   overflow: 'hidden',
   minHeight: '1.4rem',
   lineHeight: 1.4,
+});
+
+export const readOnlyValue = style({
+  resize: 'none',
+  cursor: 'text',
+  opacity: 0.88,
+});
+
+export const readOnlyItems = style({
+  display: 'grid',
+  gap: '0.25rem',
+  margin: 0,
+  padding: 0,
+  listStyle: 'none',
+});
+
+globalStyle(`${readOnlyItems} li`, {
+  display: 'grid',
+  gridTemplateColumns: '1.7rem minmax(0, 1fr)',
+  gap: '0.45rem',
+  padding: '0.35rem 0.45rem',
+  border: `1px solid ${colors.border}`,
+  borderRadius: '4px',
+  background: colors.panelMuted,
+  color: colors.text,
+  fontSize: '0.72rem',
+  lineHeight: 1.4,
+});
+
+globalStyle(`${readOnlyItems} li > span`, {
+  color: colors.textMuted,
+  textAlign: 'right',
+  fontVariantNumeric: 'tabular-nums',
 });
 
 /** D-106 — a field edited but NOT yet applied: an amber left accent (reuses the

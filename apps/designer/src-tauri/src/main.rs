@@ -12,17 +12,22 @@ mod close_guard;
 mod close_window;
 // `TEXT-DIGITS-01` — the one read-only command: which keyboard language the window types in.
 mod keyboard_language;
+mod text_source_file;
 
 fn main() {
     tauri::Builder::default()
         // `D-162` — whether the page holds the window's close (the page arms it once it can ask
         // about unsaved changes; until then, and after any navigation, a close goes through).
         .manage(close_guard::Guard::default())
+        // Only paths selected by the native text-source picker may be re-read by Reload.
+        .manage(text_source_file::SelectedTextSources::default())
         .invoke_handler(tauri::generate_handler![
             keyboard_language::keyboard_language,
             close_window::close_guard,
             close_window::close_request_seen,
-            close_window::close_window_now
+            close_window::close_window_now,
+            text_source_file::pick_text_source_file,
+            text_source_file::reload_text_source_file
         ])
         // `D-162` — every close request: held and asked about while the page holds it.
         .on_window_event(|window, event| {

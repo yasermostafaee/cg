@@ -188,6 +188,8 @@ export function stationPaths(stateDir, platform) {
     bridgeSession: p.join(runtime, 'bridge-session.json'),
     audit: p.join(runtime, 'bridge-audit.ndjson'),
     playoutConfig: p.join(runtime, 'bridge-playout.json'),
+    /** The fake bridge's default authored text-file root; an explicit CLI root may replace it. */
+    textSources: p.join(stateDir, 'text-sources'),
     /** A one-page stub for the bridge's console listener, which needs an `index.html` to start. */
     consoleDir: p.join(stateDir, 'console'),
     /**
@@ -279,6 +281,8 @@ function pathFlags(paths) {
     paths.audit,
     '--playout-config-path',
     paths.playoutConfig,
+    '--text-source-root',
+    paths.textSources,
     '--amcp-log-path',
     paths.amcpLog,
   ];
@@ -536,7 +540,8 @@ export function playoutOnlyLines(fake) {
 
 /**
  * The launcher's own flags: `--playout <url>`, `--fake`, `--pair`, `--caspar <host:port>`,
- * `--no-open`, `--playout-only`, `--playout-port <port>`. Anything else is refused.
+ * `--no-open`, `--playout-only`, `--playout-port <port>`, `--text-source-root <dir>`. Anything
+ * else is refused.
  *
  * `RELEASE-0112-01` (`R-085`) — `--pair` goes with `--fake` alone: two fake engines, each with its own
  * CasparCG stand-in. This machine's own CasparCG (`--caspar`) is one core, so it is no pair.
@@ -554,6 +559,7 @@ export function parseArgs(argv) {
     caspar: undefined,
     playoutOnly: false,
     playoutPort: undefined,
+    textSourceRoot: undefined,
   };
   let port;
   for (let i = 0; i < argv.length; i++) {
@@ -563,7 +569,17 @@ export function parseArgs(argv) {
     else if (arg === '--pair') out.pair = true;
     else if (arg === '--no-open') out.open = false;
     else if (arg === '--playout-only') out.playoutOnly = true;
-    else if (arg === '--playout-port') {
+    else if (arg === '--text-source-root') {
+      const value = argv[i + 1];
+      if (value === undefined || value.startsWith('--'))
+        return { error: '--text-source-root needs a directory.' };
+      out.textSourceRoot = value;
+      i++;
+    } else if (arg.startsWith('--text-source-root=')) {
+      const value = arg.slice('--text-source-root='.length);
+      if (value === '') return { error: '--text-source-root needs a directory.' };
+      out.textSourceRoot = value;
+    } else if (arg === '--playout-port') {
       const value = argv[i + 1];
       if (value === undefined || value.startsWith('--'))
         return { error: '--playout-port needs a port: --playout-port 8080.' };
@@ -588,7 +604,7 @@ export function parseArgs(argv) {
       return {
         error:
           `${arg} is not a dev:station flag (--playout <url>, --fake, --pair, --caspar <host:port>, ` +
-          '--no-open, --playout-only, --playout-port <port>).',
+          '--no-open, --playout-only, --playout-port <port>, --text-source-root <dir>).',
       };
   }
   if (out.fake && out.playout !== undefined)

@@ -201,6 +201,11 @@ export function fillBridgeStub<T extends object>(stub: T): T {
   // `PLAYOUT-FEATURES-01` D — no license read: the quiet answer (nothing is marked for it).
   // `PLAYOUT-FEATURES-01` E — no meters: the meter sits at the floor.
   cg['meters'] ??= { onReading: () => () => undefined };
+  // `R-102` — no authored Bridge file in an ordinary surface spec. A test that
+  // exercises one supplies its own reader; every other stub fails explicitly.
+  cg['textSources'] ??= {
+    read: () => Promise.reject(new Error('this stub has no CG Bridge text source')),
+  };
   cg['license'] ??= {
     state: () => Promise.resolve({ license: null }),
     onChanged: () => () => undefined,

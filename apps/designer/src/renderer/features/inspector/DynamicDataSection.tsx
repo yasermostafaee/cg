@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import {
+  fileSourceContentToFieldValue,
   fieldAllowsFileSource,
+  fieldTakesFileSource,
+  fileSourcePolicyOf,
   fieldDigitsOf,
   FieldDigitsSchema,
   NumberFieldDigitsSchema,
@@ -13,10 +16,39 @@ import {
   type TextElement,
   type TickerElement,
 } from '@cg/shared-schema';
+import { SHIPPED_DEFAULT_DELIMITER } from '@cg/shared-ipc';
 import type { DigitSet } from '@cg/text-shaping';
+import { compositionPackageId } from '@cg/vcg-format';
+import type { DesignerBridge, DesignerTextSourceFile } from '../../../shared/designer-bridge.js';
 import { designerStore, type ElementFieldMetaPatch } from '../../state/store.js';
+import { Button } from '../../ui/Button.js';
+import {
+  designerDelimitersVersion,
+  listDesignerDelimiters,
+  subscribeDesignerDelimiters,
+} from '../settings/designerDelimiterStore.js';
 import { CollapseSection } from './CollapseSection.js';
+import {
+  clearDesignerFileSourcePreview,
+  designerFileSourcePreviewsVersion,
+  dismissDesignerFileSourcePreview,
+  getDesignerFileSourcePreview,
+  isDesignerFixedFileIntent,
+  isDesignerFileSourcePreviewOpen,
+  requestDesignerFileSourcePreviewOpen,
+  setDesignerFileSourcePreview,
+  setDesignerFixedFileIntent,
+  subscribeDesignerFileSourcePreviews,
+} from '../fields/fileSourcePreviewStore.js';
+import { fixedFileFieldId, isFixedFileFieldId } from '../fields/fixedFileField.js';
+import {
+  bridgeTextSourceFiles,
+  isVisibleWindowsSourcePath,
+  readBridgeTextPreview,
+} from './bridgeTextFile.js';
 import { NumberField, SelectField, TextField } from './controls.js';
+import { FileSourcePreviewModal } from './FileSourcePreviewModal.js';
+import { InfoTip } from './InfoTip.js';
 import { DigitsField } from './DigitsField.js';
 import {
   CUSTOM_PATTERN,
@@ -39,6 +71,159 @@ import * as s from './DynamicDataSection.css.js';
  * in the inspector's Items section and in the preview form). This is
  * distinct from the inspector's "Name" row, which edits the element name.
  */
+export function FixedFileSourceSection({
+  element,
+  scene,
+}: {
+  element: TextElement | TickerElement | SequenceElement | RepeaterElement;
+  scene: Scene;
+}): JSX.Element {
+  useSyncExternalStore(subscribeDesignerFileSourcePreviews, designerFileSourcePreviewsVersion);
+  const activeCompositionId = designerStore.get().activeCompositionId;
+  const previewSceneId =
+    activeCompositionId === null ? scene.id : compositionPackageId(scene.id, activeCompositionId);
+  const isListElement =
+    element.type === 'ticker' || element.type === 'sequence' || element.type === 'repeater';
+  const itemsKind =
+    element.type === 'repeater'
+      ? 'repeater-items'
+      : element.type === 'sequence'
+        ? 'sequence-items'
+        : 'ticker-items';
+  const binding = scene.bindings.find((candidate) =>
+    isListElement
+      ? candidate.target.kind === itemsKind &&
+        'elementId' in candidate.target &&
+        candidate.target.elementId === element.id
+      : candidate.target.kind === 'text' &&
+        candidate.target.elementId === element.id &&
+        candidate.target.placeholder === undefined,
+  );
+  const field =
+    binding === undefined
+      ? undefined
+      : scene.fields.find((candidate) => candidate.id === binding.fieldId);
+  const fixedMode =
+    field !== undefined &&
+    isFixedFileFieldId(field.id) &&
+    fileSourcePolicyOf(field)?.inputMode === 'file-only' &&
+    fileSourcePolicyOf(field)?.lockFile === true;
+  const compositionLocked =
+    element.type === 'sequence' && sequenceItemsBinding(element.items) === null;
+  const canChoose =
+    !compositionLocked &&
+    (field === undefined || fieldTakesFileSource(field)) &&
+    (element.type !== 'sequence' || sequenceItemsBinding(element.items) === 'text');
+  const [error, setError] = useState<string | null>(null);
+  const enabled = fixedMode || isDesignerFixedFileIntent(previewSceneId, element.id);
+
+  if (!fixedMode && !canChoose) return <></>;
+
+  const setEnabled = (next: boolean): void => {
+    setDesignerFixedFileIntent(previewSceneId, element.id, next);
+    setError(null);
+    if (next || !fixedMode || field === undefined) return;
+    clearDesignerFileSourcePreview(previewSceneId, field.id);
+    const bridge = (window as unknown as { cg: Partial<DesignerBridge> }).cg;
+    const fallback = fieldTakesFileSource(field) ? field.default : '';
+    void bridge.preview?.update({ fields: { [field.id]: fallback } }).catch(() => undefined);
+    designerStore.setElementDataKey(element.id, '');
+  };
+
+  const chooseFixedFile = async (): Promise<void> => {
+    try {
+      const bridge = (window as unknown as { cg: DesignerBridge }).cg;
+      const selected = await pickSharedTextSource(bridge);
+      if (selected === null) return;
+      const fieldId = fixedFileFieldId(element.id);
+      if (!designerStore.setElementDataKey(element.id, fieldId)) {
+        setError('Could not create the internal fixed-file connection.');
+        return;
+      }
+      designerStore.setElementFieldMeta(element.id, {
+        title: element.name.trim() === '' ? 'Fixed file' : element.name,
+        allowFileSource: true,
+        fileSource: {
+          inputMode: 'file-only',
+          bridgePath: selected.bridgePath,
+          lockFile: true,
+          ...(isListElement ? { delimiter: SHIPPED_DEFAULT_DELIMITER } : {}),
+        },
+      });
+      const value = fileSourceContentToFieldValue(
+        selected.content,
+        isListElement ? 'list' : 'text',
+        {
+          split: isListElement,
+          delimiter: isListElement ? SHIPPED_DEFAULT_DELIMITER : '',
+        },
+      );
+      setDesignerFileSourcePreview({
+        sceneId: previewSceneId,
+        fieldId,
+        bridgePath: selected.bridgePath,
+        displayPath: selected.sourcePath,
+        content: selected.content,
+        value,
+      });
+      setDesignerFixedFileIntent(previewSceneId, element.id, true);
+      requestDesignerFileSourcePreviewOpen(previewSceneId, fieldId);
+      setError(null);
+      void bridge.preview.update({ fields: { [fieldId]: value } }).catch(() => undefined);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  return (
+    <CollapseSection
+      title="Fixed file source"
+      pinned
+      trailing={
+        <InfoTip title="Fixed file source">
+          <p>
+            Use this when the element must always read from one file. CG Control operators cannot
+            type over its value, add or remove rows, or replace the selected file.
+          </p>
+          <p>
+            Choose a text file from the shared folder available to Designer and CG Control. The
+            template saves only its portable filename, never the Windows or network path.
+          </p>
+          <p>
+            Open <b>View content and fields…</b> to review the file, reload it, and choose or manage
+            the delimiter for list fields.
+          </p>
+        </InfoTip>
+      }
+    >
+      <CheckRow
+        label="Use fixed file"
+        checked={enabled}
+        onChange={setEnabled}
+        title="Use a locked file source instead of authored Items or manual CG Control input."
+      />
+      {!enabled ? null : fixedMode && field !== undefined ? (
+        <>
+          <p className={s.fixedSourceHeading}>File-only, locked source · no Data key required</p>
+          <FileSourceRow
+            sceneId={previewSceneId}
+            field={field}
+            onPatch={(patch) => designerStore.setElementFieldMeta(element.id, patch)}
+            fixedMode
+          />
+        </>
+      ) : (
+        <div className={s.emptySourceChoices}>
+          <Button size="sm" onClick={() => void chooseFixedFile()}>
+            Browse shared file…
+          </Button>
+          {error !== null && <p className={s.warn}>{error}</p>}
+        </div>
+      )}
+    </CollapseSection>
+  );
+}
+
 export function DynamicDataSection({
   element,
   scene,
@@ -46,6 +231,9 @@ export function DynamicDataSection({
   element: TextElement | TickerElement | SequenceElement | RepeaterElement;
   scene: Scene;
 }): JSX.Element {
+  const activeCompositionId = designerStore.get().activeCompositionId;
+  const previewSceneId =
+    activeCompositionId === null ? scene.id : compositionPackageId(scene.id, activeCompositionId);
   // The element kinds whose Data key backs a LIST field (items binding).
   const isListElement =
     element.type === 'ticker' || element.type === 'sequence' || element.type === 'repeater';
@@ -67,6 +255,11 @@ export function DynamicDataSection({
   const conv = scene.bindings.find((b) => isConv(b, element.id));
   const field = conv === undefined ? undefined : scene.fields.find((f) => f.id === conv.fieldId);
   const currentKey = field?.id ?? '';
+  const fixedMode =
+    field !== undefined &&
+    isFixedFileFieldId(field.id) &&
+    fileSourcePolicyOf(field)?.inputMode === 'file-only' &&
+    fileSourcePolicyOf(field)?.lockFile === true;
   const [warn, setWarn] = useState<string | null>(null);
   // D-083 / D-163 — a sequence's item list is bindable when it is all text, or a BOOK — pictures
   // with or without text pages (`RUN-NEXT-VERSION-03` 1.6); only a composition item locks it. The
@@ -109,6 +302,10 @@ export function DynamicDataSection({
         !scene.bindings.some((b) => b.fieldId === f.id && ownedByOther(b)),
     )
     .map((f) => f.id);
+
+  // A fixed file is an author-owned source, not an operator variable. Its dedicated Inspector
+  // section renders outside Dynamic / Data; keep the internal runtime field entirely out of here.
+  if (fixedMode) return <></>;
 
   return (
     <CollapseSection title="Dynamic / Data" defaultExpanded={field !== undefined}>
@@ -176,11 +373,11 @@ export function DynamicDataSection({
       ) : field === undefined ? (
         <p className={s.hint}>
           {isListElement
-            ? `Give this ${element.type} a Data key to drive its items from field data at playout.`
-            : 'Give this text a Data key to drive it from field data at playout.'}
+            ? `Give this ${element.type} a Data key to drive its items from operator data.`
+            : 'Give this text a Data key to drive it from operator data.'}
         </p>
       ) : (
-        <FieldMeta element={element} field={field} />
+        <FieldMeta key={field.id} element={element} field={field} sceneId={previewSceneId} />
       )}
     </CollapseSection>
   );
@@ -190,10 +387,18 @@ export function DynamicDataSection({
 function FieldMeta({
   element,
   field,
+  sceneId,
 }: {
   element: TextElement | TickerElement | SequenceElement | RepeaterElement;
   field: DynamicField;
+  sceneId: string;
 }): JSX.Element {
+  useSyncExternalStore(subscribeDesignerFileSourcePreviews, designerFileSourcePreviewsVersion);
+  const filePreview = getDesignerFileSourcePreview(
+    sceneId,
+    field.id,
+    'fileSource' in field ? field.fileSource?.bridgePath : undefined,
+  );
   const fieldType: 'text' | 'number' = field.type === 'number' ? 'number' : 'text';
   const multiline = field.type === 'multiline';
   const patch = (p: ElementFieldMetaPatch): void =>
@@ -239,7 +444,14 @@ function FieldMeta({
               options={FieldDigitsSchema.options}
               onCommit={(v) => patch({ digits: v })}
             />
-            <FileSourceRow field={field} onChange={(v) => patch({ allowFileSource: v })} />
+            {fieldTakesFileSource(field) && (
+              <FileSourceRow
+                key={`file-source-${field.id}`}
+                sceneId={sceneId}
+                field={field}
+                onPatch={patch}
+              />
+            )}
             <p className={s.hint}>
               The field’s items are the {element.type}’s Items section; operators edit them live in
               the preview’s data form.
@@ -320,7 +532,12 @@ function FieldMeta({
               control for a grant that could not exist. Switching to Number drops
               any grant the field had (`rebuildField`), so nothing is hidden here —
               it is gone. */}
-          <FileSourceRow field={field} onChange={(v) => patch({ allowFileSource: v })} />
+          <FileSourceRow
+            key={`file-source-${field.id}`}
+            sceneId={sceneId}
+            field={field}
+            onPatch={patch}
+          />
         </>
       )}
       {fieldType === 'number' ? (
@@ -334,7 +551,7 @@ function FieldMeta({
           valueDigits={numberDigits(field)}
           onCommit={(n) => patch({ default: n })}
         />
-      ) : (
+      ) : filePreview === null ? (
         <TextField
           label="Value"
           value={defaultStr(field)}
@@ -343,6 +560,11 @@ function FieldMeta({
           onCommit={(v) => patch({ default: v })}
           resetKey={element.id}
         />
+      ) : (
+        <p className={s.hint}>
+          The selected file is previewing this field on the canvas. Its bytes are not saved as the
+          authored default.
+        </p>
       )}
     </>
   );
@@ -414,22 +636,290 @@ function PatternField({
  * The hint names the operator's control because that is the honest explanation of
  * what ticking the box does; the LABEL names the grant, not the control.
  */
+async function pickSharedTextSource(
+  bridge: DesignerBridge,
+): Promise<DesignerTextSourceFile | null> {
+  if (bridge.textSources?.pick !== undefined) return bridge.textSources.pick();
+
+  // Browser/test fallback. The desktop bridge always takes the native branch above so its
+  // absolute Windows/UNC path remains visible.
+  const picked = await bridge.assets.pick(undefined, {
+    accept: '.txt,.text,.csv,.tsv,.log,text/plain,text/csv,text/tab-separated-values',
+    multiple: false,
+  });
+  const candidate = bridgeTextSourceFiles(picked)[0];
+  if (candidate === undefined) {
+    if (picked.length > 0) throw new Error('Choose a supported text file of 1 MiB or smaller.');
+    return null;
+  }
+  return {
+    name: candidate.file.name,
+    bridgePath: candidate.path,
+    sourcePath:
+      ((candidate.file as File & { path?: string }).path ?? candidate.file.webkitRelativePath) ||
+      candidate.path,
+    content: await readBridgeTextPreview(candidate.file),
+  };
+}
+
 function FileSourceRow({
+  sceneId,
   field,
-  onChange,
+  onPatch,
+  fixedMode = false,
 }: {
+  sceneId: string;
   field: DynamicField;
-  onChange: (v: boolean) => void;
+  onPatch: (patch: ElementFieldMetaPatch) => void;
+  fixedMode?: boolean;
 }): JSX.Element {
+  useSyncExternalStore(subscribeDesignerDelimiters, designerDelimitersVersion);
+  useSyncExternalStore(subscribeDesignerFileSourcePreviews, designerFileSourcePreviewsVersion);
+  const delimiters = listDesignerDelimiters();
   const granted = fieldAllowsFileSource(field);
+  const policy = fileSourcePolicyOf(field);
+  const preview = getDesignerFileSourcePreview(sceneId, field.id, policy?.bridgePath);
+  const [browseError, setBrowseError] = useState<string | null>(null);
+  const previewModalOpen = isDesignerFileSourcePreviewOpen(sceneId, field.id);
+  const patchPolicy = (next: NonNullable<ElementFieldMetaPatch['fileSource']>): void => {
+    const compact = {
+      ...(next.inputMode === 'file-only' ? { inputMode: 'file-only' as const } : {}),
+      ...(next.bridgePath !== undefined ? { bridgePath: next.bridgePath } : {}),
+      ...(next.lockFile === true ? { lockFile: true as const } : {}),
+      ...(next.delimiter !== undefined ? { delimiter: next.delimiter } : {}),
+    };
+    onPatch({ fileSource: Object.keys(compact).length === 0 ? null : compact });
+  };
+
+  const pushAuthoringPreview = (
+    file: Pick<DesignerTextSourceFile, 'bridgePath' | 'sourcePath' | 'content'>,
+    delimiter: string | undefined,
+  ): void => {
+    if (!fieldTakesFileSource(field)) return;
+    const value = fileSourceContentToFieldValue(file.content, field.type, {
+      split: field.type === 'list' && delimiter !== undefined,
+      delimiter: delimiter ?? '',
+    });
+    setDesignerFileSourcePreview({
+      sceneId,
+      fieldId: field.id,
+      bridgePath: file.bridgePath,
+      displayPath: file.sourcePath,
+      content: file.content,
+      value,
+    });
+    const bridge = (window as unknown as { cg: Partial<DesignerBridge> }).cg;
+    void bridge.preview?.update({ fields: { [field.id]: value } }).catch(() => undefined);
+  };
+
+  const clearAuthoringPreview = (): void => {
+    clearDesignerFileSourcePreview(sceneId, field.id);
+    const bridge = (window as unknown as { cg: Partial<DesignerBridge> }).cg;
+    const fallback = fieldTakesFileSource(field) ? field.default : '';
+    void bridge.preview?.update({ fields: { [field.id]: fallback } }).catch(() => undefined);
+  };
+
+  const browseSharedFile = async (): Promise<void> => {
+    // Some page-realm tests deliberately declare `window.cg` as TemplateRuntime.
+    // This control runs only in Designer; use its explicit bridge contract rather
+    // than merging those two unrelated ambient globals.
+    const bridge = (window as unknown as { cg: DesignerBridge }).cg;
+    try {
+      const selected = await pickSharedTextSource(bridge);
+      if (selected === null) return;
+      setBrowseError(null);
+      patchPolicy({ ...policy, bridgePath: selected.bridgePath });
+      pushAuthoringPreview(selected, policy?.delimiter);
+      requestDesignerFileSourcePreviewOpen(sceneId, field.id);
+    } catch (err) {
+      setBrowseError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  // Re-selecting the element remounts this row. Restore the same selected-file value to the
+  // authoring canvas from the session store; no second browse is needed.
+  useEffect(() => {
+    if (preview === null) return;
+    const bridge = (window as unknown as { cg: Partial<DesignerBridge> }).cg;
+    void bridge.preview?.update({ fields: { [field.id]: preview.value } }).catch(() => undefined);
+  }, [field.id, preview]);
+
+  const effectiveDelimiter =
+    fixedMode && field.type === 'list'
+      ? (policy?.delimiter ?? SHIPPED_DEFAULT_DELIMITER)
+      : policy?.delimiter;
+  const delimiterValues = [
+    ...(!fixedMode ? [''] : []),
+    ...delimiters.map((option) => option.value),
+    ...(effectiveDelimiter !== undefined &&
+    !delimiters.some((option) => option.value === effectiveDelimiter)
+      ? [effectiveDelimiter]
+      : []),
+  ];
+  const delimiterLabels = [
+    ...(!fixedMode ? ['CG Control default'] : []),
+    ...delimiters.map((option) => option.label),
+    ...(delimiterValues.length > delimiters.length + (fixedMode ? 0 : 1)
+      ? ['Current value (not in list)']
+      : []),
+  ];
+  const interpretedPreview =
+    preview === null || !fieldTakesFileSource(field)
+      ? null
+      : fileSourceContentToFieldValue(preview.content, field.type, {
+          split: field.type === 'list' && effectiveDelimiter !== undefined,
+          delimiter: effectiveDelimiter ?? '',
+        });
+  const fullSourcePathVisible = preview !== null && isVisibleWindowsSourcePath(preview.displayPath);
+  const commitDelimiter = (delimiter: string): void => {
+    const authored = delimiter === '' ? undefined : delimiter;
+    patchPolicy({ ...policy, delimiter: authored });
+    if (preview !== null)
+      pushAuthoringPreview(
+        {
+          bridgePath: preview.bridgePath,
+          sourcePath: preview.displayPath,
+          content: preview.content,
+        },
+        authored,
+      );
+  };
+  const reloadSelectedFile = async (): Promise<void> => {
+    if (preview === null) throw new Error('Choose this file again before reloading it.');
+    const bridge = (window as unknown as { cg: DesignerBridge }).cg;
+    const content = await bridge.textSources.reload(preview.displayPath);
+    pushAuthoringPreview(
+      {
+        bridgePath: preview.bridgePath,
+        sourcePath: preview.displayPath,
+        content,
+      },
+      effectiveDelimiter,
+    );
+  };
   return (
     <>
-      <CheckRow label="Allow file source" checked={granted} onChange={onChange} />
-      <p className={s.hint}>
-        {granted
-          ? 'Operators can point this field at a text file and reload it — for subtitles and long copy.'
-          : 'Off: operators type this field by hand. Turn it on for subtitles and long copy prepared elsewhere.'}
-      </p>
+      {!fixedMode && (
+        <>
+          <CheckRow
+            label="Allow file source"
+            checked={granted}
+            onChange={(enabled) => {
+              onPatch({ allowFileSource: enabled, ...(!enabled ? { fileSource: null } : {}) });
+              if (!enabled) clearAuthoringPreview();
+            }}
+          />
+          <p className={s.hint}>
+            {granted
+              ? 'Operators can point this field at a text file and reload it — for subtitles and long copy.'
+              : 'Off: operators type this field by hand. Turn it on for subtitles and long copy prepared elsewhere.'}
+          </p>
+        </>
+      )}
+      {granted && (
+        <>
+          {!fixedMode && (
+            <CheckRow
+              label="File only"
+              checked={policy?.inputMode === 'file-only'}
+              onChange={(enabled) =>
+                patchPolicy({
+                  ...policy,
+                  ...(enabled ? { inputMode: 'file-only' } : { inputMode: 'operator-choice' }),
+                })
+              }
+              title="Remove manual text and list editing from CG Control; file controls remain."
+            />
+          )}
+          <div className={s.fileBrowseRow}>
+            <Button size="sm" onClick={() => void browseSharedFile()}>
+              Browse shared file…
+            </Button>
+            {policy?.bridgePath !== undefined && !fixedMode && (
+              <Button
+                size="sm"
+                variant="bare"
+                onClick={() => {
+                  clearAuthoringPreview();
+                  setBrowseError(null);
+                  patchPolicy({ ...policy, bridgePath: undefined, lockFile: undefined });
+                }}
+              >
+                Clear file
+              </Button>
+            )}
+          </div>
+          {policy?.bridgePath !== undefined && (
+            <div className={s.selectedFile}>
+              <span>
+                {preview === null
+                  ? 'CG Control file'
+                  : fullSourcePathVisible
+                    ? 'Selected file · full Windows/UNC path'
+                    : 'Selected file'}
+              </span>
+              <code className={s.selectedFilePath}>
+                {preview?.displayPath ?? policy.bridgePath}
+              </code>
+              {preview !== null && <small>CG Control file: {policy.bridgePath}</small>}
+            </div>
+          )}
+          {browseError !== null && <p className={s.warn}>{browseError}</p>}
+          {preview !== null && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => requestDesignerFileSourcePreviewOpen(sceneId, field.id)}
+            >
+              View content and fields…
+            </Button>
+          )}
+          {policy?.bridgePath !== undefined && preview === null && browseError === null && (
+            <p className={s.hint}>
+              Select this shared file once in this Designer session to preview its live content.
+            </p>
+          )}
+          {!fixedMode && (
+            <>
+              <CheckRow
+                label="Lock file"
+                checked={policy?.lockFile === true}
+                disabled={policy?.bridgePath === undefined}
+                onChange={(enabled) =>
+                  patchPolicy({
+                    ...policy,
+                    ...(enabled ? { lockFile: true } : { lockFile: undefined }),
+                  })
+                }
+                title={
+                  policy?.bridgePath === undefined
+                    ? 'Choose a file from the shared folder first.'
+                    : 'CG Control can reload this file but cannot choose, replace or detach it.'
+                }
+              />
+              {policy?.bridgePath === undefined && (
+                <p className={s.hint}>
+                  Lock file becomes available after a shared file is selected.
+                </p>
+              )}
+            </>
+          )}
+          {previewModalOpen && preview !== null && interpretedPreview !== null && (
+            <FileSourcePreviewModal
+              sourcePath={preview.displayPath}
+              bridgePath={preview.bridgePath}
+              content={preview.content}
+              value={interpretedPreview}
+              delimiter={field.type === 'list' ? effectiveDelimiter : undefined}
+              delimiterValues={field.type === 'list' ? delimiterValues : []}
+              delimiterLabels={field.type === 'list' ? delimiterLabels : []}
+              onDelimiter={field.type === 'list' ? commitDelimiter : undefined}
+              onReload={reloadSelectedFile}
+              onClose={() => dismissDesignerFileSourcePreview(sceneId, field.id)}
+            />
+          )}
+        </>
+      )}
     </>
   );
 }
@@ -440,12 +930,14 @@ export function CheckRow({
   checked,
   onChange,
   title,
+  disabled = false,
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   /** What the option does, as the row's tooltip. */
   title?: string;
+  disabled?: boolean;
 }): JSX.Element {
   return (
     <div className={cs.row} {...(title !== undefined ? { title } : {})}>
@@ -454,6 +946,7 @@ export function CheckRow({
         type="checkbox"
         className={s.checkbox}
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         aria-label={label}
       />

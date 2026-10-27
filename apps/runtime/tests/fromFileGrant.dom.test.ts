@@ -3,14 +3,16 @@ import { StrictMode, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { StackItemState } from '@cg/shared-schema';
+import type { FileSourcePolicy, StackItemState } from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
 import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
+import { stagedValue } from '../src/renderer/features/inspector/draftStore.js';
 import {
   __resetFromFileForTest,
   attachFileSource,
   fromFileState,
+  restoreFromFileAttachments,
 } from '../src/renderer/features/inspector/fromFileStore.js';
 import type * as PersistenceModule from '../src/renderer/features/inspector/fromFilePersistence.js';
 import type { PersistedAttachment } from '../src/renderer/features/inspector/fromFilePersistence.js';
@@ -55,7 +57,7 @@ vi.mock('../src/renderer/features/inspector/fromFilePersistence.js', async () =>
 });
 
 /** A source with a handle, so the store persists it (the no-handle fake does not). */
-function source(name: string) {
+function source(name: string, content = 'copy') {
   return {
     name,
     handle: {
@@ -65,7 +67,7 @@ function source(name: string) {
       queryPermission: () => Promise.resolve('granted' as PermissionState),
       requestPermission: () => Promise.resolve('granted' as PermissionState),
     } as unknown as FileSystemFileHandle,
-    read: () => Promise.resolve('copy'),
+    read: () => Promise.resolve(content),
   };
 }
 
@@ -143,13 +145,29 @@ let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
 /** `get` is a THUNK so a test can hand back null, or a promise that never settles. */
-async function render(get: () => Promise<TemplateInfo | null>): Promise<HTMLDivElement> {
+async function render(
+  get: () => Promise<TemplateInfo | null>,
+  options: {
+    readText?: (request: { path: string }) => Promise<{
+      name: string;
+      sourcePath?: string;
+      content: string;
+    }>;
+    onApply?: () => Promise<{ accepted: boolean }>;
+  } = {},
+): Promise<HTMLDivElement> {
+  await restoreFromFileAttachments({ ready: true, liveItemIds: new Set(['item-1']) });
   const stub = {
     link: {
       status: () => linkFor('both-up'),
       onStatusChanged: () => () => undefined,
       resyncing: () => false,
       onResyncingChanged: () => () => undefined,
+    },
+    textSources: {
+      read:
+        options.readText ??
+        (() => Promise.reject(new Error('this test did not provide a Bridge text source'))),
     },
     connections: connectionsStub('both-up'),
     templates: {
@@ -178,7 +196,7 @@ async function render(get: () => Promise<TemplateInfo | null>): Promise<HTMLDivE
         null,
         createElement(Inspector, {
           item: item(),
-          onApply: () => Promise.resolve({ accepted: true }),
+          onApply: options.onApply ?? (() => Promise.resolve({ accepted: true })),
           onDiscard: () => undefined,
         }),
       ),
@@ -190,6 +208,15 @@ async function render(get: () => Promise<TemplateInfo | null>): Promise<HTMLDivE
     await Promise.resolve();
   });
   return container;
+}
+
+function withFieldPolicy(fieldId: string, fileSource: FileSourcePolicy): TemplateInfo {
+  return {
+    ...TEMPLATE,
+    fields: TEMPLATE.fields?.map((field) =>
+      field.id === fieldId ? { ...field, fileSource } : field,
+    ),
+  };
 }
 
 const fromFileButton = (el: HTMLElement, fieldId: string): Element | null =>
@@ -237,17 +264,221 @@ describe('the FROM FILE control renders only where the author granted a file sou
     expect(fromFileButton(el, 'count')).toBeNull();
   });
 
-  it('leaves a granted field behaving exactly as an eligible field did before', async () => {
+  it('moves file content and list interpretation into a modal instead of the Inspector', async () => {
     const el = await render(() => Promise.resolve(TEMPLATE));
-    // A granted LIST keeps its split row in the field's footer once attached…
-    attachFileSource('item-1', ['items'], source('crawl.txt'), { split: true, delimiter: '،' });
+    attachFileSource('item-1', ['items'], source('crawl.txt', 'first|second'), {
+      split: true,
+      delimiter: '|',
+    });
     await act(async () => {
       await Promise.resolve();
     });
-    expect(el.querySelector('input[aria-label="Split items into items"]')).not.toBeNull();
-    expect(el.querySelector('select[aria-label="items split delimiter"]')).not.toBeNull();
-    // …and its detach control is the file chip's, unchanged.
+
+    expect(el.querySelector('input[aria-label="Split items into items"]')).toBeNull();
+    expect(el.querySelector('select[aria-label="items split delimiter"]')).toBeNull();
+    expect(el.textContent).not.toContain('File content');
     expect(el.querySelector('button[aria-label="Detach items file source"]')).not.toBeNull();
+
+    await act(async () => {
+      el.querySelector<HTMLButtonElement>(
+        'button[aria-label="View items file content and fields"]',
+      )?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const dialog = document.body.querySelector<HTMLElement>(
+      '[role="dialog"][aria-label="File content and fields · items"]',
+    );
+    expect(dialog).not.toBeNull();
+    expect(dialog?.querySelector('[aria-label="File content"]')?.textContent).toContain(
+      'first|second',
+    );
+    expect(dialog?.querySelector('[aria-label="Parsed fields"]')?.textContent).toContain('first');
+    expect(dialog?.querySelector('[aria-label="Parsed fields"]')?.textContent).toContain('second');
+    expect(dialog?.querySelector('input[aria-label="Split items into items"]')).not.toBeNull();
+    expect(dialog?.querySelector('select[aria-label="items split delimiter"]')).not.toBeNull();
+  });
+});
+
+describe('R-102 — authored file-only and locked Bridge sources', () => {
+  it('removes the manual editor but leaves file choice for file-only text and list fields', async () => {
+    const headlinePolicy = withFieldPolicy('headline', { inputMode: 'file-only' });
+    const template = {
+      ...headlinePolicy,
+      fields: headlinePolicy.fields?.map((field) =>
+        field.id === 'items'
+          ? { ...field, fileSource: { inputMode: 'file-only' as const } }
+          : field,
+      ),
+    };
+    const el = await render(() => Promise.resolve(template));
+
+    expect(el.querySelector('input[aria-label="headline"]')).toBeNull();
+    expect(fromFileButton(el, 'headline')).not.toBeNull();
+    expect(el.querySelector('[aria-label="Add items item"]')).toBeNull();
+    expect(el.querySelector('[aria-label^="Remove items item"]')).toBeNull();
+    expect(fromFileButton(el, 'items')).not.toBeNull();
+  });
+
+  it('keeps the manual editor for lock-only, but exposes no choose or detach route', async () => {
+    const template = withFieldPolicy('crawl', {
+      bridgePath: 'newsroom/crawl.txt',
+      lockFile: true,
+    });
+    const el = await render(() => Promise.resolve(template));
+
+    expect(el.querySelector('textarea[aria-label="crawl"]')).not.toBeNull();
+    expect(el.textContent).toContain('newsroom/crawl.txt');
+    expect(el.querySelector('button[aria-label="Reload crawl from file"]')).not.toBeNull();
+    expect(fromFileButton(el, 'crawl')).toBeNull();
+    expect(el.querySelector('button[aria-label="Detach crawl file source"]')).toBeNull();
+  });
+
+  it('combines file-only and lock so only the authored source and Reload remain', async () => {
+    const template = withFieldPolicy('headline', {
+      inputMode: 'file-only',
+      bridgePath: 'newsroom/headline.txt',
+      lockFile: true,
+    });
+    const el = await render(() => Promise.resolve(template));
+
+    expect(el.querySelector('input[aria-label="headline"]')).toBeNull();
+    expect(el.textContent).toContain('newsroom/headline.txt');
+    expect(el.querySelector('button[aria-label="Reload headline from file"]')).not.toBeNull();
+    expect(fromFileButton(el, 'headline')).toBeNull();
+    expect(el.querySelector('button[aria-label="Detach headline file source"]')).toBeNull();
+  });
+
+  it('reloads current Bridge bytes into the draft and never applies by itself', async () => {
+    const onApply = vi.fn(() => Promise.resolve({ accepted: true }));
+    const readText = vi.fn(() =>
+      Promise.resolve({
+        name: 'newsroom/crawl.txt',
+        sourcePath: String.raw`\\newsroom\CG Text\newsroom\crawl.txt`,
+        content: 'خبر تازه',
+      }),
+    );
+    const template = withFieldPolicy('crawl', {
+      bridgePath: 'newsroom/crawl.txt',
+      lockFile: true,
+    });
+    const el = await render(() => Promise.resolve(template), { readText, onApply });
+    const reload = el.querySelector<HTMLButtonElement>(
+      'button[aria-label="Reload crawl from file"]',
+    );
+    expect(reload).not.toBeNull();
+
+    await act(async () => {
+      reload?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(readText).toHaveBeenCalledWith({ path: 'newsroom/crawl.txt' });
+    expect(stagedValue('item-1', ['crawl'])).toBe('خبر تازه');
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('uses an unlocked authored path as a replaceable default', async () => {
+    const template = withFieldPolicy('headline', { bridgePath: 'newsroom/default.txt' });
+    const el = await render(() => Promise.resolve(template));
+
+    expect(el.textContent).toContain('newsroom/default.txt');
+    expect(el.querySelector('input[aria-label="headline"]')).not.toBeNull();
+    const detach = el.querySelector<HTMLButtonElement>(
+      'button[aria-label="Detach headline file source"]',
+    );
+    expect(detach).not.toBeNull();
+    await act(async () => {
+      detach?.click();
+      await Promise.resolve();
+    });
+    expect(el.textContent).not.toContain('newsroom/default.txt');
+    expect(fromFileButton(el, 'headline')).not.toBeNull();
+  });
+
+  it('seeds an authored list delimiter and enables splitting for the Bridge default', async () => {
+    const template = withFieldPolicy('items', {
+      bridgePath: 'newsroom/headlines.txt',
+      delimiter: '|',
+    });
+    await render(() => Promise.resolve(template));
+
+    expect(fromFileState('item-1', ['items'])).toMatchObject({
+      source: { bridgePath: 'newsroom/headlines.txt' },
+      split: true,
+      delimiter: '|',
+    });
+  });
+
+  it('locks list splitting and delimiter selection with the authored file', async () => {
+    attachFileSource('item-1', ['items'], source('operator.txt'), {
+      split: false,
+      delimiter: '،',
+    });
+    const template = withFieldPolicy('items', {
+      bridgePath: 'newsroom/headlines.txt',
+      lockFile: true,
+      delimiter: '|',
+    });
+    const el = await render(() => Promise.resolve(template), {
+      readText: () =>
+        Promise.resolve({
+          name: 'newsroom/headlines.txt',
+          sourcePath: String.raw`\\newsroom\CG Text\newsroom\headlines.txt`,
+          content: 'first|second',
+        }),
+    });
+
+    expect(fromFileState('item-1', ['items'])).toMatchObject({
+      source: { bridgePath: 'newsroom/headlines.txt' },
+      split: true,
+      delimiter: '|',
+    });
+    expect(el.querySelector('input[aria-label="Split items into items"]')).toBeNull();
+    expect(el.querySelector('select[aria-label="items split delimiter"]')).toBeNull();
+    expect(el.querySelector('[aria-label="items locked delimiter"]')).toBeNull();
+
+    await act(async () => {
+      el.querySelector<HTMLButtonElement>(
+        'button[aria-label="View items file content and fields"]',
+      )?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const dialog = document.body.querySelector<HTMLElement>(
+      '[role="dialog"][aria-label="File content and fields · items"]',
+    );
+    expect(dialog?.querySelector('[aria-label="items locked delimiter"]')?.textContent).toContain(
+      'pipe',
+    );
+    expect(dialog?.textContent).toContain('Delimiter');
+    expect(dialog?.textContent).toContain(String.raw`\\newsroom\CG Text\newsroom\headlines.txt`);
+    expect(dialog?.querySelector('input[aria-label="Split items into items"]')).toBeNull();
+    expect(dialog?.querySelector('select[aria-label="items split delimiter"]')).toBeNull();
+    expect(dialog?.querySelector('[aria-label="File content"]')?.textContent).toContain(
+      'first|second',
+    );
+    expect(dialog?.querySelector('[aria-label="Parsed fields"]')?.textContent).toContain('first');
+    expect(dialog?.querySelector('[aria-label="Parsed fields"]')?.textContent).toContain('second');
+  });
+
+  it('does not race an unlocked default over the operator file restored from storage', async () => {
+    attachFileSource('item-1', ['headline'], source('operator.txt'), {
+      split: false,
+      delimiter: '،',
+    });
+    expect(saved.has(JSON.stringify(['item-1', 'headline']))).toBe(true);
+    // A page reload clears memory but not IndexedDB (the mocked `saved` map).
+    __resetFromFileForTest();
+    const template = withFieldPolicy('headline', { bridgePath: 'newsroom/default.txt' });
+    const el = await render(() => Promise.resolve(template));
+
+    expect(el.textContent).toContain('operator.txt');
+    expect(el.textContent).not.toContain('newsroom/default.txt');
+    expect(saved.has(JSON.stringify(['item-1', 'headline']))).toBe(true);
   });
 });
 

@@ -1,4 +1,8 @@
-import type { DelimiterOption } from '@cg/shared-ipc';
+import {
+  SHIPPED_DEFAULT_DELIMITER,
+  SHIPPED_DELIMITERS,
+  type DelimiterOption,
+} from '@cg/shared-ipc';
 import { BRIDGE_SKEW_MESSAGE, isBridgeSkewMessage } from '../../../shared/bridgeSkew.js';
 
 /**
@@ -25,19 +29,13 @@ export type { DelimiterOption };
 
 /**
  * The list shown before the bridge answers, and the list a fresh station gets.
- * Kept in step with the bridge's own `DEFAULT_DELIMITERS` — it is the same set,
- * declared on both sides because neither can import the other's module.
+ * It is the same shared constant the bridge uses for a fresh station, so the
+ * offline Designer and connected CG Control cannot drift on the shipped choices.
  */
-export const BUILT_IN_DELIMITERS: readonly DelimiterOption[] = [
-  { id: 'newline', label: 'new line', value: '\\n' },
-  { id: 'pipe', label: 'pipe', value: '|' },
-  { id: 'persian-comma', label: 'Persian comma', value: '،' },
-  { id: 'comma', label: 'comma', value: ',' },
-  { id: 'semicolon', label: 'semicolon', value: ';' },
-];
+export const BUILT_IN_DELIMITERS: readonly DelimiterOption[] = SHIPPED_DELIMITERS;
 
 /** The default delimiter (as typed): one entry per line. */
-export const DEFAULT_DELIMITER = '\\n';
+export const DEFAULT_DELIMITER = SHIPPED_DEFAULT_DELIMITER;
 
 let cache: DelimiterOption[] = [...BUILT_IN_DELIMITERS];
 let version = 0;

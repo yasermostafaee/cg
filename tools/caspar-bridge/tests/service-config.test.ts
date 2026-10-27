@@ -48,6 +48,7 @@ describe('the file', () => {
       port: '5280',
       'template-serve-port': '7911',
       'bridge-session-path': path.join(path.dirname(file), '.cg-runtime', 'bridge-session.json'),
+      'text-source-root': path.join(path.dirname(file), 'text-sources'),
       'first-run': true,
     });
   });
@@ -57,7 +58,8 @@ describe('the file', () => {
       configFile(
         String.fromCharCode(0xfeff) +
           '{"playoutAddress":"http://192.0.2.10:8080","amcpHost":"192.0.2.10","amcpPort":5251,' +
-          '"oscPort":6260,"controlPort":5290,"templatePort":7912,"bridgeAddress":"192.0.2.50"}',
+          '"oscPort":6260,"controlPort":5290,"templatePort":7912,"bridgeAddress":"192.0.2.50",' +
+          '"textSourceRoot":"\\\\\\\\newsroom\\\\cg-text"}',
       ),
     );
     expect(serviceFlags(loaded)).toMatchObject({
@@ -67,6 +69,7 @@ describe('the file', () => {
       port: '5290',
       'template-serve-port': '7912',
       'template-serve-host': '192.0.2.50',
+      'text-source-root': '\\\\newsroom\\cg-text',
     });
   });
 

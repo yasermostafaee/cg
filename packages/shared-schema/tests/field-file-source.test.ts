@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  authoredFileDelimiter,
+  bridgeTextSourcePath,
   DynamicFieldSchema,
+  fieldUsesFileOnly,
   fieldAllowsFileSource,
+  fileSourcePolicyOf,
   fieldTypeTakesFileSource,
+  isSafeBridgeTextSourcePath,
+  lockedBridgeTextSourcePath,
 } from '../src/fields.js';
 
 /**
@@ -87,5 +93,96 @@ describe('the ONE predicate — nobody re-derives the kind list (golden rule 6)'
   it('an ABSENT field grants nothing — an inferred row was never authored', () => {
     expect(fieldAllowsFileSource(null)).toBe(false);
     expect(fieldAllowsFileSource(undefined)).toBe(false);
+  });
+});
+
+describe('R-102 — authored authority over input type and bridge file', () => {
+  it('a policy implies the grant and exposes both effective decisions', () => {
+    const field = DynamicFieldSchema.parse({
+      ...base,
+      type: 'text',
+      default: '',
+      fileSource: {
+        inputMode: 'file-only',
+        bridgePath: 'newsroom/lower-third.txt',
+        lockFile: true,
+      },
+    });
+    expect(fieldAllowsFileSource(field)).toBe(true);
+    expect(fieldUsesFileOnly(field)).toBe(true);
+    expect(bridgeTextSourcePath(field)).toBe('newsroom/lower-third.txt');
+    expect(lockedBridgeTextSourcePath(field)).toBe('newsroom/lower-third.txt');
+  });
+
+  it.each([
+    '../secret.txt',
+    '/secret.txt',
+    'C:\\secret.txt',
+    '\\\\server\\share\\x.txt',
+    'a//b',
+    ' newsroom/file.txt ',
+  ])('rejects unsafe bridge path %s', (bridgePath) => {
+    expect(isSafeBridgeTextSourcePath(bridgePath)).toBe(false);
+    expect(() =>
+      DynamicFieldSchema.parse({
+        ...base,
+        type: 'text',
+        default: '',
+        fileSource: { bridgePath, lockFile: true },
+      }),
+    ).toThrow();
+  });
+
+  it('cannot lock without a bridge path', () => {
+    expect(() =>
+      DynamicFieldSchema.parse({
+        ...base,
+        type: 'list',
+        default: [],
+        fileSource: { lockFile: true },
+      }),
+    ).toThrow(/locked file needs/i);
+  });
+
+  it('stores a delimiter only on list files and exposes it as the authored default', () => {
+    const list = DynamicFieldSchema.parse({
+      ...base,
+      type: 'list',
+      default: [],
+      fileSource: { delimiter: '|' },
+    });
+    expect(authoredFileDelimiter(list)).toBe('|');
+
+    const text = DynamicFieldSchema.parse({
+      ...base,
+      type: 'text',
+      default: '',
+      fileSource: { delimiter: ';' },
+    });
+    expect(fileSourcePolicyOf(text)).toEqual({});
+    expect(authoredFileDelimiter(text)).toBeUndefined();
+  });
+
+  it('strips the policy from a non-file field', () => {
+    const parsed = DynamicFieldSchema.parse({
+      ...base,
+      type: 'number',
+      default: 0,
+      fileSource: { inputMode: 'file-only' },
+    }) as Record<string, unknown>;
+    expect('fileSource' in parsed).toBe(false);
+  });
+
+  it('does not treat an image page-list as a text-file field', () => {
+    const pageList = DynamicFieldSchema.parse({
+      ...base,
+      type: 'list',
+      default: [],
+      pages: true,
+      allowFileSource: true,
+      fileSource: { inputMode: 'file-only' },
+    });
+    expect(fieldAllowsFileSource(pageList)).toBe(false);
+    expect(fieldUsesFileOnly(pageList)).toBe(false);
   });
 });

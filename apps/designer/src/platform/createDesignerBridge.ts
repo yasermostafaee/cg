@@ -37,6 +37,7 @@ import { SharedImageStore } from './SharedImageStore.js';
 import { Exporter } from './Exporter.js';
 import { Preview } from './preview.js';
 import { pickFiles } from './pickFiles.js';
+import { BrowserTextSourceAccess } from './BrowserTextSourceAccess.js';
 import {
   exportFailureOf,
   settleFailedFile,
@@ -82,6 +83,7 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   // page reloads.
   const sceneSaveHandles = new Map<string, FileSystemFileHandle>();
   const exportHandles = new Map<string, FileSystemFileHandle>();
+  const browserTextSources = new BrowserTextSourceAccess();
 
   // Keep the asset store pointed at the active project at all times.
   // The renderer never juggles project IDs explicitly — switching
@@ -209,6 +211,42 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     keyboard: {
       reportsLanguage: () => shellInvoke() !== null,
       language: () => shellInvoke()?.('keyboard_language') ?? Promise.resolve('unknown'),
+    },
+
+    textSources: {
+      pick: async () => {
+        const invoke = shellInvoke();
+        if (invoke !== null) {
+          const selected = await invoke('pick_text_source_file');
+          if (selected === null) return null;
+          if (
+            !Array.isArray(selected) ||
+            selected.length !== 4 ||
+            selected.some((part) => typeof part !== 'string')
+          ) {
+            throw new Error('The native text-file picker returned an invalid result.');
+          }
+          const [name, bridgePath, sourcePath, content] = selected as [
+            string,
+            string,
+            string,
+            string,
+          ];
+          return { name, bridgePath, sourcePath, content };
+        }
+        return browserTextSources.pick();
+      },
+      reload: async (sourcePath) => {
+        const invoke = shellInvoke();
+        if (invoke !== null) {
+          const content = await invoke('reload_text_source_file', { sourcePath });
+          if (typeof content !== 'string') {
+            throw new Error('The native text-file reload returned invalid content.');
+          }
+          return content;
+        }
+        return browserTextSources.reload(sourcePath);
+      },
     },
 
     // `D-162` — the window's close, held by CG Designer's shell for the page to answer. In a
