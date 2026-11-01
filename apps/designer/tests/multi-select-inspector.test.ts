@@ -136,7 +136,7 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
     expect(c.querySelector('button[aria-label="Toggle Filter"]')).not.toBeNull();
   });
 
-  it('B-359 — with every selected Live Source aspect-locked, Scale is visible but disabled', () => {
+  it('B-359 — with any selected Live Source aspect-locked, Scale is visible but disabled', () => {
     const c = render([defaultLiveSource('live-a', 0, 0), defaultLiveSource('live-b', 640, 0)]);
     const scaleX = input(c, 'Scale X');
     const scaleY = input(c, 'Scale Y');
@@ -145,7 +145,14 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
     expect(scaleX?.title).toContain('aspect locked');
   });
 
-  it('B-359 — freeing one selected Live Source keeps the shared Scale controls available', () => {
+  it('B-359 — a locked Live Source also disables Scale in a mixed-kind selection', () => {
+    const c = render([defaultLiveSource('live-a', 0, 0), defaultShape('shape', 640, 0)]);
+    expect(input(c, 'Scale X')?.disabled).toBe(true);
+    expect(input(c, 'Scale Y')?.disabled).toBe(true);
+  });
+
+  it('B-359 — freeing every selected Live Source restores the shared Scale controls', () => {
+    designerStore.setAspectLock('live-a', false);
     designerStore.setAspectLock('live-b', false);
     const c = render([defaultLiveSource('live-a', 0, 0), defaultLiveSource('live-b', 640, 0)]);
     expect(input(c, 'Scale X')?.disabled).toBe(false);

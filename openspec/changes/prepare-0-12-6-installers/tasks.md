@@ -23,7 +23,8 @@ Lane: **FULL**
 - [x] 3.3 Add the CG Control Shared files section, typed channels, Bridge-side validation/persistence,
       and mock/live parity.
 - [x] 3.4 Keep the locked-delimiter tooltip anchored to the content-sized delimiter Tag (`B-358`).
-- [x] 3.5 Disable shared Scale while every selected Live Source is aspect-locked (`B-359`).
+- [x] 3.5 Disable shared Scale while any selected Live Source is aspect-locked, including mixed
+      Live Source + shape selections (`B-359`).
 - [x] 3.6 Add symmetric, aspect-preserving Live Source auto-layout with independent gaps,
       horizontal/vertical two-plate modes, seat swapping, top/bottom remainder choice and
       single-step Undo (`B-360`).

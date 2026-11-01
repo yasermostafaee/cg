@@ -106,16 +106,16 @@ export function MultiSelectSection({ elements }: { elements: readonly Element[] 
   const [twoPlateLayout, setTwoPlateLayout] = useState<TwoPlateLayout>('horizontal');
   const [layoutBias, setLayoutBias] = useState<LiveSourceLayoutBias>('more-top');
   const [reverseLayoutOrder, setReverseLayoutOrder] = useState(false);
-  const allLockedLiveSources = useDesignerSelector((state) =>
-    elements.every(
+  const hasLockedLiveSource = useDesignerSelector((state) =>
+    elements.some(
       (element) =>
         element.type === 'video-placeholder' &&
         element.expectedAspect !== undefined &&
         isAspectLocked(state, element.id),
     ),
   );
-  const lockedScaleReason = allLockedLiveSources
-    ? 'Scale is unavailable while every selected Live Source keeps its aspect locked. Resize with Width or Height.'
+  const lockedScaleReason = hasLockedLiveSource
+    ? 'Scale is unavailable while a selected Live Source keeps its aspect locked. Resize with Width or Height.'
     : undefined;
   const byKey = new Map(shared.map((sp) => [sp.descriptor.key, sp]));
 

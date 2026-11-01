@@ -15,7 +15,7 @@ service narrow read/execute access, so the corrected bytes need a fresh identity
 - Give each Setup a recognisable product ground, give Bridge its own teal icon, and show the real
   version prominently on both app startup splashes.
 - Improve Persian-guide line spacing and keep the locked-delimiter tooltip anchored to its value.
-- Disable shared Scale edits while every selected Live Source keeps its aspect locked.
+- Disable shared Scale edits while any selected Live Source keeps its aspect locked, including mixed selections.
 - Add one-step symmetric auto-layout for a multi-selection of Live Sources.
 - Add optional side-by-side primary/backup programme monitoring with one explicit local sound/VU source.
 - Download the three final installers with hashes into the local delivery folders. No tag or release

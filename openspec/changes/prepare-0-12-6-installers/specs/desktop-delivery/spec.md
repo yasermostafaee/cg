@@ -68,14 +68,20 @@ checked for clipping, overlap and stale release identity.
 
 ### Requirement: Locked Live Source multi-selection SHALL not offer deforming Scale edits
 
-The Designer SHALL keep the shared Scale controls visible but disabled when every selected element
-is a Live Source with a declared aspect and its aspect lock enabled. If any selected Live Source is
-unlocked, the shared Scale controls SHALL remain available.
+The Designer SHALL keep the shared Scale controls visible but disabled when any selected element is
+a Live Source with a declared aspect and its aspect lock enabled, including when the remaining
+selected elements are other kinds such as rectangles. The shared Scale controls SHALL remain
+available only when every selected Live Source is unlocked.
 
 #### Scenario: Every selected plate is aspect-locked
 
 - **WHEN** the author selects multiple Live Sources whose aspect locks are all enabled
 - **THEN** `Scale X` and `Scale Y` are disabled and identify the aspect lock as the reason
+
+#### Scenario: A locked plate and a rectangle are selected together
+
+- **WHEN** the author selects an aspect-locked Live Source together with a rectangle
+- **THEN** `Scale X` and `Scale Y` are disabled for the mixed selection
 
 ### Requirement: Selected Live Sources SHALL support symmetric automatic layout
 

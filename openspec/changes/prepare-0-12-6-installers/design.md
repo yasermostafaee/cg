@@ -14,10 +14,11 @@ real package version in a high-contrast badge. Setup remains one product family 
 near-identical dark windows: Control stays neutral, Bridge is teal with its own connection icon, and
 Designer is blue. The Persian guide uses relaxed line and paragraph spacing.
 
-The Designer multi-selection Inspector treats an all-locked Live Source selection as one guarded
-editing state: `Scale X` and `Scale Y` stay visible for discoverability but are disabled because
-independent scale axes cannot satisfy every plate's aspect lock. Unlocking any selected plate restores
-the shared controls.
+The Designer multi-selection Inspector treats any selection containing an aspect-locked Live Source
+as one guarded editing state: `Scale X` and `Scale Y` stay visible for discoverability but are
+disabled because independent scale axes cannot satisfy that plate's aspect lock. This also applies to
+mixed selections such as a Live Source plus a rectangle. Unlocking every selected plate restores the
+shared controls.
 
 The same homogeneous Live Source multi-selection exposes `Auto layout`. Its pure layout function
 splits the selection into near-square rows, with an explicit top/bottom remainder choice for odd

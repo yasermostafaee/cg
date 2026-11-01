@@ -4388,14 +4388,15 @@ invokes `reload_text_source_file` to prove the packaged Designer reaches the com
 Desktop run [41294591199](https://github.com/yasermostafaee/cg/actions/runs/41294591199) passed the installed-app
 ACL smoke and produced the matching `0.12.4` installer set.
 
-## [x] B-359 — Multi-select offered Scale while every selected Live Source had its aspect locked ⟨priority: medium — one shared edit could deform every locked plate⟩ — FILED 2026-11-01 from the owner's Designer reproduction · `openspec/changes/prepare-0-12-6-installers/`
+## [x] B-359 — Multi-select offered Scale while a selected Live Source had its aspect locked ⟨priority: medium — one shared edit could deform a locked plate⟩ — FILED 2026-11-01 from the owner's Designer reproduction · `openspec/changes/prepare-0-12-6-installers/`
 
 **Repro:** add several Live Sources, keep each plate's aspect lock on, then select them together.
 The multi-selection Inspector still offered `Scale X` and `Scale Y`; those edits are independent per
-axis and do not honour the plates' aspect locks. **Fix:** when every selected element is a Live Source
-with a declared, locked aspect, both Scale fields remain visible but disabled and explain that Width
-or Height should be used. If any selected plate is unlocked, Scale remains available. **Acceptance:**
-`multi-select-inspector.test.ts` pins both the all-locked refusal and the one-unlocked control.
+axis and do not honour the plates' aspect locks. The same leak occurred for a mixed Live Source +
+shape selection. **Fix:** when any selected Live Source has a declared, locked aspect, both Scale
+fields remain visible but disabled and explain that Width or Height should be used. Scale returns only
+when every selected Live Source is unlocked. **Acceptance:** `multi-select-inspector.test.ts` pins the
+all-Live, mixed-kind and all-unlocked cases.
 
 ## [x] B-360 — Building a symmetric multi-frame composition required sizing and positioning every Live Source by hand ⟨priority: medium — routine 3/4/6-frame layouts were slow and easy to space unevenly⟩ — FILED 2026-11-01 by the owner · `openspec/changes/prepare-0-12-6-installers/`
 
