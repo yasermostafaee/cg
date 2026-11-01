@@ -163,6 +163,10 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   // its resize handles are INERT (the box can't be drag-resized). RTL pins the RIGHT
   // edge, so the rendered left edge is `position.x − width`.
   const isAutoText = element.type === 'text' && element.fitMode === 'autosize';
+  // B-362 — Live Sources are axis-aligned broadcast plates. Their Inspector deliberately
+  // withholds Rotation because the playout contract cannot honour a rotated plate; the canvas
+  // must not expose a second route that bypasses that guard.
+  const canRotate = element.type !== 'video-placeholder';
   if (element.type === 'text' && element.fitMode === 'autosize') {
     const m = measureElementSceneSize(element.id);
     if (m !== null) {
@@ -305,16 +309,18 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
 
       {/* Rotation zones — just OUTSIDE each corner along the centre→corner diagonal, so
           rotation is offered beyond the shape while the corner hit owns the exact corner. */}
-      {cornerPts.map(({ h, p }) => (
-        <div
-          key={`rot-${h}`}
-          className={s.rotZone}
-          style={at(outward(center, p, ROT_ZONE / 2), {
-            cursor: rotateCursor(screenAngleDeg(center, p) + 90),
-          })}
-          onPointerDown={down(h, 'rotate')}
-        />
-      ))}
+      {canRotate
+        ? cornerPts.map(({ h, p }) => (
+            <div
+              key={`rot-${h}`}
+              className={s.rotZone}
+              style={at(outward(center, p, ROT_ZONE / 2), {
+                cursor: rotateCursor(screenAngleDeg(center, p) + 90),
+              })}
+              onPointerDown={down(h, 'rotate')}
+            />
+          ))
+        : null}
 
       {/* Edge strips (single-axis resize) — a strip laid along each parallelogram side so
           the hover highlight (.cg-gizmo-edge) covers it; corner hits sit on top. */}
@@ -666,6 +672,8 @@ function beginRotate(
   currentFrame: number,
   ev: PointerEvent,
 ): void {
+  // Keep the interaction invariant even if a future caller bypasses Gizmo's rendered handles.
+  if (element.type === 'video-placeholder') return;
   // 🔴 B-175 — as `beginResize`: no cell means the box is not on screen, so there is no
   // pivot to rotate about and the gesture must not open.
   if (hasNoActiveCell(element.id)) return;

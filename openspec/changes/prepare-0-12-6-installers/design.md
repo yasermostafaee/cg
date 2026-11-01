@@ -20,6 +20,10 @@ disabled because independent scale axes cannot satisfy that plate's aspect lock.
 mixed selections such as a Live Source plus a rectangle. Unlocking every selected plate restores the
 shared controls.
 
+A Live Source is also guarded at the canvas boundary: its single-selection Gizmo retains move and
+resize but does not render the outside-corner rotation zones. The rotation gesture independently
+refuses a Live Source so a future caller cannot bypass the axis-aligned playout contract.
+
 The same homogeneous Live Source multi-selection exposes `Auto layout`. Its pure layout function
 splits the selection into near-square rows, with an explicit top/bottom remainder choice for odd
 layouts. The author sets horizontal and vertical gaps independently; a two-plate selection can be

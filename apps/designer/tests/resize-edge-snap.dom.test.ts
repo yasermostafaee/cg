@@ -154,6 +154,14 @@ function mountGizmo(id: string): HTMLDivElement {
   return container;
 }
 
+describe('B-362 — a Live Source cannot bypass its withheld Rotation through the canvas', () => {
+  it('does not render corner rotation zones for a Live Source', () => {
+    seed();
+    const host = mountGizmo('plate');
+    expect(host.querySelectorAll('.cg-gizmo-rot-zone, [class*="rotZone"]')).toHaveLength(0);
+  });
+});
+
 /** jsdom has no `PointerEvent`; React and the window listeners both read a MouseEvent fine. */
 function pointer(
   type: string,

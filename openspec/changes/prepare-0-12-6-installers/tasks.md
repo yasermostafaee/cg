@@ -32,6 +32,8 @@ Lane: **FULL**
       sound/VU source (`R-104`, `monitor-backup-program-return`).
 - [x] 3.8 Keep the blue single/multi selection indication readable beside the red dashed overlap
       mark without changing selection geometry (`B-361`).
+- [x] 3.9 Remove Live Source rotation zones from the canvas and refuse the gesture at its entry
+      point (`B-362`).
 
 ## 4. Verification
 

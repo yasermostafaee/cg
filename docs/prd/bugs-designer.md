@@ -4424,3 +4424,12 @@ selection a dark separator plus a bright blue outer ring/glow. The single-select
 the same blue halo without changing its measured geometry. **Acceptance:** Playwright reads a
 non-empty sky-blue outer shadow on every multi-selection box; existing geometry tests continue to
 measure the unchanged selection rect.
+
+## [x] B-362 — A Live Source could be rotated from the canvas although Rotation was withheld in the Inspector ⟨priority: high — the canvas bypass created a plate that playout cannot honour⟩ — FILED 2026-11-01 by the owner · `openspec/changes/prepare-0-12-6-installers/`
+
+**Repro / Actual:** select a Live Source. `Rotation` and `Opacity` are correctly visible but disabled
+because the CasparCG plate is static and axis-aligned, yet dragging just outside a corner still
+started a rotation gesture. **Fix:** the single-selection Gizmo no longer renders rotation zones for
+a Live Source, and the rotation gesture itself refuses that element kind as a second invariant.
+Resize handles remain available and continue to obey the plate's aspect lock. **Acceptance:**
+`resize-edge-snap.dom.test.ts` mounts a Live Source Gizmo and proves that it has no rotation zones.

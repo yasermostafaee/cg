@@ -83,6 +83,17 @@ available only when every selected Live Source is unlocked.
 - **WHEN** the author selects an aspect-locked Live Source together with a rectangle
 - **THEN** `Scale X` and `Scale Y` are disabled for the mixed selection
 
+### Requirement: Live Sources SHALL remain axis-aligned on every authoring surface
+
+The Designer SHALL not offer a canvas rotation gesture for a Live Source whose Rotation control is
+withheld in the Inspector. Move and resize gestures SHALL remain available.
+
+#### Scenario: A Live Source is selected on the canvas
+
+- **WHEN** the author selects one Live Source
+- **THEN** its Gizmo has resize handles but no outside-corner rotation zones
+- **AND** a rotation gesture cannot be started for that plate
+
 ### Requirement: Selected Live Sources SHALL support symmetric automatic layout
 
 When two or more Live Sources are selected, the Designer SHALL offer an automatic layout that
