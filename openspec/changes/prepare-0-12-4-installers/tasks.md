@@ -10,9 +10,9 @@ Lane: **FULL**
 
 ## 2. Current guide evidence
 
-- [ ] 2.1 Run Desktop on the temporary candidate branch to obtain real setup and app screenshots.
-- [ ] 2.2 Add and build the Persian `0.12.4` guide with screenshots from this build.
-- [ ] 2.3 Prove every quoted label is current and every version-bearing image is fresh.
+- [x] 2.1 Run Desktop on the temporary candidate branch to obtain real setup and app screenshots.
+- [x] 2.2 Add and build the Persian `0.12.4` guide with screenshots from this build.
+- [x] 2.3 Prove every quoted label is current and every version-bearing image is fresh.
 
 ## 3. Verification
 
