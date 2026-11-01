@@ -58,7 +58,10 @@ VIAddVersionKey "LegalCopyright" "APASAI"
 
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
+!include "StrFunc.nsh"
 !include "x64.nsh"
+
+${StrRep}
 
 Page instfiles
 UninstPage uninstConfirm
@@ -149,12 +152,15 @@ Function .onInit
   ${GetOptions} " $Args" " /CONTROLPORT=" $ControlPort
   ${GetOptions} " $Args" " /TEMPLATEPORT=" $TemplatePort
   ${GetOptions} " $Args" " /BRIDGEADDRESS=" $BridgeAddress
-  ; A path may contain spaces. Windows then quotes the whole argv token
-  ; ("/TEXTSOURCEROOT=D:\shared text"), so the leading-space spelling used for
-  ; URL-like options above would not match it. A Windows/UNC path contains
-  ; backslashes rather than the option marker's forward slash, therefore the
-  ; ordinary spelling is both quote-safe and does not truncate the path.
-  ${GetOptions} "$Args" "/TEXTSOURCEROOT=" $TextSourceRoot
+  ; CreateProcess quotes a whole argv token when its value contains spaces:
+  ;   "/TEXTSOURCEROOT=D:\shared text"
+  ; FileFunc expects the quote around the value instead:
+  ;   /TEXTSOURCEROOT="D:\shared text"
+  ; Normalize that one option before parsing it. Keep $Args itself untouched so
+  ; install.log still records the exact command line Windows supplied.
+  StrCpy $R0 $Args
+  ${StrRep} $R0 $R0 '$\"/TEXTSOURCEROOT=' '/TEXTSOURCEROOT=$\"'
+  ${GetOptions} " $R0" " /TEXTSOURCEROOT=" $TextSourceRoot
   ClearErrors
 FunctionEnd
 
