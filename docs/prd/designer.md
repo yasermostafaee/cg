@@ -5852,3 +5852,27 @@ an authoring aid, so its presentation needs to be adjustable without changing wh
 **Withdrawn:** Poster fit has been removed from the single and multi Inspector, schema, and author
 renderer. Posters use the original fixed `cover` behaviour; the real Live Source fit remains a
 separate on-air control.
+
+## [x] D-169 — A single Live Source has quick full-canvas and inset placement ⟨priority: high — the owner, 2026-11-01⟩ — `openspec/changes/prepare-0-12-6-installers/`
+
+**What:** the single-selection Live Source Inspector has a compact **Quick layout** section. **Fit
+canvas** gives the plate the largest centred rect inside the active composition; **Fit with margin**
+does the same inside an adjustable minimum inset. Both actions preserve the plate's declared source
+aspect (or its current rendered aspect when none is declared), normalise stale scale/rotation, and
+write the complete placement as one undo step. After the inset mode is chosen, editing its margin
+updates the placement immediately.
+
+**Why:** the common one-guest design should not require typing X, Y, width and height independently.
+The same shortcut must remain safe for portrait and 4:3 feeds rather than stretching every source to
+the canvas ratio.
+
+**Acceptance:**
+
+- WHEN a 16:9 Live Source in a 16:9 composition uses Fit canvas THEN its rect is exactly the full
+  composition
+- WHEN Fit with margin is used THEN the plate is centred inside at least that inset on every edge,
+  and later margin edits apply immediately
+- WHEN the plate's aspect differs from the composition THEN the largest fitting centred rect is used
+  without stretching or leaving the composition
+- WHEN either action runs THEN position, size, scale and rotation change together in one undo step;
+  the source id, live fit and poster are untouched

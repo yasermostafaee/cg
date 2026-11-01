@@ -128,6 +128,11 @@ import { TextStyleSection, TogglePair } from './TextStyleSection.js';
 import * as tss from './TextStyleSection.css.js';
 import { AlignButtonGroup, H_ALIGN_OPTIONS, V_ALIGN_OPTIONS } from './AlignButtonGroup.js';
 import { Button } from '../../ui/Button.js';
+import {
+  calculateSingleLiveSourceLayout,
+  singleLiveSourceTransform,
+} from './live-source-single-layout.js';
+import * as quickLayoutCss from './LiveSourceQuickLayout.css.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import { Tag } from '../../ui/Tag.js';
@@ -885,6 +890,7 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
           keyframes are withheld, and each says why on itself.
         </StateLine>
       </CollapseSection>
+      <LiveSourceQuickLayout element={element} />
       <LiveSourceFrameRow element={element} />
       {/*
         The Filter section, WITHHELD rather than absent (`DESIGNER-FIX-0905`): the header
@@ -893,6 +899,77 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
       */}
       <CollapseSection title="Filter" withheld={withheldReason(element, 'filter')} />
     </>
+  );
+}
+
+/** D-169 — one-click placement for the common single-plate full-frame and inset layouts. */
+function LiveSourceQuickLayout({ element }: { element: VideoPlaceholderElement }): JSX.Element {
+  const [margin, setMargin] = useState(48);
+  const [activeMode, setActiveMode] = useState<'canvas' | 'margin' | null>(null);
+  const frameW = useDesignerSelector((state) =>
+    state.scene === null ? 0 : activeDocOf(state.scene).resolution.width,
+  );
+  const frameH = useDesignerSelector((state) =>
+    state.scene === null ? 0 : activeDocOf(state.scene).resolution.height,
+  );
+
+  const apply = (requestedMargin: number): void => {
+    const layout = calculateSingleLiveSourceLayout(
+      element,
+      { width: frameW, height: frameH },
+      requestedMargin,
+    );
+    if (layout === null) return;
+    designerStore.updateElement(element.id, {
+      transform: singleLiveSourceTransform(element.transform, layout),
+    } as Partial<Element>);
+  };
+
+  return (
+    <CollapseSection title="Quick layout" defaultExpanded>
+      <NumberField
+        label="margin"
+        value={margin}
+        min={0}
+        step={1}
+        suffix="px"
+        onCommit={(next) => {
+          const safe = Math.max(0, next);
+          setMargin(safe);
+          if (activeMode === 'margin') apply(safe);
+        }}
+      />
+      <div className={quickLayoutCss.actions}>
+        <Button
+          className={quickLayoutCss.action}
+          variant="secondary"
+          selected={activeMode === 'canvas'}
+          aria-pressed={activeMode === 'canvas'}
+          aria-label="Fit Live Source to canvas"
+          title="Use the largest centred size that fits the canvas while keeping the source aspect."
+          onClick={() => {
+            setActiveMode('canvas');
+            apply(0);
+          }}
+        >
+          Fit canvas
+        </Button>
+        <Button
+          className={quickLayoutCss.action}
+          variant="secondary"
+          selected={activeMode === 'margin'}
+          aria-pressed={activeMode === 'margin'}
+          aria-label="Fit Live Source with margin"
+          title="Fit and centre the plate inside the selected minimum margin. Further margin edits apply immediately."
+          onClick={() => {
+            setActiveMode('margin');
+            apply(margin);
+          }}
+        >
+          Fit with margin
+        </Button>
+      </div>
+    </CollapseSection>
   );
 }
 

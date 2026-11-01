@@ -43,6 +43,8 @@ Lane: **FULL**
 - [x] 3.13 Keep the Source ID read-only while Auto is enabled, preserve Auto after clearing a manual
       id, and withdraw the unused Poster fit control (`B-365`, `D-168`).
 - [x] 3.14 Hide internal element ids from Issues copy while preserving click-to-select (`B-366`).
+- [x] 3.15 Add single-Live-Source Fit canvas / Fit with margin quick layout with aspect-safe centring
+      and immediate inset updates (`D-169`).
 
 ## 4. Verification
 

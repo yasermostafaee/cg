@@ -8,7 +8,7 @@ import { ProjectStore } from '../src/platform/ProjectStore.js';
 import { designerStore } from '../src/renderer/state/store.js';
 import { defaultLiveSource, defaultShape } from '../src/renderer/state/element-defaults.js';
 import { StyleSection } from '../src/renderer/features/inspector/StyleSection.js';
-import { activeLayersOf } from '../src/renderer/state/scene-doc.js';
+import { activeDocOf, activeLayersOf } from '../src/renderer/state/scene-doc.js';
 import { TransformSection } from '../src/renderer/features/inspector/TransformSection.js';
 
 /**
@@ -139,6 +139,24 @@ const live = (stroke?: { width: number; color: string }): Element =>
 const shape = (): Element => defaultShape('sh-1', 100, 100);
 
 describe('D-137 — the Live Source Inspector offers no affordance it cannot honour', () => {
+  it('D-169 — fits one Live Source to the active canvas from Quick layout', () => {
+    const c = render(live());
+    const action = c.querySelector<HTMLButtonElement>('[aria-label="Fit Live Source to canvas"]');
+    expect(action).not.toBeNull();
+
+    act(() => action?.click());
+
+    const scene = designerStore.get().scene;
+    if (scene === null) throw new Error('scene was not mounted');
+    const doc = activeLayersOf(scene)[0]?.children[0];
+    if (doc?.type !== 'video-placeholder') throw new Error('stored Live Source was not found');
+    const resolution = activeDocOf(scene).resolution;
+    expect(doc.transform.position).toEqual({ x: 0, y: 0 });
+    expect(doc.transform.size).toEqual({ w: resolution.width, h: resolution.height });
+    expect(doc.transform.scale).toEqual({ x: 1, y: 1 });
+    expect(doc.transform.rotation).toBe(0);
+  });
+
   it('offers NO keyframe diamond on any transform field — while a shape offers several', () => {
     expect(diamondProps(render(live()))).toEqual([]);
     afterRender();
