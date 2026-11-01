@@ -14,5 +14,5 @@ Lane: **FULL** — this changes an installed-shell refusal condition and Windows
 
 - [x] 2.1 Strict-validate this change and run targeted release/Designer checks.
 - [x] 2.2 Run the full local gate and local E2E lane.
-- [ ] 2.3 Push the exact fix to `dev` and record a completed green Linux workspace/E2E run.
-- [ ] 2.4 Build the next matching installer set and record a green Windows installed-app smoke.
+- [x] 2.3 Push the exact fix to `dev` and record a completed green Linux workspace/E2E run.
+- [x] 2.4 Build the next matching installer set and record a green Windows installed-app smoke.

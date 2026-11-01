@@ -18,11 +18,11 @@ Lane: **FULL**
 
 - [x] 3.1 Run the full local gate.
 - [x] 3.2 Run the complete local E2E lane.
-- [ ] 3.3 Push the exact candidate to `dev` and record green Linux workspace and E2E jobs.
-- [ ] 3.4 Record a green Desktop installer run, including the installed Designer ACL smoke and the `0.11.6` upgrade acceptance.
+- [x] 3.3 Push the exact candidate to `dev` and record green Linux workspace and E2E jobs.
+- [x] 3.4 Record a green Desktop installer run, including the installed Designer ACL smoke and the `0.11.6` upgrade acceptance.
 
 ## 4. Handoff
 
-- [ ] 4.1 Download and assemble the three exact installers and `SHA256SUMS.txt` in
+- [x] 4.1 Download and assemble the three exact installers and `SHA256SUMS.txt` in
       `installers-ci-0.12.4/` and place the latest installers in `dist/`.
-- [ ] 4.2 Record exact filenames, sizes, hashes and the Desktop run URL; keep the candidate unpublished.
+- [x] 4.2 Record exact filenames, sizes, hashes and the Desktop run URL; keep the candidate unpublished.

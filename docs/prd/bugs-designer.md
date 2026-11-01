@@ -4373,7 +4373,7 @@ e2e `telavat2-book.spec.ts` (the file's exact shape, 87 pages, through Import a 
 HEAD's import, green now; `page-lists.test.ts`, `sequence-pages.test.ts`, `book-inspector.dom.test.ts`,
 `telavat2-book.test.ts`, `listFieldPictures.test.ts`.
 
-## [~] B-356 — The installed Designer refuses both shared-text-file commands as not allowed by ACL ⟨priority: high — fixed-file authoring cannot choose or reload its source in the shipped app⟩ — FILED 2026-11-01 from the owner's installed `0.12.3` screenshot · `openspec/changes/fix-installed-text-source-acl/`
+## [x] B-356 — The installed Designer refuses both shared-text-file commands as not allowed by ACL ⟨priority: high — fixed-file authoring cannot choose or reload its source in the shipped app⟩ — FILED 2026-11-01 from the owner's installed `0.12.3` screenshot · `openspec/changes/fix-installed-text-source-acl/`
 
 **Repro:** install CG Designer `0.12.3`, enable **Use fixed file** or **Allow file source**, then press
 **Browse shared file…**. **Expected:** the native Windows picker opens; after a selection, Reload may re-read that
@@ -4383,3 +4383,7 @@ the Designer capability grants neither generated permission. The browser develop
 installed-shell boundary, so its UI/E2E coverage stayed green. **Regression:** a source-level contract compares every
 custom command declared by each desktop shell with the permissions granted to that shell, and the installed-app smoke
 invokes `reload_text_source_file` to prove the packaged Designer reaches the command rather than the ACL refusal.
+**Acceptance:** local full gate and complete Designer/Runtime E2E passed; Linux run
+[41294591200](https://github.com/yasermostafaee/cg/actions/runs/41294591200) passed workspace and Playwright E2E;
+Desktop run [41294591199](https://github.com/yasermostafaee/cg/actions/runs/41294591199) passed the installed-app
+ACL smoke and produced the matching `0.12.4` installer set.

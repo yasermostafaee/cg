@@ -79,6 +79,6 @@
 ## 6. Documentation and verification
 
 - [x] 6.1 Document the default/configured Bridge text-source root and deployment/UNC example.
-- [ ] 6.2 Run targeted package tests, Runtime/Designer local E2E and the full repository gate.
-- [ ] 6.3 Record a successful Linux CI E2E job because Runtime/Designer rendering and the bridge wire
+- [x] 6.2 Run targeted package tests, Runtime/Designer local E2E and the full repository gate.
+- [x] 6.3 Record a successful Linux CI E2E job because Runtime/Designer rendering and the bridge wire
       contract change.
