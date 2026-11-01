@@ -18,6 +18,7 @@ service narrow read/execute access, so the corrected bytes need a fresh identity
 - Disable shared Scale edits while any selected Live Source keeps its aspect locked, including mixed selections.
 - Remove the canvas rotation gesture from Live Sources, matching the withheld Inspector control.
 - Disable single-selection Scale axes while the Live Source aspect lock is enabled.
+- Keep a registered Look and its backing composition on one operator-facing display name.
 - Add one-step symmetric auto-layout for a multi-selection of Live Sources.
 - Add optional side-by-side primary/backup programme monitoring with one explicit local sound/VU source.
 - Download the three final installers with hashes into the local delivery folders. No tag or release

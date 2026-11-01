@@ -2,10 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import type { Element } from '@cg/shared-schema';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
-import { designerStore } from '../src/renderer/state/store.js';
+import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import { activeLookGroup, detachedLookCompositions } from '../src/renderer/state/slices/looks.js';
 import { activeLayersOf } from '../src/renderer/state/scene-doc.js';
 import { defaultLiveSource } from '../src/renderer/state/element-defaults.js';
+import { buildTemplateLiveSources } from '@cg/vcg-format';
 
 /**
  * ⭐ `DESIGNER-FIX-0905` §5 / `B-219` — **the orphan composition, ESTABLISHED before it was fixed.**
@@ -73,6 +74,38 @@ const platesIn = (compId: string): string[] =>
     .map((el) => el.id);
 
 describe('§5 — the orphan compositions', () => {
+  it('B-364 — renaming a Look also renames its composition and exports the operator label', () => {
+    const home = fresh();
+    designerStore.createLookGroup();
+    designerStore.addLook();
+
+    designerStore.renameLook('look-1', 'دو قاب مهمان');
+
+    expect(looks()[0]?.name).toBe('دو قاب مهمان');
+    expect(comps().find((composition) => composition.name === 'دو قاب مهمان')).toBeDefined();
+    const projected = editSceneOf(scene(), home);
+    if (projected === null) throw new Error('no projected home composition');
+    expect(buildTemplateLiveSources(projected).looks?.[0]?.name).toBe('دو قاب مهمان');
+  });
+
+  it('B-364 — renaming a registered Look composition also changes the exported Look label', () => {
+    const home = fresh();
+    designerStore.createLookGroup();
+    designerStore.addLook();
+    const look = looks()[0];
+    const instance = activeLayersOf(scene()!)
+      .flatMap((layer) => layer.children)
+      .find((element) => element.id === look?.instanceId);
+    if (instance?.type !== 'composition') throw new Error('no look composition instance');
+
+    designerStore.renameComposition(instance.compositionId, 'سه قاب استودیو');
+
+    expect(looks()[0]?.name).toBe('سه قاب استودیو');
+    const projected = editSceneOf(scene(), home);
+    if (projected === null) throw new Error('no projected home composition');
+    expect(buildTemplateLiveSources(projected).looks?.[0]?.name).toBe('سه قاب استودیو');
+  });
+
   it('removing every look keeps every composition, plates and all', () => {
     const { orphanIds } = threeOrphans();
     expect(looks()).toEqual([]);

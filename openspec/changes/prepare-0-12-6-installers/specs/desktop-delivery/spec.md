@@ -101,6 +101,23 @@ withheld in the Inspector. Move and resize gestures SHALL remain available.
 - **THEN** its Gizmo has resize handles but no outside-corner rotation zones
 - **AND** a rotation gesture cannot be started for that plate
 
+### Requirement: A registered Look SHALL have one operator-facing display name
+
+While a composition is registered as a Look, the Designer SHALL keep the Look name and composition
+name synchronized when either authoring surface renames it. Exported Look metadata SHALL carry that
+same name for CG Control. A composition retained after its Look is removed SHALL be independent.
+
+#### Scenario: The author renames a Look
+
+- **WHEN** the author changes `look-1` to `دو قاب مهمان` in the Looks Inspector
+- **THEN** its backing composition is also named `دو قاب مهمان`
+- **AND** CG Control's exported Look label is `دو قاب مهمان`
+
+#### Scenario: The author renames a registered Look composition
+
+- **WHEN** the author renames that composition in the Compositions panel
+- **THEN** the linked Look and its exported operator label receive the same name
+
 ### Requirement: Selected Live Sources SHALL support symmetric automatic layout
 
 When two or more Live Sources are selected, the Designer SHALL offer an automatic layout that

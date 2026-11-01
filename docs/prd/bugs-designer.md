@@ -4441,3 +4441,15 @@ multi-selection Inspector, `Scale X` and `Scale Y` could still be edited indepen
 Scale fields remain visible but disabled while that plate's declared aspect is locked, with Width or
 Height identified as the valid resize route. Turning `keep aspect` off restores both Scale fields.
 **Acceptance:** `live-source-inspector.dom.test.ts` pins the locked and unlocked states.
+
+## [x] B-364 — A Look and its backing composition exposed two unrelated names, while CG Control kept showing `look-N` ⟨priority: high — the author could not reliably set the operator-facing label⟩ — FILED 2026-11-01 by the owner · `openspec/changes/prepare-0-12-6-installers/`
+
+**Repro / Actual:** add a Look; both the Look and its newly-created composition initially read
+`look-1`. Rename the Look in its Inspector and the composition keeps the old name; rename the
+composition and the Look keeps the old name. This presents two names for one authoring object, while
+CG Control consumes the exported Look name and may continue to display the stale `look-1` label.
+**Fix:** while a composition is registered as a Look, the Look label is the one author-facing name:
+renaming either surface atomically updates both records by resolving the actual composition instance,
+never by comparing names. Export carries that synchronized label. Once a Look is removed, its kept
+composition is independent again. **Acceptance:** `looks-orphan.test.ts` pins both rename directions
+and the exact label emitted by `buildTemplateLiveSources` for CG Control.

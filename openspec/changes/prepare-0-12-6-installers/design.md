@@ -27,6 +27,11 @@ refuses a Live Source so a future caller cannot bypass the axis-aligned playout 
 The same aspect-lock rule applies to both Inspector paths. A single locked Live Source keeps its
 Scale axes visible but disabled, and unlocks them only when `keep aspect` is turned off.
 
+A registered Look and its backing composition expose one display name. Renaming from either the
+Looks Inspector or the Compositions panel resolves their real instance link and updates both records
+in one scene mutation; exported Look metadata therefore carries the same label CG Control shows.
+After a Look is removed, its retained composition is detached and can be named independently.
+
 The same homogeneous Live Source multi-selection exposes `Auto layout`. Its pure layout function
 splits the selection into near-square rows, with an explicit top/bottom remainder choice for odd
 layouts. The author sets horizontal and vertical gaps independently; a two-plate selection can be

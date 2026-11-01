@@ -8,7 +8,12 @@ import {
   type Scene,
 } from '@cg/shared-schema';
 import { current, set } from '../store-core.js';
-import { activeDocOf, activeLayersOf, withActiveDoc } from '../scene-doc.js';
+import {
+  activeDocOf,
+  activeLayersOf,
+  renameCompositionAndLinkedLooks,
+  withActiveDoc,
+} from '../scene-doc.js';
 import { designerStore } from '../store.js';
 
 /**
@@ -315,12 +320,20 @@ export const looksSlice = {
 
   renameLook(id: string, name: string): void {
     const group = activeLookGroup(current.scene);
-    if (group === undefined || name.trim() === '') return;
-    if (!group.looks.some((l) => l.id === id)) return;
-    const scene = writeGroup({
+    const trimmed = name.trim();
+    if (group === undefined || trimmed === '' || current.scene === null) return;
+    const look = group.looks.find((candidate) => candidate.id === id);
+    if (look === undefined) return;
+    let scene = writeGroup({
       ...group,
-      looks: group.looks.map((l) => (l.id === id ? { ...l, name: name.trim() } : l)),
+      looks: group.looks.map((candidate) =>
+        candidate.id === id ? { ...candidate, name: trimmed } : candidate,
+      ),
     });
+    const compositionId = lookCompositionId(current.scene, look);
+    if (scene !== null && compositionId !== undefined) {
+      scene = renameCompositionAndLinkedLooks(scene, compositionId, trimmed);
+    }
     if (scene !== null) set({ scene });
   },
 

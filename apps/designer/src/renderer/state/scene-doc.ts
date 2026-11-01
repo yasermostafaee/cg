@@ -93,6 +93,49 @@ export function withActiveDoc(scene: Scene, patch: Partial<EditDocFields>): Scen
 }
 
 /**
+ * Keep the author-facing name of a registered Look and its backing composition identical.
+ * A Look is stored as a composition instance, so the link is resolved through the host
+ * document's instance rather than by comparing names or ids.
+ */
+export function renameCompositionAndLinkedLooks(
+  scene: Scene,
+  compositionId: string,
+  name: string,
+): Scene {
+  const renameLinks = <T extends Scene | Composition>(doc: T): T => {
+    const linkedInstanceIds = new Set(
+      doc.layers
+        .flatMap((layer) => layer.children)
+        .filter(
+          (element) => element.type === 'composition' && element.compositionId === compositionId,
+        )
+        .map((element) => element.id),
+    );
+    if (linkedInstanceIds.size === 0 || (doc.lookGroups?.length ?? 0) === 0) return doc;
+    let changed = false;
+    const lookGroups = (doc.lookGroups ?? []).map((group) => ({
+      ...group,
+      looks: group.looks.map((look) => {
+        if (!linkedInstanceIds.has(look.instanceId) || look.name === name) return look;
+        changed = true;
+        return { ...look, name };
+      }),
+    }));
+    return changed ? ({ ...doc, lookGroups } as T) : doc;
+  };
+
+  const root = renameLinks(scene);
+  if (root.compositions === undefined) return root;
+  return {
+    ...root,
+    compositions: root.compositions.map((composition) => {
+      const linked = renameLinks(composition);
+      return composition.id === compositionId ? { ...linked, name } : linked;
+    }),
+  };
+}
+
+/**
  * D-025 — the active document's OWN fields/bindings (per-composition). Mutations
  * to data keys / bindings go through here so they scope to the open composition,
  * not the project root.

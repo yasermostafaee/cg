@@ -35,6 +35,8 @@ Lane: **FULL**
 - [x] 3.9 Remove Live Source rotation zones from the canvas and refuse the gesture at its entry
       point (`B-362`).
 - [x] 3.10 Disable single-selection Scale while the Live Source aspect lock is enabled (`B-363`).
+- [x] 3.11 Synchronize registered Look/composition display names in both rename directions and
+      prove CG Control's exported label (`B-364`).
 
 ## 4. Verification
 

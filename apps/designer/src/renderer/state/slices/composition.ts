@@ -6,6 +6,7 @@ import {
   freshCompositionId,
   freshElementId,
   reassignIdsDeep,
+  renameCompositionAndLinkedLooks,
 } from '../scene-doc.js';
 import { designerStore } from '../store.js';
 
@@ -135,12 +136,9 @@ export const compositionSlice = {
     if (current.scene === null) return;
     const comps = current.scene.compositions ?? [];
     if (!comps.some((c) => c.id === id)) return;
-    set({
-      scene: {
-        ...current.scene,
-        compositions: comps.map((c) => (c.id === id ? { ...c, name } : c)),
-      },
-    });
+    const trimmed = name.trim();
+    if (trimmed === '') return;
+    set({ scene: renameCompositionAndLinkedLooks(current.scene, id, trimmed) });
   },
 
   /**
