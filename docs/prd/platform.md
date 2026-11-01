@@ -4220,3 +4220,19 @@ already on `0.12.2` must install the complete `0.12.3` set rather than receiving
 **Acceptance:** all version surfaces say `0.12.3`; the full local gate and E2E lane pass; Linux workspace/E2E and
 all applicable Windows installer/smoke/upgrade jobs pass on the exact candidate commit; all three installer files
 are downloaded with hashes and placed in `installers-ci-0.12.3/` and `dist/`; no tag or release is created.
+
+## [~] P-072 — Release candidate `0.12.4`: installed fixed-file ACL correction ⟨priority: high⟩ — FILED 2026-11-01 by `RELEASE-0124-01` · `openspec/changes/prepare-0-12-4-installers/`
+
+**What:** build and retain one matching `0.12.4` set of CG Bridge, CG Control and CG Designer installers. The
+product change fixes `B-356`: the installed Designer must be allowed to choose and reload an authorized shared
+text file. Put the verified files in the local handoff folder and `dist/`; do not publish a release.
+
+**Why:** `0.12.3` already identifies delivered installer bytes, and its installed Designer refuses both native
+text-source commands before they reach the file reader. Different binaries cannot reuse that version. Although
+the executable correction is in Designer, the installed suite keeps one release identity, so the handoff remains
+one matching three-installer set.
+
+**Acceptance:** all version surfaces say `0.12.4`; the full local gate and E2E lane pass; Linux workspace/E2E and
+all applicable Windows installer/smoke/upgrade jobs pass on the exact candidate commit; the installed Designer
+smoke proves its text-source command crosses Tauri ACL; all three installer files are downloaded with hashes and
+placed in `installers-ci-0.12.4/` and `dist/`; no tag or release is created.

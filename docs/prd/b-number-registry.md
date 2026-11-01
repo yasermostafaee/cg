@@ -3580,3 +3580,13 @@ Measured free before use: after `git fetch origin`, the highest PRD bug heading 
 remote-tracking refs was `B-355`; the current checkout had no `B-356` heading and the stash list was empty.
 
 ⇒ **Next free after this entry is `B-357`**, **`D-167`**, **`P-072`**, **`R-104`** and **`C-049`**.
+
+### 2026-11-01 — `RELEASE-0124-01` takes `P-072`
+
+- `P-072` — release candidate `0.12.4`, the matching installer delivery that restores installed Designer
+  access to shared text files — [platform.md](platform.md).
+
+Measured free before use: the registry named `P-072` as next free; the tracked PRD-heading sweep found no
+`P-072` before this filing.
+
+⇒ **Next free after this entry is `B-357`**, **`D-167`**, **`P-073`**, **`R-104`** and **`C-049`**.
