@@ -24,6 +24,9 @@ A Live Source is also guarded at the canvas boundary: its single-selection Gizmo
 resize but does not render the outside-corner rotation zones. The rotation gesture independently
 refuses a Live Source so a future caller cannot bypass the axis-aligned playout contract.
 
+The same aspect-lock rule applies to both Inspector paths. A single locked Live Source keeps its
+Scale axes visible but disabled, and unlocks them only when `keep aspect` is turned off.
+
 The same homogeneous Live Source multi-selection exposes `Auto layout`. Its pure layout function
 splits the selection into near-square rows, with an explicit top/bottom remainder choice for odd
 layouts. The author sets horizontal and vertical gaps independently; a two-plate selection can be

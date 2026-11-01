@@ -83,6 +83,13 @@ available only when every selected Live Source is unlocked.
 - **WHEN** the author selects an aspect-locked Live Source together with a rectangle
 - **THEN** `Scale X` and `Scale Y` are disabled for the mixed selection
 
+#### Scenario: One aspect-locked plate is selected
+
+- **WHEN** the author selects one Live Source whose aspect lock is enabled
+- **THEN** `Scale X` and `Scale Y` remain visible but disabled
+- **AND WHEN** the author disables `keep aspect`
+- **THEN** both Scale controls become available
+
 ### Requirement: Live Sources SHALL remain axis-aligned on every authoring surface
 
 The Designer SHALL not offer a canvas rotation gesture for a Live Source whose Rotation control is

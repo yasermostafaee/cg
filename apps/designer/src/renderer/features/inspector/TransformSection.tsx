@@ -13,6 +13,7 @@ import { descriptorFor, isKeyframeable, withheldReason } from './field-registry.
 import { Seg, SingleField, transformFieldProps } from './transform-fields.js';
 import * as s from './TransformSection.css.js';
 import { renderedTransformAt } from '../../state/slices/arrangements.js';
+import { isAspectLocked } from '../../state/slices/view.js';
 
 interface Props {
   element: Element;
@@ -32,6 +33,12 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
   // Self-subscribe to the frame so only this value-bearing section re-renders
   // during playback, not the whole inspector.
   const currentFrame = useDesignerSelector((s) => s.currentFrame);
+  const aspectLocked = useDesignerSelector(
+    (state) =>
+      element.type === 'video-placeholder' &&
+      element.expectedAspect !== undefined &&
+      isAspectLocked(state, element.id),
+  );
   // Show the *effective* values at the current frame so editing a keyframe (or
   // scrubbing) updates these fields in lock-step with the canvas, not the
   // element's frozen static transform.
@@ -86,6 +93,9 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
     descriptorFor(element, 'opacity') === undefined
       ? (withheldReason(element, 'opacity') ?? 'Not available for this element')
       : undefined;
+  const scaleWithheld = aspectLocked
+    ? 'Scale is unavailable while this Live Source keeps its aspect locked. Resize with Width or Height.'
+    : undefined;
 
   // Commit a property's STORED value (the shared field props convert the
   // displayed value — e.g. opacity %, scale % — back to stored units).
@@ -132,10 +142,12 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
         <Seg
           {...transformFieldProps('scale.x', t.scale.x, commit('scale.x'))}
           point={indicatorFor('scale.x')}
+          withheld={scaleWithheld}
         />
         <Seg
           {...transformFieldProps('scale.y', t.scale.y, commit('scale.y'))}
           point={indicatorFor('scale.y')}
+          withheld={scaleWithheld}
         />
       </div>
       {/* Rotation (degrees) — single field, diamond outside the border. Withheld (disabled,

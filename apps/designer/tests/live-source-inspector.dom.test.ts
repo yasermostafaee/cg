@@ -178,6 +178,19 @@ describe('D-137 — the Live Source Inspector offers no affordance it cannot hon
     expect(field(render(shape()), 'Opacity')?.disabled).toBe(false);
   });
 
+  it('B-363 — disables both Scale fields while the Live Source aspect is locked', () => {
+    const c = render(live());
+    const scaleX = field(c, 'Scale X');
+    const scaleY = field(c, 'Scale Y');
+    expect(scaleX?.disabled).toBe(true);
+    expect(scaleY?.disabled).toBe(true);
+    expect(scaleX?.title).toContain('aspect locked');
+
+    act(() => designerStore.setAspectLock('live-1', false));
+    expect(scaleX?.disabled).toBe(false);
+    expect(scaleY?.disabled).toBe(false);
+  });
+
   it('renders the Filter section as a WITHHELD header, not an expandable section — a shape gets the real one', () => {
     const c = render(live());
     // Not among the expandable sections…

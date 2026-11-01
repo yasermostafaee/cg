@@ -4433,3 +4433,11 @@ started a rotation gesture. **Fix:** the single-selection Gizmo no longer render
 a Live Source, and the rotation gesture itself refuses that element kind as a second invariant.
 Resize handles remain available and continue to obey the plate's aspect lock. **Acceptance:**
 `resize-edge-snap.dom.test.ts` mounts a Live Source Gizmo and proves that it has no rotation zones.
+
+## [x] B-363 — Single-select Scale remained editable while the Live Source aspect was locked ⟨priority: medium — the single Inspector contradicted the aspect lock and the guarded multi-selection⟩ — FILED 2026-11-01 by the owner · `openspec/changes/prepare-0-12-6-installers/`
+
+**Repro / Actual:** select one Live Source with `keep aspect` enabled. Unlike the corrected
+multi-selection Inspector, `Scale X` and `Scale Y` could still be edited independently. **Fix:** both
+Scale fields remain visible but disabled while that plate's declared aspect is locked, with Width or
+Height identified as the valid resize route. Turning `keep aspect` off restores both Scale fields.
+**Acceptance:** `live-source-inspector.dom.test.ts` pins the locked and unlocked states.
