@@ -13,9 +13,9 @@ import {
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 
 /**
- * 🔴 `B-187` — the Inspector SAYS a plate's id was chosen by the tool: "auto" beside the field
- * until the author keeps it (the check) or types another. An unchanged commit — the field commits
- * on every blur — is no confirmation.
+ * 🔴 `B-187` / `B-365` — the Inspector SAYS a plate's id was chosen by the tool and lets the
+ * author turn that mark off and back on. Typing another id makes it wholly authored. An unchanged
+ * commit — the field commits on every blur — changes neither state.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -93,29 +93,41 @@ function commit(input: HTMLInputElement, value: string): void {
 }
 
 describe('B-187 — the "auto" mark on a tool-named plate', () => {
-  it('🔴 an automatic id reads "auto", titled with why, beside a keep control', () => {
+  it('🔴 an automatic id reads "auto" and has a checked reversible control', () => {
     seedPlate({ routeKey: 'live-1', routeKeyAuto: true });
     const c = render();
     expect(idInput(c)?.value).toBe('live-1');
     const mark = c.querySelector('[data-testid="live-source-auto"]');
     expect(mark?.textContent).toBe('auto');
     expect(mark?.getAttribute('title')).toBe(AUTO_SOURCE_ID_TITLE);
-    expect(mark?.hasAttribute('data-cg-tag')).toBe(true); // a fact, not a button
-    expect(c.querySelector('button[aria-label="Keep the automatic source id"]')).not.toBeNull();
+    expect(mark?.hasAttribute('data-cg-tag')).toBe(true);
+    expect(c.querySelector<HTMLInputElement>('input[aria-label="auto"]')?.checked).toBe(true);
   });
 
-  it('KEEPING it drops the mark and keeps the name', () => {
+  it('B-365 — Auto can be turned off and then back on without changing the id', () => {
     seedPlate({ routeKey: 'live-1', routeKeyAuto: true });
     const c = render();
-    act(() =>
-      c
-        .querySelector<HTMLButtonElement>('button[aria-label="Keep the automatic source id"]')
-        ?.click(),
-    );
-    expect(plateNow().routeKeyAuto).toBeUndefined();
+    const auto = c.querySelector<HTMLInputElement>('input[aria-label="auto"]');
+    if (auto === null) throw new Error('no auto checkbox');
+    act(() => auto.click());
+    expect(plateNow().routeKeyAuto).toBe(false);
     expect(plateNow().routeKey).toBe('live-1');
     rerender();
     expect(c.querySelector('[data-testid="live-source-auto"]')).toBeNull();
+    const sourceId = idInput(c);
+    if (sourceId === null) throw new Error('source id input disappeared');
+    commit(sourceId, '');
+    expect(plateNow().routeKey).toBeUndefined();
+    expect(plateNow().routeKeyAuto).toBe(false);
+    rerender();
+    const restore = c.querySelector<HTMLInputElement>('input[aria-label="auto"]');
+    if (restore === null) throw new Error('auto checkbox disappeared');
+    expect(restore.checked).toBe(false);
+    act(() => restore.click());
+    expect(plateNow().routeKeyAuto).toBe(true);
+    expect(plateNow().routeKey).toBe('live-1');
+    rerender();
+    expect(c.querySelector('[data-testid="live-source-auto"]')).not.toBeNull();
   });
 
   it('TYPING another id makes it the author’s', () => {
@@ -126,6 +138,8 @@ describe('B-187 — the "auto" mark on a tool-named plate', () => {
     commit(input, 'guest-1');
     expect(plateNow().routeKey).toBe('guest-1');
     expect(plateNow().routeKeyAuto).toBeUndefined();
+    rerender();
+    expect(c.querySelector('input[aria-label="auto"]')).toBeNull();
   });
 
   it('🔴 an UNCHANGED commit (a focus and blur) is no confirmation — the mark stays', () => {
@@ -137,14 +151,16 @@ describe('B-187 — the "auto" mark on a tool-named plate', () => {
     expect(plateNow().routeKeyAuto).toBe(true);
   });
 
-  it('clearing the field unassigns the plate and drops the mark with it', () => {
+  it('clearing an automatic id unassigns the plate but keeps Auto available', () => {
     seedPlate({ routeKey: 'live-1', routeKeyAuto: true });
     const c = render();
     const input = idInput(c);
     if (input === null) throw new Error('no source id input');
     commit(input, '');
     expect(plateNow().routeKey).toBeUndefined();
-    expect(plateNow().routeKeyAuto).toBeUndefined();
+    expect(plateNow().routeKeyAuto).toBe(false);
+    rerender();
+    expect(c.querySelector<HTMLInputElement>('input[aria-label="auto"]')?.checked).toBe(false);
   });
 
   it('an id the AUTHOR typed shows no mark', () => {

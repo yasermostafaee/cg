@@ -4454,3 +4454,14 @@ Scene Inspector atomically updates both records by resolving the actual composit
 by comparing names. Export carries that synchronized label. Once a Look is removed, its kept
 composition is independent again. **Acceptance:** `looks-orphan.test.ts` pins all three rename paths
 and the exact label emitted by `buildTemplateLiveSources` for CG Control.
+
+## [x] B-365 — Confirming an automatically generated Live Source id permanently removed its Auto control ⟨priority: medium — an accidental click could not be reversed⟩ — FILED 2026-11-01 by the owner · `openspec/changes/prepare-0-12-6-installers/`
+
+**Repro / Actual:** draw a Live Source, then turn off the `auto` mark beside its generated `live-N`
+source id. The control disappeared, so the same generated id could never be marked Auto again.
+**Fix:** generated ids retain a private true/false Auto state and show one checkbox in both states;
+turning it off can be reversed even after the id itself is cleared. Re-enabling Auto on an empty field
+generates the next free `live-N`. Typing a different id still removes the Auto state entirely because
+that value is authored. The flag remains Designer-only and does not change playout. **Acceptance:**
+`live-source-auto-name.dom.test.ts` turns Auto off, clears the id, turns Auto back on, verifies a free
+id is restored, and verifies a newly typed id removes the control.

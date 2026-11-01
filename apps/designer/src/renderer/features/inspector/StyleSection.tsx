@@ -1,5 +1,5 @@
 import { useCallback, useState, useSyncExternalStore } from 'react';
-import { Check, ChevronDown, ChevronRight, Crop, Maximize, Scan, Square } from 'lucide-react';
+import { ChevronDown, ChevronRight, Crop, Maximize, Scan, Square } from 'lucide-react';
 import { lottieClipMidpoint, lottieFollowWindow, lottieTiming } from '@cg/lottie-bridge';
 import type { LottieTiming } from '@cg/lottie-bridge';
 import {
@@ -92,6 +92,7 @@ import { elementDataField, typedTextDigits } from '../../state/slices/fields.js'
 import { isAspectLocked } from '../../state/slices/view.js';
 import { DigitsField } from './DigitsField.js';
 import { activeDocOf, activeFieldData, activeLayersOf } from '../../state/scene-doc.js';
+import { nextAutoSourceId } from '../../state/auto-source-id.js';
 import { lottieFollowAttachPhases, videoFollowAttachPhases } from '../../state/follow-attach.js';
 import { deriveLookSources, videoFollowClipFacts } from '@cg/shared-schema';
 import { contentStartDefaultFrom } from './content-start-default.js';
@@ -757,7 +758,8 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
     if (value === UNASSIGNED) {
       designerStore.updateElement(id, {
         routeKey: undefined,
-        routeKeyAuto: undefined,
+        // B-365 — clearing an automatic id must not delete the only control that can restore it.
+        routeKeyAuto: element.routeKeyAuto === undefined ? undefined : false,
       } as Partial<Element>);
       return;
     }
@@ -826,32 +828,42 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
           datalistId={`live-source-ids-${id}`}
           trailing={
             /* 🔴 `B-187` — the tool chose this name, and the field SAYS so until the author
-               keeps it (the check) or types another. A fact (`Tag`) beside one real control. */
+               turns Auto off or types another. The reversible control is the row below. */
             element.routeKeyAuto === true && element.routeKey !== undefined ? (
-              <>
-                <Tag
-                  className={fieldCss.autoMark}
-                  title={AUTO_SOURCE_ID_TITLE}
-                  data-testid="live-source-auto"
-                >
-                  auto
-                </Tag>
-                <Control
-                  size="sm"
-                  title="Keep this name"
-                  aria-label="Keep the automatic source id"
-                  onClick={() =>
-                    designerStore.updateElement(id, {
-                      routeKeyAuto: undefined,
-                    } as Partial<Element>)
-                  }
-                >
-                  <Icon icon={Check} size={12} />
-                </Control>
-              </>
+              <Tag
+                className={fieldCss.autoMark}
+                title={AUTO_SOURCE_ID_TITLE}
+                data-testid="live-source-auto"
+              >
+                auto
+              </Tag>
             ) : undefined
           }
         />
+        {/* `B-365` — confirming a generated id used to delete the only state that could restore
+            Auto, so the control vanished permanently. `false` keeps this generated-id lineage
+            without claiming that Auto is currently enabled; typing a different id still removes
+            the row because that id belongs wholly to the author. */}
+        {element.routeKeyAuto !== undefined && (
+          <CheckRow
+            label="auto"
+            checked={element.routeKeyAuto}
+            title={AUTO_SOURCE_ID_TITLE}
+            onChange={(auto) => {
+              if (auto && element.routeKey === undefined) {
+                const state = designerStore.get();
+                if (state.scene === null) return;
+                const routeKey = nextAutoSourceId(state.scene, state.activeCompositionId);
+                designerStore.updateElement(id, {
+                  routeKey,
+                  routeKeyAuto: true,
+                } as Partial<Element>);
+                return;
+              }
+              designerStore.updateElement(id, { routeKeyAuto: auto } as Partial<Element>);
+            }}
+          />
+        )}
         <AspectRow element={element} />
         <FitModeRow element={element} />
         <LivePosterRow element={element} />

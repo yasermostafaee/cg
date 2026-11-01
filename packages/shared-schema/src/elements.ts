@@ -1515,13 +1515,14 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
    */
   routeKey: LiveSourceIdSchema.optional(),
   /**
-   * 🔴 `B-187` — `true` while {@link routeKey} is an AUTOMATIC name the canvas tool gave a new
-   * plate and the author has not confirmed or replaced it. The Inspector marks it "auto";
-   * confirming it, or committing any id, drops the flag. Nothing reaches air differently: the
-   * operator maps the id in CG Control either way, and the Live Source carrier never emits this
-   * flag. Absent means the id (if any) is the author's.
+   * 🔴 `B-187` / `B-365` — whether the source id created by the canvas tool is still marked
+   * automatic. `false` remembers that automatic naming is currently off, so the Inspector's Auto
+   * checkbox remains available even if the generated id is cleared; switching it back on generates
+   * the next free `live-N`. Committing a different id removes the flag entirely because that id is
+   * the author's. Nothing reaches air differently: the operator maps the id in CG Control either
+   * way, and the Live Source carrier never emits this flag.
    */
-  routeKeyAuto: z.literal(true).optional(),
+  routeKeyAuto: z.boolean().optional(),
   /**
    * ⚠ DEPRECATED (owner, 2026-08-10; `live-source-multibox` design.md §1a).
    *

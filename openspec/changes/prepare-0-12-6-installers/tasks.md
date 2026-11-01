@@ -38,6 +38,8 @@ Lane: **FULL**
 - [x] 3.11 Synchronize registered Look/composition display names from the Look Inspector,
       Compositions panel/context menu, and open-composition Scene Inspector; prove CG Control's
       exported label (`B-364`).
+- [x] 3.12 Keep the Auto source-id control reversible after confirming a generated id, while a
+      newly typed id remains authored (`B-365`).
 
 ## 4. Verification
 
