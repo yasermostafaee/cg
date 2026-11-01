@@ -106,6 +106,22 @@ describe('§5 — the orphan compositions', () => {
     expect(buildTemplateLiveSources(projected).looks?.[0]?.name).toBe('سه قاب استودیو');
   });
 
+  it('B-364 — renaming an open Look composition in the Scene Inspector updates the Look', () => {
+    const home = fresh();
+    designerStore.createLookGroup();
+    designerStore.addLook();
+    designerStore.editLookContents('look-1');
+
+    // InspectorPanel's Scene name field commits through this generic action.
+    designerStore.updateScene({ name: 'دو قاب از اینسپکتور' });
+    designerStore.setActiveComposition(home);
+
+    expect(looks()[0]?.name).toBe('دو قاب از اینسپکتور');
+    const projected = editSceneOf(scene(), home);
+    if (projected === null) throw new Error('no projected home composition');
+    expect(buildTemplateLiveSources(projected).looks?.[0]?.name).toBe('دو قاب از اینسپکتور');
+  });
+
   it('removing every look keeps every composition, plates and all', () => {
     const { orphanIds } = threeOrphans();
     expect(looks()).toEqual([]);

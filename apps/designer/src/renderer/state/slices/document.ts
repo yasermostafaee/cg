@@ -18,6 +18,7 @@ import {
   activeDocOf,
   ensureCompositions,
   normalizeKeyframeIds,
+  renameCompositionAndLinkedLooks,
   withActiveDoc,
   type EditDocFields,
 } from '../scene-doc.js';
@@ -232,6 +233,12 @@ export const documentSlice = {
     for (const [k, v] of Object.entries(patch)) {
       (docKeys.has(k) ? docPatch : rootPatch)[k] = v;
     }
+    // B-364 — the Scene Inspector edits an open composition through
+    // `updateScene({ name })`, not through the Compositions panel's explicit
+    // `renameComposition` action. Route that third rename surface through the
+    // same Look/composition invariant so the operator label cannot stay stale.
+    const nextName = typeof docPatch.name === 'string' ? docPatch.name.trim() : null;
+    delete docPatch.name;
     let scene = current.scene;
     if (Object.keys(docPatch).length > 0) {
       scene = {
@@ -240,6 +247,9 @@ export const documentSlice = {
           c.id === current.activeCompositionId ? { ...c, ...docPatch } : c,
         ),
       };
+    }
+    if (nextName !== null && nextName !== '' && current.activeCompositionId !== null) {
+      scene = renameCompositionAndLinkedLooks(scene, current.activeCompositionId, nextName);
     }
     if (Object.keys(rootPatch).length > 0) scene = { ...scene, ...rootPatch };
     set({ scene });

@@ -4449,7 +4449,8 @@ Height identified as the valid resize route. Turning `keep aspect` off restores 
 composition and the Look keeps the old name. This presents two names for one authoring object, while
 CG Control consumes the exported Look name and may continue to display the stale `look-1` label.
 **Fix:** while a composition is registered as a Look, the Look label is the one author-facing name:
-renaming either surface atomically updates both records by resolving the actual composition instance,
-never by comparing names. Export carries that synchronized label. Once a Look is removed, its kept
-composition is independent again. **Acceptance:** `looks-orphan.test.ts` pins both rename directions
+renaming it from the Look Inspector, the Compositions panel/context menu, or the open composition's
+Scene Inspector atomically updates both records by resolving the actual composition instance, never
+by comparing names. Export carries that synchronized label. Once a Look is removed, its kept
+composition is independent again. **Acceptance:** `looks-orphan.test.ts` pins all three rename paths
 and the exact label emitted by `buildTemplateLiveSources` for CG Control.
