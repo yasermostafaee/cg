@@ -15,4 +15,4 @@ Lane: **FULL** — this changes CG Bridge's installed configuration and Windows 
 
 - [x] 2.1 Strict-validate the OpenSpec change and run targeted setup/Bridge tests.
 - [x] 2.2 Run the repository gate and required local/CI E2E lanes.
-- [ ] 2.3 Build and verify the next matching three-installer set.
+- [x] 2.3 Build and verify the next matching three-installer set.

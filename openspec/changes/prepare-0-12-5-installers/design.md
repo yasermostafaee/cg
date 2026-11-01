@@ -30,5 +30,21 @@ No tag, draft release or published release is created.
 - The rebuilt six-page Persian guide and all 81 release/guide tests pass locally.
 - The exact local candidate passed `pnpm gate` and the complete `pnpm gate:e2e` lane: all 26 E2E
   tasks succeeded, including 347 Designer tests, 2 Pack Factory tests and 378 CG Control tests.
+- Exact candidate commit `41b81b08b9c080a96aa0d3fc3f2a81a7f121e3dd` passed the complete Linux
+  workspace and Playwright jobs:
+  <https://github.com/yasermostafaee/cg/actions/runs/41309221854>.
+- The exact candidate's Desktop run passed all installer, Setup, Bridge smoke, clean-install and
+  upgrade jobs, including the installed `0.11.6` upgrade with the apps open:
+  <https://github.com/yasermostafaee/cg/actions/runs/41307026083>.
+- The unpublished handoff bytes are:
+  - `CG-Bridge_0.12.5_x64-setup.exe` — 24,925,765 bytes —
+    `93711f9897f69065be530bd8afe2e8174848464704ed0c7e6a0a1e7cd00438c6`
+  - `CG-Control_0.12.5_x64-setup.exe` — 221,718,181 bytes —
+    `3286e3a16ddff2a4c773bd92f1ed1c8a5932313710a3ec909f1b20cf50cc9f40`
+  - `CG-Designer_0.12.5_x64-setup.exe` — 230,322,931 bytes —
+    `6ed9788b8fdb8259c56bf0604663ec06f558d4d24e12b73eb58f5afce743eead`
+  - `APASAI-CG-0.12.5-install-guide-fa.pdf` — 524,108 bytes —
+    `abefd0e9d7308a9c62fb99c31c391ca523be458aff4c2e3c276529969aa5edc5`
 
-Exact final CI runs and artifact checksums remain pending.
+The matching files and `SHA256SUMS.txt` are retained in `installers-ci-0.12.5/` and `dist/`. No tag,
+draft release or published release was created.
