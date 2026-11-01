@@ -42,6 +42,7 @@ Lane: **FULL**
       newly typed id remains authored (`B-365`).
 - [x] 3.13 Keep the Source ID read-only while Auto is enabled, preserve Auto after clearing a manual
       id, and withdraw the unused Poster fit control (`B-365`, `D-168`).
+- [x] 3.14 Hide internal element ids from Issues copy while preserving click-to-select (`B-366`).
 
 ## 4. Verification
 

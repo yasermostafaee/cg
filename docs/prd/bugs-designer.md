@@ -4466,3 +4466,11 @@ generates the next free `live-N`. Typing a different id still removes the Auto s
 that value is authored. The flag remains Designer-only and does not change playout. **Acceptance:**
 `live-source-auto-name.dom.test.ts` turns Auto off, clears the id, turns Auto back on, verifies a free
 id is restored, and verifies a newly typed id removes the control.
+
+## [x] B-366 — The Issues dialog appended internal timestamp-like element ids to author-facing messages ⟨priority: medium — the suffix was meaningless and made otherwise clear guidance look technical⟩ — FILED 2026-11-01 by the owner · `openspec/changes/prepare-0-12-6-installers/`
+
+**Repro / Actual:** open Issues for an unnamed Live Source. The message already identifies the frame
+by its canvas position, but the row appended text such as `element el-1793551207639`. **Fix:** keep
+`elementId` inside the issue for click-to-select and canvas marking, but never render it as copy in
+the Issues row. **Acceptance:** `issues-panel.dom.test.ts` verifies the human position remains, the
+internal id is absent from text, and clicking the row still selects the correct element.

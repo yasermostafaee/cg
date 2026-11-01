@@ -100,9 +100,6 @@ function IssueRow({
       <span style={badge(color)}>{issue.severity}</span>
       <span className={s.rowText}>
         {issue.message}
-        {issue.elementId !== undefined && (
-          <span className={s.meta}>· element {issue.elementId}</span>
-        )}
         {issue.fieldId !== undefined && <span className={s.meta}>· field {issue.fieldId}</span>}
       </span>
     </div>
