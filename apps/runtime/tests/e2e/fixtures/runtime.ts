@@ -896,7 +896,10 @@ export async function buildListFieldVcg(templateId = 'tpl-e2e-list'): Promise<Ui
  * The E2E patches the mock's text-source read at the browser seam, so the real Inspector/modal
  * path is exercised without granting a machine-local file handle to the test runner.
  */
-export async function buildFileSourceVcg(templateId = 'tpl-e2e-file-source'): Promise<Uint8Array> {
+export async function buildFileSourceVcg(
+  templateId = 'tpl-e2e-file-source',
+  options: { lockFile?: boolean } = {},
+): Promise<Uint8Array> {
   const scene = fixtureScene();
   const layer = scene.layers[0];
   if (layer === undefined) throw new Error('fixture scene has no layer');
@@ -949,6 +952,7 @@ export async function buildFileSourceVcg(templateId = 'tpl-e2e-file-source'): Pr
         inputMode: 'file-only',
         bridgePath: 'headlines.txt',
         delimiter: '|',
+        ...(options.lockFile === true ? { lockFile: true as const } : {}),
       },
     },
   ];

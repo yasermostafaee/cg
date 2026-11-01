@@ -220,6 +220,19 @@ Section "CG Bridge" SecMain
   !insertmacro RUN "data folder access" `icacls "$DataDir" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F "NT SERVICE\${SERVICE}:(OI)(CI)M"`
   !insertmacro RUN "data folder access (contents)" `icacls "$DataDir\*" /reset /T /C /Q`
 
+  ; The setup user being able to browse a text root does not prove that the service identity can
+  ; read it. Resolve the EFFECTIVE value from the configuration (also on an upgrade with no
+  ; /TEXTSOURCEROOT= argument) and grant the local folder read/execute only. Existing and future
+  ; children inherit it; no producer's ACL is replaced. A remote UNC needs both share and NTFS
+  ; access provisioned on the remote server, which a local installer cannot safely change.
+  !insertmacro RUN "shared files folder access" `powershell.exe -NoProfile -NonInteractive -Command "$$ErrorActionPreference = 'Stop'; $$config = Get-Content -LiteralPath '$DataDir\cg-bridge.json' -Raw | ConvertFrom-Json; $$root = [string]$$config.textSourceRoot; if ([string]::IsNullOrWhiteSpace($$root)) { exit 0 }; if ($$root.StartsWith('\\')) { Write-Output 'The shared files folder is a remote network path.'; exit 3 }; if (-not (Test-Path -LiteralPath $$root -PathType Container)) { Write-Output ('The shared files folder does not exist: ' + $$root); exit 2 }; & icacls.exe $$root /grant 'NT SERVICE\${SERVICE}:(OI)(CI)RX' /T /C /Q; exit $$LASTEXITCODE"`
+  ${If} $ExitCode == 3
+    StrCpy $Warnings "$Warnings$\r$\n- Shared files folder: this is a network path. On the remote server, grant this Bridge server's computer account Read access in both Sharing and Security (NTFS)."
+  ${ElseIf} $ExitCode != 0
+    MessageBox MB_ICONSTOP "CG Bridge could not give its service read access to the shared files folder:$\r$\n$Output" /SD IDOK
+    Abort "The shared files folder is not readable by the CG Bridge service (see $Log)."
+  ${EndIf}
+
   ; 6 - one-time import of an older per-user CG Control state (nothing is deleted).
   ReadEnvStr $0 SystemDrive
   !insertmacro RUN "importing an older state (once)" `"$INSTDIR\cg-bridge.exe" "$INSTDIR\bridge\caspar-bridge.mjs" --service-config "$DataDir\cg-bridge.json" --import-state "$0\Users"`

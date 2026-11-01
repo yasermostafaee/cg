@@ -61,6 +61,8 @@ export * from './channels/stack.js';
 export * from './channels/pages.js';
 // `R-102` — live UTF-8 field sources, read under CG Bridge's configured safe root.
 export * from './channels/textSources.js';
+// The station-wide folder those portable names resolve below; configurable from CG Control.
+export * from './channels/sharedFiles.js';
 export * from './page-book.js';
 export * from './channels/connections.js';
 export * from './channels/outputs.js';

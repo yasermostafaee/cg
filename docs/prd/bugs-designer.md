@@ -4387,3 +4387,39 @@ invokes `reload_text_source_file` to prove the packaged Designer reaches the com
 [41294591200](https://github.com/yasermostafaee/cg/actions/runs/41294591200) passed workspace and Playwright E2E;
 Desktop run [41294591199](https://github.com/yasermostafaee/cg/actions/runs/41294591199) passed the installed-app
 ACL smoke and produced the matching `0.12.4` installer set.
+
+## [x] B-359 — Multi-select offered Scale while every selected Live Source had its aspect locked ⟨priority: medium — one shared edit could deform every locked plate⟩ — FILED 2026-11-01 from the owner's Designer reproduction · `openspec/changes/prepare-0-12-6-installers/`
+
+**Repro:** add several Live Sources, keep each plate's aspect lock on, then select them together.
+The multi-selection Inspector still offered `Scale X` and `Scale Y`; those edits are independent per
+axis and do not honour the plates' aspect locks. **Fix:** when every selected element is a Live Source
+with a declared, locked aspect, both Scale fields remain visible but disabled and explain that Width
+or Height should be used. If any selected plate is unlocked, Scale remains available. **Acceptance:**
+`multi-select-inspector.test.ts` pins both the all-locked refusal and the one-unlocked control.
+
+## [x] B-360 — Building a symmetric multi-frame composition required sizing and positioning every Live Source by hand ⟨priority: medium — routine 3/4/6-frame layouts were slow and easy to space unevenly⟩ — FILED 2026-11-01 by the owner · `openspec/changes/prepare-0-12-6-installers/`
+
+**Repro / Actual:** add several Live Sources and try to make a balanced multi-frame composition.
+Every plate had to be resized and positioned separately; no command made the inter-frame gaps or
+the outer centring agree. **Fix:** a Live-Source-only multi-selection now exposes `Auto layout`.
+It chooses near-square rows, preserves every plate's declared aspect, gives every row one common
+height, centres the complete group, and lets the author set horizontal and vertical gaps
+independently; changing either gap updates the arrangement live. Two plates can be side by side or
+top/bottom, and changing that mode rearranges them immediately. When a remainder exists (for example
+three plates), the author chooses whether the fuller row is at the top or bottom (`2+1` / `1+2`),
+and **Swap frame order** exchanges seats without changing layer/z order — useful when a portrait and
+a 16:9 plate need to trade sides. The complete transform fan-out is one Undo entry and remains
+keyframe-aware. **Acceptance:** `live-source-auto-layout.test.ts` pins row choice, symmetry,
+independent gaps, vertical pairs, seat swapping and mixed-aspect fitting;
+`multi-select-inspector.test.ts` pins one-step Undo; Playwright `live-source.spec.ts` measures the
+rendered 2+1 geometry in Chromium.
+
+## [x] B-361 — The blue selection outline was lost against the red overlap mark ⟨priority: medium — selected overlapping frames were hard to identify⟩ — FILED 2026-11-01 by the owner · `openspec/changes/prepare-0-12-6-installers/`
+
+**Repro / Actual:** overlap two frames so the red dashed error mark appears, then multi-select them.
+The blue outline occupied the same edge and was difficult to distinguish from the stronger error
+mark and busy frame content. **Fix:** keep the exact red dashed edge as the error signal and give
+selection a dark separator plus a bright blue outer ring/glow. The single-selection outline gains
+the same blue halo without changing its measured geometry. **Acceptance:** Playwright reads a
+non-empty sky-blue outer shadow on every multi-selection box; existing geometry tests continue to
+measure the unchanged selection rect.

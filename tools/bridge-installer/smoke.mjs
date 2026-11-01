@@ -90,6 +90,16 @@ function exitCodeOf(file, argv) {
   const r = spawnSync(file, argv, { windowsHide: true });
   return r.status;
 }
+function textRootAcl() {
+  return execFileSync('icacls', [TEXT_SOURCE_ROOT], { encoding: 'utf8', windowsHide: true });
+}
+function bridgeServiceAclLine() {
+  return (
+    textRootAcl()
+      .split(/\r?\n/)
+      .find((line) => /NT SERVICE\\CGBridge/i.test(line)) ?? ''
+  );
+}
 /** The service as Windows holds it, or `null`. Single quotes only: argv carries it to PowerShell. */
 function service() {
   const json = ps(
@@ -243,6 +253,15 @@ check(
   !/BUILTIN\\Users|\*S-1-5-32-545|Everyone/i.test(acl),
   acl.replace(/\s+/g, ' ').trim(),
 );
+const textRootAclAfterInstall = textRootAcl();
+fs.writeFileSync(path.join(OUT, 'text-root-acl-after-install.txt'), textRootAclAfterInstall);
+const textRootServiceAccess = bridgeServiceAclLine();
+check(
+  'the configured local text root grants the CG Bridge service inherited read/execute only',
+  /\(OI\).*\(CI\).*\(RX\)/i.test(textRootServiceAccess) &&
+    !/\((?:F|M|W)\)/i.test(textRootServiceAccess),
+  textRootServiceAccess.trim() || 'service ACE absent',
+);
 
 // ── 6. CONTROL: no token, no state ──────────────────────────────────────────────────────────
 const answers = await new Promise((resolve) => {
@@ -315,12 +334,29 @@ check(
 );
 
 // ── 8. upgrade ──────────────────────────────────────────────────────────────────────────────
+execFileSync('icacls', [TEXT_SOURCE_ROOT, '/remove:g', 'NT SERVICE\\CGBridge', '/T', '/C', '/Q'], {
+  encoding: 'utf8',
+  windowsHide: true,
+});
+check(
+  'the upgrade repair control starts with the service grant removed',
+  bridgeServiceAclLine() === '',
+  bridgeServiceAclLine().trim(),
+);
 const upgraded = exitCodeOf(INSTALLER, ['/S']);
 check('a silent upgrade (the same installer again) exits 0', upgraded === 0, String(upgraded));
 check(
   '…keeps the configuration',
   JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'cg-bridge.json'), 'utf8')).playoutAddress ===
     PLAYOUT,
+);
+const textRootAclAfterUpgrade = textRootAcl();
+fs.writeFileSync(path.join(OUT, 'text-root-acl-after-upgrade.txt'), textRootAclAfterUpgrade);
+check(
+  '…repairs read-only service access to the preserved local text root',
+  /\(OI\).*\(CI\).*\(RX\)/i.test(bridgeServiceAclLine()) &&
+    !/\((?:F|M|W)\)/i.test(bridgeServiceAclLine()),
+  bridgeServiceAclLine().trim() || 'service ACE absent',
 );
 const back = await until(() => service()?.state === 'Running', 60_000);
 check('…and the service is running again', back !== null, JSON.stringify(service()));

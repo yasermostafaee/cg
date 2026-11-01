@@ -485,7 +485,8 @@
   border-color: var(--r-accent-line-hover);
 }
 /* The two toggles at the trailing end sit in the same 25 px box as the transport. */
-.cg-monitor-strip > .cg-btn {
+.cg-monitor-strip > .cg-btn,
+.cg-pgm-source-controls .cg-btn {
   min-height: var(--r-pvw-transport-h);
   height: var(--r-pvw-transport-h);
   width: var(--r-pvw-transport-h);
@@ -503,7 +504,8 @@
  * ink the rest of this console already uses for "engaged", so it joins a role rather than
  * founding one.
  */
-.cg-monitor-strip > .cg-btn[data-toggle-on] {
+.cg-monitor-strip > .cg-btn[data-toggle-on],
+.cg-pgm-source-controls .cg-btn[data-toggle-on] {
   background: var(--r-accent-fill);
   border-color: var(--r-accent-line);
   color: var(--r-accent);
@@ -512,11 +514,31 @@
  * `PLAYOUT-FEATURES-01` E — PROGRAM's strip keeps the reference's 31 px with its speaker toggle in it: the
  * toggle is the strip's content box, one px under PVW's 25 px transport (`--r-pgm-strip-toggle`).
  */
-.cg-monitor-strip[data-monitor-pgm-strip] > .cg-btn {
+.cg-monitor-strip[data-monitor-pgm-strip] > .cg-btn,
+.cg-pgm-source-controls .cg-btn {
   min-height: var(--r-pgm-strip-toggle);
   height: var(--r-pgm-strip-toggle);
   width: var(--r-pgm-strip-toggle);
   min-width: var(--r-pgm-strip-toggle);
+}
+
+.cg-pgm-audio-select {
+  height: var(--r-pgm-strip-toggle);
+  min-width: 4.25rem;
+  padding: 0 1.15rem 0 0.35rem;
+  border: 1px solid var(--r-field-line);
+  border-radius: var(--r-pvw-transport-radius);
+  background: var(--r-field-bg);
+  color: var(--r-text);
+  font: inherit;
+  font-size: 0.68rem;
+}
+
+/* `R-104` — two programme returns stay side by side until each tile would be too small to read. */
+@container (max-width: 520px) {
+  .cg-pgm-pictures[data-pgm-picture-count='2'] {
+    flex-direction: column;
+  }
 }
 
 /*
@@ -2100,6 +2122,11 @@ textarea.cg-field--autogrow {
   border-radius: var(--r-radius-sm);
   overflow: hidden;
   flex: 0 1 auto;
+}
+
+/* B-358 — a chip inside a grid owns only its visible value, so its tooltip anchor stays attached. */
+.cg-file-chip--content-sized {
+  justify-self: start;
 }
 
 .cg-file-chip__name {

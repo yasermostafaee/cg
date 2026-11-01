@@ -124,6 +124,8 @@ export interface StationSetupStubOptions {
   assignments?: SourceAssignments;
   templates?: readonly TemplateInfo[];
   delimitersSetResult?: { ok: boolean; message?: string };
+  sharedFilesPath?: string;
+  sharedFilesSetResult?: { ok: boolean; path?: string; message?: string };
   /** `DELTA-RUN-NEXT-VERSION-01-C` — what `calendar.set` answers. */
   calendarSetResult?: { ok: boolean; message?: string };
   /**
@@ -146,6 +148,7 @@ export interface StationSetupStub {
   sourcesSetConfig: Mock;
   sourcesSetAssignments: Mock;
   delimitersSet: Mock;
+  sharedFilesSet: Mock;
   calendarSet: Mock;
   remove: Mock;
   takeOffAir: Mock;
@@ -161,6 +164,11 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
   const sourcesSetConfig = vi.fn(options.sourcesSetConfig ?? (() => Promise.resolve({ ok: true })));
   const sourcesSetAssignments = vi.fn(() => Promise.resolve({ ok: true }));
   const delimitersSet = vi.fn(() => Promise.resolve(options.delimitersSetResult ?? { ok: true }));
+  const sharedFilesSet = vi.fn(() =>
+    Promise.resolve(
+      options.sharedFilesSetResult ?? { ok: true, path: options.sharedFilesPath ?? 'text-sources' },
+    ),
+  );
   const calendarSet = vi.fn(() => Promise.resolve(options.calendarSetResult ?? { ok: true }));
   const remove = vi.fn(() => Promise.resolve(options.removeResult ?? { accepted: true }));
   const takeOffAir = vi.fn(() => Promise.resolve(options.takeOffAirResult ?? { ok: true }));
@@ -233,6 +241,10 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
       onChanged: () => () => undefined,
       set: delimitersSet,
     },
+    sharedFiles: {
+      get: () => Promise.resolve({ path: options.sharedFilesPath ?? 'text-sources' }),
+      set: sharedFilesSet,
+    },
     // `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri adjustment (the calculation, unadjusted).
     calendar: {
       get: () => Promise.resolve({ lunarAdjustDays: 0 }),
@@ -280,6 +292,7 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
     sourcesSetConfig,
     sourcesSetAssignments,
     delimitersSet,
+    sharedFilesSet,
     calendarSet,
     remove,
     takeOffAir,

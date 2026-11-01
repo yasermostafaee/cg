@@ -206,6 +206,11 @@ export function fillBridgeStub<T extends object>(stub: T): T {
   cg['textSources'] ??= {
     read: () => Promise.reject(new Error('this stub has no CG Bridge text source')),
   };
+  // The Bridge server owns this station path. The quiet default is its private relative root.
+  cg['sharedFiles'] ??= {
+    get: () => Promise.resolve({ path: 'text-sources' }),
+    set: () => Promise.resolve({ ok: false, message: 'this stub does not change station paths' }),
+  };
   cg['license'] ??= {
     state: () => Promise.resolve({ license: null }),
     onChanged: () => () => undefined,

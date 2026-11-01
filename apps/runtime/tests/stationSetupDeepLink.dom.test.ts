@@ -159,6 +159,31 @@ describe('a deep link opens ONE dialog at the named section', () => {
     expect(shown(dialog)).toBe('channel');
   });
 
+  it('Shared files shows the Bridge-server path and saves a station-admin change', async () => {
+    const bridge = stationSetupStub({ sharedFilesPath: String.raw`D:\CG Shared` });
+    const dialog = await renderStationSetup({ section: 'shared-files' });
+    const input = dialog.querySelector<HTMLInputElement>('#shared-files-path');
+    expect(input?.value).toBe(String.raw`D:\CG Shared`);
+
+    await act(async () => {
+      if (input === null) throw new Error('shared-files path input is missing');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(input, String.raw`\\NEWS\CG Shared`);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await settle();
+    await act(async () => {
+      const save = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent === 'Save path',
+      );
+      if (save === undefined) throw new Error('Save path button is missing');
+      save.click();
+      await Promise.resolve();
+    });
+    expect(bridge.sharedFilesSet).toHaveBeenCalledWith({ path: String.raw`\\NEWS\CG Shared` });
+  });
+
   /**
    * 🔴 `STATION-CHROME-02` §1 — **ONE DOOR.** This spec used to assert that SETTINGS and
    * SOURCES both stood on the bar and opened the same dialog one tab apart. The owner's

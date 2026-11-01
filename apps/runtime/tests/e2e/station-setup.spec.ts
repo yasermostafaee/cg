@@ -45,6 +45,7 @@ const TABS = [
   'Channel',
   'Connection',
   'Live sources',
+  'Shared files',
   'Text file delimiters',
   'Calendar',
   'Layers',
@@ -103,6 +104,49 @@ test('the rail: Settings opens on Channel, and every section is one press away',
 
   await dismiss(dialog).click();
   await expect(dialog).toBeHidden();
+});
+
+test('B-357 — Shared files shows and saves the path on the CG Control server', async ({ app }) => {
+  const page = app.page;
+  await page.evaluate(() => {
+    const target = window as unknown as {
+      __savedSharedFilesPath?: string;
+      cg: {
+        sharedFiles: {
+          get: () => Promise<{ path: string }>;
+          set: (request: { path: string }) => Promise<{ ok: boolean; path?: string }>;
+        };
+      };
+    };
+    target.cg.sharedFiles.get = () => Promise.resolve({ path: String.raw`D:\CG Shared` });
+    target.cg.sharedFiles.set = (request) => {
+      target.__savedSharedFilesPath = request.path;
+      return Promise.resolve({ ok: true, path: request.path });
+    };
+  });
+
+  await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Station setup' });
+  await dialog
+    .getByRole('tablist', { name: 'Station setup sections' })
+    .getByRole('tab', { name: 'Shared files' })
+    .click();
+
+  const pathField = dialog.getByLabel('Path on CG Control server');
+  await expect(pathField).toHaveValue(String.raw`D:\CG Shared`);
+  await pathField.fill(String.raw`\\NEWS\CG Shared`);
+  await dialog.getByRole('button', { name: 'Save path' }).click();
+  await expect(pathField).toHaveValue(String.raw`\\NEWS\CG Shared`);
+  await expect(dialog.locator('[data-section-footer="shared-files"]')).toContainText(
+    'Saved for this CG Control station',
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as { __savedSharedFilesPath?: string }).__savedSharedFilesPath,
+      ),
+    )
+    .toBe(String.raw`\\NEWS\CG Shared`);
 });
 
 test('🔴 the refusal stays with its own section, and the rail says which one is blocked', async ({

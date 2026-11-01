@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MonitorPanel } from '../src/renderer/features/monitors/MonitorPanel.js';
 import type { ProgramReturn } from '../src/renderer/hooks/useProgramReturn.js';
 import { NO_AIR } from '../src/renderer/features/channels/channelAir.js';
-import { SOUND_OFF, stubMeters } from './support/programPane.js';
+import { PRIMARY_MONITOR_PREFERENCES, SOUND_OFF, stubMeters } from './support/programPane.js';
 
 /**
  * 🔴 `FIELD-FIXES-01` H — **THE PROGRAM PICTURE ASKS FOR ITS STREAM IN A DEVELOPMENT BUILD TOO.**
@@ -47,8 +47,10 @@ function pane(programReturn: ProgramReturn): ReactElement {
     word: 'PROGRAM',
     channel: 2,
     onAirRows: 0,
-    programReturn,
+    returns: [{ engine: 'A', physicalChannel: 2, programReturn }],
     programSound: SOUND_OFF,
+    monitorPreferences: PRIMARY_MONITOR_PREFERENCES,
+    backupAvailable: false,
     air: NO_AIR,
   });
 }

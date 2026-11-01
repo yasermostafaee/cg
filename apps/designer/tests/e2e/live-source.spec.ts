@@ -584,6 +584,157 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(errorPill(app)).toHaveCount(0);
   });
 
+  test('B-359 — an all-locked Live Source multi-selection disables Scale until one lock is freed', async ({
+    app,
+  }) => {
+    await app.newProject('LockedLiveSourceMultiScale');
+    await app.addLiveSource({ x: 120, y: 100 });
+    await app.addLiveSource({ x: 300, y: 240 });
+    const ids = await app.timelineRowIds();
+    expect(ids).toHaveLength(2);
+
+    const selectBoth = async (): Promise<void> => {
+      await app.selectElementById(ids[0]!);
+      await app.page
+        .locator(`.cg-tl-row[data-element-id="${ids[1]!}"]`)
+        .click({ modifiers: ['Shift'] });
+      await expect(app.multiInspector).toBeVisible();
+    };
+
+    await selectBoth();
+    const scaleX = app.multiInspector.getByRole('spinbutton', { name: 'Scale X', exact: true });
+    const scaleY = app.multiInspector.getByRole('spinbutton', { name: 'Scale Y', exact: true });
+    await expect(scaleX).toBeDisabled();
+    await expect(scaleY).toBeDisabled();
+    await expect(scaleX).toHaveAttribute('title', /aspect locked/i);
+
+    await app.selectElementById(ids[1]!);
+    const lock = app.inspector.getByRole('button', { name: 'Keep aspect while resizing' });
+    await lock.click();
+    await expect(lock).toHaveText('FREE');
+
+    await selectBoth();
+    await expect(scaleX).toBeEnabled();
+    await expect(scaleY).toBeEnabled();
+  });
+
+  test('B-360 — three selected Live Sources auto-layout as a symmetric 2+1 grid', async ({
+    app,
+  }) => {
+    await app.newProject('LiveSourceAutoLayout');
+    // Keep placement clicks inside the visible canvas. Their starting geometry is
+    // intentionally rough and overlapping; the command below is what must repair it.
+    await app.addLiveSource({ x: 200, y: 160 });
+    await app.addLiveSource({ x: 230, y: 190 });
+    await app.addLiveSource({ x: 260, y: 220 });
+    const ids = await app.timelineRowIds();
+    expect(ids).toHaveLength(3);
+
+    await app.selectElementById(ids[0]!);
+    for (const id of ids.slice(1)) {
+      await app.page.locator(`.cg-tl-row[data-element-id="${id}"]`).click({ modifiers: ['Shift'] });
+    }
+    await expect(app.multiInspector).toBeVisible();
+    await app.multiInspector.getByRole('button', { name: 'More frames on top' }).click();
+
+    const geometry = await holes(app).evaluateAll((nodes) =>
+      nodes
+        .map((node) => {
+          const rect = node.getBoundingClientRect();
+          return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+        })
+        .sort((a, b) => a.y - b.y || a.x - b.x),
+    );
+    expect(geometry).toHaveLength(3);
+    const [topLeft, topRight, bottom] = geometry;
+    expect(topLeft!.y).toBeCloseTo(topRight!.y, 1);
+    expect(bottom!.y).toBeGreaterThan(topLeft!.y + topLeft!.height);
+    const horizontalGap = topRight!.x - (topLeft!.x + topLeft!.width);
+    const verticalGap = bottom!.y - (topLeft!.y + topLeft!.height);
+    expect(horizontalGap).toBeCloseTo(verticalGap, 1);
+    expect(topLeft!.width / topLeft!.height).toBeCloseTo(16 / 9, 2);
+    expect(bottom!.x + bottom!.width / 2).toBeCloseTo(
+      (topLeft!.x + topRight!.x + topRight!.width) / 2,
+      1,
+    );
+  });
+
+  test('B-360 — two Live Sources can stack, use a vertical gap, and exchange seats', async ({
+    app,
+  }) => {
+    await app.newProject('LiveSourceVerticalAutoLayout');
+    await app.addLiveSource({ x: 180, y: 140 });
+    await app.setLiveSourceAspect('custom');
+    const customAspect = app.inspector.getByRole('spinbutton', { name: 'custom aspect' });
+    await customAspect.fill('0.75');
+    await customAspect.press('Enter');
+    const portraitId = (await app.timelineRowIds())[0]!;
+    await app.addLiveSource({ x: 240, y: 190 });
+    const ids = await app.timelineRowIds();
+    expect(ids).toHaveLength(2);
+    const wideId = ids.find((id) => id !== portraitId)!;
+
+    await app.selectElementById(ids[0]!);
+    await app.page
+      .locator(`.cg-tl-row[data-element-id="${ids[1]!}"]`)
+      .click({ modifiers: ['Shift'] });
+    await expect(app.multiInspector).toBeVisible();
+
+    await app.multiInspector.getByRole('combobox', { name: 'layout' }).selectOption('vertical');
+    const verticalGap = app.multiInspector.getByRole('spinbutton', {
+      name: 'vertical gap',
+      exact: true,
+    });
+    await verticalGap.fill('120');
+    await verticalGap.press('Enter');
+
+    const readGeometry = async () =>
+      await holes(app).evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const rect = node.getBoundingClientRect();
+          return {
+            id: node.closest('[data-cg-element-id]')?.getAttribute('data-cg-element-id') ?? '',
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          };
+        }),
+      );
+
+    const before = await readGeometry();
+    const firstBefore = before.find((item) => item.id === ids[0]);
+    const secondBefore = before.find((item) => item.id === ids[1]);
+    expect(firstBefore).toBeDefined();
+    expect(secondBefore).toBeDefined();
+    const orderedBefore = [firstBefore!, secondBefore!].sort((a, b) => a.y - b.y);
+    const topBefore = orderedBefore[0]!;
+    const bottomBefore = orderedBefore[1]!;
+    expect(bottomBefore.y).toBeGreaterThan(topBefore.y + topBefore.height);
+    expect(firstBefore!.x + firstBefore!.width / 2).toBeCloseTo(
+      secondBefore!.x + secondBefore!.width / 2,
+      1,
+    );
+    const portraitBefore = before.find((item) => item.id === portraitId)!;
+    const wideBefore = before.find((item) => item.id === wideId)!;
+    expect(portraitBefore.width / portraitBefore.height).toBeCloseTo(3 / 4, 2);
+    expect(wideBefore.width / wideBefore.height).toBeCloseTo(16 / 9, 2);
+
+    await app.multiInspector.getByRole('button', { name: 'Swap frame order' }).click();
+    const after = await readGeometry();
+    const firstAfter = after.find((item) => item.id === ids[0]);
+    const secondAfter = after.find((item) => item.id === ids[1]);
+    const orderedAfter = [firstAfter!, secondAfter!].sort((a, b) => a.y - b.y);
+    const topAfter = orderedAfter[0]!;
+    const bottomAfter = orderedAfter[1]!;
+    expect(topAfter.id).toBe(bottomBefore.id);
+    expect(bottomAfter.id).toBe(topBefore.id);
+    const portraitAfter = after.find((item) => item.id === portraitId)!;
+    const wideAfter = after.find((item) => item.id === wideId)!;
+    expect(portraitAfter.width / portraitAfter.height).toBeCloseTo(3 / 4, 2);
+    expect(wideAfter.width / wideAfter.height).toBeCloseTo(16 / 9, 2);
+  });
+
   /**
    * 🔴 `B-148` — ONE source on TWO plates, in a template without looks, blocks the export and
    * names both. The comment above used to credit `look-source-duplicate` with this, which only

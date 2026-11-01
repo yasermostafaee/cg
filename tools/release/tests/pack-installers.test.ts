@@ -64,12 +64,13 @@ describe('packPlan', () => {
     ]);
   });
 
-  it('gives each app its own tile, and CG Bridge the console’s', () => {
+  it('gives all three products distinct icons and tiles', () => {
     const root = fixture();
     const [bridge, control, designer] = packPlan({ root, version: '0.10.0', outDir: root });
     expect(control?.mainFiles).toEqual([{ path: 'cg-control.exe', bytes: 700 }]);
     expect(designer?.installBytes).toBe(800);
-    expect(bridge?.tile).toBe(control?.tile);
+    expect(bridge?.tile).not.toBe(control?.tile);
+    expect(bridge?.icon.endsWith(path.join('setup-ui', 'assets', 'bridge-icon.ico'))).toBe(true);
     expect(designer?.tile).not.toBe(control?.tile);
     expect(designer?.icon.endsWith(path.join('designer', 'src-tauri', 'icons', 'icon.ico'))).toBe(true);
   });

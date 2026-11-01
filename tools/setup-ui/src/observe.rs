@@ -61,7 +61,7 @@ const BRIDGE: &[Step] = &[
     },
     Step {
         words: "Setting folder access",
-        done_at: Some("data folder access (contents)"),
+        done_at: Some("shared files folder access"),
         weight: 4.0,
     },
     Step {
@@ -96,7 +96,7 @@ pub const BRIDGE_LABELS: &[&str] = &[
     "stopping the service (if it runs)",
     "writing the configuration",
     "service: a failed exit counts as a failure",
-    "data folder access (contents)",
+    "shared files folder access",
     "importing an older state (once)",
     "firewall rules",
     "checking the ports",

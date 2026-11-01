@@ -621,8 +621,9 @@ answers this item's recon question without a grab verb — the recon kit below w
   after it; parts read by `Content-Length`; a silent connection closed at 8 s; reconnects at
   1-2-4-8-10 s; at most one connection per channel.
 
-**Limits.** Picture only — the audio (`GET /audio.wav`, SAME port, never `935x`) is named, not
-built. The primary Playout only; a backup Playout's return is not built. Channels ≥ 21 lie outside
+**Limits at completion of C-016.** Picture only — the audio (`GET /audio.wav`, SAME port, never `935x`) was
+named but not built, and only the primary Playout was supported. Audio was subsequently added by `R-076`;
+mapped A/B programme monitoring supersedes the primary-only limit in `R-104`. Channels ≥ 21 lie outside
 the Playout's firewall rule (9250–9269): not dialled, "No return signal", the reason in the log. The
 feed is readable by the whole LAN at the Playout (their rule, not ours). The Playout's PGM settings
 are never touched — changing them needs a Playout reset, which cuts air on every channel. A console

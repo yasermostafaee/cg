@@ -477,6 +477,8 @@ describe('the build stamp', () => {
     const occurrences = html.match(/<!-- CG_BUILD_STAMP -->/g) ?? [];
     expect(occurrences).toHaveLength(1);
     expect(html).toContain('id="cg-splash-version"');
+    expect(code).toMatch(/#cg-splash-version\s*\{[^}]*font-size:\s*12px/);
+    expect(code).toMatch(/#cg-splash-version\s*\{[^}]*font-weight:\s*700/);
   });
 });
 

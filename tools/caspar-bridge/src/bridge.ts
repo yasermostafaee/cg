@@ -91,6 +91,7 @@ import {
   pgmReturnPath,
   pgmAudioPath,
   PgmMetersChangedChannel,
+  type PgmEngine,
   type PgmReturnStatus,
   LOCK_ENGAGED_REFUSAL,
   LockEngageChannel,
@@ -195,6 +196,8 @@ import {
   TemplatesSourceGetChannel,
   TemplatesSourcePutChannel,
   TextSourcesReadChannel,
+  SharedFilesGetChannel,
+  SharedFilesSetChannel,
   type PageBuild,
   TEMPLATE_REDELIVERY_REFUSAL,
   UpdateCancelChannel,
@@ -456,6 +459,14 @@ export interface BridgeOptions {
   pagesDir?: string;
   /** R-102 — root under which authored relative text-file paths may be read. */
   textSourceRoot?: string;
+  /**
+   * Installed station controller for the operator-facing shared-files path. The getter keeps text
+   * reads live after a settings change; the setter validates and persists on the Bridge server.
+   */
+  sharedFiles?: {
+    readonly getPath: () => string;
+    readonly setPath: (path: string) => Promise<{ ok: boolean; path?: string; message?: string }>;
+  };
   /**
    * D-137 / C-015 — a PRE-RESOLVED source catalogue, explicit (tests, embedders). When given it is
    * the catalogue in force as-is, and the Playout's lists are not read.
@@ -736,13 +747,19 @@ export interface BridgeHandle {
    * `/pgm/<n>` from it; its state rides `pgmReturn.status` on the control socket.
    */
   readonly pgmReturn: PgmReturnRelay;
+  /** `R-104` — server B's mapped programme picture relay. */
+  readonly backupPgmReturn: PgmReturnRelay;
   /** `PLAYOUT-FEATURES-01` E (`R-076`) — the programme SOUND relay, served at `/pgm/<n>/sound`. */
   readonly pgmAudio: PgmAudioRelay;
+  /** `R-104` — server B's mapped programme sound relay. */
+  readonly backupPgmAudio: PgmAudioRelay;
   /**
    * `PLAYOUT-FEATURES-01` E (`R-076`) — the Playout meters stream, or `null` with auth off. Exposed for the
    * "read ONCE" test's instrument (`connectCount`).
    */
   readonly playoutMeters: PlayoutMetersReader | null;
+  /** `R-104` — the backup engine's protected meters stream. */
+  readonly backupPlayoutMeters: PlayoutMetersReader | null;
   /**
    * WHERE the candidate-layer bank in force came from, so the CLI can SAY it at
    * boot. Two machines ran different banks for two days and nothing anywhere
@@ -2867,8 +2884,9 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         `amcpAddressFor` the AMCP session dials.
 
     Resolved at each connect attempt, so a changed connection is picked up by the next dial; a
-    change to server A's host also redials at once (below). The feed's audio (`GET /audio.wav`,
-    same port — never `935x`) and a backup Playout's return are named in `design.md` §6, not built.
+    change to server A's host also redials at once (below). `R-104` applies the same programme-port
+    contract to mapped server-B channels; audio remains on `GET /audio.wav` at the same 925x port,
+    never the 935x preview ports.
   */
   const pgmTarget = async (): Promise<{ address: string; hostHeader: string } | null> => {
     if (playoutName !== undefined) {
@@ -2890,6 +2908,19 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     behind a ticket for that channel; nothing is read until a console turns its speaker on.
   */
   const pgmAudio = new PgmAudioRelay({ resolveTarget: pgmTarget, ...pgmSeams });
+  /*
+    `R-104` — B is a distinct physical core. The console always names logical N; the HTTP door below
+    resolves N → M before attaching these relays, so their channel key is B's physical M.
+  */
+  const backupPgmTarget = async (): Promise<{ address: string; hostHeader: string } | null> => {
+    const host = runtime.config().servers.B?.host;
+    return host === undefined ? null : { address: amcpAddressFor(host), hostHeader: host };
+  };
+  const backupPgmReturn = new PgmReturnRelay({
+    resolveTarget: backupPgmTarget,
+    ...pgmSeams,
+  });
+  const backupPgmAudio = new PgmAudioRelay({ resolveTarget: backupPgmTarget, ...pgmSeams });
   if (playoutName === undefined) {
     let pgmHost = runtime.config().servers.A.host;
     runtime.configChanged.subscribe((config) => {
@@ -2908,6 +2939,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     playoutAuth === null || auth.playout === null
       ? null
       : new PlayoutMetersReader({
+          engine: 'A',
           url: playout292Url(auth.playout, 'meters'),
           bearer: () => playoutAuth.usableBearer(),
           channelFor: (host, channel) =>
@@ -2919,6 +2951,33 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
             process.stderr.write(`[caspar-bridge] ${line}\n`);
           },
         });
+  const backupMeterHostIsOurs = (casparHost: string): boolean => {
+    const address = backupEngine?.address() ?? null;
+    const playoutHost = address === null ? undefined : new URL(address).hostname;
+    return hostIsOursFor(playoutHost, () => {
+      const host = runtime.config().servers.B?.host;
+      return host === undefined ? [] : [host];
+    })(casparHost);
+  };
+  const backupPlayoutMeters =
+    backupEngine === null || auth.playout === null
+      ? null
+      : new PlayoutMetersReader({
+          engine: 'B',
+          url: () => {
+            const address = backupEngine.address();
+            return address === null ? null : `${address.replace(/\/$/, '')}/api/cg/meters`;
+          },
+          bearer: () => backupEngine.accessToken(),
+          channelFor: (host, channelOnB) =>
+            backupMeterHostIsOurs(host) ? backupChannels.stationChannelOf(channelOnB) : null,
+          ...(options.playoutMetersTuning !== undefined
+            ? { tuning: options.playoutMetersTuning }
+            : {}),
+          log: (line) => {
+            process.stderr.write(`[caspar-bridge] backup ${line}\n`);
+          },
+        });
   /*
     The bridge's OWN session arriving reopens the stream with it: until then the stream reads with a
     console's token (D7's fallback) and the Playout sends only that console's channels.
@@ -2926,6 +2985,26 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   bridgeSession?.onChanged((state) => {
     if (state.state === 'signed-in') playoutMeters?.restart();
   });
+  backupEngine?.onChanged(() => {
+    backupPlayoutMeters?.restart();
+  });
+
+  let backupMonitorSignature = JSON.stringify(backupChannels.state());
+  const stopBackupMonitorReset = backupChannels.onChanged((state) => {
+    const signature = JSON.stringify(state);
+    if (signature === backupMonitorSignature) return;
+    backupMonitorSignature = signature;
+    backupPgmReturn.reset();
+    backupPgmAudio.reset();
+    backupPlayoutMeters?.restart();
+  });
+  const programmeReturnStatus = (): PgmReturnStatus[] => [
+    ...pgmReturn.status().map((status) => ({ ...status, engine: 'A' as const })),
+    ...backupPgmReturn.status().flatMap((status) => {
+      const channel = backupChannels.stationChannelOf(status.channel);
+      return channel === null ? [] : [{ engine: 'B' as const, channel, state: status.state }];
+    }),
+  ];
 
   /*
     `CENTRAL-BRIDGE-01` (D9) — the tickets for CG Bridge's HTTP resources (`/pgm/<n>`, `/logs.zip`):
@@ -2953,7 +3032,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     playoutSources,
     catalogueRows: () => playoutCatalogue?.rows() ?? null,
     refreshCatalogue: () => playoutCatalogue?.refresh() ?? Promise.resolve(),
-    pgmReturnStatus: () => pgmReturn.status(),
+    pgmReturnStatus: programmeReturnStatus,
+    backupPgmChannel: (channel) => backupChannels.channelOnB(channel),
     connectionCheck,
     // 🔴 `B-327` — does server A join the Playout's? Through the same `hostIsOurs` the meters read.
     casparJoin: () =>
@@ -2968,6 +3048,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     ...(options.oscPort !== undefined ? { oscPort: options.oscPort } : {}),
     ...(options.fixedLayersPath !== undefined ? { fixedLayersPath: options.fixedLayersPath } : {}),
     ...(options.textSourceRoot !== undefined ? { textSourceRoot: options.textSourceRoot } : {}),
+    ...(options.sharedFiles !== undefined ? { sharedFiles: options.sharedFiles } : {}),
     ...(options.sourceCatalogPath !== undefined
       ? { sourceCatalogPath: options.sourceCatalogPath }
       : {}),
@@ -3016,16 +3097,27 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       pathname.startsWith(PGM_RETURN_PATH_PREFIX)
     ) {
       // `PLAYOUT-FEATURES-01` E — `/pgm/<n>/sound` is the sound, behind a ticket for the SOUND.
-      const match = /^\/pgm\/([1-9]\d{0,3})(\/sound)?$/.exec(pathname);
-      const channel = match?.[1] === undefined ? Number.NaN : Number(match[1]);
-      const stream = match?.[2] === undefined ? 'picture' : 'audio';
+      const match = /^\/pgm\/(?:(B)\/)?([1-9]\d{0,3})(\/sound)?$/.exec(pathname);
+      const engine: PgmEngine = match?.[1] === 'B' ? 'B' : 'A';
+      const channel = match?.[2] === undefined ? Number.NaN : Number(match[2]);
+      const stream = match?.[3] === undefined ? 'picture' : 'audio';
       const grant = tickets.redeem(
         url.searchParams.get('ticket'),
-        (g) => g.kind === 'pgm' && g.channel === channel && (g.stream ?? 'picture') === stream,
+        (g) =>
+          g.kind === 'pgm' &&
+          (g.engine ?? 'A') === engine &&
+          g.channel === channel &&
+          (g.stream ?? 'picture') === stream,
       );
       if (grant === null) {
         res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
         res.end('forbidden');
+        return;
+      }
+      const physicalChannel = engine === 'A' ? channel : backupChannels.channelOnB(channel);
+      if (physicalChannel === null) {
+        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('no mapped backup programme for this channel');
         return;
       }
       if (stream === 'audio') {
@@ -3035,10 +3127,10 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           §2.1). The ticket, single-channel and short-lived, is the door; this header opens no other.
         */
         res.setHeader('access-control-allow-origin', '*');
-        pgmAudio.serve(req, res, channel);
+        (engine === 'A' ? pgmAudio : backupPgmAudio).serve(req, res, physicalChannel);
         return;
       }
-      pgmReturn.serve(req, res, channel);
+      (engine === 'A' ? pgmReturn : backupPgmReturn).serve(req, res, physicalChannel);
       return;
     }
     // `CENTRAL-BRIDGE-01` §1 A — CG Bridge's logs, one zip, behind a station admin's one-use ticket.
@@ -3222,23 +3314,25 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         Beside `wirePublishes` rather than in it: that function forwards `CasparRuntime`'s
         emitters (the `B-247` guard's subject), and the relay is not the runtime.
       */
-      pgmReturn.subscribe((status) => {
-        if (!mayBeTold(authGateState(session, playoutAuth))) return;
-        // `CENTRAL-BRIDGE-01` (D4) — through the same table as every other push.
-        const told = scopePayload(
-          PUBLISH_SCOPE,
-          PgmReturnStatusChangedChannel.name,
-          PgmReturnStatusChangedChannel.payload.parse(status),
-          scopeOfSocket(),
-          scopeContext(runtime),
-        );
-        if (told === TELL_NOTHING) return;
-        send(socket, {
-          type: 'publish',
-          channel: PgmReturnStatusChangedChannel.name,
-          payload: told,
-        });
-      }),
+      ...[pgmReturn, backupPgmReturn].map((relay) =>
+        relay.subscribe(() => {
+          if (!mayBeTold(authGateState(session, playoutAuth))) return;
+          // `R-104` — either physical relay republishes the one engine-tagged logical list.
+          const told = scopePayload(
+            PUBLISH_SCOPE,
+            PgmReturnStatusChangedChannel.name,
+            PgmReturnStatusChangedChannel.payload.parse(programmeReturnStatus()),
+            scopeOfSocket(),
+            scopeContext(runtime),
+          );
+          if (told === TELL_NOTHING) return;
+          send(socket, {
+            type: 'publish',
+            channel: PgmReturnStatusChangedChannel.name,
+            payload: told,
+          });
+        }),
+      ),
       // `RELEASE-0112-01` (`R-085`) — each engine's line, station-wide, behind the same delivery gate.
       subscribeEngines((sessions) => {
         if (!mayBeTold(authGateState(session, playoutAuth))) return;
@@ -3308,6 +3402,26 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
             }),
           ]
         : []),
+      ...(backupPlayoutMeters !== null
+        ? [
+            backupPlayoutMeters.subscribe((readings) => {
+              if (!mayBeTold(authGateState(session, playoutAuth))) return;
+              const told = scopePayload(
+                PUBLISH_SCOPE,
+                PgmMetersChangedChannel.name,
+                readings,
+                scopeOfSocket(),
+                scopeContext(runtime),
+              );
+              if (told === TELL_NOTHING) return;
+              send(socket, {
+                type: 'publish',
+                channel: PgmMetersChangedChannel.name,
+                payload: told,
+              });
+            }),
+          ]
+        : []),
     );
     socket.on('message', (data) => {
       // `B-229` — the lock is read PER REQUEST from the live runtime, never captured.
@@ -3330,6 +3444,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           void playoutLicense?.refresh({ soon: true });
           // `PLAYOUT-FEATURES-01` E — a meters stream waiting for a bearer connects now.
           playoutMeters?.kick();
+          backupPlayoutMeters?.kick();
           // `PLAYOUT-SOURCES-01` — D10 and the bound media are read at sign-in too.
           void playoutSources?.refresh(PICKER_FRESH_MS);
           introduceOnSignIn(signIn);
@@ -3554,8 +3669,11 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     templateServe,
     runtime,
     pgmReturn,
+    backupPgmReturn,
     pgmAudio,
+    backupPgmAudio,
     playoutMeters,
+    backupPlayoutMeters,
     fixedBankSource: { bank: firstBank(fixedBanks), source: fixedBankSource },
     templates: runtime.templateProvenance,
     amcpLog,
@@ -3584,6 +3702,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       // `CENTRAL-BRIDGE-01` (D7) — and the bridge's own session refresh.
       bridgeSession?.dispose();
       backupEngine?.dispose();
+      stopBackupMonitorReset();
       backupChannels.dispose();
       coreGuard?.dispose();
       clearInterval(enginesTicker);
@@ -3598,9 +3717,12 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       playoutSources?.dispose();
       // `C-016` — every upstream feed socket and every relayed viewer.
       pgmReturn.dispose();
+      backupPgmReturn.dispose();
       // `PLAYOUT-FEATURES-01` E — and the sound's, and the meters stream.
       pgmAudio.dispose();
+      backupPgmAudio.dispose();
       playoutMeters?.dispose();
+      backupPlayoutMeters?.dispose();
       // `RELEASE-091-01` §7 — and the bank bring-in's tick.
       bankBringIn?.dispose();
       await runtime.stop();
@@ -4310,6 +4432,11 @@ export function buildRoutes(
     fixedLayersPath?: string;
     /** R-102 — the filesystem boundary for `textSources.read`. */
     textSourceRoot?: string;
+    /** Installed station path reader/writer; paths are interpreted by this Bridge machine. */
+    sharedFiles?: {
+      readonly getPath: () => string;
+      readonly setPath: (path: string) => Promise<{ ok: boolean; path?: string; message?: string }>;
+    };
     sourceCatalogPath?: string;
     sourceAssignmentsPath?: string;
     /**
@@ -4365,6 +4492,8 @@ export function buildRoutes(
      * nothing watched — what a bridge with no relay is.
      */
     pgmReturnStatus?: () => PgmReturnStatus[];
+    /** `R-104` — logical N to the mapped physical channel on B, or null. */
+    backupPgmChannel?: (channel: number) => number | null;
     /**
      * `PLAYOUT-SOURCES-01` — the Playout's D10/D11 reader; `null` / absent for a bridge with none (an
      * explicit in-process catalogue, or auth off with nothing injected).
@@ -4435,6 +4564,7 @@ export function buildRoutes(
     (async (host: string): Promise<string | null> =>
       (await probeRoute(host).catch(() => null))?.address ?? null);
   const pgmReturnStatus = paths.pgmReturnStatus ?? ((): PgmReturnStatus[] => []);
+  const backupPgmChannel = paths.backupPgmChannel ?? ((): number | null => null);
   /*
     `B-229` — `lock` is the THIRD ARGUMENT AND IT IS REQUIRED. A new channel cannot be
     routed without classifying it, which is what keeps "the lock refuses everything"
@@ -4554,8 +4684,21 @@ export function buildRoutes(
       something the operator does, not something they read.
     */
     route(TextSourcesReadChannel, 'read', 'read', (r: { path: string }) =>
-      readTextSource(paths.textSourceRoot, r.path),
+      readTextSource(paths.sharedFiles?.getPath() ?? paths.textSourceRoot, r.path),
     ),
+    route(SharedFilesGetChannel, 'read', 'read', () => ({
+      path: paths.sharedFiles?.getPath() ?? paths.textSourceRoot ?? 'text-sources',
+    })),
+    route(SharedFilesSetChannel, 'operator', 'station-admin', (r: { path: string }) => {
+      if (paths.sharedFiles === undefined) {
+        return {
+          ok: false,
+          message:
+            'This installation does not allow changing the Shared files path from CG Control.',
+        };
+      }
+      return paths.sharedFiles.setPath(r.path);
+    }),
     route(AuthStateChannel, 'read', 'read', () => {
       /*
         🔴 IT ASKS THE ONE PREDICATE. It used to report `token?.principal` directly, and that
@@ -4966,14 +5109,31 @@ export function buildRoutes(
       PgmReturnTicketChannel,
       'read',
       'read',
-      (req: { channel: number; stream?: 'picture' | 'audio' | undefined }) => {
+      (req: {
+        channel: number;
+        engine?: PgmEngine | undefined;
+        stream?: 'picture' | 'audio' | undefined;
+      }) => {
+        const engine = req.engine ?? 'A';
+        if (engine === 'B' && backupPgmChannel(req.channel) === null) {
+          throw new Error(`No backup programme channel is mapped for CH ${String(req.channel)}.`);
+        }
         // `PLAYOUT-FEATURES-01` E — the SOUND's ticket opens `/pgm/<n>/sound` and nothing else.
         if (req.stream === 'audio') {
-          const ticket = issueTicket({ kind: 'pgm', channel: req.channel, stream: 'audio' });
-          return { path: `${pgmAudioPath(req.channel)}?ticket=${ticket}` };
+          const ticket = issueTicket({
+            kind: 'pgm',
+            engine,
+            channel: req.channel,
+            stream: 'audio',
+          });
+          return { path: `${pgmAudioPath(req.channel, engine)}?ticket=${ticket}` };
         }
         return {
-          path: `${pgmReturnPath(req.channel)}?ticket=${issueTicket({ kind: 'pgm', channel: req.channel })}`,
+          path: `${pgmReturnPath(req.channel, engine)}?ticket=${issueTicket({
+            kind: 'pgm',
+            engine,
+            channel: req.channel,
+          })}`,
         };
       },
     ),

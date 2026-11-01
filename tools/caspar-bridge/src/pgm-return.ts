@@ -414,6 +414,13 @@ export class PgmReturnRelay {
     for (const feed of this.#feeds.values()) feed.redial();
   }
 
+  /** Mapping/host changed: close every viewer so each browser must obtain a fresh ticket. */
+  reset(): void {
+    for (const feed of [...this.#feeds.values()]) feed.dispose();
+    this.#feeds.clear();
+    this.#publish();
+  }
+
   /** Close every upstream and every viewer. The bridge's `close()` calls this. */
   dispose(): void {
     this.#disposed = true;

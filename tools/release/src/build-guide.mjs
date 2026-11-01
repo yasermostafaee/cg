@@ -46,20 +46,20 @@ export function fontFaces() {
 const STYLE = `
 @page { size: A4; margin: 13mm 14mm 14mm 14mm; }
 * { box-sizing: border-box; }
-html { font-family: 'Vazirmatn', sans-serif; font-size: 9.6pt; line-height: 1.62; color: #141a23; }
+html { font-family: 'Vazirmatn', sans-serif; font-size: 9.9pt; line-height: 1.72; color: #141a23; }
 body { margin: 0; }
 h1 { font-size: 16pt; font-weight: 700; margin: 0 0 1mm; color: #0b2a44; }
 h1 + p { margin: 0 0 3mm; color: #4a5566; }
 h2 { font-size: 11.2pt; font-weight: 700; margin: 4mm 0 1.2mm; color: #0b2a44;
      border-bottom: 0.4mm solid #d9e2ec; padding-bottom: 0.6mm; break-after: avoid; }
-p { margin: 0 0 1.6mm; }
-ul, ol { margin: 0 0 1.6mm; padding-inline-start: 6mm; }
+p { margin: 0 0 1.9mm; }
+ul, ol { margin: 0 0 2mm; padding-inline-start: 6mm; }
 ol { list-style-type: persian; }
 .figures { display: flex; gap: 3mm; align-items: flex-start; margin: 1.5mm 0 3mm; }
 .figures figure { margin: 0; }
 figure.side { float: left; margin: 0.6mm 4mm 2mm 0; }
 h2 { clear: both; }
-li { margin: 0 0 0.8mm; }
+li { margin: 0 0 1mm; }
 strong { font-weight: 700; }
 bdi.ui { font-family: 'Vazirmatn', sans-serif; font-weight: 500; background: #eef2f7;
          border: 0.25mm solid #d3dbe6; border-radius: 1mm; padding: 0 1.2mm; white-space: nowrap; }

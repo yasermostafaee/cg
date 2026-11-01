@@ -137,4 +137,23 @@ describe('MeterStore — one subscription, its channel only, and a stale level i
     // Nobody watches: the one subscription is released.
     expect(subscribed()).toBe(false);
   });
+
+  it('R-104 — equal channel numbers on A and B remain separate and a legacy reading belongs to A', () => {
+    const { store, emit } = rig();
+    const primary: (readonly number[] | null)[] = [];
+    const backup: (readonly number[] | null)[] = [];
+    const offA = store.watchAudio(1, (value) => primary.push(value), 'A');
+    const offB = store.watchAudio(1, (value) => backup.push(value), 'B');
+
+    emit({ kind: 'audio', channel: 1, dbfs: [-12] });
+    expect(primary).toEqual([null, [-12]]);
+    expect(backup).toEqual([null]);
+
+    emit({ kind: 'audio', engine: 'B', channel: 1, dbfs: [-24] });
+    expect(primary).toEqual([null, [-12]]);
+    expect(backup).toEqual([null, [-24]]);
+
+    offA();
+    offB();
+  });
 });

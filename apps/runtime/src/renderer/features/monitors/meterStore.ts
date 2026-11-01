@@ -1,4 +1,4 @@
-import type { PgmLoudness, PgmMeterReading } from '@cg/shared-ipc';
+import type { PgmEngine, PgmLoudness, PgmMeterReading } from '@cg/shared-ipc';
 import type { Unsubscribe } from '../../../shared/runtime-bridge.js';
 import { METER_STALE_MS } from './meterScale.js';
 
@@ -39,7 +39,7 @@ export interface MeterStoreDeps {
 export class MeterStore {
   readonly #deps: MeterStoreDeps;
   readonly #now: () => number;
-  readonly #channels = new Map<number, ChannelMeters>();
+  readonly #channels = new Map<string, ChannelMeters>();
   #unsubscribe: Unsubscribe | null = null;
   #sweep: ReturnType<typeof setInterval> | null = null;
 
@@ -49,26 +49,28 @@ export class MeterStore {
   }
 
   /** Write each `audio` reading for `channel` (or `null`: the floor). Returns the release. */
-  watchAudio(channel: number, write: AudioWriter): () => void {
-    const meters = this.#meters(channel);
+  watchAudio(channel: number, write: AudioWriter, engine: PgmEngine = 'A'): () => void {
+    const key = this.#key(engine, channel);
+    const meters = this.#meters(key);
     meters.audio.add(write);
     write(null);
     this.#arm();
     return () => {
       meters.audio.delete(write);
-      this.#release(channel);
+      this.#release(key);
     };
   }
 
   /** Write each `loudness` reading for `channel` (or `null`: unknown). Returns the release. */
-  watchLoudness(channel: number, write: LoudnessWriter): () => void {
-    const meters = this.#meters(channel);
+  watchLoudness(channel: number, write: LoudnessWriter, engine: PgmEngine = 'A'): () => void {
+    const key = this.#key(engine, channel);
+    const meters = this.#meters(key);
     meters.loudness.add(write);
     write(null);
     this.#arm();
     return () => {
       meters.loudness.delete(write);
-      this.#release(channel);
+      this.#release(key);
     };
   }
 
@@ -87,11 +89,15 @@ export class MeterStore {
     }
   }
 
-  #meters(channel: number): ChannelMeters {
-    let meters = this.#channels.get(channel);
+  #key(engine: PgmEngine, channel: number): string {
+    return `${engine}:${String(channel)}`;
+  }
+
+  #meters(key: string): ChannelMeters {
+    let meters = this.#channels.get(key);
     if (meters === undefined) {
       meters = { audio: new Set(), loudness: new Set(), audioAt: null, loudnessAt: null };
-      this.#channels.set(channel, meters);
+      this.#channels.set(key, meters);
     }
     return meters;
   }
@@ -109,10 +115,10 @@ export class MeterStore {
     }
   }
 
-  #release(channel: number): void {
-    const meters = this.#channels.get(channel);
+  #release(key: string): void {
+    const meters = this.#channels.get(key);
     if (meters !== undefined && meters.audio.size === 0 && meters.loudness.size === 0) {
-      this.#channels.delete(channel);
+      this.#channels.delete(key);
     }
     if (this.#channels.size > 0) return;
     this.#unsubscribe?.();
@@ -122,7 +128,7 @@ export class MeterStore {
   }
 
   #receive(reading: PgmMeterReading): void {
-    const meters = this.#channels.get(reading.channel);
+    const meters = this.#channels.get(this.#key(reading.engine ?? 'A', reading.channel));
     if (meters === undefined) return;
     if (reading.kind === 'audio') {
       meters.audioAt = this.#now();

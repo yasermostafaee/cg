@@ -70,9 +70,9 @@ delivery (`0.11.3`).
 
 ## 3. The console (`apps/runtime`)
 
-- [x] 3.1 The status bar's `BACKUP B · n of m channels mapped`; the channel view's backup line; the PROGRAM pane's
-      `Not available on the backup engine` while B is the primary (its sound toggle and loudness meter absent
-      there) — `useBackupChannels`, the bridge contract's `backupChannels` (WebSocket, mock, parity)
+- [x] 3.1 The status bar's `BACKUP B · n of m channels mapped`; the channel view's backup line; the original
+      release's `Not available on the backup engine` PROGRAM limitation — now superseded by `R-104` /
+      `monitor-backup-program-return`; `useBackupChannels`, WebSocket/mock/parity remain the mapping source
 - [x] 3.2 Station setup → Servers → `Backup engine`: one line per declared channel, the entry and its state
       (`BackupChannelsCard`; a field and `Save backup channels` for a station admin only)
 - [x] 3.3 Part D: the password line in the Playout team's words inside `<bdi>` (`ENGINE_PASSWORD_WHERE`, read

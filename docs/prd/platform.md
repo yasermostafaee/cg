@@ -4253,3 +4253,25 @@ workspace/E2E and all applicable Windows installer/smoke/upgrade jobs pass on th
 commit; windowed and silent Bridge installation prove `textSourceRoot` is written and preserved;
 all three installer files are downloaded with hashes and placed in `installers-ci-0.12.5/` and
 `dist/`; no tag or release is created.
+
+## [~] P-074 — Release candidate `0.12.6`: installed shared-text service access ⟨priority: high⟩ — FILED 2026-11-01 by `RELEASE-0126-01` · `openspec/changes/prepare-0-12-6-installers/`
+
+**What:** build and retain one matching `0.12.6` set of CG Bridge, CG Control and CG Designer
+installers. The product changes complete `B-357`: a selected local shared-files root is readable by
+the installed CG Bridge service, can be inspected or changed from CG Control Station setup, and an
+upgrade repairs a removed local grant. The same candidate distinguishes the three Setup surfaces,
+uses a separate teal Bridge executable icon, makes the app version prominent on both startup
+splashes, improves Persian-guide line spacing, and fixes `B-358`. Put the verified files in the local
+handoff folder and `dist/`; do not publish a release.
+
+**Why:** `0.12.5` identifies already-built bytes which store the correct folder but can still fail
+with `EPERM` because Setup runs as an administrator while Bridge runs as `NT SERVICE\CGBridge`.
+The Bridge installer now changes permissions, so its new bytes need a fresh identity; the installed
+suite remains one matching set.
+
+**Acceptance:** all version surfaces say `0.12.6`; the full local gate and E2E lane pass; Linux
+workspace/E2E and all applicable Windows installer/smoke/upgrade jobs pass on the exact candidate
+commit; the Bridge smoke proves inherited read/execute-only access on a local root and upgrade
+repair; visual evidence proves the three Setup identities and clear splash versions; the rebuilt
+guide is visually inspected at readable line spacing; all three installer files are downloaded with hashes and placed in
+`installers-ci-0.12.6/` and `dist/`; no tag or release is created.

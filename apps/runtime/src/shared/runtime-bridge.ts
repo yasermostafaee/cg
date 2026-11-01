@@ -58,6 +58,7 @@ import type {
   EmptiedAirNoticeChannel,
   EmptiedAirRestoreChannel,
   PgmReturnStatus,
+  PgmEngine,
   PgmReturnStatusChannel,
   LockEngageChannel,
   ClearedOutsideLayer,
@@ -109,6 +110,8 @@ import type {
   TemplatesSourceGetChannel,
   TemplatesSourcePutChannel,
   TextSourcesReadChannel,
+  SharedFilesGetChannel,
+  SharedFilesSetChannel,
   DelimitersListChannel,
   DelimitersSetChannel,
   DelimiterOption,
@@ -773,12 +776,12 @@ export interface RuntimeBridge {
      * opens only with a ticket the verified socket is given for that channel, so every request of
      * the picture asks for a fresh one. Rejects when the bridge refuses (the channel is not held).
      */
-    feedUrl(channel: number): Promise<string | null>;
+    feedUrl(channel: number, engine?: PgmEngine): Promise<string | null>;
     /**
      * `PLAYOUT-FEATURES-01` E (`R-076`) — where this console reads channel `n`'s programme SOUND (`/pgm/<n>/sound`,
      * behind a ticket for the sound), or `null` with no relay (test mode). Asked for per connection.
      */
-    audioUrl(channel: number): Promise<string | null>;
+    audioUrl(channel: number, engine?: PgmEngine): Promise<string | null>;
     /** Every WATCHED channel's state. A channel nobody watches has no entry. */
     status(): Promise<ChannelResponse<typeof PgmReturnStatusChannel>>;
     onStatusChanged(handler: (status: readonly PgmReturnStatus[]) => void): Unsubscribe;
@@ -1349,5 +1352,13 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof CalendarSetChannel>,
     ): Promise<ChannelResponse<typeof CalendarSetChannel>>;
     onChanged(handler: (settings: CalendarSettings) => void): Unsubscribe;
+  };
+
+  /** The shared-files path as seen by the CG Bridge server, not by this console's computer. */
+  sharedFiles: {
+    get(): Promise<ChannelResponse<typeof SharedFilesGetChannel>>;
+    set(
+      req: ChannelRequest<typeof SharedFilesSetChannel>,
+    ): Promise<ChannelResponse<typeof SharedFilesSetChannel>>;
   };
 }

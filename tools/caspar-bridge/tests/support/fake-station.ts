@@ -71,8 +71,12 @@ export const FAKE_STATION_PORTS: FakeStationPorts = { amcp: 5250, osc: 6251, pgm
  * engine is refused there as a real Playout refuses it — tokens never cross.
  */
 export interface FakeStationBackup {
-  /** Server B's AMCP port — beside the primary's 5250, on the same loopback host. */
+  /** Server B's loopback alias. Separate from A so both can own the real 925x programme ports. */
+  readonly host?: string;
+  /** Server B's AMCP port. */
   readonly amcp: number;
+  /** Server B's programme ports, in physical-channel order. */
+  readonly pgm?: readonly number[];
   /** The backup engine's own `cg-admin` password: never the primary's. */
   readonly password: string;
   /** TEST-ONLY — record every AMCP line the BACKUP core received (`@cg/amcp-mock`'s trace). */
@@ -81,6 +85,8 @@ export interface FakeStationBackup {
 
 /** `--pair`'s backup engine: server B's port, and a password that is not the primary's. */
 export const FAKE_BACKUP_AMCP_PORT = 5251;
+export const FAKE_BACKUP_HOST = '127.0.0.2';
+export const FAKE_BACKUP_PGM_PORTS = [9250, 9251, 9252] as const;
 export const FAKE_BACKUP_PASSWORD = 'test-only-backup-engine-not-a-secret';
 
 /**
@@ -100,13 +106,16 @@ export const FAKE_BACKUP_CHANNELS = 5;
 export const FAKE_VIDEO_MODE = '1080i5000';
 
 /** The primary engine's D4 for a pair: its two channels, their video mode, and their mirrors (a hint). */
-export function pairPrimaryCatalogue(backupAddress: string): FakeCatalogueRow[] {
+export function pairPrimaryCatalogue(
+  backupAddress: string,
+  primaryHost = FAKE_STATION_HOST,
+): FakeCatalogueRow[] {
   const backupApi = new URL(backupAddress).host;
   return [
     {
       id: 'fake-programme',
       name: 'آپاسای',
-      casparHost: FAKE_STATION_HOST,
+      casparHost: primaryHost,
       casparChannel: 1,
       output: 'on-air',
       playlist: 'playing',
@@ -117,7 +126,7 @@ export function pairPrimaryCatalogue(backupAddress: string): FakeCatalogueRow[] 
     {
       id: 'fake-cg',
       name: 'کانال دوم (تست CG)',
-      casparHost: FAKE_STATION_HOST,
+      casparHost: primaryHost,
       casparChannel: 2,
       output: 'off',
       playlist: 'stopped',
@@ -129,13 +138,16 @@ export function pairPrimaryCatalogue(backupAddress: string): FakeCatalogueRow[] 
 }
 
 /** The backup engine's own D4 for a pair (`2.9.5`): its own channel 1, and the two mirrors at 2 and 3. */
-export function pairBackupCatalogue(primaryAddress: string): FakeCatalogueRow[] {
+export function pairBackupCatalogue(
+  primaryAddress: string,
+  backupHost = FAKE_STATION_HOST,
+): FakeCatalogueRow[] {
   const primaryApi = new URL(primaryAddress).host;
   return [
     {
       id: 'backup-own',
       name: 'برنامهٔ موتورِ پشتیبان',
-      casparHost: FAKE_STATION_HOST,
+      casparHost: backupHost,
       casparChannel: 1,
       output: 'on-air',
       playlist: 'playing',
@@ -146,7 +158,7 @@ export function pairBackupCatalogue(primaryAddress: string): FakeCatalogueRow[] 
     {
       id: 'fake-programme-r2',
       name: 'آپاسای (آینه)',
-      casparHost: FAKE_STATION_HOST,
+      casparHost: backupHost,
       casparChannel: 2,
       output: 'off',
       playlist: 'stopped',
@@ -157,7 +169,7 @@ export function pairBackupCatalogue(primaryAddress: string): FakeCatalogueRow[] 
     {
       id: 'fake-cg-r2',
       name: 'کانال دوم (آینه)',
-      casparHost: FAKE_STATION_HOST,
+      casparHost: backupHost,
       casparChannel: 3,
       output: 'off',
       playlist: 'stopped',
@@ -183,7 +195,12 @@ export interface FakeStation {
   /** One line per part that could not start — a feed whose port is taken. */
   readonly notes: readonly string[];
   /** `--pair` — the backup engine and its CasparCG; absent on a one-engine station. */
-  readonly backup?: { readonly playout: FakePlayout; readonly caspar: MockHandle };
+  readonly backup?: {
+    readonly host: string;
+    readonly playout: FakePlayout;
+    readonly caspar: MockHandle;
+    readonly feeds: readonly FakePgmFeed[];
+  };
   /** Stop every part. Safe to call twice. */
   stop(): Promise<void>;
 }
@@ -207,6 +224,7 @@ export async function startFakeStation(
   };
   // `--pair` — both engines verify bearers, so a token that crossed would be refused, not served.
   const pair = options.backup;
+  const backupHost = pair?.host ?? FAKE_BACKUP_HOST;
   const playout = await mods.startFakePlayout({
     grants,
     sealOnLoopback: false,
@@ -232,11 +250,20 @@ export async function startFakeStation(
         'is a CasparCG or another dev station running on this machine?',
     );
   }
-  let backup: { playout: FakePlayout; caspar: MockHandle } | undefined;
+  let backup:
+    | { host: string; playout: FakePlayout; caspar: MockHandle; feeds: FakePgmFeed[] }
+    | undefined;
   if (pair !== undefined) {
     const b = await mods
       .startFakePlayout({
-        grants,
+        grants: {
+          admin: [
+            { host: backupHost, channel: 1 },
+            { host: backupHost, channel: 2 },
+            { host: backupHost, channel: 3 },
+          ],
+        },
+        listenHost: backupHost,
         sealOnLoopback: false,
         verifyBearers: true,
         password: pair.password,
@@ -247,13 +274,15 @@ export async function startFakeStation(
         throw err;
       });
     // `RELEASE-0113-01` — each engine's D4 says what a real pair's does: the mirrors, by `mirrorOf`.
-    playout.setChannels(pairPrimaryCatalogue(b.baseUrl));
-    b.setChannels(pairBackupCatalogue(playout.baseUrl));
+    playout.setChannels(pairPrimaryCatalogue(b.baseUrl, host));
+    b.setChannels(pairBackupCatalogue(playout.baseUrl, backupHost));
     try {
       backup = {
+        host: backupHost,
         playout: b,
+        feeds: [],
         caspar: await mods.createMock({
-          host,
+          host: backupHost,
           amcpPort: pair.amcp,
           oscPort: 0,
           // `RELEASE-0113-01` — the backup core's OWN numbers: 1 its programme, 2–3 mirrors, 4–5 previews.
@@ -269,7 +298,7 @@ export async function startFakeStation(
       await caspar.stop();
       await playout.stop();
       throw new Error(
-        `The backup engine's CasparCG stand-in could not listen on ${host}:${String(pair.amcp)} ` +
+        `The backup engine's CasparCG stand-in could not listen on ${backupHost}:${String(pair.amcp)} ` +
           `(${why(err)}) — is a CasparCG or another dev station running on this machine?`,
       );
     }
@@ -286,6 +315,18 @@ export async function startFakeStation(
       );
     }
   }
+  if (backup !== undefined && pair !== undefined) {
+    for (const [index, port] of (pair.pgm ?? FAKE_BACKUP_PGM_PORTS).entries()) {
+      try {
+        backup.feeds.push(await mods.startFakePgmFeed({ host: backup.host, port }));
+      } catch (err) {
+        notes.push(
+          `Backup channel ${String(index + 1)}'s programme feed did not start ` +
+            `(${backup.host}:${String(port)}: ${why(err)}).`,
+        );
+      }
+    }
+  }
   let stopped = false;
   return {
     playout,
@@ -297,6 +338,7 @@ export async function startFakeStation(
       if (stopped) return;
       stopped = true;
       await Promise.all(feeds.map((feed) => feed.stop()));
+      await Promise.all((backup?.feeds ?? []).map((feed) => feed.stop()));
       await caspar.stop();
       await playout.stop();
       await backup?.caspar.stop();

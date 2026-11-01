@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, type CSSProperties } from 'react';
 import { MonitorOff, Volume2, VolumeX } from 'lucide-react';
-import { NOT_ON_BACKUP_ENGINE_WORDS } from '@cg/shared-ipc';
+import type { PgmEngine } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -11,6 +11,10 @@ import type { ProgramReturn, ProgramSignal } from '../../hooks/useProgramReturn.
 import type { PgmAudio } from '../../hooks/usePgmAudio.js';
 import { LoudnessBadge, VuMeter } from './VuMeter.js';
 import { playlistTag, type ChannelAir } from '../channels/channelAir.js';
+import type {
+  ProgramAudioChoice,
+  ProgramMonitorPreferences,
+} from './useProgramMonitorPreferences.js';
 
 /**
  * The PROGRAM output box — `C-016`'s programme return: what the Playout is putting on air,
@@ -51,6 +55,13 @@ const styles = {
     minWidth: 0,
     containerType: 'inline-size' as const,
   },
+  pictures: {
+    display: 'flex',
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
+    gap: '0.35rem',
+  },
   /** The video area. Black because that is what a video area is. */
   screen: {
     position: 'relative' as const,
@@ -84,6 +95,24 @@ const styles = {
     fontWeight: 700,
     letterSpacing: '0.08em',
     textTransform: 'uppercase' as const,
+  },
+  tileLabel: {
+    position: 'absolute' as const,
+    insetBlockStart: '0.4rem',
+    insetInlineStart: '0.45rem',
+    zIndex: 2,
+    borderRadius: '0.25rem',
+    padding: '0.18rem 0.35rem',
+    background: 'rgb(4 10 18 / 78%)',
+    color: colors.text,
+    fontSize: '0.68rem',
+    fontWeight: 800,
+    letterSpacing: '0.04em',
+  },
+  controls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.2rem',
   },
   /** `RELEASE-0113-01` — this channel's backup line: one line under the screen, muted while it is mapped. */
   backupLine: {
@@ -121,10 +150,16 @@ interface Props {
    * second count on a second surface is precisely how two numbers about air come to disagree.
    */
   onAirRows: number;
-  /** The programme return for `channel` — lifted to the strip, like the air count. */
-  programReturn: ProgramReturn;
+  /** The visible physical returns, each keyed by stable engine identity. */
+  returns: readonly {
+    readonly engine: PgmEngine;
+    readonly physicalChannel: number | null;
+    readonly programReturn: ProgramReturn;
+  }[];
   /** `PLAYOUT-FEATURES-01` E — the programme's SOUND at this console, lifted beside the return. */
   programSound: PgmAudio;
+  monitorPreferences: ProgramMonitorPreferences;
+  backupAvailable: boolean;
   /**
    * 🔴 `UI-POLISH-01` G — the Playout's `output` and `playlist` for `channel` (`NO_AIR` when it said
    * nothing). `output` alone colours the head; the playlist is a neutral tag and never a colour.
@@ -134,12 +169,12 @@ interface Props {
    * 🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — THIS channel's backup line (`Backup: CH M on <host>`, or that
    * nothing reaches the backup), with its reason on `title`; `null` with no server B. Only this channel's.
    */
-  backupLine?: { readonly text: string; readonly title?: string; readonly mapped: boolean } | null;
-  /**
-   * `RELEASE-0113-01` — server B is the primary (a failover): the return, its sound and its meter are read
-   * from the PRIMARY engine, so here they are not available — said plainly, and nothing is requested.
-   */
-  onBackupEngine?: boolean;
+  backupLine?: {
+    readonly text: string;
+    readonly title?: string;
+    readonly mapped: boolean;
+    readonly channel?: number;
+  } | null;
 }
 
 /** The head's neutral tags: `Output unknown` when it is, then the playlist's state in its words. */
@@ -156,15 +191,75 @@ export function MonitorPanel({
   word,
   channel,
   onAirRows,
-  programReturn,
+  returns,
   programSound,
+  monitorPreferences,
+  backupAvailable,
   air,
   backupLine = null,
-  onBackupEngine = false,
 }: Props): JSX.Element {
-  const { src, signal, onError } = programReturn;
-  // `RELEASE-0113-01` — after a failover none of the three is read: said, not shown as a dead feed.
-  const words = onBackupEngine ? NOT_ON_BACKUP_ENGINE_WORDS : PROGRAM_SIGNAL_WORDS[signal];
+  const liveCount = returns.filter((item) => item.programReturn.signal === 'live').length;
+  const stalled = returns.some((item) => item.programReturn.signal === 'stalled');
+  const overallSignal: ProgramSignal =
+    liveCount === returns.length && returns.length > 0 ? 'live' : stalled ? 'stalled' : 'none';
+  const words =
+    returns.length > 1
+      ? `${String(liveCount)} of ${String(returns.length)} return signals`
+      : PROGRAM_SIGNAL_WORDS[returns[0]?.programReturn.signal ?? 'none'];
+  const displayControls = backupAvailable ? (
+    <div
+      style={styles.controls}
+      className="cg-pgm-source-controls"
+      role="group"
+      aria-label="Programme picture source"
+    >
+      {(['A', 'B', 'both'] as const).map((mode) => (
+        <Button
+          key={mode}
+          variant="ghost"
+          aria-pressed={monitorPreferences.display === mode}
+          data-toggle-on={monitorPreferences.display === mode ? '' : undefined}
+          data-pgm-display-mode={mode}
+          title={mode === 'both' ? 'Show A and B' : `Show server ${mode}`}
+          onClick={() => monitorPreferences.setDisplay(mode)}
+        >
+          {mode === 'both' ? 'A+B' : mode}
+        </Button>
+      ))}
+    </div>
+  ) : (
+    <MonitorHeadFact>Server return</MonitorHeadFact>
+  );
+  const audioControls = (
+    <div style={styles.controls} className="cg-pgm-source-controls">
+      {backupAvailable && (
+        <select
+          className="cg-pgm-audio-select"
+          aria-label="Programme sound source"
+          title="Local programme sound and meter source"
+          value={monitorPreferences.audio}
+          onChange={(event) =>
+            monitorPreferences.setAudio(event.currentTarget.value as ProgramAudioChoice)
+          }
+        >
+          <option value="follow">Follow</option>
+          <option value="A">A</option>
+          <option value="B">B</option>
+        </select>
+      )}
+      <Button
+        variant="ghost"
+        aria-pressed={programSound.on}
+        data-toggle-on={programSound.on ? '' : undefined}
+        data-pgm-audio={programSound.status}
+        aria-label="Programme sound"
+        title={`Programme sound from ${monitorPreferences.audioEngine} — this console only`}
+        onClick={programSound.toggle}
+      >
+        <Icon icon={programSound.on ? Volume2 : VolumeX} size={13} />
+      </Button>
+    </div>
+  );
   return (
     <Panel
       id={id}
@@ -189,7 +284,7 @@ export function MonitorPanel({
         a state (the state is on the strip below); it names the source, so an operator reading
         a black box knows what would have filled it.
       */
-      actions={<MonitorHeadFact>Server return</MonitorHeadFact>}
+      actions={displayControls}
       /* REPAIR-03 A1, audit row 38 — the monitor box's own ground (--r-monitor-bg), a
          shade below the panels around it so the screen reads as inset. */
       style={{
@@ -207,34 +302,18 @@ export function MonitorPanel({
       */}
       <MonitorSignalStrip
         signal={words}
-        tone={onBackupEngine ? 'none' : signal}
+        tone={overallSignal}
         /*
           `PLAYOUT-FEATURES-01` E — the Playout's short-term loudness for this channel. `RELEASE-0113-01`:
           absent on the backup engine, where it is not read — not a reading at the floor.
         */
-        {...(onBackupEngine ? {} : { reading: <LoudnessBadge channel={channel} /> })}
+        reading={<LoudnessBadge channel={channel} engine={monitorPreferences.audioEngine} />}
         /*
           🔴 `PLAYOUT-FEATURES-01` E — THE PROGRAMME'S SOUND, at THIS console only: off by default, a
           pressed toggle while on (`data-toggle-on`, as PVW's guides), remembered per console.
           `RELEASE-0113-01`: ABSENT on the backup engine — a toggle that could play nothing is no control.
         */
-        {...(onBackupEngine
-          ? {}
-          : {
-              action: (
-                <Button
-                  variant="ghost"
-                  aria-pressed={programSound.on}
-                  data-toggle-on={programSound.on ? '' : undefined}
-                  data-pgm-audio={programSound.status}
-                  aria-label="Programme sound"
-                  title="Programme sound — this console only"
-                  onClick={programSound.toggle}
-                >
-                  <Icon icon={programSound.on ? Volume2 : VolumeX} size={13} />
-                </Button>
-              ),
-            })}
+        action={audioControls}
         fact={
           <MonitorHeadFact
             testId="data-monitor-air-count"
@@ -249,19 +328,45 @@ export function MonitorPanel({
         fact a sighted operator gets — there is an output here, and what state its return is in.
       */}
       <div style={styles.stage} data-pgm-stage="">
-        <div style={styles.screen} role="img" aria-label={`${title} — ${words}`} data-pgm-screen="">
-          {src !== null && !onBackupEngine && (
-            <ProgramPicture key={src} src={src} visible={signal === 'live'} onError={onError} />
-          )}
-          {(signal !== 'live' || onBackupEngine) && (
-            <>
-              <Icon icon={MonitorOff} size={22} />
-              <span style={styles.label}>{words}</span>
-            </>
-          )}
+        <div
+          style={styles.pictures}
+          className="cg-pgm-pictures"
+          data-pgm-picture-count={returns.length}
+        >
+          {returns.map(({ engine, physicalChannel, programReturn }) => {
+            const { src, signal, onError } = programReturn;
+            const tileWords = PROGRAM_SIGNAL_WORDS[signal];
+            return (
+              <div
+                key={engine}
+                style={styles.screen}
+                role="img"
+                aria-label={`${title} ${engine} CH ${String(physicalChannel ?? '—')} — ${tileWords}`}
+                data-pgm-screen={engine}
+              >
+                <bdi style={styles.tileLabel} dir="ltr">
+                  {engine} · CH {physicalChannel ?? '—'}
+                </bdi>
+                {src !== null && (
+                  <ProgramPicture
+                    key={src}
+                    src={src}
+                    visible={signal === 'live'}
+                    onError={onError}
+                  />
+                )}
+                {signal !== 'live' && (
+                  <>
+                    <Icon icon={MonitorOff} size={22} />
+                    <span style={styles.label}>{tileWords}</span>
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
         {/* `PLAYOUT-FEATURES-01` E — the programme meter, the Playout's own levels, beside the picture. */}
-        {!onBackupEngine && <VuMeter channel={channel} />}
+        <VuMeter channel={channel} engine={monitorPreferences.audioEngine} />
       </div>
       {/*
         🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — WHERE THIS CHANNEL'S LINES GO ON THE BACKUP ENGINE, in this

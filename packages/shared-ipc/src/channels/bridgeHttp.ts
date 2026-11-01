@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineChannel } from '../channel.js';
+import { PgmEngineSchema } from './pgmReturn.js';
 
 /**
  * 🔴 `CENTRAL-BRIDGE-01` (D9) — **WHAT CG BRIDGE SERVES OVER HTTP BESIDE ITS SOCKET, AND THE TICKET
@@ -35,6 +36,8 @@ export const PgmReturnTicketChannel = defineChannel(
   'pgmReturn.ticket',
   z.object({
     channel: z.number().int().positive(),
+    /** Missing is the legacy primary-only request: engine A. */
+    engine: PgmEngineSchema.optional(),
     stream: z.enum(['picture', 'audio']).optional(),
   }),
   TicketPathSchema,

@@ -16,8 +16,9 @@ mapped` in the warning tone
 With a server B, the channel's own view — never another channel's — SHALL carry one line: `Backup: CH M on
 <host>` while the mapping is in force, `Backup: not mapped — nothing is sent to the backup` when there is none,
 and `Backup: held until the next take — nothing is sent to the backup` while a changed mapping waits for a take.
-The reason a channel is not mapped SHALL ride the line's `title`. While server B is the primary, the PROGRAM
-pane SHALL say plainly `Not available on the backup engine` for the return, its sound and its meter.
+The reason a channel is not mapped SHALL ride the line's `title`. The original release left PROGRAM unavailable
+on server B; `R-104` / `monitor-backup-program-return` supersedes that temporary limitation with mapped A/B
+programme monitoring.
 
 #### Scenario: The mapped channel's line
 

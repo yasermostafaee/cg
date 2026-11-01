@@ -159,6 +159,12 @@ export class PgmAudioRelay {
     for (const feed of this.#feeds.values()) feed.redial();
   }
 
+  /** Mapping/host changed: close every listener so the next request resolves the new physical channel. */
+  reset(): void {
+    for (const feed of [...this.#feeds.values()]) feed.dispose();
+    this.#feeds.clear();
+  }
+
   dispose(): void {
     this.#disposed = true;
     for (const feed of [...this.#feeds.values()]) feed.dispose();

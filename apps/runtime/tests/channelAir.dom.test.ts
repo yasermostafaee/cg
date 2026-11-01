@@ -21,7 +21,7 @@ import { MonitorPanel, programHeadTags } from '../src/renderer/features/monitors
 import type { ProgramReturn } from '../src/renderer/hooks/useProgramReturn.js';
 import { signedInStub } from './support/authStub.js';
 import { stationSetupStub } from './support/stationSetup.js';
-import { SOUND_OFF, stubMeters } from './support/programPane.js';
+import { PRIMARY_MONITOR_PREFERENCES, SOUND_OFF, stubMeters } from './support/programPane.js';
 
 /**
  * 🔴 `UI-POLISH-01` G — **ON AIR OR NOT, BEFORE EVERY CHANNEL NAME AND ON THE PROGRAM HEAD; THE
@@ -256,8 +256,10 @@ function head(value: ChannelAir): ReactElement {
     word: 'PROGRAM',
     channel: 1,
     onAirRows: 0,
-    programReturn: NO_RETURN,
+    returns: [{ engine: 'A', physicalChannel: 1, programReturn: NO_RETURN }],
     programSound: SOUND_OFF,
+    monitorPreferences: PRIMARY_MONITOR_PREFERENCES,
+    backupAvailable: false,
     air: value,
   });
 }

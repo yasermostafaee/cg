@@ -681,6 +681,17 @@
         opacity: 0;
         animation: cg-rise 0.9s ease 1.15s forwards;
       }
+      #cg-splash-version {
+        color: #cfe8f8; /* mirrors: --r-accent-ink */
+        background: #173243; /* mirrors: --r-accent-fill */
+        border: 1px solid #31556a; /* mirrors: --r-accent-line */
+        border-radius: 4px;
+        padding: 4px 8px;
+        margin-top: -4px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
 
       @keyframes cg-rise {
         from {
@@ -944,15 +955,14 @@
 
       <div class="cg-splash__foot">
         <!--
-          The build stamp — `sha · YYYY-MM-DD`, computed ONCE by the plugin in
+          The build stamp — `vVERSION · sha · YYYY-MM-DD`, computed ONCE by the plugin in
           `vite.config.ts` and substituted for the comment below. The splash paints before
           the bundle, so a `define` global is not reachable here and the HTML transform is
           the only mechanism that works; the SAME object is exposed as `__CG_BUILD__` for
           any later in-app surface, so the two cannot disagree.
 
-          No version number: `0.0.0` is a placeholder, not a release identity. WHEN THE
-          PROJECT STARTS TAGGING RELEASES, prefix `v${version}` here — this line and
-          nowhere else.
+          A real package version is deliberately prominent on the first frame; development's
+          `0.0.0` placeholder is omitted by the shared build-stamp plugin.
         -->
         <span id="cg-splash-version"><!-- CG_BUILD_STAMP --></span>
         <span>CASPARCG · AMCP + OSC</span>

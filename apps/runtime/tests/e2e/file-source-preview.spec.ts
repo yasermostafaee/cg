@@ -83,3 +83,50 @@ test('an attached file opens raw content and parsed fields in a modal without st
   await expect(dirty).toHaveCount(0);
   expect(await app.updateCount()).toBe(0);
 });
+
+test('B-358 — a locked delimiter keeps its tooltip attached to the visible value', async ({
+  app,
+}) => {
+  await app.importVcg(
+    'locked-file-source.vcg',
+    await buildFileSourceVcg('tpl-e2e-locked-file-source', { lockFile: true }),
+    84,
+  );
+  await app.selectLayerRow(84);
+  await app.page.evaluate(() => {
+    const target = window as unknown as {
+      cg: {
+        textSources: {
+          read: (request: { path: string }) => Promise<{ name: string; content: string }>;
+        };
+      };
+    };
+    target.cg.textSources.read = (request) =>
+      Promise.resolve({ name: request.path, content: 'first|second' });
+  });
+
+  await app.inspector
+    .getByRole('button', { name: 'View headlines file content and fields' })
+    .click();
+  const dialog = app.page.getByRole('dialog', {
+    name: 'File content and fields · headlines',
+  });
+  const delimiter = dialog.getByLabel('headlines locked delimiter');
+  await expect(delimiter).toHaveText('pipe');
+  expect((await delimiter.boundingBox())?.width ?? 999).toBeLessThan(120);
+
+  await delimiter.hover();
+  const tooltip = app.page.getByRole('tooltip');
+  await expect(tooltip).toHaveText('|');
+  const delimiterBox = await delimiter.boundingBox();
+  const tooltipBox = await tooltip.boundingBox();
+  expect(delimiterBox).not.toBeNull();
+  expect(tooltipBox).not.toBeNull();
+  expect(
+    Math.abs(
+      (delimiterBox?.x ?? 0) +
+        (delimiterBox?.width ?? 0) / 2 -
+        ((tooltipBox?.x ?? 0) + (tooltipBox?.width ?? 0) / 2),
+    ),
+  ).toBeLessThanOrEqual(2);
+});

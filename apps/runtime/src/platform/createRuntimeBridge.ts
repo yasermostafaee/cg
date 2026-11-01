@@ -1,4 +1,10 @@
-import { consoleSourceCatalog, type StationChannel, type StationChannels } from '@cg/shared-ipc';
+import {
+  consoleSourceCatalog,
+  type PgmMeterReading,
+  type PgmReturnStatus,
+  type StationChannel,
+  type StationChannels,
+} from '@cg/shared-ipc';
 import type { AppInfo, BridgeLinkStatus, RuntimeBridge } from '../shared/runtime-bridge.js';
 import { MockRuntime } from './MockRuntime.js';
 import { resolveBridgeUrl } from './bridgeUrl.js';
@@ -129,6 +135,26 @@ function armOrphanSeam(mock: MockRuntime): void {
 }
 
 /**
+ * `R-104` — a browser-only programme-monitor station for Playwright. The normal offline mock must stay
+ * honestly offline; this narrow seed exists only when a spec explicitly arms `CG_E2E`, and lets the
+ * shipped UI be exercised with two independently stated return signals and engine-tagged meters.
+ */
+interface E2eProgramMonitorSeed {
+  readonly backupChannel: number | null;
+  readonly currentPrimary?: 'A' | 'B';
+  readonly statuses?: readonly PgmReturnStatus[];
+  readonly readings?: readonly PgmMeterReading[];
+}
+
+function e2eProgramMonitorSeed(): E2eProgramMonitorSeed | null {
+  const w = globalThis as typeof globalThis & {
+    CG_E2E?: boolean;
+    CG_E2E_PROGRAM_MONITOR?: E2eProgramMonitorSeed;
+  };
+  return w.CG_E2E === true ? (w.CG_E2E_PROGRAM_MONITOR ?? null) : null;
+}
+
+/**
  * The in-memory simulation, wrapped to satisfy the `RuntimeBridge` contract. Its link
  * status is a constant `offline-mock`, which the UI renders as a loud, persistent TEST MODE
  * banner — not a pill among pills.
@@ -141,7 +167,38 @@ function armOrphanSeam(mock: MockRuntime): void {
  */
 export function createMockBridge(): RuntimeBridge {
   const mock = new MockRuntime();
-  const OFFLINE: BridgeLinkStatus = 'offline-mock';
+  const programMonitor = e2eProgramMonitorSeed();
+  const linkStatus: BridgeLinkStatus = programMonitor === null ? 'offline-mock' : 'live';
+  const backupChannels =
+    programMonitor === null
+      ? { backup: null }
+      : {
+          backup: {
+            backupHost: '127.0.0.2',
+            channels: [
+              programMonitor.backupChannel === null
+                ? {
+                    channel: 1,
+                    state: 'not-mapped' as const,
+                    reason: 'No backup channel is mapped in this test station.',
+                  }
+                : {
+                    channel: 1,
+                    state: 'mapped' as const,
+                    backupChannel: programMonitor.backupChannel,
+                    source: 'playout' as const,
+                  },
+            ],
+          },
+        };
+  const connectionHealth =
+    programMonitor === null
+      ? mock.health()
+      : {
+          ...mock.health(),
+          backup: { label: 'B' as const, state: 'healthy' as const, amcpAxisOk: true },
+          currentPrimary: programMonitor.currentPrimary ?? ('A' as const),
+        };
   armCompletionSeam(mock);
   armOrphanSeam(mock);
 
@@ -158,7 +215,7 @@ export function createMockBridge(): RuntimeBridge {
     closeGuard: shellCloseGuard(),
 
     link: {
-      status: () => OFFLINE,
+      status: () => linkStatus,
       // Constant mode — never changes, so nothing to emit; the unsubscribe is a noop.
       onStatusChanged: () => () => undefined,
       // §4 — the offline mock never resyncs: there is no socket, so its stack is ALWAYS the
@@ -353,21 +410,25 @@ export function createMockBridge(): RuntimeBridge {
 
     // `RELEASE-0113-01` (`R-089`) — test mode has no backup engine: `null`, which draws nothing.
     backupChannels: {
-      state: () => Promise.resolve({ backup: null }),
+      state: () => Promise.resolve(backupChannels),
       onChanged: () => () => undefined,
       setEntries: () => Promise.resolve({ ok: false, message: 'Test mode has no backup engine.' }),
     },
 
     // `PLAYOUT-FEATURES-01` E — test mode has no Playout, so no meters: the meter sits at the floor.
     meters: {
-      onReading: () => () => undefined,
+      onReading: (handler) => {
+        for (const reading of programMonitor?.readings ?? [])
+          queueMicrotask(() => handler(reading));
+        return () => undefined;
+      },
     },
 
     connections: {
       config: () => Promise.resolve(mock.config()),
       setConfig: (req) => Promise.resolve(mock.setConfig(req)),
       templateServe: () => Promise.resolve(mock.templateServeInfo()),
-      health: () => Promise.resolve(mock.health()),
+      health: () => Promise.resolve(connectionHealth),
       failover: () => Promise.resolve(mock.failover()),
       onHealthChanged: (handler) => mock.healthChanged.subscribe(handler),
       onConfigChanged: (handler) => mock.configChanged.subscribe(handler),
@@ -404,10 +465,10 @@ export function createMockBridge(): RuntimeBridge {
       and nothing will ever change it. The pane then reads "No return signal", which is true.
     */
     pgmReturn: {
-      feedUrl: () => Promise.resolve(null),
+      feedUrl: () => Promise.resolve(programMonitor === null ? null : '/favicon.svg'),
       // `PLAYOUT-FEATURES-01` E — no relay, so no sound either.
       audioUrl: () => Promise.resolve(null),
-      status: () => Promise.resolve([]),
+      status: () => Promise.resolve([...(programMonitor?.statuses ?? [])]),
       onStatusChanged: () => () => undefined,
     },
 
@@ -467,7 +528,17 @@ export function createMockBridge(): RuntimeBridge {
 
     textSources: {
       read: (req) =>
-        Promise.reject(new Error(`Test mode has no CG Bridge text source for “${req.path}”.`)),
+        Promise.reject(new Error(`Test mode has no Shared files source for “${req.path}”.`)),
+    },
+
+    // Test mode has no Bridge service or service config. Keep the shape honest and refuse writes.
+    sharedFiles: {
+      get: () => Promise.resolve({ path: 'text-sources' }),
+      set: () =>
+        Promise.resolve({
+          ok: false,
+          message: 'Test mode has no Shared files path to change.',
+        }),
     },
 
     // `CHANNEL-TEMPLATES-01` — each channel's own list, the channel passed through as named.

@@ -64,9 +64,9 @@ B's M on N's behalf.
 
 ## After a failover
 
-The monitors (`pgm-return`, `pgm-audio`, the meters) read the primary ENGINE's host; reading B's channel M at
-`9250+M-1` would need the backup engine's feed and meters per channel, which this release does not build. The
-PROGRAM pane says plainly `Not available on the backup engine` while B is the primary.
+This release did not build B's monitor path and therefore made PROGRAM unavailable while B was primary.
+`R-104` / `monitor-backup-program-return` supersedes that temporary limitation: it reads B's mapped M at
+`9250+M-1` and uses the backup engine's own meter session without changing this mapping contract.
 
 ## `B-313`
 

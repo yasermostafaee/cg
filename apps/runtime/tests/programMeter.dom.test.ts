@@ -9,6 +9,7 @@ import { MonitorPanel } from '../src/renderer/features/monitors/MonitorPanel.js'
 import { usePgmAudio } from '../src/renderer/hooks/usePgmAudio.js';
 import type { ProgramReturn } from '../src/renderer/hooks/useProgramReturn.js';
 import { installMemoryStorage } from './support/localStorage.js';
+import { PRIMARY_MONITOR_PREFERENCES } from './support/programPane.js';
 
 /**
  * 🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — **THE PROGRAM PANE'S METER, BADGE AND SPEAKER, WIRED.** The readings
@@ -85,8 +86,10 @@ function Pane({ channel }: { channel: number }): ReactElement {
     word: 'PROGRAM',
     channel,
     onAirRows: 0,
-    programReturn: NO_RETURN,
+    returns: [{ engine: 'A', physicalChannel: channel, programReturn: NO_RETURN }],
     programSound: sound,
+    monitorPreferences: PRIMARY_MONITOR_PREFERENCES,
+    backupAvailable: false,
     air: NO_AIR,
   });
 }
@@ -185,7 +188,7 @@ describe('the programme speaker — off by default, per console, remembered', ()
     expect(speaker().hasAttribute('data-toggle-on')).toBe(true);
     expect(localStorage.getItem('cg.runtime.pgm-audio.v1')).toBe('{"on":true}');
     await vi.waitFor(() => {
-      expect(audioUrl).toHaveBeenCalledWith(2);
+      expect(audioUrl).toHaveBeenCalledWith(2, 'A');
     });
     expect(speaker().getAttribute('data-pgm-audio')).toBe('connecting');
 
@@ -210,7 +213,7 @@ describe('the programme speaker — off by default, per console, remembered', ()
       document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     });
     await vi.waitFor(() => {
-      expect(audioUrl).toHaveBeenCalledWith(1);
+      expect(audioUrl).toHaveBeenCalledWith(1, 'A');
     });
   });
 

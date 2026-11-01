@@ -66,6 +66,15 @@ describe('the programme return, behind a ticket', () => {
     const res = await c.ask('t', 'pgmReturn.ticket', { channel: 1 });
     expectRefusedWith(res.error, AUTH_REQUIRED_REFUSAL, 'an unsigned ticket');
   });
+
+  it('R-104 — engine B is not exposed when this station has no mapped backup channel', async () => {
+    const { handle, playout } = await bridge();
+    const c = await openClient(handle);
+    await c.authenticate('a', (await playout.issueToken({ user: 'operator' })).token);
+    const res = await c.ask('t', 'pgmReturn.ticket', { channel: 1, engine: 'B' });
+    expect(res.payload).toBeUndefined();
+    expect(res.error).toContain('No backup programme channel is mapped for CH 1');
+  });
 });
 
 describe('CG Bridge’s logs, downloaded', () => {

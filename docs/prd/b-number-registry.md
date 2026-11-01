@@ -3610,3 +3610,83 @@ Measured free before use: the registry named `P-073` as next free and the tracke
 found no existing `P-073` heading before filing.
 
 ⇒ **Next free after this entry is `B-358`**, **`D-167`**, **`P-074`**, **`R-104`** and **`C-049`**.
+
+### 2026-11-01 — `RELEASE-0126-01` takes `P-074`
+
+- `P-074` — release candidate `0.12.6`, the matching installer delivery that gives the installed
+  Bridge service least-privilege access to the local shared-text root — [platform.md](platform.md).
+
+Measured free before use: the registry named `P-074` as next free and the tracked PRD-heading sweep
+found no existing `P-074` heading before filing.
+
+⇒ **Next free after this entry is `B-358`**, **`D-167`**, **`P-075`**, **`R-104`** and **`C-049`**.
+
+### 2026-11-01 — fixed-file delimiter tooltip takes `B-358`
+
+- `B-358` — a locked delimiter's tooltip is centred over its stretched grid cell rather than the
+  visible value — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the registry named `B-358` as next free and the tracked PRD-heading sweep
+found no existing `B-358` heading before filing.
+
+⇒ **Next free after this entry is `B-359`**, **`D-167`**, **`P-075`**, **`R-104`** and **`C-049`**.
+
+### 2026-11-01 — locked Live Source multi-select Scale takes `B-359`
+
+- `B-359` — multi-select offered Scale while every selected Live Source had its aspect locked —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-359` as next free and the tracked PRD-heading sweep
+found no existing `B-359` heading before filing.
+
+⇒ **Next free after this entry is `B-360`**, **`D-167`**, **`P-075`**, **`R-104`** and **`C-049`**.
+
+### 2026-11-01 — symmetric Live Source auto-layout takes `B-360`
+
+- `B-360` — multi-frame compositions required manual per-plate sizing and positioning —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-360` as next free and the tracked PRD-heading sweep
+found no existing `B-360` heading before filing.
+
+⇒ **Next free after this entry is `B-361`**, **`D-167`**, **`P-075`**, **`R-104`** and **`C-049`**.
+
+### 2026-11-01 — dual-engine programme monitoring takes `R-104`
+
+- `R-104` — CG Control can optionally show server A and mapped server B programme returns together, with
+  one explicitly selected local sound/VU source and no on-air audio change.
+
+Measured free before use: the registry named `R-104` as next free; the tracked PRD-heading sweep found no
+`R-104` before filing.
+
+⇒ **Next free after this entry is `B-361`**, **`D-167`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-01 — Live Source appearance in multi-select takes `D-167`
+
+- `D-167` — aspect, aspect lock, fit, poster and frame styling remain editable when several Live
+  Source plates are selected — [designer.md](designer.md).
+
+Measured free before use: the registry named `D-167` as next free and the tracked PRD-heading sweep
+found no existing `D-167` heading before filing.
+
+⇒ **Next free after this entry is `B-361`**, **`D-168`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-01 — independent Live Source poster fitting takes `D-168`
+
+- `D-168` — a Live Source poster can fit its whole image or fill/crop the authoring plate without
+  changing the real live picture's fit — [designer.md](designer.md).
+
+Measured free before use: the registry named `D-168` as next free and the tracked PRD-heading sweep
+found no existing `D-168` heading before filing.
+
+⇒ **Next free after this entry is `B-361`**, **`D-169`**, **`P-075`**, **`R-105`** and **`C-049`**.
+
+### 2026-11-01 — distinguish selection from overlap errors takes `B-361`
+
+- `B-361` — selected overlapping frames now keep a separate bright-blue outer selection ring while
+  the red dashed error edge remains readable — [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: the registry named `B-361` as next free and the tracked PRD-heading sweep
+found no existing `B-361` heading before filing.
+
+⇒ **Next free after this entry is `B-362`**, **`D-169`**, **`P-075`**, **`R-105`** and **`C-049`**.

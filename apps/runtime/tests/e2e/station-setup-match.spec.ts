@@ -285,8 +285,8 @@ test('§3 — every rail item paints its whole box, in every mark state, and the
       'true',
     );
     const items = await measure();
-    // `DELTA-RUN-NEXT-VERSION-01-C` — six since Calendar joined Content.
-    expect(items, `${tab}: the rail lists six sections`).toHaveLength(6);
+    // Seven since Shared files joined Content.
+    expect(items, `${tab}: the rail lists seven sections`).toHaveLength(7);
     for (const item of items) {
       expect(item.h, `${tab} · ${item.label}: the item is the rail's one height`).toBe(44);
       expect(item.w, `${tab} · ${item.label}: the item is the rail's one width`).toBe(197);

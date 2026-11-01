@@ -84,14 +84,14 @@ export function createBuildStamp(appDir) {
   };
 
   /**
-   * What the splash's foot actually prints: `sha · YYYY-MM-DD`, and NO version.
-   *
-   * `0.0.0` is a placeholder, not a release identity — printing `v0.0.0` on the product's
-   * first frame would be a false claim about a release this project does not yet cut. The
-   * `version` field rides along in `__CG_BUILD__` regardless, so on the day releases are
-   * tagged only the render site changes.
+   * The release identity belongs on the FIRST frame: it lets support identify an installed
+   * build without waiting for the app or searching Windows. `0.0.0` remains a development
+   * placeholder and is deliberately omitted rather than advertised as a release.
    */
-  const stampText = `${stamp.sha} · ${stamp.builtAt}`;
+  const stampText =
+    stamp.version === '0.0.0'
+      ? `${stamp.sha} · ${stamp.builtAt}`
+      : `v${stamp.version} · ${stamp.sha} · ${stamp.builtAt}`;
 
   const plugin = {
     name: 'cg-build-stamp',

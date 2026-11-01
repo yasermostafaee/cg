@@ -1434,6 +1434,13 @@ export const VideoPlaceholderElementSchema = ElementBaseSchema.extend({
   type: z.literal('video-placeholder'),
   posterAssetId: IdSchema.optional(),
   /**
+   * D-168 — how the author-only poster is drawn inside the Live Source plate.
+   * This is deliberately separate from `fitMode`: the latter controls the real
+   * live picture on air, while this field affects only the Designer/Preview aid.
+   * Absent preserves the historical poster behaviour (`cover`).
+   */
+  posterFitMode: LiveFitModeSchema.optional(),
+  /**
    * D-147 — the author's DECLARATION about the source's shape, and now OPTIONAL.
    *
    * It was required. Making it optional is a WIDENING (every stored scene still

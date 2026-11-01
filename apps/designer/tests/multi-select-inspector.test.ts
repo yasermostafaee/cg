@@ -5,7 +5,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import type { Element } from '@cg/shared-schema';
 import { MemoryKv, MemoryWorkspace } from '@cg/storage';
 import { ProjectStore } from '../src/platform/ProjectStore.js';
-import { defaultShape, defaultText } from '../src/renderer/state/element-defaults.js';
+import {
+  defaultLiveSource,
+  defaultShape,
+  defaultText,
+} from '../src/renderer/state/element-defaults.js';
 import { MultiSelectSection } from '../src/renderer/features/inspector/MultiSelectSection.js';
 import { designerStore, editSceneOf } from '../src/renderer/state/store.js';
 import {
@@ -17,6 +21,24 @@ import { hasKeyframeAt } from '../src/renderer/features/timeline/keyframe-helper
 
 // React's act() needs this flag set for createRoot rendering under Vitest.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const noUnsub = (): void => {
+  /* no unsubscribe needed in tests */
+};
+const pendingList = (): Promise<never> => new Promise<never>(() => undefined);
+(window as unknown as { cg: unknown }).cg = {
+  assets: {
+    list: pendingList,
+    url: () => Promise.resolve(null),
+    onImported: () => noUnsub,
+    onCleared: () => noUnsub,
+  },
+  sharedImages: {
+    list: pendingList,
+    url: () => Promise.resolve(null),
+    onImported: () => noUnsub,
+  },
+};
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -39,6 +61,18 @@ function render(elements: readonly Element[]): HTMLDivElement {
 
 function input(c: HTMLDivElement, label: string): HTMLInputElement | null {
   return c.querySelector(`input[aria-label="${label}"]`);
+}
+
+function select(c: HTMLDivElement, label: string): HTMLSelectElement | null {
+  return c.querySelector(`select[aria-label="${label}"]`);
+}
+
+function choose(el: HTMLSelectElement, value: string): void {
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+    setter?.call(el, value);
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
 }
 
 /** Type into an input the way the browser does (native setter + input event). */
@@ -101,9 +135,177 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
     expect(c.querySelector('button[aria-label="Toggle Drop Shadow"]')).not.toBeNull();
     expect(c.querySelector('button[aria-label="Toggle Filter"]')).not.toBeNull();
   });
+
+  it('B-359 — with every selected Live Source aspect-locked, Scale is visible but disabled', () => {
+    const c = render([defaultLiveSource('live-a', 0, 0), defaultLiveSource('live-b', 640, 0)]);
+    const scaleX = input(c, 'Scale X');
+    const scaleY = input(c, 'Scale Y');
+    expect(scaleX?.disabled).toBe(true);
+    expect(scaleY?.disabled).toBe(true);
+    expect(scaleX?.title).toContain('aspect locked');
+  });
+
+  it('B-359 — freeing one selected Live Source keeps the shared Scale controls available', () => {
+    designerStore.setAspectLock('live-b', false);
+    const c = render([defaultLiveSource('live-a', 0, 0), defaultLiveSource('live-b', 640, 0)]);
+    expect(input(c, 'Scale X')?.disabled).toBe(false);
+    expect(input(c, 'Scale Y')?.disabled).toBe(false);
+  });
+
+  it('D-167 — homogeneous Live Sources expose appearance controls; a mixed-kind selection does not', () => {
+    const live = [defaultLiveSource('live-a', 0, 0), defaultLiveSource('live-b', 640, 0)];
+    const c = render(live);
+    expect(select(c, 'aspect')).not.toBeNull();
+    expect(
+      c.querySelector('button[aria-label="Keep aspect while resizing selected plates"]'),
+    ).not.toBeNull();
+    expect(select(c, 'fit')).not.toBeNull();
+    expect(select(c, 'poster')).not.toBeNull();
+    expect(input(c, 'stroke width')).not.toBeNull();
+    expect(c.querySelector('input[aria-label="stroke hex value"]')).not.toBeNull();
+
+    act(() =>
+      root!.render(
+        createElement(MultiSelectSection, { elements: [live[0]!, defaultShape('shape', 0, 0)] }),
+      ),
+    );
+    expect(select(c, 'aspect')).toBeNull();
+    expect(select(c, 'fit')).toBeNull();
+    expect(select(c, 'poster')).toBeNull();
+  });
+
+  it('D-167 — a mixed fit is inert until chosen, then updates all plates in one undo entry', () => {
+    const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
+    const { scene } = projects.newScene('demo', 'lower-third');
+    designerStore.setScene(scene, null);
+    designerStore.addElement({ ...defaultLiveSource('live-a', 0, 0), fitMode: 'contain' });
+    designerStore.addElement({ ...defaultLiveSource('live-b', 640, 0), fitMode: 'cover' });
+    const layer = () =>
+      editSceneOf(designerStore.get().scene, designerStore.get().activeCompositionId)!.layers[0]!;
+    const c = render(layer().children);
+    const fit = select(c, 'fit')!;
+    expect(fit.value).toBe('__cg_mixed__');
+    expect(layer().children.map((element) => (element as { fitMode?: string }).fitMode)).toEqual([
+      'contain',
+      'cover',
+    ]);
+
+    choose(fit, 'cover');
+    expect(layer().children.map((element) => (element as { fitMode?: string }).fitMode)).toEqual([
+      'cover',
+      'cover',
+    ]);
+    designerStore.undo();
+    expect(layer().children.map((element) => (element as { fitMode?: string }).fitMode)).toEqual([
+      'contain',
+      'cover',
+    ]);
+  });
+
+  it('D-168 — mixed poster fitting is truthful and fans out independently', () => {
+    const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
+    const { scene } = projects.newScene('demo', 'lower-third');
+    designerStore.setScene(scene, null);
+    designerStore.addElement({
+      ...defaultLiveSource('live-a', 0, 0),
+      posterAssetId: 'img-1',
+      posterFitMode: 'contain',
+      fitMode: 'cover',
+    });
+    designerStore.addElement({
+      ...defaultLiveSource('live-b', 640, 0),
+      posterAssetId: 'img-1',
+      posterFitMode: 'cover',
+      fitMode: 'contain',
+    });
+    const layer = () =>
+      editSceneOf(designerStore.get().scene, designerStore.get().activeCompositionId)!.layers[0]!;
+    const c = render(layer().children);
+    const posterFit = select(c, 'poster fit')!;
+    expect(posterFit.value).toBe('__cg_mixed__');
+
+    choose(posterFit, 'contain');
+    const plates = layer().children as readonly ReturnType<typeof defaultLiveSource>[];
+    expect(plates.map((element) => element.posterFitMode)).toEqual(['contain', 'contain']);
+    expect(plates.map((element) => element.fitMode)).toEqual(['cover', 'contain']);
+  });
+
+  it('D-167 — stroke width preserves each colour and repairs each plate to its own aspect', () => {
+    const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
+    const { scene } = projects.newScene('demo', 'lower-third');
+    designerStore.setScene(scene, null);
+    const a = defaultLiveSource('live-a', 0, 0);
+    const b = defaultLiveSource('live-b', 640, 0);
+    designerStore.addElement({
+      ...a,
+      expectedAspect: 16 / 9,
+      stroke: { color: '#ff0000', width: 2 },
+      transform: { ...a.transform, size: { w: 640, h: 300 } },
+    });
+    designerStore.addElement({
+      ...b,
+      expectedAspect: 1,
+      stroke: { color: '#0000ff', width: 4 },
+      transform: { ...b.transform, size: { w: 500, h: 360 } },
+    });
+    const layer = () =>
+      editSceneOf(designerStore.get().scene, designerStore.get().activeCompositionId)!.layers[0]!;
+    const c = render(layer().children);
+    const width = input(c, 'stroke width')!;
+    expect(width.value).toBe('');
+    expect(width.placeholder).toBe('—');
+
+    designerStore.markHistoryBoundary();
+    typeInto(width, '7');
+    act(() => width.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    const framed = layer().children as readonly ReturnType<typeof defaultLiveSource>[];
+    expect(framed.map((element) => element.stroke?.width)).toEqual([7, 7]);
+    expect(framed.map((element) => element.stroke?.color)).toEqual(['#ff0000', '#0000ff']);
+    designerStore.undo();
+    expect(
+      (layer().children as readonly ReturnType<typeof defaultLiveSource>[]).map(
+        (element) => element.stroke?.width,
+      ),
+    ).toEqual([2, 4]);
+
+    const repair = c.querySelector<HTMLButtonElement>(
+      'button[aria-label="Repair selected plates to aspect"]',
+    )!;
+    act(() => repair.click());
+    const repaired = layer().children as readonly ReturnType<typeof defaultLiveSource>[];
+    expect(repaired[0]!.transform.size.w / repaired[0]!.transform.size.h).toBeCloseTo(16 / 9);
+    expect(repaired[1]!.transform.size.w / repaired[1]!.transform.size.h).toBeCloseTo(1);
+  });
 });
 
 describe('MultiSelectSection — live edit + single-undo commit (D-053)', () => {
+  it('B-360 — auto layout changes every selected Live Source in one undo entry', () => {
+    const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
+    const { scene } = projects.newScene('demo', 'lower-third');
+    designerStore.setScene(scene, null);
+    designerStore.addElement(defaultLiveSource('live-1', 10, 20));
+    designerStore.addElement(defaultLiveSource('live-2', 30, 40));
+    designerStore.addElement(defaultLiveSource('live-3', 50, 60));
+    const layer = () =>
+      editSceneOf(designerStore.get().scene, designerStore.get().activeCompositionId)!.layers[0]!;
+    const before = layer().children.map((element) => ({ ...element.transform.position }));
+    const c = render(layer().children);
+    const button = Array.from(c.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent?.includes('More frames on top') === true,
+    );
+    expect(button).toBeDefined();
+
+    act(() => button!.click());
+    const arranged = layer().children;
+    expect(arranged[0]!.transform.position).not.toEqual(before[0]);
+    expect(arranged[0]!.transform.size.w / arranged[0]!.transform.size.h).toBeCloseTo(16 / 9);
+    expect(arranged[0]!.transform.position.y).toBeCloseTo(arranged[1]!.transform.position.y);
+    expect(arranged[2]!.transform.position.y).toBeGreaterThan(arranged[0]!.transform.position.y);
+
+    designerStore.undo();
+    expect(layer().children.map((element) => element.transform.position)).toEqual(before);
+  });
+
   it('a typed edit updates EVERY selected element live on keystroke, and one boundary on blur makes it ONE undo across all', () => {
     const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
     const { scene } = projects.newScene('demo', 'lower-third');

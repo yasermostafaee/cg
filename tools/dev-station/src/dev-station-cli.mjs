@@ -151,7 +151,9 @@ async function startFake(pair = false) {
     pair
       ? {
           backup: {
+            host: stationMod.FAKE_BACKUP_HOST,
             amcp: stationMod.FAKE_BACKUP_AMCP_PORT,
+            pgm: stationMod.FAKE_BACKUP_PGM_PORTS,
             password: stationMod.FAKE_BACKUP_PASSWORD,
           },
         }
@@ -173,7 +175,8 @@ async function startFake(pair = false) {
             address: backup.playout.baseUrl,
             username: playoutMod.FAKE_ADMIN.username,
             password: backup.playout.password,
-            caspar: `${host}:${String(backup.caspar.amcpPort)}`,
+            caspar: `${backup.host}:${String(backup.caspar.amcpPort)}`,
+            feeds: backup.feeds.map((feed) => feed.port),
           },
         }),
     stop: () => station.stop(),

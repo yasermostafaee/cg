@@ -135,7 +135,7 @@ describe('C-038 — the census: every route, classified', () => {
    * seventh route quietly joining this class is a privilege change that should have to be
    * argued for — so it reddens here, and the argument happens in review.
    */
-  it('exactly fifteen routes are station-admin: the configuration verbs, the unjoined catalogue, the two channel-scope doors, the bridge’s own sign-in on each engine, the backup channel entries, its logs, and the station’s Lunar Hijri adjustment', () => {
+  it('exactly sixteen routes are station-admin: the configuration verbs, the unjoined catalogue, the two channel-scope doors, the bridge’s own sign-in on each engine, the backup channel entries, its logs, and the station-wide calendar and shared-files settings', () => {
     const admin = [...routes().entries()]
       .filter(([, r]) => r.perm === 'station-admin')
       .map(([name]) => name)
@@ -190,6 +190,7 @@ describe('C-038 — the census: every route, classified', () => {
         station-admin rung for the catalogue's reason: only choosing a channel needs to ask.
       */
       'setup.channel-occupancy',
+      'sharedFiles.set',
       // `PLATE-BAND-01` — its channel footprint is the channels whose defaults it changes.
       'sources.set-assignments',
       'sources.set-config',
@@ -290,6 +291,7 @@ describe('C-038 — the census: every route, classified', () => {
       */
       'setup.check',
       'setup.route-address',
+      'sharedFiles.get',
       'sources.assignments',
       'sources.config',
       /*

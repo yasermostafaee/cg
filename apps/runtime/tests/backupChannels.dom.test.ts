@@ -11,6 +11,7 @@ import { StatusBar } from '../src/renderer/features/status/StatusBar.js';
 import { usePgmAudio } from '../src/renderer/hooks/usePgmAudio.js';
 import type { ProgramReturn } from '../src/renderer/hooks/useProgramReturn.js';
 import { installMemoryStorage } from './support/localStorage.js';
+import { PRIMARY_MONITOR_PREFERENCES } from './support/programPane.js';
 
 /**
  * 🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — **WHERE EACH CHANNEL'S LINES GO ON THE BACKUP ENGINE, SAID ON THE
@@ -143,10 +144,10 @@ describe('R-089 — the status bar: `BACKUP B · n of m channels mapped`', () =>
   });
 });
 
-describe('R-089 — the channel’s own view: its backup line, and the backup engine on air', () => {
+describe('R-089 / R-104 — the channel’s own backup line and programme return', () => {
   function Pane(props: {
     backupLine: { text: string; title?: string; mapped: boolean } | null;
-    onBackupEngine?: boolean;
+    showBackup?: boolean;
   }): ReactElement {
     const sound = usePgmAudio(null);
     const programReturn: ProgramReturn = { src: null, signal: 'none', onError: () => undefined };
@@ -156,11 +157,19 @@ describe('R-089 — the channel’s own view: its backup line, and the backup en
       word: 'PROGRAM',
       channel: 1,
       onAirRows: 0,
-      programReturn,
+      returns: props.showBackup
+        ? [
+            { engine: 'A', physicalChannel: 1, programReturn },
+            { engine: 'B', physicalChannel: 2, programReturn },
+          ]
+        : [{ engine: 'A', physicalChannel: 1, programReturn }],
       programSound: sound,
+      monitorPreferences: props.showBackup
+        ? { ...PRIMARY_MONITOR_PREFERENCES, display: 'both' }
+        : PRIMARY_MONITOR_PREFERENCES,
+      backupAvailable: props.showBackup ?? false,
       air: NO_AIR,
       backupLine: props.backupLine,
-      onBackupEngine: props.onBackupEngine ?? false,
     });
   }
 
@@ -190,20 +199,13 @@ describe('R-089 — the channel’s own view: its backup line, and the backup en
     expect(line()?.getAttribute('title')).toBe('The backup engine names no mirror of CH 1.');
   });
 
-  it('🔴 after a failover the pane says plainly that the return, sound and meter are not available — the toggle and the meter are absent; CONTROL: present on the primary', async () => {
+  it('🔴 when a mapped backup exists, A and B have separate labelled picture tiles and retain one audio monitor', async () => {
     stub();
-    let el = await mount(createElement(Pane, { backupLine: null, onBackupEngine: true }));
-    expect(el.querySelector('[data-pgm-screen]')?.textContent).toContain(
-      'Not available on the backup engine',
-    );
-    expect(el.querySelector('[data-pgm-audio]')).toBe(null);
-    await act(async () => {
-      root?.unmount();
-    });
-    root = null;
-    host?.remove();
-    el = await mount(createElement(Pane, { backupLine: null }));
-    expect(el.querySelector('[data-pgm-screen]')?.textContent).toContain('No return signal');
+    const el = await mount(createElement(Pane, { backupLine: null, showBackup: true }));
+    expect([...el.querySelectorAll('[data-pgm-screen]')].map((tile) => tile.textContent)).toEqual([
+      expect.stringContaining('A · CH 1'),
+      expect.stringContaining('B · CH 2'),
+    ]);
     expect(el.querySelector('[data-pgm-audio]')).not.toBe(null);
   });
 });

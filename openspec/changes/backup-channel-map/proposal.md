@@ -27,8 +27,8 @@ numbers.
 - **Reads from B mapped back:** B's OSC, its acknowledged clears and its `INFO` answers are taken as the station's
   channel N; a B message for an unmapped channel is ignored and logged once.
 - **After a failover:** every send to B uses M; a take on a channel with no mapping is refused in words (`No
-backup channel is known for CH N`) with nothing sent; the programme return, sound and meters say plainly that
-  they are not available on the backup engine.
+backup channel is known for CH N`) with nothing sent. This change originally left programme monitoring unavailable
+  on B; `R-104` / `monitor-backup-program-return` supersedes that release limitation.
 - **`B-313`'s guard** compares another CG Bridge's channels with B's mirror channels M (and with A's channels N
   on A's machine), per server where `/health` says so.
 - **The console:** the status bar's `BACKUP B · n of m channels mapped`; each channel's own `Backup: CH M on

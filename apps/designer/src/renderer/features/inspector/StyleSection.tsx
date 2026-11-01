@@ -1102,17 +1102,32 @@ function LivePosterRow({ element }: { element: VideoPlaceholderElement }): JSX.E
   const current = element.posterAssetId ?? '';
   const missing = current !== '' && !ids.includes(current);
   return (
-    <SelectField
-      label="poster"
-      value={current}
-      options={['', ...(missing ? [current] : []), ...ids]}
-      labels={['bars', ...(missing ? [`${current} (missing)`] : []), ...names]}
-      onCommit={(v) =>
-        designerStore.updateElement(element.id, {
-          posterAssetId: v === '' ? undefined : v,
-        } as Partial<Element>)
-      }
-    />
+    <>
+      <SelectField
+        label="poster"
+        value={current}
+        options={['', ...(missing ? [current] : []), ...ids]}
+        labels={['bars', ...(missing ? [`${current} (missing)`] : []), ...names]}
+        onCommit={(v) =>
+          designerStore.updateElement(element.id, {
+            posterAssetId: v === '' ? undefined : v,
+          } as Partial<Element>)
+        }
+      />
+      {current !== '' && (
+        <SelectField
+          label="poster fit"
+          value={element.posterFitMode ?? 'cover'}
+          options={LIVE_FIT_MODES}
+          labels={['Fit whole poster', 'Fill frame (crop edges)']}
+          onCommit={(posterFitMode) =>
+            designerStore.updateElement(element.id, {
+              posterFitMode: posterFitMode as LiveFitMode,
+            } as Partial<Element>)
+          }
+        />
+      )}
+    </>
   );
 }
 

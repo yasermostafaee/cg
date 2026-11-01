@@ -1183,7 +1183,7 @@ mod tests {
         assert!(s
             .texts()
             .contains(&"http://127.0.0.1:8080 · on this machine"));
-        assert!(s.texts().contains(&"SHARED TEXT FOLDER"));
+        assert!(s.texts().contains(&"SHARED FILES FOLDER"));
         assert!(s.widget(WidgetId::TextSourceField).is_some());
         assert!(s.widget(WidgetId::TextSourceBrowse).is_some());
         assert!(s.widget(WidgetId::PlayoutField).is_none());

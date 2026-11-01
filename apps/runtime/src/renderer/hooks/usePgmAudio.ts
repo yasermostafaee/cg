@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PgmEngine } from '@cg/shared-ipc';
 import {
   PGM_AUDIO_SAMPLE_RATE,
   PgmAudioPlayer,
@@ -58,7 +59,7 @@ function audioContextCtor(): AudioContextCtor | null {
   return g.AudioContext ?? null;
 }
 
-export function usePgmAudio(channel: number | null): PgmAudio {
+export function usePgmAudio(channel: number | null, engine: PgmEngine = 'A'): PgmAudio {
   const live = useLink() === 'live';
   const [on, setOn] = useState(readOn);
   const [state, setState] = useState<PgmAudioState>('stopped');
@@ -118,7 +119,7 @@ export function usePgmAudio(channel: number | null): PgmAudio {
     const ctx = context.current;
     if (ctx === null) return undefined;
     const player = new PgmAudioPlayer({
-      url: () => window.cg.pgmReturn.audioUrl(channel),
+      url: () => window.cg.pgmReturn.audioUrl(channel, engine),
       out: ctx as unknown as PcmOut,
       onState: setState,
     });
@@ -126,7 +127,7 @@ export function usePgmAudio(channel: number | null): PgmAudio {
     return () => {
       player.stop();
     };
-  }, [on, running, live, channel]);
+  }, [on, running, live, channel, engine]);
 
   useEffect(
     () => () => {

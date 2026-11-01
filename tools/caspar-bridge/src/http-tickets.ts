@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { HTTP_TICKET_TTL_MS } from '@cg/shared-ipc';
+import { HTTP_TICKET_TTL_MS, type PgmEngine } from '@cg/shared-ipc';
 
 /**
  * 🔴 `CENTRAL-BRIDGE-01` (D9) — **THE TICKETS THAT OPEN CG BRIDGE'S HTTP RESOURCES.**
@@ -16,6 +16,8 @@ import { HTTP_TICKET_TTL_MS } from '@cg/shared-ipc';
 export type TicketGrant =
   | {
       readonly kind: 'pgm';
+      /** Missing is the legacy primary-only grant: engine A. */
+      readonly engine?: PgmEngine;
       readonly channel: number;
       /** `PLAYOUT-FEATURES-01` E — the sound's ticket opens the sound only. Absent = the picture. */
       readonly stream?: 'picture' | 'audio';

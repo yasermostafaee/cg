@@ -331,6 +331,8 @@ describe('the wordmark and the foot', () => {
     // and a `%…%` token can collide with it.
     expect(html.match(/<!-- CG_BUILD_STAMP -->/g) ?? []).toHaveLength(1);
     expect(html).toContain('id="cg-splash-version"');
+    expect(code).toMatch(/#cg-splash-version\s*\{[^}]*font-size:\s*12px/);
+    expect(code).toMatch(/#cg-splash-version\s*\{[^}]*font-weight:\s*700/);
     // No `v0.0.0`: printing a semver the project does not maintain is a false claim of a
     // release identity.
     expect(code).not.toMatch(/v0\.0\.0/);

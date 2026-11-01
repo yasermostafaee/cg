@@ -1646,7 +1646,17 @@ class FakePlayoutServer implements FakePlayout {
   }
 
   get baseUrl(): string {
-    return `http://127.0.0.1:${String(this.#port)}`;
+    // Advertise the interface the fake actually bound. The paired fake station uses
+    // 127.0.0.1 for engine A and 127.0.0.2 for engine B so the two engines cannot
+    // accidentally read one another's programme feeds. Wildcard listeners remain
+    // reachable through loopback, which preserves the existing IPv4/IPv6 test setup.
+    const host =
+      this.#listenHost === '0.0.0.0' || this.#listenHost === '::'
+        ? '127.0.0.1'
+        : this.#listenHost.includes(':')
+          ? `[${this.#listenHost}]`
+          : this.#listenHost;
+    return `http://${host}:${String(this.#port)}`;
   }
 
   /** Byte-for-byte what `playout.issuer` must be configured as (ADR 0010 rule 1). */

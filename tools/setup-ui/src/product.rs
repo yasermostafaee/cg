@@ -66,7 +66,7 @@ pub struct Product {
     pub uses_webview2: bool,
     /// The Done page's one option.
     pub launch_label: &'static str,
-    /// The B-290 tile it wears: the dark one (CG Control's) or the light one (CG Designer's).
+    /// Whether the product tile is designed for a dark surround.
     pub dark_tile: bool,
 }
 
@@ -88,7 +88,7 @@ pub const BRIDGE: Product = Product {
     ],
     uses_webview2: false,
     launch_label: "Open CG Bridge status",
-    // CG Bridge has no window of its own; it is CG Control's service, so it wears CG Control's tile.
+    // The Bridge has its own teal connection mark, distinct from the Control console.
     dark_tile: true,
 };
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { definePublishChannel } from '../publish.js';
+import { PgmEngineSchema } from './pgmReturn.js';
 
 /**
  * 🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — **THE PROGRAMME'S LEVELS, AS THE PLAYOUT METERS THEM.**
@@ -30,6 +31,8 @@ const Channel = z.number().int().positive();
 /** One channel's bus levels, relayed. */
 export const PgmAudioLevelsSchema = z.object({
   kind: z.literal('audio'),
+  /** Missing on an old primary-only payload means A. */
+  engine: PgmEngineSchema.optional(),
   channel: Channel,
   dbfs: z.array(z.number().finite()).max(MAX_BUSES),
 });
@@ -39,6 +42,8 @@ export type PgmAudioLevels = z.infer<typeof PgmAudioLevelsSchema>;
 /** One channel's loudness and limiter, relayed. `null` — the Playout does not know it now. */
 export const PgmLoudnessSchema = z.object({
   kind: z.literal('loudness'),
+  /** Missing on an old primary-only payload means A. */
+  engine: PgmEngineSchema.optional(),
   channel: Channel,
   momentary: z.number().finite().nullable(),
   shortterm: z.number().finite().nullable(),

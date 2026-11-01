@@ -451,9 +451,13 @@ describe('R-102 — authored file-only and locked Bridge sources', () => {
     const dialog = document.body.querySelector<HTMLElement>(
       '[role="dialog"][aria-label="File content and fields · items"]',
     );
-    expect(dialog?.querySelector('[aria-label="items locked delimiter"]')?.textContent).toContain(
-      'pipe',
+    const lockedDelimiter = dialog?.querySelector<HTMLElement>(
+      '[aria-label="items locked delimiter"]',
     );
+    expect(lockedDelimiter?.textContent).toContain('pipe');
+    // B-358 — the global tooltip centres on this element's box, so the grid item must not
+    // stretch across the modal while its visible label sits at the start.
+    expect(lockedDelimiter?.classList.contains('cg-file-chip--content-sized')).toBe(true);
     expect(dialog?.textContent).toContain('Delimiter');
     expect(dialog?.textContent).toContain(String.raw`\\newsroom\CG Text\newsroom\headlines.txt`);
     expect(dialog?.querySelector('input[aria-label="Split items into items"]')).toBeNull();

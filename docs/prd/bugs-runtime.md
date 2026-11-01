@@ -13868,11 +13868,33 @@ installed CG Control. Designer shows the current bytes, while CG Control receive
 explicitly given the same shared root.
 
 **Cause:** the portable template correctly stores only `zirnevis.txt`, and Bridge correctly resolves
-it below `textSourceRoot`; however, the installed setup exposes no way to set that root. The existing
-schema/CLI support is therefore reachable only by manually editing protected service configuration.
+it below `textSourceRoot`. Setup now stores that root, but the folder picker runs as the administrator
+while Bridge runs as `NT SERVICE\CGBridge`; setup-user reachability did not prove service-account
+reachability. A local folder under another user's profile therefore produced `EPERM` even though its
+path was configured correctly.
 
-**Expected / Acceptance:** CG Bridge Setup offers an optional native **Shared text folder** choice for
+**Expected / Acceptance:** CG Bridge Setup offers an optional native **Shared files folder** choice for
 each server and stores it as `textSourceRoot`; no customer path is hardcoded. Existing values load and
 survive upgrades, `/TEXTSOURCEROOT=` provides the same silent contract, and the default remains valid
 when no shared folder is selected. A missing/unreachable folder is refused before installation. The
-template remains relative and Bridge's containment checks remain unchanged.
+template remains relative and Bridge's containment checks remain unchanged. For a local root, Setup
+adds inherited read/execute access for `NT SERVICE\CGBridge` on install and upgrade without granting
+write/modify/full or replacing the producer's ACL. For a direct remote UNC root, Setup preserves the
+station-specific path and warns that the Bridge server's computer account needs Read in both the
+remote share and NTFS permissions; no customer server or share is hardcoded. CG Control Station setup
+also shows the effective Bridge-server path and lets a station admin change it. The Bridge validates
+the new local/UNC folder with its own service identity before persisting it; a failure leaves the old
+path in force and explains which permission must be fixed.
+
+## [x] B-358 — Locked delimiter tooltip is centred over the stretched grid cell instead of its value ⟨priority: low — the `*` bubble appears detached from `star`⟩ — FILED 2026-11-01 from the owner's screenshot · `openspec/changes/prepare-0-12-6-installers/`
+
+**Repro / Actual:** open CG Control's fixed-file preview for a locked list and hover the delimiter tag
+`star`. The delegated tooltip containing `*` appears near the middle of the modal instead of next to
+the visible `star` value.
+
+**Cause:** the Tag is a CSS-grid item and stretches across the whole flexible value column. The text is
+painted at the start, but Tooltip correctly centres on the element's much wider bounding box.
+
+**Fix / Acceptance:** the locked delimiter Tag sizes/aligns to its own content (`justify-self: start`),
+so its bounding box and tooltip anchor are the visible value. The existing global tooltip placement,
+native-title suppression and viewport clamping remain unchanged.

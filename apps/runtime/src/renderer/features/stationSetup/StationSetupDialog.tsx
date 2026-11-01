@@ -24,6 +24,7 @@ import {
   Settings,
   Type,
   CalendarDays,
+  FolderOpen,
   type LucideIcon,
 } from 'lucide-react';
 import { DEFAULT_OSC_PORT, type ConnectionConfig, type TemplateServeInfo } from '@cg/shared-ipc';
@@ -50,6 +51,7 @@ import {
 } from '../fixedLayers/CandidateLayersSection.js';
 import { DelimitersSection } from '../inspector/DelimitersSection.js';
 import { CalendarSection } from '../calendar/CalendarSection.js';
+import { SharedFilesSection } from './SharedFilesSection.js';
 import { SourcesSection } from '../sources/SourcesSection.js';
 import { BackupServerDialog } from './BackupServerDialog.js';
 import { BackupChannelsCard } from './BackupChannelsCard.js';
@@ -149,6 +151,7 @@ const SECTION_ICONS: Record<StationSetupSection, LucideIcon> = {
   channel: Monitor,
   servers: Server,
   sources: Radio,
+  'shared-files': FolderOpen,
   delimiters: Type,
   calendar: CalendarDays,
   'candidate-layers': Layers,
@@ -648,6 +651,7 @@ export function StationSetupDialog({
       };
     return {
       sources: make('sources'),
+      sharedFiles: make('shared-files'),
       delimiters: make('delimiters'),
       calendar: make('calendar'),
       candidateLayers: make('candidate-layers'),
@@ -2032,6 +2036,12 @@ export function StationSetupDialog({
           {active === 'delimiters' && (
             <SetupSection id="delimiters">
               <DelimitersSection report={reporters.delimiters} />
+            </SetupSection>
+          )}
+
+          {active === 'shared-files' && (
+            <SetupSection id="shared-files">
+              <SharedFilesSection report={reporters.sharedFiles} />
             </SetupSection>
           )}
 

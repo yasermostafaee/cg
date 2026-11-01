@@ -83,6 +83,8 @@ import {
   CalendarGetChannel,
   CalendarSetChannel,
   type CalendarSettings,
+  SharedFilesGetChannel,
+  SharedFilesSetChannel,
   ChannelSettingsChangedChannel,
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
@@ -2213,14 +2215,21 @@ export class WebSocketRuntime implements RuntimeBridge {
     one. A refusal (a channel the sign-in does not hold) rejects, and the pane shows no picture.
   */
   readonly pgmReturn = {
-    feedUrl: async (channel: number): Promise<string | null> => {
-      const { path } = await this.#invoke(ipcChannels.PgmReturnTicketChannel, { channel });
+    feedUrl: async (
+      channel: number,
+      engine: ipcChannels.PgmEngine = 'A',
+    ): Promise<string | null> => {
+      const { path } = await this.#invoke(ipcChannels.PgmReturnTicketChannel, { channel, engine });
       return this.#bridgeHttpUrl(path);
     },
     // `PLAYOUT-FEATURES-01` E — the SOUND, behind a ticket for the sound.
-    audioUrl: async (channel: number): Promise<string | null> => {
+    audioUrl: async (
+      channel: number,
+      engine: ipcChannels.PgmEngine = 'A',
+    ): Promise<string | null> => {
       const { path } = await this.#invoke(ipcChannels.PgmReturnTicketChannel, {
         channel,
+        engine,
         stream: 'audio',
       });
       return this.#bridgeHttpUrl(path);
@@ -2523,6 +2532,13 @@ export class WebSocketRuntime implements RuntimeBridge {
     get: () => this.#invoke(CalendarGetChannel, undefined),
     set: (req: ChannelRequest<typeof CalendarSetChannel>) => this.#invoke(CalendarSetChannel, req),
     onChanged: (handler: (settings: CalendarSettings) => void) => this.#calendarSubs.add(handler),
+  };
+
+  /** The station path CG Bridge itself resolves shared-file names below. */
+  readonly sharedFiles = {
+    get: () => this.#invoke(SharedFilesGetChannel, undefined),
+    set: (req: ChannelRequest<typeof SharedFilesSetChannel>) =>
+      this.#invoke(SharedFilesSetChannel, req),
   };
 }
 

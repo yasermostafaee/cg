@@ -31,6 +31,21 @@ test.describe('Multi-select inspector parity + per-shape boxes (D-049)', () => {
     await app.addRectangle(B);
     await app.addRectangle(C);
     await app.clickCanvas(inA);
+    // B-361 — single selection uses the same crisp blue / dark / blue rings as
+    // multi-select; the exact one-device-pixel frame remains separate.
+    await expect(app.page.getByTestId('gizmo-selection-outer')).toHaveAttribute(
+      'stroke-width',
+      '10',
+    );
+    await expect(app.page.getByTestId('gizmo-selection-separator')).toHaveAttribute(
+      'stroke-width',
+      '4',
+    );
+    await expect(app.page.getByTestId('gizmo-selection-border')).toHaveAttribute(
+      'stroke-width',
+      '2',
+    );
+    await expect(app.page.getByTestId('gizmo-frame')).toBeVisible();
     await app.shiftClickCanvas(inB);
     await expect(app.multiInspector).toBeVisible();
 
@@ -46,6 +61,13 @@ test.describe('Multi-select inspector parity + per-shape boxes (D-049)', () => {
     // Per-shape selection boxes, and NO single group bounding box.
     await expect(app.multiBoxes).toHaveCount(2);
     await expect(app.multiBbox).toHaveCount(0);
+    // B-361 — selection has a separate bright outer ring, so the red dashed
+    // overlap mark can remain visible on the exact element edge beneath it.
+    const selectionHalo = await app.multiBoxes
+      .first()
+      .evaluate((element) => getComputedStyle(element).boxShadow);
+    expect(selectionHalo).not.toBe('none');
+    expect(selectionHalo).toContain('56, 189, 248');
 
     // Group move: both per-shape boxes translate by the SAME delta; one undo
     // reverts the whole move.

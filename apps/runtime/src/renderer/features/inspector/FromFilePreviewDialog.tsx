@@ -208,7 +208,7 @@ export function FromFilePreviewDialog({
         <div style={styles.split}>
           <span>Delimiter</span>
           <Tag
-            className="cg-file-chip"
+            className="cg-file-chip cg-file-chip--content-sized"
             aria-label={`${fieldId} locked delimiter`}
             title={state.split ? state.delimiter : 'Whole file'}
           >

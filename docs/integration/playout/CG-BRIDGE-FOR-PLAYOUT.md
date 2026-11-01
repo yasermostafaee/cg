@@ -227,7 +227,7 @@ and does not update an on-air graphic by itself. The default local location is:
 ```
 
 Create that folder as an administrator and let the system that produces the text save UTF-8 files
-there. From `0.12.5`, CG Bridge Setup exposes **Shared text folder** on its server page: browse to the
+there. From `0.12.6`, CG Bridge Setup exposes **Shared files folder** on its server page: browse to the
 station's existing local or UNC folder and Setup writes `textSourceRoot`. The silent equivalent is
 `/TEXTSOURCEROOT="\\fileserver\newsroom\CG Text"`; omitting it on an upgrade preserves the stored
 value. No customer path is compiled into the installer.
@@ -243,9 +243,12 @@ UNC view in Designer. To use a remote network share directly, the resulting conf
 }
 ```
 
-The service only reads these files. For a remote UNC root, give the Windows computer account running
-CG Bridge read access to both the share and NTFS (for example `DOMAIN\\CGSERVER$`); give the producing
-application write access. Paths
+The service only reads these files. Setup automatically grants `NT SERVICE\CGBridge` inherited
+read/execute access when Bridge is configured with a local folder, and repairs that grant on an
+upgrade. It never grants write, modify, or full control to the service and does not replace the
+producer's permissions. For a remote UNC root, give the Bridge server's Windows computer account
+read access to both the share and NTFS (for example `DOMAIN\\CGSERVER$`); Setup warns because it
+cannot safely change permissions on another server. Give the producing application write access. Paths
 stored by Designer stay relative: on the authoring workstation, use **Browse shared file…** and
 choose the text file directly inside this same `textSourceRoot` share, then verify its live preview.
 Designer saves only a filename such as `crawl.txt`; drive paths, UNC roots, `..`, preview bytes and
@@ -346,9 +349,10 @@ What CG Bridge reads from server B — OSC, `INFO`, layers it finds at start —
 channel of the backup that is not a mirror in force is ignored and logged once.
 
 **After a failover** CG Bridge sends on M. A take on a channel with no backup channel is refused before anything
-is sent: `No backup channel is known for CH N.` CG Control's PROGRAM return, its sound and its loudness meter are
-read from the primary engine; on the backup they say `Not available on the backup engine` instead of reading
-another channel.
+is sent: `No backup channel is known for CH N.` For a channel with a valid mapping, CG Control can monitor A/N,
+B/M or both programme returns. Picture tiles stay physically labelled `A · CH N` and `B · CH M`; one local
+sound/meter source is selected (`Follow primary`, A or B), never mixed. These monitor choices do not change the
+on-air route or audio. With no valid mapping, no B monitor route or ticket exists.
 
 **What `/health` says.** `casparcg.servers[].channels` lists, per core, the channels CG Bridge writes there in
 that core's own numbers — server A the declared channels, server B the mirrors in force. A declared channel with

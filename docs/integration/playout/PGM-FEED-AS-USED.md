@@ -54,8 +54,10 @@ The core listens on `0.0.0.0`; the Playout rewrites its firewall rule on every s
 channel is readable by anyone on the station's LAN**, whatever CG Control does. Limiting it to the
 bridge would break the Playout's own clients; that decision is the owner's and the Playout team's.
 CG Control's own relay adds nothing to that exposure: since `CENTRAL-BRIDGE-01` (D9) it is served on CG
-Bridge's control port — `/pgm/<n>` for the picture, `/pgm/<n>/sound` for the sound — and opens only
-with a short-lived ticket a signed-in console was given for that channel over its verified socket.
+Bridge's control port — `/pgm/<n>` for A's picture and `/pgm/<n>/sound` for A's sound; `R-104` adds
+`/pgm/B/<n>` and `/pgm/B/<n>/sound` for the mapped B engine. Here `<n>` is always the authorized logical
+station channel. CG Bridge resolves B's physical M internally, and every route opens only with a short-lived
+ticket a signed-in console was given for that engine, channel and stream over its verified socket.
 
 ## What CG Control never does
 
@@ -81,9 +83,14 @@ with a short-lived ticket a signed-in console was given for that channel over it
   it can be. The meter beside the picture does not come from this stream: it is the Playout's
   `GET /api/cg/meters`, read once by CG Bridge.
 
-## Named, not built
+## The mapped backup return — built by `R-104`
 
-- **A backup Playout's return.** The relay reads the primary Playout host only.
+- A console may select A, mapped B, or A+B. Server identities and physical channel labels remain stable across
+  failover; B is offered only when the current validated N → M mapping exists.
+- B reads the backup Playout host at `9250 + M − 1`, with the same well-behaved-client rules as A. The browser
+  asks only for logical N; it cannot name M as authority.
+- Sound and meters remain one selected local monitor path: `Follow primary`, explicit A or explicit B. They are
+  never mixed, and the selection sends no command that can change on-air audio.
 
 ## Cost, measured
 

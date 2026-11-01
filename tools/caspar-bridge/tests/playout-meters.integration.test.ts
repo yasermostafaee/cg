@@ -132,9 +132,9 @@ describe('PLAYOUT-FEATURES-01 E — the Playout’s meters, relayed', () => {
 
     // The Playout's own numbers, relayed as they came (16 buses, 0.1 dB).
     const audio = readings(one).find((r) => r.kind === 'audio');
-    expect(audio).toEqual({ kind: 'audio', channel: 1, dbfs: LEVELS_1.dbfs });
+    expect(audio).toEqual({ kind: 'audio', engine: 'A', channel: 1, dbfs: LEVELS_1.dbfs });
     const loud = readings(one).find((r) => r.kind === 'loudness');
-    expect(loud).toEqual({ kind: 'loudness', channel: 1, ...LEVELS_1.loudness });
+    expect(loud).toEqual({ kind: 'loudness', engine: 'A', channel: 1, ...LEVELS_1.loudness });
     // Channel 2's loudness is unknown: no `loudness` for it — never a stale or invented one.
     expect(readings(two).some((r) => r.kind === 'loudness')).toBe(false);
   }, 60_000);

@@ -39,7 +39,7 @@ pub const SEPARATE_LABEL: &str = "CG Bridge runs on a separate server (not on th
 pub const PLAYOUT_LABEL: &str = "Playout address";
 pub const AMCP_LABEL: &str = "CasparCG (AMCP) host";
 pub const ADDRESS_LABEL: &str = "This server's address";
-pub const TEXT_SOURCE_LABEL: &str = "Shared text folder";
+pub const TEXT_SOURCE_LABEL: &str = "Shared files folder";
 pub const TEXT_SOURCE_PLACEHOLDER: &str = r"Optional · e.g. \\server\news-text";
 pub const OTHER_LABEL: &str = "Other";
 /// The Playout field's placeholder: what to type, in the form CG Control's first question takes.

@@ -395,14 +395,13 @@ describe('the relay — a well-behaved client', () => {
 
   it('dials the RULE port by default — channel 2 on 9251', async () => {
     /*
-      ON `127.0.0.2`, not `127.0.0.1`: the rule port is a FIXED port, and a dev station on this
-      host (`pnpm dev:station --fake`) holds `127.0.0.1:9251` with its own fake feed, which failed
-      the gate with EADDRINUSE. The port under test is unchanged — the relay's own rule, 9251, a
-      real listener and a real dial — only the loopback address is one no station binds.
+      ON `127.0.0.3`, outside the paired fake station's A/B addresses: the rule port is a FIXED
+      port, and a dev station may hold 127.0.0.1:9251 (A) and 127.0.0.2:9251 (B). The port under
+      test is unchanged — the relay's own rule, 9251; a third loopback address only isolates it.
     */
-    const f = await feed({ port: pgmPort(2), host: '127.0.0.2' });
+    const f = await feed({ port: pgmPort(2), host: '127.0.0.3' });
     const relay = new PgmReturnRelay({
-      resolveTarget: () => Promise.resolve({ address: '127.0.0.2', hostHeader: '127.0.0.2' }),
+      resolveTarget: () => Promise.resolve({ address: '127.0.0.3', hostHeader: '127.0.0.3' }),
       log: () => undefined,
     });
     relays.push(relay);
@@ -570,7 +569,7 @@ describe('the relay route — the control port, behind a ticket, bytes untouched
       4000,
       'a live publish',
     );
-    expect(published()[0]).toEqual([{ channel: 1, state: 'connecting' }]);
+    expect(published()[0]).toEqual([{ engine: 'A', channel: 1, state: 'connecting' }]);
     expect(f.connections).toHaveLength(1);
     // The request went to the configured host with its name in `Host`.
     expect(f.connections[0]?.received.toString('latin1')).toBe(
@@ -588,7 +587,7 @@ describe('the relay route — the control port, behind a ticket, bytes untouched
     await waitFor(() => frames.some((fr) => fr.type === 'response' && fr.id === 'b'), 3000, 'read');
     const second = frames.find((fr) => fr.type === 'response' && fr.id === 'b');
     expect(second?.type === 'response' ? second.payload : null).toEqual([
-      { channel: 1, state: 'live' },
+      { engine: 'A', channel: 1, state: 'live' },
     ]);
 
     // The console leaves: the upstream closes and the list empties.

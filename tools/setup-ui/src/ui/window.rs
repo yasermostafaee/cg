@@ -619,14 +619,14 @@ fn run_effect(hwnd: HWND, e: Effect) {
                 })
                 .unwrap_or_default();
                 if let Some(chosen) =
-                    pick_exact_folder(hwnd, &start, "Choose the shared text folder")
+                    pick_exact_folder(hwnd, &start, "Choose the shared files folder")
                 {
                     APP.with(|a| {
                         if let Ok(mut g) = a.try_borrow_mut() {
                             if let Some(app) = g.as_mut() {
                                 app.model.server.text_source.set(&chosen);
                                 app.model.server.text_source_changed();
-                                log_line(&app.log, &format!("shared text folder chosen: {chosen}"));
+                                log_line(&app.log, &format!("shared files folder chosen: {chosen}"));
                                 app.rebuild();
                             }
                         }

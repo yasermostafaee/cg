@@ -149,10 +149,9 @@ test('the foot carries a build stamp that identifies the running build', async (
   await armMockBoot(page);
   await page.goto('/');
 
-  // The SHAPE, never the literal — it changes every build. `nogit` is the documented
-  // fallback for a tree built without `.git` (release tarball, Docker layer).
+  // P-074 — the release identity is visible before the app opens. The SHA still changes per build.
   const stamp = (await splash(page).locator('#cg-splash-version').textContent())?.trim();
-  expect(stamp).toMatch(/^([0-9a-f]{7,}|nogit) · \d{4}-\d{2}-\d{2}$/);
+  expect(stamp).toMatch(/^v0\.12\.6 · ([0-9a-f]{7,}|nogit) · \d{4}-\d{2}-\d{2}$/);
 });
 
 test.describe('reduced motion', () => {

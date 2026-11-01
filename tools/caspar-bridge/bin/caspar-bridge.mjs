@@ -118,6 +118,7 @@ import {
   ConsoleHttpServer,
   applyFirewallRules,
   checkReservedPorts,
+  createSharedFilesController,
   createBridge,
   defaultPlayoutConfigPath,
   findPerUserStates,
@@ -334,6 +335,17 @@ const textSourceRoot =
   typeof args['text-source-root'] === 'string'
     ? args['text-source-root']
     : path.join(stateHome, 'text-sources');
+
+/*
+  `B-357` — CG Control may change the station's shared-files path after installation. The path is
+  interpreted HERE, on the Bridge server. A remote console never browses or validates its own disk.
+  The service proves it can read the folder before the live boundary moves; an unreadable candidate
+  leaves both memory and cg-bridge.json unchanged.
+*/
+const sharedFiles = createSharedFilesController({
+  initialPath: textSourceRoot,
+  ...(serviceConfig === null ? {} : { serviceConfigFile: serviceConfig.file }),
+});
 
 const persistPath =
   typeof args['persist-path'] === 'string'
@@ -800,6 +812,7 @@ const bridgeOptions = {
   templatesDir,
   pagesDir,
   textSourceRoot,
+  sharedFiles,
   sourceCatalogPath,
   sourceAssignmentsPath,
   playoutInputsPath,

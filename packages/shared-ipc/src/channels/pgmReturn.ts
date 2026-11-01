@@ -31,8 +31,14 @@ export const PGM_RETURN_STATES = ['connecting', 'live', 'stalled', 'unavailable'
 
 export type PgmReturnState = (typeof PGM_RETURN_STATES)[number];
 
+/** The physical programme engine. Missing on an old primary-only payload means A. */
+export const PGM_ENGINES = ['A', 'B'] as const;
+export const PgmEngineSchema = z.enum(PGM_ENGINES);
+export type PgmEngine = z.infer<typeof PgmEngineSchema>;
+
 /** One WATCHED channel's return. A channel nobody is watching has no entry at all. */
 export const PgmReturnStatusSchema = z.object({
+  engine: PgmEngineSchema.optional(),
   channel: z.number().int().positive(),
   state: z.enum(PGM_RETURN_STATES),
 });
@@ -61,8 +67,10 @@ export const PgmReturnStatusChangedChannel = definePublishChannel(
  */
 export const PGM_RETURN_PATH_PREFIX = '/pgm/';
 
-export function pgmReturnPath(channel: number): string {
-  return `${PGM_RETURN_PATH_PREFIX}${String(channel)}`;
+export function pgmReturnPath(channel: number, engine: PgmEngine = 'A'): string {
+  return engine === 'A'
+    ? `${PGM_RETURN_PATH_PREFIX}${String(channel)}`
+    : `${PGM_RETURN_PATH_PREFIX}B/${String(channel)}`;
 }
 
 /**
@@ -75,6 +83,6 @@ export function pgmReturnPath(channel: number): string {
  * The bytes are the core's WAV stream unchanged; only the path and the type (`application/octet-stream`)
  * are the relay's own.
  */
-export function pgmAudioPath(channel: number): string {
-  return `${pgmReturnPath(channel)}/sound`;
+export function pgmAudioPath(channel: number, engine: PgmEngine = 'A'): string {
+  return `${pgmReturnPath(channel, engine)}/sound`;
 }

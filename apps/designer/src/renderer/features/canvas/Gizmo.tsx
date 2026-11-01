@@ -197,6 +197,7 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
   // centered on the RENDERED (layout-quantized) edge, stays crisp at any dpr and remains
   // HONEST for fractional placement (the border visibly sits between grid lines — see D-122).
   const frameStrokePx = 1 / (window.devicePixelRatio > 0 ? window.devicePixelRatio : 1);
+  const framePoints = `${String(c.tl.x)},${String(c.tl.y)} ${String(c.tr.x)},${String(c.tr.y)} ${String(c.br.x)},${String(c.br.y)} ${String(c.bl.x)},${String(c.bl.y)}`;
 
   /** Resize cursor for a handle: the double-arrow points along centre→handle. */
   const resizeCur = (p: ScreenPoint): string => resizeCursor(screenAngleDeg(center, p));
@@ -251,9 +252,51 @@ export function Gizmo({ element, scale, currentFrame }: Props): JSX.Element {
         }}
         aria-hidden
       >
+        <defs>
+          {/* Keep the crisp selection rings OUTSIDE the element, matching the
+              multi-selection box-shadow instead of covering the poster within. */}
+          <mask id="cg-single-selection-outside" maskUnits="userSpaceOnUse">
+            <rect x="0" y="0" width="100%" height="100%" fill="white" />
+            <polygon
+              points={framePoints}
+              fill="black"
+              stroke="black"
+              strokeWidth={2}
+              strokeLinejoin="round"
+            />
+          </mask>
+        </defs>
+        {/* B-361 — the same crisp blue / dark separator / blue treatment as
+            multi-selection. The measured one-device-pixel polygon remains below. */}
+        <polygon
+          data-testid="gizmo-selection-outer"
+          points={framePoints}
+          fill="none"
+          stroke={colors.accent}
+          strokeWidth={10}
+          strokeLinejoin="round"
+          mask="url(#cg-single-selection-outside)"
+        />
+        <polygon
+          data-testid="gizmo-selection-separator"
+          points={framePoints}
+          fill="none"
+          stroke={colors.onAccent}
+          strokeWidth={4}
+          strokeLinejoin="round"
+          mask="url(#cg-single-selection-outside)"
+        />
+        <polygon
+          data-testid="gizmo-selection-border"
+          points={framePoints}
+          fill="none"
+          stroke={colors.accent}
+          strokeWidth={2}
+          strokeLinejoin="round"
+        />
         <polygon
           data-testid="gizmo-frame"
-          points={`${String(c.tl.x)},${String(c.tl.y)} ${String(c.tr.x)},${String(c.tr.y)} ${String(c.br.x)},${String(c.br.y)} ${String(c.bl.x)},${String(c.bl.y)}`}
+          points={framePoints}
           fill="none"
           stroke={colors.accent}
           strokeWidth={frameStrokePx}

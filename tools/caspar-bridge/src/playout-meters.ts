@@ -4,6 +4,7 @@ import net from 'node:net';
 import { StringDecoder } from 'node:string_decoder';
 import {
   parsePlayoutMeterEvent,
+  type PgmEngine,
   type PgmMeterReading,
   type PlayoutMeterEvent,
 } from '@cg/shared-ipc';
@@ -61,8 +62,10 @@ export const DEFAULT_PLAYOUT_METERS_TUNING: PlayoutMetersTuning = {
 const MAX_EVENT_BYTES = 64 * 1024;
 
 export interface PlayoutMetersReaderOptions {
+  /** Physical engine identity on relayed readings. Omitted only by legacy/unit seams. */
+  readonly engine?: PgmEngine;
   /** `GET /api/cg/meters` at the configured Playout (`playout292Url(…, 'meters')`). */
-  readonly url: string;
+  readonly url: string | (() => string | null);
   /** The bearer — the bridge's own session, checked at use — or `null`: wait, and ask again. */
   readonly bearer: () => string | null;
   /** The Playout's `casparHost` + `casparChannel` → this station's channel, or `null`. */
@@ -72,7 +75,8 @@ export interface PlayoutMetersReaderOptions {
 }
 
 export class PlayoutMetersReader {
-  readonly #url: URL;
+  readonly #engine: PgmEngine | undefined;
+  readonly #url: () => string | null;
   readonly #bearer: () => string | null;
   readonly #channelFor: (casparHost: string, casparChannel: number) => number | null;
   readonly #tuning: PlayoutMetersTuning;
@@ -90,7 +94,9 @@ export class PlayoutMetersReader {
   #disposed = false;
 
   constructor(options: PlayoutMetersReaderOptions) {
-    this.#url = new URL(options.url);
+    this.#engine = options.engine;
+    const configuredUrl = options.url;
+    this.#url = typeof configuredUrl === 'string' ? () => configuredUrl : configuredUrl;
     this.#bearer = options.bearer;
     this.#channelFor = options.channelFor;
     this.#tuning = { ...DEFAULT_PLAYOUT_METERS_TUNING, ...(options.tuning ?? {}) };
@@ -194,8 +200,14 @@ export class PlayoutMetersReader {
       this.#schedule(this.#tuning.backoffBaseMs * 2);
       return;
     }
+    const rawUrl = this.#url();
+    if (rawUrl === null) {
+      this.#schedule(this.#tuning.backoffBaseMs * 2);
+      return;
+    }
+    const url = new URL(rawUrl);
     const generation = ++this.#generation;
-    void pinnedIPv4(this.#url.hostname)
+    void pinnedIPv4(url.hostname)
       .catch(() => null)
       .then((ip) => {
         if (generation !== this.#generation) return;
@@ -203,12 +215,11 @@ export class PlayoutMetersReader {
           this.#schedule(this.#backoff());
           return;
         }
-        this.#stream(generation, ip, bearer);
+        this.#stream(generation, url, ip, bearer);
       });
   }
 
-  #stream(generation: number, ip: string, bearer: string): void {
-    const url = this.#url;
+  #stream(generation: number, url: URL, ip: string, bearer: string): void {
     const secure = url.protocol === 'https:';
     const bareHost = url.hostname.replace(/^\[|\]$/g, '');
     this.#connectCount++;
@@ -320,9 +331,15 @@ export class PlayoutMetersReader {
     const channel = this.#channelFor(event.casparHost, event.casparChannel);
     if (channel === null) return null;
     return event.kind === 'audio'
-      ? { kind: 'audio', channel, dbfs: [...event.dbfs] }
+      ? {
+          kind: 'audio',
+          ...(this.#engine !== undefined ? { engine: this.#engine } : {}),
+          channel,
+          dbfs: [...event.dbfs],
+        }
       : {
           kind: 'loudness',
+          ...(this.#engine !== undefined ? { engine: this.#engine } : {}),
           channel,
           momentary: event.momentary,
           shortterm: event.shortterm,

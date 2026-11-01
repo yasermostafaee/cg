@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react';
-import { METER_FLOOR_DBFS, type PgmLoudness } from '@cg/shared-ipc';
+import { METER_FLOOR_DBFS, type PgmEngine, type PgmLoudness } from '@cg/shared-ipc';
 import {
   isLimiting,
   loudnessText,
@@ -23,7 +23,13 @@ import { meterStore } from './meterStore.js';
  * smallest window (1100 × 700, measured), only in a narrower browser — a container query in `controls.css`
  * shows the first TWO (the programme's left and right) and hides the rest.
  */
-export function VuMeter({ channel }: { channel: number | null }): JSX.Element {
+export function VuMeter({
+  channel,
+  engine = 'A',
+}: {
+  channel: number | null;
+  engine?: PgmEngine;
+}): JSX.Element {
   const fills = useRef<(HTMLSpanElement | null)[]>([]);
   useLayoutEffect(() => {
     const write = (dbfs: readonly number[] | null): void => {
@@ -35,10 +41,17 @@ export function VuMeter({ channel }: { channel: number | null }): JSX.Element {
       write(null);
       return undefined;
     }
-    return meterStore().watchAudio(channel, write);
-  }, [channel]);
+    return meterStore().watchAudio(channel, write, engine);
+  }, [channel, engine]);
   return (
-    <div className="cg-vu" data-vu-meter="" role="img" aria-label="Programme level, dBFS" dir="ltr">
+    <div
+      className="cg-vu"
+      data-vu-meter=""
+      data-vu-engine={engine}
+      role="img"
+      aria-label="Programme level, dBFS"
+      dir="ltr"
+    >
       <span className="cg-vu__unit" aria-hidden="true">
         dBFS
       </span>
@@ -76,7 +89,13 @@ export function VuMeter({ channel }: { channel: number | null }): JSX.Element {
  * decimal, in its three tones (`meterScale.ts`), pulsing while the limiter works. Written by the store's
  * writer, like the bars: text and tone go onto the element directly.
  */
-export function LoudnessBadge({ channel }: { channel: number | null }): JSX.Element {
+export function LoudnessBadge({
+  channel,
+  engine = 'A',
+}: {
+  channel: number | null;
+  engine?: PgmEngine;
+}): JSX.Element {
   const ref = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -92,13 +111,14 @@ export function LoudnessBadge({ channel }: { channel: number | null }): JSX.Elem
       write(null);
       return undefined;
     }
-    return meterStore().watchLoudness(channel, write);
-  }, [channel]);
+    return meterStore().watchLoudness(channel, write, engine);
+  }, [channel, engine]);
   return (
     <span
       ref={ref}
       className="cg-loudness"
       data-loudness-badge=""
+      data-loudness-engine={engine}
       title="Short-term loudness, EBU R128 — target −23 LUFS"
     />
   );

@@ -5802,3 +5802,49 @@ data the operator may supply.
 - WHEN Variables is viewed at the normal narrow Inspector width THEN Key, Title, Type / binding and
   Actions remain aligned as one table row per field; actions do not fall into a separate card footer,
   and the already-selected Variables tab is not repeated as another panel heading
+
+## [x] D-167 — Live Source appearance controls remain editable in multi-select ⟨priority: high — the owner, 2026-11-01⟩ — `openspec/changes/multiselect-live-source-appearance/`
+
+**What:** when every selected element is a Live Source plate, the multi-selection Inspector exposes
+the same plate-wide appearance controls as single selection: aspect, keep aspect, fit, poster, frame
+stroke and stroke width. Agreeing values are shown normally; differing values read **mixed** and are
+left untouched until the author commits a replacement. Every document edit fans out as one undo
+entry, while keep-aspect remains the existing per-plate session preference. Repair-to-aspect applies
+each plate's own declared ratio, preserving differently shaped selections rather than forcing the
+first plate's geometry on the others. These controls do not appear for a mixed-kind selection.
+
+**Why:** multi-frame templates are authored as a set. Requiring the author to select each plate in
+turn for the same poster, fit or frame treatment makes the existing multi-selection incomplete and
+turns a small styling change into repetitive work.
+
+**Acceptance:**
+
+- WHEN two or more Live Sources are selected THEN the multi Inspector offers aspect, keep aspect,
+  fit, poster, stroke and stroke width, plus the existing transforms and auto-layout
+- WHEN selected plates disagree THEN the relevant field shows a neutral mixed value and makes no
+  scene change until the author chooses a value
+- WHEN a value is committed THEN it is applied to every selected plate as one undo entry while each
+  stroke edit preserves the other stroke component
+- WHEN Repair to aspect is used THEN each eligible plate is repaired to its own declared aspect in
+  one undo entry; plates already matching remain unchanged
+- WHEN the selection contains a non-Live-Source element THEN these plate-only controls are absent
+
+## [x] D-168 — A Live Source poster has its own fit mode ⟨priority: medium — the owner, 2026-11-01⟩ — `openspec/changes/multiselect-live-source-appearance/`
+
+**What:** after choosing a poster image for a Live Source, the author can independently choose
+**Fit whole poster** (`contain`) or **Fill frame** (`cover`, cropping edges). This poster-only choice
+is available for single and homogeneous multi-selection, defaults to the historical `cover`
+behaviour for existing templates, and never changes the real live picture's `fit` setting.
+
+**Why:** a portrait or differently shaped reference image can be cropped enough that the author
+cannot see its complete content or confidently identify the plate boundary. The reference image is
+an authoring aid, so its presentation needs to be adjustable without changing what goes on air.
+
+**Acceptance:**
+
+- WHEN a poster is selected THEN Poster fit offers Fit whole poster and Fill frame
+- WHEN Poster fit changes THEN the Designer canvas and Preview update, while the on-air live fit is
+  unchanged
+- WHEN several Live Sources are selected THEN Poster fit supports a truthful mixed value and one
+  committed value updates all selected plates as one undo entry
+- WHEN an older template has a poster and no Poster fit THEN it continues to render as cover

@@ -4557,8 +4557,9 @@ disagree, no mapping, said. **Valid only when** B's row is `cgLicensed: true`, h
 sign-in and on B's reconnect; a mapping that disappears or changes while CG has layers on that channel stops
 every line to B for it, sends no clean-up anywhere, and takes the new mapping at the channel's next take.
 **After a failover:** every send uses M; a take on a channel with no mapping is refused in words (`No backup
-channel is known for CH N`) with nothing sent; the programme return, sound and meters say plainly that they are
-not available on the backup engine. **Why:** `B-316`. **Acceptance:**
+channel is known for CH N`) with nothing sent. The former primary-only programme-monitor limitation is
+superseded by `R-104`: a valid mapping enables independent A/N and B/M picture returns and one selected local
+sound/meter source. **Why:** `B-316`. **Acceptance:**
 
 - WHEN B's D4 (`2.9.5`) names A's channel 1 by `mirrorOf` at B's channel 2 THEN every line for A's channel 1 —
   a take, an UPDATE, a look switch, a swap, a clear, a `CLEAR ALL`, a restore and a failover catch-up — reaches
@@ -4795,3 +4796,27 @@ closes, so the operator has no evidence that the first press is still working.
 **Acceptance:** WHEN a selected package is still importing THEN the dialog names it and visibly shows
 progress with conflicting actions unavailable; WHEN the chooser is cancelled THEN no loading state
 appears; WHEN import settles THEN loading clears into the existing success or refusal state.
+
+## [~] R-104 — CG Control can monitor the primary and backup programme returns together ⟨priority: high — requested after the client demo, 2026-11-01⟩ — `openspec/changes/monitor-backup-program-return/`
+
+**What:** PROGRAM offers **A**, **B** and **A + B** when the selected channel has a valid mirror on the
+backup engine. In the combined mode the two programme pictures are shown side by side, each labelled with
+its physical server/channel and its own signal state. There is still exactly one local monitor-audio path:
+the operator explicitly chooses A or B, and the speaker, loudness and VU meter follow that choice; the two
+engines are never mixed and this control never changes the on-air audio.
+**Why:** during the client demo the backup Playout could not be verified beside the active output, so an
+operator had to fail over before seeing whether its programme picture and sound were healthy.
+**Acceptance:**
+
+- WHEN server B is absent or the selected channel has no valid backup mapping THEN only A is offered and no
+  backup picture, sound or meter is requested
+- WHEN a valid backup exists THEN the operator can select A, B or A + B and the preference is remembered on
+  that console
+- WHEN A + B is selected THEN both programme pictures are visible at once with stable A/B and physical-channel
+  labels, and either feed independently hides a stale frame and reports its own signal state
+- WHEN monitor sound is enabled THEN exactly one chosen engine is heard and metered; changing the source moves
+  sound, loudness and VU together without mixing or changing any on-air audio
+- WHEN failover changes the current primary THEN the physical A/B labels remain stable and the default/follow
+  audio source follows the current primary unless the operator explicitly selects another source
+- WHEN B is requested THEN CG Bridge authorizes the logical channel, maps it to B's physical channel, uses B's
+  core programme port and B engine's own meter session, and never exposes another channel or token

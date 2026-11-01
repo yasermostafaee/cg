@@ -1,4 +1,4 @@
-import { backupChannelLineText } from '@cg/shared-ipc';
+import { backupChannelLineText, type PgmEngine } from '@cg/shared-ipc';
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
 import { useBackupChannels } from '../../hooks/useBackupChannels.js';
 import { useConnections } from '../../hooks/useConnections.js';
@@ -9,6 +9,7 @@ import { useStackSnapshot } from '../../hooks/useStack.js';
 import { airTally, onChannel } from '../stack/onAir.js';
 import { MonitorPanel } from './MonitorPanel.js';
 import { PreviewPanel } from './PreviewPanel.js';
+import { useProgramMonitorPreferences } from './useProgramMonitorPreferences.js';
 
 /**
  * The monitor strip: PREVIEW beside PROGRAM, in their final positions.
@@ -49,14 +50,19 @@ export function MonitorStrip(): JSX.Element {
   const showPvw = focus !== 'pgm';
   const showPgm = focus !== 'pvw';
   /*
-    🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — THIS channel's backup line, and whether the backup engine is on
-    air now (server B the primary): then the return, its sound and its meter — read from the PRIMARY engine —
-    are not available, and nothing is requested for them.
+    🔴 `RELEASE-0113-01` / `R-104` — THIS channel's validated N → M backup line. It is also the
+    identity of B's programme resource: if M or the backup host changes, the old viewer is replaced
+    with a fresh ticket even though the authorized logical channel N did not change.
   */
   const backupState = useBackupChannels();
   const health = useConnections();
-  const onBackupEngine = health?.currentPrimary === 'B';
-  const backupLine = ((): { text: string; title?: string; mapped: boolean } | null => {
+  const currentPrimary: PgmEngine = health?.currentPrimary === 'B' ? 'B' : 'A';
+  const backupLine = ((): {
+    text: string;
+    title?: string;
+    mapped: boolean;
+    channel?: number;
+  } | null => {
     const backup = backupState?.backup ?? null;
     if (backup === null) return null;
     const line = backup.channels.find((c) => c.channel === viewChannel);
@@ -65,16 +71,30 @@ export function MonitorStrip(): JSX.Element {
       text: backupChannelLineText(line, backup.backupHost),
       ...(line.reason !== undefined ? { title: line.reason } : {}),
       mapped: line.state === 'mapped',
+      ...(line.state === 'mapped' && line.backupChannel !== undefined
+        ? { channel: line.backupChannel }
+        : {}),
     };
   })();
+  const backupAvailable = backupLine?.mapped === true && backupLine.channel !== undefined;
+  const monitorPreferences = useProgramMonitorPreferences(backupAvailable, currentPrimary);
   /*
     `C-016` — the programme return, lifted here beside the air count for the same reason. A
     PROGRAM pane that is not rendered asks for NOTHING: the channel is `null` while it is folded
     away, so no picture is requested and the bridge pulls nothing from the Playout for it.
   */
-  const programReturn = useProgramReturn(showPgm && !onBackupEngine ? viewChannel : null);
+  const showA = monitorPreferences.display === 'A' || monitorPreferences.display === 'both';
+  const showB =
+    backupAvailable &&
+    (monitorPreferences.display === 'B' || monitorPreferences.display === 'both');
+  const programReturnA = useProgramReturn(showPgm && showA ? viewChannel : null, 'A');
+  const programReturnB = useProgramReturn(
+    showPgm && showB ? viewChannel : null,
+    'B',
+    backupLine?.text ?? '',
+  );
   // `PLAYOUT-FEATURES-01` E — and its SOUND, on the same rule: a folded PROGRAM plays nothing.
-  const programSound = usePgmAudio(showPgm && !onBackupEngine ? viewChannel : null);
+  const programSound = usePgmAudio(showPgm ? viewChannel : null, monitorPreferences.audioEngine);
 
   return (
     /*
@@ -121,11 +141,31 @@ export function MonitorStrip(): JSX.Element {
           word="PROGRAM"
           channel={viewChannel}
           onAirRows={onAirRows}
-          programReturn={programReturn}
+          returns={[
+            ...(showA
+              ? [
+                  {
+                    engine: 'A' as const,
+                    physicalChannel: viewChannel,
+                    programReturn: programReturnA,
+                  },
+                ]
+              : []),
+            ...(showB && backupLine?.channel !== undefined
+              ? [
+                  {
+                    engine: 'B' as const,
+                    physicalChannel: backupLine.channel,
+                    programReturn: programReturnB,
+                  },
+                ]
+              : []),
+          ]}
           programSound={programSound}
+          monitorPreferences={monitorPreferences}
+          backupAvailable={backupAvailable}
           air={air}
           backupLine={backupLine}
-          onBackupEngine={onBackupEngine}
         />
       )}
     </div>

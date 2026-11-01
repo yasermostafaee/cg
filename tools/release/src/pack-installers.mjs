@@ -60,8 +60,9 @@ export function packPlan({ root = REPO, version, outDir, guide = null }) {
       product: 'bridge',
       engine: path.join(root, 'tools', 'bridge-installer', names.bridge.built),
       out: path.join(outDir, names.bridge.built),
-      // CG Bridge has no window of its own; it is CG Control's service and wears CG Control's tile.
-      ...icons('runtime'),
+      // A service should not look like the console executable in Explorer or in Setup.
+      icon: path.join(root, 'tools', 'setup-ui', 'assets', 'bridge-icon.ico'),
+      tile: path.join(root, 'tools', 'setup-ui', 'assets', 'bridge-icon.png'),
       mainFiles: bridgeMain,
       installBytes: filesUnder(payload).reduce((sum, f) => sum + f.bytes, 0),
       guide,

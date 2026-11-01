@@ -100,7 +100,7 @@ async function pairStation(dir = scratch()): Promise<Pair> {
       connection: {
         servers: {
           A: { host: '127.0.0.1', amcpPort: st.caspar.amcpPort, oscPort: oscA },
-          B: { host: '127.0.0.1', amcpPort: backup.caspar.amcpPort, oscPort: oscB },
+          B: { host: backup.host, amcpPort: backup.caspar.amcpPort, oscPort: oscB },
         },
         strategy: 'mirror-sync',
         autoFailoverEnabled: false,
@@ -162,15 +162,23 @@ const channelOf = (line: string): number | null => {
 };
 
 describe('🔴 R-089 — the fake pair maps itself from the backup engine’s own D4, through a real CG Bridge', () => {
-  it('signed in on both engines: CH 1 maps to the backup core’s 2; a take reaches B’s 2 and never B’s 1; `/health` says B’s own number', async () => {
+  it('signed in on both engines: CH 1 maps to B’s 2; its programme ticket stays logical; a take reaches B’s 2 and never B’s 1', async () => {
     const p = await pairStation();
     await until(
       async () => (await stateOf(p.admin)).backup?.channels[0]?.state === 'mapped',
       'the mapping',
     );
     expect((await stateOf(p.admin)).backup).toEqual({
-      backupHost: '127.0.0.1',
+      backupHost: p.st.backup?.host,
       channels: [{ channel: 1, state: 'mapped', backupChannel: 2, source: 'playout' }],
+    });
+    const backupReturn = await p.admin.ask(id(), 'pgmReturn.ticket', {
+      channel: 1,
+      engine: 'B',
+    });
+    expect(backupReturn.error).toBeUndefined();
+    expect(backupReturn.payload).toEqual({
+      path: expect.stringMatching(/^\/pgm\/B\/1\?ticket=[A-Za-z0-9_-]+$/),
     });
     await until(
       async () => p.bridge.runtime.health().backup?.state === 'healthy',
@@ -209,12 +217,14 @@ describe('🔴 R-089 — the fake pair maps itself from the backup engine’s ow
     const dir = scratch();
     const p = await pairStation(dir);
     // The backup engine as `2.9.2` publishes it: the same channels, no `mirrorOf` on any row.
-    const legacy = pairBackupCatalogue(p.st.playout.baseUrl).map((row) => {
-      const copy: Record<string, unknown> = { ...row };
-      delete copy['mirrorOf'];
-      delete copy['mirrors'];
-      return copy as unknown as typeof row;
-    });
+    const legacy = pairBackupCatalogue(p.st.playout.baseUrl, p.st.backup?.host ?? '127.0.0.1').map(
+      (row) => {
+        const copy: Record<string, unknown> = { ...row };
+        delete copy['mirrorOf'];
+        delete copy['mirrors'];
+        return copy as unknown as typeof row;
+      },
+    );
     p.st.backup?.playout.setChannels(legacy);
     await until(
       async () =>
@@ -287,7 +297,7 @@ describe('🔴 R-089 — the fake pair maps itself from the backup engine’s ow
       fs.readFileSync(path.join(dir, 'bridge-backup-channels.json'), 'utf8'),
     ) as { server: { host: string }; entries: unknown[] };
     expect(saved.entries).toEqual([{ channel: 1, backupChannel: 2 }]);
-    expect(saved.server.host).toBe('127.0.0.1');
+    expect(saved.server.host).toBe(p.st.backup?.host);
 
     // 🔴 A restart: the same state folder, a new process — the entry is in force again, by itself.
     const again = await p.restart();

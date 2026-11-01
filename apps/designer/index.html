@@ -78,6 +78,9 @@
         --cg-logo-bars: #eef3f9;
         --cg-logo-swoosh: #5c6a7c;
         --cg-lt-ink: #ffffff;
+        --cg-version-ink: #e9ddff;
+        --cg-version-bg: #2b2142;
+        --cg-version-line: #6f5a9a;
 
         position: fixed;
         inset: 0;
@@ -616,6 +619,17 @@
         opacity: 0;
         animation: cg-rise 0.9s ease 1.15s forwards;
       }
+      #cg-splash-version {
+        color: var(--cg-version-ink);
+        background: var(--cg-version-bg);
+        border: 1px solid var(--cg-version-line);
+        border-radius: 4px;
+        padding: 4px 8px;
+        margin-top: -4px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
 
       @keyframes cg-rise {
         from {
@@ -863,16 +877,15 @@
 
       <div class="cg-splash__foot">
         <!--
-          The build stamp — `sha · YYYY-MM-DD`, computed ONCE by `@cg/splash-kit` from
+          The build stamp — `vVERSION · sha · YYYY-MM-DD`, computed ONCE by `@cg/splash-kit` from
           `vite.config.ts` and substituted for the comment below. The splash paints before the
           bundle, so a `define` global is not reachable here and the HTML transform is the
           only mechanism that works; the SAME object is exposed as `__CG_BUILD__` for any
           later in-app surface, and it is the same plugin the Runtime stamps from, so the two
           products cannot disagree about which build is on the box.
 
-          No version number: `0.0.0` is a placeholder, not a release identity. WHEN THE
-          PROJECT STARTS TAGGING RELEASES, prefix `v${version}` here — this line and nowhere
-          else.
+          A real package version is deliberately prominent on the first frame; development's
+          `0.0.0` placeholder is omitted by the shared build-stamp plugin.
         -->
         <span id="cg-splash-version"><!-- CG_BUILD_STAMP --></span>
         <span>SCENE · TEMPLATE · .VCG</span>

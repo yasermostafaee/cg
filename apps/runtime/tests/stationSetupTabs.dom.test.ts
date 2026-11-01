@@ -59,6 +59,7 @@ describe('§2 — the rail: nothing is hidden, and no refusal stands in front of
       // `SERVERS-SIMPLIFY-01` (T1) — was `Servers`; the deep-link id below is unchanged.
       'Connection',
       'Live sources',
+      'Shared files',
       'Text file delimiters',
       // `DELTA-RUN-NEXT-VERSION-01-C` — the station's Lunar Hijri day adjustment.
       'Calendar',

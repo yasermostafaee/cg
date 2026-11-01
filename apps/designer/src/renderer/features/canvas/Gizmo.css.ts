@@ -25,6 +25,10 @@ export const frame = style({
 export const multiBox = style({
   position: 'absolute',
   border: `2px solid ${colors.accent}`,
+  // B-361 — an overlap error draws a red dashed border on this exact rect. Keep
+  // that error readable and add a separate outer selection ring, so red still
+  // means "invalid" while the brighter blue halo unmistakably means "selected".
+  boxShadow: `0 0 0 1px ${colors.onAccent}, 0 0 0 4px ${colors.accent}, 0 0 10px rgba(56, 189, 248, 0.85)`,
   boxSizing: 'border-box',
   pointerEvents: 'none',
 });

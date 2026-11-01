@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PgmReturnStatus } from '@cg/shared-ipc';
+import type { PgmEngine, PgmReturnStatus } from '@cg/shared-ipc';
 import type { Unsubscribe } from '../../shared/runtime-bridge.js';
 import { useBridgeSnapshot } from './useBridgeSnapshot.js';
 import { useLink } from './useLink.js';
@@ -50,11 +50,18 @@ const RETRY_MAX_MS = 30_000;
  * in an `<img>`; the relay sees every frame and publishes `pgmReturn.status-changed`. A signal
  * derived here from `load`/`error` events would be a second, weaker opinion about the same feed.
  */
-export function useProgramReturn(channel: number | null): ProgramReturn {
+export function useProgramReturn(
+  channel: number | null,
+  engine: PgmEngine = 'A',
+  resourceKey = '',
+): ProgramReturn {
   const link = useLink();
   const live = link === 'live';
   const statuses = useBridgeSnapshot(fetchStatus, subscribeStatus, NOTHING_WATCHED);
-  const state = channel === null ? undefined : statuses.find((s) => s.channel === channel)?.state;
+  const state =
+    channel === null
+      ? undefined
+      : statuses.find((s) => (s.engine ?? 'A') === engine && s.channel === channel)?.state;
 
   const [mount, setMount] = useState(0);
   const retries = useRef(0);
@@ -103,7 +110,7 @@ export function useProgramReturn(channel: number | null): ProgramReturn {
     setTicketed(null);
     if (channel === null || !live) return;
     let current = true;
-    window.cg.pgmReturn.feedUrl(channel).then(
+    window.cg.pgmReturn.feedUrl(channel, engine).then(
       (url) => {
         if (current) setTicketed(url);
       },
@@ -114,7 +121,7 @@ export function useProgramReturn(channel: number | null): ProgramReturn {
     return () => {
       current = false;
     };
-  }, [channel, live, mount, onError]);
+  }, [channel, engine, live, mount, onError, resourceKey]);
 
   // The mount number rides the query so each request is its own resource, never a cached one.
   const src =

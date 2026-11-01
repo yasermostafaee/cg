@@ -37,6 +37,7 @@ export type StationSetupSection =
   | 'channel'
   | 'servers'
   | 'sources'
+  | 'shared-files'
   | 'delimiters'
   | 'calendar'
   | 'candidate-layers';
@@ -215,6 +216,16 @@ export const STATION_SETUP_SECTIONS: readonly StationSetupSectionSpec[] = [
     footerIcon: 'info',
   },
   {
+    id: 'shared-files',
+    title: 'Shared files',
+    commit: 'immediate',
+    group: 'Content',
+    legend: 'Saved when Save path succeeds.',
+    footerRest: 'Saved for this CG Control station — there is nothing waiting to be applied.',
+    commits: false,
+    footerIcon: 'saved',
+  },
+  {
     id: 'delimiters',
     title: 'Text file delimiters',
     commit: 'immediate',
@@ -292,7 +303,7 @@ const CHANNEL_FOR_STATION_ADMIN: Partial<StationSetupSectionSpec> = {
 /**
  * 🔴 `MULTI-CHANNEL-01` §2 I — **EVERY COMMIT IN STATION SETUP IS A `station-admin` ROUTE**, walked
  * against the route classes rather than a list: `connections.set-config` (Servers),
- * `sources.set-config` (Live sources — the band; `PLAYOUT-SOURCES-01`), `delimiters.set` (Text file
+ * `sources.set-config` (Live sources — the band; `PLAYOUT-SOURCES-01`), `sharedFiles.set`, `delimiters.set` (Text file
  * delimiters), `calendar.set` (Calendar), `fixedLayers.set-config` / `set-banks` (Layers, and the Channel pane's Change
  * channel…). So for any other principal every pane that commits shows its values as VALUES — no
  * Apply, no Revert, no inputs (golden rule 13: absent, never offered-then-refused) — and its head

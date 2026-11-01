@@ -588,7 +588,7 @@ pub fn paint(g: &Gfx, rt: &ID2D1RenderTarget, dev: &mut Device, f: &Frame) {
     };
     unsafe {
         rt.SetTransform(&Matrix3x2::identity());
-        rt.Clear(Some(&color(palette::SURFACE, 1.0)));
+        rt.Clear(Some(&color(product_surface(f.product), 1.0)));
     }
     rail(&mut p, f);
     // The foot: the sign-in card's — a raised surface, ruled above.
@@ -630,7 +630,11 @@ pub fn paint(g: &Gfx, rt: &ID2D1RenderTarget, dev: &mut Device, f: &Frame) {
 }
 
 fn rail(p: &mut Painter, f: &Frame) {
-    p.fill(Rect::new(0.0, 0.0, RAIL_W, WIN_H), palette::SPLASH_BG, 1.0);
+    p.fill(
+        Rect::new(0.0, 0.0, RAIL_W, WIN_H),
+        product_rail(f.product),
+        1.0,
+    );
     p.vline(RAIL_W - 0.5, 0.0, WIN_H, palette::BORDER);
     // `P-067` — the product's OWN scene, faint above Help (CG Control's is the one every rail drew).
     draw_art(p, &rail_art::display_list(rail_art::rail_art(f.product)));
@@ -661,6 +665,25 @@ fn rail(p: &mut Painter, f: &Frame) {
             };
         }
         rail_step(p, step, f.step_t[i]);
+    }
+}
+
+/// The setup family stays dark and branded, while each product gets a recognisable room:
+/// neutral Control, teal Bridge and blue Designer. These are blends of existing audited tokens,
+/// not a second hand-picked palette.
+fn product_surface(id: ProductId) -> Rgb {
+    match id {
+        ProductId::Control => palette::SURFACE,
+        ProductId::Bridge => mix(palette::SURFACE, palette::OK_BG, 0.62),
+        ProductId::Designer => mix(palette::SURFACE, palette::ACCENT_FILL, 0.58),
+    }
+}
+
+fn product_rail(id: ProductId) -> Rgb {
+    match id {
+        ProductId::Control => palette::SPLASH_BG,
+        ProductId::Bridge => mix(palette::SPLASH_BG, palette::OK_BG, 0.58),
+        ProductId::Designer => mix(palette::SPLASH_BG, palette::BRAND_DEEP, 0.22),
     }
 }
 
@@ -1219,4 +1242,20 @@ fn focus_ring(p: &mut Painter, r: Rect, radius: f32) {
     unsafe {
         p.rt.DrawRoundedRectangle(&rr(inflate(r, 1.0), radius + 1.0), &b, 2.0, None)
     };
+}
+
+#[cfg(test)]
+mod product_colour_tests {
+    use super::*;
+
+    #[test]
+    fn every_product_has_a_distinct_setup_ground_and_rail() {
+        let ids = [ProductId::Bridge, ProductId::Control, ProductId::Designer];
+        for (index, id) in ids.iter().enumerate() {
+            for other in ids.iter().skip(index + 1) {
+                assert_ne!(product_surface(*id), product_surface(*other));
+                assert_ne!(product_rail(*id), product_rail(*other));
+            }
+        }
+    }
 }
