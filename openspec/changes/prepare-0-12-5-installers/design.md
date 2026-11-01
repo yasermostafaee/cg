@@ -20,4 +20,15 @@ No tag, draft release or published release is created.
 
 ## Recorded evidence
 
-Pending verification.
+- Strict OpenSpec validation passed for both `configure-installed-text-source-root` and this change.
+- The targeted Windows Bridge smoke passed at commit `db6c2ef9`, including a text-source path with
+  spaces, silent install/upgrade preservation, the Setup folder field, and equality between Setup
+  and silent configuration:
+  <https://github.com/yasermostafaee/cg/actions/runs/41301328492/job/124835354304>.
+- Fresh Windows/browser guide captures passed for the same commit:
+  <https://github.com/yasermostafaee/cg/actions/runs/41302632084/job/124836768883>.
+- The rebuilt six-page Persian guide and all 81 release/guide tests pass locally.
+- The exact local candidate passed `pnpm gate` and the complete `pnpm gate:e2e` lane: all 26 E2E
+  tasks succeeded, including 347 Designer tests, 2 Pack Factory tests and 378 CG Control tests.
+
+Exact final CI runs and artifact checksums remain pending.
