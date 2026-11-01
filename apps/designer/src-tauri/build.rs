@@ -1,10 +1,13 @@
 fn main() {
     // The app's own commands, and the permission each generates (`allow-keyboard-language`,
-    // `allow-close-guard`, `allow-close-request-seen`, `allow-close-window-now`), granted in
+    // `allow-close-guard`, `allow-close-request-seen`, `allow-close-window-now`,
+    // `allow-pick-text-source-file`, `allow-reload-text-source-file`), granted in
     // `capabilities/designer.json` to the window the app bundles and to nothing else:
     //   - `keyboard_language` (`TEXT-DIGITS-01`): read-only;
     //   - `close_guard`, `close_request_seen`, `close_window_now` (`D-162`): the window's close,
     //     held for the page to answer (`src/close_window.rs`).
+    //   - `pick_text_source_file`, `reload_text_source_file` (`B-356`): choose one bounded UTF-8
+    //     file natively, then re-read only that session-authorized path (`src/text_source_file.rs`).
     // Declaring them is what puts the app's commands under the capability: before `D-162` the
     // Designer declared none, and every command it registered was open to its page by default.
     tauri_build::try_build(
@@ -13,6 +16,8 @@ fn main() {
             "close_guard",
             "close_request_seen",
             "close_window_now",
+            "pick_text_source_file",
+            "reload_text_source_file",
         ])),
     )
     .expect("tauri-build failed");

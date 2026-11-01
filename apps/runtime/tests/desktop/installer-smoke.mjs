@@ -508,6 +508,26 @@ async function keyboardProbe() {
 }
 
 /**
+ * `B-356` — prove the INSTALLED Designer's window crosses Tauri ACL for the text-source command.
+ * The deliberately absent path must reach Rust and return its path-specific error. Calling the
+ * picker itself would leave unattended Windows CI blocked behind an operating-system dialog.
+ */
+async function designerTextSourceAclProbe() {
+  try {
+    await window.__TAURI_INTERNALS__.invoke('reload_text_source_file', {
+      sourcePath: 'C:\\__cg_acl_probe_missing__\\never.txt',
+    });
+    return { ok: false, said: 'The missing probe path unexpectedly succeeded.' };
+  } catch (err) {
+    const said = String(err);
+    return {
+      ok: /Could not resolve the selected file/i.test(said) && !/not allowed by ACL/i.test(said),
+      said,
+    };
+  }
+}
+
+/**
  * 🔴 `RELEASE-0114-01-C` — **THE INSTALLED DESIGNER STILL DOES ITS WORK** under the capability
  * `D-162` gave it (before it, every command the shell registered was open to the page; now only
  * the four granted are). With the project `name` open and unchanged: a composition SETTING changed
@@ -868,6 +888,16 @@ async function designer() {
     'CG Designer reports its keyboard language through its one read-only command',
     keyboard.ok && KEYBOARD_LANGUAGES.includes(keyboard.said),
     keyboard.said,
+  );
+  const textSourceAcl = await page.evaluate(designerTextSourceAclProbe);
+  fs.writeFileSync(
+    path.join(out, 'designer-text-source-acl.json'),
+    JSON.stringify(textSourceAcl, null, 2),
+  );
+  check(
+    'CG Designer reaches its confined text-source reader through the installed-app ACL',
+    textSourceAcl.ok,
+    textSourceAcl.said,
   );
   const ffmpeg = await page.evaluate(ffmpegProbe);
   fs.writeFileSync(path.join(out, 'designer-ffmpeg.json'), JSON.stringify(ffmpeg, null, 2));

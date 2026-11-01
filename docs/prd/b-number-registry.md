@@ -3569,3 +3569,14 @@ Measured free before use: the registry named `R-103` as next free; the tracked P
 found no `R-103` before filing.
 
 ⇒ **Next free after this entry is `B-356`**, **`D-167`**, **`P-072`**, **`R-104`** and **`C-049`**.
+
+### 2026-11-01 — installed fixed-file ACL refusal takes `B-356`
+
+- `B-356` — CG Designer `0.12.3` registers its native shared-text-file picker and reload commands but
+  grants neither command to the installed window, so both are refused by Tauri ACL —
+  [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: after `git fetch origin`, the highest PRD bug heading across all 13 local and
+remote-tracking refs was `B-355`; the current checkout had no `B-356` heading and the stash list was empty.
+
+⇒ **Next free after this entry is `B-357`**, **`D-167`**, **`P-072`**, **`R-104`** and **`C-049`**.
