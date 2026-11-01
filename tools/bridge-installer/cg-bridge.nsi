@@ -149,7 +149,12 @@ Function .onInit
   ${GetOptions} " $Args" " /CONTROLPORT=" $ControlPort
   ${GetOptions} " $Args" " /TEMPLATEPORT=" $TemplatePort
   ${GetOptions} " $Args" " /BRIDGEADDRESS=" $BridgeAddress
-  ${GetOptions} " $Args" " /TEXTSOURCEROOT=" $TextSourceRoot
+  ; A path may contain spaces. Windows then quotes the whole argv token
+  ; ("/TEXTSOURCEROOT=D:\shared text"), so the leading-space spelling used for
+  ; URL-like options above would not match it. A Windows/UNC path contains
+  ; backslashes rather than the option marker's forward slash, therefore the
+  ; ordinary spelling is both quote-safe and does not truncate the path.
+  ${GetOptions} "$Args" "/TEXTSOURCEROOT=" $TextSourceRoot
   ClearErrors
 FunctionEnd
 
