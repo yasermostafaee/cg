@@ -13857,3 +13857,22 @@ but take/switch refuses it; and (5) availability returning is the positive contr
 draft/error sentence and the old selected look/row refusal. The existing held-plate unavailable-switch test remains
 green; a live swap to an unavailable target is refused without state residue, while a healthy emergency swap remains
 possible despite an unrelated unchanged invalid plate.
+
+## [~] B-357 — Installed CG Control cannot read the shared fixed file because CG Bridge Setup never configures its root ⟨priority: high — installed authoring succeeds but the on-air operator receives `ENOENT`⟩ — FILED 2026-11-01 from the owner's installed-system reproduction · `openspec/changes/configure-installed-text-source-root/`
+
+**Repro / Actual:** in installed Designer, choose and preview
+`\\PLAYOUT02\share text\zirnevis.txt`, export/import the template, then open its fixed-file modal in
+installed CG Control. Designer shows the current bytes, while CG Control receives
+`Text source “zirnevis.txt” cannot be found or read` and Bridge reports a lookup below
+`C:\ProgramData\CG Bridge\text-sources`. Browser development works when `dev:station --fake` was
+explicitly given the same shared root.
+
+**Cause:** the portable template correctly stores only `zirnevis.txt`, and Bridge correctly resolves
+it below `textSourceRoot`; however, the installed setup exposes no way to set that root. The existing
+schema/CLI support is therefore reachable only by manually editing protected service configuration.
+
+**Expected / Acceptance:** CG Bridge Setup offers an optional native **Shared text folder** choice for
+each server and stores it as `textSourceRoot`; no customer path is hardcoded. Existing values load and
+survive upgrades, `/TEXTSOURCEROOT=` provides the same silent contract, and the default remains valid
+when no shared folder is selected. A missing/unreachable folder is refused before installation. The
+template remains relative and Bridge's containment checks remain unchanged.

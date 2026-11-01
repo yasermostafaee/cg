@@ -62,8 +62,10 @@ const PROGRAM_DIR = path.join(
   'CG Bridge',
 );
 const DATA_DIR = path.join(process.env.ProgramData ?? 'C:\\ProgramData', 'CG Bridge');
+const SHARED_TEXT = path.join(OUT, 'shared text');
 const KEY = 'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\CGBridge';
 const { check, save } = checks(OUT);
+fs.mkdirSync(SHARED_TEXT, { recursive: true });
 
 const code = (file, argv) => spawnSync(file, argv, { windowsHide: true }).status;
 const uninstall = () =>
@@ -442,6 +444,7 @@ let serverIp = null;
   toServerPage();
   uia(TITLE, 'toggle', 'separate-server');
   until(TITLE, 'PLAYOUT ADDRESS', 20);
+  uia(TITLE, 'set', `shared-text-folder=${SHARED_TEXT}`);
   uia(TITLE, 'set', `playout-address=${PLAYOUT_DOC}`);
   let pg = page(TITLE);
   check(
@@ -493,13 +496,14 @@ let serverIp = null;
     `/PLAYOUT=http://${PLAYOUT_DOC}:8080`,
     `/AMCPHOST=${PLAYOUT_DOC}`,
     `/BRIDGEADDRESS=${String(serverIp)}`,
+    `/TEXTSOURCEROOT=${SHARED_TEXT}`,
   ]);
   check('the same values on the command line install too (exit 0)', silent === 0, String(silent));
   const fromCommand = configOrNull();
   const cmp = sameFields(fromPage, fromCommand);
   check(
     `the page's configuration equals the command line's, field by field (${cmp.keys.join(', ')})`,
-    cmp.same && fromPage?.bridgeAddress === serverIp,
+    cmp.same && fromPage?.bridgeAddress === serverIp && fromPage?.textSourceRoot === SHARED_TEXT,
     `page ${JSON.stringify(fromPage)} · command line ${JSON.stringify(fromCommand)}`,
   );
 }

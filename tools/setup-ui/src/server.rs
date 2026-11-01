@@ -2,7 +2,7 @@
 //! machine)"**: the page CG Bridge's setup asks it on, and what that page hands the engine.
 //!
 //! The engine (CG Bridge's NSIS installer, unchanged) already takes everything a separate server needs on
-//! its command line — `/PLAYOUT=`, `/AMCPHOST=`, `/BRIDGEADDRESS=` — and writes them to
+//! its command line — `/PLAYOUT=`, `/AMCPHOST=`, `/BRIDGEADDRESS=`, `/TEXTSOURCEROOT=` — and writes them to
 //! `%ProgramData%\CG Bridge\cg-bridge.json` through the bridge's own schema. Until now only a PowerShell
 //! line could give them. This page gives EXACTLY those arguments, judged first by the engine's own rules
 //! (`address.rs`) so a value the install would turn into a service that cannot start is refused here, in
@@ -26,14 +26,21 @@ use crate::field::Field;
 pub const PLAYOUT_ON_THIS_MACHINE: &str = "http://127.0.0.1:8080";
 pub const AMCP_ON_THIS_MACHINE: &str = "127.0.0.1";
 
-/// The engine's three options, spelled as its `GetOptions` reads them.
-pub const OPTIONS: [&str; 3] = ["/PLAYOUT=", "/AMCPHOST=", "/BRIDGEADDRESS="];
+/// The engine options this page owns, spelled as its `GetOptions` reads them.
+pub const OPTIONS: [&str; 4] = [
+    "/PLAYOUT=",
+    "/AMCPHOST=",
+    "/BRIDGEADDRESS=",
+    "/TEXTSOURCEROOT=",
+];
 
 // ── The page's words. The checkbox's is the owner's own (RELEASE-0111-01 §A1). ────────────────
 pub const SEPARATE_LABEL: &str = "CG Bridge runs on a separate server (not on the Playout machine)";
 pub const PLAYOUT_LABEL: &str = "Playout address";
 pub const AMCP_LABEL: &str = "CasparCG (AMCP) host";
 pub const ADDRESS_LABEL: &str = "This server's address";
+pub const TEXT_SOURCE_LABEL: &str = "Shared text folder";
+pub const TEXT_SOURCE_PLACEHOLDER: &str = r"Optional · e.g. \\server\news-text";
 pub const OTHER_LABEL: &str = "Other";
 /// The Playout field's placeholder: what to type, in the form CG Control's first question takes.
 pub const PLAYOUT_PLACEHOLDER: &str = "IP or name · :port if not 8080";
@@ -45,13 +52,15 @@ pub const NOT_A_HOST: &str = "That is not a host. Type an IPv4 address or a name
 pub const CHOOSE_AN_ADDRESS: &str = "Choose this server's address.";
 pub const NOT_AN_ADDRESS: &str = "That is not an address. Type an IPv4 address or a name.";
 pub const NOT_LOOPBACK: &str = "The Playout cannot reach this server on a loopback address.";
+pub const NOT_A_TEXT_SOURCE: &str = "Choose an existing folder this server can read.";
 
-/// `cg-bridge.json`'s three values, as an installed CG Bridge stores them.
+/// The `cg-bridge.json` values this setup page owns.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StoredBridge {
     pub playout: Option<String>,
     pub amcp_host: Option<String>,
     pub bridge_address: Option<String>,
+    pub text_source_root: Option<String>,
 }
 
 impl StoredBridge {
@@ -73,6 +82,7 @@ impl StoredBridge {
             playout: s("playoutAddress"),
             amcp_host: s("amcpHost"),
             bridge_address: s("bridgeAddress"),
+            text_source_root: s("textSourceRoot"),
         })
     }
 
@@ -100,11 +110,15 @@ pub struct Refusals {
     pub playout: Option<&'static str>,
     pub amcp: Option<&'static str>,
     pub address: Option<&'static str>,
+    pub text_source: Option<&'static str>,
 }
 
 impl Refusals {
     pub fn none(&self) -> bool {
-        self.playout.is_none() && self.amcp.is_none() && self.address.is_none()
+        self.playout.is_none()
+            && self.amcp.is_none()
+            && self.address.is_none()
+            && self.text_source.is_none()
     }
 }
 
@@ -117,6 +131,8 @@ pub struct ServerSetup {
     pub amcp_edited: bool,
     pub choice: AddressChoice,
     pub other: Field,
+    /// The local or UNC folder from which every locked/fixed text file is read.
+    pub text_source: Field,
     /// This machine's IPv4 addresses, loopback never among them.
     pub addresses: Vec<String>,
     /// The machine was set up as a separate server (stored, or on the command line).
@@ -141,10 +157,15 @@ impl ServerSetup {
         let playout = pick(&given.playout, stored.map(|s| &s.playout));
         let amcp = pick(&given.amcp_host, stored.map(|s| &s.amcp_host));
         let address = pick(&given.bridge_address, stored.map(|s| &s.bridge_address));
+        let text_source = pick(
+            &given.text_source_root,
+            stored.map(|s| &s.text_source_root),
+        );
         let effective = StoredBridge {
             playout: playout.clone(),
             amcp_host: amcp.clone(),
             bridge_address: address.clone(),
+            text_source_root: text_source.clone(),
         };
         let was_separate = effective.is_separate();
         let mut setup = ServerSetup {
@@ -158,6 +179,7 @@ impl ServerSetup {
             amcp_edited: false,
             choice: AddressChoice::None,
             other: Field::default(),
+            text_source: Field::new(text_source.as_deref().unwrap_or("")),
             addresses,
             was_separate,
             shown: Refusals::default(),
@@ -217,6 +239,10 @@ impl ServerSetup {
         self.shown.address = None;
     }
 
+    pub fn text_source_changed(&mut self) {
+        self.shown.text_source = None;
+    }
+
     pub fn toggle(&mut self) {
         self.separate = !self.separate;
         self.shown = Refusals::default();
@@ -236,8 +262,16 @@ impl ServerSetup {
 
     /// Each field, judged by the engine's rules and by what the checkbox means. Nothing when unticked.
     pub fn judge(&self) -> Refusals {
+        let text_source = match self.text_source.text().trim() {
+            "" => None,
+            value if std::path::Path::new(value).is_dir() => None,
+            _ => Some(NOT_A_TEXT_SOURCE),
+        };
         if !self.separate {
-            return Refusals::default();
+            return Refusals {
+                text_source,
+                ..Refusals::default()
+            };
         }
         let playout = if self.playout.text().trim().is_empty() {
             Some(TYPE_THE_PLAYOUT)
@@ -269,28 +303,39 @@ impl ServerSetup {
             playout,
             amcp,
             address,
+            text_source,
         }
     }
 
     /// The options the engine is given, as a command-line user would type them — `None`: none, the
     /// command line passes through as it was. Only called once `judge()` refuses nothing.
     pub fn engine_options(&self) -> Option<Vec<String>> {
+        let text_source = self.text_source.text().trim();
+        let text_source_option = (!text_source.is_empty()).then(|| {
+            let escaped = text_source.replace('"', "");
+            format!("{}\"{escaped}\"", OPTIONS[3])
+        });
         if self.separate {
             let playout = normalise_playout_address(self.playout.text())?;
             let amcp = bare_host(self.amcp.text())?;
             let address = bare_host(&self.bridge_address()?)?;
-            return Some(vec![
+            let mut options = vec![
                 format!("{}{playout}", OPTIONS[0]),
                 format!("{}{amcp}", OPTIONS[1]),
                 format!("{}{address}", OPTIONS[2]),
-            ]);
+            ];
+            options.extend(text_source_option);
+            return Some(options);
         }
-        self.was_separate.then(|| {
-            vec![
+        if self.was_separate {
+            let mut options = vec![
                 format!("{}{PLAYOUT_ON_THIS_MACHINE}", OPTIONS[0]),
                 format!("{}{AMCP_ON_THIS_MACHINE}", OPTIONS[1]),
-            ]
-        })
+            ];
+            options.extend(text_source_option);
+            return Some(options);
+        }
+        text_source_option.map(|option| vec![option])
     }
 }
 
@@ -363,6 +408,7 @@ mod tests {
                 playout: Some(TYPE_THE_PLAYOUT),
                 amcp: Some(TYPE_A_HOST),
                 address: Some(CHOOSE_AN_ADDRESS),
+                text_source: None,
             }
         );
         s.playout.set("ftp://192.0.2.10");
@@ -375,6 +421,7 @@ mod tests {
                 playout: Some(NOT_A_PLAYOUT_ADDRESS),
                 amcp: Some(NOT_A_HOST),
                 address: Some(NOT_LOOPBACK),
+                text_source: None,
             }
         );
         s.playout.set("127.0.0.1:8080");
@@ -426,6 +473,7 @@ mod tests {
             playout: Some("http://192.0.2.10:8080".into()),
             amcp_host: Some("192.0.2.10".into()),
             bridge_address: Some("192.0.2.20".into()),
+            text_source_root: None,
         };
         let mut s = ServerSetup::new(Some(&stored), &StoredBridge::default(), ips());
         s.toggle();
@@ -456,10 +504,27 @@ mod tests {
             playout: Some("http://192.0.2.30:8080".into()),
             amcp_host: Some("192.0.2.30".into()),
             bridge_address: Some("192.0.2.20".into()),
+            text_source_root: None,
         };
         let s = ServerSetup::new(Some(&stored), &given, ips());
         assert!(s.separate);
         assert_eq!(s.playout.text(), "http://192.0.2.30:8080");
         assert_eq!(s.choice, AddressChoice::Listed(0));
+    }
+
+    #[test]
+    fn a_shared_text_folder_is_per_server_and_quoted_for_the_engine() {
+        let stored = StoredBridge::from_json(
+            br#"{"playoutAddress":"http://127.0.0.1:8080","textSourceRoot":"\\\\PLAYOUT02\\share text"}"#,
+        )
+        .unwrap();
+        let s = ServerSetup::new(Some(&stored), &StoredBridge::default(), ips());
+        assert_eq!(s.text_source.text(), r"\\PLAYOUT02\share text");
+        assert_eq!(
+            s.engine_options(),
+            Some(vec![
+                r#"/TEXTSOURCEROOT="\\PLAYOUT02\share text""#.to_string()
+            ])
+        );
     }
 }

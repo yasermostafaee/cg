@@ -4236,3 +4236,20 @@ one matching three-installer set.
 all applicable Windows installer/smoke/upgrade jobs pass on the exact candidate commit; the installed Designer
 smoke proves its text-source command crosses Tauri ACL; all three installer files are downloaded with hashes and
 placed in `installers-ci-0.12.4/` and `dist/`; no tag or release is created.
+
+## [~] P-073 — Release candidate `0.12.5`: installed shared-text-root configuration ⟨priority: high⟩ — FILED 2026-11-01 by `RELEASE-0125-01` · `openspec/changes/prepare-0-12-5-installers/`
+
+**What:** build and retain one matching `0.12.5` set of CG Bridge, CG Control and CG Designer
+installers. The product change fixes `B-357`: CG Bridge Setup configures the station-specific local
+or UNC root used for fixed text files. Put the verified files in the local handoff folder and
+`dist/`; do not publish a release.
+
+**Why:** `0.12.4` identifies already-built candidate bytes which fix Designer ACL but leave installed
+CG Control looking in Bridge's private default folder. The Bridge installer and CG Setup now change,
+so their new bytes need a new identity; the installed suite remains one matching set.
+
+**Acceptance:** all version surfaces say `0.12.5`; the full local gate and E2E lane pass; Linux
+workspace/E2E and all applicable Windows installer/smoke/upgrade jobs pass on the exact candidate
+commit; windowed and silent Bridge installation prove `textSourceRoot` is written and preserved;
+all three installer files are downloaded with hashes and placed in `installers-ci-0.12.5/` and
+`dist/`; no tag or release is created.

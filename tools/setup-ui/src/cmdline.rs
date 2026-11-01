@@ -264,8 +264,8 @@ mod tests {
     }
 
     #[test]
-    fn the_engines_three_options_read_and_removed_as_getoptions_reads_them() {
-        let rest = r#" /PLAYOUT=http://192.0.2.10:8080 /amcphost=192.0.2.10 /BRIDGEADDRESS="192.0.2.20" /OSCPORT=6251"#;
+    fn the_engines_page_options_read_and_removed_as_getoptions_reads_them() {
+        let rest = r#" /PLAYOUT=http://192.0.2.10:8080 /amcphost=192.0.2.10 /BRIDGEADDRESS="192.0.2.20" /TEXTSOURCEROOT="\\server\share text" /OSCPORT=6251"#;
         assert_eq!(
             option_value(rest, "/PLAYOUT=").as_deref(),
             Some("http://192.0.2.10:8080")
@@ -278,10 +278,22 @@ mod tests {
             option_value(rest, "/BRIDGEADDRESS=").as_deref(),
             Some("192.0.2.20")
         );
+        assert_eq!(
+            option_value(rest, "/TEXTSOURCEROOT=").as_deref(),
+            Some(r"\\server\share text")
+        );
         assert_eq!(option_value(rest, "/CONTROLPORT="), None);
         assert_eq!(option_value(" /PLAYOUT= /S", "/PLAYOUT="), None);
         assert_eq!(
-            without_options(rest, &["/PLAYOUT=", "/AMCPHOST=", "/BRIDGEADDRESS="]),
+            without_options(
+                rest,
+                &[
+                    "/PLAYOUT=",
+                    "/AMCPHOST=",
+                    "/BRIDGEADDRESS=",
+                    "/TEXTSOURCEROOT=",
+                ],
+            ),
             "/OSCPORT=6251"
         );
         assert_eq!(

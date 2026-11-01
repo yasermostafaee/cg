@@ -9,7 +9,7 @@
 ;
 ; Silent:     CG-Bridge_<v>_x64-setup.exe /S [/PLAYOUT=http://host:8080] [/AMCPHOST=127.0.0.1]
 ;               [/AMCPPORT=5250] [/OSCPORT=6251] [/CONTROLPORT=5280] [/TEMPLATEPORT=7911]
-;               [/BRIDGEADDRESS=<ip>]
+;               [/BRIDGEADDRESS=<ip>] [/TEXTSOURCEROOT=<local-or-UNC-folder>]
 ;             A value runs to the next space; a value in double quotes may hold one.
 ; Uninstall:  "%ProgramFiles%\CG Bridge\uninstall.exe" /S _?=%ProgramFiles%\CG Bridge
 ;             _?= makes the uninstaller finish before it exits (its exit code is then the
@@ -76,6 +76,7 @@ Var OscPort
 Var ControlPort
 Var TemplatePort
 Var BridgeAddress
+Var TextSourceRoot
 Var Warnings
 
 ; ---------------------------------------------------------------------------------------------
@@ -148,6 +149,7 @@ Function .onInit
   ${GetOptions} " $Args" " /CONTROLPORT=" $ControlPort
   ${GetOptions} " $Args" " /TEMPLATEPORT=" $TemplatePort
   ${GetOptions} " $Args" " /BRIDGEADDRESS=" $BridgeAddress
+  ${GetOptions} " $Args" " /TEXTSOURCEROOT=" $TextSourceRoot
   ClearErrors
 FunctionEnd
 
@@ -179,7 +181,7 @@ Section "CG Bridge" SecMain
   ${AndIf} $Playout == ""
     StrCpy $Playout "${DEFAULT_PLAYOUT}"
   ${EndIf}
-  !insertmacro RUN "writing the configuration" `"$INSTDIR\cg-bridge.exe" "$INSTDIR\bridge\caspar-bridge.mjs" --write-service-config "$DataDir\cg-bridge.json" --playout-address "$Playout" --caspar-host "$AmcpHost" --amcp-port "$AmcpPort" --osc-port "$OscPort" --port "$ControlPort" --template-serve-port "$TemplatePort" --template-serve-host "$BridgeAddress"`
+  !insertmacro RUN "writing the configuration" `"$INSTDIR\cg-bridge.exe" "$INSTDIR\bridge\caspar-bridge.mjs" --write-service-config "$DataDir\cg-bridge.json" --playout-address "$Playout" --caspar-host "$AmcpHost" --amcp-port "$AmcpPort" --osc-port "$OscPort" --port "$ControlPort" --template-serve-port "$TemplatePort" --template-serve-host "$BridgeAddress" --text-source-root "$TextSourceRoot"`
   ${If} $ExitCode != 0
     MessageBox MB_ICONSTOP "CG Bridge's configuration was not written:$\r$\n$Output" /SD IDOK
     Abort "CG Bridge's configuration was not written (see $Log)."

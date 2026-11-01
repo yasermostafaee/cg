@@ -7,7 +7,8 @@ import { DEFAULT_OSC_PORT, RESERVED_OSC_PORT, RESERVED_OSC_PORT_REASON } from '@
  * 🔴 `CENTRAL-BRIDGE-01` (D2) — **CG BRIDGE'S CONFIGURATION FILE**, `%ProgramData%\CG Bridge\cg-bridge.json`.
  *
  * Written by the installer from its arguments (`/PLAYOUT=`, `/AMCPHOST=`, `/AMCPPORT=`, `/OSCPORT=`,
- * `/CONTROLPORT=`, `/TEMPLATEPORT=`, `/BRIDGEADDRESS=`) and read at every start by `--service-config`.
+ * `/CONTROLPORT=`, `/TEMPLATEPORT=`, `/BRIDGEADDRESS=`, `/TEXTSOURCEROOT=`) and read at every start
+ * by `--service-config`.
  * It fills in the command-line flags the service did not give — every flag still wins over it — so
  * each value is checked by the one reader that already checks that flag, and the file adds no
  * second path through the bridge.

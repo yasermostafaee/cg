@@ -11,7 +11,7 @@ use crate::palette::{self, Rgb};
 use crate::product::{ProductId, PUBLISHER, WEBVIEW2_LINE};
 use crate::server::{
     AddressChoice, ADDRESS_LABEL, AMCP_LABEL, OTHER_LABEL, PLAYOUT_LABEL, PLAYOUT_PLACEHOLDER,
-    SEPARATE_LABEL,
+    SEPARATE_LABEL, TEXT_SOURCE_LABEL, TEXT_SOURCE_PLACEHOLDER,
 };
 
 pub const WIN_W: f32 = 800.0;
@@ -152,6 +152,8 @@ pub enum WidgetId {
     Address(u8),
     AddressOther,
     AddressOtherField,
+    TextSourceField,
+    TextSourceBrowse,
 }
 
 impl WidgetId {
@@ -159,7 +161,10 @@ impl WidgetId {
     pub fn is_field(self) -> bool {
         matches!(
             self,
-            WidgetId::PlayoutField | WidgetId::AmcpField | WidgetId::AddressOtherField
+            WidgetId::PlayoutField
+                | WidgetId::AmcpField
+                | WidgetId::AddressOtherField
+                | WidgetId::TextSourceField
         )
     }
 }
@@ -417,6 +422,25 @@ fn server_page(b: &mut Builder, m: &Model) {
         SEPARATE_LABEL,
         true,
     ));
+    let text_y = 140.0;
+    b.label(text_y, TEXT_SOURCE_LABEL);
+    b.widgets.push(field_widget(
+        WidgetId::TextSourceField,
+        Rect::new(X0, text_y + 20.0, CONTENT_W - 96.0, 32.0),
+        TEXT_SOURCE_LABEL,
+        &s.text_source,
+        TEXT_SOURCE_PLACEHOLDER,
+        s.shown.text_source.is_some(),
+    ));
+    b.widgets.push(Widget::new(
+        WidgetId::TextSourceBrowse,
+        WidgetKind::Button(Variant::Secondary),
+        Rect::new(X1 - 88.0, text_y + 20.0, 88.0, 32.0),
+        "Browse…",
+        true,
+    ));
+    refusal(b, text_y + 56.0, s.shown.text_source);
+
     if !s.separate {
         let stored = m
             .facts
@@ -424,9 +448,9 @@ fn server_page(b: &mut Builder, m: &Model) {
             .as_ref()
             .filter(|_| !s.was_separate)
             .and_then(|c| c.playout.clone());
-        b.label(152.0, PLAYOUT_LABEL);
+        b.label(222.0, PLAYOUT_LABEL);
         b.text(
-            Rect::new(X0, 174.0, CONTENT_W, 20.0),
+            Rect::new(X0, 244.0, CONTENT_W, 20.0),
             format!(
                 "{} · on this machine",
                 stored
@@ -439,7 +463,7 @@ fn server_page(b: &mut Builder, m: &Model) {
         return;
     }
     let shown = s.shown.clone();
-    let mut y = 150.0;
+    let mut y = 212.0;
     b.label(y, PLAYOUT_LABEL);
     b.widgets.push(field_widget(
         WidgetId::PlayoutField,
@@ -1159,6 +1183,9 @@ mod tests {
         assert!(s
             .texts()
             .contains(&"http://127.0.0.1:8080 · on this machine"));
+        assert!(s.texts().contains(&"SHARED TEXT FOLDER"));
+        assert!(s.widget(WidgetId::TextSourceField).is_some());
+        assert!(s.widget(WidgetId::TextSourceBrowse).is_some());
         assert!(s.widget(WidgetId::PlayoutField).is_none());
         assert_eq!(s.primary, Some(WidgetId::Install));
         assert_eq!(s.escape, Some(WidgetId::Cancel));
@@ -1192,6 +1219,8 @@ mod tests {
             tab,
             vec![
                 WidgetId::Separate,
+                WidgetId::TextSourceField,
+                WidgetId::TextSourceBrowse,
                 WidgetId::PlayoutField,
                 WidgetId::AmcpField,
                 WidgetId::Address(0),

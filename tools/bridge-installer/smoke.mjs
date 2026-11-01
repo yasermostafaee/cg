@@ -46,6 +46,7 @@ const PROGRAM_DIR = path.join(process.env.ProgramFiles ?? 'C:\\Program Files', '
 const DATA_DIR = path.join(process.env.ProgramData ?? 'C:\\ProgramData', 'CG Bridge');
 const EXE = path.join(PROGRAM_DIR, 'cg-bridge.exe');
 const HEALTH = 'http://127.0.0.1:5280/health';
+const TEXT_SOURCE_ROOT = path.resolve(OUT, 'shared text');
 /** Our three rules, each as `firewall-rule.mjs` judges it: a name, a protocol, the ports in force. */
 const RULES = [
   { name: 'CG Bridge - consoles', protocol: 'TCP', port: '5280' },
@@ -57,6 +58,7 @@ const RULES = [
 const NOT_SIGNED_IN = 'This console is not signed in';
 
 fs.mkdirSync(OUT, { recursive: true });
+fs.mkdirSync(TEXT_SOURCE_ROOT, { recursive: true });
 const results = [];
 let failed = false;
 function check(name, ok, detail = '') {
@@ -134,7 +136,11 @@ check(
   path.basename(INSTALLER) === `CG-Bridge_${RELEASE}_x64-setup.exe`,
   path.basename(INSTALLER),
 );
-const installed = exitCodeOf(INSTALLER, ['/S', `/PLAYOUT=${PLAYOUT}`]);
+const installed = exitCodeOf(INSTALLER, [
+  '/S',
+  `/PLAYOUT=${PLAYOUT}`,
+  `/TEXTSOURCEROOT=${TEXT_SOURCE_ROOT}`,
+]);
 check('a silent install exits 0', installed === 0, String(installed));
 for (const file of [
   EXE,
@@ -227,7 +233,7 @@ check(
 const config = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'cg-bridge.json'), 'utf8'));
 check(
   'the configuration is written, with the Playout it was given',
-  config.playoutAddress === PLAYOUT,
+  config.playoutAddress === PLAYOUT && config.textSourceRoot === TEXT_SOURCE_ROOT,
   JSON.stringify(config),
 );
 const acl = execFileSync('icacls', [DATA_DIR], { encoding: 'utf8', windowsHide: true });

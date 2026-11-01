@@ -3590,3 +3590,23 @@ Measured free before use: the registry named `P-072` as next free; the tracked P
 `P-072` before this filing.
 
 ⇒ **Next free after this entry is `B-357`**, **`D-167`**, **`P-073`**, **`R-104`** and **`C-049`**.
+
+### 2026-11-01 — installed shared-text deployment takes `B-357`
+
+- `B-357` — installed CG Control cannot read a file selected successfully in Designer because CG
+  Bridge Setup never configures the station's shared-text root — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the registry named `B-357` as next free and the tracked PRD-heading sweep
+found no existing `B-357` heading before filing.
+
+⇒ **Next free after this entry is `B-358`**, **`D-167`**, **`P-073`**, **`R-104`** and **`C-049`**.
+
+### 2026-11-01 — `RELEASE-0125-01` takes `P-073`
+
+- `P-073` — release candidate `0.12.5`, the matching installer delivery that configures each
+  station's shared-text root — [platform.md](platform.md).
+
+Measured free before use: the registry named `P-073` as next free and the tracked PRD-heading sweep
+found no existing `P-073` heading before filing.
+
+⇒ **Next free after this entry is `B-358`**, **`D-167`**, **`P-074`**, **`R-104`** and **`C-049`**.

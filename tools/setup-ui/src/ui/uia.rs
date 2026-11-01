@@ -105,6 +105,8 @@ fn automation_id(id: WidgetId) -> String {
         WidgetId::Address(i) => return format!("address-{i}"),
         WidgetId::AddressOther => "address-other",
         WidgetId::AddressOtherField => "address-other-field",
+        WidgetId::TextSourceField => "shared-text-folder",
+        WidgetId::TextSourceBrowse => "shared-text-folder-browse",
     }
     .to_string()
 }

@@ -227,8 +227,14 @@ and does not update an on-air graphic by itself. The default local location is:
 ```
 
 Create that folder as an administrator and let the system that produces the text save UTF-8 files
-there. To keep the files on a network share, add (or preserve during an upgrade) this key and restart
-the `CGBridge` service:
+there. From `0.12.5`, CG Bridge Setup exposes **Shared text folder** on its server page: browse to the
+station's existing local or UNC folder and Setup writes `textSourceRoot`. The silent equivalent is
+`/TEXTSOURCEROOT="\\fileserver\newsroom\CG Text"`; omitting it on an upgrade preserves the stored
+value. No customer path is compiled into the installer.
+
+The most reliable layout is a local folder on the Bridge server (for example `D:\CG Text`) shared to
+Designer workstations as `\\CGSERVER\CG Text`: configure Bridge with the local path and browse the
+UNC view in Designer. To use a remote network share directly, the resulting configuration is:
 
 ```json
 {
@@ -237,8 +243,9 @@ the `CGBridge` service:
 }
 ```
 
-The service only reads these files. Give the Windows computer account running CG Bridge read access
-to the share (for example `DOMAIN\\CGSERVER$`); give the producing application write access. Paths
+The service only reads these files. For a remote UNC root, give the Windows computer account running
+CG Bridge read access to both the share and NTFS (for example `DOMAIN\\CGSERVER$`); give the producing
+application write access. Paths
 stored by Designer stay relative: on the authoring workstation, use **Browse shared file…** and
 choose the text file directly inside this same `textSourceRoot` share, then verify its live preview.
 Designer saves only a filename such as `crawl.txt`; drive paths, UNC roots, `..`, preview bytes and

@@ -109,7 +109,7 @@ pub fn widget_from_code(code: usize) -> Option<WidgetId> {
     ALL_WIDGETS.get(code).copied()
 }
 const ADDRESS_CODE: usize = 100;
-const ALL_WIDGETS: [WidgetId; 17] = [
+const ALL_WIDGETS: [WidgetId; 19] = [
     WidgetId::Next,
     WidgetId::Back,
     WidgetId::Cancel,
@@ -127,6 +127,8 @@ const ALL_WIDGETS: [WidgetId; 17] = [
     WidgetId::AmcpField,
     WidgetId::AddressOther,
     WidgetId::AddressOtherField,
+    WidgetId::TextSourceField,
+    WidgetId::TextSourceBrowse,
 ];
 
 /// What must run after the window's state is released (each may re-enter the window procedure).
@@ -134,6 +136,7 @@ enum Effect {
     Minimize,
     Destroy,
     PickFolder,
+    PickTextSourceFolder,
     Open { target: String, as_user: bool },
     Move(RECT),
 }
@@ -256,6 +259,7 @@ fn given_server(rest: &str) -> StoredBridge {
         playout: cmdline::option_value(rest, OPTIONS[0]),
         amcp_host: cmdline::option_value(rest, OPTIONS[1]),
         bridge_address: cmdline::option_value(rest, OPTIONS[2]),
+        text_source_root: cmdline::option_value(rest, OPTIONS[3]),
     }
 }
 
@@ -595,6 +599,40 @@ fn run_effect(hwnd: HWND, e: Effect) {
                     });
                 }
             }
+            Effect::PickTextSourceFolder => {
+                let start = with_app(|a| {
+                    let current = a.model.server.text_source.text().trim();
+                    if !current.is_empty() {
+                        return current.to_string();
+                    }
+                    a.model
+                        .facts
+                        .data_dir
+                        .as_deref()
+                        .map(|data| {
+                            Path::new(data)
+                                .join("text-sources")
+                                .to_string_lossy()
+                                .to_string()
+                        })
+                        .unwrap_or_default()
+                })
+                .unwrap_or_default();
+                if let Some(chosen) =
+                    pick_exact_folder(hwnd, &start, "Choose the shared text folder")
+                {
+                    APP.with(|a| {
+                        if let Ok(mut g) = a.try_borrow_mut() {
+                            if let Some(app) = g.as_mut() {
+                                app.model.server.text_source.set(&chosen);
+                                app.model.server.text_source_changed();
+                                log_line(&app.log, &format!("shared text folder chosen: {chosen}"));
+                                app.rebuild();
+                            }
+                        }
+                    });
+                }
+            }
         }
     }
 }
@@ -602,6 +640,19 @@ fn run_effect(hwnd: HWND, e: Effect) {
 /// The system folder picker. The product's own folder name is added to a folder that is not it, as
 /// NSIS's directory page always did.
 fn pick_folder(hwnd: HWND, current: &str, name: &str) -> Option<String> {
+    let chosen = pick_exact_folder(hwnd, current, &format!("Choose a folder for {name}"))?;
+    let last = Path::new(&chosen)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    Some(if last.eq_ignore_ascii_case(name) {
+        chosen
+    } else {
+        format!(r"{}\{}", chosen.trim_end_matches('\\'), name)
+    })
+}
+
+fn pick_exact_folder(hwnd: HWND, current: &str, title: &str) -> Option<String> {
     unsafe {
         let dialog: IFileOpenDialog =
             CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER).ok()?;
@@ -609,7 +660,7 @@ fn pick_folder(hwnd: HWND, current: &str, name: &str) -> Option<String> {
         dialog
             .SetOptions(opts | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST)
             .ok()?;
-        let _ = dialog.SetTitle(&HSTRING::from(format!("Choose a folder for {name}")));
+        let _ = dialog.SetTitle(&HSTRING::from(title));
         if let Some(start) = win::nearest_existing(Path::new(current)) {
             if let Ok(item) = SHCreateItemFromParsingName::<_, _, IShellItem>(
                 &HSTRING::from(start.as_os_str()),
@@ -623,15 +674,7 @@ fn pick_folder(hwnd: HWND, current: &str, name: &str) -> Option<String> {
         let path = item.GetDisplayName(SIGDN_FILESYSPATH).ok()?;
         let chosen = path.to_string().ok()?;
         windows::Win32::System::Com::CoTaskMemFree(Some(path.0 as *const _));
-        let last = Path::new(&chosen)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_default();
-        Some(if last.eq_ignore_ascii_case(name) {
-            chosen
-        } else {
-            format!(r"{}\{}", chosen.trim_end_matches('\\'), name)
-        })
+        Some(chosen)
     }
 }
 
@@ -1185,6 +1228,7 @@ impl App {
                 WidgetId::PlayoutField => &mut server.playout,
                 WidgetId::AmcpField => &mut server.amcp,
                 WidgetId::AddressOtherField => &mut server.other,
+                WidgetId::TextSourceField => &mut server.text_source,
                 _ => return,
             };
             let before = field.text().to_string();
@@ -1195,6 +1239,7 @@ impl App {
             match id {
                 WidgetId::PlayoutField => server.playout_changed(),
                 WidgetId::AmcpField => server.amcp_changed(),
+                WidgetId::TextSourceField => server.text_source_changed(),
                 _ => server.address_changed(),
             }
         }
@@ -1214,6 +1259,8 @@ impl App {
                 _ if s.addresses.is_empty() => WidgetId::AddressOther,
                 _ => WidgetId::Address(0),
             })
+        } else if s.shown.text_source.is_some() {
+            Some(WidgetId::TextSourceField)
         } else {
             None
         }
@@ -1290,6 +1337,7 @@ impl App {
                 _ => self.quit(1, fx),
             },
             WidgetId::Change => fx.push(Effect::PickFolder),
+            WidgetId::TextSourceBrowse => fx.push(Effect::PickTextSourceFolder),
             WidgetId::Install => {
                 if self.model.can_install() && !self.installing {
                     // `RELEASE-0111-01` Part A — refused HERE, in words, beside each field: never
@@ -1322,7 +1370,10 @@ impl App {
                     self.focus = Some(WidgetId::PlayoutField);
                 }
             }
-            WidgetId::PlayoutField | WidgetId::AmcpField | WidgetId::AddressOtherField => {
+            WidgetId::PlayoutField
+            | WidgetId::AmcpField
+            | WidgetId::AddressOtherField
+            | WidgetId::TextSourceField => {
                 self.focus = Some(id);
             }
             WidgetId::Address(i) => {
