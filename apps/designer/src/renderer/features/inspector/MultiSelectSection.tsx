@@ -506,10 +506,6 @@ function LiveSourceAppearanceSections({
   ];
   const selectedPosters = elements.map((element) => element.posterAssetId ?? '');
   const selectedPoster = allSame(selectedPosters) ? (selectedPosters[0] ?? '') : MIXED;
-  const posterFitModes = elements.map((element) => element.posterFitMode ?? 'cover');
-  const selectedPosterFitMode: LiveFitMode | typeof MIXED = allSame(posterFitModes)
-    ? (posterFitModes[0] ?? 'cover')
-    : MIXED;
   const missingPosters = Array.from(
     new Set(selectedPosters.filter((id) => id !== '' && !posterIds.includes(id))),
   );
@@ -621,22 +617,6 @@ function LiveSourceAppearanceSections({
             }));
           }}
         />
-        {selectedPosters.some((poster) => poster !== '') && (
-          <SelectField
-            label="poster fit"
-            value={selectedPosterFitMode}
-            options={[...(selectedPosterFitMode === MIXED ? [MIXED] : []), ...LIVE_FIT_MODES]}
-            labels={[
-              ...(selectedPosterFitMode === MIXED ? ['— mixed —'] : []),
-              'Fit whole poster',
-              'Fill frame (crop edges)',
-            ]}
-            onCommit={(posterFitMode) => {
-              if (posterFitMode === MIXED) return;
-              updateAll(() => ({ posterFitMode: posterFitMode as LiveFitMode }));
-            }}
-          />
-        )}
         <div className={fieldCss.row}>
           <span className={fieldCss.label} />
           <Button

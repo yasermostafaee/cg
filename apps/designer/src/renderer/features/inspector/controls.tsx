@@ -577,6 +577,8 @@ interface TextFieldProps {
   bare?: boolean | undefined;
   value: string;
   onCommit: (s: string) => void;
+  /** Keep the committed value visible while preventing edits. */
+  disabled?: boolean | undefined;
   /**
    * Accessible name for the input, when the row's short label isn't enough on
    * its own (e.g. "Regex" → "Custom pattern regex"). Defaults to none — the
@@ -632,6 +634,7 @@ export function TextField(props: TextFieldProps): JSX.Element {
           defaultValue={shown}
           aria-label={props.ariaLabel}
           list={listId}
+          disabled={props.disabled}
           onFocus={(e) => e.currentTarget.select()}
           onInput={
             digits === undefined

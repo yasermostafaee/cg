@@ -101,13 +101,21 @@ describe('B-187 — the "auto" mark on a tool-named plate', () => {
     expect(mark?.textContent).toBe('auto');
     expect(mark?.getAttribute('title')).toBe(AUTO_SOURCE_ID_TITLE);
     expect(mark?.hasAttribute('data-cg-tag')).toBe(true);
-    expect(c.querySelector<HTMLInputElement>('input[aria-label="auto"]')?.checked).toBe(true);
+    const auto = c.querySelector<HTMLInputElement>('input[aria-label="auto source id"]');
+    const sourceId = idInput(c);
+    expect(auto?.checked).toBe(true);
+    expect(sourceId?.disabled).toBe(true);
+    expect(
+      auto !== null && sourceId !== null
+        ? (auto.compareDocumentPosition(sourceId) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+        : false,
+    ).toBe(true);
   });
 
   it('B-365 — Auto can be turned off and then back on without changing the id', () => {
     seedPlate({ routeKey: 'live-1', routeKeyAuto: true });
     const c = render();
-    const auto = c.querySelector<HTMLInputElement>('input[aria-label="auto"]');
+    const auto = c.querySelector<HTMLInputElement>('input[aria-label="auto source id"]');
     if (auto === null) throw new Error('no auto checkbox');
     act(() => auto.click());
     expect(plateNow().routeKeyAuto).toBe(false);
@@ -120,7 +128,7 @@ describe('B-187 — the "auto" mark on a tool-named plate', () => {
     expect(plateNow().routeKey).toBeUndefined();
     expect(plateNow().routeKeyAuto).toBe(false);
     rerender();
-    const restore = c.querySelector<HTMLInputElement>('input[aria-label="auto"]');
+    const restore = c.querySelector<HTMLInputElement>('input[aria-label="auto source id"]');
     if (restore === null) throw new Error('auto checkbox disappeared');
     expect(restore.checked).toBe(false);
     act(() => restore.click());
@@ -133,8 +141,13 @@ describe('B-187 — the "auto" mark on a tool-named plate', () => {
   it('TYPING another id makes it the author’s', () => {
     seedPlate({ routeKey: 'live-1', routeKeyAuto: true });
     const c = render();
+    const auto = c.querySelector<HTMLInputElement>('input[aria-label="auto source id"]');
+    if (auto === null) throw new Error('no auto checkbox');
+    act(() => auto.click());
+    rerender();
     const input = idInput(c);
     if (input === null) throw new Error('no source id input');
+    expect(input.disabled).toBe(false);
     commit(input, 'guest-1');
     expect(plateNow().routeKey).toBe('guest-1');
     expect(plateNow().routeKeyAuto).toBeUndefined();
@@ -142,29 +155,37 @@ describe('B-187 — the "auto" mark on a tool-named plate', () => {
     expect(c.querySelector('input[aria-label="auto"]')).toBeNull();
   });
 
-  it('🔴 an UNCHANGED commit (a focus and blur) is no confirmation — the mark stays', () => {
-    seedPlate({ routeKey: 'live-1', routeKeyAuto: true });
+  it('an unchanged manual commit does not turn Auto back on', () => {
+    seedPlate({ routeKey: 'live-1', routeKeyAuto: false });
     const c = render();
     const input = idInput(c);
     if (input === null) throw new Error('no source id input');
     commit(input, 'live-1');
-    expect(plateNow().routeKeyAuto).toBe(true);
+    expect(plateNow().routeKeyAuto).toBe(false);
   });
 
   it('clearing an automatic id unassigns the plate but keeps Auto available', () => {
     seedPlate({ routeKey: 'live-1', routeKeyAuto: true });
     const c = render();
+    const auto = c.querySelector<HTMLInputElement>('input[aria-label="auto source id"]');
+    if (auto === null) throw new Error('no auto checkbox');
+    act(() => auto.click());
+    rerender();
     const input = idInput(c);
     if (input === null) throw new Error('no source id input');
     commit(input, '');
     expect(plateNow().routeKey).toBeUndefined();
     expect(plateNow().routeKeyAuto).toBe(false);
     rerender();
-    expect(c.querySelector<HTMLInputElement>('input[aria-label="auto"]')?.checked).toBe(false);
+    expect(c.querySelector<HTMLInputElement>('input[aria-label="auto source id"]')?.checked).toBe(
+      false,
+    );
   });
 
   it('an id the AUTHOR typed shows no mark', () => {
     seedPlate({ routeKey: 'guest-1' });
-    expect(render().querySelector('[data-testid="live-source-auto"]')).toBeNull();
+    const c = render();
+    expect(c.querySelector('[data-testid="live-source-auto"]')).toBeNull();
+    expect(c.querySelector('input[aria-label="auto source id"]')).toBeNull();
   });
 });

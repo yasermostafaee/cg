@@ -113,26 +113,6 @@ describe('VideoPlaceholderElementSchema — additive, and still frozen for D-128
     );
   });
 
-  it('D-168 — `posterFitMode` round-trips independently and remains optional', () => {
-    for (const posterFitMode of ['contain', 'cover'] as const) {
-      const v = {
-        ...base,
-        type: 'video-placeholder' as const,
-        routeKey: 'guest-1',
-        posterAssetId: 'asset-poster',
-        posterFitMode,
-      };
-      expect(VideoPlaceholderElementSchema.parse(v)).toEqual(v);
-    }
-    const legacy = {
-      ...base,
-      type: 'video-placeholder' as const,
-      routeKey: 'guest-1',
-      posterAssetId: 'asset-poster',
-    };
-    expect(VideoPlaceholderElementSchema.parse(legacy)).toEqual(legacy);
-  });
-
   it('a device-shaped source id is refused AT THE SCHEMA BOUNDARY', () => {
     for (const routeKey of ['DECKLINK DEVICE 3', 'route://1-1', 'C:\\media\\guest.mp4']) {
       const res = VideoPlaceholderElementSchema.safeParse({

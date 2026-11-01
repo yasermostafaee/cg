@@ -133,16 +133,6 @@ describe("D-137 — 'author' mode paints the bars", () => {
     expect(el.querySelector('[data-cg-live-source-label]')?.textContent).toBe('guest-1');
   });
 
-  it('D-168 — poster fit is independent and may show the whole authoring image', () => {
-    const { root } = build(
-      sceneWith([liveSource({ posterAssetId: 'asset-1', posterFitMode: 'contain' })]),
-      'author',
-    );
-    expect(
-      node(root).querySelector<HTMLImageElement>('img[data-cg-asset-id]')?.style.objectFit,
-    ).toBe('contain');
-  });
-
   it('the label is pinned LTR, so a Persian scene cannot flip `guest-1` to `1-guest`', () => {
     const { root } = build(sceneWith([liveSource()]), 'author');
     const label = node(root).querySelector<HTMLElement>('[data-cg-live-source-label]');

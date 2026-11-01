@@ -83,9 +83,6 @@ async function render(): Promise<HTMLDivElement> {
 
 const posterSelect = (c: HTMLElement): HTMLSelectElement | null =>
   c.querySelector('select[aria-label="poster"]');
-const posterFitSelect = (c: HTMLElement): HTMLSelectElement | null =>
-  c.querySelector('select[aria-label="poster fit"]');
-
 function choose(select: HTMLSelectElement, value: string): void {
   act(() => {
     const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
@@ -115,17 +112,6 @@ describe('D-137 — the poster picker', () => {
     expect(plateNow().posterAssetId).toBe('img-1');
     choose(select, '');
     expect(plateNow().posterAssetId).toBeUndefined();
-  });
-
-  it('D-168 — a chosen poster offers independent fit/cover without changing live fit', async () => {
-    seedPlate({ posterAssetId: 'img-1', fitMode: 'contain' });
-    const c = await render();
-    const posterFit = posterFitSelect(c);
-    expect(posterFit?.value).toBe('cover');
-    if (posterFit === null) throw new Error('no poster fit select');
-    choose(posterFit, 'contain');
-    expect(plateNow().posterFitMode).toBe('contain');
-    expect(plateNow().fitMode).toBe('contain');
   });
 
   it('a stored poster that resolves to neither list is shown as itself, missing', async () => {

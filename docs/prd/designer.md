@@ -5829,7 +5829,7 @@ turns a small styling change into repetitive work.
   one undo entry; plates already matching remain unchanged
 - WHEN the selection contains a non-Live-Source element THEN these plate-only controls are absent
 
-## [x] D-168 — A Live Source poster has its own fit mode ⟨priority: medium — the owner, 2026-11-01⟩ — `openspec/changes/multiselect-live-source-appearance/`
+## [~] D-168 — A Live Source poster has its own fit mode ⟨withdrawn by the owner, 2026-11-01 — the control was not useful⟩ — `openspec/changes/multiselect-live-source-appearance/`
 
 **What:** after choosing a poster image for a Live Source, the author can independently choose
 **Fit whole poster** (`contain`) or **Fill frame** (`cover`, cropping edges). This poster-only choice
@@ -5848,3 +5848,7 @@ an authoring aid, so its presentation needs to be adjustable without changing wh
 - WHEN several Live Sources are selected THEN Poster fit supports a truthful mixed value and one
   committed value updates all selected plates as one undo entry
 - WHEN an older template has a poster and no Poster fit THEN it continues to render as cover
+
+**Withdrawn:** Poster fit has been removed from the single and multi Inspector, schema, and author
+renderer. Posters use the original fixed `cover` behaviour; the real Live Source fit remains a
+separate on-air control.

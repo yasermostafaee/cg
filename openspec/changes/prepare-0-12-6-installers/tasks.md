@@ -40,6 +40,8 @@ Lane: **FULL**
       exported label (`B-364`).
 - [x] 3.12 Keep the Auto source-id control reversible after confirming a generated id, while a
       newly typed id remains authored (`B-365`).
+- [x] 3.13 Keep the Source ID read-only while Auto is enabled, preserve Auto after clearing a manual
+      id, and withdraw the unused Poster fit control (`B-365`, `D-168`).
 
 ## 4. Verification
 

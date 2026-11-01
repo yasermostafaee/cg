@@ -818,35 +818,14 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
   return (
     <>
       <CollapseSection title="Live Source" defaultExpanded>
-        <TextField
-          label="source id"
-          ariaLabel="Live Source source id"
-          value={holds}
-          resetKey={`${id}-${String(rejectSeq)}`}
-          onCommit={commitId}
-          suggestions={suggestions}
-          datalistId={`live-source-ids-${id}`}
-          trailing={
-            /* 🔴 `B-187` — the tool chose this name, and the field SAYS so until the author
-               turns Auto off or types another. The reversible control is the row below. */
-            element.routeKeyAuto === true && element.routeKey !== undefined ? (
-              <Tag
-                className={fieldCss.autoMark}
-                title={AUTO_SOURCE_ID_TITLE}
-                data-testid="live-source-auto"
-              >
-                auto
-              </Tag>
-            ) : undefined
-          }
-        />
-        {/* `B-365` — confirming a generated id used to delete the only state that could restore
-            Auto, so the control vanished permanently. `false` keeps this generated-id lineage
-            without claiming that Auto is currently enabled; typing a different id still removes
-            the row because that id belongs wholly to the author. */}
+        {/* `B-365` — name the automatic policy before the value it controls. Confirming a
+            generated id used to delete the only state that could restore Auto, so the control
+            vanished permanently. `false` keeps that generated-id lineage without claiming that
+            Auto is currently enabled; typing a different id removes the row because that id
+            belongs wholly to the author. */}
         {element.routeKeyAuto !== undefined && (
           <CheckRow
-            label="auto"
+            label="auto source id"
             checked={element.routeKeyAuto}
             title={AUTO_SOURCE_ID_TITLE}
             onChange={(auto) => {
@@ -864,6 +843,29 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
             }}
           />
         )}
+        <TextField
+          label="source id"
+          ariaLabel="Live Source source id"
+          value={holds}
+          resetKey={`${id}-${String(rejectSeq)}`}
+          disabled={element.routeKeyAuto === true}
+          onCommit={commitId}
+          suggestions={suggestions}
+          datalistId={`live-source-ids-${id}`}
+          trailing={
+            /* 🔴 `B-187` — the tool chose this name, and the field SAYS so until the author
+               turns Auto off or types another. The reversible control is the row above. */
+            element.routeKeyAuto === true && element.routeKey !== undefined ? (
+              <Tag
+                className={fieldCss.autoMark}
+                title={AUTO_SOURCE_ID_TITLE}
+                data-testid="live-source-auto"
+              >
+                auto
+              </Tag>
+            ) : undefined
+          }
+        />
         <AspectRow element={element} />
         <FitModeRow element={element} />
         <LivePosterRow element={element} />
@@ -1126,19 +1128,6 @@ function LivePosterRow({ element }: { element: VideoPlaceholderElement }): JSX.E
           } as Partial<Element>)
         }
       />
-      {current !== '' && (
-        <SelectField
-          label="poster fit"
-          value={element.posterFitMode ?? 'cover'}
-          options={LIVE_FIT_MODES}
-          labels={['Fit whole poster', 'Fill frame (crop edges)']}
-          onCommit={(posterFitMode) =>
-            designerStore.updateElement(element.id, {
-              posterFitMode: posterFitMode as LiveFitMode,
-            } as Partial<Element>)
-          }
-        />
-      )}
     </>
   );
 }

@@ -1747,10 +1747,9 @@ function buildLiveSource(element: VideoPlaceholderElement, ctx: BuildCtx): HTMLE
     poster.alt = '';
     poster.style.width = '100%';
     poster.style.height = '100%';
-    // D-168 — poster presentation is an authoring aid, independent from the
-    // on-air live picture's fitMode. Absence keeps every existing template on
-    // the former cover behaviour.
-    poster.style.objectFit = element.posterFitMode ?? 'cover';
+    // Posters are an authoring aid and always fill the plate. This remains
+    // independent from the real live picture's on-air fitMode.
+    poster.style.objectFit = 'cover';
     poster.style.display = 'block';
     el.appendChild(poster);
   } else {

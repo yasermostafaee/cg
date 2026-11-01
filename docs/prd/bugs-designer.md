@@ -4459,7 +4459,8 @@ and the exact label emitted by `buildTemplateLiveSources` for CG Control.
 
 **Repro / Actual:** draw a Live Source, then turn off the `auto` mark beside its generated `live-N`
 source id. The control disappeared, so the same generated id could never be marked Auto again.
-**Fix:** generated ids retain a private true/false Auto state and show one checkbox in both states;
+**Fix:** generated ids retain a private true/false Auto state and show one clearly labelled
+`auto source id` checkbox in both states;
 turning it off can be reversed even after the id itself is cleared. Re-enabling Auto on an empty field
 generates the next free `live-N`. Typing a different id still removes the Auto state entirely because
 that value is authored. The flag remains Designer-only and does not change playout. **Acceptance:**

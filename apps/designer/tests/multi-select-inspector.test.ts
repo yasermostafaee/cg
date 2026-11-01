@@ -209,34 +209,6 @@ describe('MultiSelectSection — single-inspector parity (D-049)', () => {
     ]);
   });
 
-  it('D-168 — mixed poster fitting is truthful and fans out independently', () => {
-    const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
-    const { scene } = projects.newScene('demo', 'lower-third');
-    designerStore.setScene(scene, null);
-    designerStore.addElement({
-      ...defaultLiveSource('live-a', 0, 0),
-      posterAssetId: 'img-1',
-      posterFitMode: 'contain',
-      fitMode: 'cover',
-    });
-    designerStore.addElement({
-      ...defaultLiveSource('live-b', 640, 0),
-      posterAssetId: 'img-1',
-      posterFitMode: 'cover',
-      fitMode: 'contain',
-    });
-    const layer = () =>
-      editSceneOf(designerStore.get().scene, designerStore.get().activeCompositionId)!.layers[0]!;
-    const c = render(layer().children);
-    const posterFit = select(c, 'poster fit')!;
-    expect(posterFit.value).toBe('__cg_mixed__');
-
-    choose(posterFit, 'contain');
-    const plates = layer().children as readonly ReturnType<typeof defaultLiveSource>[];
-    expect(plates.map((element) => element.posterFitMode)).toEqual(['contain', 'contain']);
-    expect(plates.map((element) => element.fitMode)).toEqual(['cover', 'contain']);
-  });
-
   it('D-167 — stroke width preserves each colour and repairs each plate to its own aspect', () => {
     const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
     const { scene } = projects.newScene('demo', 'lower-third');
