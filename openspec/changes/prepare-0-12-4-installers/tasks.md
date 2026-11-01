@@ -16,8 +16,8 @@ Lane: **FULL**
 
 ## 3. Verification
 
-- [ ] 3.1 Run the full local gate.
-- [ ] 3.2 Run the complete local E2E lane.
+- [x] 3.1 Run the full local gate.
+- [x] 3.2 Run the complete local E2E lane.
 - [ ] 3.3 Push the exact candidate to `dev` and record green Linux workspace and E2E jobs.
 - [ ] 3.4 Record a green Desktop installer run, including the installed Designer ACL smoke and the `0.11.6` upgrade acceptance.
 
