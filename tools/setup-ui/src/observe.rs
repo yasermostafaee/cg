@@ -407,7 +407,7 @@ mod tests {
         let later = bridge(LOG, 1.0, 1000, 1000, true);
         assert_eq!(later.words, "Setting folder access");
         assert!(later.fraction > more.fraction);
-        let done = bridge(&format!("{LOG}[data folder access] exit 0\r\n[data folder access (contents)] exit 0\r\n[importing an older state (once)] exit 0\r\n[firewall rules] exit 0\r\n[checking the ports] exit 0\r\n[starting the service] exit 0\r\n==== done\r\n"), 1.0, 1000, 1000, true);
+        let done = bridge(&format!("{LOG}[data folder access] exit 0\r\n[data folder access (contents)] exit 0\r\n[shared files folder access] exit 0\r\n[importing an older state (once)] exit 0\r\n[firewall rules] exit 0\r\n[checking the ports] exit 0\r\n[starting the service] exit 0\r\n==== done\r\n"), 1.0, 1000, 1000, true);
         assert_eq!(done.fraction, 1.0);
         assert_eq!(done.step, done.of);
     }
