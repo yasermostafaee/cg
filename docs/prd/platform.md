@@ -4275,3 +4275,19 @@ commit; the Bridge smoke proves inherited read/execute-only access on a local ro
 repair; visual evidence proves the three Setup identities and clear splash versions; the rebuilt
 guide is visually inspected at readable line spacing; all three installer files are downloaded with hashes and placed in
 `installers-ci-0.12.6/` and `dist/`; no tag or release is created.
+
+## [~] P-075 — Deliver a concise styled HTML installation guide ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/html-install-guide/`
+
+**What:** Replace the dense guide artifact with a standalone styled Persian HTML guide, revise its wording, remove stale/irrelevant notes, and record the required Playout version explicitly at guide-build time.
+**Why:** The current document is hard to scan and contains ambiguous prose that does not help an installer.
+**Acceptance:**
+
+- WHEN a release guide is built THEN a self-contained readable HTML file is produced and packaged beside the installers
+- WHEN the guide is read THEN headings, steps, warnings and screenshots have comfortable spacing and concise Persian wording
+- WHEN a guide is built THEN the Playout version is supplied explicitly (current delivery: `2.17.1`) rather than copied from stale prose
+
+## [~] P-076 — Label the startup build identity in operator language ⟨priority: medium — the owner, 2026-11-02⟩ — `openspec/changes/readable-splash-build-stamp/`
+
+**What:** Replace the unexplained compact splash stamp (`v0.12.6 · b2305252 · 2026-11-01`) with explicit Version, Revision and Build date labels on both products.
+**Why:** The revision after the version is useful for support, but an operator cannot know what the bare number means.
+**Acceptance:** both startup splashes retain the exact release/revision/date identity while each value is visibly labelled; development builds remain truthful when no release version or Git revision exists.

@@ -4820,3 +4820,24 @@ operator had to fail over before seeing whether its programme picture and sound 
   audio source follows the current primary unless the operator explicitly selects another source
 - WHEN B is requested THEN CG Bridge authorizes the logical channel, maps it to B's physical channel, uses B's
   core programme port and B engine's own meter session, and never exposes another channel or token
+
+## [~] R-105 — A healthy but empty live source shows a black plate on air ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/black-empty-live-plate/`
+
+**What:** Keep the geometry of an assigned, healthy Live Source visible as black when its upstream currently has no picture, such as an ended playlist.
+**Why:** A transparent/missing plate makes a multi-box layout collapse visually even though the source assignment itself is valid.
+**Acceptance:**
+
+- WHEN a valid assigned source has no current picture THEN its authored plate remains a black rectangle in the requested geometry
+- WHEN picture resumes THEN it replaces the black fallback without re-taking the template
+- WHEN the source is invalid or unavailable THEN the existing refusal still prevents the take or update
+
+## [~] R-106 — PVW Live Source markers follow Play and the Safe Area control is removed ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/pvw-plate-lifecycle/`
+
+**What:** PVW starts with the graphic and its Live Source markers hidden; Play reveals both and Stop hides both. Remove the Safe Area toggle.
+**Why:** Markers appearing before the template make PVW look partly on before Play, and the Safe Area control is not used.
+**Acceptance:**
+
+- WHEN a row first enters PVW THEN its Live Source markers are hidden with its template
+- WHEN Play is pressed THEN the template and its Live Source markers appear together
+- WHEN Stop is pressed THEN both disappear together
+- WHEN PVW is shown THEN no Safe Area control or guide state is offered

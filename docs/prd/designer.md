@@ -5876,3 +5876,33 @@ the canvas ratio.
   without stretching or leaving the composition
 - WHEN either action runs THEN position, size, scale and rotation change together in one undo step;
   the source id, live fit and poster are untouched
+
+## [~] D-170 — Composition export uses the project name and reports progress honestly ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/export-project-name-and-feedback/`
+
+**What:** `.vcg` and HTML export suggest the project name, show an in-progress state, and finish with a success-coloured notice when the write succeeds.
+**Why:** A composition name is not the delivery file name, and the current red success toast reads as a failure.
+**Acceptance:**
+
+- WHEN an author exports any composition THEN the save dialog suggests the project name, not the composition name
+- WHEN export is running THEN the action visibly remains busy and cannot be started twice
+- WHEN export succeeds THEN its notice uses the success treatment; failures remain persistent error notices
+
+## [~] D-171 — New Live Source plates use clear `plate-N` names and readable canvas labels ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/live-source-plate-names/`
+
+**What:** Auto-generated source ids begin at `plate-1`, and the authoring label is large enough to identify a plate at normal canvas zoom.
+**Why:** `live-N` describes an implementation concept rather than the frame the author is arranging, and the current label is too small.
+**Acceptance:**
+
+- WHEN a Live Source is drawn THEN its next free automatic id is `plate-N` within the same look
+- WHEN a Live Source is visible on the Designer canvas THEN its source label is clearly legible without selecting it
+- WHEN an existing project contains `live-N` or a custom id THEN that authored id is preserved unchanged
+
+## [~] D-172 — Text padding switches between one value and four sides ⟨priority: high — the owner, 2026-11-02⟩ — `openspec/changes/text-padding-mode/`
+
+**What:** Text Padding gains the same single/per-edge mode pattern as Border Radius.
+**Why:** Setting the same padding four times is slow and inconsistent with the existing Border Radius interaction.
+**Acceptance:**
+
+- WHEN padding is uniform THEN one value controls all four sides
+- WHEN the author switches to per-side mode THEN the current value is copied to top, right, bottom and left
+- WHEN the author switches back to uniform mode THEN the top value becomes the single value and rendering stays consistent in canvas, preview and export

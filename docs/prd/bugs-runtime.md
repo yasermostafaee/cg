@@ -13898,3 +13898,17 @@ painted at the start, but Tooltip correctly centres on the element's much wider 
 **Fix / Acceptance:** the locked delimiter Tag sizes/aligns to its own content (`justify-self: start`),
 so its bounding box and tooltip anchor are the visible value. The existing global tooltip placement,
 native-title suppression and viewport clamping remain unchanged.
+
+## [~] B-367 — Shared-files Save path is vertically misaligned with its input ⟨priority: low⟩ — FILED 2026-11-02 by the owner · `openspec/changes/align-shared-path-action/`
+
+**Repro:** Open CG Control Settings → Shared files folder as station admin.
+**Expected:** The path input and Save path action share one aligned row.
+**Actual:** The action sits lower than the input.
+**Regression test:** DOM/layout contract for the shared-files action row.
+
+## [~] B-368 — An authored fixed text file is not loaded until the operator presses Reload ⟨priority: high⟩ — FILED 2026-11-02 by the owner · `openspec/changes/autoload-authored-text-file/`
+
+**Repro:** Import a template with a fixed file source, load it in CG Control, and open its Inspector.
+**Expected:** The first staged value comes from the current shared file automatically.
+**Actual:** The authored test/default value remains until Reload is pressed.
+**Regression test:** Inspector/store test proving one automatic read per newly reconciled authored source and no repeated overwrite of operator edits.
