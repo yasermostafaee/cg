@@ -8,7 +8,7 @@ The requested surface resembles Cinegy's two monitor windows: the operator can c
 
 **Goals:**
 
-- Show A, B, or both programme pictures for the selected logical channel when B has a valid mapped M.
+- Always expose A, B, and A + B monitor controls; show a black, labelled no-signal B position until B has a valid mapped M.
 - Keep physical A/B identity stable across failover and show the actual physical channel on each picture.
 - Give each picture an independent live/stalled/unavailable state and never present a stale frame.
 - Keep exactly one local audio decoder and one meter/loudness surface, explicitly bound to A, B, or the current primary.
@@ -52,9 +52,9 @@ Using the primary token was rejected because Playout tokens are engine-local and
 
 ### 4. The monitor has display mode and audio source as separate local preferences
 
-The display choice is `A`, `B`, or `A + B`, persisted per console. B choices exist only while a valid mapping exists; if it disappears, the UI falls back to A/current-primary and releases every B resource. In the combined mode, two equally sized tiles are rendered side by side and stack vertically only at the existing narrow breakpoint. Each tile has its own stable server/channel label and signal state.
+The display choice is `A`, `B`, or `A + B`, persisted per console. All choices remain visible whether or not a backup is configured, so the operator can see and prepare the reserve-monitor position before commissioning it. Without a valid mapping, B is a black `B · CH —` tile that says there is no return signal and opens no B resource; if a mapping disappears, the selected layout stays in place but every B resource is released. In the combined mode, two equally sized tiles are rendered side by side and stack vertically only at the existing narrow breakpoint. Each tile has its own stable server/channel label and signal state.
 
-Audio has one selector: `Follow primary` (default), `A`, or `B`. The existing speaker on/off preference remains separate. The resolved source owns the one audio decoder, loudness badge and VU meter; changing it tears down the old stream before opening the new one. This is clearer than two speaker buttons and structurally prevents accidental mixing. Cinegy's single meter beside multiple pictures supports this model.
+Audio has one selector: `Follow primary` (default), `A`, or `B`, and the selector also remains visible before B is mapped. The existing speaker on/off preference remains separate. The resolved available source owns the one audio decoder, loudness badge and VU meter; selecting an unavailable B leaves those surfaces silent/unknown and opens no B resource. Changing between available sources tears down the old stream before opening the new one. This is clearer than two speaker buttons and structurally prevents accidental mixing. Cinegy's single meter beside multiple pictures supports this model.
 
 ### 5. Current-primary changes roles, never labels
 
@@ -67,7 +67,7 @@ Only visible picture tiles request picture tickets. Only the selected audible so
 ## Risks / Trade-offs
 
 - **[Two visible feeds double picture bandwidth]** → Side-by-side is opt-in, each engine still has one upstream per physical channel shared by consoles, and hidden tiles release immediately.
-- **[A mapping changes while B is watched]** → invalidate B tickets/status, close B viewers, and remount against the newly resolved M; never keep a frame from the old mapping.
+- **[A mapping changes or disappears while B is watched]** → invalidate B tickets/status, close B viewers, retain the selected B tile as a black no-signal placeholder, and remount only after a new M resolves; never keep a frame from the old mapping.
 - **[Backup Playout is old or unsigned-in]** → B picture may still work from the core, while B meter remains unknown; the two states are shown independently and A is unaffected.
 - **[Failover changes while audio follows primary]** → close the old decoder first, reset meter/loudness to unknown, then open the new engine; no overlap means no mix.
 - **[Existing clients/bridges during rolling upgrade]** → new CG Control requires the matching Bridge version as today; parsers continue treating missing engine on old primary readings/status as A for fake/test compatibility.
@@ -77,7 +77,7 @@ Only visible picture tiles request picture tickets. Only the selected audible so
 
 1. Ship the shared contract and Bridge support first in the same versioned installer set.
 2. Keep the default visible behavior equivalent to today's single current-primary/A picture; the operator opts into both.
-3. Existing sound-on preference remains valid and resolves through `Follow primary`; new display/audio-source preferences have safe defaults.
+3. Existing sound-on preference remains valid and resolves through `Follow primary`; new display/audio-source preferences have safe defaults and an unavailable B never silently falls back to A.
 4. Rollback to the prior matching CG Control + Bridge pair restores the single A monitor without changing Playout or station data.
 
 ## Open Questions

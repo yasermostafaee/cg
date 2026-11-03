@@ -2,9 +2,9 @@
 
 ### Requirement: The PROGRAM monitor shows the programme return, and says so when it cannot
 
-The PROGRAM pane SHALL show the programme return of the channel on screen, served by the bridge same-origin, and SHALL offer A, B and A + B display modes only while that logical channel has a valid mapped backup. A is server A's physical channel N and B is server B's mapped physical channel M; those labels SHALL remain stable when the current primary changes. In A + B, both equally sized pictures SHALL be visible together and each tile SHALL carry its own physical server/channel label and signal state.
+The PROGRAM pane SHALL show the programme return of the channel on screen, served by the bridge same-origin, and SHALL always offer A, B and A + B display modes, including before a backup is configured. A is server A's physical channel N and B is server B's mapped physical channel M; those labels SHALL remain stable when the current primary changes. In A + B, both equally sized pictures SHALL be visible together and each tile SHALL carry its own physical server/channel label and signal state. Without a valid B mapping, the B tile SHALL remain present as a black `B · CH —` position with **"No return signal"**, while no B picture, sound or meter resource is requested.
 
-Each tile SHALL show its picture ONLY while the bridge reports that engine/channel `live` over a live bridge link. Otherwise that tile SHALL hide the picture and say **"No return signal"** (connecting, unreachable or unavailable) or **"Return feed stalled"** (the feed stopped delivering frames) — never a frozen frame as if it were live. The pane SHALL carry no explanatory prose; the strip keeps the rows-on-air count beside the signals, so "no return signal" is never read as "nothing on air". With no valid backup, B choices SHALL be absent and no B resource SHALL be requested.
+Each tile SHALL show its picture ONLY while the bridge reports that engine/channel `live` over a live bridge link. Otherwise that tile SHALL hide the picture and say **"No return signal"** (connecting, unreachable, unconfigured or unavailable) or **"Return feed stalled"** (the feed stopped delivering frames) — never a frozen frame as if it were live. The pane SHALL carry no explanatory prose; the strip keeps the rows-on-air count beside the signals, so "no return signal" is never read as "nothing on air". With no valid backup, B controls and its selected layout position SHALL remain visible but no B resource SHALL be requested.
 
 #### Scenario: The live pictures appear together
 
@@ -16,10 +16,10 @@ Each tile SHALL show its picture ONLY while the bridge reports that engine/chann
 - **WHEN** A keeps delivering frames and B stops delivering them
 - **THEN** A remains visible, B hides its last frame and reads "Return feed stalled", and B returns independently when its frames resume
 
-#### Scenario: No backup mapping means no backup monitor
+#### Scenario: No backup mapping keeps an honest reserve position
 
 - **WHEN** server B is absent or channel N has no valid mapped M
-- **THEN** only A is offered and no B picture, sound or meter request is made
+- **THEN** A, B and A + B remain available, a selected B position is black and labelled `B · CH —` with "No return signal", and no B picture, sound or meter request is made
 
 #### Scenario: Failover does not rename physical feeds
 
@@ -47,7 +47,7 @@ The console SHALL request only the programme-return pictures selected by the cur
 
 ### Requirement: The PGM monitor SHALL play one programme sound on request and SHALL show that source's Playout meter
 
-A speaker toggle on the PGM monitor SHALL be off by default and remembered per console (`cg.runtime.pgm-audio.v1`; remembered ON after a reload, the sound starts at the first press or key on the page, as a browser requires). A separate local source preference SHALL offer `Follow primary` (default), A and — only while mapped — B. `Follow primary` SHALL resolve to the engine CG Bridge reports as current primary; an explicit A or B selection SHALL remain physical across failover. Exactly one resolved engine SHALL own sound, loudness and VU at a time, and changing it SHALL stop the previous sound before starting the next. Nothing in this control SHALL change the on-air mix.
+A speaker toggle on the PGM monitor SHALL be off by default and remembered per console (`cg.runtime.pgm-audio.v1`; remembered ON after a reload, the sound starts at the first press or key on the page, as a browser requires). A separate local source preference SHALL always offer `Follow primary` (default), A and B. `Follow primary` SHALL resolve to the engine CG Bridge reports as current primary; an explicit A or B selection SHALL remain physical across failover. Exactly one resolved, available engine SHALL own sound, loudness and VU at a time, and changing it SHALL stop the previous sound before starting the next. Selecting B while it is unmapped SHALL leave the meter/loudness unknown and open no B sound or meter resource; it SHALL NOT silently play A. Nothing in this control SHALL change the on-air mix.
 
 While on, it SHALL play the resolved engine's mapped channel sound by the Playout client's method: a streaming `fetch`, the 44-byte header skipped, whole 4-byte frames of s16le stereo at 48 kHz, each chunk scheduled on the `AudioContext` clock, a buffer that starts at 30 ms and grows by 15 ms after 3 underruns within 10 s up to 90 ms and never shrinks during a connection, and chunks dropped whenever more than 150 ms is scheduled ahead. No timestamp SHALL be added.
 

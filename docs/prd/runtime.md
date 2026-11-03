@@ -4799,17 +4799,19 @@ appears; WHEN import settles THEN loading clears into the existing success or re
 
 ## [~] R-104 — CG Control can monitor the primary and backup programme returns together ⟨priority: high — requested after the client demo, 2026-11-01⟩ — `openspec/changes/monitor-backup-program-return/`
 
-**What:** PROGRAM offers **A**, **B** and **A + B** when the selected channel has a valid mirror on the
-backup engine. In the combined mode the two programme pictures are shown side by side, each labelled with
-its physical server/channel and its own signal state. There is still exactly one local monitor-audio path:
+**What:** PROGRAM always offers **A**, **B** and **A + B**, even before a reserve Playout or channel mapping
+is configured. An unavailable B remains a black, labelled no-signal position and opens no stream. In the
+combined mode the two programme pictures are shown side by side, each labelled with its physical
+server/channel and its own signal state. There is still exactly one local monitor-audio path:
 the operator explicitly chooses A or B, and the speaker, loudness and VU meter follow that choice; the two
 engines are never mixed and this control never changes the on-air audio.
 **Why:** during the client demo the backup Playout could not be verified beside the active output, so an
 operator had to fail over before seeing whether its programme picture and sound were healthy.
 **Acceptance:**
 
-- WHEN server B is absent or the selected channel has no valid backup mapping THEN only A is offered and no
-  backup picture, sound or meter is requested
+- WHEN server B is absent or the selected channel has no valid backup mapping THEN A/B/A+B controls remain
+  visible, a selected B position is black and says there is no return signal, and no backup picture, sound or
+  meter is requested
 - WHEN a valid backup exists THEN the operator can select A, B or A + B and the preference is remembered on
   that console
 - WHEN A + B is selected THEN both programme pictures are visible at once with stable A/B and physical-channel

@@ -43,26 +43,23 @@ export interface ProgramMonitorPreferences {
   setAudio(choice: ProgramAudioChoice): void;
 }
 
-export function useProgramMonitorPreferences(
-  backupAvailable: boolean,
-  currentPrimary: PgmEngine,
-): ProgramMonitorPreferences {
+export function useProgramMonitorPreferences(currentPrimary: PgmEngine): ProgramMonitorPreferences {
   const [stored, setStored] = useState(read);
   const update = useCallback((next: Required<StoredPreferences>): void => {
     setStored(next);
     write(next);
   }, []);
-  const display = backupAvailable ? stored.display : 'A';
-  const audio = backupAvailable ? stored.audio : stored.audio === 'B' ? 'follow' : stored.audio;
+  const display = stored.display;
+  const audio = stored.audio;
   const audioEngine = audio === 'follow' ? currentPrimary : audio;
   return useMemo(
     () => ({
       display,
       audio,
-      audioEngine: backupAvailable || audioEngine === 'A' ? audioEngine : 'A',
+      audioEngine,
       setDisplay: (mode: ProgramDisplayMode) => update({ ...stored, display: mode }),
       setAudio: (choice: ProgramAudioChoice) => update({ ...stored, audio: choice }),
     }),
-    [audio, audioEngine, backupAvailable, display, stored, update],
+    [audio, audioEngine, display, stored, update],
   );
 }

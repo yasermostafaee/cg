@@ -206,7 +206,7 @@ export function MonitorPanel({
     returns.length > 1
       ? `${String(liveCount)} of ${String(returns.length)} return signals`
       : PROGRAM_SIGNAL_WORDS[returns[0]?.programReturn.signal ?? 'none'];
-  const displayControls = backupAvailable ? (
+  const displayControls = (
     <div
       style={styles.controls}
       className="cg-pgm-source-controls"
@@ -227,26 +227,22 @@ export function MonitorPanel({
         </Button>
       ))}
     </div>
-  ) : (
-    <MonitorHeadFact>Server return</MonitorHeadFact>
   );
   const audioControls = (
     <div style={styles.controls} className="cg-pgm-source-controls">
-      {backupAvailable && (
-        <select
-          className="cg-pgm-audio-select"
-          aria-label="Programme sound source"
-          title="Local programme sound and meter source"
-          value={monitorPreferences.audio}
-          onChange={(event) =>
-            monitorPreferences.setAudio(event.currentTarget.value as ProgramAudioChoice)
-          }
-        >
-          <option value="follow">Follow</option>
-          <option value="A">A</option>
-          <option value="B">B</option>
-        </select>
-      )}
+      <select
+        className="cg-pgm-audio-select"
+        aria-label="Programme sound source"
+        title="Local programme sound and meter source"
+        value={monitorPreferences.audio}
+        onChange={(event) =>
+          monitorPreferences.setAudio(event.currentTarget.value as ProgramAudioChoice)
+        }
+      >
+        <option value="follow">Follow</option>
+        <option value="A">A</option>
+        <option value="B">B</option>
+      </select>
       <Button
         variant="ghost"
         aria-pressed={programSound.on}
@@ -260,6 +256,7 @@ export function MonitorPanel({
       </Button>
     </div>
   );
+  const meterChannel = monitorPreferences.audioEngine === 'A' || backupAvailable ? channel : null;
   return (
     <Panel
       id={id}
@@ -304,14 +301,14 @@ export function MonitorPanel({
         signal={words}
         tone={overallSignal}
         /*
-          `PLAYOUT-FEATURES-01` E — the Playout's short-term loudness for this channel. `RELEASE-0113-01`:
-          absent on the backup engine, where it is not read — not a reading at the floor.
+          `PLAYOUT-FEATURES-01` E — the selected Playout engine's short-term loudness for this channel.
+          An unmapped B stays unknown because it is not read — never a reading at the floor.
         */
-        reading={<LoudnessBadge channel={channel} engine={monitorPreferences.audioEngine} />}
+        reading={<LoudnessBadge channel={meterChannel} engine={monitorPreferences.audioEngine} />}
         /*
           🔴 `PLAYOUT-FEATURES-01` E — THE PROGRAMME'S SOUND, at THIS console only: off by default, a
           pressed toggle while on (`data-toggle-on`, as PVW's guides), remembered per console.
-          `RELEASE-0113-01`: ABSENT on the backup engine — a toggle that could play nothing is no control.
+          An unmapped B opens no sound resource; selecting it never silently plays A.
         */
         action={audioControls}
         fact={
@@ -366,7 +363,7 @@ export function MonitorPanel({
           })}
         </div>
         {/* `PLAYOUT-FEATURES-01` E — the programme meter, the Playout's own levels, beside the picture. */}
-        <VuMeter channel={channel} engine={monitorPreferences.audioEngine} />
+        <VuMeter channel={meterChannel} engine={monitorPreferences.audioEngine} />
       </div>
       {/*
         🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — WHERE THIS CHANNEL'S LINES GO ON THE BACKUP ENGINE, in this

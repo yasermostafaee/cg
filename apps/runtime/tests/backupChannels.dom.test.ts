@@ -208,6 +208,18 @@ describe('R-089 / R-104 — the channel’s own backup line and programme return
     ]);
     expect(el.querySelector('[data-pgm-audio]')).not.toBe(null);
   });
+
+  it('without a mapped backup, the picture and sound source controls remain visible', async () => {
+    stub();
+    const el = await mount(createElement(Pane, { backupLine: null }));
+    expect(el.querySelector('[data-pgm-display-mode="B"]')).not.toBe(null);
+    expect(el.querySelector('[data-pgm-display-mode="both"]')).not.toBe(null);
+    expect(
+      [
+        ...el.querySelectorAll<HTMLOptionElement>('[aria-label="Programme sound source"] option'),
+      ].map((option) => option.value),
+    ).toEqual(['follow', 'A', 'B']);
+  });
 });
 
 describe('R-089 — Station setup → Servers → Backup engine: one line per channel', () => {

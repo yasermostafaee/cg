@@ -3,7 +3,7 @@ import type { PgmMeterReading, PgmReturnStatus } from '@cg/shared-ipc';
 
 /**
  * `R-104` — the shipped PROGRAM UI with a paired station: independent A/B pictures, one explicit
- * sound/meter source, and the honest single-A fallback when the channel has no backup mapping.
+ * sound/meter source, and the honest reserve placeholder when the channel has no backup mapping.
  */
 
 interface ProgramMonitorSeed {
@@ -83,7 +83,7 @@ test('A+B keeps physical labels through a B-primary state, shows one stalled fee
   await expect(page.locator('[data-pgm-screen="B"]')).toContainText('B · CH 2');
 });
 
-test('a declared backup without a channel mapping falls back to the truthful single-A monitor', async ({
+test('without a channel mapping, reserve controls stay visible and B is a black no-signal tile', async ({
   page,
 }) => {
   await open(page, {
@@ -91,13 +91,17 @@ test('a declared backup without a channel mapping falls back to the truthful sin
     statuses: [{ engine: 'A', channel: 1, state: 'live' }],
   });
 
-  await expect(page.getByRole('button', { name: 'A+B', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'A+B', exact: true })).toHaveCount(1);
+  await expect(page.getByLabel('Programme sound source')).toHaveCount(1);
+  await page.getByRole('button', { name: 'A+B', exact: true }).click();
   await expect(page.locator('[data-pgm-picture-count]')).toHaveAttribute(
     'data-pgm-picture-count',
-    '1',
+    '2',
   );
   await expect(page.locator('[data-pgm-screen="A"]')).toContainText('A · CH 1');
-  await expect(page.locator('[data-pgm-screen="B"]')).toHaveCount(0);
+  await expect(page.locator('[data-pgm-screen="B"]')).toContainText('B · CH —');
+  await expect(page.locator('[data-pgm-screen="B"]')).toContainText('No return signal');
+  await expect(page.locator('[data-pgm-screen="B"] [data-pgm-picture]')).toHaveCount(0);
   await expect(page.locator('[data-backup-channel-line="not-mapped"]')).toContainText(
     'Backup: not mapped',
   );

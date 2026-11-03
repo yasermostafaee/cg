@@ -77,24 +77,26 @@ export function MonitorStrip(): JSX.Element {
     };
   })();
   const backupAvailable = backupLine?.mapped === true && backupLine.channel !== undefined;
-  const monitorPreferences = useProgramMonitorPreferences(backupAvailable, currentPrimary);
+  const monitorPreferences = useProgramMonitorPreferences(currentPrimary);
   /*
     `C-016` — the programme return, lifted here beside the air count for the same reason. A
     PROGRAM pane that is not rendered asks for NOTHING: the channel is `null` while it is folded
     away, so no picture is requested and the bridge pulls nothing from the Playout for it.
   */
   const showA = monitorPreferences.display === 'A' || monitorPreferences.display === 'both';
-  const showB =
-    backupAvailable &&
-    (monitorPreferences.display === 'B' || monitorPreferences.display === 'both');
+  const showB = monitorPreferences.display === 'B' || monitorPreferences.display === 'both';
   const programReturnA = useProgramReturn(showPgm && showA ? viewChannel : null, 'A');
   const programReturnB = useProgramReturn(
-    showPgm && showB ? viewChannel : null,
+    showPgm && showB && backupAvailable ? viewChannel : null,
     'B',
     backupLine?.text ?? '',
   );
   // `PLAYOUT-FEATURES-01` E — and its SOUND, on the same rule: a folded PROGRAM plays nothing.
-  const programSound = usePgmAudio(showPgm ? viewChannel : null, monitorPreferences.audioEngine);
+  const audioAvailable = monitorPreferences.audioEngine === 'A' || backupAvailable;
+  const programSound = usePgmAudio(
+    showPgm && audioAvailable ? viewChannel : null,
+    monitorPreferences.audioEngine,
+  );
 
   return (
     /*
@@ -151,11 +153,11 @@ export function MonitorStrip(): JSX.Element {
                   },
                 ]
               : []),
-            ...(showB && backupLine?.channel !== undefined
+            ...(showB
               ? [
                   {
                     engine: 'B' as const,
-                    physicalChannel: backupLine.channel,
+                    physicalChannel: backupLine?.channel ?? null,
                     programReturn: programReturnB,
                   },
                 ]
