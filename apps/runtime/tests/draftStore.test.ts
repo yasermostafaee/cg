@@ -14,6 +14,7 @@ import {
   pruneDrafts,
   snapshotDraft,
   stageField,
+  stageFieldBatch,
   stagePosition,
   stagedValue,
   unstageField,
@@ -63,6 +64,17 @@ describe('staging + effective value', () => {
     stageField(A, ['title'], 'one');
     stageField(A, ['title'], 'two');
     expect(stagedValue(A, ['title'])).toBe('two');
+  });
+
+  it('stages a related field batch without dropping namespaced siblings', () => {
+    stageFieldBatch(A, [
+      { path: ['page-1', 'cities'], value: [{ id: 'row-1', city: 'Tehran' }] },
+      { path: ['page-2', 'cities'], value: [{ id: 'row-2', city: 'Shiraz' }] },
+    ]);
+    expect(snapshotDraft(A)).toEqual({
+      'page-1': { cities: [{ id: 'row-1', city: 'Tehran' }] },
+      'page-2': { cities: [{ id: 'row-2', city: 'Shiraz' }] },
+    });
   });
 
   /*

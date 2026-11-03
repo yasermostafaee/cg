@@ -39,10 +39,10 @@ const COMPARATOR_LABELS: Record<ValueRuleComparator, string> = {
 
 const EFFECT_LABELS: Record<ValueRuleEffect['property'], string> = {
   visible: 'visibility',
-  textColor: 'text colour',
-  backgroundColor: 'background colour',
-  fill: 'fill colour',
-  stroke: 'stroke colour',
+  textColor: 'text color',
+  backgroundColor: 'background color',
+  fill: 'fill color',
+  stroke: 'stroke color',
   image: 'picture',
 };
 
@@ -199,7 +199,11 @@ function ValueRulesEditor({
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const stored = element.valueRules;
-  const selectedField = fields.find((field) => field.id === stored?.input.fieldId) ?? fields[0];
+  // A stored rule set owns its exact input. If that field is missing, never fall through to the
+  // first unrelated field: the author must see the broken reference until deletion cleanup removes
+  // the rules or they explicitly choose a new input.
+  const selectedField =
+    stored === undefined ? fields[0] : fields.find((field) => field.id === stored.input.fieldId);
   const set: ValueRuleSet | undefined =
     stored ??
     (selectedField === undefined

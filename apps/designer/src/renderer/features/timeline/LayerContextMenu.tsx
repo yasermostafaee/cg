@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react';
 import { designerStore } from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { Icon } from '../../ui/Icon.js';
+import { requestDeleteSelection } from '../shell/element-delete-guard.js';
 import * as s from './LayerContextMenu.css.js';
 
 // JS-state hover highlight (these menus track hover in React state, not :hover).
@@ -219,7 +220,7 @@ export function LayerContextMenu({ x, y, onClose }: Props): JSX.Element {
             setColorOpen(false);
           }}
           onMouseLeave={() => setHover(null)}
-          onClick={() => run(() => designerStore.deleteSelection())}
+          onClick={() => run(requestDeleteSelection)}
         >
           <span>Delete</span>
           <span className={s.shortcut}>(Del)</span>

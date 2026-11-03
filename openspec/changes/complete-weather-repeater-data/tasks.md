@@ -58,6 +58,8 @@
 - [x] 2.21 Let the Sequence Page data modal author the nested Repeater as File only; remove the
       combined manual editor in CG Control while retaining generated-workbook connection/Reload, and
       keep editable numeric cells on the same active field surface as text/select controls.
+- [x] 2.22 Publish File-only page rows to every Sequence namespace as one draft batch; include the
+      batch helper in the tracked runtime source so clean Linux builds do not depend on a local file.
 
 ## 3. Conditional value rules
 
@@ -71,6 +73,9 @@
       visible even when the section is collapsed.
 - [x] 3.6 When a rule input is an exact numeric choice field, use that field's authored choices and
       aliases for condition values while preserving canonical numeric rule data.
+- [x] 3.7 Warn before deleting a Data-key element that supplies surviving Value rules; on confirm,
+      delete those dependent rules rather than making the editor appear to bind to another field.
+- [x] 3.8 Use American-English `color` labels throughout the Value rules modal.
 
 ## 4. Export and verification
 

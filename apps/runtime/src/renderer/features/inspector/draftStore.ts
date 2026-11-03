@@ -502,6 +502,18 @@ export function stageField(itemId: string, path: FieldPath, value: FieldValue): 
   bump();
 }
 
+/** Stage several related fields as one operator edit and publish one store change. */
+export function stageFieldBatch(
+  itemId: string,
+  entries: readonly { path: FieldPath; value: FieldValue }[],
+): void {
+  if (entries.length === 0) return;
+  const item = drafts.get(itemId) ?? {};
+  for (const entry of entries) setAt(item, entry.path, entry.value);
+  drafts.set(itemId, item);
+  bump();
+}
+
 /**
  * WITHDRAW one field's draft, leaving the item's other staged edits alone.
  *

@@ -189,4 +189,42 @@ describe('D-139 — Value rules authoring', () => {
     choose('value', '20');
     expect(element().valueRules?.rules[0]?.condition).toEqual({ comparator: '=', value: 20 });
   });
+
+  it('uses color spelling for every color effect in the modal', () => {
+    render();
+    act(() => host.querySelector<HTMLButtonElement>('[data-testid="value-rules-open"]')?.click());
+    act(() => document.querySelector<HTMLButtonElement>('[data-testid="value-rule-add"]')?.click());
+    render();
+
+    const labels = [
+      ...document.querySelectorAll<HTMLSelectElement>('select[aria-label="effect"] option'),
+    ]
+      .map((option) => option.textContent)
+      .filter((label): label is string => label !== null);
+    expect(labels).toContain('fill color');
+    expect(labels.some((label) => label.includes('colour'))).toBe(false);
+  });
+
+  it('does not display an unrelated field when a stored input is missing', () => {
+    designerStore.updateElement('badge', {
+      valueRules: {
+        input: { kind: 'field', fieldId: 'removed-field' },
+        rules: [
+          {
+            condition: { comparator: '=', value: 1 },
+            effect: { elementId: 'badge', property: 'visible', value: true },
+          },
+        ],
+      },
+    });
+    render();
+    expect(host.querySelector('[data-testid="value-rules-summary"]')?.textContent).toContain(
+      'input field is missing',
+    );
+    act(() => host.querySelector<HTMLButtonElement>('[data-testid="value-rules-open"]')?.click());
+    expect(document.querySelector('select[aria-label="input"]')).toBeNull();
+    expect(document.querySelector('[data-testid="value-rules"]')?.textContent).toContain(
+      'input field is missing',
+    );
+  });
 });

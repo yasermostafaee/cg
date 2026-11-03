@@ -9,6 +9,8 @@ import { CanvasArea } from './features/canvas/CanvasArea.js';
 import { DesignerRightPanel } from './features/fields/DesignerRightPanel.js';
 import { InputTooltip } from './features/shell/InputTooltip.js';
 import { DurationGuardDialog } from './features/addGuard/DurationGuardDialog.js';
+import { ElementDeleteGuardDialog } from './features/shell/ElementDeleteGuardDialog.js';
+import { requestDeleteSelection } from './features/shell/element-delete-guard.js';
 import { LandingView } from './features/shell/LandingView.js';
 import { Splitter } from './features/shell/Splitter.js';
 import { StorageNotice } from './features/shell/StorageNotice.js';
@@ -394,7 +396,7 @@ export function App(): JSX.Element {
       e.preventDefault();
       // Start a fresh undo entry so the delete isn't coalesced with a prior edit.
       designerStore.markHistoryBoundary();
-      designerStore.deleteSelection();
+      requestDeleteSelection();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -625,6 +627,7 @@ export function App(): JSX.Element {
           doors (assets panel, canvas drops, compositions panel) raise it; it renders only
           while a guarded add is pending. */}
       <DurationGuardDialog />
+      <ElementDeleteGuardDialog />
       {notice !== null && <Toast message={notice} />}
       {/* DELTA-RUN-NEXT-VERSION-01-H — the one Steps dialog; outlives the Inspector's swaps. */}
       <StepsDialogHost />

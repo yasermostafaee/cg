@@ -21,6 +21,7 @@ import { designerStore } from '../store.js';
 import { collectGroupMoveTargets } from '../../features/canvas/group-move.js';
 import { renderedTransformAt } from './arrangements.js';
 import { nextAutoSourceId } from '../auto-source-id.js';
+import { removeValueRulesForFields } from '../value-rule-dependencies.js';
 import {
   clampDeltaToPasteboard,
   pasteboardSceneBounds,
@@ -595,7 +596,16 @@ export const elementsSlice = {
     const stillBound = new Set(nextBindings.map((b) => b.fieldId));
     const nextFields = doc.fields.filter((f) => !(boundToEl.has(f.id) && !stillBound.has(f.id)));
 
-    const withLayers = withActiveLayers(current.scene, nextLayers);
+    const removedFieldIds = new Set(
+      doc.fields
+        .filter((field) => !nextFields.some((next) => next.id === field.id))
+        .map((f) => f.id),
+    );
+    const nextLayersWithRules = nextLayers.map((candidate) => ({
+      ...candidate,
+      children: removeValueRulesForFields(candidate.children, removedFieldIds),
+    }));
+    const withLayers = withActiveLayers(current.scene, nextLayersWithRules);
     set({
       scene: withActiveFieldData({ ...withLayers }, { fields: nextFields, bindings: nextBindings }),
       selection: nextSelection,

@@ -248,6 +248,20 @@ SHALL win and no match SHALL restore the authored value.
   that matches none
 - **THEN** the affected property returns to its authored value instead of retaining the old branch
 
+#### Scenario: Deleting a rule input is explicit and atomic
+
+- **WHEN** an author deletes an element whose Data key supplies Value rules on surviving elements
+- **THEN** Designer warns with the affected element names before deleting anything
+- **AND WHEN** the author confirms
+- **THEN** Designer deletes the source element and every rule set that depended on the removed field
+  in one undoable action
+- **AND** the rule editor never substitutes an unrelated field for the missing input
+
+#### Scenario: Value rule color labels use product spelling
+
+- **WHEN** the author opens the Value rules modal and chooses an effect
+- **THEN** text, background, fill and stroke effects use `color`, not `colour`
+
 ### Requirement: Dynamic Repeater images are export assets
 
 Both exporters SHALL include image assets reachable through image-field defaults, authored Repeater
