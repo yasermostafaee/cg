@@ -111,6 +111,17 @@ structure to an already packaged template: if the workbook exceeds its authored 
 the Designer/regenerate remedy instead of truncating. Arbitrary scalar/nested/mixed page structures
 continue to use the generated self-documenting JSON format.
 
+The author may set the homogeneous child Repeater field to **File only** directly from the outer
+Sequence's Page data modal; this writes the same canonical field policy as the child Repeater's
+Dynamic / Data section. CG Control asks the shared `fieldUsesFileOnly` predicate before rendering the
+combined editor. In File-only mode the row table, add/remove and reorder controls are absent, while
+the generated-workbook connection, Reload, replace/detach and staged Update semantics remain.
+Designer still owns the authored defaults used to generate a fresh workbook.
+
+Structured numeric cells use the shared `.cg-field` surface just like their text and select siblings.
+The numeric parser/filter remains `NumericInput`; sharing the visual primitive prevents an editable
+temperature from resembling a disabled browser-default input without changing its value contract.
+
 This is an authoring input, not a second on-air data channel: parsed canonical values are persisted
 on the Sequence items, included in the aggregate defaults exported to CG Control, and may still be
 overridden by the normal namespaced operator payload. The runtime merges the item defaults first and

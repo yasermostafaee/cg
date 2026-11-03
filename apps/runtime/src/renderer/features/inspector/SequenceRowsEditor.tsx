@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { CircleCheck, TriangleAlert, Unplug } from 'lucide-react';
 import {
   fileSourceContentToFieldValue,
+  fieldUsesFileOnly,
   type CompositionFieldGroup,
   type DynamicField,
   type ListItem,
@@ -373,6 +374,7 @@ export function SequenceRowsEditor({
   set: SequenceRowsPageSet;
 }): JSX.Element {
   const rows = rowsFromPages(item, set);
+  const fileOnly = fieldUsesFileOnly(set.field);
   const combinedField: ListField = {
     ...set.field,
     label: `${set.field.label} · all pages`,
@@ -390,16 +392,25 @@ export function SequenceRowsEditor({
     <section style={styles.section} aria-label={`${set.sequenceName} all rows`}>
       <h3 style={styles.heading}>{set.field.label} · all pages</h3>
       <p style={styles.hint}>
-        One row is one city/item. CG Control splits rows into {String(set.pages.length)} pages of{' '}
-        {String(set.maxItems)}. Changes stay as a draft until Update.
+        {String(rows.length)} / {String(set.capacity)} · {String(set.pages.length)} pages ·{' '}
+        {String(set.maxItems)} per page
       </p>
-      <ListFieldEditor
-        fieldId={set.field.label || set.field.id}
-        field={combinedField}
-        value={rows}
-        onStage={onRows}
-        footer={<SequenceRowsFileControl item={item} set={set} rows={rows} onRows={onRows} />}
-      />
+      {fileOnly ? (
+        <>
+          <div style={styles.source}>
+            <Tag>File only</Tag>
+          </div>
+          <SequenceRowsFileControl item={item} set={set} rows={rows} onRows={onRows} />
+        </>
+      ) : (
+        <ListFieldEditor
+          fieldId={set.field.label || set.field.id}
+          field={combinedField}
+          value={rows}
+          onStage={onRows}
+          footer={<SequenceRowsFileControl item={item} set={set} rows={rows} onRows={onRows} />}
+        />
+      )}
     </section>
   );
 }

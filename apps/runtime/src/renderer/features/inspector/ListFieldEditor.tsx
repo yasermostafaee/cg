@@ -211,6 +211,7 @@ function StructuredRowEditor({
               </select>
             ) : field.type === 'number' ? (
               <NumericInput
+                className="cg-field"
                 value={String(typeof value === 'number' ? value : field.default)}
                 min={field.min}
                 max={field.max}

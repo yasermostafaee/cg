@@ -105,6 +105,15 @@ same page values.
   per page, retains the normal draft/Update safety, and redistributes rows into the authored page
   namespaces
 
+#### Scenario: Paged rows are authored as File only
+
+- **WHEN** an author enables **File only in CG Control** for a homogeneous paged Repeater from the
+  Sequence Page data modal
+- **THEN** the nested list field stores the canonical File-only policy and CG Control renders no row
+  inputs, add, remove or reorder controls for the combined pages
+- **AND THEN** generated-workbook connection, Reload and replace/detach actions remain available,
+  and loaded values still wait for Update
+
 #### Scenario: A deleted Excel template can be regenerated
 
 - **WHEN** an author or operator chooses **Save and connect Excel** for a homogeneous paged Repeater
@@ -175,6 +184,8 @@ same page values.
 - **AND WHEN** a structured row mixes text, numeric and dropdown columns in the narrow Preview panel
 - **THEN** every value control receives an equal flexible cell and the existing city and temperature
   values remain visible
+- **AND THEN** an editable numeric cell uses the same active field background, border and opacity as
+  its text sibling rather than resembling a disabled input
 
 #### Scenario: Operator CSV exceeds the packaged capacity
 

@@ -519,6 +519,47 @@ describe('designerStore — D-029 sequence Data key + items', () => {
       ],
     });
   });
+
+  it('D-180 authors File only on a nested Repeater field from the outer Sequence', () => {
+    freshScene();
+    const compositionId = designerStore.addComposition();
+    if (compositionId === null) throw new Error('composition was not created');
+    designerStore.addField({
+      id: 'cities',
+      label: 'Cities',
+      required: false,
+      type: 'list',
+      default: [],
+      allowFileSource: true,
+      fileSource: { bridgePath: 'weather.xlsx', format: 'csv' },
+    });
+
+    designerStore.setCompositionFieldFileOnly(compositionId, 'cities', true);
+    let field = designerStore
+      .get()
+      .scene?.compositions?.find((composition) => composition.id === compositionId)
+      ?.fields?.find((candidate) => candidate.id === 'cities');
+    expect(field).toMatchObject({
+      allowFileSource: true,
+      fileSource: {
+        inputMode: 'file-only',
+        bridgePath: 'weather.xlsx',
+        format: 'csv',
+      },
+    });
+
+    designerStore.setCompositionFieldFileOnly(compositionId, 'cities', false);
+    field = designerStore
+      .get()
+      .scene?.compositions?.find((composition) => composition.id === compositionId)
+      ?.fields?.find((candidate) => candidate.id === 'cities');
+    expect(field).toMatchObject({
+      allowFileSource: true,
+      fileSource: { bridgePath: 'weather.xlsx', format: 'csv' },
+    });
+    expect(field?.type).toBe('list');
+    if (field?.type === 'list') expect(field.fileSource?.inputMode).toBeUndefined();
+  });
 });
 
 describe('designerStore — D-083 follow-up: EXPLICIT per-item TEXT binding', () => {

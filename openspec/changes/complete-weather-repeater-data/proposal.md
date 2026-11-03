@@ -24,12 +24,14 @@ authored or exported reliably.
   plus Excel-compatible CSV and a generated `.xlsx` template. Designer automatically makes the
   required pages; CG Control presents the packaged pages as one operator table, can regenerate the
   Excel template, and keeps file reload behind the normal Update action.
+- Let the author mark that paged table **File only** from the Sequence Page data modal. CG Control
+  then withholds manual rows while retaining generated-workbook connection and Reload.
 - Add ordered conditional rules for numeric/string field values. The first match per target property
   wins, so one temperature may change text and background together without making same-property
   conflicts ambiguous.
 - Let number fields declare an exact numeric choice list (with 0/1 as one example) or a custom
   range, and enforce those contracts in Designer, file imports and CG Control. Choice-list cells use
-  a dropdown everywhere.
+  a dropdown everywhere, while editable numeric cells use the same active field surface as text.
 - Include every image reachable through authored row data or a conditional rule in both export paths.
 
 ## Impact

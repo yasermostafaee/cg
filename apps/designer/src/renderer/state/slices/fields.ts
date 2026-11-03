@@ -450,6 +450,49 @@ export const fieldsSlice = {
     set({ scene: withActiveFieldData(current.scene, { fields }) });
   },
 
+  /**
+   * D-180 — the outer Sequence's Page data modal can author the input authority of its
+   * homogeneous child Repeater without making the author drill into that composition first.
+   * The field still owns the policy; this is only a composition-addressed shortcut to the
+   * same `fileSource.inputMode` contract used by Dynamic / Data.
+   */
+  setCompositionFieldFileOnly(compositionId: string, fieldId: string, fileOnly: boolean): void {
+    if (current.scene === null) return;
+    let changed = false;
+    const compositions = (current.scene.compositions ?? []).map((composition) => {
+      if (composition.id !== compositionId) return composition;
+      let compositionChanged = false;
+      const fields = (composition.fields ?? []).map((field) => {
+        if (field.id !== fieldId || field.type !== 'list' || !fieldTakesFileSource(field)) {
+          return field;
+        }
+        changed = true;
+        compositionChanged = true;
+        if (fileOnly) {
+          return {
+            ...field,
+            allowFileSource: true,
+            fileSource: { ...field.fileSource, inputMode: 'file-only' as const },
+          };
+        }
+        const previous = field.fileSource;
+        const remainingPolicy: FileSourcePolicy = {
+          ...(previous?.bridgePath !== undefined ? { bridgePath: previous.bridgePath } : {}),
+          ...(previous?.lockFile === true ? { lockFile: true as const } : {}),
+          ...(previous?.delimiter !== undefined ? { delimiter: previous.delimiter } : {}),
+          ...(previous?.format !== undefined ? { format: previous.format } : {}),
+        };
+        const { fileSource: _removedPolicy, ...withoutPolicy } = field;
+        void _removedPolicy;
+        return Object.keys(remainingPolicy).length === 0
+          ? { ...withoutPolicy, allowFileSource: true }
+          : { ...withoutPolicy, allowFileSource: true, fileSource: remainingPolicy };
+      });
+      return compositionChanged ? { ...composition, fields } : composition;
+    });
+    if (changed) set({ scene: { ...current.scene, compositions } });
+  },
+
   /** Remove a field and any bindings that reference it (active composition). */
   removeField(fieldId: string): void {
     if (current.scene === null) return;

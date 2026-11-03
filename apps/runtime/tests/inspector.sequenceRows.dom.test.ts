@@ -47,7 +47,7 @@ const FIELD = {
   ],
 };
 
-function page(itemId: string, item: number): CompositionFieldGroup {
+function page(itemId: string, item: number, field: typeof FIELD = FIELD): CompositionFieldGroup {
   return {
     instanceId: `weather:${itemId}`,
     name: `weather:${itemId}`,
@@ -55,7 +55,7 @@ function page(itemId: string, item: number): CompositionFieldGroup {
     labelParts: { name: 'Weather card', item },
     compositionId: 'weather-card',
     sequence: { id: 'weather', name: 'Weather pages', itemId },
-    aggregate: { fields: [FIELD], groups: [] },
+    aggregate: { fields: [field], groups: [] },
   };
 }
 
@@ -101,7 +101,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function render(): Promise<HTMLDivElement> {
+async function render(template: TemplateInfo = TEMPLATE): Promise<HTMLDivElement> {
   const stub = {
     link: {
       status: () => linkFor('both-up'),
@@ -111,8 +111,8 @@ async function render(): Promise<HTMLDivElement> {
     },
     connections: connectionsStub('both-up'),
     templates: {
-      get: vi.fn(() => Promise.resolve(TEMPLATE)),
-      list: vi.fn(() => Promise.resolve([TEMPLATE])),
+      get: vi.fn(() => Promise.resolve(template)),
+      list: vi.fn(() => Promise.resolve([template])),
       onChanged: () => () => undefined,
     },
     fixedLayers: {
@@ -155,11 +155,39 @@ describe('D-180 — one operator table for all Sequence pages', () => {
     expect(combined?.querySelectorAll('input[aria-label*=" City"]')).toHaveLength(3);
     expect(combined?.querySelectorAll('select[aria-label*=" Weather"]')).toHaveLength(3);
     expect(el.querySelector('section[aria-label="Weather card — item 1 fields"]')).toBeNull();
-    expect(combined?.textContent).toContain('2 pages of 2');
+    expect(combined?.textContent).toContain('2 pages · 2 per page');
     expect(combined?.textContent).toContain('Not connected');
     expect(combined?.textContent).toContain('Save and connect Excel');
     expect(combined?.textContent).not.toContain('From Excel/CSV');
     expect(combined?.querySelector('svg')).not.toBeNull();
+    expect(
+      combined
+        ?.querySelector('input[aria-label="Cities item 1 Temperature"]')
+        ?.classList.contains('cg-field'),
+    ).toBe(true);
+  });
+
+  it('honours File only for the combined pages while keeping workbook controls', async () => {
+    const fileOnlyField = {
+      ...FIELD,
+      allowFileSource: true,
+      fileSource: { inputMode: 'file-only' as const },
+    };
+    const template: TemplateInfo = {
+      ...TEMPLATE,
+      groups: [page('page-1', 1, fileOnlyField), page('page-2', 2, fileOnlyField)],
+    };
+    const el = await render(template);
+    const combined = el.querySelector('section[aria-label="Weather pages all rows"]');
+
+    expect(combined).not.toBeNull();
+    expect(combined?.textContent).toContain('File only');
+    expect(combined?.textContent).toContain('Not connected');
+    expect(combined?.textContent).toContain('Save and connect Excel');
+    expect(combined?.querySelector('input')).toBeNull();
+    expect(combined?.querySelector('select')).toBeNull();
+    expect(combined?.querySelector('button[aria-label^="Remove Cities item"]')).toBeNull();
+    expect(combined?.querySelector('button[aria-label="Add Cities item"]')).toBeNull();
   });
 
   it('stages an edited flat row back into the correct page namespace', async () => {

@@ -1213,6 +1213,227 @@ export async function buildPatternFieldVcg(templateId = 'tpl-e2e-pattern'): Prom
   });
 }
 
+/** D-180 — a two-page Sequence whose one structured Repeater may be authored File only. */
+export async function buildPagedRepeaterVcg(
+  templateId = 'tpl-e2e-paged-repeater',
+  options: { fileOnly?: boolean } = {},
+): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  const layer = scene.layers[0];
+  if (layer === undefined) throw new Error('fixture scene has no layer');
+  const transform = {
+    position: { x: 0, y: 0 },
+    size: { w: 1200, h: 720 },
+    scale: { x: 1, y: 1 },
+    rotation: 0,
+    anchor: { x: 0, y: 0 },
+  };
+  layer.children = [
+    ...layer.children,
+    {
+      id: 'weather-pages',
+      name: 'Weather pages',
+      type: 'sequence',
+      transform,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 2,
+      font: {
+        family: 'Vazirmatn',
+        weight: 500,
+        style: 'normal',
+        size: 36,
+        lineHeight: 1.4,
+        letterSpacing: 0,
+      },
+      color: '#FFFFFF',
+      align: 'start',
+      verticalAlign: 'middle',
+      direction: 'ltr',
+      items: [
+        {
+          id: 'page-1',
+          kind: 'composition',
+          compositionId: 'weather-list',
+          fieldValues: {
+            cities: [
+              { id: 'tehran', city: 'Tehran', temperature: 25, weather: 0 },
+              { id: 'tabriz', city: 'Tabriz', temperature: -12, weather: 1 },
+            ],
+          },
+        },
+        {
+          id: 'page-2',
+          kind: 'composition',
+          compositionId: 'weather-list',
+          fieldValues: {
+            cities: [{ id: 'shiraz', city: 'Shiraz', temperature: 22, weather: 1 }],
+          },
+        },
+      ],
+      defaultDwellMs: 5000,
+      advance: 'manual',
+      transitionIn: 'none',
+      transitionOut: 'none',
+      transitionTiming: 'simultaneous',
+      transitionMs: 400,
+      repeat: 'infinite',
+    },
+  ];
+  scene.compositions = [
+    {
+      id: 'weather-list',
+      name: 'Weather list',
+      resolution: { width: 1200, height: 720 },
+      frameRange: { in: 0, out: 250 },
+      editorBackdrop: 'transparent',
+      layers: [
+        {
+          id: 'weather-list-layer',
+          name: 'Weather list',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [
+            {
+              id: 'cities-repeater',
+              name: 'Cities',
+              type: 'repeater',
+              transform,
+              opacity: 1,
+              visible: true,
+              locked: false,
+              zIndex: 0,
+              compositionId: 'weather-card',
+              direction: 'column',
+              flow: 'rtl',
+              gap: 8,
+              maxItems: 2,
+              items: [],
+            },
+          ],
+        },
+      ],
+      fields: [
+        {
+          id: 'cities',
+          label: 'Cities',
+          required: false,
+          type: 'list',
+          default: [],
+          allowFileSource: true,
+          ...(options.fileOnly === true
+            ? { fileSource: { inputMode: 'file-only' as const, format: 'csv' as const } }
+            : {}),
+        },
+      ],
+      bindings: [
+        {
+          fieldId: 'cities',
+          target: { kind: 'repeater-items', elementId: 'cities-repeater' },
+        },
+      ],
+    },
+    {
+      id: 'weather-card',
+      name: 'Weather card',
+      resolution: { width: 600, height: 80 },
+      frameRange: { in: 0, out: 250 },
+      editorBackdrop: 'transparent',
+      layers: [
+        {
+          id: 'weather-card-layer',
+          name: 'Weather card',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [],
+        },
+      ],
+      fields: [
+        { id: 'city', label: 'City', required: true, type: 'text', default: '' },
+        { id: 'temperature', label: 'Temperature', required: true, type: 'number', default: 0 },
+        {
+          id: 'weather',
+          label: 'Weather',
+          required: true,
+          type: 'number',
+          default: 0,
+          allowedValues: [0, 1],
+          allowedValueLabels: { '0': 'Rain', '1': 'Sun' },
+        },
+      ],
+      bindings: [],
+    },
+  ] as Scene['compositions'];
+  return pack({
+    scene,
+    manifestExtras: {
+      id: templateId,
+      name: 'e2e-paged-repeater',
+      authoring: {
+        designerVersion: '0.0.0',
+        createdAt: '2026-11-04T00:00:00.000Z',
+        exportedAt: '2026-11-04T00:01:00.000Z',
+      },
+      compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+      fontDeps: scene.fonts,
+      assetIndex: [],
+    },
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
+/**
+ * `R-101` — a verifiable `.vcg` whose text field `azanTime` ("Azan time") carries the Designer's
+ * `Time (HH:MM)` preset as its `pattern`, bound into the fixture's text, as an azan template's is.
+ */
+export async function buildPatternFieldVcg(templateId = 'tpl-e2e-pattern'): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  const text = scene.layers[0]?.children[0];
+  if (text === undefined || text.type !== 'text') throw new Error('fixture scene has no text');
+  text.text = '{{anchor}} {{azanTime}}';
+  scene.fields = [
+    ...scene.fields,
+    {
+      id: 'azanTime',
+      label: 'Azan time',
+      required: false,
+      type: 'text',
+      default: '20:32',
+      pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$',
+    },
+  ];
+  scene.bindings = [
+    ...scene.bindings,
+    {
+      fieldId: 'azanTime',
+      target: { kind: 'text', elementId: 'el-name', placeholder: '{{azanTime}}' },
+    },
+  ];
+  return pack({
+    scene,
+    manifestExtras: {
+      id: templateId,
+      name: 'e2e-azan',
+      authoring: {
+        designerVersion: '0.0.0',
+        createdAt: '2026-10-16T00:00:00.000Z',
+        exportedAt: '2026-10-16T00:01:00.000Z',
+      },
+      compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+      fontDeps: scene.fonts,
+      assetIndex: [],
+    },
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
 /**
  * `R-100` — a verifiable `.vcg` carrying a BOOK: a picture sequence (manual, one pass, Cut) bound
  * to a `list` field marked as a page list (`pages`). Its own pages are empty — the operator loads

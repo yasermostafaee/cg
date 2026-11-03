@@ -55,6 +55,9 @@
 - [x] 2.20 Record the generated file's template signature in Designer and CG Control; keep Reload
       available but show a labelled connected/update-file warning after fields, limits or choices
       change, and clear the warning only by saving and connecting a current file.
+- [x] 2.21 Let the Sequence Page data modal author the nested Repeater as File only; remove the
+      combined manual editor in CG Control while retaining generated-workbook connection/Reload, and
+      keep editable numeric cells on the same active field surface as text/select controls.
 
 ## 3. Conditional value rules
 

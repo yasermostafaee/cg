@@ -3,6 +3,7 @@ import { CircleCheck, TriangleAlert, Unplug } from 'lucide-react';
 import {
   aggregateCompositionFields,
   defaultNestedValues,
+  fieldUsesFileOnly,
   sequenceItemInstanceId,
   sequencesOf,
   withListLimits,
@@ -29,6 +30,7 @@ import { useSharedImages } from '../sharedLibrary/useSharedImages.js';
 import { PreviewFieldForm } from './PreviewFieldForm.js';
 import { ListItemsEditor, newItemId } from './ListItemsEditor.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
+import { CheckRow } from '../inspector/DynamicDataSection.js';
 import {
   imageChoicesForAssets,
   repeaterColumnsByFieldId,
@@ -62,6 +64,7 @@ interface PageSequence {
 type ListField = Extract<DynamicField, { type: 'list' }>;
 
 interface BulkLayout {
+  readonly compositionId: string;
   readonly field: ListField;
   readonly columns: readonly ListItemColumn[];
   readonly maxItems: number;
@@ -182,7 +185,12 @@ function bulkLayout(
   });
   const fieldColumns = columnsByFieldId.get(firstField.id);
   if (!compatible || fieldColumns === undefined || fieldColumns.length === 0) return null;
-  return { field: firstField, columns: fieldColumns, maxItems: firstField.maxItems };
+  return {
+    compositionId: compositionItems[0]?.compositionId ?? '',
+    field: firstField,
+    columns: fieldColumns,
+    maxItems: firstField.maxItems,
+  };
 }
 
 function bulkRows(entry: PageSequence, layout: BulkLayout): ListItem[] {
@@ -223,6 +231,7 @@ function SequencePageSection({
   );
   const values = useMemo(() => defaultNestedValues(aggregate), [aggregate]);
   const layout = useMemo(() => bulkLayout(entry, columns), [columns, entry]);
+  const fileOnly = layout !== null && fieldUsesFileOnly(layout.field);
   useSyncExternalStore(subscribeSequencePageDataAttachments, sequencePageDataAttachmentsVersion);
   const sceneId = designerStore.get().scene?.id ?? 'scene';
   const attachment = getSequencePageDataAttachment(sceneId, sequence.id);
@@ -426,6 +435,7 @@ function SequencePageSection({
               <Icon icon={Unplug} size={14} /> Not connected
             </span>
           )}
+          {fileOnly && <span className={s.connectionStatus}>CG Control · File only</span>}
         </div>
         {attachment !== null && <code className={s.path}>{attachment.sourcePath}</code>}
       </section>
@@ -488,6 +498,20 @@ function SequencePageSection({
             )}
           </div>
           {attachment !== null && <code className={s.path}>{attachment.sourcePath}</code>}
+          {layout !== null && (
+            <CheckRow
+              label="File only in CG Control"
+              checked={fileOnly}
+              onChange={(enabled) =>
+                designerStore.setCompositionFieldFileOnly(
+                  layout.compositionId,
+                  layout.field.id,
+                  enabled,
+                )
+              }
+              title="Remove manual row editing in CG Control; connected-file controls remain."
+            />
+          )}
           {attachmentNeedsUpdate && (
             <p className={s.warning} role="status">
               Template fields changed after this file was generated. Reload still validates its
