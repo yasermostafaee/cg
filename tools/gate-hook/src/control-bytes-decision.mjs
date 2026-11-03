@@ -49,6 +49,7 @@ export const BINARY_EXTENSIONS = new Set([
   'webm',
   'zip',
   'mp4',
+  'xlsx',
   // Images.
   'jpg',
   'jpeg',

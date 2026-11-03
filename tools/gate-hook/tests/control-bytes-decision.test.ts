@@ -104,7 +104,16 @@ describe('binary files are judged by EXTENSION, never by content', () => {
    * precisely the file this guard exists to catch.
    */
   it('skips the binary formats this tree carries', () => {
-    for (const p of ['a/b.png', 'f/x.woff2', 'p.vcg', 'c.avi', 'd.webm', 'e.zip', 'g.mp4']) {
+    for (const p of [
+      'a/b.png',
+      'f/x.woff2',
+      'p.vcg',
+      'c.avi',
+      'd.webm',
+      'e.zip',
+      'g.mp4',
+      'weather.xlsx',
+    ]) {
       expect(isTextPath(p), `${p} must be treated as binary`).toBe(false);
     }
   });
