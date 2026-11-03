@@ -75,4 +75,4 @@
 - [x] 4.2 Package the same dynamic asset closure in `.vcg` and single-file HTML exports.
 - [ ] 4.3 Verify the attached weather project model with direct Repeater use and optional Sequence paging.
 - [x] 4.4 Pass focused schema, Designer, Runtime and exporter suites plus strict OpenSpec validation.
-- [ ] 4.5 Run the full repository gate before commit/push; do not build installers until CG Control is manually accepted. Latest run passed 102/103 tasks; the remaining deterministic failure is the unrelated pre-existing `video-convert-sequence-args.test.ts` expectation for the new `-map 0:v:0` poster arguments.
+- [x] 4.5 Run the full repository gate before commit/push; do not build installers until CG Control is manually accepted. Local `pnpm gate` passed all 103/103 tasks plus formatting, control-byte and strict OpenSpec checks on 2026-11-04; installers remain deferred until manual CG Control acceptance.
