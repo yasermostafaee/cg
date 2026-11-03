@@ -12,8 +12,10 @@ export const PRIMARY_MONITOR_PREFERENCES: ProgramMonitorPreferences = {
   display: 'A',
   audio: 'follow',
   audioEngine: 'A',
+  layout: 'horizontal',
   setDisplay: () => undefined,
   setAudio: () => undefined,
+  setLayout: () => undefined,
 };
 
 export function stubMeters(): void {

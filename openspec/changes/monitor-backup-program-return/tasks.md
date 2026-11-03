@@ -18,6 +18,7 @@
 - [x] 3.3 Add Follow primary/A/B audio-source selection; keep one decoder and bind the one loudness/VU surface to the resolved source.
 - [x] 3.4 Add DOM/unit coverage for preference fallback, failover, no mixing, resource release and stale/engine-separated meters.
 - [x] 3.5 Keep A/B/A+B and audio-source controls visible without a configured backup; retain a black no-signal B placeholder while opening no B resource.
+- [x] 3.6 Add a persisted horizontal/vertical A+B layout choice without reconnecting programme resources.
 
 ## 4. End-to-end and release verification
 
@@ -26,3 +27,4 @@
 - [ ] 4.3 Run targeted typecheck/lint/tests, strict OpenSpec validation, full local gate and local Runtime E2E.
 - [ ] 4.4 Push the exact commit to `dev`, record the completed green Linux `ci` and `e2e` run URL here, and complete the 0.12.6 installer candidate only afterward.
 - [x] 4.5 Re-run the focused Runtime DOM/E2E coverage for the always-visible reserve controls and no-signal placeholder.
+- [x] 4.6 Run focused DOM/E2E coverage for both A+B arrangements and persistence.

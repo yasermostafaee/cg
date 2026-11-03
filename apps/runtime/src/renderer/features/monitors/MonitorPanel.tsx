@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type CSSProperties } from 'react';
-import { MonitorOff, Volume2, VolumeX } from 'lucide-react';
+import { Columns2, MonitorOff, Rows2, Volume2, VolumeX } from 'lucide-react';
 import type { PgmEngine } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -207,25 +207,40 @@ export function MonitorPanel({
       ? `${String(liveCount)} of ${String(returns.length)} return signals`
       : PROGRAM_SIGNAL_WORDS[returns[0]?.programReturn.signal ?? 'none'];
   const displayControls = (
-    <div
-      style={styles.controls}
-      className="cg-pgm-source-controls"
-      role="group"
-      aria-label="Programme picture source"
-    >
-      {(['A', 'B', 'both'] as const).map((mode) => (
-        <Button
-          key={mode}
-          variant="ghost"
-          aria-pressed={monitorPreferences.display === mode}
-          data-toggle-on={monitorPreferences.display === mode ? '' : undefined}
-          data-pgm-display-mode={mode}
-          title={mode === 'both' ? 'Show A and B' : `Show server ${mode}`}
-          onClick={() => monitorPreferences.setDisplay(mode)}
-        >
-          {mode === 'both' ? 'A+B' : mode}
-        </Button>
-      ))}
+    <div style={styles.controls} className="cg-pgm-source-controls">
+      <div style={styles.controls} role="group" aria-label="Programme picture source">
+        {(['A', 'B', 'both'] as const).map((mode) => (
+          <Button
+            key={mode}
+            variant="ghost"
+            aria-pressed={monitorPreferences.display === mode}
+            data-toggle-on={monitorPreferences.display === mode ? '' : undefined}
+            data-pgm-display-mode={mode}
+            title={mode === 'both' ? 'Show A and B' : `Show server ${mode}`}
+            onClick={() => monitorPreferences.setDisplay(mode)}
+          >
+            {mode === 'both' ? 'A+B' : mode}
+          </Button>
+        ))}
+      </div>
+      {monitorPreferences.display === 'both' && (
+        <div style={styles.controls} role="group" aria-label="Programme picture layout">
+          {(['horizontal', 'vertical'] as const).map((layout) => (
+            <Button
+              key={layout}
+              variant="ghost"
+              aria-label={`${layout === 'horizontal' ? 'Horizontal' : 'Vertical'} programme layout`}
+              aria-pressed={monitorPreferences.layout === layout}
+              data-toggle-on={monitorPreferences.layout === layout ? '' : undefined}
+              data-pgm-layout-choice={layout}
+              title={`${layout === 'horizontal' ? 'Horizontal' : 'Vertical'} A+B layout`}
+              onClick={() => monitorPreferences.setLayout(layout)}
+            >
+              <Icon icon={layout === 'horizontal' ? Columns2 : Rows2} size={13} />
+            </Button>
+          ))}
+        </div>
+      )}
     </div>
   );
   const audioControls = (
@@ -326,9 +341,13 @@ export function MonitorPanel({
       */}
       <div style={styles.stage} data-pgm-stage="">
         <div
-          style={styles.pictures}
+          style={{
+            ...styles.pictures,
+            flexDirection: monitorPreferences.layout === 'vertical' ? 'column' : 'row',
+          }}
           className="cg-pgm-pictures"
           data-pgm-picture-count={returns.length}
+          data-pgm-layout={monitorPreferences.layout}
         >
           {returns.map(({ engine, physicalChannel, programReturn }) => {
             const { src, signal, onError } = programReturn;

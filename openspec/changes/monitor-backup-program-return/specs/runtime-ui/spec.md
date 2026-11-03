@@ -2,7 +2,7 @@
 
 ### Requirement: The PROGRAM monitor shows the programme return, and says so when it cannot
 
-The PROGRAM pane SHALL show the programme return of the channel on screen, served by the bridge same-origin, and SHALL always offer A, B and A + B display modes, including before a backup is configured. A is server A's physical channel N and B is server B's mapped physical channel M; those labels SHALL remain stable when the current primary changes. In A + B, both equally sized pictures SHALL be visible together and each tile SHALL carry its own physical server/channel label and signal state. Without a valid B mapping, the B tile SHALL remain present as a black `B · CH —` position with **"No return signal"**, while no B picture, sound or meter resource is requested.
+The PROGRAM pane SHALL show the programme return of the channel on screen, served by the bridge same-origin, and SHALL always offer A, B and A + B display modes, including before a backup is configured. A is server A's physical channel N and B is server B's mapped physical channel M; those labels SHALL remain stable when the current primary changes. In A + B, both equally sized pictures SHALL be visible together and the operator SHALL be able to arrange them horizontally (default) or vertically; this console-local choice SHALL be remembered and SHALL NOT be overridden by a narrow panel. Each tile SHALL carry its own physical server/channel label and signal state. Without a valid B mapping, the B tile SHALL remain present as a black `B · CH —` position with **"No return signal"**, while no B picture, sound or meter resource is requested.
 
 Each tile SHALL show its picture ONLY while the bridge reports that engine/channel `live` over a live bridge link. Otherwise that tile SHALL hide the picture and say **"No return signal"** (connecting, unreachable, unconfigured or unavailable) or **"Return feed stalled"** (the feed stopped delivering frames) — never a frozen frame as if it were live. The pane SHALL carry no explanatory prose; the strip keeps the rows-on-air count beside the signals, so "no return signal" is never read as "nothing on air". With no valid backup, B controls and its selected layout position SHALL remain visible but no B resource SHALL be requested.
 
@@ -15,6 +15,11 @@ Each tile SHALL show its picture ONLY while the bridge reports that engine/chann
 
 - **WHEN** A keeps delivering frames and B stops delivering them
 - **THEN** A remains visible, B hides its last frame and reads "Return feed stalled", and B returns independently when its frames resume
+
+#### Scenario: The operator chooses the A+B arrangement
+
+- **WHEN** A + B is selected and the operator chooses the vertical layout
+- **THEN** B is placed below A, the choice is remembered on that console, and choosing horizontal places B beside A without reconnecting either feed
 
 #### Scenario: No backup mapping keeps an honest reserve position
 

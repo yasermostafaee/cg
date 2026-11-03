@@ -3,12 +3,14 @@ import type { PgmEngine } from '@cg/shared-ipc';
 
 export type ProgramDisplayMode = 'A' | 'B' | 'both';
 export type ProgramAudioChoice = 'follow' | PgmEngine;
+export type ProgramPictureLayout = 'horizontal' | 'vertical';
 
 const STORAGE_KEY = 'cg.runtime.pgm-monitor.v1';
 
 interface StoredPreferences {
   readonly display?: ProgramDisplayMode;
   readonly audio?: ProgramAudioChoice;
+  readonly layout?: ProgramPictureLayout;
 }
 
 function read(): Required<StoredPreferences> {
@@ -18,12 +20,14 @@ function read(): Required<StoredPreferences> {
     ) as StoredPreferences;
     const display = parsed.display;
     const audio = parsed.audio;
+    const layout = parsed.layout;
     return {
       display: display === 'B' || display === 'both' ? display : 'A',
       audio: audio === 'A' || audio === 'B' ? audio : 'follow',
+      layout: layout === 'vertical' ? 'vertical' : 'horizontal',
     };
   } catch {
-    return { display: 'A', audio: 'follow' };
+    return { display: 'A', audio: 'follow', layout: 'horizontal' };
   }
 }
 
@@ -39,8 +43,10 @@ export interface ProgramMonitorPreferences {
   readonly display: ProgramDisplayMode;
   readonly audio: ProgramAudioChoice;
   readonly audioEngine: PgmEngine;
+  readonly layout: ProgramPictureLayout;
   setDisplay(mode: ProgramDisplayMode): void;
   setAudio(choice: ProgramAudioChoice): void;
+  setLayout(layout: ProgramPictureLayout): void;
 }
 
 export function useProgramMonitorPreferences(currentPrimary: PgmEngine): ProgramMonitorPreferences {
@@ -51,15 +57,18 @@ export function useProgramMonitorPreferences(currentPrimary: PgmEngine): Program
   }, []);
   const display = stored.display;
   const audio = stored.audio;
+  const layout = stored.layout;
   const audioEngine = audio === 'follow' ? currentPrimary : audio;
   return useMemo(
     () => ({
       display,
       audio,
       audioEngine,
+      layout,
       setDisplay: (mode: ProgramDisplayMode) => update({ ...stored, display: mode }),
       setAudio: (choice: ProgramAudioChoice) => update({ ...stored, audio: choice }),
+      setLayout: (next: ProgramPictureLayout) => update({ ...stored, layout: next }),
     }),
-    [audio, audioEngine, display, stored, update],
+    [audio, audioEngine, display, layout, stored, update],
   );
 }

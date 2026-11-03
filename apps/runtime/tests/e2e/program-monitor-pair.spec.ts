@@ -60,6 +60,7 @@ test('A+B keeps physical labels through a B-primary state, shows one stalled fee
   await page.getByRole('button', { name: 'A+B', exact: true }).click();
   const pictures = page.locator('[data-pgm-picture-count]');
   await expect(pictures).toHaveAttribute('data-pgm-picture-count', '2');
+  await expect(pictures).toHaveAttribute('data-pgm-layout', 'horizontal');
   await expect(page.locator('[data-pgm-screen="A"]')).toContainText('A · CH 1');
   await expect(page.locator('[data-pgm-screen="A"]')).toContainText('Return feed stalled');
   await expect(page.locator('[data-pgm-screen="B"]')).toContainText('B · CH 2');
@@ -74,6 +75,23 @@ test('A+B keeps physical labels through a B-primary state, shows one stalled fee
     'title',
     /from B/,
   );
+
+  const horizontalA = await page.locator('[data-pgm-screen="A"]').boundingBox();
+  const horizontalB = await page.locator('[data-pgm-screen="B"]').boundingBox();
+  expect(horizontalA).not.toBeNull();
+  expect(horizontalB).not.toBeNull();
+  expect(horizontalB?.x ?? 0).toBeGreaterThan((horizontalA?.x ?? 0) + 20);
+
+  await page.getByRole('button', { name: 'Vertical programme layout' }).click();
+  await expect(pictures).toHaveAttribute('data-pgm-layout', 'vertical');
+  const verticalA = await page.locator('[data-pgm-screen="A"]').boundingBox();
+  const verticalB = await page.locator('[data-pgm-screen="B"]').boundingBox();
+  expect(verticalA).not.toBeNull();
+  expect(verticalB).not.toBeNull();
+  expect(verticalB?.y ?? 0).toBeGreaterThan((verticalA?.y ?? 0) + 20);
+  await expect
+    .poll(() => page.evaluate(() => globalThis.localStorage.getItem('cg.runtime.pgm-monitor.v1')))
+    .toContain('"layout":"vertical"');
 
   await soundSource.selectOption('A');
   await expect(page.locator('[data-vu-meter]')).toHaveCount(1);

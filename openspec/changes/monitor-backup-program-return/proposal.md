@@ -5,6 +5,7 @@ An operator can currently see only server A's programme return, so a configured 
 ## What Changes
 
 - Keep PROGRAM monitor modes for server A, server B, and A + B visible even before a backup is configured; an unavailable B remains a black, labelled no-signal tile and opens no stream until the selected logical channel has a valid backup mapping.
+- Let the operator arrange A + B horizontally or vertically and remember that console-local layout choice.
 - Label each picture by physical server and channel and report each return's signal independently, including stalled or unavailable backup feeds without retaining a stale frame.
 - Keep one local monitor-audio path: the operator chooses A or B, the selected source owns the speaker, loudness badge, and VU meter, and the two outputs are never mixed. This changes only CG Control monitoring and never the on-air mix.
 - Extend the programme-return ticket, status, sound, and meter contracts with an engine identity. Server B requests stay scoped to the console's logical channel and are translated by CG Bridge to the mapped physical backup channel.

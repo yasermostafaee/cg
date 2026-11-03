@@ -4801,7 +4801,7 @@ appears; WHEN import settles THEN loading clears into the existing success or re
 
 **What:** PROGRAM always offers **A**, **B** and **A + B**, even before a reserve Playout or channel mapping
 is configured. An unavailable B remains a black, labelled no-signal position and opens no stream. In the
-combined mode the two programme pictures are shown side by side, each labelled with its physical
+combined mode the two programme pictures can be arranged horizontally or vertically, each labelled with its physical
 server/channel and its own signal state. There is still exactly one local monitor-audio path:
 the operator explicitly chooses A or B, and the speaker, loudness and VU meter follow that choice; the two
 engines are never mixed and this control never changes the on-air audio.
@@ -4816,6 +4816,8 @@ operator had to fail over before seeing whether its programme picture and sound 
   that console
 - WHEN A + B is selected THEN both programme pictures are visible at once with stable A/B and physical-channel
   labels, and either feed independently hides a stale frame and reports its own signal state
+- WHEN A + B is selected THEN the operator can arrange the two pictures horizontally or vertically and the
+  selected layout is remembered on that console without reconnecting either feed
 - WHEN monitor sound is enabled THEN exactly one chosen engine is heard and metered; changing the source moves
   sound, loudness and VU together without mixing or changing any on-air audio
 - WHEN failover changes the current primary THEN the physical A/B labels remain stable and the default/follow

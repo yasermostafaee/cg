@@ -206,6 +206,8 @@ describe('R-089 / R-104 — the channel’s own backup line and programme return
       expect.stringContaining('A · CH 1'),
       expect.stringContaining('B · CH 2'),
     ]);
+    expect(el.querySelector('[data-pgm-layout="horizontal"]')).not.toBe(null);
+    expect(el.querySelectorAll('[data-pgm-layout-choice]')).toHaveLength(2);
     expect(el.querySelector('[data-pgm-audio]')).not.toBe(null);
   });
 
