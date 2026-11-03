@@ -1,10 +1,25 @@
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
 export const list = style({
   display: 'flex',
   flexDirection: 'column',
   gap: '0.25rem',
+});
+
+export const comfortableList = style({
+  gap: '0.5rem',
+});
+
+globalStyle(`${comfortableList} input, ${comfortableList} select, ${comfortableList} textarea`, {
+  minHeight: '2.25rem',
+  padding: '0.45rem 0.6rem',
+  fontSize: '0.86rem',
+});
+
+globalStyle(`${comfortableList} button`, {
+  minWidth: '2.1rem',
+  minHeight: '2.1rem',
 });
 
 export const itemRow = style({
@@ -24,6 +39,12 @@ export const itemInput = style({
   fontSize: '0.74rem',
   boxSizing: 'border-box',
   outline: 'none',
+});
+
+/** A design-system Select wraps its native control; the WRAPPER must own the flex column width. */
+export const itemControl = style({
+  flex: '1 1 0',
+  minWidth: 0,
 });
 
 /** D-118 — the multi-line item-text textarea filling the item row (the look lives in the shared

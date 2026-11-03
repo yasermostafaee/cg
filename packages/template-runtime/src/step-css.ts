@@ -279,6 +279,20 @@ export function stepPlanOf(scene: Scene): StepPlan {
       }
     }
   }
+  // D-139 — a visibility rule uses the same composition-safe wrapper as a countdown change. It
+  // therefore composes with lifespan display gates and element opacity instead of overwriting them.
+  for (const owner of sceneElements(scene)) {
+    for (const rule of owner.valueRules?.rules ?? []) {
+      const change = rule.effect;
+      if (change.property !== 'visible') continue;
+      const el = byId.get(change.elementId);
+      if (el === undefined) continue;
+      if (!elements.has(el.id)) elements.set(el.id, elements.size);
+      const isInstance = el.type === 'composition';
+      if (!isInstance) wrapped.add(el.id);
+      if (change.value && !el.visible && !isInstance) shown.add(el.id);
+    }
+  }
   const plan: StepPlan = { countdowns, elements, wrapped, shown, byId };
   planCache.set(scene, plan);
   return plan;

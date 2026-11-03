@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import type { DynamicField, FieldValue, ListItem, NestedFieldValues } from '@cg/shared-schema';
 import { PreviewFieldForm } from '../src/renderer/features/fields/PreviewFieldForm.js';
 import { ListItemsEditor } from '../src/renderer/features/fields/ListItemsEditor.js';
+import * as listStyles from '../src/renderer/features/fields/ListItemsEditor.css.js';
 import { NumberField } from '../src/renderer/features/inspector/controls.js';
 
 /**
@@ -13,7 +14,7 @@ import { NumberField } from '../src/renderer/features/inspector/controls.js';
  * `type="number"` box, so `۱۲` typed into a number field's default left the box EMPTY and stored
  * `0`, and `۱۲٫۵` in the preview form previewed as `0`.
  *
- * Each case is paired with its control: an impossible text is refused and commits nothing, and a
+ * Each case is paired with its control: an impossible character is rejected, and a
  * CHROME number (any `NumberField` that does not opt in) is still the old `type="number"` box —
  * §1 E, the owner's "nothing else changes".
  */
@@ -120,7 +121,7 @@ describe('the preview form’s number field', () => {
     expect(onChange).toHaveBeenLastCalledWith(['score'], 12.5);
   });
 
-  it('refuses `۱۲a` in one line and hands on NOTHING (the control)', () => {
+  it('does not let `۱۲a` replace a valid numeric value', () => {
     const onChange = vi.fn();
     const el = mount(createElement(Harness, { onChange }));
     const box = input(el, 'score');
@@ -128,9 +129,55 @@ describe('the preview form’s number field', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
     type(box, '۱۲a');
     expect(onChange, 'an impossible text commits nothing').toHaveBeenCalledTimes(1);
-    expect(alerts(el)).toEqual(['Not a number']);
-    expect(box.getAttribute('aria-invalid')).toBe('true');
-    expect(box.value).toBe('۱۲a');
+    expect(alerts(el)).toEqual([]);
+    expect(box.getAttribute('aria-invalid')).toBeNull();
+    expect(box.value).toBe('۱۲');
+  });
+
+  it('renders arbitrary authored numeric choices as a dropdown', () => {
+    const onChange = vi.fn();
+    const choices: DynamicField = {
+      id: 'score',
+      label: 'score',
+      required: false,
+      type: 'number',
+      default: 10,
+      allowedValues: [10, 20, 30],
+      allowedValueLabels: { '10': 'Low', '20': 'Medium', '30': 'High' },
+    };
+    const el = mount(createElement(Harness, { onChange, field: choices }));
+    const select = el.querySelector<HTMLSelectElement>('select[aria-label="score"]');
+    if (select === null) throw new Error('numeric choice dropdown missing');
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      'Low',
+      'Medium',
+      'High',
+    ]);
+    act(() => {
+      select.value = '20';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(onChange).toHaveBeenLastCalledWith(['score'], 20);
+    expect(el.querySelector('input[aria-label="score"]')).toBeNull();
+  });
+
+  it('refuses a numeric value outside the authored range', () => {
+    const onChange = vi.fn();
+    const whole: DynamicField = {
+      id: 'score',
+      label: 'score',
+      required: false,
+      type: 'number',
+      default: 5,
+      min: 0,
+      max: 10,
+      step: 1,
+    };
+    const el = mount(createElement(Harness, { onChange, field: whole }));
+    const box = input(el, 'score');
+    type(box, '۱۲');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(alerts(el)).toEqual(['Must be at most 10.']);
   });
 });
 
@@ -149,7 +196,7 @@ describe('a list item’s number column and dwell', () => {
     });
   }
 
-  it('a number column keeps `۳` on screen and stores 3; `۳x` stores nothing', () => {
+  it('a number column keeps `۳` on screen and stores 3; `۳x` cannot enter the box', () => {
     const onItems = vi.fn();
     const el = mount(createElement(Harness, { onItems }));
     const cell = input(el, 'rows item 1 Goals');
@@ -160,8 +207,8 @@ describe('a list item’s number column and dwell', () => {
     const calls = onItems.mock.calls.length;
     type(cell, '۳x');
     expect(onItems.mock.calls.length, 'the control: an impossible text stores nothing').toBe(calls);
-    expect(cell.getAttribute('aria-invalid')).toBe('true');
-    expect(cell.title).toBe('Not a number');
+    expect(cell.getAttribute('aria-invalid')).toBeNull();
+    expect(cell.value).toBe('۳');
   });
 
   it('the dwell reads `۰۰:۳۰` as thirty seconds, and a bare `۵` as five', () => {
@@ -177,10 +224,49 @@ describe('a list item’s number column and dwell', () => {
     type(dwell, '');
     expect(onItems).toHaveBeenLastCalledWith([{ id: 'i1', goals: 1 }]);
   });
+
+  it('uses an equal-width wrapper for a numeric choice beside populated text/number cells', () => {
+    const onItems = vi.fn();
+    const el = mount(
+      createElement(ListItemsEditor, {
+        items: [{ id: 'i1', city: 'Tehran', temperature: 22, weather: 0 }],
+        label: 'rows',
+        columns: [
+          { key: 'city', label: 'City' },
+          { key: 'temperature', label: 'Temperature', kind: 'number' },
+          {
+            key: 'weather',
+            label: 'Weather',
+            kind: 'number',
+            allowedValues: [0, 2, 5],
+            allowedValueLabels: { '0': 'Rain', '2': 'Sun', '5': 'Cloud' },
+          },
+        ],
+        onChange: onItems,
+      }),
+    );
+    expect(input(el, 'rows item 1 City').value).toBe('Tehran');
+    expect(input(el, 'rows item 1 Temperature').value).toBe('22');
+    const select = el.querySelector<HTMLSelectElement>('select[aria-label="rows item 1 Weather"]');
+    if (select === null) throw new Error('numeric choice row dropdown missing');
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      'Rain',
+      'Sun',
+      'Cloud',
+    ]);
+    expect(select.parentElement?.classList.contains(listStyles.itemControl)).toBe(true);
+    act(() => {
+      select.value = '5';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(onItems).toHaveBeenLastCalledWith([
+      { id: 'i1', city: 'Tehran', temperature: 22, weather: 5 },
+    ]);
+  });
 });
 
 describe('the Inspector’s number field default ("Value")', () => {
-  it('`as-typed` keeps `۱۲`, commits 12, and refuses `۱۲a` in one line', () => {
+  it('`as-typed` keeps `۱۲`, commits 12, and rejects the letter in `۱۲a`', () => {
     const onCommit = vi.fn();
     function Harness() {
       const [value, setValue] = useState(0);
@@ -203,8 +289,9 @@ describe('the Inspector’s number field default ("Value")', () => {
     expect(box.value).toBe('۱۲');
     type(box, '۱۲a');
     expect(onCommit).toHaveBeenCalledTimes(1);
-    expect(alerts(el)).toEqual(['Not a number']);
-    // Leaving the box: the never-committed text gives way to the value, in the author's digits.
+    expect(alerts(el)).toEqual([]);
+    expect(box.value).toBe('۱۲');
+    // Leaving the box keeps the committed value in the author's digits.
     act(() => box.blur());
     expect(box.value).toBe('۱۲');
     expect(alerts(el)).toEqual([]);

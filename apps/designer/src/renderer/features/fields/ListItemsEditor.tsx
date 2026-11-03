@@ -1,6 +1,14 @@
+import { useState } from 'react';
 import { Check, Link2 } from 'lucide-react';
 import { writeDigitsInto } from '@cg/gesture';
-import { FieldDigitsSchema, type FieldDigits, type ListItem } from '@cg/shared-schema';
+import {
+  FieldDigitsSchema,
+  numberFieldAllowedValues,
+  numberFieldValueLabel,
+  numberFieldValueError,
+  type FieldDigits,
+  type ListItem,
+} from '@cg/shared-schema';
 import { formatNumberLike, readLocalizedDuration, writeFieldDigits } from '@cg/text-shaping';
 import { cx } from '../../cx.js';
 import { keyboardLanguage } from '../../keyboardLanguage.js';
@@ -47,7 +55,7 @@ interface Props {
    * D-118 — the item TEXT reading direction (the element's `direction`) applied to the multi-line
    * textarea, so Persian/RTL item text edits in reading order. Absent ⇒ inherits (LTR contexts).
    */
-  dir?: 'ltr' | 'rtl' | undefined;
+  dir?: 'ltr' | 'rtl' | 'auto' | undefined;
   /**
    * D-118 — render the single-text item input as a multi-line `<Textarea>` (sequence contexts), in
    * BOTH the inspector and the preview field form, so authoring a `\n` (D-117 renders it) is possible
@@ -107,6 +115,8 @@ interface Props {
    * flagged "not shown", because the page stamps only the first `maxItems`. Absent ⇒ no limit.
    */
   maxItems?: number | undefined;
+  /** Roomier controls for modal/table editing; compact Inspector lists keep their existing density. */
+  comfortable?: boolean | undefined;
 }
 
 /** `B-106` — why `Add item` is withheld at the limit, as the add row's title. */
@@ -228,6 +238,21 @@ function numberCellOf(item: ListItem, key: string): number | undefined {
   return typeof v === 'number' ? v : undefined;
 }
 
+/** An IMAGE column's canonical asset id (legacy scalar ids remain readable). */
+function imageCellOf(item: ListItem, key: string): string {
+  const v = (item as Record<string, unknown>)[key];
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+    const assetId = (v as Record<string, unknown>)['assetId'];
+    return typeof assetId === 'string' ? assetId : '';
+  }
+  return '';
+}
+
+function booleanCellOf(item: ListItem, key: string): boolean {
+  return (item as Record<string, unknown>)[key] === true;
+}
+
 /** Set one TEXT column cell, preserving every other field. */
 function withCell(item: ListItem, column: ListItemColumn, raw: string): ListItem {
   return { ...item, [column.key]: raw } as ListItem;
@@ -239,6 +264,34 @@ function withNumberCell(item: ListItem, key: string, n: number | undefined): Lis
   if (n === undefined) delete next[key];
   else next[key] = n;
   return next as ListItem;
+}
+
+/** Set/clear one IMAGE column cell using the canonical FieldValue shape. */
+function withImageCell(item: ListItem, key: string, assetId: string): ListItem {
+  const next: Record<string, unknown> = { ...item };
+  if (assetId === '') delete next[key];
+  else next[key] = { assetId };
+  return next as ListItem;
+}
+
+function withBooleanCell(item: ListItem, key: string, checked: boolean): ListItem {
+  return { ...item, [key]: checked } as ListItem;
+}
+
+/** A new structured row seeded from the referenced child composition's fields. */
+export function newColumnItem(columns: readonly ListItemColumn[]): ListItem {
+  const row: Record<string, unknown> = { id: newItemId() };
+  for (const column of columns) {
+    if (!Object.prototype.hasOwnProperty.call(column, 'defaultValue')) continue;
+    const value = column.defaultValue;
+    row[column.key] =
+      typeof value === 'object' && value !== null
+        ? Array.isArray(value)
+          ? [...value]
+          : { ...(value as Record<string, unknown>) }
+        : value;
+  }
+  return row as ListItem;
 }
 
 /**
@@ -257,6 +310,10 @@ function ItemNumberInput({
   placeholder,
   title,
   ariaLabel,
+  min,
+  max,
+  step,
+  allowedValues,
 }: {
   className: string;
   invalidClassName: string;
@@ -266,29 +323,58 @@ function ItemNumberInput({
   placeholder: string;
   title: string;
   ariaLabel: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  allowedValues?: readonly number[];
 }): JSX.Element {
+  const [rangeRefusal, setRangeRefusal] = useState<string | null>(null);
   const typed = useTypedNumber(
     value,
     kind === 'duration'
-      ? { read: readLocalizedDuration, write: (ms, sample) => formatNumberLike(ms / 1000, sample) }
-      : {},
+      ? {
+          read: readLocalizedDuration,
+          write: (ms, sample) => formatNumberLike(ms / 1000, sample),
+          rejectInvalid: true,
+        }
+      : { rejectInvalid: true },
   );
   return (
     <input
-      className={cx(className, typed.refusal !== null && invalidClassName)}
+      className={cx(
+        className,
+        (typed.refusal !== null || rangeRefusal !== null) && invalidClassName,
+      )}
       type="text"
       inputMode="decimal"
       placeholder={placeholder}
       // In a row this narrow the refusal cannot take a line of its own: it is the box's tooltip
       // and its danger edge instead.
-      title={typed.refusal ?? title}
+      title={typed.refusal ?? rangeRefusal ?? title}
       value={typed.text}
       aria-label={ariaLabel}
-      {...(typed.refusal !== null ? { 'aria-invalid': true } : {})}
+      {...(typed.refusal !== null || rangeRefusal !== null ? { 'aria-invalid': true } : {})}
       onChange={(e) => {
         const reading = typed.change(e.target.value);
-        if (reading.kind === 'number') onValue(reading.value);
-        else if (e.target.value.trim() === '') onValue(undefined);
+        if (reading.kind === 'number') {
+          const error =
+            kind === 'number'
+              ? numberFieldValueError(
+                  {
+                    ...(min === undefined ? {} : { min }),
+                    ...(max === undefined ? {} : { max }),
+                    ...(step === undefined ? {} : { step }),
+                    ...(allowedValues === undefined ? {} : { allowedValues }),
+                  },
+                  reading.value,
+                )
+              : undefined;
+          setRangeRefusal(error ?? null);
+          if (error === undefined) onValue(reading.value);
+        } else if (e.target.value.trim() === '') {
+          setRangeRefusal(null);
+          onValue(undefined);
+        }
       }}
     />
   );
@@ -311,6 +397,7 @@ export function ListItemsEditor({
   itemDigits,
   onItemDigits,
   maxItems,
+  comfortable = false,
 }: Props): JSX.Element {
   const atLimit = maxItems !== undefined && items.length >= maxItems;
   /** The Digits an item's text box writes: its own bound field's, else the list's / element's. */
@@ -332,7 +419,7 @@ export function ListItemsEditor({
   };
 
   return (
-    <div className={s.list}>
+    <div className={cx(s.list, comfortable && s.comfortableList)}>
       {items.length === 0 && <p className={s.empty}>No items yet — add the first one.</p>}
       {items.map((item, i) => {
         const dwellInput = showDwell ? (
@@ -526,39 +613,149 @@ export function ListItemsEditor({
           >
             {columns !== undefined && columns.length > 0 ? (
               // D-030 — one input per child-composition field (column).
-              columns.map((col) =>
-                col.kind === 'number' ? (
-                  <ItemNumberInput
-                    key={col.key}
-                    className={s.itemInput}
-                    invalidClassName={s.inputInvalid}
-                    kind="number"
-                    placeholder={col.label}
-                    title={col.label}
-                    value={numberCellOf(item, col.key)}
-                    ariaLabel={`${label} item ${String(i + 1)} ${col.label}`}
-                    onValue={(n) =>
-                      onChange(
-                        items.map((it, j) => (j === i ? withNumberCell(it, col.key, n) : it)),
-                      )
-                    }
-                  />
-                ) : (
+              columns.map((col) => {
+                const ariaLabel = `${label} item ${String(i + 1)} ${col.label}`;
+                if (col.kind === 'number') {
+                  const allowedValues = numberFieldAllowedValues(col);
+                  if (allowedValues !== undefined) {
+                    return (
+                      <Select
+                        key={col.key}
+                        className={s.itemInput}
+                        wrapperClassName={s.itemControl}
+                        value={String(
+                          numberCellOf(item, col.key) ?? col.defaultValue ?? allowedValues[0],
+                        )}
+                        title={col.label}
+                        aria-label={ariaLabel}
+                        onChange={(e) =>
+                          onChange(
+                            items.map((it, j) =>
+                              j === i ? withNumberCell(it, col.key, Number(e.target.value)) : it,
+                            ),
+                          )
+                        }
+                      >
+                        {allowedValues.map((value) => (
+                          <option key={value} value={value}>
+                            {numberFieldValueLabel(col, value)}
+                          </option>
+                        ))}
+                      </Select>
+                    );
+                  }
+                  return (
+                    <ItemNumberInput
+                      key={col.key}
+                      className={s.itemInput}
+                      invalidClassName={s.inputInvalid}
+                      kind="number"
+                      placeholder={col.label}
+                      title={col.label}
+                      value={numberCellOf(item, col.key)}
+                      ariaLabel={ariaLabel}
+                      {...(col.min === undefined ? {} : { min: col.min })}
+                      {...(col.max === undefined ? {} : { max: col.max })}
+                      {...(col.step === undefined ? {} : { step: col.step })}
+                      {...(col.allowedValues === undefined
+                        ? {}
+                        : { allowedValues: col.allowedValues })}
+                      onValue={(n) =>
+                        onChange(
+                          items.map((it, j) => (j === i ? withNumberCell(it, col.key, n) : it)),
+                        )
+                      }
+                    />
+                  );
+                }
+                if (col.kind === 'image' || col.kind === 'select') {
+                  const value =
+                    col.kind === 'image' ? imageCellOf(item, col.key) : cellOf(item, col.key);
+                  const known = col.choices?.some((choice) => choice.value === value) === true;
+                  return (
+                    <Select
+                      key={col.key}
+                      className={s.itemInput}
+                      wrapperClassName={s.itemControl}
+                      value={value}
+                      title={col.label}
+                      aria-label={ariaLabel}
+                      onChange={(e) =>
+                        onChange(
+                          items.map((it, j) =>
+                            j !== i
+                              ? it
+                              : col.kind === 'image'
+                                ? withImageCell(it, col.key, e.target.value)
+                                : withCell(it, col, e.target.value),
+                          ),
+                        )
+                      }
+                    >
+                      {col.kind === 'image' && <option value="">— use default / no image —</option>}
+                      {value !== '' && !known && <option value={value}>{value} (missing)</option>}
+                      {(col.choices ?? []).map((choice) => (
+                        <option key={choice.value} value={choice.value}>
+                          {choice.label}
+                        </option>
+                      ))}
+                    </Select>
+                  );
+                }
+                if (col.kind === 'boolean') {
+                  return (
+                    <label key={col.key} className={s.itemInput} title={col.label}>
+                      <input
+                        type="checkbox"
+                        checked={booleanCellOf(item, col.key)}
+                        aria-label={ariaLabel}
+                        onChange={(e) =>
+                          onChange(
+                            items.map((it, j) =>
+                              j === i ? withBooleanCell(it, col.key, e.target.checked) : it,
+                            ),
+                          )
+                        }
+                      />
+                      {col.label}
+                    </label>
+                  );
+                }
+                if (col.kind === 'color') {
+                  const value = cellOf(item, col.key);
+                  return (
+                    <input
+                      key={col.key}
+                      className={s.itemInput}
+                      type="color"
+                      title={col.label}
+                      value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#000000'}
+                      aria-label={ariaLabel}
+                      onChange={(e) =>
+                        onChange(
+                          items.map((it, j) => (j === i ? withCell(it, col, e.target.value) : it)),
+                        )
+                      }
+                    />
+                  );
+                }
+                return (
                   <input
                     key={col.key}
                     className={s.itemInput}
                     type="text"
+                    dir={dir}
                     placeholder={col.label}
                     title={col.label}
                     value={shown(cellOf(item, col.key), col.digits)}
-                    aria-label={`${label} item ${String(i + 1)} ${col.label}`}
+                    aria-label={ariaLabel}
                     onChange={(e) => {
                       const text = typedInto(e.currentTarget, e.nativeEvent, col.digits);
                       onChange(items.map((it, j) => (j === i ? withCell(it, col, text) : it)));
                     }}
                   />
-                ),
-              )
+                );
+              })
             ) : kindOf(item) === 'image' ? (
               <PictureItem item={item} ariaLabel={`${label} item ${String(i + 1)} picture`} />
             ) : multiline ? (
@@ -578,6 +775,7 @@ export function ListItemsEditor({
               <input
                 className={s.itemInput}
                 type="text"
+                dir={dir}
                 value={shown(textOf(item), digitsFor(item))}
                 aria-label={`${label} item ${String(i + 1)}`}
                 onChange={(e) => {
@@ -607,7 +805,12 @@ export function ListItemsEditor({
           disabled={atLimit}
           onClick={() => {
             if (atLimit) return;
-            onChange([...items, { id: newItemId(), text: '' }]);
+            onChange([
+              ...items,
+              columns !== undefined && columns.length > 0
+                ? newColumnItem(columns)
+                : { id: newItemId(), text: '' },
+            ]);
           }}
         >
           Add item

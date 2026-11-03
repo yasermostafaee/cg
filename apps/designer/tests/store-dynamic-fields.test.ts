@@ -161,6 +161,52 @@ describe('designerStore — D-018 Data key convenience layer', () => {
     expect(fields()[0]).toMatchObject({ type: 'number', default: 0 });
   });
 
+  it('authors and clears numeric presets while keeping the default valid', () => {
+    freshScene();
+    designerScene_addText('el-1');
+    designerStore.setElementDataKey('el-1', 'weather');
+    designerStore.setElementFieldMeta('el-1', { fieldType: 'number', default: 7 });
+    designerStore.setElementFieldMeta('el-1', { min: 0, max: 1, step: 1 });
+    expect(fields()[0]).toMatchObject({ type: 'number', default: 1, min: 0, max: 1, step: 1 });
+
+    designerStore.setElementFieldMeta('el-1', { min: null, max: null, step: null });
+    expect(fields()[0]).toMatchObject({ type: 'number', default: 1 });
+    expect(fields()[0]).not.toHaveProperty('min');
+    expect(fields()[0]).not.toHaveProperty('max');
+    expect(fields()[0]).not.toHaveProperty('step');
+  });
+
+  it('authors arbitrary numeric choices and moves an invalid default to the first choice', () => {
+    freshScene();
+    designerScene_addText('el-1');
+    designerStore.setElementDataKey('el-1', 'weather');
+    designerStore.setElementFieldMeta('el-1', { fieldType: 'number', default: 7 });
+    designerStore.setElementFieldMeta('el-1', { allowedValues: [10, 20, 30] });
+    expect(fields()[0]).toMatchObject({
+      type: 'number',
+      default: 10,
+      allowedValues: [10, 20, 30],
+    });
+
+    designerStore.setElementFieldMeta('el-1', { default: 30 });
+    designerStore.setElementFieldMeta('el-1', {
+      allowedValueLabels: { '10': 'Low', '20': 'Medium', '30': 'High' },
+    });
+    designerStore.setElementFieldMeta('el-1', { title: 'Weather kind' });
+    expect(fields()[0]).toMatchObject({
+      default: 30,
+      allowedValues: [10, 20, 30],
+      allowedValueLabels: { '10': 'Low', '20': 'Medium', '30': 'High' },
+    });
+
+    designerStore.setElementFieldMeta('el-1', {
+      allowedValues: null,
+      allowedValueLabels: null,
+    });
+    expect(fields()[0]).not.toHaveProperty('allowedValues');
+    expect(fields()[0]).not.toHaveProperty('allowedValueLabels');
+  });
+
   it('editing the field default mirrors onto the element text (inline editor stays in sync)', () => {
     freshScene();
     designerScene_addText('el-1');
@@ -441,6 +487,37 @@ describe('designerStore — D-029 sequence Data key + items', () => {
       { id: 'a', text: 'Headline' },
       { id: 'b', kind: 'composition', compositionId: 'clock-card', dwellMs: 3000 },
     ]);
+  });
+
+  it('D-180 persists per-page values and the selected page-data file on a Sequence', () => {
+    freshScene();
+    addSequence('sq-pages');
+    designerStore.setSequenceItems('sq-pages', [
+      {
+        id: 'page-1',
+        kind: 'composition',
+        compositionId: 'weather-list',
+        fieldValues: { cities: [{ id: 'tehran', city: 'تهران' }] },
+      },
+    ]);
+    designerStore.setSequenceItemFieldValues('sq-pages', 'page-1', {
+      cities: [{ id: 'tabriz', city: 'تبریز' }],
+    });
+    designerStore.setSequencePageDataFile('sq-pages', 'weather-pages.json');
+
+    const scene = editSceneOf(designerStore.get().scene, designerStore.get().activeCompositionId);
+    const sequence = scene?.layers
+      .flatMap((layer) => layer.children)
+      .find((element) => element.id === 'sq-pages');
+    expect(sequence).toMatchObject({
+      pageDataFile: 'weather-pages.json',
+      items: [
+        {
+          id: 'page-1',
+          fieldValues: { cities: [{ id: 'tabriz', city: 'تبریز' }] },
+        },
+      ],
+    });
   });
 });
 

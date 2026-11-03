@@ -29,6 +29,17 @@ const logoMeta: AssetMeta = {
   workingPath: `projects/p/assets/image/${SHA}.png`,
 };
 const RELATIVE_PATH = `assets/image/${SHA}.png`;
+const BRANCH_ID = 'storm-2';
+const BRANCH_SHA = 'b'.repeat(64);
+const BRANCH_PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 8, 7, 6]);
+const branchMeta: AssetMeta = {
+  assetId: BRANCH_ID,
+  kind: 'image',
+  filename: 'storm.png',
+  sha256: BRANCH_SHA,
+  byteSize: BRANCH_PNG.byteLength,
+  workingPath: `projects/p/assets/image/${BRANCH_SHA}.png`,
+};
 
 /** AssetStore stub exposing only what the exporters call (list/get/bytes). */
 function stubAssets(present: boolean): AssetStore {
@@ -76,6 +87,18 @@ function makeVcgExporter(present: boolean): Exporter {
   });
 }
 
+function ruleAssets(): AssetStore {
+  const byId = new Map([
+    [ASSET_ID, { meta: logoMeta, bytes: PNG }],
+    [BRANCH_ID, { meta: branchMeta, bytes: BRANCH_PNG }],
+  ]);
+  return {
+    list: async () => [...byId.values()].map((entry) => entry.meta),
+    get: async (id: string) => byId.get(id)?.meta ?? null,
+    bytes: async (id: string) => byId.get(id)?.bytes ?? null,
+  } as unknown as AssetStore;
+}
+
 function makeHtmlExporter(present: boolean): ExporterSingleFile {
   return new ExporterSingleFile({
     cgJsIife:
@@ -115,6 +138,41 @@ describe('D-062 — .vcg image rendering', () => {
     await expect(makeVcgExporter(false).produce(sceneWithImage())).rejects.toThrow(
       /missing-asset|blocked/,
     );
+  });
+
+  it('packages value-rule picture branches and preserves their operator-facing filename', async () => {
+    const scene = sceneWithImage();
+    const image = scene.layers[0]?.children[0];
+    if (image === undefined) throw new Error('missing fixture image');
+    image.valueRules = {
+      input: { kind: 'field', fieldId: 'weather' },
+      rules: [
+        {
+          condition: { comparator: '=', value: 'storm' },
+          effect: {
+            elementId: image.id,
+            property: 'image',
+            value: { assetId: BRANCH_ID, source: 'project' },
+          },
+        },
+      ],
+    };
+    scene.fields = [
+      { id: 'weather', label: 'Weather', required: false, type: 'text', default: 'clear' },
+    ];
+    const exporter = new Exporter({
+      assets: ruleAssets(),
+      cgJs: 'export const createRuntime = () => {}; export const installCasparGlobals = () => {};',
+      cgCss: 'html{background:transparent}',
+    });
+
+    const { manifest, files } = await unpack((await exporter.produce(scene)).vcg);
+
+    expect(manifest.assetIndex.find((entry) => entry.id === BRANCH_ID)).toMatchObject({
+      filename: 'storm.png',
+      path: `assets/image/${BRANCH_SHA}.png`,
+    });
+    expect(files.get(`assets/image/${BRANCH_SHA}.png`)).toEqual(BRANCH_PNG);
   });
 });
 

@@ -37,7 +37,7 @@ import { SharedImageStore } from './SharedImageStore.js';
 import { Exporter } from './Exporter.js';
 import { Preview } from './preview.js';
 import { pickFiles } from './pickFiles.js';
-import { BrowserTextSourceAccess } from './BrowserTextSourceAccess.js';
+import { BrowserTextSourceAccess, textSourceSampleMimeType } from './BrowserTextSourceAccess.js';
 import {
   exportFailureOf,
   settleFailedFile,
@@ -246,6 +246,93 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
           return content;
         }
         return browserTextSources.reload(sourcePath);
+      },
+      pickStructuredRows: async () => {
+        const invoke = shellInvoke();
+        if (invoke !== null) {
+          const selected = await invoke('pick_structured_rows_file');
+          if (
+            !Array.isArray(selected) ||
+            selected.length !== 4 ||
+            selected.slice(0, 3).some((part) => typeof part !== 'string') ||
+            !Array.isArray(selected[3]) ||
+            selected[3].some((part) => typeof part !== 'number')
+          ) {
+            if (selected === null) return null;
+            throw new Error('The native row-data picker returned an invalid result.');
+          }
+          const [name, bridgePath, sourcePath, raw] = selected as [
+            string,
+            string,
+            string,
+            number[],
+          ];
+          const bytes = Uint8Array.from(raw);
+          return {
+            name,
+            bridgePath,
+            sourcePath,
+            content: bytes,
+          };
+        }
+        return browserTextSources.pickStructuredRows();
+      },
+      reloadStructuredRows: async (sourcePath) => {
+        const invoke = shellInvoke();
+        if (invoke !== null) {
+          const raw = await invoke('reload_structured_rows_file', { sourcePath });
+          if (!Array.isArray(raw) || raw.some((part) => typeof part !== 'number')) {
+            throw new Error('The native row-data reload returned invalid content.');
+          }
+          const bytes = Uint8Array.from(raw as number[]);
+          return bytes;
+        }
+        return browserTextSources.reloadStructuredRows(sourcePath);
+      },
+      saveSample: async ({ suggestedName, content, format }) => {
+        // File System Access accepts MIME essence values only. Parameters such as `charset` make
+        // Chromium reject the picker options before the save dialog can open.
+        const mimeType = textSourceSampleMimeType(format);
+        const bytes = typeof content === 'string' ? new TextEncoder().encode(content) : content;
+        const invoke = shellInvoke();
+        if (invoke !== null) {
+          const saved = await invoke('save_text_source_sample', {
+            suggestedName,
+            content: Array.from(bytes),
+            format,
+          });
+          if (saved !== null && typeof saved !== 'string') {
+            throw new Error('The native data sample save returned an invalid result.');
+          }
+          return saved;
+        }
+        const picker = window.showSaveFilePicker;
+        if (picker !== undefined) {
+          let handle: FileSystemFileHandle;
+          try {
+            handle = await picker({
+              suggestedName,
+              types: [
+                {
+                  description: 'Sequence page data',
+                  accept: {
+                    [mimeType]: [format === 'csv' ? '.csv' : format === 'xlsx' ? '.xlsx' : '.json'],
+                  },
+                },
+              ],
+            });
+          } catch (err) {
+            if (err instanceof DOMException && err.name === 'AbortError') return null;
+            throw err;
+          }
+          const writable = await handle.createWritable();
+          await writable.write(new Blob([Uint8Array.from(bytes).buffer], { type: mimeType }));
+          await writable.close();
+          browserTextSources.rememberStructuredRowsHandle(handle);
+          return handle.name;
+        }
+        triggerSampleDownload(bytes, suggestedName, mimeType);
+        return suggestedName;
       },
     },
 
@@ -725,6 +812,19 @@ async function readBytesFromHandle(handle: FileSystemFileHandle): Promise<Uint8A
 function triggerPackageDownload(bytes: Uint8Array, filename: string): void {
   const blob = new Blob([bytes as BlobPart], { type: 'application/zip' });
   const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 10_000);
+}
+
+function triggerSampleDownload(content: Uint8Array, filename: string, mimeType: string): void {
+  const url = URL.createObjectURL(new Blob([Uint8Array.from(content).buffer], { type: mimeType }));
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;

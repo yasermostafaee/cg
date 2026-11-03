@@ -7,13 +7,17 @@ import { casparRefusalReason } from '../../ui/reachWording.js';
 import {
   aggregateHasFields,
   authoredFileDelimiter,
+  authoredFileFormat,
   bridgeTextSourcePath,
   fieldAllowsFileSource,
   fieldDigitsOf,
   fieldTypeTakesFileSource,
   fieldUsesFileOnly,
   isFieldNamespace,
+  numberFieldAllowedValues,
+  numberFieldValueLabel,
   isOnAirStatus,
+  numberFieldValueError,
   lockedBridgeTextSourcePath,
   type CompositionFieldGroup,
   type DynamicField,
@@ -55,6 +59,7 @@ import { detachUngrantedSources } from './fromFileStore.js';
 import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import { CountdownTargetField } from './CountdownTargetField.js';
+import { SequenceRowsEditor, sequenceRowsPageSets } from './SequenceRowsEditor.js';
 import { BookBlock } from '../book/BookBlock.js';
 import { bookTitle } from '../book/bookFacts.js';
 import { fieldPatternRefusal } from './patternCheck.js';
@@ -549,13 +554,19 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
    *    instance is which. Those got a readable label instead — see
    *    `sequenceItemHeading` (`R-037`: `<composition> — item N`; `R-040`: a stub on a collision).
    */
-  const groups = (info?.groups ?? []).filter((g) => aggregateHasFields(g.aggregate));
+  const visibleGroups = (info?.groups ?? []).filter((g) => aggregateHasFields(g.aggregate));
+  const sequenceRowSets = sequenceRowsPageSets(visibleGroups);
+  const combinedGroupNames = new Set(
+    sequenceRowSets.flatMap((set) => set.pages.map((page) => page.name)),
+  );
+  const groups = visibleGroups.filter((group) => !combinedGroupNames.has(group.name));
   // The schema-less fallback (registry doesn't know the template) stays FLAT: with no
   // schema there are no namespaces to infer, so every top-level VALUE is a field.
   const inferredRows: { field: DynamicField | null; key: string }[] = Object.keys(item.fields)
     .filter((key) => !isFieldNamespace(item.fields[key]))
     .map((key) => ({ field: null, key }));
-  const hasSchema = (schema !== null && schema.length > 0) || groups.length > 0;
+  const hasSchema =
+    (schema !== null && schema.length > 0) || groups.length > 0 || sequenceRowSets.length > 0;
   const rootFields: { field: DynamicField | null; key: string }[] = hasSchema
     ? (schema ?? []).map((f) => ({ field: f, key: f.id }))
     : inferredRows;
@@ -584,7 +595,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
     */
     item.timingOverride,
   );
-  const isEmpty = rootFields.length === 0 && groups.length === 0;
+  const isEmpty = rootFields.length === 0 && groups.length === 0 && sequenceRowSets.length === 0;
   // `R-100` — the row's book (its first page list), turned beside that field.
   const rowBook = bookOf(info, item);
 
@@ -810,6 +821,9 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
                   bookName={info?.pageLists?.find((l) => l.fieldId === row.key)?.name}
                   bookFit={info?.pageLists?.find((l) => l.fieldId === row.key)?.fit}
                 />
+              ))}
+              {sequenceRowSets.map((set) => (
+                <SequenceRowsEditor key={set.sequenceId} item={item} set={set} />
               ))}
               {groups.map((group) => (
                 <FieldGroup
@@ -1121,6 +1135,7 @@ function FieldEditor({
   const fileOnly = fieldUsesFileOnly(field);
   const authoredPath = bridgeTextSourcePath(field);
   const authoredDelimiter = authoredFileDelimiter(field);
+  const authoredFormat = authoredFileFormat(field) ?? 'text';
   const lockedPath = lockedBridgeTextSourcePath(field);
   // Built ONCE and placed in one of two spots (see below), so the two placements
   // cannot drift into two differently-configured controls.
@@ -1133,6 +1148,10 @@ function FieldEditor({
         fieldId={fieldId}
         {...(authoredPath !== undefined ? { authoredPath } : {})}
         {...(authoredDelimiter !== undefined ? { authoredDelimiter } : {})}
+        authoredFormat={authoredFormat}
+        {...(field?.type === 'list' && field.itemFields !== undefined
+          ? { itemFields: field.itemFields }
+          : {})}
         lockFile={lockedPath !== undefined}
       />
     );
@@ -1295,23 +1314,32 @@ function FieldControl({
       </select>
     );
   }
-  if (kind === 'image') {
-    // Image fields ship as { assetId }; kept as a plain text field on the
-    // assetId (the asset library picker lands later).
+  if (kind === 'image' && field?.type === 'image') {
     const v =
       typeof value === 'object' && value !== null && 'assetId' in value
         ? String((value as { assetId: string }).assetId)
         : '';
     return (
-      <input
+      <select
         className={fieldClass(dirty)}
-        type="text"
-        dir={EDITOR_DIR}
         value={v}
-        placeholder="asset id"
-        onChange={(e) => onStage({ assetId: e.target.value })}
         aria-label={fieldId}
-      />
+        onChange={(event) => {
+          const assetId = event.currentTarget.value;
+          if (assetId === '') onUnstage();
+          else onStage({ assetId });
+        }}
+      >
+        {v === '' && <option value="">No picture selected</option>}
+        {v !== '' && !(field.assetOptions ?? []).some((option) => option.assetId === v) && (
+          <option value={v}>Missing picture</option>
+        )}
+        {(field.assetOptions ?? []).map((option) => (
+          <option key={option.assetId} value={option.assetId}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     );
   }
   // `FIELD-DIGITS-01` — a text or multiline field shows and stages its value in the field's
@@ -1433,18 +1461,46 @@ function NumberField({
   // Shown in the field's digits whatever wrote `text` — a keystroke, a reseed, or a schema that
   // resolved after the box first rendered. The writer is idempotent and one-for-one.
   const shown = writeFieldDigits(text, digits, 'number');
-  const refused = readLocalizedNumber(shown).kind === 'invalid';
+  const reading = readLocalizedNumber(shown);
+  const rangeRefusal =
+    reading.kind === 'number' && field?.type === 'number'
+      ? numberFieldValueError(field, reading.value)
+      : undefined;
+  const refusal = reading.kind === 'invalid' ? NOT_A_NUMBER : rangeRefusal;
+  const refused = refusal !== undefined;
   // R-020 — the shared NumericInput (type="text" under the hood: a `type="number"` box drops
   // Persian digits before script sees them). `step`/`min`/`max` are not rendered: on the old
   // `type="number"` they only drove the spinner and the :invalid style — the staged value was
   // never clamped. `scrub` — drag horizontally or press ↑/↓ to adjust, the Designer's feel
   // (owner request). `step: 1` with Shift for tenths and Ctrl/Cmd for tens; no min/max, because
   // a dynamic field's range is not declared here.
+  const allowedValues = field?.type === 'number' ? numberFieldAllowedValues(field) : undefined;
+  if (field?.type === 'number' && allowedValues !== undefined) {
+    return (
+      <select
+        className={fieldClass(dirty)}
+        value={String(
+          typeof value === 'number' && allowedValues.includes(value)
+            ? value
+            : (allowedValues[0] ?? field.default),
+        )}
+        aria-label={fieldId}
+        onChange={(event) => onStage(Number(event.currentTarget.value))}
+      >
+        {allowedValues.map((choice) => (
+          <option key={choice} value={choice}>
+            {numberFieldValueLabel(field, choice)}
+          </option>
+        ))}
+      </select>
+    );
+  }
   return (
     <>
       <NumericInput
         className={fieldClass(dirty)}
         decimal
+        allow="number"
         digits={digits}
         scrub={{ step: 1 }}
         value={shown}
@@ -1453,8 +1509,15 @@ function NumberField({
           setText(raw);
           const reading = readLocalizedNumber(raw);
           if (reading.kind === 'number') {
-            setSeen(reading.value); // our own edit — don't let the resync reseed over it
-            onStage(reading.value);
+            const error =
+              field?.type === 'number' ? numberFieldValueError(field, reading.value) : undefined;
+            if (error === undefined) {
+              setSeen(reading.value); // our own edit — don't let the resync reseed over it
+              onStage(reading.value);
+            } else {
+              setSeen(applied);
+              onUnstage();
+            }
           } else {
             // The withdrawn draft makes the effective value the APPLIED one; seeing it first
             // keeps the resync from overwriting the text the operator is still editing.
@@ -1466,7 +1529,7 @@ function NumberField({
       />
       {refused && (
         <p id={refusalId} className="cg-field-refusal" data-field-refusal="">
-          {NOT_A_NUMBER}
+          {refusal}
         </p>
       )}
     </>

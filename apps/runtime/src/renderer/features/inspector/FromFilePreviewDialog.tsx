@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
-import type { FieldValue, StackItemState } from '@cg/shared-schema';
+import type { FieldValue, ListItemField, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Checkbox } from '../../ui/Checkbox.js';
@@ -90,15 +90,45 @@ const styles = {
     lineHeight: 1.55,
   },
   list: { margin: 0, paddingInlineStart: '1.8rem', display: 'grid', gap: '0.35rem' },
+  structuredRow: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(6rem, 0.35fr) minmax(0, 1fr)',
+    gap: '0.25rem 0.65rem',
+    margin: 0,
+  },
+  term: { color: colors.textMuted, overflowWrap: 'anywhere' as const },
+  value: { margin: 0, overflowWrap: 'anywhere' as const },
 } as const;
 
 function ParsedValue({ value }: { value: FieldValue }): JSX.Element {
   if (Array.isArray(value)) {
+    const structured = value.some((entry) =>
+      Object.keys(entry).some((key) => key !== 'id' && key !== 'text'),
+    );
     return (
       <ol style={styles.list} data-file-preview-fields="">
-        {value.map((entry, index) => (
-          <li key={`${String(index)}:${entry.id}`}>{itemText(entry)}</li>
-        ))}
+        {value.map((entry, index) =>
+          structured ? (
+            <li key={`${String(index)}:${entry.id}`}>
+              <dl style={styles.structuredRow}>
+                {Object.entries(entry)
+                  .filter(([key]) => key !== 'id')
+                  .map(([key, cell]) => (
+                    <div key={key} style={{ display: 'contents' }}>
+                      <dt style={styles.term}>{key}</dt>
+                      <dd style={styles.value}>
+                        {typeof cell === 'object' && cell !== null
+                          ? JSON.stringify(cell)
+                          : String(cell ?? '')}
+                      </dd>
+                    </div>
+                  ))}
+              </dl>
+            </li>
+          ) : (
+            <li key={`${String(index)}:${entry.id}`}>{itemText(entry)}</li>
+          ),
+        )}
       </ol>
     );
   }
@@ -123,6 +153,7 @@ export function FromFilePreviewDialog({
   kind,
   fieldId,
   lockFile,
+  itemFields,
 }: {
   open: boolean;
   onClose: () => void;
@@ -131,6 +162,7 @@ export function FromFilePreviewDialog({
   kind: FromFileFieldKind;
   fieldId: string;
   lockFile: boolean;
+  itemFields?: readonly ListItemField[] | undefined;
 }): JSX.Element | null {
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
   useSyncExternalStore(subscribeDelimiters, delimitersVersion);
@@ -165,14 +197,22 @@ export function FromFilePreviewDialog({
 
   if (!open || state === undefined) return null;
 
-  const parsed =
-    content === null
-      ? null
-      : contentToFieldValue(content, kind, {
-          split: state.split,
-          delimiter: state.delimiter,
-        });
+  let parsed: FieldValue | null = null;
+  let parseError: string | null = null;
+  if (content !== null) {
+    try {
+      parsed = contentToFieldValue(content, kind, {
+        split: state.split,
+        delimiter: state.delimiter,
+        format: state.format,
+        ...(kind === 'list' && itemFields !== undefined ? { itemFields } : {}),
+      });
+    } catch (reason) {
+      parseError = reason instanceof Error ? reason.message : String(reason);
+    }
+  }
   const delimiters = listDelimiters();
+  const modalError = error ?? parseError;
 
   return (
     <Modal
@@ -181,10 +221,14 @@ export function FromFilePreviewDialog({
       size="wide"
       frame="fixed"
       onClose={onClose}
-      {...(error === null
+      {...(modalError === null
         ? {}
         : {
-            message: { role: 'refusal' as const, text: 'Could not read the file.', detail: error },
+            message: {
+              role: 'refusal' as const,
+              text: error === null ? 'The file data is not valid.' : 'Could not read the file.',
+              detail: modalError,
+            },
           })}
       footer={
         <ModalAction actionRole="cancel" onClick={onClose}>
@@ -206,33 +250,55 @@ export function FromFilePreviewDialog({
 
       {kind === 'list' && lockFile && (
         <div style={styles.split}>
-          <span>Delimiter</span>
+          <span>{state.format === 'text' ? 'Delimiter' : 'Format'}</span>
           <Tag
             className="cg-file-chip cg-file-chip--content-sized"
-            aria-label={`${fieldId} locked delimiter`}
-            title={state.split ? state.delimiter : 'Whole file'}
+            aria-label={
+              state.format === 'text'
+                ? `${fieldId} locked delimiter`
+                : `${fieldId} locked file format`
+            }
+            title={state.format}
           >
-            {state.split
-              ? (delimiters.find((entry) => entry.value === state.delimiter)?.label ??
-                state.delimiter)
-              : 'Whole file'}
+            {state.format === 'text'
+              ? state.split
+                ? (delimiters.find((entry) => entry.value === state.delimiter)?.label ??
+                  state.delimiter)
+                : 'Whole file'
+              : state.format.toUpperCase()}
           </Tag>
         </div>
       )}
 
       {kind === 'list' && !lockFile && (
         <div style={styles.split}>
-          <span>Delimiter</span>
+          <span>File format</span>
           <div style={styles.splitControls}>
-            <label>
-              <Checkbox
-                checked={state.split}
-                onChange={(checked) => updateSplitConfig(item.itemId, path, { split: checked })}
-                aria-label={`Split ${fieldId} into items`}
-              />{' '}
-              Split file
-            </label>
-            {state.split && (
+            <select
+              className="cg-field cg-file-preview__delimiter"
+              value={state.format}
+              onChange={(event) =>
+                updateSplitConfig(item.itemId, path, {
+                  format: event.target.value as 'text' | 'json' | 'csv',
+                })
+              }
+              aria-label={`${fieldId} file format`}
+            >
+              <option value="text">Text / delimiter</option>
+              <option value="json">JSON rows</option>
+              <option value="csv">CSV rows</option>
+            </select>
+            {state.format === 'text' && (
+              <label>
+                <Checkbox
+                  checked={state.split}
+                  onChange={(checked) => updateSplitConfig(item.itemId, path, { split: checked })}
+                  aria-label={`Split ${fieldId} into items`}
+                />{' '}
+                Split file
+              </label>
+            )}
+            {state.format === 'text' && state.split && (
               <select
                 className="cg-field cg-file-preview__delimiter"
                 value={state.delimiter}
@@ -252,12 +318,16 @@ export function FromFilePreviewDialog({
               </select>
             )}
           </div>
-          <ManageDelimitersButton
-            onOpen={() => {
-              onClose();
-              openStationSetup('delimiters');
-            }}
-          />
+          {state.format === 'text' ? (
+            <ManageDelimitersButton
+              onOpen={() => {
+                onClose();
+                openStationSetup('delimiters');
+              }}
+            />
+          ) : (
+            <span />
+          )}
         </div>
       )}
 
@@ -271,7 +341,7 @@ export function FromFilePreviewDialog({
         <section style={styles.pane} aria-label="Parsed fields">
           <h3 style={styles.heading}>Parsed fields</h3>
           {parsed === null ? (
-            <p style={styles.loadingText}>Loading…</p>
+            <p style={styles.loadingText}>{parseError === null ? 'Loading…' : 'No valid rows.'}</p>
           ) : (
             <ParsedValue value={parsed} />
           )}

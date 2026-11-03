@@ -1,9 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { writeDigitsInto } from '@cg/gesture';
 import {
   fieldDigitsOf,
   fieldTakesFileSource,
   fileSourcePolicyOf,
+  numberFieldAllowedValues,
+  numberFieldValueLabel,
+  numberFieldValueError,
   type AggregatedFields,
   type DynamicField,
   type FieldDigits,
@@ -394,12 +397,15 @@ function PreviewNumberInput({
   label: string;
   /** `TEXT-DIGITS-01` — the field's digits: the box shows and types the number in them. */
   digits: DigitSet;
+  field: Extract<DynamicField, { type: 'number' }>;
 }): JSX.Element {
-  const typed = useTypedNumber(value);
+  const typed = useTypedNumber(value, { rejectInvalid: true });
+  const [rangeRefusal, setRangeRefusal] = useState<string | null>(null);
+  const refusal = typed.refusal ?? rangeRefusal;
   return (
     <>
       <input
-        className={cx(className, typed.refusal !== null && s.inputInvalid)}
+        className={cx(className, refusal !== null && s.inputInvalid)}
         type="text"
         inputMode="decimal"
         value={writeFieldDigits(typed.text, digits, 'number')}
@@ -412,15 +418,19 @@ function PreviewNumberInput({
             'number',
           );
           const reading = typed.change(text);
-          if (reading.kind === 'number') onChange(reading.value);
+          if (reading.kind === 'number') {
+            const error = numberFieldValueError(field, reading.value);
+            setRangeRefusal(error ?? null);
+            if (error === undefined) onChange(reading.value);
+          }
         }}
         aria-label={label}
-        {...(typed.refusal !== null ? { 'aria-invalid': true } : {})}
+        {...(refusal !== null ? { 'aria-invalid': true } : {})}
       />
-      {typed.refusal !== null && (
+      {refusal !== null && (
         <span className={s.error} role="alert">
           <Icon icon={TriangleAlert} size={14} />
-          {typed.refusal}
+          {refusal}
         </span>
       )}
     </>
@@ -457,6 +467,7 @@ function GrowTextarea({
     <textarea
       ref={ref}
       className={cx(className, s.grow)}
+      dir="auto"
       rows={rows}
       value={writeFieldDigits(value, digits)}
       onChange={(e) =>
@@ -501,6 +512,27 @@ function renderInput(
       );
     case 'number': {
       const numberDigits = fieldDigitsOf(field);
+      const allowedValues = numberFieldAllowedValues(field);
+      if (allowedValues !== undefined) {
+        return (
+          <Select
+            className={cls}
+            value={String(
+              typeof value === 'number' && allowedValues.includes(value)
+                ? value
+                : (allowedValues[0] ?? field.default),
+            )}
+            aria-label={label}
+            onChange={(event) => onChange(Number(event.currentTarget.value))}
+          >
+            {allowedValues.map((choice) => (
+              <option key={choice} value={choice}>
+                {numberFieldValueLabel(field, choice)}
+              </option>
+            ))}
+          </Select>
+        );
+      }
       return (
         <PreviewNumberInput
           className={cls}
@@ -508,6 +540,7 @@ function renderInput(
           onChange={onChange}
           label={label}
           digits={numberDigits === 'as-typed' ? 'latin' : numberDigits}
+          field={field}
         />
       );
     }
@@ -570,6 +603,7 @@ function renderInput(
           // the SAME multi-line textarea as the inspector, so the preview matches the properties panel.
           // (A `list` field carries no own direction; the textarea inherits the form's reading order.)
           multiline={showDwell}
+          dir="auto"
           columns={columns}
           digits={fieldDigitsOf(field)}
           // `RUN-NEXT-VERSION-02` Q3 — a repeater's list stops at its row limit, as the Rows section does.

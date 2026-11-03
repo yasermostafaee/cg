@@ -3,6 +3,7 @@ import {
   formatNumberLike,
   latinDigits,
   parseLocalizedNumber,
+  readLocalizedNumber,
   writeFieldDigits,
   type FieldDigits,
 } from '@cg/text-shaping';
@@ -81,7 +82,7 @@ interface NumericInputProps extends Omit<
    * would break paste, Ctrl+A/C/V, the arrows, Home/End and undo — and paste is the path that
    * actually carries `port 5250 (AMCP)` into a field.
    */
-  allow?: 'digits';
+  allow?: 'digits' | 'number';
   /**
    * 🔴 `PERSIAN-DIGITS-01` — **WHOSE NUMBER IS THIS?** A CONSOLE number (a port, an offset, a
    * PIN) is the console's own, and it normalises to Latin as above: `latin`, the default. A
@@ -214,14 +215,21 @@ export function NumericInput({
       onChange={(e) => {
         const el = e.currentTarget;
         const raw = el.value;
+        const emitNumberText = (next: string): void => {
+          if (allow === 'number' && readLocalizedNumber(next).kind === 'invalid') {
+            el.value = value;
+            return;
+          }
+          onValueChange(next);
+        };
         // A template value is the operator's text, verbatim — see `digits`.
         if (asTyped) {
-          onValueChange(raw);
+          emitNumberText(raw);
           return;
         }
         // …or written in its field's digit set as it is typed (`FIELD-DIGITS-01`).
         if (fieldSet) {
-          onValueChange(writeDigitsAsTyped(el, digits, kind, e.nativeEvent));
+          emitNumberText(writeDigitsAsTyped(el, digits, kind, e.nativeEvent));
           return;
         }
         const normalized = normalizeDigits(raw, { decimal });
@@ -254,7 +262,7 @@ export function NumericInput({
             el.setSelectionRange(at, at);
           }
         }
-        onValueChange(next);
+        emitNumberText(next);
       }}
     />
   );

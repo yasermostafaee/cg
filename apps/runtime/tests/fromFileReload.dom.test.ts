@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
-import type { FieldValues, ListItem, StackItemState } from '@cg/shared-schema';
+import type { FieldValues, ListItem, ListItemField, StackItemState } from '@cg/shared-schema';
 import {
   __resetDraftsForTest,
   hasStaged,
@@ -80,6 +80,37 @@ describe('initial load (choose file) — stages like a hand edit', () => {
     expect(ok).toBe(false);
     expect(hasStaged('item-1', PATH)).toBe(false);
     expect(fromFileState('item-1', PATH)?.error).toContain('crawl.txt');
+  });
+
+  it('stages typed Repeater rows from JSON and keeps malformed data out of the draft', async () => {
+    const source = fakeSource([
+      '[{"city":"Tehran","temperature":18,"icon":"sunny"}]',
+      '[{"city":"Tehran","temperature":"warm"}]',
+    ]);
+    attachFileSource('item-1', PATH, source, {
+      split: false,
+      delimiter: '\\n',
+      format: 'json',
+    });
+    const itemFields: readonly ListItemField[] = [
+      { id: 'city', label: 'City', required: true, type: 'text', default: '' },
+      { id: 'temperature', label: 'Temperature', required: true, type: 'number', default: 0 },
+      { id: 'icon', label: 'Icon', required: false, type: 'image', accept: ['png'] },
+    ];
+
+    expect(await stageFromFile(item(), PATH, 'list', itemFields)).toBe(true);
+    expect(stagedValue('item-1', PATH)).toEqual([
+      {
+        id: 'file-1',
+        city: 'Tehran',
+        temperature: 18,
+        icon: { assetId: 'sunny' },
+      },
+    ]);
+    const goodDraft = stagedValue('item-1', PATH);
+    expect(await reloadFromFile(item(), PATH, 'list', itemFields)).toEqual({ accepted: false });
+    expect(stagedValue('item-1', PATH)).toEqual(goodDraft);
+    expect(fromFileState('item-1', PATH)?.error).toMatch(/row 1.*temperature/i);
   });
 });
 
@@ -201,7 +232,12 @@ describe('store housekeeping', () => {
     attachFileSource('item-1', PATH, source, { split: true, delimiter: '\\n' });
     updateSplitConfig('item-1', PATH, { split: false });
     updateSplitConfig('item-1', PATH, { delimiter: '،' });
-    expect(fromFileState('item-1', PATH)).toMatchObject({ split: false, delimiter: '،' });
+    updateSplitConfig('item-1', PATH, { format: 'csv' });
+    expect(fromFileState('item-1', PATH)).toMatchObject({
+      split: false,
+      delimiter: '،',
+      format: 'csv',
+    });
   });
 
   it('pruneFromFile drops entries for items gone from the stack', () => {

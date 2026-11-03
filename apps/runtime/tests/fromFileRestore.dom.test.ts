@@ -75,7 +75,11 @@ describe('from-file attachments survive a refresh', () => {
 
   it('an attachment is written through, and comes back after the store is wiped', async () => {
     const handle = fakeHandle('names.txt', 'granted');
-    attachFileSource('item-1', ['anchor'], source(handle), { split: true, delimiter: '|' });
+    attachFileSource('item-1', ['anchor'], source(handle), {
+      split: true,
+      delimiter: '|',
+      format: 'csv',
+    });
     expect(saved.size).toBe(1);
 
     // The page reloads: the in-memory store is gone, durable storage is not.
@@ -89,6 +93,7 @@ describe('from-file attachments survive a refresh', () => {
     // other would silently change how the file is read.
     expect(restored?.split).toBe(true);
     expect(restored?.delimiter).toBe('|');
+    expect(restored?.format).toBe('csv');
     expect(restored?.permission).toBe('granted');
   });
 

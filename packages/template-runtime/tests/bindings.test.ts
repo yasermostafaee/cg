@@ -53,6 +53,54 @@ describe('applyFieldValues', () => {
     expect(elementMap.get('name')?.textContent).toBe('سارا نادری');
   });
 
+  it('D-180 resolves a bound image value through the host asset map', () => {
+    const sceneCopy = structuredClone(lowerThirdScene);
+    sceneCopy.layers[0]!.children.push({
+      id: 'weather-icon',
+      name: 'Weather icon',
+      type: 'image',
+      assetId: 'sunny',
+      source: 'project',
+      fit: 'contain',
+      preserveAspect: true,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 2,
+      transform: {
+        position: { x: 0, y: 0 },
+        size: { w: 100, h: 100 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+        anchor: { x: 0, y: 0 },
+      },
+    });
+    sceneCopy.fields.push({
+      id: 'icon',
+      label: 'Icon',
+      required: false,
+      type: 'image',
+      accept: ['png'],
+      defaultAssetId: 'sunny',
+    });
+    sceneCopy.bindings.push({
+      fieldId: 'icon',
+      target: { kind: 'image', elementId: 'weather-icon' },
+    });
+    const { container, elementMap, textOriginals } = buildScene(sceneCopy);
+    applyFieldValues(
+      sceneCopy,
+      { icon: { assetId: 'rain' } },
+      elementMap,
+      textOriginals,
+      container,
+      { rain: 'assets/img/rain.png' },
+    );
+    const image = elementMap.get('weather-icon') as HTMLImageElement;
+    expect(image.dataset['cgAssetId']).toBe('rain');
+    expect(image.getAttribute('src')).toBe('assets/img/rain.png');
+  });
+
   it('replaces the whole text when placeholder is absent', () => {
     const sceneCopy = structuredClone(lowerThirdScene);
     sceneCopy.bindings[0]!.target = { kind: 'text', elementId: 'name' };

@@ -1,4 +1,4 @@
-import type { FieldValue, StackItemState } from '@cg/shared-schema';
+import type { FieldValue, ListItemField, StackItemState } from '@cg/shared-schema';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { stageField, type FieldPath } from './draftStore.js';
 import { contentToFieldValue, type FromFileFieldKind } from './fromFileContent.js';
@@ -24,6 +24,7 @@ async function readCurrentValue(
   item: StackItemState,
   path: FieldPath,
   kind: FromFileFieldKind,
+  itemFields?: readonly ListItemField[],
 ): Promise<FieldValue | null> {
   const state = fromFileState(item.itemId, path);
   if (state === undefined) return null;
@@ -37,8 +38,22 @@ async function readCurrentValue(
     reportCommandError(message);
     return null;
   }
-  setFromFileError(item.itemId, path, null);
-  return contentToFieldValue(content, kind, { split: state.split, delimiter: state.delimiter });
+  try {
+    const value = contentToFieldValue(content, kind, {
+      split: state.split,
+      delimiter: state.delimiter,
+      format: state.format,
+      ...(kind === 'list' && itemFields !== undefined ? { itemFields } : {}),
+    });
+    setFromFileError(item.itemId, path, null);
+    return value;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    const message = `Could not use “${state.source.name}” — the current value is kept. (${reason})`;
+    setFromFileError(item.itemId, path, message);
+    reportCommandError(message);
+    return null;
+  }
 }
 
 /**
@@ -50,8 +65,9 @@ export async function stageFromFile(
   item: StackItemState,
   path: FieldPath,
   kind: FromFileFieldKind,
+  itemFields?: readonly ListItemField[],
 ): Promise<boolean> {
-  const value = await readCurrentValue(item, path, kind);
+  const value = await readCurrentValue(item, path, kind, itemFields);
   if (value === null) return false;
   stageField(item.itemId, path, value);
   return true;
@@ -88,7 +104,8 @@ export async function reloadFromFile(
   item: StackItemState,
   path: FieldPath,
   kind: FromFileFieldKind,
+  itemFields?: readonly ListItemField[],
 ): Promise<{ accepted: boolean }> {
-  const staged = await stageFromFile(item, path, kind);
+  const staged = await stageFromFile(item, path, kind, itemFields);
   return { accepted: staged };
 }

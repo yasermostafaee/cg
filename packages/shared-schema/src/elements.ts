@@ -15,13 +15,20 @@ import {
 } from './primitives.js';
 import { ElementAnimationSchema, FrameRangeSchema } from './animation.js';
 import { AnchorPointSchema, type AnchorPoint } from './path-points.js';
-import { FieldDigitsSchema, ListItemSchema, type FieldDigits } from './fields.js';
+import {
+  BridgeTextSourcePathSchema,
+  FieldDigitsSchema,
+  FieldValuesSchema,
+  ListItemSchema,
+  type FieldDigits,
+} from './fields.js';
 import { LiveFitModeSchema } from './live-fit.js';
 import {
   ChangeTransitionSchema,
   ElementChangeSchema,
   refineChangeList,
 } from './element-changes.js';
+import { ValueRuleSetSchema } from './value-rules.js';
 import { AfterZeroSchema } from './countdown.js';
 
 const TextDirectionSchema = z.enum(['auto', 'ltr', 'rtl']);
@@ -167,6 +174,11 @@ export const ElementBaseSchema = z.object({
    * the same on-air result, and drops the key. Nothing writes it.
    */
   zoneOverrides: ZoneOverridesSchema.optional(),
+  /**
+   * D-139 / D-180 — ordered current-scope field rules. The first matching rule applies its one
+   * effect; no match restores the target element's authored value. Optional and additive.
+   */
+  valueRules: ValueRuleSetSchema.optional(),
 });
 export type ElementBase = z.infer<typeof ElementBaseSchema>;
 
@@ -721,6 +733,12 @@ export const SequenceCompositionItemSchema = z.object({
   id: z.string().min(1),
   compositionId: IdSchema,
   dwellMs: z.number().int().positive().optional(),
+  /**
+   * D-180 — authored defaults for this stamped composition instance. The same child may appear on
+   * several Sequence pages, so keeping the values on the item is what lets Designer show and save
+   * independent page data without cloning the child composition.
+   */
+  fieldValues: FieldValuesSchema.optional(),
 });
 
 /**
@@ -872,6 +890,12 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
   direction: z.enum(['ltr', 'rtl']),
   /** Authored default items; a bound `list` field replaces them at playout. */
   items: z.array(SequenceItemSchema),
+  /**
+   * D-180 — optional Bridge-relative JSON source used to author the composition pages above. The
+   * parsed values are stored on the items; this path preserves where they came from and enables a
+   * deliberate reload without embedding a workstation/UNC absolute path in the project.
+   */
+  pageDataFile: BridgeTextSourcePathSchema.optional(),
   /**
    * `D-163` — how EVERY picture item of this sequence is scaled in the box (the image element's
    * `fit` values). Optional, read as `contain` when absent, so a sequence authored before picture

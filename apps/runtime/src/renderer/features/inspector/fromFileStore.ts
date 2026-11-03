@@ -1,3 +1,4 @@
+import type { FileSourceListFormat } from '@cg/shared-schema';
 import type { FieldPath, StackPruneInput } from './draftStore.js';
 import {
   attachmentKey,
@@ -33,6 +34,10 @@ export interface FromFileState {
   split: boolean;
   /** Delimiter as typed (escapes unparsed — `parseDelimiter` resolves at use). */
   delimiter: string;
+  /** How list bytes become rows; `text` preserves the legacy split path. */
+  format: FileSourceListFormat;
+  /** Generated workbook schema; absent on generic and legacy file attachments. */
+  schemaSignature?: string;
   /** The last reload's error, or null. Cleared by the next successful read. */
   error: string | null;
   /**
@@ -47,6 +52,8 @@ export interface FromFileState {
 const entries = new Map<string, FromFileState>();
 /** The authored default already considered for each row/field during this session. */
 const authoredDefaultPaths = new Map<string, string>();
+/** Authored source definitions already auto-read for this row/field this session. */
+const autoLoadedAuthoredSources = new Map<string, string>();
 /** Items whose persisted operator choices have been read (including an empty result). */
 const restoredItemIds = new Set<string>();
 let version = 0;
@@ -79,6 +86,8 @@ function persist(itemId: string, path: FieldPath, entry: FromFileState): void {
     handle,
     split: entry.split,
     delimiter: entry.delimiter,
+    format: entry.format,
+    ...(entry.schemaSignature === undefined ? {} : { schemaSignature: entry.schemaSignature }),
   });
 }
 
@@ -105,13 +114,22 @@ export function attachFileSource(
   itemId: string,
   path: FieldPath,
   source: TextFileSource,
-  defaults: { split: boolean; delimiter: string },
+  defaults: {
+    split: boolean;
+    delimiter: string;
+    format?: FileSourceListFormat;
+    schemaSignature?: string;
+  },
 ): void {
   // A freshly picked file is readable by construction — the picker IS the grant.
   const entry: FromFileState = {
     source,
     split: defaults.split,
     delimiter: defaults.delimiter,
+    format: defaults.format ?? 'text',
+    ...(defaults.schemaSignature === undefined
+      ? {}
+      : { schemaSignature: defaults.schemaSignature }),
     error: null,
     permission: 'granted',
   };
@@ -135,11 +153,12 @@ export function reconcileAuthoredFileSource(
   path: FieldPath,
   bridgePath: string | undefined,
   locked: boolean,
-  defaults: { split: boolean; delimiter: string },
+  defaults: { split: boolean; delimiter: string; format?: FileSourceListFormat },
 ): void {
   const key = keyOf(itemId, path);
   if (bridgePath === undefined) {
     authoredDefaultPaths.delete(key);
+    autoLoadedAuthoredSources.delete(key);
     return;
   }
   // Do not let an authored default race the IndexedDB restore and erase an
@@ -167,11 +186,40 @@ export function reconcileAuthoredFileSource(
     locked &&
     current !== undefined &&
     current.source.bridgePath === bridgePath &&
-    (current.split !== defaults.split || current.delimiter !== defaults.delimiter)
+    (current.split !== defaults.split ||
+      current.delimiter !== defaults.delimiter ||
+      current.format !== (defaults.format ?? 'text'))
   ) {
-    entries.set(key, { ...current, split: defaults.split, delimiter: defaults.delimiter });
+    entries.set(key, {
+      ...current,
+      split: defaults.split,
+      delimiter: defaults.delimiter,
+      format: defaults.format ?? 'text',
+    });
     bump();
   }
+}
+
+/**
+ * Claim the one automatic read owed by an authored source definition.
+ *
+ * React may render the control repeatedly (and development StrictMode mounts it
+ * twice), so the component cannot use its own mount as the guard.  The claim
+ * lives beside the source store and is keyed by the complete author-owned
+ * definition: changing the path or delimiter earns one new read; ordinary
+ * rerenders do not.  A failed automatic read remains claimed so an unavailable
+ * network share does not turn into an unbounded retry loop — Reload is the
+ * explicit retry gesture.
+ */
+export function claimAuthoredFileAutoLoad(
+  itemId: string,
+  path: FieldPath,
+  signature: string,
+): boolean {
+  const key = keyOf(itemId, path);
+  if (autoLoadedAuthoredSources.get(key) === signature) return false;
+  autoLoadedAuthoredSources.set(key, signature);
+  return true;
 }
 
 /** Detach the field's source (the field goes back to hand editing only). */
@@ -204,7 +252,7 @@ export function setFromFilePermission(
 export function updateSplitConfig(
   itemId: string,
   path: FieldPath,
-  patch: Partial<Pick<FromFileState, 'split' | 'delimiter'>>,
+  patch: Partial<Pick<FromFileState, 'split' | 'delimiter' | 'format'>>,
 ): void {
   const key = keyOf(itemId, path);
   const entry = entries.get(key);
@@ -310,6 +358,10 @@ export function pruneFromFile(snapshot: StackPruneInput): void {
     const [itemId] = JSON.parse(key) as [string, ...string[]];
     if (!live.has(itemId)) authoredDefaultPaths.delete(key);
   }
+  for (const key of [...autoLoadedAuthoredSources.keys()]) {
+    const [itemId] = JSON.parse(key) as [string, ...string[]];
+    if (!live.has(itemId)) autoLoadedAuthoredSources.delete(key);
+  }
   if (changed) bump();
 }
 
@@ -350,6 +402,8 @@ export async function restoreFromFileAttachments(snapshot: StackPruneInput): Pro
       source: fsaTextFileSource(record.handle),
       split: record.split,
       delimiter: record.delimiter,
+      format: record.format ?? 'text',
+      ...(record.schemaSignature === undefined ? {} : { schemaSignature: record.schemaSignature }),
       error: null,
       permission,
     });
@@ -370,6 +424,7 @@ export async function restoreFromFileAttachments(snapshot: StackPruneInput): Pro
 export function __resetFromFileForTest(): void {
   entries.clear();
   authoredDefaultPaths.clear();
+  autoLoadedAuthoredSources.clear();
   restoredItemIds.clear();
   bump();
 }

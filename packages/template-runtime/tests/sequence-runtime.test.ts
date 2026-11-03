@@ -592,6 +592,33 @@ describe('createRuntime — D-083 composition sequence items (text | composition
     expect(hostText()).toContain('Tehran');
   });
 
+  it("D-180 uses a composition page's authored field values before any operator payload", async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      compScene(
+        {
+          advance: 'manual',
+          repeat: 'infinite',
+          items: [
+            {
+              kind: 'composition',
+              id: 'c1',
+              compositionId: 'comp-label',
+              fieldValues: { label: 'Tehran' },
+            },
+          ],
+        },
+        [labelComp()],
+      ),
+      { skipFontLoad: true, clock },
+    );
+
+    await runtime.play({});
+    expect(hostText()).toContain('Tehran');
+    await runtime.update({ 'seq:c1': { label: 'Tabriz' } });
+    expect(hostText()).toContain('Tabriz');
+  });
+
   it('(D-083 follow-up) an UNBOUND text item stays STATIC — no per-item key overrides it', async () => {
     const clock = makeClock();
     const runtime = createRuntime(

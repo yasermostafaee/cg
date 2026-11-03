@@ -106,6 +106,7 @@ function Harness({
   asTyped,
   persian,
   scrub,
+  numberOnly,
 }: {
   onValue: (v: string) => void;
   decimal?: boolean;
@@ -113,6 +114,7 @@ function Harness({
   /** `FIELD-DIGITS-01` — a template field set to Persian. */
   persian?: boolean;
   scrub?: boolean;
+  numberOnly?: boolean;
 }): JSX.Element {
   const [value, setValue] = useState('');
   return createElement(NumericInput, {
@@ -121,6 +123,7 @@ function Harness({
     ...(asTyped === true ? { digits: 'as-typed' as const } : {}),
     ...(persian === true ? { digits: 'persian' as const } : {}),
     ...(scrub === true ? { scrub: { step: 1 } } : {}),
+    ...(numberOnly === true ? { allow: 'number' as const } : {}),
     onValueChange: (next: string) => {
       setValue(next);
       onValue(next);
@@ -238,6 +241,26 @@ describe('NumericInput — R-020', () => {
     expect(input.value).toBe('12.5');
     expect(seen.at(-1)).toBe('12.5');
   });
+
+  it('number-only mode keeps valid partials but drops letters', async () => {
+    const seen: string[] = [];
+    const el = await render(
+      createElement(Harness, {
+        onValue: (v) => seen.push(v),
+        decimal: true,
+        asTyped: true,
+        numberOnly: true,
+      }),
+    );
+    const input = inputByLabel(el, 'num');
+    await setInput(input, '۱۲');
+    expect(input.value).toBe('۱۲');
+    await setInput(input, '۱۲a');
+    expect(input.value).toBe('۱۲');
+    expect(seen).toEqual(['۱۲']);
+    await setInput(input, '-');
+    expect(input.value).toBe('-');
+  });
 });
 
 describe('Inspector fields — R-020', () => {
@@ -272,6 +295,14 @@ describe('Inspector fields — R-020', () => {
               },
               { id: 'title', type: 'text', label: 'Headline', default: '' },
               { id: 'count', type: 'number', label: 'Count', default: 1 },
+              {
+                id: 'weather',
+                type: 'number',
+                label: 'Weather',
+                default: 0,
+                allowedValues: [0, 2, 5],
+                allowedValueLabels: { '0': 'Rain', '2': 'Sun', '5': 'Cloud' },
+              },
               { id: 'clock', type: 'text', label: 'Clock', default: '', digits: 'persian' },
               {
                 id: 'notes',
@@ -301,7 +332,7 @@ describe('Inspector fields — R-020', () => {
     return {
       itemId: 'item-1',
       templateId: 'tpl-1',
-      fields: { fontSize: 5, title: '', count: 1, clock: '', notes: '' },
+      fields: { fontSize: 5, title: '', count: 1, weather: 0, clock: '', notes: '' },
       status: 'loaded',
       pending: false,
     };
@@ -334,6 +365,24 @@ describe('Inspector fields — R-020', () => {
     expect(inputByLabel(el, 'fontSize').value).toBe('۱۲۸');
   });
 
+  it('renders an arbitrary numeric choice list as a dropdown and stages a number', async () => {
+    const el = await renderInspector();
+    const select = el.querySelector<HTMLSelectElement>('select[aria-label="weather"]');
+    if (select === null) throw new Error('weather dropdown missing');
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      'Rain',
+      'Sun',
+      'Cloud',
+    ]);
+    await act(async () => {
+      select.value = '5';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(effectiveValue('item-1', ['weather'], 0)).toBe(5);
+    expect(el.querySelector('input[aria-label="weather"]')).toBeNull();
+  });
+
   it('reads ٫ and ٬ — `۱۲٫۵` stages 12.5 and `۱٬۲۳۴` stages 1234, the text untouched', async () => {
     const el = await renderInspector();
     const input = inputByLabel(el, 'fontSize');
@@ -346,7 +395,7 @@ describe('Inspector fields — R-020', () => {
     expect(input.value).toBe('۱٬۲۳۴');
   });
 
-  it('`۱۲a` is refused in ONE line and stages NOTHING — not even the `۱۲` typed on the way', async () => {
+  it('does not let the letter in `۱۲a` enter or replace the staged number', async () => {
     const el = await renderInspector();
     const input = inputByLabel(el, 'fontSize');
     // The control: a number stages, with no refusal.
@@ -356,16 +405,10 @@ describe('Inspector fields — R-020', () => {
     expect(input.getAttribute('aria-invalid')).toBeNull();
 
     await setInput(input, '۱۲a');
-    const refusal = el.querySelectorAll('[data-field-refusal]');
-    expect(refusal, 'exactly one refusal line').toHaveLength(1);
-    expect(refusal[0]?.textContent).toBe('Not a number — Update will not change it.');
-    expect(input.getAttribute('aria-invalid')).toBe('true');
-    expect(input.getAttribute('aria-describedby')).toBe(refusal[0]?.id);
-    // The draft is WITHDRAWN: the value an Update would send is the one on air (5).
-    // Measured before this change: `۱۲a` reached air as 12.
-    expect(effectiveValue('item-1', ['fontSize'], 5)).toBe(5);
-    // …and the operator's text is still there to correct, not reset under him.
-    expect(input.value).toBe('۱۲a');
+    expect(el.querySelector('[data-field-refusal]')).toBeNull();
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+    expect(effectiveValue('item-1', ['fontSize'], 5)).toBe(12);
+    expect(input.value).toBe('۱۲');
   });
 
   it('a half-typed number says NOTHING and stages nothing', async () => {

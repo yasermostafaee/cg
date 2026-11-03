@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { DynamicFieldSchema, FieldValuesSchema, fieldDigitsOf } from '../src/fields.js';
+import {
+  DynamicFieldSchema,
+  FieldValuesSchema,
+  fieldDigitsOf,
+  numberFieldAllowedValues,
+  numberFieldValueAlias,
+  numberFieldValueError,
+  numberFieldValueFromAlias,
+  numberFieldValueLabel,
+} from '../src/fields.js';
 
 const baseField = { id: 'headline', label: 'Headline', required: true };
 
@@ -44,6 +53,53 @@ describe('DynamicField variants', () => {
       unit: 'px',
     };
     expect(DynamicFieldSchema.parse(f)).toEqual(f);
+  });
+  it('number with exact choices', () => {
+    const f = {
+      ...baseField,
+      type: 'number' as const,
+      default: 2,
+      allowedValues: [0, 2, 5],
+    };
+    expect(DynamicFieldSchema.parse(f)).toEqual(f);
+    expect(numberFieldAllowedValues(f)).toEqual([0, 2, 5]);
+    expect(numberFieldValueError(f, 5)).toBeUndefined();
+    expect(numberFieldValueError(f, 1)).toBe('Must be one of: 0, 2, 5.');
+  });
+  it('number choices can carry unique operator-facing aliases', () => {
+    const f = {
+      ...baseField,
+      type: 'number' as const,
+      default: 0,
+      allowedValues: [0, 1],
+      allowedValueLabels: { '0': 'بارانی', '1': 'آفتابی' },
+    };
+    expect(DynamicFieldSchema.parse(f)).toEqual(f);
+    expect(numberFieldValueAlias(f, 0)).toBe('بارانی');
+    expect(numberFieldValueLabel(f, 1)).toBe('آفتابی');
+    expect(numberFieldValueFromAlias(f, ' آفتابی ')).toBe(1);
+    expect(numberFieldValueLabel(f, 2)).toBe('2');
+  });
+  it('number choice aliases must be unique', () => {
+    expect(() =>
+      DynamicFieldSchema.parse({
+        ...baseField,
+        type: 'number',
+        default: 0,
+        allowedValues: [0, 1],
+        allowedValueLabels: { '0': 'Rain', '1': 'rain' },
+      }),
+    ).toThrow(/unique/i);
+  });
+  it('number rejects duplicate exact choices', () => {
+    expect(() =>
+      DynamicFieldSchema.parse({
+        ...baseField,
+        type: 'number',
+        default: 0,
+        allowedValues: [0, 1, 1],
+      }),
+    ).toThrow(/unique/i);
   });
   it('select', () => {
     const f = {

@@ -26,8 +26,53 @@ export interface ImageRef {
 export function collectImageElements(scene: Scene): ImageRef[] {
   const out: ImageRef[] = [];
   const seen = new Set<string>();
+  const addDynamic = (
+    key: string,
+    elementId: string,
+    assetId: string,
+    source: 'project' | 'shared' = 'project',
+  ): void => {
+    if (assetId === '' || seen.has(key)) return;
+    seen.add(key);
+    // A dynamic field value does not encode its store. Project-first with the
+    // exporter's existing shared fallback resolves either id space safely.
+    out.push({ elementId, assetId, source });
+  };
+  const collectDynamicValue = (value: unknown, ownerId: string, path: string): void => {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) =>
+        collectDynamicValue(item, ownerId, `${path}[${String(index)}]`),
+      );
+      return;
+    }
+    if (typeof value !== 'object' || value === null) return;
+    const record = value as Record<string, unknown>;
+    if (typeof record['assetId'] === 'string') {
+      addDynamic(
+        `${ownerId}:dynamic:${path}`,
+        ownerId,
+        record['assetId'],
+        record['source'] === 'shared' ? 'shared' : 'project',
+      );
+      return;
+    }
+    for (const [key, nested] of Object.entries(record)) {
+      collectDynamicValue(nested, ownerId, path === '' ? key : `${path}.${key}`);
+    }
+  };
   const walk = (children: readonly Element[]): void => {
     for (const el of children) {
+      // D-139 — every authored picture branch belongs to the export closure even when its rule is
+      // false at export time. The rule's image value already names its project/shared source.
+      for (const [index, rule] of (el.valueRules?.rules ?? []).entries()) {
+        if (rule.effect.property !== 'image') continue;
+        addDynamic(
+          `${el.id}:value-rule:${String(index)}:${rule.effect.elementId}`,
+          rule.effect.elementId,
+          rule.effect.value.assetId,
+          rule.effect.value.source,
+        );
+      }
       if (el.type === 'image') {
         if (!seen.has(el.id)) {
           seen.add(el.id);
@@ -81,6 +126,10 @@ export function collectImageElements(scene: Scene): ImageRef[] {
             });
           }
         }
+      } else if (el.type === 'repeater') {
+        // D-180 — row image fields are structured values, not image elements.
+        // Their assets still belong to the exported template.
+        collectDynamicValue(el.items, el.id, 'items');
       } else if (el.type === 'container') {
         walk(el.children);
       }
@@ -89,6 +138,15 @@ export function collectImageElements(scene: Scene): ImageRef[] {
   for (const layer of scene.layers) walk(layer.children);
   for (const comp of scene.compositions ?? []) {
     for (const layer of comp.layers) walk(layer.children);
+  }
+  for (const doc of [scene, ...(scene.compositions ?? [])]) {
+    for (const field of doc.fields ?? []) {
+      if (field.type === 'image' && field.defaultAssetId !== undefined) {
+        addDynamic(`${doc.id}:field:${field.id}:default`, field.id, field.defaultAssetId);
+      } else if (field.type === 'list') {
+        collectDynamicValue(field.default, field.id, 'default');
+      }
+    }
   }
   return out;
 }

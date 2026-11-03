@@ -22,6 +22,13 @@ describe('R-102 — shared text-file browse', () => {
     expect(files.map((entry) => entry.path)).toEqual(['item2.txt', 'item10.txt']);
   });
 
+  it('accepts JSON as bounded UTF-8 structured list data', () => {
+    const files = bridgeTextSourceFiles([
+      pickedFile('weather.json', '[{"city":"Tehran"}]', 'application/json'),
+    ]);
+    expect(files.map((entry) => entry.path)).toEqual(['weather.json']);
+  });
+
   it('omits files larger than the same 1 MiB ceiling enforced by CG Bridge', () => {
     const file = pickedFile('large.txt');
     Object.defineProperty(file, 'size', {

@@ -144,6 +144,9 @@ export class Exporter {
     // matter which composition is currently open (bindings are scene-level but
     // their target elements may live in another comp). Deduped by id.
     const elementsById = new Map<string, Element>();
+    const reportedMissingImages = new Set<string>();
+    const missingImageKey = (elementId: string, assetId: string): string =>
+      `${elementId}\0${assetId}`;
     const walk = (children: readonly Element[]): void => {
       for (const el of children) {
         if (!elementsById.has(el.id)) elementsById.set(el.id, el);
@@ -157,6 +160,7 @@ export class Exporter {
     const allElementIds = new Set(elementsById.keys());
     for (const el of elementsById.values()) {
       if (el.type === 'image' && !knownAssetIds.has(el.assetId)) {
+        reportedMissingImages.add(missingImageKey(el.id, el.assetId));
         issues.push({
           severity: 'error',
           code: 'missing-asset',
@@ -170,6 +174,7 @@ export class Exporter {
         el.items.forEach((item, i) => {
           if (item.kind !== 'image' || item.assetId === undefined) return;
           if (knownAssetIds.has(item.assetId)) return;
+          reportedMissingImages.add(missingImageKey(el.id, item.assetId));
           issues.push({
             severity: 'error',
             code: 'missing-asset',
@@ -207,6 +212,7 @@ export class Exporter {
         el.separator !== null &&
         !knownAssetIds.has(el.separator.assetId)
       ) {
+        reportedMissingImages.add(missingImageKey(el.id, el.separator.assetId));
         issues.push({
           severity: 'error',
           code: 'missing-asset',
@@ -214,6 +220,20 @@ export class Exporter {
           elementId: el.id,
         });
       }
+    }
+
+    // D-180 / D-139 — defaults, authored structured rows and conditional branches are image
+    // references too. The shared collector is the exact closure both exporters package.
+    for (const ref of collectImageElements(scene)) {
+      const key = missingImageKey(ref.elementId, ref.assetId);
+      if (knownAssetIds.has(ref.assetId) || reportedMissingImages.has(key)) continue;
+      reportedMissingImages.add(key);
+      issues.push({
+        severity: 'error',
+        code: 'missing-asset',
+        message: `Dynamic image reference uses unknown asset ${ref.assetId}.`,
+        elementId: ref.elementId,
+      });
     }
 
     for (const font of scene.fonts) {
@@ -596,6 +616,7 @@ export class Exporter {
       assetIndex.push({
         id: meta.assetId,
         path: relativePath,
+        filename: meta.filename,
         kind: meta.kind,
         bytes: bytes.byteLength,
         sha256: meta.sha256,

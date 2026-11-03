@@ -2861,17 +2861,16 @@ icons + tooltips.
 
 ## [x] D-106 — Preview field form: explicit Update + optional textarea inputs ⟨priority: medium⟩ — merged (#194 + #198 per-INPUT correction) & archived: `openspec/changes/archive/2026-06-29-preview-field-update/`
 
-**What:** (1) Editing field values in the preview no longer updates the stage in realtime — an explicit
-Update applies changes: a global "Update all" and a per-INPUT Update (each editable input applies on its
-own — a scalar field's input, or each item input of a ticker/sequence `list`); edited-but-unapplied fields
-show a pending indicator. (2) Field inputs can be multi-line textareas (optional / expandable / auto-grow)
-so long values are fully visible.
+**What:** (1) Editing field values in the preview no longer updates the stage in realtime — one explicit
+global **Update all** applies every prepared scalar and list value; edited-but-unapplied fields show a
+pending indicator without repeating an Update/check button on every row. (2) Field inputs can be
+multi-line textareas (optional / expandable / auto-grow) so long values are fully visible.
 **Why:** Broadcast operators prepare values and commit on cue (CasparCG CG UPDATE); realtime-as-you-type
 risks partial/flickering on-air updates. Long values (tickers/sequences/headlines) need full visibility.
 **Acceptance:**
 
 - WHEN a field value is edited THEN the stage does NOT change until Update is pressed, and the field shows a pending/unapplied indicator
-- WHEN global Update is pressed THEN all pending changes apply at once; WHEN a per-INPUT Update is pressed THEN only that input applies (a scalar field, or a single ticker/sequence item) while the others stay pending
+- WHEN global Update all is pressed THEN all pending changes apply at once and no duplicate per-field or per-item Update control crowds the Variables table
 - WHEN a field holds long text THEN it can be shown as a multi-line textarea (optional/expandable) so the full text is visible
 
 **Notes:** Reuse the amber/dirty-indicator pattern (D-088/D-089) for pending fields; textarea optional or
@@ -3903,9 +3902,9 @@ no watching. Content-model recon done at filing time: ticker and sequence both c
 `packages/shared-schema/src/elements.ts`), so "whole text" maps to a single item, never to a new
 content field. Cinegy parity is the NEED, not the UI.
 
-## [ ] D-139 — data-driven conditional styling rules (value ranges → color / image / visibility) ⟨priority: medium⟩
+## [~] D-139 — data-driven conditional styling rules (value ranges → color / image / visibility) ⟨priority: medium; field-driven rules implemented under D-180, countdown-time input remains⟩
 
-**What:** An ORDERED LIST of declarative rules on an element, FIRST MATCH WINS — not an expression
+**What:** An ORDERED LIST of declarative rules on an element, FIRST MATCH PER TARGET PROPERTY — not an expression
 language. v1 scope: rule INPUT is a bound field's value (number or string) OR a countdown clock's
 remaining time; rule CONDITION is a comparator/range (=, ≠, <, ≤, >, ≥, between); rule EFFECT
 overrides exactly ONE property of ONE target element — color/fill, image assetId, or visibility —

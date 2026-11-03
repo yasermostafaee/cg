@@ -1,6 +1,6 @@
 {
   "identifier": "designer",
-  "description": "The Designer CG Designer bundles, in its own window, may read which keyboard language the window types in (TEXT-DIGITS-01); (D-162) answer the window's close: hold it while it can ask about unsaved changes (close_guard), say it has the ask (close_request_seen) and close the window once answered (close_window_now); and (B-356) choose one bounded UTF-8 text source and re-read only that session-authorized path. Nothing else.",
+  "description": "The Designer CG Designer bundles, in its own window, may read which keyboard language the window types in (TEXT-DIGITS-01); (D-162) answer the window's close: hold it while it can ask about unsaved changes (close_guard), say it has the ask (close_request_seen) and close the window once answered (close_window_now); and (B-356/D-180) choose one bounded UTF-8 text source or structured CSV/JSON/XLSX source, re-read only that session-authorized path, or save generated data to an author-picked destination. Nothing else.",
   "windows": ["main"],
   "permissions": [
     "allow-keyboard-language",
@@ -8,6 +8,9 @@
     "allow-close-request-seen",
     "allow-close-window-now",
     "allow-pick-text-source-file",
-    "allow-reload-text-source-file"
+    "allow-reload-text-source-file",
+    "allow-pick-structured-rows-file",
+    "allow-reload-structured-rows-file",
+    "allow-save-text-source-sample"
   ]
 }

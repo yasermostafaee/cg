@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import type { ListItem } from '@cg/shared-schema';
 import {
   ListItemsEditor,
+  newColumnItem,
   rowLimitReason,
   rowOverLimitReason,
 } from '../src/renderer/features/fields/ListItemsEditor.js';
@@ -109,5 +110,59 @@ describe('B-106 — a row past the limit is flagged', () => {
     // The rows inside the limit carry no flag; the flagged rows stay editable (removable).
     expect([...host.querySelectorAll('[data-cg-tag]')]).toHaveLength(2);
     expect(flagged[0]?.querySelector('button[aria-label="Remove Repeater item 3"]')).not.toBeNull();
+  });
+});
+
+describe('D-180 — structured Repeater image rows', () => {
+  const columns = [
+    { key: 'city', label: 'City', defaultValue: 'تهران' },
+    {
+      key: 'icon',
+      label: 'Weather icon',
+      kind: 'image' as const,
+      defaultValue: { assetId: 'sunny' },
+      choices: [
+        { value: 'sunny', label: 'Sunny' },
+        { value: 'rain', label: 'Rain' },
+      ],
+    },
+  ];
+
+  it('stores an image choice as the canonical { assetId } value', () => {
+    const onChange = vi.fn();
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() =>
+      root?.render(
+        createElement(ListItemsEditor, {
+          items: [{ id: 'r1', city: 'یزد', icon: { assetId: 'sunny' } }],
+          label: 'Weather',
+          columns,
+          onChange,
+        }),
+      ),
+    );
+    const select = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Weather item 1 Weather icon"]',
+    );
+    expect(select?.value).toBe('sunny');
+    act(() => {
+      if (select === null) return;
+      select.value = 'rain';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect((onChange.mock.calls[0]?.[0] as ListItem[])[0]).toEqual({
+      id: 'r1',
+      city: 'یزد',
+      icon: { assetId: 'rain' },
+    });
+  });
+
+  it('seeds a new row from every child-field default', () => {
+    expect(newColumnItem(columns)).toMatchObject({
+      city: 'تهران',
+      icon: { assetId: 'sunny' },
+    });
   });
 });

@@ -27,7 +27,10 @@ fn main() {
             close_window::close_request_seen,
             close_window::close_window_now,
             text_source_file::pick_text_source_file,
-            text_source_file::reload_text_source_file
+            text_source_file::reload_text_source_file,
+            text_source_file::pick_structured_rows_file,
+            text_source_file::reload_structured_rows_file,
+            text_source_file::save_text_source_sample
         ])
         // `D-162` — every close request: held and asked about while the page holds it.
         .on_window_event(|window, event| {

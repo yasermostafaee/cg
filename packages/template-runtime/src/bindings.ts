@@ -17,6 +17,7 @@ import { coerceTickerItems, tickerDriverFor } from './ticker-driver.js';
 import { lottiePlayerFor } from './lottie-registry.js';
 import { applyTransform, stringifyValue } from './transforms.js';
 import { parseLocalizedNumber, writeFieldDigits } from '@cg/text-shaping';
+import { applyValueRules, type ValueRuleDoc } from './value-rules.js';
 
 /**
  * How a field's value is written wherever the page writes it as TEXT: its digits
@@ -103,6 +104,7 @@ export function applyFieldValues(
   elementMap: ReadonlyMap<string, HTMLElement>,
   textOriginals: ReadonlyMap<string, string>,
   container: HTMLElement,
+  assetUrls?: Readonly<Record<string, string>>,
 ): void {
   // Build a quick field-defaults lookup so missing values fall back cleanly,
   // plus each field's text rule (its digits, and a text field's `maxLength` cap).
@@ -111,12 +113,20 @@ export function applyFieldValues(
   for (const binding of scene.bindings) {
     const raw = binding.fieldId in values ? values[binding.fieldId] : defaults.get(binding.fieldId);
     if (raw === undefined) continue;
-    applyOne(binding, raw, elementMap, textOriginals, container, rules.get(binding.fieldId));
+    applyOne(
+      binding,
+      raw,
+      elementMap,
+      textOriginals,
+      container,
+      rules.get(binding.fieldId),
+      assetUrls,
+    );
   }
 }
 
 /** A doc that owns fields + bindings: the root scene or a composition. */
-export interface FieldDocLite {
+export interface FieldDocLite extends ValueRuleDoc {
   fields?: readonly DynamicField[] | undefined;
   bindings?: readonly FieldBinding[] | undefined;
 }
@@ -134,8 +144,9 @@ export function applyScopedFieldValues(
   rootDoc: FieldDocLite,
   values: NestedFieldValues,
   scope: FieldScope,
+  assetUrls?: Readonly<Record<string, string>>,
 ): void {
-  applyDocScope(scene, rootDoc, values, scope);
+  applyDocScope(scene, rootDoc, values, scope, assetUrls);
 }
 
 function applyDocScope(
@@ -143,6 +154,7 @@ function applyDocScope(
   doc: FieldDocLite,
   values: NestedFieldValues,
   scope: FieldScope,
+  assetUrls?: Readonly<Record<string, string>>,
 ): void {
   const { defaults, rules } = fieldLookups(doc.fields ?? []);
   for (const binding of doc.bindings ?? []) {
@@ -155,14 +167,16 @@ function applyDocScope(
       scope.textOriginals,
       scope.container,
       rules.get(binding.fieldId),
+      assetUrls,
     );
   }
+  applyValueRules(doc, values, scope, assetUrls);
   for (const child of scope.children) {
     const childDoc = scene.compositions?.find((c) => c.id === child.compositionId);
     if (childDoc === undefined) continue;
     const sub = values[child.name];
     const subVals: NestedFieldValues = isNamespace(sub) ? sub : {};
-    applyDocScope(scene, childDoc, subVals, child.scope);
+    applyDocScope(scene, childDoc, subVals, child.scope, assetUrls);
   }
 }
 
@@ -183,6 +197,7 @@ function applyOne(
   textOriginals: ReadonlyMap<string, string>,
   container: HTMLElement,
   rule?: FieldTextRule,
+  assetUrls?: Readonly<Record<string, string>>,
 ): void {
   const target = binding.target;
   const maxLength = rule?.maxLength;
@@ -228,10 +243,10 @@ function applyOne(
       if (!(el instanceof HTMLImageElement)) return;
       const assetId = stringifyValue(raw);
       el.dataset['cgAssetId'] = assetId;
-      // Caller resolves assetId → URL. For M3.2-α we set src directly to
-      // the assetId; the export pipeline will rewrite to `assets/img/...`
-      // paths once asset resolution is wired.
-      el.src = assetId;
+      // D-180 — an image field carries an asset id, never a browser URL. Resolve
+      // through the same host map used for static images; the fallback keeps
+      // legacy/custom hosts that already send URLs working.
+      el.src = assetUrls?.[assetId] ?? assetId;
       return;
     }
     case 'color': {

@@ -96,6 +96,8 @@ const ScalarFileSourcePolicySchema = z
 export const FileSourcePolicySchema = z
   .object({
     ...FileSourcePolicyShape,
+    /** D-180 — how a list file is interpreted. Absent keeps legacy text/split behavior. */
+    format: z.enum(['text', 'json', 'csv']).optional(),
     /**
      * R-102 follow-up — an authored default for turning a text-list file into rows.
      * The printable spelling is stored (`\\n`, `\\t`, or a literal separator),
@@ -106,6 +108,7 @@ export const FileSourcePolicySchema = z
   })
   .superRefine(requirePathWhenLocked);
 export type FileSourcePolicy = z.infer<typeof FileSourcePolicySchema>;
+export type FileSourceListFormat = NonNullable<FileSourcePolicy['format']>;
 
 const ScalarFileSourceGrant = {
   allowFileSource: z.boolean().optional(),
@@ -163,10 +166,22 @@ const MultilineFieldSchema = DynamicFieldBaseSchema.extend({
   ...ScalarFileSourceGrant,
 });
 
+export const ImageFieldAssetOptionSchema = z.object({
+  assetId: IdSchema,
+  /** Operator-facing package filename. Never fall back to the opaque asset id. */
+  label: z.string().min(1),
+});
+export type ImageFieldAssetOption = z.infer<typeof ImageFieldAssetOptionSchema>;
+
 const ImageFieldSchema = DynamicFieldBaseSchema.extend({
   type: z.literal('image'),
   defaultAssetId: IdSchema.optional(),
   accept: z.array(z.enum(['png', 'jpg', 'webp', 'svg'])).min(1),
+  /**
+   * D-180 — package-derived picker metadata for CG Control. The Designer does
+   * not author this list; import derives it from the manifest asset index.
+   */
+  assetOptions: z.array(ImageFieldAssetOptionSchema).optional(),
 });
 
 const ColorFieldSchema = DynamicFieldBaseSchema.extend({
@@ -185,6 +200,27 @@ const NumberFieldSchema = DynamicFieldBaseSchema.extend({
   min: z.number().optional(),
   max: z.number().optional(),
   step: z.number().positive().optional(),
+  allowedValues: z
+    .array(z.number().finite())
+    .min(1)
+    .max(100)
+    .refine((values) => new Set(values).size === values.length, 'Allowed values must be unique.')
+    .optional(),
+  /**
+   * Optional operator-facing names for exact numeric choices. Keys are the canonical numeric
+   * values serialized with `String(value)`; values are what direct editors and office files show.
+   * The actual field value remains numeric all the way to bindings and rules.
+   */
+  allowedValueLabels: z
+    .record(z.string(), z.string().trim().min(1).max(120))
+    .refine((labels) => Object.keys(labels).length <= 100, 'At most 100 value labels are allowed.')
+    .refine(
+      (labels) =>
+        new Set(Object.values(labels).map((label) => label.trim().toLocaleLowerCase())).size ===
+        Object.values(labels).length,
+      'Value labels must be unique.',
+    )
+    .optional(),
   unit: z.string().optional(),
   digits: NumberFieldDigitsSchema.optional(),
 });
@@ -194,6 +230,22 @@ const SelectFieldSchema = DynamicFieldBaseSchema.extend({
   default: z.string(),
   options: z.array(z.object({ value: z.string(), label: z.string() })).min(1),
 });
+
+/**
+ * D-180 — the field kinds one structured Repeater row can expose. A nested list
+ * is deliberately excluded: v1 rows are flat objects and every consumer can
+ * render one compact cell per key without recursive editors.
+ */
+export const ListItemFieldSchema = z.discriminatedUnion('type', [
+  TextFieldSchema,
+  MultilineFieldSchema,
+  ImageFieldSchema,
+  ColorFieldSchema,
+  BooleanFieldSchema,
+  NumberFieldSchema,
+  SelectFieldSchema,
+]);
+export type ListItemField = z.infer<typeof ListItemFieldSchema>;
 
 /**
  * One item of a `list` field value. DELIBERATELY extensible: a required
@@ -235,6 +287,12 @@ const ListFieldSchema = DynamicFieldBaseSchema.extend({
    * of truth, the repeater. Absent: no limit (or a template imported before this).
    */
   maxItems: z.number().int().positive().optional(),
+  /**
+   * D-180 — derived at Preview/import for a list bound to a Repeater. This is
+   * operator metadata, not a second authoring source: the referenced child
+   * composition's own fields remain authoritative.
+   */
+  itemFields: z.array(ListItemFieldSchema).optional(),
 });
 
 /** Discriminated union of declared dynamic-field types. */
@@ -249,6 +307,88 @@ export const DynamicFieldSchema = z.discriminatedUnion('type', [
   ListFieldSchema,
 ]);
 export type DynamicField = z.infer<typeof DynamicFieldSchema>;
+
+export type NumberDynamicField = Extract<DynamicField, { type: 'number' }>;
+
+interface NumberConstraint {
+  allowedValues?: readonly number[] | undefined;
+  allowedValueLabels?: Readonly<Record<string, string>> | undefined;
+  min?: number | undefined;
+  max?: number | undefined;
+  step?: number | undefined;
+}
+
+/**
+ * The authored numeric choices, plus the old 0/1 range marker for templates authored before the
+ * general choice-list control existed.
+ */
+export function numberFieldAllowedValues(field: NumberConstraint): readonly number[] | undefined {
+  if (field.allowedValues !== undefined) return field.allowedValues;
+  return field.min === 0 && field.max === 1 && field.step === 1 ? [0, 1] : undefined;
+}
+
+/** The authored operator-facing alias for one canonical numeric value, if any. */
+export function numberFieldValueAlias(field: NumberConstraint, value: number): string | undefined {
+  const alias = field.allowedValueLabels?.[String(value)]?.trim();
+  return alias === undefined || alias === '' ? undefined : alias;
+}
+
+/** The text shown for one exact numeric choice while its stored value remains numeric. */
+export function numberFieldValueLabel(field: NumberConstraint, value: number): string {
+  return numberFieldValueAlias(field, value) ?? String(value);
+}
+
+/**
+ * Resolve an authored alias to its canonical number. Matching ignores surrounding whitespace and
+ * letter case. Ambiguous/malformed legacy metadata deliberately resolves to `undefined`.
+ */
+export function numberFieldValueFromAlias(
+  field: NumberConstraint,
+  input: string,
+): number | undefined {
+  const wanted = input.trim().toLocaleLowerCase();
+  if (wanted === '') return undefined;
+  const matches = (numberFieldAllowedValues(field) ?? []).filter(
+    (value) => numberFieldValueAlias(field, value)?.toLocaleLowerCase() === wanted,
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+/** Readable exact choices for validation messages, including aliases when authored. */
+export function numberFieldAllowedValuesText(field: NumberConstraint): string | undefined {
+  const values = numberFieldAllowedValues(field);
+  if (values === undefined) return undefined;
+  return values
+    .map((value) => {
+      const alias = numberFieldValueAlias(field, value);
+      return alias === undefined ? String(value) : `“${alias}” (${String(value)})`;
+    })
+    .join(', ');
+}
+
+/** True when the numeric choice list is exactly 0 / 1. */
+export function isBinaryNumberField(field: NumberConstraint): boolean {
+  const values = numberFieldAllowedValues(field);
+  return values?.length === 2 && values[0] === 0 && values[1] === 1;
+}
+
+/**
+ * One numeric range validator shared by authoring, file import and CG Control. `undefined` means
+ * the value is safe to commit. `step` remains an editing increment for compatibility, except that
+ * the explicit 0/1 preset uses it as part of its binary marker.
+ */
+export function numberFieldValueError(field: NumberConstraint, value: number): string | undefined {
+  if (!Number.isFinite(value)) return 'Must be a number.';
+  const allowedValues = numberFieldAllowedValues(field);
+  if (allowedValues !== undefined && !allowedValues.includes(value)) {
+    const readable = numberFieldAllowedValuesText(field) ?? allowedValues.map(String).join(', ');
+    if (field.allowedValueLabels !== undefined) return `Must be one of: ${readable}.`;
+    return isBinaryNumberField(field) ? 'Must be 0 or 1.' : `Must be one of: ${readable}.`;
+  }
+  if (field.min !== undefined && value < field.min) return `Must be at least ${String(field.min)}.`;
+  if (field.max !== undefined && value > field.max) return `Must be at most ${String(field.max)}.`;
+  return undefined;
+}
 
 /**
  * The field variants that can carry file content — and so the only ones on which
@@ -343,6 +483,15 @@ export function lockedBridgeTextSourcePath(
 export function authoredFileDelimiter(field: DynamicField | null | undefined): string | undefined {
   return field?.type === 'list' && fieldTakesFileSource(field)
     ? field.fileSource?.delimiter
+    : undefined;
+}
+
+/** D-180 — the author's structured-list format; absent preserves the text path. */
+export function authoredFileFormat(
+  field: DynamicField | null | undefined,
+): FileSourceListFormat | undefined {
+  return field?.type === 'list' && fieldTakesFileSource(field)
+    ? field.fileSource?.format
     : undefined;
 }
 

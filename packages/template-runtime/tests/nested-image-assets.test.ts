@@ -199,4 +199,103 @@ describe('D-064 — an image inside a REPEATER row gets its src from assetUrls',
     expect(srcs).toHaveLength(2);
     for (const x of srcs) expect(x).toBe(URL_OF_LOGO);
   });
+
+  it('D-180 updates one row image live from a canonical image field value', async () => {
+    const s = scene([repeater()]);
+    const comp = s.compositions?.[0];
+    if (comp === undefined) throw new Error('fixture changed');
+    comp.fields = [
+      {
+        id: 'icon',
+        label: 'Weather icon',
+        required: false,
+        type: 'image',
+        accept: ['png'],
+        defaultAssetId: 'logo',
+      },
+    ];
+    comp.bindings = [{ fieldId: 'icon', target: { kind: 'image', elementId: 'logo-in-comp' } }];
+    const rep = s.layers[0]?.children[0];
+    if (rep === undefined || rep.type !== 'repeater') throw new Error('fixture changed');
+    rep.items = [{ id: 'r1', icon: { assetId: 'sunny' } }];
+    s.fields.push({
+      id: 'rows',
+      label: 'Rows',
+      required: false,
+      type: 'list',
+      default: rep.items,
+    });
+    s.bindings.push({ fieldId: 'rows', target: { kind: 'repeater-items', elementId: 'rep' } });
+
+    const rt = createRuntime(s, {
+      skipFontLoad: true,
+      assetUrls: {
+        logo: URL_OF_LOGO,
+        sunny: 'assets/img/sunny.png',
+        rain: 'assets/img/rain.png',
+      },
+    });
+    await rt.play({ rows: [{ id: 'r1', icon: { assetId: 'sunny' } }] });
+    const image = document.querySelector<HTMLImageElement>(
+      '[data-cg-element-id="rep"] img[data-cg-asset-id="sunny"]',
+    );
+    expect(image?.getAttribute('src')).toBe('assets/img/sunny.png');
+
+    await rt.update({ rows: [{ id: 'r1', icon: { assetId: 'rain' } }] });
+    const changed = document.querySelector<HTMLImageElement>(
+      '[data-cg-element-id="rep"] img[data-cg-asset-id="rain"]',
+    );
+    expect(changed).toBe(image);
+    expect(changed?.getAttribute('src')).toBe('assets/img/rain.png');
+  });
+
+  it('D-180 evaluates an image value rule independently in every repeater row', async () => {
+    const s = scene([repeater()]);
+    const comp = s.compositions?.[0];
+    if (comp === undefined) throw new Error('fixture changed');
+    comp.fields = [
+      { id: 'code', label: 'Weather code', required: false, type: 'text', default: 'sun' },
+    ];
+    const icon = comp.layers[0]?.children.find((element) => element.id === 'logo-in-comp');
+    if (icon === undefined) throw new Error('fixture changed');
+    icon.valueRules = {
+      input: { kind: 'field', fieldId: 'code' },
+      rules: [
+        {
+          condition: { comparator: '=', value: 'rain' },
+          effect: {
+            elementId: 'logo-in-comp',
+            property: 'image',
+            value: { assetId: 'rain', source: 'project' },
+          },
+        },
+      ],
+    };
+    const rep = s.layers[0]?.children[0];
+    if (rep === undefined || rep.type !== 'repeater') throw new Error('fixture changed');
+    rep.items = [
+      { id: 'r1', code: 'rain' },
+      { id: 'r2', code: 'sun' },
+    ];
+    s.fields.push({ id: 'rows', label: 'Rows', required: false, type: 'list', default: rep.items });
+    s.bindings.push({ fieldId: 'rows', target: { kind: 'repeater-items', elementId: 'rep' } });
+
+    const rt = createRuntime(s, {
+      skipFontLoad: true,
+      assetUrls: { logo: URL_OF_LOGO, rain: 'assets/img/rain.png' },
+    });
+    await rt.play({ rows: rep.items });
+    const rows = document.querySelectorAll<HTMLElement>('[data-cg-repeater-row]');
+    expect(rows[0]?.querySelector('img')?.getAttribute('src')).toBe('assets/img/rain.png');
+    expect(rows[1]?.querySelector('img')?.getAttribute('src')).toBe(URL_OF_LOGO);
+
+    await rt.update({
+      rows: [
+        { id: 'r1', code: 'sun' },
+        { id: 'r2', code: 'rain' },
+      ],
+    });
+    expect(rows[0]?.querySelector('img')?.getAttribute('src')).toBe(URL_OF_LOGO);
+    expect(rows[1]?.querySelector('img')?.getAttribute('src')).toBe('assets/img/rain.png');
+  });
 });

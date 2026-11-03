@@ -37,6 +37,9 @@ export function FileSourcePreviewModal({
   const [reloading, setReloading] = useState(false);
   const [reloadError, setReloadError] = useState<string | null>(null);
   const fullSourcePathVisible = isVisibleWindowsSourcePath(sourcePath);
+  const structuredItems =
+    items !== null &&
+    items.some((item) => Object.keys(item).some((key) => key !== 'id' && key !== 'text'));
   const reload = async (): Promise<void> => {
     setReloading(true);
     setReloadError(null);
@@ -136,11 +139,28 @@ export function FileSourcePreviewModal({
                 ) : items.length === 0 ? (
                   <p className={s.empty}>No items were found with this delimiter.</p>
                 ) : (
-                  <ol className={s.items}>
+                  <ol className={s.items} data-structured={structuredItems ? 'true' : 'false'}>
                     {items.map((item, index) => (
                       <li key={item.id}>
                         <span>{String(index + 1)}</span>
-                        <bdi>{typeof item.text === 'string' ? item.text : ''}</bdi>
+                        {structuredItems ? (
+                          <dl className={s.structuredRow}>
+                            {Object.entries(item)
+                              .filter(([key]) => key !== 'id')
+                              .map(([key, cell]) => (
+                                <div key={key}>
+                                  <dt>{key}</dt>
+                                  <dd>
+                                    {typeof cell === 'object' && cell !== null
+                                      ? JSON.stringify(cell)
+                                      : String(cell ?? '')}
+                                  </dd>
+                                </div>
+                              ))}
+                          </dl>
+                        ) : (
+                          <bdi>{typeof item.text === 'string' ? item.text : ''}</bdi>
+                        )}
                       </li>
                     ))}
                   </ol>

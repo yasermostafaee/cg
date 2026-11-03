@@ -160,3 +160,28 @@ globalStyle(`${items} li > span`, {
 });
 
 export const empty = style({ margin: '0.35rem', color: colors.textMuted, fontSize: '0.76rem' });
+
+export const structuredRow = style({
+  display: 'grid',
+  gap: '0.3rem',
+  minWidth: 0,
+  margin: 0,
+});
+
+globalStyle(`${structuredRow} > div`, {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(5.5rem, 0.35fr) minmax(0, 1fr)',
+  gap: '0.55rem',
+  minWidth: 0,
+});
+globalStyle(`${structuredRow} dt`, {
+  color: colors.textMuted,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+});
+globalStyle(`${structuredRow} dd`, {
+  minWidth: 0,
+  margin: 0,
+  overflowWrap: 'anywhere',
+});

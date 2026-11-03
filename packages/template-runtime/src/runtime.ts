@@ -1246,9 +1246,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           const applyFields = (values: Record<string, unknown>): void => {
             if (childComp === undefined) return;
             const sub = resolveScopeValues(values as NestedFieldValues, path)[namespace];
-            const itemValues =
+            const suppliedItemValues =
               sub !== null && typeof sub === 'object' ? (sub as NestedFieldValues) : {};
-            applyScopedFieldValues(scene, childComp, itemValues, built.scope);
+            const itemValues = mergeNestedValues(
+              (item.fieldValues ?? {}) as NestedFieldValues,
+              suppliedItemValues,
+            );
+            applyScopedFieldValues(scene, childComp, itemValues, built.scope, options.assetUrls);
           };
           applyFields(currentValues); // initial render uses the current values (defaults pre-play)
           let torndown = false;
@@ -2290,7 +2294,13 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             collectScopeAnimated(row.scope, rowAnimated);
             const apply = (values: Record<string, unknown>): void => {
               if (comp !== undefined) {
-                applyScopedFieldValues(scene, comp, values as NestedFieldValues, row.scope);
+                applyScopedFieldValues(
+                  scene,
+                  comp,
+                  values as NestedFieldValues,
+                  row.scope,
+                  options.assetUrls,
+                );
               }
             };
             const item = items[i];
@@ -2400,7 +2410,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     visit(rootNode);
   };
 
-  applyScopedFieldValues(scene, scene, {}, built.scopeTree);
+  applyScopedFieldValues(scene, scene, {}, built.scopeTree, options.assetUrls);
 
   // D-026 — every scope (the root scene + each nested instance) owns its animated
   // elements on `scope.animated`. `allAnimated` is the flat union across the whole
@@ -2907,7 +2917,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         currentValues,
         stripCgControl(data as Record<string, unknown>) as NestedFieldValues,
       );
-      applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
+      applyScopedFieldValues(scene, scene, currentValues, built.scopeTree, options.assetUrls);
       reapplySequenceItemFields();
       reapplyClockTargets();
       // D-163 — the take's page: AFTER the fields (a new book is in place first), BEFORE the run
@@ -3151,7 +3161,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       } else {
         currentValues = mergeNestedValues(currentValues, values as NestedFieldValues);
       }
-      applyScopedFieldValues(scene, scene, currentValues, built.scopeTree);
+      applyScopedFieldValues(scene, scene, currentValues, built.scopeTree, options.assetUrls);
       reapplySequenceItemFields();
       reapplyClockTargets();
       /*

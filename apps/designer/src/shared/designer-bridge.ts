@@ -86,6 +86,14 @@ export interface DesignerTextSourceFile {
   content: string;
 }
 
+/** One Sequence row-data file; Excel stays binary while CSV/JSON stays text. */
+export interface DesignerStructuredRowsFile {
+  bridgePath: string;
+  sourcePath: string;
+  name: string;
+  content: string | Uint8Array;
+}
+
 export type Unsubscribe = () => void;
 
 /** D-150 — which storage root the Designer is using, and why. */
@@ -137,6 +145,16 @@ export interface DesignerBridge {
     pick(): Promise<DesignerTextSourceFile | null>;
     /** Re-read the same session-selected file after another application saves it. */
     reload(sourcePath: string): Promise<string>;
+    /** Legacy picker retained for compatibility; new Sequence UI generates its own exact file. */
+    pickStructuredRows(): Promise<DesignerStructuredRowsFile | null>;
+    /** Re-read the retained CSV/JSON/Excel source without asking for it again. */
+    reloadStructuredRows(sourcePath: string): Promise<string | Uint8Array>;
+    /** Save a generated, template-specific JSON, CSV or Excel file and retain it for Reload. */
+    saveSample(req: {
+      suggestedName: string;
+      content: string | Uint8Array;
+      format: 'json' | 'csv' | 'xlsx';
+    }): Promise<string | null>;
   };
 
   /**

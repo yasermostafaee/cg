@@ -4,12 +4,17 @@ import {
   fieldAllowsFileSource,
   fieldTakesFileSource,
   fileSourcePolicyOf,
+  listFieldItemFields,
   fieldDigitsOf,
   FieldDigitsSchema,
   NumberFieldDigitsSchema,
+  numberFieldAllowedValues,
+  numberFieldValueAlias,
   sequenceItemsBinding,
   type DynamicField,
+  type FileSourceListFormat,
   type FieldBinding,
+  type ListItemField,
   type RepeaterElement,
   type Scene,
   type SequenceElement,
@@ -42,6 +47,11 @@ import {
 } from '../fields/fileSourcePreviewStore.js';
 import { fixedFileFieldId, isFixedFileFieldId } from '../fields/fixedFileField.js';
 import {
+  sequencePageDataAttachmentCount,
+  sequencePageDataAttachmentsVersion,
+  subscribeSequencePageDataAttachments,
+} from '../fields/sequencePageDataAttachmentStore.js';
+import {
   bridgeTextSourceFiles,
   isVisibleWindowsSourcePath,
   readBridgeTextPreview,
@@ -50,6 +60,7 @@ import { NumberField, SelectField, TextField } from './controls.js';
 import { FileSourcePreviewModal } from './FileSourcePreviewModal.js';
 import { InfoTip } from './InfoTip.js';
 import { DigitsField } from './DigitsField.js';
+import { NumberChoicesModal } from './NumberChoicesModal.js';
 import {
   CUSTOM_PATTERN,
   PATTERN_PRESET_ORDER,
@@ -208,6 +219,9 @@ export function FixedFileSourceSection({
           <FileSourceRow
             sceneId={previewSceneId}
             field={field}
+            itemFields={
+              field.type === 'list' ? listFieldItemFields(scene, scene, field.id) : undefined
+            }
             onPatch={(patch) => designerStore.setElementFieldMeta(element.id, patch)}
             fixedMode
           />
@@ -377,7 +391,13 @@ export function DynamicDataSection({
             : 'Give this text a Data key to drive it from operator data.'}
         </p>
       ) : (
-        <FieldMeta key={field.id} element={element} field={field} sceneId={previewSceneId} />
+        <FieldMeta
+          key={field.id}
+          element={element}
+          field={field}
+          scene={scene}
+          sceneId={previewSceneId}
+        />
       )}
     </CollapseSection>
   );
@@ -387,13 +407,16 @@ export function DynamicDataSection({
 function FieldMeta({
   element,
   field,
+  scene,
   sceneId,
 }: {
   element: TextElement | TickerElement | SequenceElement | RepeaterElement;
   field: DynamicField;
+  scene: Scene;
   sceneId: string;
 }): JSX.Element {
   useSyncExternalStore(subscribeDesignerFileSourcePreviews, designerFileSourcePreviewsVersion);
+  useSyncExternalStore(subscribeSequencePageDataAttachments, sequencePageDataAttachmentsVersion);
   const filePreview = getDesignerFileSourcePreview(
     sceneId,
     field.id,
@@ -401,8 +424,24 @@ function FieldMeta({
   );
   const fieldType: 'text' | 'number' = field.type === 'number' ? 'number' : 'text';
   const multiline = field.type === 'multiline';
+  const [numberChoicesOpen, setNumberChoicesOpen] = useState(false);
   const patch = (p: ElementFieldMetaPatch): void =>
     designerStore.setElementFieldMeta(element.id, p);
+  const allowedNumberValues = field.type === 'number' ? numberFieldAllowedValues(field) : undefined;
+  const numberMode =
+    field.type !== 'number'
+      ? 'any'
+      : allowedNumberValues !== undefined
+        ? 'choices'
+        : field.min === undefined && field.max === undefined
+          ? 'any'
+          : 'custom';
+
+  const numberAliasCount =
+    field.type === 'number' && allowedNumberValues !== undefined
+      ? allowedNumberValues.filter((value) => numberFieldValueAlias(field, value) !== undefined)
+          .length
+      : 0;
 
   // D-028/D-029 — a ticker's/sequence's list field: only the base meta
   // applies; the items themselves are edited in the Items section (and live
@@ -449,6 +488,7 @@ function FieldMeta({
                 key={`file-source-${field.id}`}
                 sceneId={sceneId}
                 field={field}
+                itemFields={listFieldItemFields(scene, scene, field.id)}
                 onPatch={patch}
               />
             )}
@@ -496,6 +536,101 @@ function FieldMeta({
         }
         onCommit={(v) => patch({ digits: v })}
       />
+      {fieldType === 'number' && (
+        <SelectField
+          label="Allowed values"
+          value={numberMode}
+          options={['any', 'choices', 'custom'] as const}
+          labels={['Any number', 'Choice list', 'Custom limits']}
+          onCommit={(mode) => {
+            if (mode === 'choices') {
+              patch({
+                allowedValues: [0, 1],
+                allowedValueLabels: null,
+                min: null,
+                max: null,
+                step: null,
+              });
+            } else if (mode === 'any') {
+              patch({
+                allowedValues: null,
+                allowedValueLabels: null,
+                min: null,
+                max: null,
+                step: null,
+              });
+            } else {
+              patch({
+                allowedValues: null,
+                allowedValueLabels: null,
+                min: field.type === 'number' ? (field.min ?? 0) : 0,
+                max: field.type === 'number' ? (field.max ?? 100) : 100,
+                step: field.type === 'number' ? (field.step ?? 1) : 1,
+              });
+            }
+          }}
+        />
+      )}
+      {fieldType === 'number' && field.type === 'number' && numberMode === 'choices' && (
+        <>
+          <div className={cs.row}>
+            <span className={cs.label}>Choices</span>
+            <div className={s.numberChoicesControl}>
+              <span className={cs.readout}>
+                {allowedNumberValues?.length ?? 0}{' '}
+                {(allowedNumberValues?.length ?? 0) === 1 ? 'choice' : 'choices'} ·{' '}
+                {numberAliasCount} {numberAliasCount === 1 ? 'alias' : 'aliases'}
+              </span>
+              <Button size="sm" onClick={() => setNumberChoicesOpen(true)}>
+                Edit…
+              </Button>
+            </div>
+          </div>
+          <p className={s.hint}>Stored values stay numeric; aliases are shown to operators.</p>
+          {numberChoicesOpen && (
+            <NumberChoicesModal
+              values={allowedNumberValues ?? [0, 1]}
+              labels={field.allowedValueLabels ?? {}}
+              connectedFileCount={sequencePageDataAttachmentCount(scene.id)}
+              onCancel={() => setNumberChoicesOpen(false)}
+              onSave={(values, labels) => {
+                patch({
+                  allowedValues: values,
+                  allowedValueLabels: Object.keys(labels).length === 0 ? null : labels,
+                  min: null,
+                  max: null,
+                  step: null,
+                });
+                setNumberChoicesOpen(false);
+              }}
+            />
+          )}
+        </>
+      )}
+      {fieldType === 'number' && field.type === 'number' && numberMode === 'custom' && (
+        <>
+          <NumberField
+            label="Minimum"
+            value={field.min ?? 0}
+            step={field.step ?? 1}
+            {...(field.max === undefined ? {} : { max: field.max })}
+            onCommit={(min) => patch({ min })}
+          />
+          <NumberField
+            label="Maximum"
+            value={field.max ?? 100}
+            step={field.step ?? 1}
+            {...(field.min === undefined ? {} : { min: field.min })}
+            onCommit={(max) => patch({ max })}
+          />
+          <NumberField
+            label="Increment"
+            value={field.step ?? 1}
+            min={0.000001}
+            onCommit={(step) => patch({ step: Math.max(0.000001, step) })}
+          />
+        </>
+      )}
       {fieldType === 'text' && (
         <>
           <CheckRow
@@ -540,11 +675,23 @@ function FieldMeta({
           />
         </>
       )}
-      {fieldType === 'number' ? (
+      {fieldType === 'number' && field.type === 'number' && allowedNumberValues !== undefined ? (
+        <SelectField
+          label="Value"
+          value={String(field.default)}
+          options={allowedNumberValues.map(String)}
+          labels={allowedNumberValues.map(
+            (value) => numberFieldValueAlias(field, value) ?? String(value),
+          )}
+          onCommit={(value) => patch({ default: Number(value) })}
+        />
+      ) : fieldType === 'number' ? (
         <NumberField
           label="Value"
           value={field.type === 'number' ? field.default : 0}
-          step={1}
+          step={field.type === 'number' ? (field.step ?? 1) : 1}
+          min={field.type === 'number' ? field.min : undefined}
+          max={field.type === 'number' ? field.max : undefined}
           // `PERSIAN-DIGITS-01` — a template value, read by the one reader; `TEXT-DIGITS-01` — shown
           // and typed in the field's digits, what goes on air.
           digits="as-typed"
@@ -644,7 +791,8 @@ async function pickSharedTextSource(
   // Browser/test fallback. The desktop bridge always takes the native branch above so its
   // absolute Windows/UNC path remains visible.
   const picked = await bridge.assets.pick(undefined, {
-    accept: '.txt,.text,.csv,.tsv,.log,text/plain,text/csv,text/tab-separated-values',
+    accept:
+      '.txt,.text,.csv,.tsv,.json,.log,text/plain,text/csv,application/json,text/tab-separated-values',
     multiple: false,
   });
   const candidate = bridgeTextSourceFiles(picked)[0];
@@ -665,11 +813,13 @@ async function pickSharedTextSource(
 function FileSourceRow({
   sceneId,
   field,
+  itemFields,
   onPatch,
   fixedMode = false,
 }: {
   sceneId: string;
   field: DynamicField;
+  itemFields?: readonly ListItemField[] | undefined;
   onPatch: (patch: ElementFieldMetaPatch) => void;
   fixedMode?: boolean;
 }): JSX.Element {
@@ -687,6 +837,7 @@ function FileSourceRow({
       ...(next.bridgePath !== undefined ? { bridgePath: next.bridgePath } : {}),
       ...(next.lockFile === true ? { lockFile: true as const } : {}),
       ...(next.delimiter !== undefined ? { delimiter: next.delimiter } : {}),
+      ...(next.format !== undefined && next.format !== 'text' ? { format: next.format } : {}),
     };
     onPatch({ fileSource: Object.keys(compact).length === 0 ? null : compact });
   };
@@ -694,11 +845,14 @@ function FileSourceRow({
   const pushAuthoringPreview = (
     file: Pick<DesignerTextSourceFile, 'bridgePath' | 'sourcePath' | 'content'>,
     delimiter: string | undefined,
+    format: FileSourceListFormat = 'text',
   ): void => {
     if (!fieldTakesFileSource(field)) return;
     const value = fileSourceContentToFieldValue(file.content, field.type, {
       split: field.type === 'list' && delimiter !== undefined,
       delimiter: delimiter ?? '',
+      format,
+      ...(field.type === 'list' && itemFields !== undefined ? { itemFields } : {}),
     });
     setDesignerFileSourcePreview({
       sceneId,
@@ -708,6 +862,7 @@ function FileSourceRow({
       content: file.content,
       value,
     });
+    setBrowseError(null);
     const bridge = (window as unknown as { cg: Partial<DesignerBridge> }).cg;
     void bridge.preview?.update({ fields: { [field.id]: value } }).catch(() => undefined);
   };
@@ -729,7 +884,7 @@ function FileSourceRow({
       if (selected === null) return;
       setBrowseError(null);
       patchPolicy({ ...policy, bridgePath: selected.bridgePath });
-      pushAuthoringPreview(selected, policy?.delimiter);
+      pushAuthoringPreview(selected, policy?.delimiter, policy?.format ?? 'text');
       requestDesignerFileSourcePreviewOpen(sceneId, field.id);
     } catch (err) {
       setBrowseError(err instanceof Error ? err.message : String(err));
@@ -748,6 +903,7 @@ function FileSourceRow({
     fixedMode && field.type === 'list'
       ? (policy?.delimiter ?? SHIPPED_DEFAULT_DELIMITER)
       : policy?.delimiter;
+  const effectiveFormat: FileSourceListFormat = policy?.format ?? 'text';
   const delimiterValues = [
     ...(!fixedMode ? [''] : []),
     ...delimiters.map((option) => option.value),
@@ -763,26 +919,58 @@ function FileSourceRow({
       ? ['Current value (not in list)']
       : []),
   ];
-  const interpretedPreview =
-    preview === null || !fieldTakesFileSource(field)
-      ? null
-      : fileSourceContentToFieldValue(preview.content, field.type, {
-          split: field.type === 'list' && effectiveDelimiter !== undefined,
-          delimiter: effectiveDelimiter ?? '',
-        });
+  let interpretedPreview = preview?.value ?? null;
+  let previewParseError: string | null = null;
+  if (preview !== null && fieldTakesFileSource(field)) {
+    try {
+      interpretedPreview = fileSourceContentToFieldValue(preview.content, field.type, {
+        split: field.type === 'list' && effectiveDelimiter !== undefined,
+        delimiter: effectiveDelimiter ?? '',
+        format: effectiveFormat,
+        ...(field.type === 'list' && itemFields !== undefined ? { itemFields } : {}),
+      });
+    } catch (cause) {
+      interpretedPreview = null;
+      previewParseError = cause instanceof Error ? cause.message : String(cause);
+    }
+  }
   const fullSourcePathVisible = preview !== null && isVisibleWindowsSourcePath(preview.displayPath);
   const commitDelimiter = (delimiter: string): void => {
     const authored = delimiter === '' ? undefined : delimiter;
     patchPolicy({ ...policy, delimiter: authored });
-    if (preview !== null)
-      pushAuthoringPreview(
-        {
-          bridgePath: preview.bridgePath,
-          sourcePath: preview.displayPath,
-          content: preview.content,
-        },
-        authored,
-      );
+    if (preview !== null) {
+      try {
+        pushAuthoringPreview(
+          {
+            bridgePath: preview.bridgePath,
+            sourcePath: preview.displayPath,
+            content: preview.content,
+          },
+          authored,
+          effectiveFormat,
+        );
+      } catch (cause) {
+        setBrowseError(cause instanceof Error ? cause.message : String(cause));
+      }
+    }
+  };
+  const commitFormat = (format: FileSourceListFormat): void => {
+    patchPolicy({ ...policy, format: format === 'text' ? undefined : format });
+    if (preview !== null) {
+      try {
+        pushAuthoringPreview(
+          {
+            bridgePath: preview.bridgePath,
+            sourcePath: preview.displayPath,
+            content: preview.content,
+          },
+          effectiveDelimiter,
+          format,
+        );
+      } catch (cause) {
+        setBrowseError(cause instanceof Error ? cause.message : String(cause));
+      }
+    }
   };
   const reloadSelectedFile = async (): Promise<void> => {
     if (preview === null) throw new Error('Choose this file again before reloading it.');
@@ -795,6 +983,7 @@ function FileSourceRow({
         content,
       },
       effectiveDelimiter,
+      effectiveFormat,
     );
   };
   return (
@@ -831,6 +1020,15 @@ function FileSourceRow({
               title="Remove manual text and list editing from CG Control; file controls remain."
             />
           )}
+          {field.type === 'list' && (
+            <SelectField
+              label="file format"
+              value={effectiveFormat}
+              options={['text', 'json', 'csv'] as const}
+              labels={['Text / delimiter', 'JSON rows', 'CSV rows']}
+              onCommit={commitFormat}
+            />
+          )}
           <div className={s.fileBrowseRow}>
             <Button size="sm" onClick={() => void browseSharedFile()}>
               Browse shared file…
@@ -865,6 +1063,9 @@ function FileSourceRow({
             </div>
           )}
           {browseError !== null && <p className={s.warn}>{browseError}</p>}
+          {previewParseError !== null && browseError !== previewParseError && (
+            <p className={s.warn}>{previewParseError}</p>
+          )}
           {preview !== null && (
             <Button
               size="sm"
@@ -910,10 +1111,18 @@ function FileSourceRow({
               bridgePath={preview.bridgePath}
               content={preview.content}
               value={interpretedPreview}
-              delimiter={field.type === 'list' ? effectiveDelimiter : undefined}
-              delimiterValues={field.type === 'list' ? delimiterValues : []}
-              delimiterLabels={field.type === 'list' ? delimiterLabels : []}
-              onDelimiter={field.type === 'list' ? commitDelimiter : undefined}
+              delimiter={
+                field.type === 'list' && effectiveFormat === 'text' ? effectiveDelimiter : undefined
+              }
+              delimiterValues={
+                field.type === 'list' && effectiveFormat === 'text' ? delimiterValues : []
+              }
+              delimiterLabels={
+                field.type === 'list' && effectiveFormat === 'text' ? delimiterLabels : []
+              }
+              onDelimiter={
+                field.type === 'list' && effectiveFormat === 'text' ? commitDelimiter : undefined
+              }
               onReload={reloadSelectedFile}
               onClose={() => dismissDesignerFileSourcePreview(sceneId, field.id)}
             />

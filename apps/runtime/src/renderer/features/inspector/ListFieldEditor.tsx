@@ -2,17 +2,25 @@ import { useRef, useState, type ReactNode } from 'react';
 import { GripVertical, Plus, X } from 'lucide-react';
 import {
   fieldDigitsOf,
+  numberFieldAllowedValues,
+  numberFieldValueLabel,
+  numberFieldValueError,
   type DynamicField,
   type FieldValue,
   type ListItem,
+  type ListItemField,
 } from '@cg/shared-schema';
 import { writeFieldDigits } from '@cg/text-shaping';
 import { colors } from '../../theme.js';
 import { uuid } from '../../lib/uuid.js';
 import { AutoGrowTextarea } from '../../ui/AutoGrowTextarea.js';
+import { Checkbox } from '../../ui/Checkbox.js';
+import { ColorInput } from '../../ui/ColorInput.js';
 import { writeFieldText } from '../../ui/fieldDigitsInput.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { NumericInput } from '../../ui/NumericInput.js';
+import { TextInput } from '../../ui/TextInput.js';
 import {
   addItem,
   dropTargetIndex,
@@ -115,6 +123,153 @@ const styles = {
   pictures: { margin: 0, paddingInlineStart: 'var(--r-space-4)', fontSize: 'var(--r-text-sm)' },
 } as const;
 
+function newStructuredItem(id: string, fields: readonly ListItemField[]): ListItem {
+  const item: Record<string, unknown> = { id };
+  for (const field of fields) {
+    if (field.type === 'image') {
+      if (field.defaultAssetId !== undefined) item[field.id] = { assetId: field.defaultAssetId };
+    } else {
+      item[field.id] = field.default;
+    }
+  }
+  return item as ListItem;
+}
+
+function imageAssetId(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return '';
+  const assetId = (value as Record<string, unknown>)['assetId'];
+  return typeof assetId === 'string' ? assetId : '';
+}
+
+function StructuredRowEditor({
+  fieldId,
+  row,
+  rowNumber,
+  fields,
+  onChange,
+}: {
+  fieldId: string;
+  row: ListItem;
+  rowNumber: string;
+  fields: readonly ListItemField[];
+  onChange: (key: string, value: unknown) => void;
+}): JSX.Element {
+  return (
+    <div className="cg-list-item__structured">
+      {fields.map((field) => {
+        const value = row[field.id];
+        const label = field.label.trim() === '' ? field.id : field.label;
+        const ariaLabel = `${fieldId} item ${rowNumber} ${label}`;
+        const allowedNumberValues =
+          field.type === 'number' ? numberFieldAllowedValues(field) : undefined;
+        return (
+          <label key={field.id} className="cg-list-cell">
+            <span title={field.id}>{label}</span>
+            {field.type === 'boolean' ? (
+              <Checkbox
+                checked={value === true}
+                aria-label={ariaLabel}
+                onChange={(next) => onChange(field.id, next)}
+              />
+            ) : field.type === 'select' ? (
+              <select
+                className="cg-field"
+                value={typeof value === 'string' ? value : field.default}
+                aria-label={ariaLabel}
+                onChange={(event) => onChange(field.id, event.currentTarget.value)}
+              >
+                {field.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : field.type === 'multiline' ? (
+              <AutoGrowTextarea
+                dir="auto"
+                value={typeof value === 'string' ? value : ''}
+                aria-label={ariaLabel}
+                onChange={(event) => onChange(field.id, event.currentTarget.value)}
+              />
+            ) : field.type === 'number' && allowedNumberValues !== undefined ? (
+              <select
+                className="cg-field"
+                value={String(
+                  typeof value === 'number' && allowedNumberValues.includes(value)
+                    ? value
+                    : (allowedNumberValues[0] ?? field.default),
+                )}
+                aria-label={ariaLabel}
+                onChange={(event) => onChange(field.id, Number(event.currentTarget.value))}
+              >
+                {allowedNumberValues.map((choice) => (
+                  <option key={choice} value={choice}>
+                    {numberFieldValueLabel(field, choice)}
+                  </option>
+                ))}
+              </select>
+            ) : field.type === 'number' ? (
+              <NumericInput
+                value={String(typeof value === 'number' ? value : field.default)}
+                min={field.min}
+                max={field.max}
+                step={field.step ?? 1}
+                decimal
+                allow="number"
+                aria-label={ariaLabel}
+                onValueChange={(raw) => {
+                  const next = Number(raw);
+                  if (numberFieldValueError(field, next) === undefined) onChange(field.id, next);
+                }}
+              />
+            ) : field.type === 'color' ? (
+              <ColorInput
+                className="cg-list-cell__color"
+                value={typeof value === 'string' ? value : field.default}
+                aria-label={ariaLabel}
+                onChange={(next) => onChange(field.id, next)}
+              />
+            ) : field.type === 'image' ? (
+              <select
+                className="cg-field"
+                value={imageAssetId(value)}
+                aria-label={ariaLabel}
+                onChange={(event) =>
+                  onChange(
+                    field.id,
+                    event.currentTarget.value === ''
+                      ? undefined
+                      : { assetId: event.currentTarget.value },
+                  )
+                }
+              >
+                <option value="">No picture</option>
+                {imageAssetId(value) !== '' &&
+                  !(field.assetOptions ?? []).some(
+                    (option) => option.assetId === imageAssetId(value),
+                  ) && <option value={imageAssetId(value)}>Missing picture</option>}
+                {(field.assetOptions ?? []).map((option) => (
+                  <option key={option.assetId} value={option.assetId}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <TextInput
+                dir="auto"
+                value={typeof value === 'string' ? value : ''}
+                aria-label={ariaLabel}
+                onChange={(next) => onChange(field.id, next)}
+              />
+            )}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * 🔴 `B-353` — the sentence a list of PICTURES gets when it reaches this editor instead of the book's
  * (`BookBlock`): a template imported before CG Control read such a list as a book. A refusal
@@ -155,6 +310,7 @@ export function ListFieldEditor({
   const items = toListItems(value);
   // `RUN-NEXT-VERSION-02` Q4 — the most items the list takes (a repeater's row limit, from import).
   const maxItems = field?.type === 'list' ? field.maxItems : undefined;
+  const itemFields = field?.type === 'list' ? field.itemFields : undefined;
   const atLimit = maxItems !== undefined && items.length >= maxItems;
   // Drag state is PURELY presentational (which row is lifted, where it would land).
   // The value still changes only through `onStage`, on drop.
@@ -253,16 +409,40 @@ export function ListFieldEditor({
             {/* FIRST IN THE DOM, SECOND ON SCREEN — see the header and
                 `.cg-list-item__tools`'s `order: -1`. Tab order reaches an item's
                 text before its controls; the picture puts the cluster first. */}
-            <AutoGrowTextarea
-              className="cg-list-item__text"
-              value={writeFieldDigits(itemText(item), fieldDigitsOf(field))}
-              aria-label={`${fieldId} item ${n}`}
-              onChange={(e) =>
-                onStage(
-                  setItemText(items, i, writeFieldText(e.currentTarget, field, e.nativeEvent)),
-                )
-              }
-            />
+            {itemFields !== undefined && itemFields.length > 0 ? (
+              <StructuredRowEditor
+                fieldId={fieldId}
+                row={item}
+                rowNumber={n}
+                fields={itemFields}
+                onChange={(key, next) =>
+                  onStage(
+                    items.map((candidate, index) =>
+                      index === i
+                        ? next === undefined
+                          ? (Object.fromEntries(
+                              Object.entries(candidate).filter(
+                                ([candidateKey]) => candidateKey !== key,
+                              ),
+                            ) as ListItem)
+                          : { ...candidate, [key]: next }
+                        : candidate,
+                    ),
+                  )
+                }
+              />
+            ) : (
+              <AutoGrowTextarea
+                className="cg-list-item__text"
+                value={writeFieldDigits(itemText(item), fieldDigitsOf(field))}
+                aria-label={`${fieldId} item ${n}`}
+                onChange={(e) =>
+                  onStage(
+                    setItemText(items, i, writeFieldText(e.currentTarget, field, e.nativeEvent)),
+                  )
+                }
+              />
+            )}
             <div className="cg-list-item__tools">
               {/*
                 The handle ARMS its row for dragging on pointer-down and is otherwise
@@ -334,7 +514,14 @@ export function ListFieldEditor({
           // `RUN-NEXT-VERSION-02` Q4 — a repeater's list stops at its row limit: the page shows no more.
           disabled={atLimit}
           {...(atLimit && maxItems !== undefined ? { title: `At most ${String(maxItems)}` } : {})}
-          onClick={() => onStage(addItem(items, `item-${uuid()}`))}
+          onClick={() => {
+            const id = `item-${uuid()}`;
+            onStage(
+              itemFields !== undefined && itemFields.length > 0
+                ? [...items, newStructuredItem(id, itemFields)]
+                : addItem(items, id),
+            );
+          }}
         >
           {/* lucide, not the mock's `＋` glyph — the design system routes every icon
               through `Icon` so it inherits `currentColor` and one size. */}

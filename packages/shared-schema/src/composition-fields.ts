@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { DynamicFieldSchema, type DynamicField, type FieldValue } from './fields.js';
+import {
+  DynamicFieldSchema,
+  FieldValuesSchema,
+  type DynamicField,
+  type FieldValue,
+} from './fields.js';
 import type { FieldBinding } from './bindings.js';
 import type { Element } from './elements.js';
 import type { Composition, Layer, Scene } from './scene.js';
@@ -55,6 +60,19 @@ export interface CompositionFieldGroup {
   compositionId: string;
   /** The child's own aggregate (recursive — arbitrary depth). */
   aggregate: AggregatedFields;
+  /** Optional authored values for this particular instance (Sequence composition pages). */
+  defaultValues?: NestedFieldValues | undefined;
+  /**
+   * D-180 — present when this namespace is one page of a Sequence. CG Control uses this
+   * authored identity to combine all homogeneous pages into one operator-friendly table.
+   */
+  sequence?:
+    | {
+        id: string;
+        name: string;
+        itemId: string;
+      }
+    | undefined;
 }
 
 /** `R-037` / `R-040` — the parts of a sequence item's heading; {@link sequenceItemHeading} joins them. */
@@ -117,6 +135,10 @@ export const CompositionFieldGroupSchema: z.ZodType<CompositionFieldGroup, z.Zod
         .optional(),
       compositionId: z.string().min(1),
       aggregate: AggregatedFieldsSchema,
+      defaultValues: FieldValuesSchema.optional(),
+      sequence: z
+        .object({ id: z.string().min(1), name: z.string(), itemId: z.string().min(1) })
+        .optional(),
     }),
   );
 
@@ -408,6 +430,8 @@ function aggregateCompositionFieldsImpl(
           labelParts: parts,
           compositionId: child.id,
           aggregate: aggregateCompositionFieldsImpl(scene, child, depth + 1, boundOnly),
+          ...(item.fieldValues === undefined ? {} : { defaultValues: item.fieldValues }),
+          sequence: { id: seq.id, name: seq.name, itemId: item.id },
         };
         groups.push(group);
         itemGroups.push({ group, seq });
@@ -481,7 +505,24 @@ export function defaultFieldValue(field: DynamicField): FieldValue {
 export function defaultNestedValues(aggregate: AggregatedFields): NestedFieldValues {
   const out: NestedFieldValues = {};
   for (const f of aggregate.fields) out[f.id] = defaultFieldValue(f);
-  for (const g of aggregate.groups) out[g.name] = defaultNestedValues(g.aggregate);
+  for (const g of aggregate.groups) {
+    const defaults = defaultNestedValues(g.aggregate);
+    out[g.name] =
+      g.defaultValues === undefined ? defaults : mergeNestedDefaults(defaults, g.defaultValues);
+  }
+  return out;
+}
+
+/** Recursive authored-instance overlay; partial page files keep child-field defaults. */
+function mergeNestedDefaults(base: NestedFieldValues, patch: NestedFieldValues): NestedFieldValues {
+  const out: NestedFieldValues = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    const current = out[key];
+    out[key] =
+      isFieldNamespace(current) && isFieldNamespace(value)
+        ? mergeNestedDefaults(current, value)
+        : value;
+  }
   return out;
 }
 

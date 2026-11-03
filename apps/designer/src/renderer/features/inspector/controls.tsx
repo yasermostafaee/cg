@@ -579,6 +579,12 @@ interface TextFieldProps {
   onCommit: (s: string) => void;
   /** Keep the committed value visible while preventing edits. */
   disabled?: boolean | undefined;
+  /** Full hover text for compact/narrow editing surfaces. */
+  title?: string | undefined;
+  /** Explicit direction for syntax-like values and their native tooltip. */
+  dir?: 'ltr' | 'rtl' | 'auto' | undefined;
+  /** Short example shown while the field is empty. */
+  placeholder?: string | undefined;
   /**
    * Accessible name for the input, when the row's short label isn't enough on
    * its own (e.g. "Regex" → "Custom pattern regex"). Defaults to none — the
@@ -632,9 +638,12 @@ export function TextField(props: TextFieldProps): JSX.Element {
           className={s.inputInner}
           type="text"
           defaultValue={shown}
-          aria-label={props.ariaLabel}
+          aria-label={props.ariaLabel ?? props.label}
           list={listId}
           disabled={props.disabled}
+          title={props.title}
+          dir={props.dir}
+          placeholder={props.placeholder}
           onFocus={(e) => e.currentTarget.select()}
           onInput={
             digits === undefined

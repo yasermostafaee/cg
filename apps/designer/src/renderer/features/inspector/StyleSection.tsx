@@ -68,7 +68,7 @@ import {
   presetKeyFor,
   presetValueFor,
 } from './aspect-presets.js';
-import { columnsForFields } from '../fields/repeater-columns.js';
+import { columnsForFields, imageChoicesForAssets } from '../fields/repeater-columns.js';
 import {
   SEQUENCE_PRESET_ORDER,
   SEQUENCE_TRANSITION_PRESETS,
@@ -76,6 +76,7 @@ import {
 } from './sequence-presets.js';
 import { ListItemsEditor } from '../fields/ListItemsEditor.js';
 import { SequencePagesControl } from './SequencePagesControl.js';
+import { SequencePageDataControl } from '../fields/SequencePageDataPanel.js';
 import {
   designerFileSourcePreviewsVersion,
   getDesignerFileSourcePreview,
@@ -3377,6 +3378,7 @@ function SequenceSections({
             dir={element.direction}
             textDigits={(itemId) => itemDigits(itemId) ?? typedTextDigits(scene, element)}
           />
+          {scene !== null && <SequencePageDataControl scene={scene} sequence={element} />}
           {pageCount === 0 && itemsEditor}
         </CollapseSection>
       )}
@@ -3402,6 +3404,8 @@ function RepeaterSections({
 }: SectionProps<RepeaterElement>): JSX.Element {
   const id = element.id;
   const scene = useDesignerSelector((s) => s.scene);
+  const assets = useAssets();
+  const sharedImages = useSharedImages();
   const comps = scene?.compositions ?? [];
   // Valid = the existing author-time cycle guard; keep the CURRENT choice
   // listed even if momentarily invalid so the select doesn't jump.
@@ -3409,7 +3413,7 @@ function RepeaterSections({
     (c) => c.id === element.compositionId || designerStore.canNestCompositionInActive(c.id),
   );
   const child = comps.find((c) => c.id === element.compositionId);
-  const columns = columnsForFields(child?.fields);
+  const columns = columnsForFields(child?.fields, imageChoicesForAssets(assets, sharedImages));
   const fileItems = useFileSourceItems(id);
   return (
     <>

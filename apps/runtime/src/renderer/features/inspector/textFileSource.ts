@@ -16,6 +16,8 @@ export interface TextFileSource {
    * error; they never blank a field because a share went away.
    */
   read(): Promise<string>;
+  /** Binary read used by the Sequence-row Excel importer. */
+  readBytes?(): Promise<Uint8Array>;
   /**
    * B-113 — the underlying handle, when there is one, so the attachment can be
    * PERSISTED (a handle is structured-cloneable; a closure is not). Absent on
@@ -117,6 +119,10 @@ export function fsaTextFileSource(handle: FileSystemFileHandle): TextFileSource 
       const file = await handle.getFile();
       return file.text();
     },
+    readBytes: async (): Promise<Uint8Array> => {
+      const file = await handle.getFile();
+      return new Uint8Array(await file.arrayBuffer());
+    },
   };
 }
 
@@ -143,13 +149,30 @@ export function bridgeTextFileSource(bridgePath: string): TextFileSource {
  * when the picker API is absent (the caller shows it verbatim). Must be called
  * from a user gesture (the button click) — the API requires activation.
  */
-export async function pickTextFileSource(w: Window = window): Promise<TextFileSource | null> {
+export async function pickTextFileSource(
+  w: Window = window,
+  options: { includeExcel?: boolean } = {},
+): Promise<TextFileSource | null> {
   const picker = (w as FilePickerWindow).showOpenFilePicker;
   if (picker === undefined) throw new Error(FILE_SOURCE_UNSUPPORTED_MESSAGE);
   let handles: FileSystemFileHandle[];
   try {
     handles = await picker({
-      types: [{ description: 'Text', accept: { 'text/plain': ['.txt', '.text'] } }],
+      types: [
+        {
+          description: 'Text and structured data',
+          accept: {
+            'text/plain': ['.txt', '.text', '.log'],
+            'text/csv': ['.csv'],
+            'application/json': ['.json'],
+            ...(options.includeExcel === true
+              ? {
+                  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+                }
+              : {}),
+          },
+        },
+      ],
       multiple: false,
     });
   } catch (err) {

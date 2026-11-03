@@ -8,6 +8,7 @@ import {
   type Element,
   type FieldBinding,
   type FieldDigits,
+  type FieldValues,
   type FileSourcePolicy,
   type ListItem,
   type Scene,
@@ -43,6 +44,14 @@ export interface ElementFieldMetaPatch {
   maxLength?: number;
   pattern?: string;
   default?: string | number;
+  /** Number constraints; `null` explicitly clears an authored constraint. */
+  min?: number | null;
+  max?: number | null;
+  step?: number | null;
+  /** Exact numeric choices; `null` returns to an unrestricted/range number. */
+  allowedValues?: readonly number[] | null;
+  /** Optional operator-facing aliases keyed by the canonical numeric choice. */
+  allowedValueLabels?: Readonly<Record<string, string>> | null;
   /**
    * TEXT-FILE-OPT-01 — the authored file-source grant. Only the `text`, `multiline`
    * and `list` variants can hold it (see `@cg/shared-schema`), so `rebuildField`
@@ -119,6 +128,29 @@ function currentDigits(field: DynamicField): FieldDigits | undefined {
     : undefined;
 }
 
+function constrainedNumber(
+  value: number,
+  min: number | undefined,
+  max: number | undefined,
+  step: number | undefined,
+  allowedValues: readonly number[] | undefined,
+): number {
+  let next = value;
+  if (min !== undefined) next = Math.max(min, next);
+  if (max !== undefined) next = Math.min(max, next);
+  if (step !== undefined && step > 0) {
+    const base = min ?? 0;
+    next = base + Math.round((next - base) / step) * step;
+    if (min !== undefined) next = Math.max(min, next);
+    if (max !== undefined) next = Math.min(max, next);
+    next = Number(next.toFixed(12));
+  }
+  if (allowedValues !== undefined && !allowedValues.includes(next)) {
+    next = allowedValues[0] ?? next;
+  }
+  return next;
+}
+
 /**
  * Rebuild the dynamic field backing a Data key from a high-level meta patch,
  * producing a valid variant for the selected `fieldType`/`multiline` and
@@ -187,14 +219,48 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
     // back to `text` leaves the field un-granted until the author says otherwise.
     const cur = field.type === 'number' ? field.default : numberFrom(defaultAsString(field));
     const raw = patch.default !== undefined ? numberFrom(patch.default) : cur;
-    const next = Number.isFinite(raw) ? raw : 0;
+    const currentMin = field.type === 'number' ? field.min : undefined;
+    const currentMax = field.type === 'number' ? field.max : undefined;
+    const currentStep = field.type === 'number' ? field.step : undefined;
+    const currentAllowedValues = field.type === 'number' ? field.allowedValues : undefined;
+    const currentAllowedValueLabels =
+      field.type === 'number' ? field.allowedValueLabels : undefined;
+    const min = patch.min === null ? undefined : (patch.min ?? currentMin);
+    const max = patch.max === null ? undefined : (patch.max ?? currentMax);
+    const step = patch.step === null ? undefined : (patch.step ?? currentStep);
+    const allowedValues =
+      patch.allowedValues === null
+        ? undefined
+        : patch.allowedValues === undefined
+          ? currentAllowedValues
+          : [...patch.allowedValues];
+    const rawAllowedValueLabels =
+      patch.allowedValueLabels === null
+        ? undefined
+        : patch.allowedValueLabels === undefined
+          ? currentAllowedValueLabels
+          : patch.allowedValueLabels;
+    const allowedValueLabels =
+      rawAllowedValueLabels === undefined || allowedValues === undefined
+        ? undefined
+        : Object.fromEntries(
+            allowedValues.flatMap((value) => {
+              const label = rawAllowedValueLabels[String(value)]?.trim();
+              return label === undefined || label === '' ? [] : [[String(value), label]];
+            }),
+          );
+    const next = constrainedNumber(Number.isFinite(raw) ? raw : 0, min, max, step, allowedValues);
     return {
       ...base,
       type: 'number',
       default: next,
-      ...(field.type === 'number' && field.min !== undefined ? { min: field.min } : {}),
-      ...(field.type === 'number' && field.max !== undefined ? { max: field.max } : {}),
-      ...(field.type === 'number' && field.step !== undefined ? { step: field.step } : {}),
+      ...(min !== undefined ? { min } : {}),
+      ...(max !== undefined ? { max } : {}),
+      ...(step !== undefined && step > 0 ? { step } : {}),
+      ...(allowedValues !== undefined ? { allowedValues: [...allowedValues] } : {}),
+      ...(allowedValueLabels !== undefined && Object.keys(allowedValueLabels).length > 0
+        ? { allowedValueLabels }
+        : {}),
       ...(field.type === 'number' && field.unit !== undefined ? { unit: field.unit } : {}),
       ...numberDigits,
     };
@@ -762,9 +828,17 @@ export const fieldsSlice = {
         typeof dwell === 'number' && Number.isInteger(dwell) && dwell > 0 ? dwell : undefined;
       if (o['kind'] === 'composition') {
         const compositionId = typeof o['compositionId'] === 'string' ? o['compositionId'] : '';
-        return dwellMs === undefined
-          ? { id: i.id, kind: 'composition', compositionId }
-          : { id: i.id, kind: 'composition', compositionId, dwellMs };
+        const fieldValues =
+          typeof o['fieldValues'] === 'object' && o['fieldValues'] !== null
+            ? (o['fieldValues'] as FieldValues)
+            : undefined;
+        return {
+          id: i.id,
+          kind: 'composition',
+          compositionId,
+          ...(dwellMs === undefined ? {} : { dwellMs }),
+          ...(fieldValues === undefined ? {} : { fieldValues }),
+        };
       }
       // D-163 — a PICTURE item keeps its one source and its file name.
       if (o['kind'] === 'image') {
@@ -832,6 +906,28 @@ export const fieldsSlice = {
         });
       }
     }
+  },
+
+  /** Persist one composition page's independent field defaults on its Sequence item. */
+  setSequenceItemFieldValues(elementId: string, itemId: string, fieldValues: FieldValues): void {
+    if (current.scene === null) return;
+    const found = locate(current.scene, elementId);
+    const el = found === null ? undefined : found.layer.children[found.elIdx];
+    if (el === undefined || el.type !== 'sequence') return;
+    const items = el.items.map((item) =>
+      item.id === itemId && item.kind === 'composition' ? { ...item, fieldValues } : item,
+    );
+    designerStore.updateElement(elementId, { items } as Partial<Element>);
+  },
+
+  /** Remember (or clear) the Bridge-relative JSON file that authored a Sequence's pages. */
+  setSequencePageDataFile(elementId: string, pageDataFile: string | undefined): void {
+    designerStore.updateElement(
+      elementId,
+      (pageDataFile === undefined
+        ? { pageDataFile: undefined }
+        : { pageDataFile }) as Partial<Element>,
+    );
   },
 
   /**

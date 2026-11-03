@@ -16,6 +16,7 @@ import { selectedElements } from './shared-properties.js';
 import { StyleSection } from './StyleSection.js';
 import { TransformSection } from './TransformSection.js';
 import { ElementStepsSection } from './CountdownStepsSection.js';
+import { ValueRulesSection } from './ValueRulesSection.js';
 import * as s from './InspectorPanel.css.js';
 
 interface Props {
@@ -107,6 +108,11 @@ function ElementInspector({
   const bindings = scene.bindings
     .map((b, idx) => ({ b, idx }))
     .filter(({ b }) => bindingTargetsElement(b, element.id) && !isFixedFileFieldId(b.fieldId));
+  const hasDynamicData =
+    element.type === 'text' ||
+    element.type === 'ticker' ||
+    element.type === 'sequence' ||
+    element.type === 'repeater';
   return (
     <aside className={s.panel} aria-label="Inspector">
       <ElementNameRow elementId={element.id} name={element.name} />
@@ -117,10 +123,7 @@ function ElementInspector({
         </CollapseSection>
       )}
       <StyleSection element={element} selectedKeyframe={selectedKeyframe} />
-      {(element.type === 'text' ||
-        element.type === 'ticker' ||
-        element.type === 'sequence' ||
-        element.type === 'repeater') && (
+      {hasDynamicData ? (
         <>
           <FixedFileSourceSection
             key={`fixed-file-${element.id}`}
@@ -128,7 +131,10 @@ function ElementInspector({
             scene={scene}
           />
           <DynamicDataSection element={element} scene={scene} />
+          <ValueRulesSection element={element} scene={scene} />
         </>
+      ) : (
+        <ValueRulesSection element={element} scene={scene} />
       )}
       {/* DELTA-RUN-NEXT-VERSION-01-B — this element's door to the steps that change it. */}
       <ElementStepsSection element={element} />

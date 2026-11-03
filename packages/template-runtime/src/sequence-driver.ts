@@ -44,7 +44,13 @@ import {
  */
 export type SequenceDriverItem =
   | { kind?: 'text' | undefined; id: string; text: string; dwellMs?: number | undefined }
-  | { kind: 'composition'; id: string; compositionId: string; dwellMs?: number | undefined }
+  | {
+      kind: 'composition';
+      id: string;
+      compositionId: string;
+      dwellMs?: number | undefined;
+      fieldValues?: Record<string, unknown> | undefined;
+    }
   | SequenceDriverImageItem;
 
 /**
@@ -97,6 +103,7 @@ export interface RenderedSequenceItem {
 export type SequenceCompositionRenderer = (item: {
   id: string;
   compositionId: string;
+  fieldValues?: Record<string, unknown> | undefined;
 }) => RenderedSequenceItem;
 
 const NOOP = (): void => undefined;
@@ -876,7 +883,11 @@ export class SequenceDriver {
    */
   private renderItem(item: SequenceDriverItem): RenderedSequenceItem {
     if (item.kind === 'composition' && this.o.renderComposition !== undefined) {
-      return this.o.renderComposition({ id: item.id, compositionId: item.compositionId });
+      return this.o.renderComposition({
+        id: item.id,
+        compositionId: item.compositionId,
+        ...(item.fieldValues === undefined ? {} : { fieldValues: item.fieldValues }),
+      });
     }
     if (item.kind === 'image' && this.o.renderImage !== undefined) {
       return this.o.renderImage(item);
@@ -973,9 +984,17 @@ export function coerceSequenceItems(raw: readonly unknown[]): SequenceDriverItem
         typeof dwell === 'number' && Number.isInteger(dwell) && dwell > 0 ? dwell : undefined;
       if (o['kind'] === 'composition' && typeof o['compositionId'] === 'string') {
         const compositionId = o['compositionId'];
-        return dwellMs === undefined
-          ? { kind: 'composition', id, compositionId }
-          : { kind: 'composition', id, compositionId, dwellMs };
+        const fieldValues =
+          typeof o['fieldValues'] === 'object' && o['fieldValues'] !== null
+            ? (o['fieldValues'] as Record<string, unknown>)
+            : undefined;
+        return {
+          kind: 'composition',
+          id,
+          compositionId,
+          ...(dwellMs === undefined ? {} : { dwellMs }),
+          ...(fieldValues === undefined ? {} : { fieldValues }),
+        };
       }
       // D-163 — a PICTURE item keeps whichever source it names (a page list from CG Control names
       // `media`; an authored default names `assetId`), and its file name for people.

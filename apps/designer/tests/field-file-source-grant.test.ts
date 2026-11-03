@@ -569,6 +569,53 @@ describe('R-102 — file-only and locked Bridge file authoring', () => {
     });
   });
 
+  it('authors JSON row mode and previews structured list values', async () => {
+    freshScene();
+    designerStore.addElement(defaultTicker('k1', 0, 0));
+    designerStore.setElementDataKey('k1', 'weather');
+    designerStore.setElementFieldMeta('k1', { allowFileSource: true });
+    mount();
+    render('k1');
+
+    const content = '[{"city":"Tehran","temperature":18}]';
+    const picked = new File([content], 'weather.json', { type: 'application/json' });
+    Object.defineProperty(picked, 'text', { value: vi.fn(() => Promise.resolve(content)) });
+    const updatePreview = vi.fn(() => Promise.resolve({ ok: true }));
+    Object.defineProperty(window, 'cg', {
+      configurable: true,
+      value: {
+        assets: { pick: vi.fn(() => Promise.resolve([picked])) },
+        preview: { update: updatePreview },
+      },
+    });
+
+    const format = container?.querySelector<HTMLSelectElement>('select[aria-label="file format"]');
+    act(() => {
+      if (format !== null && format !== undefined) {
+        format.value = 'json';
+        format.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+    render('k1');
+    const browse = [...(container?.querySelectorAll('button') ?? [])].find((button) =>
+      button.textContent?.includes('Browse shared file'),
+    );
+    await act(async () => {
+      browse?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(filePolicyOf('weather')).toEqual({ bridgePath: 'weather.json', format: 'json' });
+    expect(updatePreview).toHaveBeenLastCalledWith({
+      fields: {
+        weather: [{ id: 'file-1', city: 'Tehran', temperature: 18 }],
+      },
+    });
+    expect(document.querySelector('[aria-label="Field preview"]')?.textContent).toContain('city');
+    expect(document.querySelector('[aria-label="Field preview"]')?.textContent).toContain('Tehran');
+  });
+
   it('persists both policies through the Designer project save and re-open path', async () => {
     const projects = new ProjectStore(new MemoryWorkspace(), new MemoryKv());
     const { scene } = projects.newScene('demo', 'lower-third');

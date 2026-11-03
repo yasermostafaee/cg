@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import type { StackItemState } from '@cg/shared-schema';
+import type { FileSourceListFormat, ListItemField, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
@@ -12,6 +12,7 @@ import { reloadFromFile, stageFromFile } from './fromFileOps.js';
 import { Tag } from '../../ui/Tag.js';
 import {
   attachFileSource,
+  claimAuthoredFileAutoLoad,
   detachFileSource,
   fromFileState,
   fromFileVersion,
@@ -75,6 +76,8 @@ export function FromFileControl({
   fieldId,
   authoredPath,
   authoredDelimiter,
+  authoredFormat = 'text',
+  itemFields,
   lockFile = false,
 }: {
   item: StackItemState;
@@ -85,6 +88,10 @@ export function FromFileControl({
   authoredPath?: string | undefined;
   /** R-102 — the author's initial delimiter for a list file. */
   authoredDelimiter?: string | undefined;
+  /** D-180 — structured list-file format selected by the template author. */
+  authoredFormat?: FileSourceListFormat | undefined;
+  /** Child-derived Repeater row schema for typed JSON/CSV cells. */
+  itemFields?: readonly ListItemField[] | undefined;
   lockFile?: boolean;
 }): JSX.Element {
   useSyncExternalStore(subscribeFromFile, fromFileVersion);
@@ -93,7 +100,8 @@ export function FromFileControl({
   const lockedPath = lockFile ? authoredPath : undefined;
   const supported = fileSourceSupported();
   const pathKey = JSON.stringify(path);
-  const lockedSplit = kind === 'list' && authoredDelimiter !== undefined;
+  const lockedSplit =
+    kind === 'list' && authoredFormat === 'text' && authoredDelimiter !== undefined;
 
   useEffect(() => {
     reconcileAuthoredFileSource(item.itemId, path, authoredPath, lockFile, {
@@ -105,9 +113,11 @@ export function FromFileControl({
       delimiter: lockFile
         ? (authoredDelimiter ?? DEFAULT_DELIMITER)
         : (state?.delimiter ?? authoredDelimiter ?? DEFAULT_DELIMITER),
+      format: lockFile ? authoredFormat : (state?.format ?? authoredFormat),
     });
   }, [
     authoredDelimiter,
+    authoredFormat,
     authoredPath,
     item.itemId,
     item.templateId,
@@ -117,9 +127,37 @@ export function FromFileControl({
     path,
     pathKey,
     state?.delimiter,
+    state?.format,
     state?.source.bridgePath,
     state?.split,
   ]);
+
+  const authoredAutoLoadSignature =
+    authoredPath === undefined
+      ? undefined
+      : JSON.stringify([
+          authoredPath,
+          lockFile,
+          lockedSplit,
+          authoredDelimiter ?? DEFAULT_DELIMITER,
+          authoredFormat,
+        ]);
+
+  useEffect(() => {
+    if (authoredAutoLoadSignature === undefined) return;
+    const current = fromFileState(item.itemId, path);
+    if (
+      current?.source.bridgePath !== authoredPath ||
+      current?.permission !== 'granted' ||
+      !claimAuthoredFileAutoLoad(item.itemId, path, authoredAutoLoadSignature)
+    ) {
+      return;
+    }
+    // The authored file is the field's starting input, so its current bytes must
+    // become the starting draft without making the operator press Reload first.
+    // This stages only; Update remains the single write that can reach on air.
+    void stageFromFile(item, path, kind, itemFields);
+  }, [authoredAutoLoadSignature, authoredPath, item, itemFields, kind, path, pathKey]);
 
   const choose = async (): Promise<void> => {
     let source;
@@ -138,9 +176,10 @@ export function FromFileControl({
         kind === 'list' &&
         (authoredDelimiter !== undefined || splitDefaultFor(item.templateId, path)),
       delimiter: authoredDelimiter ?? DEFAULT_DELIMITER,
+      format: authoredFormat,
     });
     // Initial load STAGES like a hand edit; the operator applies with Update.
-    await stageFromFile(item, path, kind);
+    await stageFromFile(item, path, kind, itemFields);
   };
 
   if (lockedPath !== undefined && state?.source.bridgePath !== lockedPath) {
@@ -251,7 +290,7 @@ export function FromFileControl({
           <AsyncButton
             variant="secondary"
             aria-label={`Reload ${fieldId} from file`}
-            run={() => reloadFromFile(item, path, kind)}
+            run={() => reloadFromFile(item, path, kind, itemFields)}
             onError={() => undefined}
           >
             Reload
@@ -285,6 +324,7 @@ export function FromFileControl({
         kind={kind}
         fieldId={fieldId}
         lockFile={lockedPath !== undefined}
+        itemFields={itemFields}
       />
     </div>
   );

@@ -72,4 +72,73 @@ describe('withListLimits', () => {
     expect(out.fields[0]).toMatchObject({ id: 'a', maxItems: 3 });
     expect(out.fields[1]).not.toHaveProperty('maxItems');
   });
+
+  it('derives the flat child field schema for a Repeater list', () => {
+    const row = doc(
+      [],
+      [
+        {
+          id: 'city',
+          label: 'City',
+          required: false,
+          type: 'text',
+          default: '',
+        },
+        {
+          id: 'icon',
+          label: 'Icon',
+          required: false,
+          type: 'image',
+          accept: ['png'],
+        },
+        list('nested'),
+      ],
+      [],
+    );
+    const d = doc([repeater('r', 3)], [], [drives('weather', 'r')]);
+    d.compositions = [{ ...row, id: 'row', name: 'row' }] as Scene['compositions'];
+    const out = withListLimits(d, d, { fields: [list('weather')], groups: [] });
+    expect(out.fields[0]).toMatchObject({
+      id: 'weather',
+      itemFields: [
+        { id: 'city', type: 'text' },
+        { id: 'icon', type: 'image' },
+      ],
+    });
+  });
+
+  it('adds operator-facing image choices to root and Repeater-row image fields', () => {
+    const row = doc(
+      [],
+      [
+        {
+          id: 'icon',
+          label: 'Icon',
+          required: false,
+          type: 'image',
+          accept: ['png'],
+        },
+      ],
+      [],
+    );
+    const d = doc([repeater('r')], [], [drives('weather', 'r')]);
+    d.compositions = [{ ...row, id: 'row', name: 'row' }] as Scene['compositions'];
+    const pictures = [{ assetId: 'sun', label: 'sunny.png' }];
+    const out = withListLimits(
+      d,
+      d,
+      {
+        fields: [
+          list('weather'),
+          { id: 'hero', label: 'Hero', required: false, type: 'image', accept: ['png'] },
+        ],
+        groups: [],
+      },
+      pictures,
+    );
+    expect(out.fields[0]).toMatchObject({
+      itemFields: [{ id: 'icon', assetOptions: pictures }],
+    });
+    expect(out.fields[1]).toMatchObject({ assetOptions: pictures });
+  });
 });

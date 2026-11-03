@@ -21,6 +21,7 @@
  * a stale failure as the file's current condition, and the operator would be
  * looking at a red line about a share that came back ten minutes ago.
  */
+import type { FileSourceListFormat } from '@cg/shared-schema';
 import type { FieldPath } from './draftStore.js';
 
 const DB_NAME = 'cg-runtime-from-file';
@@ -35,6 +36,10 @@ export interface PersistedAttachment {
   handle: FileSystemFileHandle;
   split: boolean;
   delimiter: string;
+  /** Optional for records written before structured list files existed. */
+  format?: FileSourceListFormat;
+  /** Generated workbook schema; absent on generic and legacy file attachments. */
+  schemaSignature?: string;
 }
 
 export function attachmentKey(itemId: string, path: FieldPath): string {

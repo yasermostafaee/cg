@@ -74,3 +74,11 @@ export const selectedFilePath = style({
   overflowWrap: 'anywhere',
   fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
 });
+
+export const numberChoicesControl = style({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '0.45rem',
+  minWidth: 0,
+});

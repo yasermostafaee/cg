@@ -7,6 +7,8 @@ const Sha256Schema = z.string().regex(/^[0-9a-f]{64}$/i, 'Expected sha256 hex');
 const AssetEntrySchema = z.object({
   id: IdSchema,
   path: z.string().min(1),
+  /** Original operator-facing filename; absent on packages exported before D-180. */
+  filename: z.string().min(1).optional(),
   kind: z.enum(['image', 'lottie', 'font', 'video', 'audio']),
   bytes: z.number().int().nonnegative(),
   sha256: Sha256Schema,

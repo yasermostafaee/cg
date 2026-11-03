@@ -154,6 +154,26 @@ describe('aggregateCompositionFields (D-025)', () => {
     expect(group?.aggregate.fields.map((f) => f.id)).toEqual(['teamName', 'score']);
   });
 
+  it('B-385 — a direct namespace keeps its stable key but follows the composition display name', () => {
+    const child = comp({
+      id: 'child',
+      name: 'Weather card',
+      fields: [textField('city')],
+    });
+    const parent = comp({
+      id: 'parent',
+      layers: [layer([instance('i1', 'child', 'weather-card')])],
+    });
+    const scene = { compositions: [child, parent] } as Pick<Scene, 'compositions'>;
+
+    const before = aggregateCompositionFields(scene, parent).groups[0];
+    expect(before).toMatchObject({ name: 'weather-card', label: 'Weather card' });
+
+    const renamed = { ...child, name: 'Forecast card' };
+    const after = aggregateCompositionFields({ compositions: [renamed, parent] }, parent).groups[0];
+    expect(after).toMatchObject({ name: 'weather-card', label: 'Forecast card' });
+  });
+
   it('(c) the SAME child instanced twice yields two independent namespaces', () => {
     const child = comp({ id: 'child', fields: [textField('teamName')] });
     const parent = comp({
@@ -198,6 +218,40 @@ describe('aggregateCompositionFields (D-025)', () => {
     expect(agg.groups[0]?.aggregate.fields.map((f) => f.id)).toEqual(['label']);
     // The value object carries ONLY the comp item (no scalar for the unbound text item).
     expect(defaultNestedValues(agg)).toEqual({ 'seq:c1': { label: 'City' } });
+  });
+
+  it('D-180 overlays independent authored defaults for each composition page', () => {
+    const card = comp({
+      id: 'card',
+      fields: [textField('label', 'City'), textField('temperature', '0')],
+    });
+    const seq = sequenceEl('seq', 'Cities', [
+      {
+        id: 'first',
+        kind: 'composition',
+        compositionId: 'card',
+        fieldValues: { label: 'Tehran', temperature: '20' },
+      },
+      {
+        id: 'second',
+        kind: 'composition',
+        compositionId: 'card',
+        fieldValues: { label: 'Tabriz' },
+      },
+    ]);
+    const parent = comp({ id: 'parent', layers: [layer([seq])] });
+    const scene = { compositions: [card, parent] } as Pick<Scene, 'compositions'>;
+
+    const aggregate = aggregateCompositionFields(scene, parent);
+    expect(aggregate.groups.map((group) => group.sequence)).toEqual([
+      { id: 'seq', name: 'Cities', itemId: 'first' },
+      { id: 'seq', name: 'Cities', itemId: 'second' },
+    ]);
+
+    expect(defaultNestedValues(aggregate)).toEqual({
+      'seq:first': { label: 'Tehran', temperature: '20' },
+      'seq:second': { label: 'Tabriz', temperature: '0' },
+    });
   });
 
   it('(D-083 follow-up) a non-bound text-only sequence exposes NOTHING (text is static unless explicitly bound)', () => {

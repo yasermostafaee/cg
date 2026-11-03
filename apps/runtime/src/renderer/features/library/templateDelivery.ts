@@ -319,10 +319,17 @@ export async function produceTemplateDelivery(
   // time control for it. The binding is the one source of truth (`countdownTargetFieldsOf`).
   // `RUN-NEXT-VERSION-02` Q4 — and each list driving a repeater carries its row limit (`maxItems`), so
   // the Inspector stops the operator there: the page shows only that many rows.
+  const imageAssets = manifest.assetIndex
+    .filter((entry) => entry.kind === 'image')
+    .map((entry, index) => ({
+      assetId: entry.id,
+      label: entry.filename?.trim() || `Picture ${index + 1}`,
+    }));
   const aggregate = withListLimits(
     scene,
     scene,
     countdownTargetFieldsOf(scene, scene, aggregateBoundCompositionFields(scene, scene)),
+    imageAssets,
   );
   // R-004 — carry BOTH labels the package can offer, and let the display rule choose.
   //

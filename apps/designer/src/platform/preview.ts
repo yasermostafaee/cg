@@ -298,7 +298,16 @@ export class Preview {
         // D-011 — assetId → blob URL map, posted by the host. After
         // every scene rebuild we walk the iframe DOM and assign src
         // for every <img data-cg-asset-id="…">.
-        let assetUrls = {};
+        // Keep one object identity for the lifetime of this iframe. Runtime bindings
+        // retain this map so a later host asset-urls message must mutate it rather
+        // than replace it; otherwise a dynamic image field would resolve against the
+        // empty map captured at boot even though static images were repaired by the DOM walk.
+        const assetUrls = {};
+        function replaceAssetUrls(next) {
+          for (const id in assetUrls) delete assetUrls[id];
+          if (!next || typeof next !== 'object') return;
+          for (const id in next) assetUrls[id] = next[id];
+        }
         // D-128 Phase 3 — LIVE <video> nodes kept ACROSS scene rebuilds, keyed by
         // element id. A transform-only change (drag/resize/rotate/opacity) posts a
         // full 'scene-replace' → the runtime DOM is torn down + rebuilt, which for
@@ -998,7 +1007,7 @@ export class Preview {
                 // B-028 — and the new frame SIZE (a scene-size edit travels here too).
                 applyFrameSize(msg.scene.resolution);
                 if (msg.assetUrls && typeof msg.assetUrls === 'object') {
-                  assetUrls = msg.assetUrls;
+                  replaceAssetUrls(msg.assetUrls);
                 }
                 // D-125 — the parsed Lottie map travels with the scene (same rAF channel),
                 // so the rebuilt runtime mounts each element's player.
@@ -1021,7 +1030,7 @@ export class Preview {
                     : undefined;
                 await applyScene(msg.scene);
               } else if (msg.action === 'asset-urls' && msg.assetUrls) {
-                assetUrls = msg.assetUrls;
+                replaceAssetUrls(msg.assetUrls);
                 applyAssetUrls();
                 applyFontFaces().catch(() => {});
               } else if (msg.action === 'lottie-assets' && msg.lottieAssets) {

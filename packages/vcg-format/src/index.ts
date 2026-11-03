@@ -30,6 +30,13 @@ export { buildPlayoutMetadata } from './playout-metadata.js';
 export type { PlayoutMetadata } from './playout-metadata.js';
 
 export {
+  buildStructuredRowsXlsx,
+  decodeStructuredText,
+  structuredRowsXlsxToCsv,
+} from './structured-rows-xlsx.js';
+export type { StructuredRowsXlsxOptions } from './structured-rows-xlsx.js';
+
+export {
   buildTemplateLiveSources,
   collectArrangements,
   collectLiveSources,
