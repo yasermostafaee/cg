@@ -2486,12 +2486,11 @@ affordance.
   version, a SHA or a date — 🔴 two derivations are two answers, and the whole point of the
   stamp is that what the operator reads on the first frame and what they read in the app are
   the SAME STRING
-- WHEN the project starts tagging releases THEN `v${version}` is prefixed at the ONE render
-  site named in the comment beside `#cg-splash-version` in `apps/runtime/index.html`, not at a
-  second one
-- WHEN no release tag exists THEN the surface shows `sha · builtAt` only, exactly as the splash
-  does — `0.0.0` is a placeholder, not a release identity, and showing it would be a lie about
-  what is deployed
+- WHEN the identity is formatted THEN it follows P-076's explicit Version / Revision / Build date
+  labels, superseding the original compact `v${version}` / `sha · builtAt` spelling; the values
+  still come from the one shared build identity, never a second derivation
+- WHEN a release version or Git revision is unavailable THEN that value is omitted truthfully,
+  as on the splash — `0.0.0` and `nogit` are placeholders, not available release identities
 
 **Notes:** carries the `version` decision R-035 deferred (see
 `openspec/changes/archive/2026-08-11-runtime-splash-screen/DEBT.md` §3). The Designer has the

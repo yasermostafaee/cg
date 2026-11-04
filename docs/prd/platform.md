@@ -4291,3 +4291,7 @@ guide is visually inspected at readable line spacing; all three installer files 
 **What:** Replace the unexplained compact splash stamp (`v0.12.6 · b2305252 · 2026-11-01`) with explicit Version, Revision and Build date labels on both products.
 **Why:** The revision after the version is useful for support, but an operator cannot know what the bare number means.
 **Acceptance:** both startup splashes retain the exact release/revision/date identity while each value is visibly labelled; development builds remain truthful when no release version or Git revision exists.
+
+**2026-11-05 integration correction:** retain the still-required Revision label; the imported
+Version/Built-only formatter was incomplete, not a superseding owner decision. The shared formatter
+and both app assertions now follow this contract; verification evidence belongs in the active tasks.

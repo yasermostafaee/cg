@@ -86,11 +86,13 @@ export function createBuildStamp(appDir) {
   /**
    * The release identity belongs on the FIRST frame: it lets support identify an installed
    * build without waiting for the app or searching Windows. `0.0.0` remains a development
-   * placeholder and is deliberately omitted rather than advertised as a release.
+   * placeholder and is deliberately omitted rather than advertised as a release. A missing
+   * Git revision is omitted too; available values keep explicit operator-facing labels.
    */
   const parts = [];
   if (stamp.version !== '0.0.0') parts.push(`Version ${stamp.version}`);
-  parts.push(`Built ${stamp.builtAt}`);
+  if (stamp.sha !== 'nogit') parts.push(`Revision ${stamp.sha}`);
+  parts.push(`Build date ${stamp.builtAt}`);
   const stampText = parts.join(' · ');
 
   const plugin = {
