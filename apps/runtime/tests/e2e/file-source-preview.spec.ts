@@ -1,5 +1,43 @@
 import { buildFileSourceVcg, expect, test } from './fixtures/runtime.js';
 
+test('B-368 — an authored file stages its current bytes when the Inspector first opens', async ({
+  app,
+}) => {
+  const templateId = 'tpl-e2e-authored-file-autoload';
+  await app.importVcg('authored-file.vcg', await buildFileSourceVcg(templateId), 84);
+  await app.page.evaluate(() => {
+    const target = window as unknown as {
+      __authoredFileReads: number;
+      cg: {
+        textSources: {
+          read: (request: { path: string }) => Promise<{ name: string; content: string }>;
+        };
+      };
+    };
+    target.__authoredFileReads = 0;
+    target.cg.textSources.read = (request) => {
+      target.__authoredFileReads += 1;
+      return Promise.resolve({ name: request.path, content: 'current|shared|headlines' });
+    };
+  });
+  await app.installUpdateSpy();
+
+  await app.selectLayerRow(84);
+  const dirty = app.inspector
+    .locator('[data-field-heading="headlines"]')
+    .locator('..')
+    .locator('.cg-dirty-dot');
+  await expect(dirty).toHaveCount(1);
+  await expect
+    .poll(() =>
+      app.page.evaluate(
+        () => (window as unknown as { __authoredFileReads: number }).__authoredFileReads,
+      ),
+    )
+    .toBe(1);
+  expect(await app.updateCount()).toBe(0);
+});
+
 /**
  * R-102 — the operator inspects potentially large live-file content in a wide modal, not in the
  * narrow Inspector. The modal owns list interpretation and remains preview-only.

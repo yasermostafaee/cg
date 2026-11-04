@@ -13909,12 +13909,15 @@ lower than the input.
 **Regression test:** DOM contract plus real-browser width and vertical-alignment measurements for the
 shared-files action row.
 
-## [~] B-368 — An authored fixed text file is not loaded until the operator presses Reload ⟨priority: high⟩ — FILED 2026-11-02 by the owner · `openspec/changes/autoload-authored-text-file/`
+## [x] B-368 — An authored fixed text file is not loaded until the operator presses Reload ⟨priority: high⟩ — FILED 2026-11-02 and FIXED 2026-11-04 · `openspec/changes/autoload-authored-text-file/`
 
 **Repro:** Import a template with a fixed file source, load it in CG Control, and open its Inspector.
 **Expected:** The first staged value comes from the current shared file automatically.
 **Actual:** The authored test/default value remains until Reload is pressed.
-**Regression test:** Inspector/store test proving one automatic read per newly reconciled authored source and no repeated overwrite of operator edits.
+**Fix / Regression:** the reconciled author-owned definition is claimed by item, field, path and
+delimiter, then its current bytes are staged once without applying. DOM coverage proves rerenders do
+not re-read or replace a later operator edit and failed reads retain the previous draft; Runtime E2E
+proves opening the Inspector stages the shared bytes without sending an Update.
 
 ## [x] B-389 — Download logs is intercepted by IDM and the archive is not saved ⟨priority: high — the owner cannot retrieve diagnostics⟩ — FILED and FIXED 2026-11-04 · `openspec/changes/download-logs-without-navigation/`
 

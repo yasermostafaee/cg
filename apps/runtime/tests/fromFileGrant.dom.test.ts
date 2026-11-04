@@ -6,11 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FileSourcePolicy, StackItemState } from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
-import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
-import { stagedValue } from '../src/renderer/features/inspector/draftStore.js';
+import {
+  __resetDraftsForTest,
+  stageField,
+  stagedValue,
+} from '../src/renderer/features/inspector/draftStore.js';
 import {
   __resetFromFileForTest,
   attachFileSource,
+  claimAuthoredFileAutoLoad,
   fromFileState,
   restoreFromFileAttachments,
 } from '../src/renderer/features/inspector/fromFileStore.js';
@@ -350,7 +354,7 @@ describe('R-102 — authored file-only and locked Bridge sources', () => {
     expect(el.querySelector('button[aria-label="Detach headline file source"]')).toBeNull();
   });
 
-  it('reloads current Bridge bytes into the draft and never applies by itself', async () => {
+  it('loads current authored Bridge bytes into the draft once and never applies by itself', async () => {
     const onApply = vi.fn(() => Promise.resolve({ accepted: true }));
     const readText = vi.fn(() =>
       Promise.resolve({
@@ -364,20 +368,70 @@ describe('R-102 — authored file-only and locked Bridge sources', () => {
       lockFile: true,
     });
     const el = await render(() => Promise.resolve(template), { readText, onApply });
-    const reload = el.querySelector<HTMLButtonElement>(
-      'button[aria-label="Reload crawl from file"]',
-    );
-    expect(reload).not.toBeNull();
-
     await act(async () => {
-      reload?.click();
       await Promise.resolve();
       await Promise.resolve();
     });
 
+    expect(
+      el.querySelector<HTMLButtonElement>('button[aria-label="Reload crawl from file"]'),
+    ).not.toBeNull();
+    expect(readText).toHaveBeenCalledTimes(1);
     expect(readText).toHaveBeenCalledWith({ path: 'newsroom/crawl.txt' });
     expect(stagedValue('item-1', ['crawl'])).toBe('خبر تازه');
     expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('does not re-read or replace a later operator edit on an unrelated Inspector render', async () => {
+    const readText = vi.fn(() =>
+      Promise.resolve({
+        name: 'newsroom/crawl.txt',
+        content: 'initial file value',
+      }),
+    );
+    const template = withFieldPolicy('crawl', {
+      bridgePath: 'newsroom/crawl.txt',
+      lockFile: true,
+    });
+    await render(() => Promise.resolve(template), { readText });
+    await act(async () => {
+      await Promise.resolve();
+      stageField('item-1', ['crawl'], 'operator edit');
+      await Promise.resolve();
+    });
+
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(stagedValue('item-1', ['crawl'])).toBe('operator edit');
+  });
+
+  it('keeps the previous draft and reports the existing error when the automatic read fails', async () => {
+    stageField('item-1', ['crawl'], 'keep this copy');
+    const readText = vi.fn(() => Promise.reject(new Error('share unavailable')));
+    const template = withFieldPolicy('crawl', {
+      bridgePath: 'newsroom/crawl.txt',
+      lockFile: true,
+    });
+    const el = await render(() => Promise.resolve(template), { readText });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(stagedValue('item-1', ['crawl'])).toBe('keep this copy');
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain('current value is kept');
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain('share unavailable');
+  });
+
+  it('claims each authored path/delimiter definition once and allows a changed definition', () => {
+    const first = JSON.stringify(['newsroom/crawl.txt', true, true, '|', 'text']);
+    const changedDelimiter = JSON.stringify(['newsroom/crawl.txt', true, true, ',', 'text']);
+    const changedPath = JSON.stringify(['newsroom/other.txt', true, true, ',', 'text']);
+
+    expect(claimAuthoredFileAutoLoad('item-1', ['crawl'], first)).toBe(true);
+    expect(claimAuthoredFileAutoLoad('item-1', ['crawl'], first)).toBe(false);
+    expect(claimAuthoredFileAutoLoad('item-1', ['crawl'], changedDelimiter)).toBe(true);
+    expect(claimAuthoredFileAutoLoad('item-1', ['crawl'], changedPath)).toBe(true);
   });
 
   it('uses an unlocked authored path as a replaceable default', async () => {
