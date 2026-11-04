@@ -5380,6 +5380,27 @@ input[type='checkbox']:disabled:checked {
 }
 
 /*
+ * B-367 — a server/UNC path needs the row, not half of it. The path owns every spare pixel;
+ * the action keeps only its intrinsic width and aligns to the input rather than its label.
+ */
+.cg-shared-files-fields {
+  grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.cg-shared-files-fields .cg-field {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.cg-shared-files-action {
+  display: flex;
+  align-self: end;
+  align-items: center;
+  min-height: var(--r-setup-field-input-min-h);
+}
+
+/*
  * `SETTINGS-MATCH-02` — the reference's `.optional`: a field's label says whether the field
  * has to be filled, in the label rather than in a hint the operator reads after typing.
  * Quieter than the label it sits in, and never a different colour from a hint.

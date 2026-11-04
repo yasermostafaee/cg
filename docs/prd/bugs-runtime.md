@@ -13899,12 +13899,15 @@ painted at the start, but Tooltip correctly centres on the element's much wider 
 so its bounding box and tooltip anchor are the visible value. The existing global tooltip placement,
 native-title suppression and viewport clamping remain unchanged.
 
-## [~] B-367 — Shared-files Save path is vertically misaligned with its input ⟨priority: low⟩ — FILED 2026-11-02 by the owner · `openspec/changes/align-shared-path-action/`
+## [x] B-367 — Shared-files path is too short and Save path is vertically misaligned ⟨priority: low⟩ — FILED 2026-11-02 and FIXED 2026-11-04 · `openspec/changes/align-shared-path-action/`
 
 **Repro:** Open CG Control Settings → Shared files folder as station admin.
-**Expected:** The path input and Save path action share one aligned row.
-**Actual:** The action sits lower than the input.
-**Regression test:** DOM/layout contract for the shared-files action row.
+**Expected:** The path input consumes all spare row width so a long Windows/UNC path is visible, while
+Save path keeps its intrinsic width and aligns with the input.
+**Actual:** The equal two-column layout gives half the card to one short button and the action sits
+lower than the input.
+**Regression test:** DOM contract plus real-browser width and vertical-alignment measurements for the
+shared-files action row.
 
 ## [~] B-368 — An authored fixed text file is not loaded until the operator presses Reload ⟨priority: high⟩ — FILED 2026-11-02 by the owner · `openspec/changes/autoload-authored-text-file/`
 

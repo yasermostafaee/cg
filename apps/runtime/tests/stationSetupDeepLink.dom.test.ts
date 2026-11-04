@@ -163,6 +163,8 @@ describe('a deep link opens ONE dialog at the named section', () => {
     const bridge = stationSetupStub({ sharedFilesPath: String.raw`D:\CG Shared` });
     const dialog = await renderStationSetup({ section: 'shared-files' });
     const input = dialog.querySelector<HTMLInputElement>('#shared-files-path');
+    expect(dialog.querySelector('.cg-shared-files-fields')).not.toBeNull();
+    expect(dialog.querySelector('.cg-shared-files-action')).not.toBeNull();
     expect(input?.value).toBe(String.raw`D:\CG Shared`);
 
     await act(async () => {

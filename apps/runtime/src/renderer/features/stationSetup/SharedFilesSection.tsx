@@ -60,7 +60,7 @@ export function SharedFilesSection({
       </div>
       <div className="cg-card__body">
         {admin ? (
-          <div className="cg-setup-fields">
+          <div className="cg-setup-fields cg-shared-files-fields">
             <label className="cg-setup-field" htmlFor="shared-files-path">
               <span className="cg-setup-field__label">Path on CG Control server</span>
               <TextInput
@@ -71,7 +71,7 @@ export function SharedFilesSection({
                 onChange={setDraft}
               />
             </label>
-            <div>
+            <div className="cg-shared-files-action">
               <AsyncButton
                 variant="primary"
                 disabled={draft.trim() === '' || draft.trim() === stored}

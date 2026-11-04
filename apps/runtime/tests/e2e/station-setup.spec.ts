@@ -134,6 +134,38 @@ test('B-357 — Shared files shows and saves the path on the CG Control server',
 
   const pathField = dialog.getByLabel('Path on CG Control server');
   await expect(pathField).toHaveValue(String.raw`D:\CG Shared`);
+
+  const pathRow = dialog.locator('.cg-shared-files-fields');
+  const saveAction = dialog.locator('.cg-shared-files-action');
+  const geometry = await pathRow.evaluate((row) => {
+    const input = row.querySelector<HTMLInputElement>('#shared-files-path');
+    const action = row.querySelector<HTMLElement>('.cg-shared-files-action');
+    if (input === null || action === null) throw new Error('Shared-files controls are missing');
+    const rowBox = row.getBoundingClientRect();
+    const inputBox = input.getBoundingClientRect();
+    const actionBox = action.getBoundingClientRect();
+    return {
+      rowWidth: rowBox.width,
+      inputWidth: inputBox.width,
+      actionWidth: actionBox.width,
+      gap: actionBox.left - inputBox.right,
+      inputBottom: inputBox.bottom,
+      actionBottom: actionBox.bottom,
+    };
+  });
+  expect(geometry.inputWidth, 'the long server path owns the spare row width').toBeGreaterThan(
+    geometry.actionWidth * 4,
+  );
+  expect(
+    Math.abs(geometry.rowWidth - geometry.inputWidth - geometry.actionWidth - geometry.gap),
+    'the path and action use the full control row',
+  ).toBeLessThan(1);
+  expect(
+    Math.abs(geometry.inputBottom - geometry.actionBottom),
+    'Save path aligns with the input control',
+  ).toBeLessThan(1);
+  await expect(saveAction).toBeVisible();
+
   await pathField.fill(String.raw`\\NEWS\CG Shared`);
   await dialog.getByRole('button', { name: 'Save path' }).click();
   await expect(pathField).toHaveValue(String.raw`\\NEWS\CG Shared`);
